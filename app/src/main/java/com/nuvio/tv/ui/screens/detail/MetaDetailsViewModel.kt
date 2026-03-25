@@ -16,6 +16,7 @@ import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import com.nuvio.tv.data.repository.ImdbEpisodeRatingsRepository
 import com.nuvio.tv.data.repository.MDBListRepository
 import com.nuvio.tv.data.repository.TraktCommentsService
+import com.nuvio.tv.data.repository.TraktRelatedService
 import com.nuvio.tv.data.repository.parseContentIds
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.LibraryEntryInput
@@ -76,6 +77,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktCommentsService: TraktCommentsService,
+    private val traktRelatedService: TraktRelatedService,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
@@ -98,6 +100,7 @@ class MetaDetailsViewModel @Inject constructor(
     private var episodeRatingsJob: Job? = null
     private var nextToWatchJob: Job? = null
     private var commentsJob: Job? = null
+    private var commentsLoadMoreJob: Job? = null
 
     private var trailerDelayMs = 7000L
     private var trailerAutoplayEnabled = false
@@ -170,7 +173,7 @@ class MetaDetailsViewModel @Inject constructor(
                     val meta = _uiState.value.meta
                     val shouldShow = enabled && authenticated && supportsComments(meta)
                     if (!shouldShow) {
-                        commentsJob?.cancel()
+                        cancelCommentsRequests()
                     }
 
                     _uiState.update { state ->
@@ -181,11 +184,19 @@ class MetaDetailsViewModel @Inject constructor(
                         } else {
                             state.copy(
                                 comments = emptyList(),
+                                commentsCurrentPage = 0,
+                                commentsPageCount = 0,
                                 isCommentsLoading = false,
+                                isCommentsLoadingMore = false,
                                 commentsError = null,
-                                shouldShowCommentsSection = false
+                                shouldShowCommentsSection = false,
+                                selectedComment = null
                             )
                         }
+                    }
+
+                    if (meta != null) {
+                        loadMoreLikeThisAsync(meta)
                     }
 
                     if (shouldShow && meta != null) {
@@ -257,7 +268,9 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnToggleLibrary -> toggleLibrary()
             MetaDetailsEvent.OnRetry -> loadMeta()
             MetaDetailsEvent.OnRetryComments -> _uiState.value.meta?.let { loadComments(it, forceRefresh = true) }
+            MetaDetailsEvent.OnLoadMoreComments -> loadMoreComments()
             is MetaDetailsEvent.OnCommentSelected -> openCommentOverlay(event.review)
+            is MetaDetailsEvent.OnAdvanceCommentOverlay -> advanceCommentOverlay(event.direction)
             MetaDetailsEvent.OnDismissCommentOverlay -> dismissCommentOverlay()
             MetaDetailsEvent.OnBackPress -> { /* Handle in screen */ }
             MetaDetailsEvent.OnUserInteraction -> handleUserInteraction()
@@ -426,7 +439,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun loadMeta() {
         viewModelScope.launch {
-            commentsJob?.cancel()
+            cancelCommentsRequests()
             _uiState.update {
                 it.copy(
                     isLoading = true,
@@ -437,10 +450,14 @@ class MetaDetailsViewModel @Inject constructor(
                     mdbListRatings = null,
                     showMdbListImdb = false,
                     moreLikeThis = emptyList(),
+                    moreLikeThisSource = null,
                     collection = emptyList(),
                     collectionName = null,
                     comments = emptyList(),
+                    commentsCurrentPage = 0,
+                    commentsPageCount = 0,
                     isCommentsLoading = false,
+                    isCommentsLoadingMore = false,
                     commentsError = null,
                     shouldShowCommentsSection = false,
                     selectedComment = null
@@ -586,11 +603,14 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun loadComments(meta: Meta, forceRefresh: Boolean = false) {
         if (!traktCommentsEnabled || !traktAuthenticated || !supportsComments(meta)) {
-            commentsJob?.cancel()
+            cancelCommentsRequests()
             _uiState.update { state ->
                 state.copy(
                     comments = emptyList(),
+                    commentsCurrentPage = 0,
+                    commentsPageCount = 0,
                     isCommentsLoading = false,
+                    isCommentsLoadingMore = false,
                     commentsError = null,
                     shouldShowCommentsSection = false,
                     selectedComment = null
@@ -600,25 +620,31 @@ class MetaDetailsViewModel @Inject constructor(
         }
 
         commentsJob?.cancel()
+        commentsLoadMoreJob?.cancel()
         commentsJob = viewModelScope.launch {
             _uiState.update { state ->
                 if (state.meta == null || state.meta.id != meta.id) {
                     state
                 } else {
                     state.copy(
-                        comments = if (forceRefresh) emptyList() else state.comments,
+                        comments = emptyList(),
+                        commentsCurrentPage = 0,
+                        commentsPageCount = 0,
                         isCommentsLoading = true,
+                        isCommentsLoadingMore = false,
                         commentsError = null,
-                        shouldShowCommentsSection = true
+                        shouldShowCommentsSection = true,
+                        selectedComment = if (forceRefresh) null else state.selectedComment
                     )
                 }
             }
 
             try {
-                val comments = traktCommentsService.getBestReviews(
+                val page = traktCommentsService.getCommentsPage(
                     meta = meta,
                     fallbackItemId = itemId,
                     fallbackItemType = itemType,
+                    page = 1,
                     forceRefresh = forceRefresh
                 )
 
@@ -627,10 +653,16 @@ class MetaDetailsViewModel @Inject constructor(
                         state
                     } else {
                         state.copy(
-                            comments = comments,
+                            comments = page.items,
+                            commentsCurrentPage = page.currentPage,
+                            commentsPageCount = page.pageCount,
                             isCommentsLoading = false,
+                            isCommentsLoadingMore = false,
                             commentsError = null,
-                            shouldShowCommentsSection = true
+                            shouldShowCommentsSection = true,
+                            selectedComment = state.selectedComment?.let { selected ->
+                                page.items.firstOrNull { it.id == selected.id }
+                            }
                         )
                     }
                 }
@@ -644,7 +676,10 @@ class MetaDetailsViewModel @Inject constructor(
                     } else {
                         state.copy(
                             comments = emptyList(),
+                            commentsCurrentPage = 0,
+                            commentsPageCount = 0,
                             isCommentsLoading = false,
+                            isCommentsLoadingMore = false,
                             commentsError = context.getString(R.string.detail_comments_error),
                             shouldShowCommentsSection = true
                         )
@@ -663,9 +698,93 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
+    private fun loadMoreComments(selectNextAfterLoad: Boolean = false) {
+        val state = _uiState.value
+        val meta = state.meta ?: return
+        if (!traktCommentsEnabled || !traktAuthenticated || !supportsComments(meta)) return
+        if (state.isCommentsLoading || state.isCommentsLoadingMore || state.commentsCurrentPage == 0) return
+        if (state.commentsPageCount > 0 && state.commentsCurrentPage >= state.commentsPageCount) return
+
+        val nextPage = state.commentsCurrentPage + 1
+        val currentLastCommentId = state.comments.lastOrNull()?.id
+        val selectedCommentId = state.selectedComment?.id
+
+        commentsLoadMoreJob?.cancel()
+        commentsLoadMoreJob = viewModelScope.launch {
+            _uiState.update { current ->
+                if (current.meta?.id != meta.id) current else current.copy(isCommentsLoadingMore = true)
+            }
+
+            try {
+                val page = traktCommentsService.getCommentsPage(
+                    meta = meta,
+                    fallbackItemId = itemId,
+                    fallbackItemType = itemType,
+                    page = nextPage
+                )
+
+                _uiState.update { current ->
+                    if (current.meta?.id != meta.id) {
+                        current
+                    } else {
+                        val appended = page.items.filterNot { fetched ->
+                            current.comments.any { existing -> existing.id == fetched.id }
+                        }
+                        val updatedComments = current.comments + appended
+                        val shouldAdvanceSelection =
+                            selectNextAfterLoad &&
+                                current.selectedComment?.id == selectedCommentId &&
+                                current.selectedComment?.id == currentLastCommentId &&
+                                appended.isNotEmpty()
+
+                        current.copy(
+                            comments = updatedComments,
+                            commentsCurrentPage = maxOf(current.commentsCurrentPage, page.currentPage),
+                            commentsPageCount = maxOf(current.commentsPageCount, page.pageCount),
+                            isCommentsLoadingMore = false,
+                            commentsError = null,
+                            selectedComment = if (shouldAdvanceSelection) appended.first() else current.selectedComment
+                        )
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(TAG, "Failed to load more Trakt comments for ${meta.id}: ${error.message}")
+                _uiState.update { current ->
+                    if (current.meta?.id != meta.id) current else current.copy(isCommentsLoadingMore = false)
+                }
+            }
+        }
+    }
+
     private fun openCommentOverlay(review: TraktCommentReview) {
         _uiState.update { state ->
             state.copy(selectedComment = review)
+        }
+    }
+
+    private fun advanceCommentOverlay(direction: Int) {
+        if (direction == 0) return
+        val state = _uiState.value
+        val selected = state.selectedComment ?: return
+        val selectedIndex = state.comments.indexOfFirst { it.id == selected.id }
+        if (selectedIndex < 0) return
+
+        val targetIndex = selectedIndex + direction
+        if (targetIndex in state.comments.indices) {
+            _uiState.update { current ->
+                if (current.selectedComment?.id != selected.id) {
+                    current
+                } else {
+                    current.copy(selectedComment = current.comments.getOrNull(targetIndex) ?: current.selectedComment)
+                }
+            }
+            return
+        }
+
+        if (direction > 0) {
+            loadMoreComments(selectNextAfterLoad = true)
         }
     }
 
@@ -675,33 +794,61 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
+    private fun cancelCommentsRequests() {
+        commentsJob?.cancel()
+        commentsLoadMoreJob?.cancel()
+    }
+
     private fun loadMoreLikeThisAsync(meta: Meta) {
         moreLikeThisJob?.cancel()
         moreLikeThisJob = viewModelScope.launch {
-            val settings = tmdbSettingsDataStore.settings.first()
-            if (!shouldLoadMoreLikeThis(settings)) {
-                _uiState.update { it.copy(moreLikeThis = emptyList()) }
-                return@launch
+            val source = if (shouldLoadTraktMoreLikeThis(meta)) {
+                MoreLikeThisSource.TRAKT
+            } else {
+                val settings = tmdbSettingsDataStore.settings.first()
+                if (!shouldLoadMoreLikeThis(settings)) {
+                    _uiState.update { it.copy(moreLikeThis = emptyList(), moreLikeThisSource = null) }
+                    return@launch
+                }
+                MoreLikeThisSource.TMDB
             }
 
-            val tmdbContentType = resolveTmdbContentType(meta)
-            val tmdbLookupType = tmdbContentType.toApiString()
-            val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
-                ?: tmdbService.ensureTmdbId(itemId, itemType)
-            if (tmdbId.isNullOrBlank()) {
-                _uiState.update { it.copy(moreLikeThis = emptyList()) }
-                return@launch
-            }
+            val rawRecommendations = when (source) {
+                MoreLikeThisSource.TRAKT -> {
+                    runCatching {
+                        traktRelatedService.getRelated(
+                            meta = meta,
+                            fallbackItemId = itemId,
+                            fallbackItemType = itemType
+                        )
+                    }.getOrElse {
+                        Log.w(TAG, "Failed to load Trakt related titles for ${meta.id}: ${it.message}")
+                        emptyList()
+                    }
+                }
 
-            val rawRecommendations = runCatching {
-                tmdbMetadataService.fetchMoreLikeThis(
-                    tmdbId = tmdbId,
-                    contentType = tmdbContentType,
-                    language = settings.language
-                )
-            }.getOrElse {
-                Log.w(TAG, "Failed to load More like this for ${meta.id}: ${it.message}")
-                emptyList()
+                MoreLikeThisSource.TMDB -> {
+                    val settings = tmdbSettingsDataStore.settings.first()
+                    val tmdbContentType = resolveTmdbContentType(meta)
+                    val tmdbLookupType = tmdbContentType.toApiString()
+                    val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
+                        ?: tmdbService.ensureTmdbId(itemId, itemType)
+                    if (tmdbId.isNullOrBlank()) {
+                        _uiState.update { it.copy(moreLikeThis = emptyList(), moreLikeThisSource = null) }
+                        return@launch
+                    }
+
+                    runCatching {
+                        tmdbMetadataService.fetchMoreLikeThis(
+                            tmdbId = tmdbId,
+                            contentType = tmdbContentType,
+                            language = settings.language
+                        )
+                    }.getOrElse {
+                        Log.w(TAG, "Failed to load More like this for ${meta.id}: ${it.message}")
+                        emptyList()
+                    }
+                }
             }
 
             val recommendations = if (hideUnreleasedContent) {
@@ -713,7 +860,10 @@ class MetaDetailsViewModel @Inject constructor(
 
             _uiState.update { state ->
                 if (state.meta == null || state.meta.id == meta.id) {
-                    state.copy(moreLikeThis = recommendations)
+                    state.copy(
+                        moreLikeThis = recommendations,
+                        moreLikeThisSource = source.takeIf { recommendations.isNotEmpty() }
+                    )
                 } else {
                     state
                 }
@@ -723,6 +873,15 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun shouldLoadMoreLikeThis(settings: TmdbSettings): Boolean {
         return settings.enabled && settings.useMoreLikeThis
+    }
+
+    private fun shouldLoadTraktMoreLikeThis(meta: Meta): Boolean {
+        if (!traktAuthenticated) return false
+        return when (meta.type) {
+            ContentType.MOVIE -> true
+            ContentType.SERIES, ContentType.TV -> true
+            else -> meta.apiType in listOf("movie", "series", "tv", "show")
+        }
     }
 
     private fun loadCollectionAsync(collectionId: Int, collectionName: String?, settings: TmdbSettings) {

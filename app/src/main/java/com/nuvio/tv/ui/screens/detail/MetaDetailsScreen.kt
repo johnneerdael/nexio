@@ -229,10 +229,12 @@ fun MetaDetailsScreen(
         initialValue = false
     )
     val selectedComment = uiState.selectedComment
+    var commentOverlayDirection by remember { mutableIntStateOf(0) }
     var restorePlayFocusAfterTrailerBackToken by rememberSaveable { mutableIntStateOf(0) }
 
     BackHandler {
         if (selectedComment != null) {
+            commentOverlayDirection = 0
             viewModel.onEvent(MetaDetailsEvent.OnDismissCommentOverlay)
         } else if (uiState.isTrailerPlaying) {
             restorePlayFocusAfterTrailerBackToken += 1
@@ -385,6 +387,7 @@ fun MetaDetailsScreen(
                     isMovieWatched = uiState.isMovieWatched,
                     isMovieWatchedPending = uiState.isMovieWatchedPending,
                     moreLikeThis = uiState.moreLikeThis,
+                    moreLikeThisSource = uiState.moreLikeThisSource,
                     collection = uiState.collection,
                     collectionName = uiState.collectionName,
                     episodeImdbRatings = uiState.episodeImdbRatings,
@@ -393,7 +396,10 @@ fun MetaDetailsScreen(
                     mdbListRatings = uiState.mdbListRatings,
                     showMdbListImdb = uiState.showMdbListImdb,
                     comments = uiState.comments,
+                    commentsCurrentPage = uiState.commentsCurrentPage,
+                    commentsPageCount = uiState.commentsPageCount,
                     isCommentsLoading = uiState.isCommentsLoading,
+                    isCommentsLoadingMore = uiState.isCommentsLoadingMore,
                     commentsError = uiState.commentsError,
                     shouldShowCommentsSection = uiState.shouldShowCommentsSection,
                     selectedComment = uiState.selectedComment,
@@ -538,8 +544,24 @@ fun MetaDetailsScreen(
                     onTrailerEnded = { viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded) },
                     onTrailerButtonClick = { viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick) },
                     onRetryComments = { viewModel.onEvent(MetaDetailsEvent.OnRetryComments) },
-                    onCommentClick = { viewModel.onEvent(MetaDetailsEvent.OnCommentSelected(it)) },
-                    onDismissCommentOverlay = { viewModel.onEvent(MetaDetailsEvent.OnDismissCommentOverlay) },
+                    onLoadMoreComments = { viewModel.onEvent(MetaDetailsEvent.OnLoadMoreComments) },
+                    onCommentClick = {
+                        commentOverlayDirection = 0
+                        viewModel.onEvent(MetaDetailsEvent.OnCommentSelected(it))
+                    },
+                    onShowPreviousComment = {
+                        commentOverlayDirection = -1
+                        viewModel.onEvent(MetaDetailsEvent.OnAdvanceCommentOverlay(direction = -1))
+                    },
+                    onShowNextComment = {
+                        commentOverlayDirection = 1
+                        viewModel.onEvent(MetaDetailsEvent.OnAdvanceCommentOverlay(direction = 1))
+                    },
+                    onDismissCommentOverlay = {
+                        commentOverlayDirection = 0
+                        viewModel.onEvent(MetaDetailsEvent.OnDismissCommentOverlay)
+                    },
+                    commentOverlayDirection = commentOverlayDirection,
                     restorePlayFocusAfterTrailerBackToken = restorePlayFocusAfterTrailerBackToken,
                     onNavigateToCastDetail = onNavigateToCastDetail,
                     onNavigateToTmdbEntityBrowse = onNavigateToTmdbEntityBrowse,
@@ -628,6 +650,7 @@ private fun MetaDetailsContent(
     isMovieWatched: Boolean,
     isMovieWatchedPending: Boolean,
     moreLikeThis: List<MetaPreview>,
+    moreLikeThisSource: MoreLikeThisSource?,
     collection: List<MetaPreview>,
     collectionName: String?,
     episodeImdbRatings: Map<Pair<Int, Int>, Double>,
@@ -636,7 +659,10 @@ private fun MetaDetailsContent(
     mdbListRatings: MDBListRatings?,
     showMdbListImdb: Boolean,
     comments: List<TraktCommentReview>,
+    commentsCurrentPage: Int,
+    commentsPageCount: Int,
     isCommentsLoading: Boolean,
+    isCommentsLoadingMore: Boolean,
     commentsError: String?,
     shouldShowCommentsSection: Boolean,
     selectedComment: TraktCommentReview?,
@@ -668,13 +694,21 @@ private fun MetaDetailsContent(
     onTrailerEnded: () -> Unit,
     onTrailerButtonClick: () -> Unit,
     onRetryComments: () -> Unit,
+    onLoadMoreComments: () -> Unit,
     onCommentClick: (TraktCommentReview) -> Unit,
+    onShowPreviousComment: () -> Unit,
+    onShowNextComment: () -> Unit,
     onDismissCommentOverlay: () -> Unit,
+    commentOverlayDirection: Int,
     restorePlayFocusAfterTrailerBackToken: Int,
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
     onNavigateToTmdbEntityBrowse: (entityKind: String, entityId: Int, entityName: String, sourceType: String) -> Unit = { _, _, _, _ -> },
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> }
 ) {
+    val canLoadMoreComments = commentsCurrentPage in 1 until commentsPageCount
+    val selectedCommentIndex = remember(comments, selectedComment?.id) {
+        selectedComment?.let { review -> comments.indexOfFirst { it.id == review.id } } ?: -1
+    }
     val isSeries = remember(meta.type, meta.videos) {
         meta.type == ContentType.SERIES || meta.videos.isNotEmpty()
     }
@@ -931,6 +965,11 @@ private fun MetaDetailsContent(
     val strTabRatings = stringResource(R.string.detail_tab_ratings)
     val strTabMoreLikeThis = stringResource(R.string.detail_tab_more_like_this)
     val strTabCollection = stringResource(R.string.tmdb_collections_title)
+    val moreLikeThisSourceLabel = when (moreLikeThisSource) {
+        MoreLikeThisSource.TMDB -> stringResource(R.string.detail_more_like_this_powered_by_tmdb)
+        MoreLikeThisSource.TRAKT -> stringResource(R.string.detail_more_like_this_powered_by_trakt)
+        null -> null
+    }
     val peopleTabItems = remember(
         hasCastSection,
         hasMoreLikeThisSection,
@@ -1399,6 +1438,7 @@ private fun MetaDetailsContent(
                             PeopleSectionTab.MORE_LIKE_THIS -> {
                                 MoreLikeThisSection(
                                     items = moreLikeThis,
+                                    sourceLabel = moreLikeThisSourceLabel,
                                     upFocusRequester = if (hasPeopleTabs) moreLikeTabFocusRequester else seasonDownFocusRequester,
                                     sectionFocusRequester = moreLikeSectionFocusRequester,
                                     restoreItemId = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) pendingRestoreMoreLikeItemId else null,
@@ -1456,9 +1496,12 @@ private fun MetaDetailsContent(
                     CommentsSection(
                         comments = comments,
                         isLoading = isCommentsLoading,
+                        isLoadingMore = isCommentsLoadingMore,
+                        canLoadMore = canLoadMoreComments,
                         error = commentsError,
                         upFocusRequester = commentsUpFocusRequester,
                         onRetry = onRetryComments,
+                        onLoadMore = onLoadMoreComments,
                         onCommentClick = onCommentClick
                     )
                 }
@@ -1570,6 +1613,14 @@ private fun MetaDetailsContent(
         selectedComment?.let { review ->
             CommentOverlay(
                 review = review,
+                canNavigatePrevious = selectedCommentIndex > 0,
+                canNavigateNext = selectedCommentIndex >= 0 && (
+                    selectedCommentIndex < comments.lastIndex || canLoadMoreComments || isCommentsLoadingMore
+                ),
+                isLoadingNext = isCommentsLoadingMore,
+                transitionDirection = commentOverlayDirection,
+                onPrevious = onShowPreviousComment,
+                onNext = onShowNextComment,
                 onDismiss = onDismissCommentOverlay
             )
         }
