@@ -44,6 +44,8 @@
     <string name="continue_watching">Weiter ansehen</string>
     <string name="cw_upcoming">Demnächst</string>
     <string name="cw_next_up">Als nächstes</string>
+		<string name="cw_new_episode">Neue Folge</string>
+    <string name="cw_new_season">Neue Staffel</string>
     <string name="cw_resume">Fortsetzen</string>
     <string name="cw_percent_watched">%1$d%% angesehen</string>
     <string name="cw_hours_min_left">%1$dh %2$dm verbleibend</string>
