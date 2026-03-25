@@ -149,15 +149,12 @@ fun ModernHomeContent(
         effectiveExpandEnabled ||
             (effectiveAutoplayEnabled &&
                 trailerPlaybackTarget == FocusedPosterTrailerPlaybackTarget.HERO_MEDIA)
-    val visibleCatalogRows = remember(uiState.catalogRows) {
-        uiState.catalogRows.filter { it.items.isNotEmpty() }
-    }
     val carouselRows = uiState.modernHomePresentation.rows
 
     if (carouselRows.isEmpty()) return
     val carouselLookups = uiState.modernHomePresentation.lookups
-    val rowIndexByKey = carouselLookups.rowIndexByKey
     val rowByKey = carouselLookups.rowByKey
+    val rowKeyByGlobalRowIndex = carouselLookups.rowKeyByGlobalRowIndex
     val activeRowKeys = carouselLookups.activeRowKeys
     val activeItemKeysByRow = carouselLookups.activeItemKeysByRow
     val activeCatalogItemIds = carouselLookups.activeCatalogItemIds
@@ -282,11 +279,11 @@ fun ModernHomeContent(
         if (!restoredFromSavedState && focusState.hasSavedFocus) {
             val savedRowKey = when {
                 focusState.focusedRowIndex == -1 && uiState.continueWatchingItems.isNotEmpty() -> "continue_watching"
-                focusState.focusedRowIndex >= 0 -> visibleCatalogRows.getOrNull(focusState.focusedRowIndex)?.let { catalogRowKey(it) }
+                focusState.focusedRowIndex >= 0 -> rowKeyByGlobalRowIndex[focusState.focusedRowIndex]
                 else -> null
             }
 
-            val resolvedRow = carouselRows.firstOrNull { it.key == savedRowKey } ?: carouselRows.first()
+            val resolvedRow = savedRowKey?.let(rowByKey::get) ?: carouselRows.first()
             val resolvedIndex = focusState.focusedItemIndex
                 .coerceAtLeast(0)
                 .coerceAtMost((resolvedRow.items.size - 1).coerceAtLeast(0))
@@ -306,7 +303,7 @@ fun ModernHomeContent(
         }
 
         val hadActiveRow = focusHolder.activeRowKey != null
-        val existingActive = focusHolder.activeRowKey?.let { key -> carouselRows.firstOrNull { it.key == key } }
+        val existingActive = focusHolder.activeRowKey?.let(rowByKey::get)
         val resolvedActive = existingActive ?: carouselRows.first()
         val resolvedIndex = focusedItemByRow[resolvedActive.key]
             ?.coerceIn(0, (resolvedActive.items.size - 1).coerceAtLeast(0))

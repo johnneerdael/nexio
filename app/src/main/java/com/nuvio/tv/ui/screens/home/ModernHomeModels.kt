@@ -99,6 +99,7 @@ data class HeroCarouselRow(
 data class CarouselRowLookups(
     val rowIndexByKey: Map<String, Int>,
     val rowByKey: Map<String, HeroCarouselRow>,
+    val rowKeyByGlobalRowIndex: Map<Int, String>,
     val activeRowKeys: Set<String>,
     val activeItemKeysByRow: Map<String, Set<String>>,
     val activeCatalogItemIds: Set<String>
@@ -110,6 +111,7 @@ data class ModernHomePresentationState(
     val lookups: CarouselRowLookups = CarouselRowLookups(
         rowIndexByKey = emptyMap(),
         rowByKey = emptyMap(),
+        rowKeyByGlobalRowIndex = emptyMap(),
         activeRowKeys = emptySet(),
         activeItemKeysByRow = emptyMap(),
         activeCatalogItemIds = emptySet()

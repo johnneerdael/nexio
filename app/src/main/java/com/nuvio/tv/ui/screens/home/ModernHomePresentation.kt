@@ -157,6 +157,7 @@ internal fun buildModernHomePresentation(
 internal fun buildCarouselRowLookups(carouselRows: List<HeroCarouselRow>): CarouselRowLookups {
     val rowIndexByKey = LinkedHashMap<String, Int>(carouselRows.size)
     val rowByKey = LinkedHashMap<String, HeroCarouselRow>(carouselRows.size)
+    val rowKeyByGlobalRowIndex = LinkedHashMap<Int, String>(carouselRows.size)
     val activeRowKeys = LinkedHashSet<String>(carouselRows.size)
     val activeItemKeysByRow = LinkedHashMap<String, Set<String>>(carouselRows.size)
     val activeCatalogItemIds = LinkedHashSet<String>()
@@ -164,6 +165,9 @@ internal fun buildCarouselRowLookups(carouselRows: List<HeroCarouselRow>): Carou
     carouselRows.forEachIndexed { index, row ->
         rowIndexByKey[row.key] = index
         rowByKey[row.key] = row
+        if (row.globalRowIndex >= 0) {
+            rowKeyByGlobalRowIndex[row.globalRowIndex] = row.key
+        }
         activeRowKeys += row.key
 
         val itemKeys = LinkedHashSet<String>(row.items.size)
@@ -180,6 +184,7 @@ internal fun buildCarouselRowLookups(carouselRows: List<HeroCarouselRow>): Carou
     return CarouselRowLookups(
         rowIndexByKey = rowIndexByKey,
         rowByKey = rowByKey,
+        rowKeyByGlobalRowIndex = rowKeyByGlobalRowIndex,
         activeRowKeys = activeRowKeys,
         activeItemKeysByRow = activeItemKeysByRow,
         activeCatalogItemIds = activeCatalogItemIds
