@@ -444,6 +444,8 @@
     <string name="layout_modern_sidebar_sub">Ativar navegação lateral flutuante.</string>
     <string name="layout_modern_sidebar_blur">Desfoque no menu lateral</string>
     <string name="layout_modern_sidebar_blur_sub">Ativar efeito de desfoque (blur) no menu.</string>
+    <string name="layout_fullscreen_hero_backdrop">Plano de Fundo Moderno em Tela Cheia</string>
+    <string name="layout_fullscreen_hero_backdrop_sub">Expandir o fundo do visual Moderno para preencher toda a tela</string>
     <string name="layout_show_hero">Mostrar Destaque</string>
     <string name="layout_show_hero_sub">Exibir Destaque de topo na home.</string>
     <string name="layout_show_discover">Mostrar Descobrir na busca</string>
