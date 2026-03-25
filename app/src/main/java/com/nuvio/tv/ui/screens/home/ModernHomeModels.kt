@@ -30,7 +30,7 @@ internal val MODERN_LANDSCAPE_LOGO_GRADIENT = Brush.verticalGradient(
 )
 
 @Immutable
-internal data class HeroPreview(
+data class HeroPreview(
     val title: String,
     val logo: String?,
     val description: String?,
@@ -51,7 +51,7 @@ internal data class HeroPreview(
 )
 
 @Immutable
-internal sealed class ModernPayload {
+sealed class ModernPayload {
     data class ContinueWatching(val item: ContinueWatchingItem) : ModernPayload()
     data class Catalog(
         val focusKey: String,
@@ -71,7 +71,7 @@ internal data class FocusedCatalogSelection(
 )
 
 @Immutable
-internal data class ModernCarouselItem(
+data class ModernCarouselItem(
     val key: String,
     val title: String,
     val subtitle: String?,
@@ -82,7 +82,7 @@ internal data class ModernCarouselItem(
 )
 
 @Immutable
-internal data class HeroCarouselRow(
+data class HeroCarouselRow(
     val key: String,
     val title: String,
     val globalRowIndex: Int,
@@ -96,12 +96,24 @@ internal data class HeroCarouselRow(
 )
 
 @Immutable
-internal data class CarouselRowLookups(
+data class CarouselRowLookups(
     val rowIndexByKey: Map<String, Int>,
     val rowByKey: Map<String, HeroCarouselRow>,
     val activeRowKeys: Set<String>,
     val activeItemKeysByRow: Map<String, Set<String>>,
     val activeCatalogItemIds: Set<String>
+)
+
+@Immutable
+data class ModernHomePresentationState(
+    val rows: List<HeroCarouselRow> = emptyList(),
+    val lookups: CarouselRowLookups = CarouselRowLookups(
+        rowIndexByKey = emptyMap(),
+        rowByKey = emptyMap(),
+        activeRowKeys = emptySet(),
+        activeItemKeysByRow = emptyMap(),
+        activeCatalogItemIds = emptySet()
+    )
 )
 
 internal data class ModernCatalogRowBuildCacheEntry(
