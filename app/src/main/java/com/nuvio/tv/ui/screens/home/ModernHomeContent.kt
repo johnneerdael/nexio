@@ -672,6 +672,8 @@ fun ModernHomeContent(
                     }
                     ModernRowSection(
                         row = row,
+                        isActiveRow = activeRowKey == row.key,
+                        isVerticalRowsScrolling = isVerticalRowsScrolling,
                         rowTitleBottom = rowTitleBottom,
                         defaultBringIntoViewSpec = defaultBringIntoViewSpec,
                         focusStateCatalogRowScrollIndex = remember(focusState.catalogRowScrollStates, row.key) {
