@@ -200,10 +200,14 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                 if (inProgressOnly.isNotEmpty()) {
                     val initialItems = inProgressOnly.map { it as ContinueWatchingItem }
                     _uiState.update { state ->
-                        if (state.continueWatchingItems == initialItems) {
+                        val nextState = state.copy(
+                            continueWatchingItems = initialItems,
+                            continueWatchingResolved = true
+                        )
+                        if (state == nextState) {
                             state
                         } else {
-                            state.copy(continueWatchingItems = initialItems)
+                            nextState
                         }
                     }
                     debug.recordInitialRendered(
@@ -233,10 +237,14 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                     nextUpItems = partialNextUpItems
                                 )
                                 _uiState.update { state ->
-                                    if (state.continueWatchingItems == partialItems) {
+                                    val nextState = state.copy(
+                                        continueWatchingItems = partialItems,
+                                        continueWatchingResolved = true
+                                    )
+                                    if (state == nextState) {
                                         state
                                     } else {
-                                        state.copy(continueWatchingItems = partialItems)
+                                        nextState
                                     }
                                 }
                                 debug.recordPartialRendered(
@@ -259,10 +267,14 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                 )
 
                 _uiState.update { state ->
-                    if (state.continueWatchingItems == normalItems) {
+                    val nextState = state.copy(
+                        continueWatchingItems = normalItems,
+                        continueWatchingResolved = true
+                    )
+                    if (state == nextState) {
                         state
                     } else {
-                        state.copy(continueWatchingItems = normalItems)
+                        nextState
                     }
                 }
                 debug.recordLightweightRendered(
@@ -578,10 +590,14 @@ private suspend fun HomeViewModel.enrichVisibleContinueWatchingItems(
     if (enrichedItems == finalItems) return@coroutineScope false
 
     _uiState.update { state ->
-        if (state.continueWatchingItems == enrichedItems) {
+        val nextState = state.copy(
+            continueWatchingItems = enrichedItems,
+            continueWatchingResolved = true
+        )
+        if (state == nextState) {
             state
         } else {
-            state.copy(continueWatchingItems = enrichedItems)
+            nextState
         }
     }
     persistLocalContinueWatchingMetadata(

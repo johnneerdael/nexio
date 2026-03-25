@@ -31,6 +31,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -50,15 +53,12 @@ import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
 import com.nuvio.tv.data.local.StartupAuthNotice
 import com.nuvio.tv.ui.theme.NuvioColors
-import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 private data class HomePosterOptionsTarget(
     val item: MetaPreview,
     val addonBaseUrl: String
 )
-
-private const val HOME_STARTUP_CW_GATE_TIMEOUT_MS = 5_000L
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -86,11 +86,10 @@ fun HomeScreen(
     val effectiveAutoplayEnabled by viewModel.effectiveAutoplayEnabled.collectAsStateWithLifecycle(
         initialValue = false
     )
+    val lifecycleOwner = LocalLifecycleOwner.current
     val hasCatalogContent = uiState.catalogRows.any { it.items.isNotEmpty() }
     var hasEnteredCatalogContent by rememberSaveable { mutableStateOf(false) }
     var showHomeContentWithAnimation by rememberSaveable { mutableStateOf(false) }
-    var hasReleasedStartupCwGate by rememberSaveable { mutableStateOf(false) }
-    var startupCwGateTimedOut by rememberSaveable { mutableStateOf(false) }
     var hasShownInitialHomeContent by rememberSaveable { mutableStateOf(false) }
     var posterOptionsTarget by remember { mutableStateOf<HomePosterOptionsTarget?>(null) }
 
@@ -112,15 +111,18 @@ fun HomeScreen(
     }
 
     LaunchedEffect(Unit) {
-        delay(HOME_STARTUP_CW_GATE_TIMEOUT_MS)
-        startupCwGateTimedOut = true
+        viewModel.refreshContinueWatchingIfStale()
     }
 
-    LaunchedEffect(uiState.continueWatchingItems.isNotEmpty(), startupCwGateTimedOut) {
-        if (!hasReleasedStartupCwGate &&
-            (uiState.continueWatchingItems.isNotEmpty() || startupCwGateTimedOut)
-        ) {
-            hasReleasedStartupCwGate = true
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshContinueWatchingIfStale()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -195,9 +197,7 @@ fun HomeScreen(
             }
 
             else -> {
-                val shouldShowLoadingGate =
-                    !hasReleasedStartupCwGate ||
-                        (!hasEnteredCatalogContent && !hasCatalogContent)
+                val shouldShowLoadingGate = !hasEnteredCatalogContent && !hasCatalogContent
                 LaunchedEffect(shouldShowLoadingGate) {
                     if (shouldShowLoadingGate) {
                         showHomeContentWithAnimation = false
