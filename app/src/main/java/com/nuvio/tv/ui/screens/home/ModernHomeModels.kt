@@ -100,6 +100,8 @@ data class CarouselRowLookups(
     val rowIndexByKey: Map<String, Int>,
     val rowByKey: Map<String, HeroCarouselRow>,
     val rowKeyByGlobalRowIndex: Map<Int, String>,
+    val firstHeroPreviewByRow: Map<String, HeroPreview>,
+    val fallbackBackdropByRow: Map<String, String>,
     val activeRowKeys: Set<String>,
     val activeItemKeysByRow: Map<String, Set<String>>,
     val activeCatalogItemIds: Set<String>
@@ -112,10 +114,25 @@ data class ModernHomePresentationState(
         rowIndexByKey = emptyMap(),
         rowByKey = emptyMap(),
         rowKeyByGlobalRowIndex = emptyMap(),
+        firstHeroPreviewByRow = emptyMap(),
+        fallbackBackdropByRow = emptyMap(),
         activeRowKeys = emptySet(),
         activeItemKeysByRow = emptyMap(),
         activeCatalogItemIds = emptySet()
     )
+)
+
+@Immutable
+internal data class ModernHeroSceneState(
+    val heroBackdrop: String?,
+    val preview: HeroPreview?,
+    val enrichmentActive: Boolean,
+    val shouldPlayTrailer: Boolean,
+    val trailerFirstFrameRendered: Boolean,
+    val trailerUrl: String?,
+    val trailerAudioUrl: String?,
+    val trailerMuted: Boolean,
+    val fullScreenBackdrop: Boolean
 )
 
 internal data class ModernCatalogRowBuildCacheEntry(

@@ -163,6 +163,8 @@ internal fun buildCarouselRowLookups(carouselRows: List<HeroCarouselRow>): Carou
     val rowIndexByKey = LinkedHashMap<String, Int>(carouselRows.size)
     val rowByKey = LinkedHashMap<String, HeroCarouselRow>(carouselRows.size)
     val rowKeyByGlobalRowIndex = LinkedHashMap<Int, String>(carouselRows.size)
+    val firstHeroPreviewByRow = LinkedHashMap<String, HeroPreview>(carouselRows.size)
+    val fallbackBackdropByRow = LinkedHashMap<String, String>(carouselRows.size)
     val activeRowKeys = LinkedHashSet<String>(carouselRows.size)
     val activeItemKeysByRow = LinkedHashMap<String, Set<String>>(carouselRows.size)
     val activeCatalogItemIds = LinkedHashSet<String>()
@@ -173,6 +175,10 @@ internal fun buildCarouselRowLookups(carouselRows: List<HeroCarouselRow>): Carou
         if (row.globalRowIndex >= 0) {
             rowKeyByGlobalRowIndex[row.globalRowIndex] = row.key
         }
+        row.items.firstOrNull()?.heroPreview?.let { firstHeroPreviewByRow[row.key] = it }
+        row.items.firstNotNullOfOrNull { item ->
+            item.heroPreview.backdrop?.takeIf { it.isNotBlank() }
+        }?.let { fallbackBackdropByRow[row.key] = it }
         activeRowKeys += row.key
 
         val itemKeys = LinkedHashSet<String>(row.items.size)
@@ -190,6 +196,8 @@ internal fun buildCarouselRowLookups(carouselRows: List<HeroCarouselRow>): Carou
         rowIndexByKey = rowIndexByKey,
         rowByKey = rowByKey,
         rowKeyByGlobalRowIndex = rowKeyByGlobalRowIndex,
+        firstHeroPreviewByRow = firstHeroPreviewByRow,
+        fallbackBackdropByRow = fallbackBackdropByRow,
         activeRowKeys = activeRowKeys,
         activeItemKeysByRow = activeItemKeysByRow,
         activeCatalogItemIds = activeCatalogItemIds
