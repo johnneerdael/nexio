@@ -241,7 +241,7 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(subtitle: Subtitle) {
         Log.d(
             PlayerRuntimeController.TAG,
             "Selecting ADDON subtitle addon=${subtitle.addonName} lang=${subtitle.lang} normalizedLang=$normalizedLang " +
-                "id=${subtitle.id} inferredMime=$inferredMime ext=${PlayerSubtitleUtils.fileExtensionFromUrl(subtitle.url)} " +
+                "id=${subtitle.id} inferredMime=$inferredMime " +
                 "url=${subtitle.url}"
         )
 

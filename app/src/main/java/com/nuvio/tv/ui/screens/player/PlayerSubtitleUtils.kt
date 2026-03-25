@@ -87,16 +87,4 @@ internal object PlayerSubtitleUtils {
             else -> MimeTypes.APPLICATION_SUBRIP
         }
     }
-
-    fun fileExtensionFromUrl(url: String): String? {
-        val normalizedPath = url
-            .substringBefore('#')
-            .substringBefore('?')
-            .trimEnd('/')
-        val lastSegment = normalizedPath.substringAfterLast('/', missingDelimiterValue = normalizedPath)
-        val extension = lastSegment.substringAfterLast('.', missingDelimiterValue = "")
-            .trim()
-            .lowercase()
-        return extension.takeIf { it.isNotEmpty() }
-    }
 }

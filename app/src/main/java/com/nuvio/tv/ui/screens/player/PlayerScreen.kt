@@ -563,7 +563,7 @@ fun PlayerScreen(
                         
                         // Apply vertical offset (-20 = very bottom, 0 = default, 50 = middle)
                         // Convert percentage to fraction for bottom padding
-                        val webVttCompensationFraction = if (shouldApplyExternalWebVttCompensation) 0.08f else 0f
+                        val webVttCompensationFraction = if (shouldApplyExternalWebVttCompensation) 0.06f else 0f
                         val bottomPaddingFraction = (
                             0.06f +
                                 (subtitleStyle.verticalOffset / 250f) +
@@ -574,7 +574,7 @@ fun PlayerScreen(
                         // Also apply explicit bottom padding based on view height for stronger offset effect
                         post {
                             val webVttCompensationPadding = if (shouldApplyExternalWebVttCompensation) {
-                                (height * 0.08f).toInt()
+                                (height * 0.06f).toInt()
                             } else {
                                 0
                             }
