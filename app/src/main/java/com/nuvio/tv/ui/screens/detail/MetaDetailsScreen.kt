@@ -387,6 +387,7 @@ fun MetaDetailsScreen(
                     isMovieWatched = uiState.isMovieWatched,
                     isMovieWatchedPending = uiState.isMovieWatchedPending,
                     moreLikeThis = uiState.moreLikeThis,
+                    moreLikeThisSource = uiState.moreLikeThisSource,
                     collection = uiState.collection,
                     collectionName = uiState.collectionName,
                     episodeImdbRatings = uiState.episodeImdbRatings,
@@ -649,6 +650,7 @@ private fun MetaDetailsContent(
     isMovieWatched: Boolean,
     isMovieWatchedPending: Boolean,
     moreLikeThis: List<MetaPreview>,
+    moreLikeThisSource: MoreLikeThisSource?,
     collection: List<MetaPreview>,
     collectionName: String?,
     episodeImdbRatings: Map<Pair<Int, Int>, Double>,
@@ -963,6 +965,11 @@ private fun MetaDetailsContent(
     val strTabRatings = stringResource(R.string.detail_tab_ratings)
     val strTabMoreLikeThis = stringResource(R.string.detail_tab_more_like_this)
     val strTabCollection = stringResource(R.string.tmdb_collections_title)
+    val moreLikeThisSourceLabel = when (moreLikeThisSource) {
+        MoreLikeThisSource.TMDB -> stringResource(R.string.detail_more_like_this_powered_by_tmdb)
+        MoreLikeThisSource.TRAKT -> stringResource(R.string.detail_more_like_this_powered_by_trakt)
+        null -> null
+    }
     val peopleTabItems = remember(
         hasCastSection,
         hasMoreLikeThisSection,
@@ -1412,6 +1419,7 @@ private fun MetaDetailsContent(
                             PeopleSectionTab.MORE_LIKE_THIS -> {
                                 MoreLikeThisSection(
                                     items = moreLikeThis,
+                                    sourceLabel = moreLikeThisSourceLabel,
                                     upFocusRequester = if (hasPeopleTabs) moreLikeTabFocusRequester else seasonDownFocusRequester,
                                     sectionFocusRequester = moreLikeSectionFocusRequester,
                                     restoreItemId = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) pendingRestoreMoreLikeItemId else null,

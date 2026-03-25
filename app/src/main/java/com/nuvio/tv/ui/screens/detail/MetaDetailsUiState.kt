@@ -10,6 +10,11 @@ import com.nuvio.tv.domain.model.LibraryListTab
 import com.nuvio.tv.domain.model.LibrarySourceMode
 import com.nuvio.tv.domain.model.MDBListRatings
 
+enum class MoreLikeThisSource {
+    TMDB,
+    TRAKT
+}
+
 data class MetaDetailsUiState(
     val isLoading: Boolean = true,
     val meta: Meta? = null,
@@ -41,6 +46,7 @@ data class MetaDetailsUiState(
     val blurUnwatchedEpisodes: Boolean = false,
     val showFullReleaseDate: Boolean = true,
     val moreLikeThis: List<MetaPreview> = emptyList(),
+    val moreLikeThisSource: MoreLikeThisSource? = null,
     val collection: List<MetaPreview> = emptyList(),
     val collectionName: String? = null,
     val episodeImdbRatings: Map<Pair<Int, Int>, Double> = emptyMap(),

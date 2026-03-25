@@ -16,6 +16,7 @@ import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import com.nuvio.tv.data.repository.ImdbEpisodeRatingsRepository
 import com.nuvio.tv.data.repository.MDBListRepository
 import com.nuvio.tv.data.repository.TraktCommentsService
+import com.nuvio.tv.data.repository.TraktRelatedService
 import com.nuvio.tv.data.repository.parseContentIds
 import com.nuvio.tv.domain.model.ContentType
 import com.nuvio.tv.domain.model.LibraryEntryInput
@@ -76,6 +77,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktCommentsService: TraktCommentsService,
+    private val traktRelatedService: TraktRelatedService,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
@@ -185,6 +187,10 @@ class MetaDetailsViewModel @Inject constructor(
                                 selectedComment = null
                             )
                         }
+                    }
+
+                    if (meta != null) {
+                        loadMoreLikeThisAsync(meta)
                     }
 
                     if (shouldShow && meta != null) {
@@ -432,6 +438,7 @@ class MetaDetailsViewModel @Inject constructor(
                     mdbListRatings = null,
                     showMdbListImdb = false,
                     moreLikeThis = emptyList(),
+                    moreLikeThisSource = null,
                     collection = emptyList(),
                     collectionName = null,
                     comments = emptyList(),
@@ -769,30 +776,53 @@ class MetaDetailsViewModel @Inject constructor(
     private fun loadMoreLikeThisAsync(meta: Meta) {
         moreLikeThisJob?.cancel()
         moreLikeThisJob = viewModelScope.launch {
-            val settings = tmdbSettingsDataStore.settings.first()
-            if (!shouldLoadMoreLikeThis(settings)) {
-                _uiState.update { it.copy(moreLikeThis = emptyList()) }
-                return@launch
+            val source = if (shouldLoadTraktMoreLikeThis(meta)) {
+                MoreLikeThisSource.TRAKT
+            } else {
+                val settings = tmdbSettingsDataStore.settings.first()
+                if (!shouldLoadMoreLikeThis(settings)) {
+                    _uiState.update { it.copy(moreLikeThis = emptyList(), moreLikeThisSource = null) }
+                    return@launch
+                }
+                MoreLikeThisSource.TMDB
             }
 
-            val tmdbContentType = resolveTmdbContentType(meta)
-            val tmdbLookupType = tmdbContentType.toApiString()
-            val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
-                ?: tmdbService.ensureTmdbId(itemId, itemType)
-            if (tmdbId.isNullOrBlank()) {
-                _uiState.update { it.copy(moreLikeThis = emptyList()) }
-                return@launch
-            }
+            val rawRecommendations = when (source) {
+                MoreLikeThisSource.TRAKT -> {
+                    runCatching {
+                        traktRelatedService.getRelated(
+                            meta = meta,
+                            fallbackItemId = itemId,
+                            fallbackItemType = itemType
+                        )
+                    }.getOrElse {
+                        Log.w(TAG, "Failed to load Trakt related titles for ${meta.id}: ${it.message}")
+                        emptyList()
+                    }
+                }
 
-            val rawRecommendations = runCatching {
-                tmdbMetadataService.fetchMoreLikeThis(
-                    tmdbId = tmdbId,
-                    contentType = tmdbContentType,
-                    language = settings.language
-                )
-            }.getOrElse {
-                Log.w(TAG, "Failed to load More like this for ${meta.id}: ${it.message}")
-                emptyList()
+                MoreLikeThisSource.TMDB -> {
+                    val settings = tmdbSettingsDataStore.settings.first()
+                    val tmdbContentType = resolveTmdbContentType(meta)
+                    val tmdbLookupType = tmdbContentType.toApiString()
+                    val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
+                        ?: tmdbService.ensureTmdbId(itemId, itemType)
+                    if (tmdbId.isNullOrBlank()) {
+                        _uiState.update { it.copy(moreLikeThis = emptyList(), moreLikeThisSource = null) }
+                        return@launch
+                    }
+
+                    runCatching {
+                        tmdbMetadataService.fetchMoreLikeThis(
+                            tmdbId = tmdbId,
+                            contentType = tmdbContentType,
+                            language = settings.language
+                        )
+                    }.getOrElse {
+                        Log.w(TAG, "Failed to load More like this for ${meta.id}: ${it.message}")
+                        emptyList()
+                    }
+                }
             }
 
             val recommendations = if (hideUnreleasedContent) {
@@ -804,7 +834,10 @@ class MetaDetailsViewModel @Inject constructor(
 
             _uiState.update { state ->
                 if (state.meta == null || state.meta.id == meta.id) {
-                    state.copy(moreLikeThis = recommendations)
+                    state.copy(
+                        moreLikeThis = recommendations,
+                        moreLikeThisSource = source.takeIf { recommendations.isNotEmpty() }
+                    )
                 } else {
                     state
                 }
@@ -814,6 +847,15 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun shouldLoadMoreLikeThis(settings: TmdbSettings): Boolean {
         return settings.enabled && settings.useMoreLikeThis
+    }
+
+    private fun shouldLoadTraktMoreLikeThis(meta: Meta): Boolean {
+        if (!traktAuthenticated) return false
+        return when (meta.type) {
+            ContentType.MOVIE -> true
+            ContentType.SERIES, ContentType.TV -> true
+            else -> meta.apiType in listOf("movie", "series", "tv", "show")
+        }
     }
 
     private fun loadCollectionAsync(collectionId: Int, collectionName: String?, settings: TmdbSettings) {
