@@ -17,9 +17,14 @@ internal data class ModernHomePresentationInput(
 internal fun buildModernHomePresentation(
     input: ModernHomePresentationInput,
     cache: ModernCarouselRowBuildCache,
-    context: Context
+    context: Context,
+    maxCatalogRows: Int? = null
 ): ModernHomePresentationState {
     val visibleCatalogRows = input.catalogRows.filter { it.items.isNotEmpty() }
+    val catalogRowsToRender = maxCatalogRows
+        ?.coerceAtLeast(0)
+        ?.let(visibleCatalogRows::take)
+        ?: visibleCatalogRows
     val strContinueWatching = context.getString(R.string.continue_watching)
     val strAirsDate = context.getString(R.string.cw_airs_date)
     val strUpcoming = context.getString(R.string.cw_upcoming)
@@ -27,7 +32,7 @@ internal fun buildModernHomePresentation(
     val strTypeSeries = context.getString(R.string.type_series)
 
     val rows = buildList {
-        val activeCatalogKeys = LinkedHashSet<String>(visibleCatalogRows.size)
+        val activeCatalogKeys = LinkedHashSet<String>(catalogRowsToRender.size)
 
         if (input.continueWatchingItems.isNotEmpty()) {
             val reuseContinueWatchingRow =
@@ -67,7 +72,7 @@ internal fun buildModernHomePresentation(
             cache.continueWatchingRow = null
         }
 
-        visibleCatalogRows.forEachIndexed { index, row ->
+        catalogRowsToRender.forEachIndexed { index, row ->
             val rowKey = catalogRowKey(row)
             activeCatalogKeys += rowKey
             val cached = cache.catalogRows[rowKey]

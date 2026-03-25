@@ -218,6 +218,28 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
             }
             .distinctUntilChanged()
             .collectLatest { input ->
+                val shouldWarmStart = uiState.value.modernHomePresentation.rows.isEmpty()
+                val visibleCatalogRowCount = input.catalogRows.count { it.items.isNotEmpty() }
+                val warmStartCatalogRowCount = if (input.continueWatchingItems.isNotEmpty()) 1 else 2
+
+                if (shouldWarmStart && visibleCatalogRowCount > warmStartCatalogRowCount) {
+                    val warmStartPresentation = withContext(Dispatchers.Default) {
+                        buildModernHomePresentation(
+                            input = input,
+                            cache = modernCarouselRowBuildCache,
+                            context = appContext,
+                            maxCatalogRows = warmStartCatalogRowCount
+                        )
+                    }
+                    _uiState.update { state ->
+                        if (state.modernHomePresentation == warmStartPresentation) {
+                            state
+                        } else {
+                            state.copy(modernHomePresentation = warmStartPresentation)
+                        }
+                    }
+                }
+
                 val presentation = withContext(Dispatchers.Default) {
                     buildModernHomePresentation(
                         input = input,
