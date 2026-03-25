@@ -5,7 +5,7 @@
     <string name="type_unknown">Ukjent</string>
 
     <!-- HomeScreen -->
-    <string name="home_no_addons">Ingen tillegg installert. Legg til ett for å komme i gang.</string>
+    <string name="home_no_addons">Ingen tillegg installert. Legg til et for å komme i gang.</string>
     <string name="home_no_catalog_addons">Ingen katalogtillegg installert. Installer et katalogtillegg for å se innhold.</string>
     <string name="auth_notice_nuvio_logged_out">Du har blitt logget ut av Nuvio. Logg inn igjen.</string>
     <string name="auth_notice_trakt_logged_out">Du har blitt logget ut av Trakt. Koble til igjen.</string>
