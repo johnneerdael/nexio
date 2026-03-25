@@ -3,9 +3,12 @@ package com.nexio.tv.data.remote
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
+import kotlinx.coroutines.delay
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -41,22 +44,24 @@ class OkHttpCustomImdbClient @Inject constructor(
     private val moshi: Moshi
 ) : CustomImdbClient {
     private val ratingWithEpisodesAdapter = moshi.adapter(RatingWithEpisodes::class.java)
+    internal var delayMs: suspend (Long) -> Unit = { delay(it) }
 
     override suspend fun validate(baseUrl: String, apiKey: String): Boolean {
         val normalizedBaseUrl = normalizeCustomImdbBaseUrl(baseUrl)
         if (normalizedBaseUrl.isBlank() || apiKey.isBlank()) return false
 
-        return runCatching {
-            val request = Request.Builder()
-                .url(buildCustomImdbUrl(normalizedBaseUrl, "meta/stats"))
-                .header("X-API-Key", apiKey.trim())
-                .get()
-                .build()
+        val request = Request.Builder()
+            .url(buildCustomImdbUrl(normalizedBaseUrl, "meta/stats"))
+            .header("X-API-Key", apiKey.trim())
+            .get()
+            .build()
 
-            okHttpClient.newCall(request).execute().use { response ->
-                response.isSuccessful
-            }
-        }.getOrDefault(false)
+        return executeWithRateLimitRetry(
+            request = request,
+            onFailure = { false }
+        ) { response ->
+            response.isSuccessful
+        }
     }
 
     override suspend fun fetchEpisodeRatings(
@@ -79,19 +84,64 @@ class OkHttpCustomImdbClient @Inject constructor(
             .get()
             .build()
 
-        okHttpClient.newCall(request).execute().use { response ->
+        return executeWithRateLimitRetry(
+            request = request,
+            onFailure = { emptyMap() }
+        ) { response ->
             if (!response.isSuccessful) {
-                return emptyMap()
+                return@executeWithRateLimitRetry emptyMap()
             }
 
             val payload = response.body?.string().orEmpty()
-            val parsed = ratingWithEpisodesAdapter.fromJson(payload) ?: return emptyMap()
-            return parsed.episodes.mapNotNull { episode ->
+            val parsed = ratingWithEpisodesAdapter.fromJson(payload) ?: return@executeWithRateLimitRetry emptyMap()
+            parsed.episodes.mapNotNull { episode ->
                 val seasonNumber = episode.seasonNumber ?: return@mapNotNull null
                 val episodeNumber = episode.episodeNumber ?: return@mapNotNull null
                 val averageRating = episode.averageRating?.takeIf { it > 0.0 } ?: return@mapNotNull null
                 (seasonNumber to episodeNumber) to averageRating
             }.toMap()
+        }
+    }
+
+    private suspend fun <T> executeWithRateLimitRetry(
+        request: Request,
+        onFailure: (IOException) -> T,
+        onResponse: (Response) -> T
+    ): T {
+        var hasRetriedRateLimit = false
+
+        while (true) {
+            try {
+                var retryDelayMs: Long? = null
+
+                okHttpClient.newCall(request).execute().use { response ->
+                    if (response.code == 429 && !hasRetriedRateLimit) {
+                        retryDelayMs = parseRetryAfterDelayMs(response.header("Retry-After"))
+                        return@use
+                    }
+
+                    return onResponse(response)
+                }
+
+                if (retryDelayMs != null) {
+                    hasRetriedRateLimit = true
+                    delayMs(retryDelayMs)
+                    continue
+                }
+
+                error("Unreachable response state for custom IMDb request.")
+            } catch (error: IOException) {
+                return onFailure(error)
+            }
+        }
+    }
+
+    private fun parseRetryAfterDelayMs(retryAfterHeader: String?): Long {
+        val seconds = retryAfterHeader?.trim()?.toLongOrNull()
+        return if (seconds != null && seconds >= 0L) {
+            seconds * 1_000L
+        } else {
+            1_000L
         }
     }
 }

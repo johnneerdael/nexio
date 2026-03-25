@@ -181,6 +181,108 @@ class CustomImdbClientTest {
     }
 
     @Test
+    fun `validate retries once after rate limit using retry after header`() = runTest {
+        var attempts = 0
+        val delays = mutableListOf<Long>()
+        val client = OkHttpCustomImdbClient(
+            okHttpClient = okHttpClient { chain ->
+                attempts += 1
+                when (attempts) {
+                    1 -> jsonResponse(
+                        chain,
+                        """
+                        {
+                          "error": {
+                            "code": "rate_limited",
+                            "message": "rate limit exceeded"
+                          }
+                        }
+                        """.trimIndent(),
+                        code = 429,
+                        headers = mapOf("Retry-After" to "2")
+                    )
+
+                    else -> jsonResponse(chain, """{"status":"ok"}""")
+                }
+            },
+            moshi = Moshi.Builder().build()
+        ).also { imdbClient ->
+            imdbClient.delayMs = { delayMillis ->
+                delays += delayMillis
+            }
+        }
+
+        val result = client.validate(
+            baseUrl = "https://ratings.example.com",
+            apiKey = "secret-key"
+        )
+
+        assertTrue(result)
+        assertEquals(2, attempts)
+        assertEquals(listOf(2_000L), delays)
+    }
+
+    @Test
+    fun `fetchEpisodeRatings retries once after rate limit and falls back to one second delay`() = runTest {
+        var attempts = 0
+        val delays = mutableListOf<Long>()
+        val client = OkHttpCustomImdbClient(
+            okHttpClient = okHttpClient { chain ->
+                attempts += 1
+                when (attempts) {
+                    1 -> jsonResponse(
+                        chain,
+                        """
+                        {
+                          "error": {
+                            "code": "rate_limited",
+                            "message": "rate limit exceeded"
+                          }
+                        }
+                        """.trimIndent(),
+                        code = 429
+                    )
+
+                    else -> jsonResponse(
+                        chain,
+                        """
+                        {
+                          "requestTconst": "tt27444205",
+                          "episodesParentTconst": "tt27444205",
+                          "episodes": [
+                            {
+                              "tconst": "tt1000001",
+                              "parentTconst": "tt27444205",
+                              "seasonNumber": 1,
+                              "episodeNumber": 1,
+                              "averageRating": 8.3,
+                              "numVotes": 200
+                            }
+                          ]
+                        }
+                        """.trimIndent()
+                    )
+                }
+            },
+            moshi = Moshi.Builder().build()
+        ).also { imdbClient ->
+            imdbClient.delayMs = { delayMillis ->
+                delays += delayMillis
+            }
+        }
+
+        val result = client.fetchEpisodeRatings(
+            baseUrl = "https://ratings.example.com",
+            apiKey = "secret-key",
+            tconst = "tt27444205"
+        )
+
+        assertEquals(2, attempts)
+        assertEquals(listOf(1_000L), delays)
+        assertEquals(mapOf((1 to 1) to 8.3), result)
+    }
+
+    @Test
     fun `validate returns false when remote call fails`() = runTest {
         val client = OkHttpCustomImdbClient(
             okHttpClient = okHttpClient { throw IOException("boom") },
@@ -201,15 +303,21 @@ class CustomImdbClientTest {
     private fun jsonResponse(
         chain: Interceptor.Chain,
         body: String,
-        code: Int = 200
+        code: Int = 200,
+        headers: Map<String, String> = emptyMap()
     ): Response {
-        return Response.Builder()
+        val builder = Response.Builder()
             .request(chain.request())
             .protocol(Protocol.HTTP_1_1)
             .code(code)
             .message("OK")
             .body(body.toResponseBody("application/json".toMediaType()))
-            .build()
+
+        headers.forEach { (name, value) ->
+            builder.addHeader(name, value)
+        }
+
+        return builder.build()
     }
 }
 
