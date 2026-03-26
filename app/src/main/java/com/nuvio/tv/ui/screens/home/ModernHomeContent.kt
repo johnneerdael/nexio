@@ -60,7 +60,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
@@ -105,7 +108,7 @@ import kotlinx.coroutines.delay
 import android.view.KeyEvent as AndroidKeyEvent
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-private const val KEY_REPEAT_THROTTLE_MS = 80L
+
 private const val MODERN_HERO_RAPID_NAV_THRESHOLD_MS = 130L
 private const val MODERN_HERO_RAPID_NAV_SETTLE_MS = 170L
 
@@ -182,7 +185,9 @@ fun ModernHomeContent(
     }
 
     // Tag JankStats with key UI states so jank reports are actionable.
-    val metricsHolder = PerformanceMetricsState.getHolderForHierarchy(LocalView.current)
+    val currentView = LocalView.current
+    val focusManager = LocalFocusManager.current
+    val metricsHolder = PerformanceMetricsState.getHolderForHierarchy(currentView)
     LaunchedEffect(isVerticalRowsScrolling) {
         metricsHolder.state?.putState("HomeScrolling", isVerticalRowsScrolling.toString())
     }
@@ -215,7 +220,7 @@ fun ModernHomeContent(
     var restoredFromSavedState by remember { mutableStateOf(false) }
     var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
     val lastFocusedContinueWatchingIndexRef = remember { java.util.concurrent.atomic.AtomicInteger(-1) }
-    val lastKeyRepeatTimeRef = remember { java.util.concurrent.atomic.AtomicLong(0L) }
+    val lastKeyRepeatDispatchRef = remember { java.util.concurrent.atomic.AtomicLong(0L) }
     val lastHeroNavigationAtMsRef = remember { java.util.concurrent.atomic.AtomicLong(0L) }
     val heroFocusSettleDelayMsRef = remember { java.util.concurrent.atomic.AtomicLong(MODERN_HERO_FOCUS_DEBOUNCE_MS) }
     var focusedCatalogSelection by remember { mutableStateOf<FocusedCatalogSelection?>(null) }
@@ -682,12 +687,30 @@ fun ModernHomeContent(
                     .focusRestorer { focusRestorerRequester }
                     .onPreviewKeyEvent { event ->
                         val native = event.nativeKeyEvent
-                        if (native.action == AndroidKeyEvent.ACTION_DOWN && native.repeatCount > 0) {
-                            val now = System.currentTimeMillis()
-                            if (now - lastKeyRepeatTimeRef.get() < KEY_REPEAT_THROTTLE_MS) {
-                                return@onPreviewKeyEvent true
+                       
+                    
+                        if (native.action == AndroidKeyEvent.ACTION_DOWN &&
+                            native.repeatCount > 0
+                        ) {
+                            val isVertical = native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN ||
+                                native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_UP
+                            val gateMs = if (isVertical) 112L else 80L
+                            val now = android.os.SystemClock.uptimeMillis()
+                            if (now - lastKeyRepeatDispatchRef.get() < gateMs) {
+                                return@onPreviewKeyEvent true // consume, too soon
                             }
-                            lastKeyRepeatTimeRef.set(now)
+                            lastKeyRepeatDispatchRef.set(now)
+                            val direction = when (native.keyCode) {
+                                AndroidKeyEvent.KEYCODE_DPAD_DOWN -> FocusDirection.Down
+                                AndroidKeyEvent.KEYCODE_DPAD_UP -> FocusDirection.Up
+                                AndroidKeyEvent.KEYCODE_DPAD_LEFT -> FocusDirection.Left
+                                AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> FocusDirection.Right
+                                else -> null
+                            }
+                            if (direction != null) {
+                                focusManager.moveFocus(direction)
+                            }
+                            return@onPreviewKeyEvent true
                         }
                         false
                     },
