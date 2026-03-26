@@ -591,15 +591,18 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
                 watchProgressRepository.observeWatchedMovieIds()
                     .collectLatest { watchedIds ->
                         _uiState.update { state ->
-                            val newStatus = buildMap {
+                            val movieStatus = buildMap {
                                 allMovieItemsByKey.forEach { (statusKey, contentId) ->
                                     put(statusKey, contentId in watchedIds)
                                 }
                             }
-                            if (state.movieWatchedStatus == newStatus) {
+                            // Merge with existing status to preserve series entries.
+                            val merged = state.movieWatchedStatus
+                                .filterKeys { it !in desiredMovieKeys } + movieStatus
+                            if (state.movieWatchedStatus == merged) {
                                 state
                             } else {
-                                state.copy(movieWatchedStatus = newStatus)
+                                state.copy(movieWatchedStatus = merged)
                             }
                         }
                     }
@@ -619,7 +622,9 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
                     }
                 }
                 _uiState.update { state ->
-                    val merged = state.movieWatchedStatus + seriesStatus
+                    // Merge with existing status to preserve movie entries.
+                    val merged = state.movieWatchedStatus
+                        .filterKeys { it !in allSeriesItemsByKey.keys } + seriesStatus
                     if (state.movieWatchedStatus == merged) state
                     else state.copy(movieWatchedStatus = merged)
                 }
