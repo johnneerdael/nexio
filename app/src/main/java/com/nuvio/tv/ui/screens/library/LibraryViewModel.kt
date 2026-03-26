@@ -2,8 +2,11 @@ package com.nuvio.tv.ui.screens.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.data.local.LayoutPreferenceDataStore
+import com.nuvio.tv.data.local.LibraryPreferences
 import com.nuvio.tv.data.repository.TraktLibraryService
+import com.nuvio.tv.domain.model.AuthState
 import com.nuvio.tv.domain.model.LibraryEntry
 import com.nuvio.tv.domain.model.LibraryListTab
 import com.nuvio.tv.domain.model.LibrarySourceMode
@@ -73,6 +76,7 @@ data class LibraryUiState(
     val selectedTypeTab: LibraryTypeTab? = null,
     val selectedSortOption: LibrarySortOption = LibrarySortOption.DEFAULT,
     val sortSelectionVersion: Long = 0L,
+    val isNuvioAccount: Boolean = false,
     val posterCardWidthDp: Int = 126,
     val posterCardCornerRadiusDp: Int = 12,
     val isLoading: Boolean = true,
@@ -88,7 +92,9 @@ data class LibraryUiState(
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val libraryRepository: LibraryRepository,
-    private val layoutPreferenceDataStore: LayoutPreferenceDataStore
+    private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    private val libraryPreferences: LibraryPreferences,
+    private val authManager: AuthManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LibraryUiState())
@@ -128,6 +134,7 @@ class LibraryViewModel @Inject constructor(
             )
             updated.withVisibleItems()
         }
+        viewModelScope.launch { libraryPreferences.setSortOption(option.key) }
     }
 
     fun onRefresh() {
@@ -299,15 +306,28 @@ class LibraryViewModel @Inject constructor(
                 libraryRepository.sourceMode,
                 libraryRepository.isSyncing,
                 libraryRepository.libraryItems,
-                libraryRepository.listTabs
-            ) { sourceMode, isSyncing, items, listTabs ->
+                libraryRepository.listTabs,
+                libraryPreferences.sortOption,
+                authManager.authState
+            ) { args ->
+                val sourceMode = args[0] as LibrarySourceMode
+                val isSyncing = args[1] as Boolean
+                @Suppress("UNCHECKED_CAST")
+                val items = args[2] as List<LibraryEntry>
+                @Suppress("UNCHECKED_CAST")
+                val listTabs = args[3] as List<LibraryListTab>
+                val persistedSortKey = args[4] as String?
+                val authState = args[5] as AuthState
                 DataBundle(
                     sourceMode = sourceMode,
                     isSyncing = isSyncing,
                     items = items,
-                    listTabs = listTabs
+                    listTabs = listTabs,
+                    persistedSortKey = persistedSortKey,
+                    authState = authState
                 )
-            }.collectLatest { (sourceMode, isSyncing, items, listTabs) ->
+            }.collectLatest { bundle ->
+                val (sourceMode, isSyncing, items, listTabs, persistedSortKey, authState) = bundle
                 _uiState.update { current ->
                     val nextSelectedList = when {
                         sourceMode == LibrarySourceMode.TRAKT -> {
@@ -341,9 +361,15 @@ class LibraryViewModel @Inject constructor(
                     } else {
                         LibrarySortOption.LocalOptions
                     }
-                    val nextSelectedSort = current.selectedSortOption
+                    val modeDefault = if (sourceMode == LibrarySourceMode.TRAKT) LibrarySortOption.DEFAULT else LibrarySortOption.ADDED_DESC
+                    val persistedSort = persistedSortKey?.let { key ->
+                        LibrarySortOption.entries.find { it.key == key }
+                    }
+                    val nextSelectedSort = (persistedSort ?: current.selectedSortOption)
                         .takeIf { it in sortOptions }
-                        ?: if (sourceMode == LibrarySourceMode.TRAKT) LibrarySortOption.DEFAULT else LibrarySortOption.ADDED_DESC
+                        ?: modeDefault
+
+                    val isNuvioAccount = sourceMode == LibrarySourceMode.LOCAL && authState is AuthState.FullAccount
 
                     val updated = current.copy(
                         sourceMode = sourceMode,
@@ -355,11 +381,9 @@ class LibraryViewModel @Inject constructor(
                         selectedListKey = nextSelectedList,
                         selectedSortOption = nextSelectedSort,
                         manageSelectedListKey = nextManageSelected,
-                        isSyncing = sourceMode == LibrarySourceMode.TRAKT && isSyncing,
-                        isLoading = sourceMode == LibrarySourceMode.TRAKT &&
-                            isSyncing &&
-                            items.isEmpty() &&
-                            listTabs.isEmpty()
+                        isNuvioAccount = isNuvioAccount,
+                        isSyncing = isSyncing,
+                        isLoading = isSyncing && items.isEmpty()
                     )
                     updated.withVisibleItems()
                 }
@@ -395,7 +419,9 @@ class LibraryViewModel @Inject constructor(
         val sourceMode: LibrarySourceMode,
         val isSyncing: Boolean,
         val items: List<LibraryEntry>,
-        val listTabs: List<LibraryListTab>
+        val listTabs: List<LibraryListTab>,
+        val persistedSortKey: String?,
+        val authState: AuthState
     )
 
     private fun reorderSelectedList(moveUp: Boolean) {

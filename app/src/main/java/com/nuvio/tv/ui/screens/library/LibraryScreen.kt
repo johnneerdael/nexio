@@ -234,7 +234,11 @@ fun LibraryScreen(
                     letterSpacing = 0.5.sp
                 )
                 Text(
-                    text = if (uiState.sourceMode == LibrarySourceMode.TRAKT) "TRAKT" else stringResource(R.string.library_source_local),
+                    text = when {
+                        uiState.sourceMode == LibrarySourceMode.TRAKT -> "TRAKT"
+                        uiState.isNuvioAccount -> "NUVIO"
+                        else -> stringResource(R.string.library_source_local)
+                    },
                     style = MaterialTheme.typography.labelLarge,
                     color = if (showBuiltInHeader) NuvioColors.TextTertiary else Color.Transparent,
                     fontWeight = FontWeight.Medium,
