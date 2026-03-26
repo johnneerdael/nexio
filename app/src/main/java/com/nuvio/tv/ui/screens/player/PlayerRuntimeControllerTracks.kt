@@ -347,12 +347,32 @@ internal fun PlayerRuntimeController.findMatchingTrackIndex(
     if (nameContainsIndex >= 0) return nameContainsIndex
 
     return if (!targetLang.isNullOrBlank()) {
-        tracks.indexOfFirst { track ->
-            val trackLang = normalizeTrackMatchValue(track.language)
+        // Detect the regional variant from the remembered selection's name/language
+        val targetVariant = PlayerSubtitleUtils.detectTrackLanguageVariant(
+            language = target.language,
+            name = target.name,
+            trackId = target.trackId
+        )
+        val langCandidates = tracks.indices.filter { index ->
+            val trackLang = normalizeTrackMatchValue(tracks[index].language)
             !trackLang.isNullOrBlank() &&
                 (trackLang == targetLang ||
                     trackLang.startsWith("$targetLang-") ||
                     trackLang.startsWith("${targetLang}_"))
+        }
+        if (langCandidates.size <= 1) {
+            langCandidates.firstOrNull() ?: -1
+        } else {
+            // Multiple tracks with the same base language — prefer the one
+            // whose detected variant matches the remembered selection.
+            langCandidates.firstOrNull { index ->
+                val trackVariant = PlayerSubtitleUtils.detectTrackLanguageVariant(
+                    language = tracks[index].language,
+                    name = tracks[index].name,
+                    trackId = tracks[index].trackId
+                )
+                trackVariant == targetVariant
+            } ?: langCandidates.first()
         }
     } else {
         -1
@@ -427,8 +447,31 @@ internal fun PlayerRuntimeController.applyPersistedTrackPreference(
                         updatedPending = updatedPending.copy(subtitle = null)
                     }
                 } else {
-                    Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: internal subtitle no match, clearing")
-                    updatedPending = updatedPending.copy(subtitle = null)
+                    // No internal track matches — try addon fallback with the same language variant.
+                    val resolvedVariant = PlayerSubtitleUtils.detectTrackLanguageVariant(
+                        language = subtitleSelection.track.language,
+                        name = subtitleSelection.track.name,
+                        trackId = subtitleSelection.track.trackId
+                    )
+                    val state = _uiState.value
+                    val addonFallback = state.addonSubtitles.firstOrNull { subtitle ->
+                        PlayerSubtitleUtils.matchesLanguageCode(subtitle.lang, resolvedVariant)
+                    }
+                    if (addonFallback != null) {
+                        Log.d(
+                            PlayerRuntimeController.TAG,
+                            "TRACK_PREF restore: internal no match, falling back to addon lang=${addonFallback.lang} variant=$resolvedVariant"
+                        )
+                        autoSubtitleSelected = true
+                        subtitleAddonRestoredByPersistedPreference = true
+                        pendingRestoredAddonSubtitle = addonFallback
+                        selectAddonSubtitle(addonFallback)
+                        updatedAddonSubtitle = addonFallback
+                        updatedPending = updatedPending.copy(subtitle = null)
+                    } else {
+                        Log.d(PlayerRuntimeController.TAG, "TRACK_PREF restore: internal subtitle no match, no addon fallback for variant=$resolvedVariant, clearing")
+                        updatedPending = updatedPending.copy(subtitle = null)
+                    }
                 }
             }
         }
@@ -499,8 +542,19 @@ internal fun PlayerRuntimeController.findBestInternalSubtitleTrackIndex(
                     )
                     return brazilianFromGenericPt
                 }
-                // Specific PT-BR rule:
-                // generic "pt" tracks without brazilian tags are not accepted as PT-BR.
+                if (targetPosition == 0) {
+                    return -1
+                }
+            }
+            if (normalizedTarget == "es-419") {
+                val latinoFromGenericEs = findLatinoSpanishInGenericEsTracks(subtitleTracks)
+                if (latinoFromGenericEs >= 0) {
+                    Log.d(
+                        PlayerRuntimeController.TAG,
+                        "AUTO_SUB pick internal es-419 via generic-es tags index=$latinoFromGenericEs"
+                    )
+                    return latinoFromGenericEs
+                }
                 if (targetPosition == 0) {
                     return -1
                 }
@@ -511,6 +565,14 @@ internal fun PlayerRuntimeController.findBestInternalSubtitleTrackIndex(
 
         if (normalizedTarget == "pt" || normalizedTarget == "pt-br") {
             val tieBroken = breakPortugueseSubtitleTie(
+                subtitleTracks = subtitleTracks,
+                candidateIndexes = candidateIndexes,
+                normalizedTarget = normalizedTarget
+            )
+            if (tieBroken >= 0) return tieBroken
+        }
+        if (normalizedTarget == "es" || normalizedTarget == "es-419") {
+            val tieBroken = breakSpanishSubtitleTie(
                 subtitleTracks = subtitleTracks,
                 candidateIndexes = candidateIndexes,
                 normalizedTarget = normalizedTarget
@@ -536,11 +598,18 @@ internal fun PlayerRuntimeController.findBrazilianPortugueseInGenericPtTracks(
     }
     if (genericPtIndexes.isEmpty()) return -1
 
+    val brazilianNonForced = genericPtIndexes.filter { index ->
+        !subtitleTracks[index].isForced &&
+            subtitleHasAnyTag(subtitleTracks[index], PlayerSubtitleUtils.BRAZILIAN_TAGS) &&
+            !subtitleHasAnyTag(subtitleTracks[index], PlayerSubtitleUtils.EUROPEAN_PT_TAGS)
+    }
+    if (brazilianNonForced.isNotEmpty()) return brazilianNonForced.first()
+
     return genericPtIndexes.firstOrNull { index ->
-        subtitleHasAnyTag(subtitleTracks[index], PlayerRuntimeController.PORTUGUESE_BRAZILIAN_TAGS) &&
-            !subtitleHasAnyTag(subtitleTracks[index], PlayerRuntimeController.PORTUGUESE_EUROPEAN_TAGS)
+        subtitleHasAnyTag(subtitleTracks[index], PlayerSubtitleUtils.BRAZILIAN_TAGS) &&
+            !subtitleHasAnyTag(subtitleTracks[index], PlayerSubtitleUtils.EUROPEAN_PT_TAGS)
     } ?: genericPtIndexes.firstOrNull { index ->
-        subtitleHasAnyTag(subtitleTracks[index], PlayerRuntimeController.PORTUGUESE_BRAZILIAN_TAGS)
+        subtitleHasAnyTag(subtitleTracks[index], PlayerSubtitleUtils.BRAZILIAN_TAGS)
     } ?: -1
 }
 
@@ -550,11 +619,11 @@ internal fun PlayerRuntimeController.breakPortugueseSubtitleTie(
     normalizedTarget: String
 ): Int {
     fun hasBrazilianTags(index: Int): Boolean {
-        return subtitleHasAnyTag(subtitleTracks[index], PlayerRuntimeController.PORTUGUESE_BRAZILIAN_TAGS)
+        return subtitleHasAnyTag(subtitleTracks[index], PlayerSubtitleUtils.BRAZILIAN_TAGS)
     }
 
     fun hasEuropeanTags(index: Int): Boolean {
-        return subtitleHasAnyTag(subtitleTracks[index], PlayerRuntimeController.PORTUGUESE_EUROPEAN_TAGS)
+        return subtitleHasAnyTag(subtitleTracks[index], PlayerSubtitleUtils.EUROPEAN_PT_TAGS)
     }
 
     return if (normalizedTarget == "pt-br") {
@@ -565,6 +634,55 @@ internal fun PlayerRuntimeController.breakPortugueseSubtitleTie(
         candidateIndexes.firstOrNull { hasEuropeanTags(it) && !hasBrazilianTags(it) }
             ?: candidateIndexes.firstOrNull { hasEuropeanTags(it) }
             ?: candidateIndexes.firstOrNull { !hasBrazilianTags(it) }
+            ?: candidateIndexes.first()
+    }
+}
+
+internal fun PlayerRuntimeController.findLatinoSpanishInGenericEsTracks(
+    subtitleTracks: List<TrackInfo>
+): Int {
+    val genericEsIndexes = subtitleTracks.indices.filter { index ->
+        val trackLanguage = subtitleTracks[index].language ?: return@filter false
+        PlayerSubtitleUtils.normalizeLanguageCode(trackLanguage) == "es"
+    }
+    if (genericEsIndexes.isEmpty()) return -1
+
+    val latinoNonForced = genericEsIndexes.filter { index ->
+        !subtitleTracks[index].isForced &&
+            subtitleHasAnyTag(subtitleTracks[index], PlayerSubtitleUtils.LATINO_TAGS) &&
+            !subtitleHasAnyTag(subtitleTracks[index], PlayerSubtitleUtils.CASTILIAN_TAGS)
+    }
+    if (latinoNonForced.isNotEmpty()) return latinoNonForced.first()
+
+    return genericEsIndexes.firstOrNull { index ->
+        subtitleHasAnyTag(subtitleTracks[index], PlayerSubtitleUtils.LATINO_TAGS) &&
+            !subtitleHasAnyTag(subtitleTracks[index], PlayerSubtitleUtils.CASTILIAN_TAGS)
+    } ?: genericEsIndexes.firstOrNull { index ->
+        subtitleHasAnyTag(subtitleTracks[index], PlayerSubtitleUtils.LATINO_TAGS)
+    } ?: -1
+}
+
+internal fun PlayerRuntimeController.breakSpanishSubtitleTie(
+    subtitleTracks: List<TrackInfo>,
+    candidateIndexes: List<Int>,
+    normalizedTarget: String
+): Int {
+    fun hasLatinoTags(index: Int): Boolean {
+        return subtitleHasAnyTag(subtitleTracks[index], PlayerSubtitleUtils.LATINO_TAGS)
+    }
+
+    fun hasCastilianTags(index: Int): Boolean {
+        return subtitleHasAnyTag(subtitleTracks[index], PlayerSubtitleUtils.CASTILIAN_TAGS)
+    }
+
+    return if (normalizedTarget == "es-419") {
+        candidateIndexes.firstOrNull { hasLatinoTags(it) && !hasCastilianTags(it) }
+            ?: candidateIndexes.firstOrNull { hasLatinoTags(it) }
+            ?: candidateIndexes.first()
+    } else {
+        candidateIndexes.firstOrNull { hasCastilianTags(it) && !hasLatinoTags(it) }
+            ?: candidateIndexes.firstOrNull { hasCastilianTags(it) }
+            ?: candidateIndexes.firstOrNull { !hasLatinoTags(it) }
             ?: candidateIndexes.first()
     }
 }
