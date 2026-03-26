@@ -639,6 +639,26 @@
     <string name="player_more_aspect_ratio">Proporcje obrazu</string>
     <string name="player_more_open_external">Otwórz w zewnętrznym odtwarzaczu</string>
 
+    <!-- StreamInfoOverlay -->
+    <string name="stream_info_section_source">ŹRÓDŁO</string>
+    <string name="stream_info_section_file">PLIK</string>
+    <string name="stream_info_section_video">WIDEO</string>
+    <string name="stream_info_section_audio">AUDIO</string>
+    <string name="stream_info_section_subtitle">NAPISY</string>
+    <string name="stream_info_filename">Nazwa pliku</string>
+    <string name="stream_info_size">Rozmiar</string>
+    <string name="stream_info_codec">Kodek</string>
+    <string name="stream_info_resolution">Rozdzielczość</string>
+    <string name="stream_info_frame_rate">Klatki/s</string>
+    <string name="stream_info_bitrate">Bitrate</string>
+    <string name="stream_info_channels">Kanały</string>
+    <string name="stream_info_sample_rate">Próbkowanie</string>
+    <string name="stream_info_language">Język</string>
+    <string name="stream_info_name">Nazwa</string>
+    <string name="stream_info_source">Źródło</string>
+    <string name="stream_info_subtitle_source_addon">Dodatek</string>
+    <string name="stream_info_subtitle_source_embedded">Wbudowane</string>
+
     <!-- StreamSourcesSidePanel -->
     <string name="sources_title">Źródła</string>
     <string name="sources_reload">Odśwież</string>

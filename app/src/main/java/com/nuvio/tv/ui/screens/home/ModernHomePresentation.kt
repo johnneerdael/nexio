@@ -126,7 +126,8 @@ internal fun buildModernHomePresentation(
                                 occurrence = occurrence,
                                 strTypeMovie = strTypeMovie,
                                 strTypeSeries = strTypeSeries,
-                                showFullReleaseDate = input.showFullReleaseDate
+                                showFullReleaseDate = input.showFullReleaseDate,
+                                previousCachedItem = cachedItem?.carouselItem
                             )
                             rowItemCache[cacheKey] = CachedCarouselItem(
                                 source = item,
