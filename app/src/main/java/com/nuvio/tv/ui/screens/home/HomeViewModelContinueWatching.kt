@@ -300,6 +300,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                         .filter { shouldUseAsCompletedSeed(it) }
                         .groupBy { it.contentId }
                         .mapNotNull { (_, items) -> choosePreferredNextUpSeed(items) }
+                        .take(CW_MAX_NEXT_UP_LOOKUPS)
                     if (uncachedSeeds.isNotEmpty()) {
                         launch(Dispatchers.IO) {
                             val lookupSemaphore = Semaphore(CW_MAX_NEXT_UP_CONCURRENCY)
