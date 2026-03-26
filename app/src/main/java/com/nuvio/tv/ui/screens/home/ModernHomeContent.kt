@@ -690,7 +690,11 @@ fun ModernHomeContent(
                        
                     
                         if (native.action == AndroidKeyEvent.ACTION_DOWN &&
-                            native.repeatCount > 0
+                            native.repeatCount > 0 &&
+                            (native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN ||
+                                native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_UP ||
+                                native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT ||
+                                native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_RIGHT)
                         ) {
                             val isVertical = native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN ||
                                 native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_UP
