@@ -939,6 +939,8 @@
     <string name="library_filter_list">List</string>
     <string name="library_filter_type">Type</string>
     <string name="library_filter_sort">Sort</string>
+    <string name="library_filter_genre">Genre</string>
+    <string name="library_filter_year">Year</string>
     <string name="library_sort_trakt_order">Trakt Order</string>
     <string name="library_sort_added_desc">Added ↓</string>
     <string name="library_sort_added_asc">Added ↑</string>
