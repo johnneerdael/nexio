@@ -48,7 +48,6 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -360,11 +359,17 @@ internal fun ModernRowSection(
             if (pendingRowFocusKey != row.key) return@LaunchedEffect
             val targetIndex = (pendingRowFocusIndex ?: 0)
                 .coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
-            val targetItemKey = row.items.getOrNull(targetIndex)?.key ?: return@LaunchedEffect
+            val visibleItemsInfo = rowListState.layoutInfo.visibleItemsInfo
+            val firstVisibleIndex = visibleItemsInfo.firstOrNull()?.index ?: rowListState.firstVisibleItemIndex
+            val resolvedIndex = if (visibleItemsInfo.any { it.index == targetIndex }) {
+                targetIndex
+            } else {
+                firstVisibleIndex.coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
+            }
+            val targetItemKey = row.items.getOrNull(resolvedIndex)?.key ?: return@LaunchedEffect
             val requester = uiCaches.requesterFor(row.key, targetItemKey)
             var didFocus = false
-            var didScrollToTarget = false
-            repeat(20) {
+            repeat(8) {
                 didFocus = runCatching {
                     requester.requestFocus()
                     true
@@ -372,22 +377,11 @@ internal fun ModernRowSection(
                 if (didFocus) {
                     return@repeat
                 }
-                if (!didScrollToTarget) {
-                    runCatching { rowListState.scrollToItem(targetIndex) }
-                    didScrollToTarget = true
-                }
                 withFrameNanos { }
             }
             if (!didFocus) {
-                val fallbackIndex = rowListState.firstVisibleItemIndex
-                    .coerceIn(0, (row.items.size - 1).coerceAtLeast(0))
-                val fallbackItemKey = row.items.getOrNull(fallbackIndex)?.key
-                didFocus = runCatching {
-                    if (fallbackItemKey != null) {
-                        uiCaches.requesterFor(row.key, fallbackItemKey).requestFocus()
-                    }
-                    true
-                }.getOrDefault(false)
+                onPendingRowFocusCleared()
+                return@LaunchedEffect
             }
             if (didFocus) {
                 onPendingRowFocusCleared()
@@ -559,7 +553,7 @@ internal fun ModernRowSection(
         CompositionLocalProvider(LocalBringIntoViewSpec provides horizontalBringIntoViewSpec) {
             LazyRow(
                 state = rowListState,
-                modifier = Modifier.focusRestorer().focusGroup(),
+                modifier = Modifier.focusGroup(),
                 contentPadding = PaddingValues(horizontal = rowStartPadding),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {

@@ -61,7 +61,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -192,6 +191,8 @@ fun ModernHomeContent(
     var pendingRowFocusKey by remember { mutableStateOf<String?>(null) }
     var pendingRowFocusIndex by remember { mutableStateOf<Int?>(null) }
     var pendingRowFocusNonce by remember { mutableIntStateOf(0) }
+    var sidebarRestoreNonce by remember { mutableIntStateOf(0) }
+    var lastSidebarExpanded by remember { mutableStateOf(isSidebarExpanded) }
     var heroItem by remember { mutableStateOf<HeroPreview?>(null) }
     val heroTransitioningRef = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
     var restoredFromSavedState by remember { mutableStateOf(false) }
@@ -363,6 +364,13 @@ fun ModernHomeContent(
         focusedItemByRow[row.key] = clampedIndex
     }
 
+    LaunchedEffect(isSidebarExpanded) {
+        if (lastSidebarExpanded && !isSidebarExpanded) {
+            sidebarRestoreNonce++
+        }
+        lastSidebarExpanded = isSidebarExpanded
+    }
+
     val activeHeroItemKey by remember(activeRow, clampedActiveItemIndex) {
         derivedStateOf {
             val row = activeRow ?: return@derivedStateOf null
@@ -443,8 +451,6 @@ fun ModernHomeContent(
         }
         val activeItemId = activeCarouselItem?.metaPreview?.id
         val enrichmentActive = enrichingItemId != null && enrichingItemId == activeItemId
-        // When enrichment is active use heroItem (frozen), when done use activeCarouselItem
-        // which already has the enriched data from uiState update
         val resolvedHero = if (enrichmentActive) heroItem else activeCarouselItem?.heroPreview ?: heroItem
         val activeRowFallbackBackdrop = remember(activeRow?.key, activeRow?.items?.size) {
             activeRow?.items?.firstNotNullOfOrNull { item ->
@@ -522,20 +528,46 @@ fun ModernHomeContent(
         }
         val bgColor = NuvioColors.Background
         val contentFocusRequester = LocalContentFocusRequester.current
-        val focusRestorerRequester by remember(carouselRows, uiCaches) {
+        val explicitRestoreRequester by remember(carouselRows, uiCaches, activeRowKey, activeItemIndex) {
             derivedStateOf {
                 val rowKey = activeRowKey
                 if (rowKey != null) {
-                    val row = carouselRows.firstOrNull { it.key == rowKey }
+                    val row = rowByKey[rowKey]
                     val rowListState = uiCaches.rowListStates[rowKey]
-                    val firstVisibleIndex = rowListState?.firstVisibleItemIndex ?: 0
-                    val safeIndex = firstVisibleIndex.coerceIn(0, ((row?.items?.size ?: 1) - 1).coerceAtLeast(0))
+                    val firstVisibleIndex = rowListState?.layoutInfo?.visibleItemsInfo?.firstOrNull()?.index
+                        ?: rowListState?.firstVisibleItemIndex
+                        ?: 0
+                    val lastVisibleIndex = rowListState?.layoutInfo?.visibleItemsInfo?.lastOrNull()?.index
+                    val preferredIndex = focusedItemByRow[rowKey]
+                    val resolvedIndex = if (
+                        preferredIndex != null &&
+                        lastVisibleIndex != null &&
+                        preferredIndex in firstVisibleIndex..lastVisibleIndex
+                    ) {
+                        preferredIndex
+                    } else {
+                        firstVisibleIndex
+                    }
+                    val safeIndex = resolvedIndex.coerceIn(0, ((row?.items?.size ?: 1) - 1).coerceAtLeast(0))
                     val itemKey = row?.items?.getOrNull(safeIndex)?.key
                     if (itemKey != null) {
                         uiCaches.itemFocusRequesters[rowKey]?.get(itemKey) ?: FocusRequester.Default
                     } else FocusRequester.Default
                 } else FocusRequester.Default
             }
+        }
+        LaunchedEffect(
+            sidebarRestoreNonce,
+            pendingRowFocusKey,
+            isVerticalRowsScrolling,
+            activeRowKey,
+            explicitRestoreRequester
+        ) {
+            if (sidebarRestoreNonce == 0) return@LaunchedEffect
+            if (pendingRowFocusKey != null || isVerticalRowsScrolling || activeRowKey == null) return@LaunchedEffect
+            withFrameNanos { }
+            runCatching { explicitRestoreRequester.requestFocus() }
+            sidebarRestoreNonce = 0
         }
         val heroMediaWidthPx = remember(maxWidth, localDensity, fullScreenBackdrop) {
             with(localDensity) {
@@ -615,7 +647,6 @@ fun ModernHomeContent(
                     .padding(bottom = catalogBottomPadding)
                     .graphicsLayer { alpha = trailerContentAlpha }
                     .focusRequester(contentFocusRequester)
-                    .focusRestorer { focusRestorerRequester }
                     .onPreviewKeyEvent { event ->
                         val native = event.nativeKeyEvent
                         if (native.action == AndroidKeyEvent.ACTION_DOWN && native.repeatCount > 0) {
