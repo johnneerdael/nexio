@@ -15,7 +15,6 @@ import com.nuvio.tv.data.local.StartupAuthNotice
 import com.nuvio.tv.data.local.TmdbSettingsDataStore
 import com.nuvio.tv.data.local.TraktSettingsDataStore
 import com.nuvio.tv.data.local.WatchedItemsPreferences
-import com.nuvio.tv.data.repository.WatchProgressRepositoryImpl
 import com.nuvio.tv.data.trailer.TrailerService
 import com.nuvio.tv.domain.model.Addon
 import com.nuvio.tv.domain.model.CatalogDescriptor
@@ -28,6 +27,7 @@ import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.CatalogRepository
 import com.nuvio.tv.domain.repository.LibraryRepository
 import com.nuvio.tv.domain.repository.MetaRepository
+import com.nuvio.tv.domain.repository.WatchProgressRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -49,7 +49,7 @@ class HomeViewModel @Inject constructor(
     @ApplicationContext internal val appContext: Context,
     internal val addonRepository: AddonRepository,
     internal val catalogRepository: CatalogRepository,
-    internal val watchProgressRepository: WatchProgressRepositoryImpl,
+    internal val watchProgressRepository: WatchProgressRepository,
     internal val libraryRepository: LibraryRepository,
     internal val metaRepository: MetaRepository,
     internal val layoutPreferenceDataStore: LayoutPreferenceDataStore,
@@ -74,7 +74,6 @@ class HomeViewModel @Inject constructor(
         internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
         internal const val EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS = 120L
         internal const val MAX_POSTER_STATUS_OBSERVERS = 24
-        internal const val CONTINUE_WATCHING_REMOTE_REFRESH_STALE_MS = 60_000L
     }
 
     internal val _uiState = MutableStateFlow(HomeUiState())
@@ -272,24 +271,6 @@ class HomeViewModel @Inject constructor(
 
     private fun loadContinueWatching() {
         loadContinueWatchingPipeline()
-    }
-
-    fun refreshContinueWatchingIfStale(force: Boolean = false) {
-        viewModelScope.launch {
-            val refreshedAt = watchProgressRepository.refreshRemoteProgressIfStale(
-                maxAgeMs = CONTINUE_WATCHING_REMOTE_REFRESH_STALE_MS,
-                force = force
-            )
-            if (refreshedAt != null) {
-                _uiState.update { state ->
-                    if (state.continueWatchingLastRemoteSyncAtMs == refreshedAt) {
-                        state
-                    } else {
-                        state.copy(continueWatchingLastRemoteSyncAtMs = refreshedAt)
-                    }
-                }
-            }
-        }
     }
 
     private fun removeContinueWatching(

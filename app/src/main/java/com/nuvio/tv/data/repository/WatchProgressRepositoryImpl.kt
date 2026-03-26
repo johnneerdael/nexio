@@ -74,7 +74,6 @@ class WatchProgressRepositoryImpl @Inject constructor(
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var syncJob: Job? = null
     private var watchedItemsSyncJob: Job? = null
-    private var lastRemoteRefreshAtMs: Long = 0L
     var isSyncingFromRemote = false
     var hasCompletedInitialPull = false
     var hasCompletedInitialWatchedItemsPull = false
@@ -96,44 +95,6 @@ class WatchProgressRepositoryImpl @Inject constructor(
         syncJob = syncScope.launch {
             delay(2000)
             watchProgressSyncService.pushToRemote()
-        }
-    }
-
-    suspend fun refreshRemoteProgressIfStale(
-        maxAgeMs: Long,
-        force: Boolean = false
-    ): Long? {
-        if (isSyncingFromRemote) return null
-
-        val now = System.currentTimeMillis()
-        val useTraktProgress = shouldUseTraktProgress()
-        if (!force && hasCompletedInitialPull && lastRemoteRefreshAtMs > 0L) {
-            val ageMs = now - lastRemoteRefreshAtMs
-            if (ageMs in 0 until maxAgeMs) {
-                return lastRemoteRefreshAtMs
-            }
-        }
-
-        if (useTraktProgress) {
-            traktProgressService.refreshNow()
-            lastRemoteRefreshAtMs = now
-            return lastRemoteRefreshAtMs
-        }
-
-        if (!authManager.isAuthenticated) return lastRemoteRefreshAtMs.takeIf { it > 0L }
-
-        isSyncingFromRemote = true
-        return try {
-            val remoteEntries = watchProgressSyncService.pullFromRemote().getOrElse { throw it }
-            watchProgressPreferences.mergeRemoteEntries(remoteEntries.toMap())
-            hasCompletedInitialPull = true
-            lastRemoteRefreshAtMs = System.currentTimeMillis()
-            lastRemoteRefreshAtMs
-        } catch (error: Exception) {
-            Log.w(TAG, "refreshRemoteProgressIfStale failed", error)
-            lastRemoteRefreshAtMs.takeIf { it > 0L }
-        } finally {
-            isSyncingFromRemote = false
         }
     }
 
