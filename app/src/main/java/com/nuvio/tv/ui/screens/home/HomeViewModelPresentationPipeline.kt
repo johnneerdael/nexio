@@ -220,7 +220,7 @@ internal fun HomeViewModel.observeModernHomePresentationPipeline() {
             .collectLatest { input ->
                 val shouldWarmStart = uiState.value.modernHomePresentation.rows.isEmpty()
                 val visibleCatalogRowCount = input.catalogRows.count { it.items.isNotEmpty() }
-                val warmStartCatalogRowCount = if (input.continueWatchingItems.isNotEmpty()) 1 else 2
+                val warmStartCatalogRowCount = if (input.continueWatchingItems.isNotEmpty()) 2 else 3
 
                 if (shouldWarmStart && visibleCatalogRowCount > warmStartCatalogRowCount) {
                     val warmStartPresentation = withContext(Dispatchers.Default) {

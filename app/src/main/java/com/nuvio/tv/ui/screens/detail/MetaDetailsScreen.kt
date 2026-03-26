@@ -1151,33 +1151,39 @@ private fun MetaDetailsContent(
         with(localDensity) { screenHeightDp.roundToPx() }
     }
     val hasHeroBackdrop = !heroBackdropUrl.isNullOrBlank()
+    val seedBackdropUrl = heroBackdropUrl?.takeIf { it.isNotBlank() }
     val backdropDataUrl = meta.backdropUrl ?: meta.poster
-    val backdropRequest = remember(
-        localContext,
-        backdropDataUrl,
-        hasHeroBackdrop,
-        backdropWidthPx,
-        backdropHeightPx
-    ) {
-        ImageRequest.Builder(localContext)
-            .data(backdropDataUrl)
-            .apply { if (hasHeroBackdrop) crossfade(false) else crossfade(400) }
-            .size(width = backdropWidthPx, height = backdropHeightPx)
-            .build()
-    }
-
-    // Show hero backdrop from previous screen as a persistent underlay
-    // so there's no visual gap or re-render during transitions
+    val shouldReuseSeedBackdrop = seedBackdropUrl != null && seedBackdropUrl == backdropDataUrl
+    val shouldShowSeedBackdropUnderlay = seedBackdropUrl != null && !shouldReuseSeedBackdrop
     val heroBackdropRequest = remember(
         localContext,
-        heroBackdropUrl,
+        seedBackdropUrl,
         backdropWidthPx,
         backdropHeightPx
     ) {
-        heroBackdropUrl?.takeIf { it.isNotBlank() }?.let {
+        seedBackdropUrl?.let {
             ImageRequest.Builder(localContext)
                 .data(it)
                 .crossfade(false)
+                .size(width = backdropWidthPx, height = backdropHeightPx)
+                .build()
+        }
+    }
+    val backdropRequest = remember(
+        localContext,
+        backdropDataUrl,
+        shouldReuseSeedBackdrop,
+        hasHeroBackdrop,
+        heroBackdropRequest,
+        backdropWidthPx,
+        backdropHeightPx
+    ) {
+        if (shouldReuseSeedBackdrop && heroBackdropRequest != null) {
+            heroBackdropRequest
+        } else {
+            ImageRequest.Builder(localContext)
+                .data(backdropDataUrl)
+                .apply { if (shouldShowSeedBackdropUnderlay) crossfade(400) else if (hasHeroBackdrop) crossfade(false) else crossfade(400) }
                 .size(width = backdropWidthPx, height = backdropHeightPx)
                 .build()
         }
@@ -1247,7 +1253,7 @@ private fun MetaDetailsContent(
         // Sticky background — backdrop or trailer
         BackdropLayer(
             backdropRequest = backdropRequest,
-            heroBackdropRequest = heroBackdropRequest,
+            heroBackdropRequest = if (shouldShowSeedBackdropUnderlay) heroBackdropRequest else null,
             trailerUrl = trailerUrl,
             trailerAudioUrl = trailerAudioUrl,
             isTrailerPlaying = isTrailerPlaying,
