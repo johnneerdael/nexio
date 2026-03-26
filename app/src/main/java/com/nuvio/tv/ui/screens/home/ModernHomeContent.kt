@@ -760,7 +760,7 @@ fun ModernHomeContent(
             modifier = heroMediaModifier
         )
         val trailerContentAlpha by animateFloatAsState(
-            targetValue = if (fullScreenBackdrop && shouldPlayHeroTrailer && heroTrailerFirstFrameRendered) 0.12f else 1f,
+            targetValue = if (fullScreenBackdrop && shouldPlayHeroTrailer && heroTrailerFirstFrameRendered) 0f else 1f,
             animationSpec = tween(durationMillis = 480),
             label = "trailerContentFade"
         )
