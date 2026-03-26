@@ -624,6 +624,12 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
             async(Dispatchers.IO) {
                 try {
                     val tmdbId = tmdbService.ensureTmdbId(item.id, item.apiType) ?: return@async item
+
+                    //Pre-warm resolveMetaLookupId returns instantly from cache.
+                    tmdbId.toIntOrNull()?.let { numericId ->
+                        runCatching { tmdbService.tmdbToImdb(numericId, item.apiType) }
+                    }
+
                     val enrichment = tmdbMetadataService.fetchEnrichment(
                         tmdbId = tmdbId,
                         contentType = item.type,
