@@ -723,6 +723,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         PlayerEvent.OnRetry -> {
             hasRenderedFirstFrame = false
             hasRetriedCurrentStreamAfter416 = false
+            resetErrorRetryState()
             resetNextEpisodeCardState(clearEpisode = false)
             _uiState.update { state ->
                 state.copy(
