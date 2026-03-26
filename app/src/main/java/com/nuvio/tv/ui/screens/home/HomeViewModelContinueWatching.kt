@@ -282,8 +282,8 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     }
                 }.toSet()
                 val newFullyWatched = allSeedContentIds - nextUpContentIds - olderSeedsWithNextUp - inProgressContentIds
-                if (fullyWatchedSeriesIds.value != newFullyWatched) {
-                    fullyWatchedSeriesIds.value = newFullyWatched
+                if (fullyWatchedSeriesIds.fullyWatchedSeriesIds.value != newFullyWatched) {
+                    fullyWatchedSeriesIds.update(newFullyWatched)
                 }
 
                 // For older seeds not yet in the resolution cache, resolve async.
@@ -324,8 +324,8 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                 }
                             }.toSet()
                             val updatedFullyWatched = allSeedContentIds - nextUpContentIds - updatedOlderWithNextUp - inProgressContentIds
-                            if (fullyWatchedSeriesIds.value != updatedFullyWatched) {
-                                fullyWatchedSeriesIds.value = updatedFullyWatched
+                            if (fullyWatchedSeriesIds.fullyWatchedSeriesIds.value != updatedFullyWatched) {
+                                fullyWatchedSeriesIds.update(updatedFullyWatched)
                             }
 
                             // Inject discovered next-up items into CW (e.g. new season alerts).

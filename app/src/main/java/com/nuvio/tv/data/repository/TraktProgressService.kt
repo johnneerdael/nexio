@@ -450,7 +450,9 @@ class TraktProgressService @Inject constructor(
             }
             result as Set<String>
         }
-            .onStart { getWatchedMoviesSnapshot(forceRefresh = false) }
+            .onStart {
+                scope.launch { getWatchedMoviesSnapshot(forceRefresh = false) }
+            }
             .distinctUntilChanged()
     }
 

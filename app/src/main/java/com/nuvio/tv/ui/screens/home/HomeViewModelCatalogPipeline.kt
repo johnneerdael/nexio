@@ -615,7 +615,7 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
     if (allSeriesItemsByKey.isNotEmpty()) {
         seriesWatchedObserverJob?.cancel()
         seriesWatchedObserverJob = viewModelScope.launch {
-            fullyWatchedSeriesIds.collectLatest { fullyWatched ->
+            fullyWatchedSeriesIds.fullyWatchedSeriesIds.collectLatest { fullyWatched ->
                 val seriesStatus = buildMap {
                     allSeriesItemsByKey.forEach { (statusKey, contentId) ->
                         put(statusKey, contentId in fullyWatched)

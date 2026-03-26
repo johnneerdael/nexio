@@ -31,11 +31,16 @@ import javax.inject.Inject
 class SearchViewModel @Inject constructor(
     private val addonRepository: AddonRepository,
     private val catalogRepository: CatalogRepository,
-    private val layoutPreferenceDataStore: LayoutPreferenceDataStore
+    private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    private val watchProgressRepository: com.nuvio.tv.domain.repository.WatchProgressRepository,
+    private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
+
+    private val _watchedContentIds = MutableStateFlow<Set<String>>(emptySet())
+    val watchedContentIds: StateFlow<Set<String>> = _watchedContentIds.asStateFlow()
 
     private val catalogsMap = linkedMapOf<String, CatalogRow>()
     private val catalogOrder = mutableListOf<String>()
@@ -57,6 +62,13 @@ class SearchViewModel @Inject constructor(
     }
 
     init {
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                watchProgressRepository.observeWatchedMovieIds(),
+                watchedSeriesStateHolder.fullyWatchedSeriesIds
+            ) { movieIds, seriesIds -> movieIds + seriesIds }
+                .collect { ids -> _watchedContentIds.value = ids }
+        }
         viewModelScope.launch {
             layoutPreferenceDataStore.searchDiscoverEnabled.collectLatest { enabled ->
                 _uiState.update { it.copy(discoverEnabled = enabled) }

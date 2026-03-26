@@ -57,7 +57,8 @@ class HomeViewModel @Inject constructor(
     internal val tmdbService: TmdbService,
     internal val tmdbMetadataService: TmdbMetadataService,
     internal val trailerService: TrailerService,
-    internal val watchedItemsPreferences: WatchedItemsPreferences
+    internal val watchedItemsPreferences: WatchedItemsPreferences,
+    internal val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder
 ) : ViewModel() {
     companion object {
         internal const val TAG = "HomeViewModel"
@@ -132,7 +133,7 @@ class HomeViewModel @Inject constructor(
     internal val cwMetaCache = Collections.synchronizedMap(mutableMapOf<String, Meta?>())
     internal val cwTmdbIdCache = Collections.synchronizedMap(mutableMapOf<String, String?>())
     internal val cwNextUpResolutionCache = Collections.synchronizedMap(mutableMapOf<String, NextUpResolution?>())
-    internal val fullyWatchedSeriesIds = MutableStateFlow<Set<String>>(emptySet())
+    internal val fullyWatchedSeriesIds get() = watchedSeriesStateHolder
     internal var tmdbEnrichFocusJob: Job? = null
     internal var pendingTmdbEnrichItemId: String? = null
     internal var adjacentItemPrefetchJob: Job? = null
