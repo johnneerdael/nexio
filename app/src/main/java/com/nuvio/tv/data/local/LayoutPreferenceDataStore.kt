@@ -60,8 +60,10 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val posterCardHeightDpKey = intPreferencesKey("poster_card_height_dp")
     private val posterCardCornerRadiusDpKey = intPreferencesKey("poster_card_corner_radius_dp")
     private val blurUnwatchedEpisodesKey = booleanPreferencesKey("blur_unwatched_episodes")
+    private val blurContinueWatchingNextUpKey = booleanPreferencesKey("blur_continue_watching_next_up")
     private val detailPageTrailerButtonEnabledKey = booleanPreferencesKey("detail_page_trailer_button_enabled")
     private val preferExternalMetaAddonDetailKey = booleanPreferencesKey("prefer_external_meta_addon_detail")
+    private val modernHeroFullScreenBackdropKey = booleanPreferencesKey("modern_hero_full_screen_backdrop")
     private val hideUnreleasedContentKey = booleanPreferencesKey("hide_unreleased_content")
     private val showFullReleaseDateKey = booleanPreferencesKey("show_full_release_date")
 
@@ -130,6 +132,10 @@ class LayoutPreferenceDataStore @Inject constructor(
         prefs[modernLandscapePostersEnabledKey] ?: false
     }
 
+    val modernHeroFullScreenBackdropEnabled: Flow<Boolean> = profileFlow { prefs ->
+        prefs[modernHeroFullScreenBackdropKey] ?: false
+    }
+
     val heroSectionEnabled: Flow<Boolean> = profileFlow { prefs ->
         prefs[heroSectionEnabledKey] ?: true
     }
@@ -190,6 +196,10 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val blurUnwatchedEpisodes: Flow<Boolean> = profileFlow { prefs ->
         prefs[blurUnwatchedEpisodesKey] ?: false
+    }
+
+    val blurContinueWatchingNextUp: Flow<Boolean> = profileFlow { prefs ->
+        prefs[blurContinueWatchingNextUpKey] ?: false
     }
 
     val detailPageTrailerButtonEnabled: Flow<Boolean> = profileFlow { prefs ->
@@ -293,6 +303,12 @@ class LayoutPreferenceDataStore @Inject constructor(
         }
     }
 
+    suspend fun setModernHeroFullScreenBackdropEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[modernHeroFullScreenBackdropKey] = enabled
+        }
+    }
+
     suspend fun setHeroSectionEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[heroSectionEnabledKey] = enabled
@@ -384,6 +400,12 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setBlurUnwatchedEpisodes(enabled: Boolean) {
         store().edit { prefs ->
             prefs[blurUnwatchedEpisodesKey] = enabled
+        }
+    }
+
+    suspend fun setBlurContinueWatchingNextUp(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[blurContinueWatchingNextUpKey] = enabled
         }
     }
 

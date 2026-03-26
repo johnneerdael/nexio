@@ -102,6 +102,7 @@ private fun ModernContinueWatchingRowItem(
     requester: FocusRequester,
     cardWidth: Dp,
     imageHeight: Dp,
+    blurUnwatchedEpisodes: Boolean,
     onFocused: () -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onShowOptions: (ContinueWatchingItem) -> Unit,
@@ -128,6 +129,7 @@ private fun ModernContinueWatchingRowItem(
         onLongPress = onLongPress,
         cardWidth = cardWidth,
         imageHeight = imageHeight,
+        blurUnwatchedEpisodes = blurUnwatchedEpisodes,
         modifier = modifier
             .focusRequester(requester)
             .onFocusChanged {
@@ -296,6 +298,7 @@ internal fun ModernRowSection(
     landscapeCatalogCardHeight: Dp,
     continueWatchingCardWidth: Dp,
     continueWatchingCardHeight: Dp,
+    blurUnwatchedEpisodes: Boolean,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingOptions: (ContinueWatchingItem) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
@@ -578,6 +581,7 @@ internal fun ModernRowSection(
                                 requester = requester,
                                 cardWidth = continueWatchingCardWidth,
                                 imageHeight = continueWatchingCardHeight,
+                                blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                                 onFocused = onFocused,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onShowOptions = onContinueWatchingOptions
@@ -677,8 +681,27 @@ private fun ModernCarouselCard(
         rememberUpdatedState(cardWidth)
     }
     val animatedCardWidth by animatedCardWidthState
+    // Freeze the logo URL for row cards - enrichment updates must not cause flickering.
+    // The first non-blank value wins and is never replaced.
+    // Primary source of truth is the data-layer frozen value (survives navigation);
+    // the remember-state acts as a secondary guard within the same composition.
+    val dataFrozenLogo = item.heroPreview.frozenLogoUrl
+    val frozenLogoUrl = remember(item.key) { mutableStateOf(dataFrozenLogo ?: item.heroPreview.logo) }
+    if (frozenLogoUrl.value.isNullOrBlank() && !item.heroPreview.logo.isNullOrBlank()) {
+        frozenLogoUrl.value = item.heroPreview.logo
+    }
+    val effectiveLogoUrl = frozenLogoUrl.value
+    // Freeze the backdrop URL for landscape cards - prevents image reload when enrichment updates backdrop.
+    val dataFrozenBackdrop = item.heroPreview.frozenBackdropUrl
+    val frozenBackdropUrl = remember(item.key) { mutableStateOf(dataFrozenBackdrop ?: item.heroPreview.backdrop) }
+    if (frozenBackdropUrl.value.isNullOrBlank() && !item.heroPreview.backdrop.isNullOrBlank()) {
+        frozenBackdropUrl.value = item.heroPreview.backdrop
+    }
+    val effectiveBackdropUrl = frozenBackdropUrl.value
     val imageUrl = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
         item.heroPreview.backdrop ?: item.imageUrl ?: item.heroPreview.poster
+    } else if (useLandscapeOverlayTreatment) {
+        effectiveBackdropUrl ?: item.heroPreview.poster
     } else {
         item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
     }
@@ -712,13 +735,6 @@ private fun ModernCarouselCard(
     val maxLogoWidthPx = remember(maxRequestCardWidth, density) {
         with(density) { (maxRequestCardWidth * 0.62f).roundToPx() }
     }
-    // Freeze the logo URL for row cards - enrichment updates must not cause flickering.
-    // The first non-blank value wins and is never replaced.
-    val frozenLogoUrl = remember(item.key) { mutableStateOf(item.heroPreview.logo) }
-    if (frozenLogoUrl.value.isNullOrBlank() && !item.heroPreview.logo.isNullOrBlank()) {
-        frozenLogoUrl.value = item.heroPreview.logo
-    }
-    val effectiveLogoUrl = frozenLogoUrl.value
 
     val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx) {
         effectiveLogoUrl?.let {

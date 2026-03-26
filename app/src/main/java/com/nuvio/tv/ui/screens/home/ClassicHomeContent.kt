@@ -230,7 +230,8 @@ fun ClassicHomeContent(
                     onItemFocused = { itemIndex ->
                         currentFocusSnapshot.rowIndex = -1
                         currentFocusSnapshot.itemIndex = itemIndex
-                    }
+                    },
+                    blurUnwatchedEpisodes = uiState.blurUnwatchedEpisodes
                 )
             }
         }
