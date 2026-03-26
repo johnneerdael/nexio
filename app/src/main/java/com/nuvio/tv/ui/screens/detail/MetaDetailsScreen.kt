@@ -379,7 +379,7 @@ fun MetaDetailsScreen(
                         alignment = Alignment.TopEnd
                     )
                 }
-                MetaDetailsSkeleton()
+                MetaDetailsSkeleton(backdropAware = !heroBackdropUrl.isNullOrBlank())
             }
             uiState.error != null -> {
                 ErrorState(

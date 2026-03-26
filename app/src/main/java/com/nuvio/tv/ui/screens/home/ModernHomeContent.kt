@@ -548,12 +548,8 @@ fun ModernHomeContent(
         val heroSceneState = if (isVerticalRowsScrolling) stableHeroSceneState else liveHeroSceneState
 
         val prefetchContext = LocalContext.current
-        LaunchedEffect(heroSceneState.heroBackdrop, fullScreenBackdrop) {
-            if (fullScreenBackdrop) {
-                HeroBackdropState.update(heroSceneState.heroBackdrop)
-            } else {
-                HeroBackdropState.update(null)
-            }
+        LaunchedEffect(heroSceneState.heroBackdrop) {
+            HeroBackdropState.update(heroSceneState.heroBackdrop)
         }
         if (!fullScreenBackdrop && !heroSceneState.heroBackdrop.isNullOrBlank()) {
             val screenConf = LocalConfiguration.current
