@@ -540,6 +540,17 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
         }
     val desiredMovieKeys = allMovieItemsByKey.keys
 
+    val allSeriesItemsByKey = linkedMapOf<String, String>()
+    rows.asSequence()
+        .flatMap { row -> row.items.asSequence() }
+        .filter { it.apiType.equals("series", ignoreCase = true) || it.apiType.equals("tv", ignoreCase = true) }
+        .forEach { item ->
+            val key = homeItemStatusKey(item.id, item.apiType)
+            if (key !in allSeriesItemsByKey) {
+                allSeriesItemsByKey[key] = item.id
+            }
+        }
+
     posterLibraryObserverJobs.keys
         .filterNot { it in desiredLibraryKeys }
         .forEach { staleKey ->
@@ -596,11 +607,35 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
         }
     }
 
+    // Update series watched status from CW pipeline's fully-watched resolution.
+    // This piggybacks on the meta lookups CW already performs — no extra network calls.
+    if (allSeriesItemsByKey.isNotEmpty()) {
+        seriesWatchedObserverJob?.cancel()
+        seriesWatchedObserverJob = viewModelScope.launch {
+            fullyWatchedSeriesIds.collectLatest { fullyWatched ->
+                val seriesStatus = buildMap {
+                    allSeriesItemsByKey.forEach { (statusKey, contentId) ->
+                        put(statusKey, contentId in fullyWatched)
+                    }
+                }
+                _uiState.update { state ->
+                    val merged = state.movieWatchedStatus + seriesStatus
+                    if (state.movieWatchedStatus == merged) state
+                    else state.copy(movieWatchedStatus = merged)
+                }
+            }
+        }
+    } else {
+        seriesWatchedObserverJob?.cancel()
+        seriesWatchedObserverJob = null
+    }
+
     _uiState.update { state ->
+        val allWatchedKeys = desiredMovieKeys + allSeriesItemsByKey.keys
         val trimmedLibraryMembership =
             state.posterLibraryMembership.filterKeys { it in desiredLibraryKeys }
         val trimmedMovieWatchedStatus =
-            state.movieWatchedStatus.filterKeys { it in desiredMovieKeys }
+            state.movieWatchedStatus.filterKeys { it in allWatchedKeys }
         val trimmedLibraryPending =
             state.posterLibraryPending.filterTo(linkedSetOf()) { it in desiredLibraryKeys }
         val trimmedMovieWatchedPending =
