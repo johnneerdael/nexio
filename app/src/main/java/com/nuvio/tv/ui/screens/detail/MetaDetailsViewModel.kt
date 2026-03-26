@@ -1236,7 +1236,13 @@ class MetaDetailsViewModel @Inject constructor(
 
             val nonSpecialEpisodes = allEpisodes.filter { (it.season ?: 0) > 0 }
             val episodePool = if (nonSpecialEpisodes.isNotEmpty()) nonSpecialEpisodes else allEpisodes
-            val latestSeriesProgress = progressMap.values.maxByOrNull { it.lastWatched }
+            val latestSeriesProgress = progressMap.values
+                .sortedWith(
+                    compareByDescending<WatchProgress> { it.lastWatched }
+                        .thenByDescending { it.season ?: 0 }
+                        .thenByDescending { it.episode ?: 0 }
+                )
+                .firstOrNull()
             val defaultEpisode = findPreferredDefaultEpisode(meta)?.takeIf { preferred ->
                 episodePool.any { it.id == preferred.id }
             }

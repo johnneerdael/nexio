@@ -672,7 +672,21 @@ class TraktProgressService @Inject constructor(
                 watched = false
             )
         } else {
-            invalidateEpisodeProgressCache(contentId)
+            // Optimistically remove just this episode from the cache instead of
+            // invalidating the entire series cache (which causes all episodes to
+            // briefly appear unwatched until the next Trakt fetch completes).
+            val cacheKey = canonicalLookupKey(contentId.trim())
+            if (season != null && episode != null) {
+                episodeProgressState.update { current ->
+                    val entry = current[cacheKey] ?: return@update current
+                    val updatedProgress = entry.progress.toMutableMap().apply {
+                        remove(season to episode)
+                    }
+                    current + (cacheKey to entry.copy(progress = updatedProgress))
+                }
+            } else {
+                invalidateEpisodeProgressCache(contentId)
+            }
         }
         refreshNow()
     }
