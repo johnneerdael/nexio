@@ -449,7 +449,9 @@ class TraktProgressService @Inject constructor(
                 }
             }
             result as Set<String>
-        }.distinctUntilChanged()
+        }
+            .onStart { getWatchedMoviesSnapshot(forceRefresh = false) }
+            .distinctUntilChanged()
     }
 
     suspend fun markAsWatched(
