@@ -111,6 +111,12 @@ class MetaDetailsViewModel @Inject constructor(
     private var traktCommentsEnabled = false
     private var traktAuthenticated = false
 
+    /** Content ID used for watch-progress and watched-items lookups.
+     *  Starts as the navigation [itemId] (which may be "tmdb:123") and is
+     *  updated to [Meta.id] once meta loads (typically an IMDB ID like "tt0396375").
+     *  This ensures progress is read from the same key it was written under. */
+    private val _effectiveContentId = MutableStateFlow(itemId)
+
     init {
         observeMetaViewSettings()
         observeTrailerAutoplaySettings()
@@ -349,7 +355,9 @@ class MetaDetailsViewModel @Inject constructor(
     private fun observeWatchProgress() {
         if (itemType.lowercase() == "movie") return
         viewModelScope.launch {
-            watchProgressRepository.getAllEpisodeProgress(itemId)
+            _effectiveContentId.flatMapLatest { cid ->
+                watchProgressRepository.getAllEpisodeProgress(cid)
+            }
                 .distinctUntilChanged()
                 .collectLatest { progressMap ->
                 _uiState.update { state ->
@@ -368,7 +376,9 @@ class MetaDetailsViewModel @Inject constructor(
     private fun observeWatchedEpisodes() {
         if (itemType.lowercase() == "movie") return
         viewModelScope.launch {
-            watchedItemsPreferences.getWatchedEpisodesForContent(itemId)
+            _effectiveContentId.flatMapLatest { cid ->
+                watchedItemsPreferences.getWatchedEpisodesForContent(cid)
+            }
                 .distinctUntilChanged()
                 .collectLatest { watchedSet ->
                 _uiState.update { state ->
@@ -387,11 +397,13 @@ class MetaDetailsViewModel @Inject constructor(
     private fun observeMovieWatched() {
         if (itemType.lowercase() != "movie") return
         viewModelScope.launch {
-            _uiState.map { it.meta?.imdbId?.takeIf { id -> id != itemId && id.isNotBlank() } }
-                .distinctUntilChanged()
-                .flatMapLatest { videoId ->
-                    watchProgressRepository.isWatched(itemId, videoId = videoId)
-                }
+            _effectiveContentId.flatMapLatest { cid ->
+                _uiState.map { it.meta?.imdbId?.takeIf { id -> id != cid && id.isNotBlank() } }
+                    .distinctUntilChanged()
+                    .flatMapLatest { videoId ->
+                        watchProgressRepository.isWatched(cid, videoId = videoId)
+                    }
+            }
                 .distinctUntilChanged()
                 .collectLatest { watched ->
                 _uiState.update { state ->
@@ -453,6 +465,11 @@ class MetaDetailsViewModel @Inject constructor(
             }
 
             val metaLookupId = resolveMetaLookupId(itemId = itemId, itemType = itemType)
+            // Update effective content ID as early as possible so watch-progress
+            // observers use the canonical (usually IMDB) ID, not the navigation ID.
+            if (metaLookupId != itemId) {
+                _effectiveContentId.value = metaLookupId
+            }
             val preferExternal = layoutPreferenceDataStore.preferExternalMetaAddonDetail.first()
 
             if (preferExternal) {
@@ -528,6 +545,15 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun applyMeta(meta: Meta) {
+        // Update the effective content ID so watch-progress observers pick up
+        // the canonical ID (e.g. IMDB "tt0396375") instead of the navigation ID
+        // (which may be "tmdb:13836").  This also covers the reverse: if the user
+        // arrived via an IMDB catalog but progress was stored under a tmdb: key,
+        // we still try both.
+        if (meta.id.isNotBlank() && meta.id != itemId) {
+            _effectiveContentId.value = meta.id
+        }
+
         val seasons = meta.videos
             .mapNotNull { it.season }
             .distinct()
@@ -1165,7 +1191,7 @@ class MetaDetailsViewModel @Inject constructor(
         nextToWatchJob = viewModelScope.launch {
             if (!isSeries) {
                 // For movies, check if there's an in-progress watch
-                val progress = watchProgressRepository.getProgress(itemId).first()
+                val progress = watchProgressRepository.getProgress(_effectiveContentId.value).first()
                 val nextToWatch = if (progress != null && shouldResumeProgress(progress)) {
                     NextToWatch(
                         watchProgress = progress,
@@ -1484,7 +1510,7 @@ class MetaDetailsViewModel @Inject constructor(
             _uiState.update { it.copy(isMovieWatchedPending = true) }
             runCatching {
                 if (_uiState.value.isMovieWatched) {
-                    watchProgressRepository.removeFromHistory(itemId, videoId = resolveFallbackVideoId())
+                    watchProgressRepository.removeFromHistory(_effectiveContentId.value, videoId = resolveFallbackVideoId())
                     showMessage(context.getString(R.string.detail_movie_marked_unwatched))
                 } else {
                     watchProgressRepository.markAsCompleted(buildCompletedMovieProgress(meta))
@@ -1516,7 +1542,7 @@ class MetaDetailsViewModel @Inject constructor(
                 || _uiState.value.watchedEpisodes.contains(season to episode)
             runCatching {
                 if (isWatched) {
-                    watchProgressRepository.removeFromHistory(itemId, videoId = resolveFallbackVideoId(), season = season, episode = episode)
+                    watchProgressRepository.removeFromHistory(_effectiveContentId.value, videoId = resolveFallbackVideoId(), season = season, episode = episode)
                     showMessage(context.getString(R.string.detail_episode_marked_unwatched))
                 } else {
                     watchProgressRepository.markAsCompleted(buildCompletedEpisodeProgress(meta, video))
@@ -1611,7 +1637,7 @@ class MetaDetailsViewModel @Inject constructor(
             for (video in watched) {
                 val key = episodePendingKey(video)
                 runCatching {
-                    watchProgressRepository.removeFromHistory(itemId, videoId = resolveFallbackVideoId(), season = video.season!!, episode = video.episode!!)
+                    watchProgressRepository.removeFromHistory(_effectiveContentId.value, videoId = resolveFallbackVideoId(), season = video.season!!, episode = video.episode!!)
                     unmarked++
                 }.onFailure { error ->
                     Log.w(TAG, "Failed to unmark S${video.season}E${video.episode}: ${error.message}")
@@ -1676,7 +1702,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun buildCompletedMovieProgress(meta: Meta): WatchProgress {
         return WatchProgress(
-            contentId = itemId,
+            contentId = _effectiveContentId.value,
             contentType = meta.apiType,
             name = meta.name,
             poster = meta.poster,
@@ -1696,7 +1722,7 @@ class MetaDetailsViewModel @Inject constructor(
     private fun buildCompletedEpisodeProgress(meta: Meta, video: Video): WatchProgress {
         val runtimeMs = video.runtime?.toLong()?.times(60_000L) ?: 1L
         return WatchProgress(
-            contentId = itemId,
+            contentId = _effectiveContentId.value,
             contentType = meta.apiType,
             name = meta.name,
             poster = meta.poster,
