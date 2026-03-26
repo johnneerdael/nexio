@@ -87,7 +87,10 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
+import coil.imageLoader
 import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import com.nuvio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.ui.components.ContinueWatchingCard
@@ -104,6 +107,16 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 private const val KEY_REPEAT_THROTTLE_MS = 80L
 private const val MODERN_HERO_RAPID_NAV_THRESHOLD_MS = 130L
 private const val MODERN_HERO_RAPID_NAV_SETTLE_MS = 170L
+
+private fun buildPrefetchRequest(
+    context: android.content.Context,
+    url: String,
+    widthPx: Int,
+    heightPx: Int
+): ImageRequest = ImageRequest.Builder(context)
+    .data(url)
+    .size(width = widthPx, height = heightPx)
+    .build()
 
 @Composable
 fun ModernHomeContent(
@@ -534,13 +547,25 @@ fun ModernHomeContent(
         }
         val heroSceneState = if (isVerticalRowsScrolling) stableHeroSceneState else liveHeroSceneState
 
-        // Keep HeroBackdropState in sync so MetaDetailsScreen can use it
-        // during the Home → Detail transition to prevent backdrop re-render
+        val prefetchContext = LocalContext.current
         LaunchedEffect(heroSceneState.heroBackdrop, fullScreenBackdrop) {
             if (fullScreenBackdrop) {
                 HeroBackdropState.update(heroSceneState.heroBackdrop)
             } else {
                 HeroBackdropState.update(null)
+            }
+        }
+        if (!fullScreenBackdrop && !heroSceneState.heroBackdrop.isNullOrBlank()) {
+            val screenConf = LocalConfiguration.current
+            val density = LocalDensity.current
+            val screenWPx = remember(screenConf, density) { with(density) { screenConf.screenWidthDp.dp.roundToPx() } }
+            val screenHPx = remember(screenConf, density) { with(density) { screenConf.screenHeightDp.dp.roundToPx() } }
+            val heroUrl = heroSceneState.heroBackdrop!!
+            val req = remember(prefetchContext, heroUrl, screenWPx, screenHPx) {
+                buildPrefetchRequest(prefetchContext, heroUrl, screenWPx, screenHPx)
+            }
+            LaunchedEffect(req) {
+                prefetchContext.imageLoader.enqueue(req)
             }
         }
 

@@ -1150,16 +1150,18 @@ private fun MetaDetailsContent(
     val backdropHeightPx = remember(screenHeightDp, localDensity) {
         with(localDensity) { screenHeightDp.roundToPx() }
     }
+    val hasHeroBackdrop = !heroBackdropUrl.isNullOrBlank()
     val backdropDataUrl = meta.backdropUrl ?: meta.poster
     val backdropRequest = remember(
         localContext,
         backdropDataUrl,
+        hasHeroBackdrop,
         backdropWidthPx,
         backdropHeightPx
     ) {
         ImageRequest.Builder(localContext)
             .data(backdropDataUrl)
-            .crossfade(false)
+            .apply { if (hasHeroBackdrop) crossfade(false) else crossfade(400) }
             .size(width = backdropWidthPx, height = backdropHeightPx)
             .build()
     }
