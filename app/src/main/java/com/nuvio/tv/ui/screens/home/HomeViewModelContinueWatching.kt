@@ -303,18 +303,18 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     if (uncachedSeeds.isNotEmpty()) {
                         launch(Dispatchers.IO) {
                             val lookupSemaphore = Semaphore(CW_MAX_NEXT_UP_CONCURRENCY)
-                            uncachedSeeds.map { seed ->
+                            val discoveredNextUpItems = uncachedSeeds.map { seed ->
                                 async {
                                     lookupSemaphore.withPermit {
-                                        findNextUpEpisodeFromMetaSeed(
+                                        buildNextUpItem(
                                             progress = seed,
                                             showUnairedNextUp = showUnairedNextUp
                                         )
                                     }
-                                    seed.contentId
                                 }
-                            }.awaitAll()
-                            // Re-evaluate after cache is populated.
+                            }.awaitAll().filterNotNull()
+
+                            // Re-evaluate watched badge after cache is populated.
                             val updatedOlderWithNextUp = olderSeedContentIds.filter { contentId ->
                                 synchronized(cwNextUpResolutionCache) {
                                     cwNextUpResolutionCache.entries.any { (key, value) ->
@@ -325,6 +325,18 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                             val updatedFullyWatched = allSeedContentIds - nextUpContentIds - updatedOlderWithNextUp - inProgressContentIds
                             if (fullyWatchedSeriesIds.value != updatedFullyWatched) {
                                 fullyWatchedSeriesIds.value = updatedFullyWatched
+                            }
+
+                            // Inject discovered next-up items into CW (e.g. new season alerts).
+                            if (discoveredNextUpItems.isNotEmpty()) {
+                                val updatedItems = mergeContinueWatchingItems(
+                                    inProgressItems = inProgressOnly,
+                                    nextUpItems = nextUpItems + discoveredNextUpItems
+                                )
+                                _uiState.update { state ->
+                                    if (state.continueWatchingItems == updatedItems) state
+                                    else state.copy(continueWatchingItems = updatedItems)
+                                }
                             }
                         }
                     }
