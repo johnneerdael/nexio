@@ -154,6 +154,8 @@ fun ModernHomeContent(
     val carouselLookups = uiState.modernHomePresentation.lookups
     val rowByKey = carouselLookups.rowByKey
     val rowKeyByGlobalRowIndex = carouselLookups.rowKeyByGlobalRowIndex
+    val firstHeroPreviewByRow = carouselLookups.firstHeroPreviewByRow
+    val fallbackBackdropByRow = carouselLookups.fallbackBackdropByRow
     val activeRowKeys = carouselLookups.activeRowKeys
     val activeItemKeysByRow = carouselLookups.activeItemKeysByRow
     val activeCatalogItemIds = carouselLookups.activeCatalogItemIds
@@ -451,11 +453,13 @@ fun ModernHomeContent(
         }
         val activeItemId = activeCarouselItem?.metaPreview?.id
         val enrichmentActive = enrichingItemId != null && enrichingItemId == activeItemId
-        val resolvedHero = if (enrichmentActive) heroItem else activeCarouselItem?.heroPreview ?: heroItem
-        val activeRowFallbackBackdrop = remember(activeRow?.key, activeRow?.items?.size) {
-            activeRow?.items?.firstNotNullOfOrNull { item ->
-                item.heroPreview.backdrop?.takeIf { it.isNotBlank() }
+        val activeRowFallbackBackdrop = activeRow?.key?.let(fallbackBackdropByRow::get)
+        val resolvedHero = when {
+            isVerticalRowsScrolling -> {
+                heroItem ?: activeCarouselItem?.heroPreview ?: activeRow?.key?.let(firstHeroPreviewByRow::get)
             }
+            enrichmentActive -> heroItem
+            else -> activeCarouselItem?.heroPreview ?: heroItem ?: activeRow?.key?.let(firstHeroPreviewByRow::get)
         }
         val heroBackdrop = remember(resolvedHero, activeRowFallbackBackdrop, heroItem) {
             firstNonBlank(
@@ -499,6 +503,36 @@ fun ModernHomeContent(
                 heroTrailerFirstFrameRendered = false
             }
         }
+        val liveHeroSceneState = remember(
+            heroBackdrop,
+            resolvedHero,
+            enrichmentActive,
+            shouldPlayHeroTrailer,
+            heroTrailerFirstFrameRendered,
+            heroTrailerUrl,
+            heroTrailerAudioUrl,
+            uiState.focusedPosterBackdropTrailerMuted,
+            fullScreenBackdrop
+        ) {
+            ModernHeroSceneState(
+                heroBackdrop = heroBackdrop,
+                preview = if (enrichmentActive) null else resolvedHero,
+                enrichmentActive = enrichmentActive,
+                shouldPlayTrailer = shouldPlayHeroTrailer,
+                trailerFirstFrameRendered = heroTrailerFirstFrameRendered,
+                trailerUrl = heroTrailerUrl,
+                trailerAudioUrl = heroTrailerAudioUrl,
+                trailerMuted = uiState.focusedPosterBackdropTrailerMuted,
+                fullScreenBackdrop = fullScreenBackdrop
+            )
+        }
+        var stableHeroSceneState by remember { mutableStateOf(liveHeroSceneState) }
+        LaunchedEffect(liveHeroSceneState, isVerticalRowsScrolling) {
+            if (!isVerticalRowsScrolling || stableHeroSceneState.preview == null) {
+                stableHeroSceneState = liveHeroSceneState
+            }
+        }
+        val heroSceneState = if (isVerticalRowsScrolling) stableHeroSceneState else liveHeroSceneState
         val catalogBottomPadding = 0.dp
         val heroToCatalogGap = 16.dp
         val rowTitleBottom = 14.dp
@@ -597,24 +631,14 @@ fun ModernHomeContent(
             }
         }
 
-        ModernHeroMediaLayer(
-            heroBackdrop = heroBackdrop,
-            enrichmentActive = enrichmentActive,
-            shouldPlayHeroTrailer = shouldPlayHeroTrailer,
-            heroTrailerFirstFrameRendered = heroTrailerFirstFrameRendered,
-            heroTrailerUrl = heroTrailerUrl,
-            heroTrailerAudioUrl = heroTrailerAudioUrl,
-            muted = uiState.focusedPosterBackdropTrailerMuted,
-            onTrailerEnded = { expandedCatalogFocusKey = null },
-            onFirstFrameRendered = { heroTrailerFirstFrameRendered = true },
+        ModernHeroScene(
+            state = heroSceneState,
+            bgColor = bgColor,
             modifier = heroMediaModifier,
             requestWidthPx = heroMediaWidthPx,
-            requestHeightPx = heroMediaHeightPx
-        )
-        ModernHeroGradientLayer(
-            bgColor = bgColor,
-            isFullScreen = fullScreenBackdrop,
-            modifier = heroMediaModifier
+            requestHeightPx = heroMediaHeightPx,
+            onTrailerEnded = { expandedCatalogFocusKey = null },
+            onFirstFrameRendered = { heroTrailerFirstFrameRendered = true },
         )
         val trailerContentAlpha by animateFloatAsState(
             targetValue = if (fullScreenBackdrop && shouldPlayHeroTrailer && heroTrailerFirstFrameRendered) 0.12f else 1f,
@@ -623,10 +647,12 @@ fun ModernHomeContent(
         )
 
         HeroTitleBlock(
-            preview = if (enrichmentActive) null else resolvedHero,
-            enrichmentActive = enrichmentActive,
+            preview = heroSceneState.preview,
+            enrichmentActive = heroSceneState.enrichmentActive,
             portraitMode = !useLandscapePosters,
-            trailerPlaying = fullScreenBackdrop && shouldPlayHeroTrailer && heroTrailerFirstFrameRendered,
+            trailerPlaying = heroSceneState.fullScreenBackdrop &&
+                heroSceneState.shouldPlayTrailer &&
+                heroSceneState.trailerFirstFrameRendered,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(
@@ -645,6 +671,7 @@ fun ModernHomeContent(
                     .fillMaxWidth()
                     .height(rowsViewportHeight)
                     .padding(bottom = catalogBottomPadding)
+                    .clipToBounds()
                     .graphicsLayer { alpha = trailerContentAlpha }
                     .focusRequester(contentFocusRequester)
                     .onPreviewKeyEvent { event ->
