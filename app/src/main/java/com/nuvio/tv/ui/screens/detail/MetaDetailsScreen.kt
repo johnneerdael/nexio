@@ -81,6 +81,8 @@ import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import coil.imageLoader
+import coil.memory.MemoryCache
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.Rect
@@ -189,6 +191,7 @@ fun MetaDetailsScreen(
     viewModel: MetaDetailsViewModel = hiltViewModel(),
     returnFocusSeason: Int? = null,
     returnFocusEpisode: Int? = null,
+    heroBackdropUrl: String? = null,
     onBackPress: () -> Unit,
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
     onNavigateToTmdbEntityBrowse: (entityKind: String, entityId: Int, entityName: String, sourceType: String) -> Unit = { _, _, _, _ -> },
@@ -348,6 +351,32 @@ fun MetaDetailsScreen(
     ) {
         when {
             uiState.isLoading -> {
+                // Show hero backdrop from ModernHome during loading to prevent visual gap
+                if (!heroBackdropUrl.isNullOrBlank()) {
+                    val localContext = LocalContext.current
+                    val localDensity = LocalDensity.current
+                    val configuration = LocalConfiguration.current
+                    val loadingBackdropWidthPx = remember(configuration, localDensity) {
+                        with(localDensity) { configuration.screenWidthDp.dp.roundToPx() }
+                    }
+                    val loadingBackdropHeightPx = remember(configuration, localDensity) {
+                        with(localDensity) { configuration.screenHeightDp.dp.roundToPx() }
+                    }
+                    val loadingBackdropRequest = remember(localContext, heroBackdropUrl, loadingBackdropWidthPx, loadingBackdropHeightPx) {
+                        ImageRequest.Builder(localContext)
+                            .data(heroBackdropUrl)
+                            .crossfade(false)
+                            .size(width = loadingBackdropWidthPx, height = loadingBackdropHeightPx)
+                            .build()
+                    }
+                    AsyncImage(
+                        model = loadingBackdropRequest,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        alignment = Alignment.TopEnd
+                    )
+                }
                 MetaDetailsSkeleton()
             }
             uiState.error != null -> {
@@ -366,6 +395,7 @@ fun MetaDetailsScreen(
                 }
 
                 MetaDetailsContent(
+                    heroBackdropUrl = heroBackdropUrl,
                     meta = meta,
                     detailReturnEpisodeFocusRequest = DetailReturnEpisodeFocusRequest(
                         season = returnFocusSeason,
@@ -612,6 +642,7 @@ fun MetaDetailsScreen(
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun MetaDetailsContent(
+    heroBackdropUrl: String? = null,
     meta: Meta,
     detailReturnEpisodeFocusRequest: DetailReturnEpisodeFocusRequest? = null,
     seasons: List<Int>,
@@ -1119,18 +1150,35 @@ private fun MetaDetailsContent(
     val backdropHeightPx = remember(screenHeightDp, localDensity) {
         with(localDensity) { screenHeightDp.roundToPx() }
     }
+    val backdropDataUrl = meta.backdropUrl ?: meta.poster
     val backdropRequest = remember(
         localContext,
-        meta.backdropUrl,
-        meta.poster,
+        backdropDataUrl,
         backdropWidthPx,
         backdropHeightPx
     ) {
         ImageRequest.Builder(localContext)
-            .data(meta.backdropUrl ?: meta.poster)
-            .crossfade(true)
+            .data(backdropDataUrl)
+            .crossfade(false)
             .size(width = backdropWidthPx, height = backdropHeightPx)
             .build()
+    }
+
+    // Show hero backdrop from previous screen as a persistent underlay
+    // so there's no visual gap or re-render during transitions
+    val heroBackdropRequest = remember(
+        localContext,
+        heroBackdropUrl,
+        backdropWidthPx,
+        backdropHeightPx
+    ) {
+        heroBackdropUrl?.takeIf { it.isNotBlank() }?.let {
+            ImageRequest.Builder(localContext)
+                .data(it)
+                .crossfade(false)
+                .size(width = backdropWidthPx, height = backdropHeightPx)
+                .build()
+        }
     }
 
     val leftGradientBitmap = remember(backgroundColor, backdropWidthPx, backdropHeightPx) {
@@ -1197,6 +1245,7 @@ private fun MetaDetailsContent(
         // Sticky background — backdrop or trailer
         BackdropLayer(
             backdropRequest = backdropRequest,
+            heroBackdropRequest = heroBackdropRequest,
             trailerUrl = trailerUrl,
             trailerAudioUrl = trailerAudioUrl,
             isTrailerPlaying = isTrailerPlaying,
@@ -1594,6 +1643,7 @@ private fun PlayManualOverrideDialog(
 @Composable
 private fun BackdropLayer(
     backdropRequest: ImageRequest,
+    heroBackdropRequest: ImageRequest? = null,
     trailerUrl: String?,
     trailerAudioUrl: String?,
     isTrailerPlaying: Boolean,
@@ -1618,12 +1668,25 @@ private fun BackdropLayer(
         label = "gradientFade"
     )
     Box(modifier = Modifier.fillMaxSize()) {
+        // Show hero backdrop from previous screen as persistent underlay
+        // to prevent flash/re-render during navigation transition
+        if (heroBackdropRequest != null) {
+            AsyncImage(
+                model = heroBackdropRequest,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                alpha = backdropAlphaState.value,
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.TopEnd
+            )
+        }
         AsyncImage(
             model = backdropRequest,
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             alpha = backdropAlphaState.value,
-            contentScale = ContentScale.Crop
+            contentScale = ContentScale.Crop,
+            alignment = Alignment.TopEnd
         )
         TrailerPlayer(
             trailerUrl = trailerUrl,

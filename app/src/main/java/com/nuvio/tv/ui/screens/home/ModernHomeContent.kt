@@ -533,6 +533,17 @@ fun ModernHomeContent(
             }
         }
         val heroSceneState = if (isVerticalRowsScrolling) stableHeroSceneState else liveHeroSceneState
+
+        // Keep HeroBackdropState in sync so MetaDetailsScreen can use it
+        // during the Home → Detail transition to prevent backdrop re-render
+        LaunchedEffect(heroSceneState.heroBackdrop, fullScreenBackdrop) {
+            if (fullScreenBackdrop) {
+                HeroBackdropState.update(heroSceneState.heroBackdrop)
+            } else {
+                HeroBackdropState.update(null)
+            }
+        }
+
         val catalogBottomPadding = 0.dp
         val heroToCatalogGap = 16.dp
         val rowTitleBottom = 14.dp
