@@ -207,7 +207,10 @@ fun ModernHomeContent(
     var pendingRowFocusKey by remember { mutableStateOf<String?>(null) }
     var pendingRowFocusIndex by remember { mutableStateOf<Int?>(null) }
     var pendingRowFocusNonce by remember { mutableIntStateOf(0) }
-    var heroItem by remember { mutableStateOf<HeroPreview?>(null) }
+    var heroItem by remember {
+        val initialHero = carouselRows.firstOrNull()?.items?.firstOrNull()?.heroPreview
+        mutableStateOf<HeroPreview?>(initialHero)
+    }
     val heroTransitioningRef = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
     var restoredFromSavedState by remember { mutableStateOf(false) }
     var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }

@@ -1,6 +1,7 @@
 package com.nuvio.tv.ui.screens.home
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -224,7 +225,7 @@ fun HomeScreen(
                                     animationSpec = tween(320)
                                 )
                         } else {
-                            fadeIn(animationSpec = tween(320))
+                            EnterTransition.None
                         }
                     ) {
                         when (uiState.homeLayout) {
