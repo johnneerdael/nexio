@@ -63,6 +63,7 @@ import com.nuvio.tv.ui.components.LoadingIndicator
 import com.nuvio.tv.ui.components.PosterCardStyle
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.util.formatAddonTypeLabel
+import com.nuvio.tv.ui.util.localizedGenreLabel
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -100,7 +101,7 @@ internal fun DiscoverSection(
     }
     val selectedTypeLabel = localizedTypeLabel(uiState.selectedDiscoverType)
     val selectedCatalogLabel = selectedCatalog?.catalogName ?: stringResource(R.string.discover_select_catalog)
-    val selectedGenreLabel = uiState.selectedDiscoverGenre ?: stringResource(R.string.discover_genre_default)
+    val selectedGenreLabel = uiState.selectedDiscoverGenre?.let { localizedGenreLabel(it) } ?: stringResource(R.string.discover_genre_default)
 
     Column(
         modifier = modifier
@@ -161,7 +162,7 @@ internal fun DiscoverSection(
                 expanded = expandedPicker == "genre",
                 options = buildList {
                     add(DiscoverOption(stringResource(R.string.discover_genre_default), "__default__"))
-                    addAll(genres.map { DiscoverOption(it, it) })
+                    addAll(genres.map { DiscoverOption(localizedGenreLabel(it), it) })
                 },
                 onExpandedChange = { shouldExpand ->
                     expandedPicker = if (shouldExpand) "genre" else null
@@ -181,7 +182,7 @@ internal fun DiscoverSection(
                         .takeIf { it.isNotEmpty() }
                         ?.let(::add)
                 }
-                uiState.selectedDiscoverGenre?.let(::add)
+                uiState.selectedDiscoverGenre?.let { add(localizedGenreLabel(it)) }
             }
             Text(
                 text = metadataSegments.joinToString(" • "),

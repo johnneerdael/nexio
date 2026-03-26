@@ -79,6 +79,7 @@ import com.nuvio.tv.ui.components.NuvioDialog
 import com.nuvio.tv.ui.theme.NuvioColors
 import com.nuvio.tv.ui.theme.NuvioTheme
 import com.nuvio.tv.ui.util.formatAddonTypeLabel
+import com.nuvio.tv.ui.util.localizedGenreLabel
 import kotlinx.coroutines.delay
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
@@ -427,7 +428,7 @@ private fun LibrarySelectorsRow(
     } ?: stringResource(R.string.library_type_all)
     val selectedSortLabel = stringResource(selectedSortOption.labelResId)
     val allLabel = stringResource(R.string.library_type_all)
-    val selectedGenreLabel = selectedGenre ?: allLabel
+    val selectedGenreLabel = selectedGenre?.let { localizedGenreLabel(it) } ?: allLabel
     val selectedYearLabel = selectedYear ?: allLabel
 
     Column(
@@ -509,7 +510,7 @@ private fun LibrarySelectorsRow(
                         selectedValue = selectedGenre ?: "__all__",
                         expanded = expandedPicker == "genre",
                         options = listOf(genreAllOption) + genres.map {
-                            LibraryOption("${it.label} (${it.count})", it.key)
+                            LibraryOption("${localizedGenreLabel(it.label)} (${it.count})", it.key)
                         },
                         onExpandedChange = { onExpandedChange("genre", it) },
                         onSelect = { option ->
