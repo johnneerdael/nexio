@@ -21,7 +21,7 @@ internal object PlayerSubtitleUtils {
         }
 
         if (containsAny("portuguese", "portugues")) {
-            if (containsAny("brazil", "brasil", "brazilian", "brasileiro", "pt br", "ptbr", "pob")) {
+            if (containsAny("brazil", "brasil", "brazilian", "brasileiro", "pt br", "ptbr", "pob", "(br)")) {
                 return "pt-br"
             }
             if (containsAny("portugal", "european", "europeu", "iberian", "pt pt", "ptpt")) {
@@ -31,7 +31,7 @@ internal object PlayerSubtitleUtils {
         }
 
         if (containsAny("spanish", "espanol", "español", "castellano")) {
-            if (containsAny("latin", "latino", "latinoamerica", "latinoamericano", "lat am", "latam", "es 419", "es419", "la")) {
+            if (containsAny("latin", "latino", "latinoamerica", "latinoamericano", "lat am", "latam", "es 419", "es419", "la", "(419)")) {
                 return "es-419"
             }
             return "es"
