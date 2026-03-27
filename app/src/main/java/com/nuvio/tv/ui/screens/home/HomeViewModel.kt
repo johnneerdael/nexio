@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.home
 
+import android.content.Context
 import android.os.SystemClock
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
@@ -27,6 +28,7 @@ import com.nuvio.tv.domain.repository.CatalogRepository
 import com.nuvio.tv.domain.repository.LibraryRepository
 import com.nuvio.tv.domain.repository.MetaRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -44,6 +46,7 @@ import javax.inject.Inject
 @OptIn(kotlinx.coroutines.FlowPreview::class)
 @HiltViewModel
 class HomeViewModel @Inject constructor(
+    @ApplicationContext internal val appContext: Context,
     internal val addonRepository: AddonRepository,
     internal val catalogRepository: CatalogRepository,
     internal val watchProgressRepository: WatchProgressRepository,
@@ -125,6 +128,7 @@ class HomeViewModel @Inject constructor(
     internal var lastHeroEnrichmentSignature: String? = null
     internal var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
     internal var heroItemOrder: List<String> = emptyList()
+    internal val modernCarouselRowBuildCache = ModernCarouselRowBuildCache()
     internal val prefetchedExternalMetaIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal val externalMetaPrefetchInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal var externalMetaPrefetchJob: Job? = null
@@ -160,6 +164,7 @@ class HomeViewModel @Inject constructor(
     init {
         watchedSeriesStateHolder.loadFromDisk()
         observeLayoutPreferences()
+        observeModernHomePresentation()
         observeExternalMetaPrefetchPreference()
         loadHomeCatalogOrderPreference()
         loadDisabledHomeCatalogPreference()
@@ -188,6 +193,8 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun observeLayoutPreferences() = observeLayoutPreferencesPipeline()
+
+    private fun observeModernHomePresentation() = observeModernHomePresentationPipeline()
 
     private fun observeExternalMetaPrefetchPreference() = observeExternalMetaPrefetchPreferencePipeline()
 
