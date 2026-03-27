@@ -733,7 +733,7 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
         subtitleTracks = state.subtitleTracks,
         targets = targets
     )
-    if (internalIndex >= 0) {
+    if (internalIndex >= 0 && hasScannedTextTracksOnce) {
         // Determine which target position this internal match satisfies,
         // taking regional variant into account so that e.g. a PT-BR track
         // is not treated as a primary match when the user wants PT.
