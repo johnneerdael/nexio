@@ -70,6 +70,8 @@ import com.nuvio.tv.ui.util.localizedGenreLabel
 internal fun DiscoverSection(
     uiState: SearchUiState,
     posterCardStyle: PosterCardStyle,
+    watchedMovieIds: Set<String> = emptySet(),
+    watchedSeriesIds: Set<String> = emptySet(),
     focusResults: Boolean,
     firstItemFocusRequester: FocusRequester,
     focusedItemIndex: Int,
@@ -207,6 +209,8 @@ internal fun DiscoverSection(
                 DiscoverGrid(
                     items = uiState.discoverResults,
                     posterCardStyle = posterCardStyle,
+                    watchedMovieIds = watchedMovieIds,
+                    watchedSeriesIds = watchedSeriesIds,
                     focusResults = focusResults,
                     firstItemFocusRequester = firstItemFocusRequester,
                     focusedItemIndex = focusedItemIndex,
@@ -397,6 +401,8 @@ private data class DiscoverOption(
 internal fun DiscoverGrid(
     items: List<MetaPreview>,
     posterCardStyle: PosterCardStyle,
+    watchedMovieIds: Set<String> = emptySet(),
+    watchedSeriesIds: Set<String> = emptySet(),
     focusResults: Boolean,
     firstItemFocusRequester: FocusRequester,
     focusedItemIndex: Int,
@@ -495,6 +501,10 @@ internal fun DiscoverGrid(
                 item = item,
                 onClick = { onItemClick(index, item) },
                 posterCardStyle = adaptiveStyle,
+                isWatched = run {
+                    val isSeries = item.apiType.equals("series", ignoreCase = true) || item.apiType.equals("tv", ignoreCase = true)
+                    if (isSeries) item.id in watchedSeriesIds else item.id in watchedMovieIds
+                },
                 modifier = Modifier.width(adaptiveStyle.width),
                 focusRequester = focusReq,
                 onFocused = { onItemFocused(index) }
