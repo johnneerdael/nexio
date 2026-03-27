@@ -800,9 +800,18 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
     val selectedAddonMatchesTarget = state.selectedAddonSubtitle != null &&
         targets.any { target -> PlayerSubtitleUtils.matchesLanguageCode(state.selectedAddonSubtitle.lang, target) }
     if (selectedAddonMatchesTarget) {
-        autoSubtitleSelected = true
-        Log.d(PlayerRuntimeController.TAG, "AUTO_SUB stop: matching addon already selected (no internal match)")
-        return
+        val selectedMatchesPrimary = PlayerSubtitleUtils.matchesLanguageCode(
+            state.selectedAddonSubtitle!!.lang, targets.first()
+        )
+        if (selectedMatchesPrimary) {
+            autoSubtitleSelected = true
+            Log.d(PlayerRuntimeController.TAG, "AUTO_SUB stop: matching addon already selected (primary match)")
+            return
+        }
+        Log.d(
+            PlayerRuntimeController.TAG,
+            "AUTO_SUB: selected addon ${state.selectedAddonSubtitle.lang} matches secondary target, checking for primary addon"
+        )
     }
 
     // Wait until we have at least one full text-track scan to avoid choosing addon too early.
@@ -823,7 +832,14 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
             val match = state.addonSubtitles.firstOrNull { subtitle ->
                 PlayerSubtitleUtils.matchesLanguageCode(subtitle.lang, target)
             }
-            if (match != null) return@run match
+            if (match != null) {
+                Log.d(
+                    PlayerRuntimeController.TAG,
+                    "AUTO_SUB addon fallback: target=$target matched addon lang=${match.lang} id=${match.id} " +
+                        "(addons=${state.addonSubtitles.size}, targets=$targets)"
+                )
+                return@run match
+            }
         }
         null
     }
