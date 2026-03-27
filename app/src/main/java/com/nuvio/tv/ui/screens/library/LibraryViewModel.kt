@@ -112,8 +112,9 @@ class LibraryViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(LibraryUiState())
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
 
-    private val _watchedContentIds = MutableStateFlow<Set<String>>(emptySet())
-    val watchedContentIds: StateFlow<Set<String>> = _watchedContentIds.asStateFlow()
+    private val _watchedMovieIds = MutableStateFlow<Set<String>>(emptySet())
+    val watchedMovieIds: StateFlow<Set<String>> = _watchedMovieIds.asStateFlow()
+    val watchedSeriesIds: StateFlow<Set<String>> = watchedSeriesStateHolder.fullyWatchedSeriesIds
 
     private var messageClearJob: Job? = null
 
@@ -121,11 +122,8 @@ class LibraryViewModel @Inject constructor(
         observeLayoutPreferences()
         observeLibraryData()
         viewModelScope.launch {
-            kotlinx.coroutines.flow.combine(
-                watchProgressRepository.observeWatchedMovieIds(),
-                watchedSeriesStateHolder.fullyWatchedSeriesIds
-            ) { movieIds, seriesIds -> movieIds + seriesIds }
-                .collect { ids -> _watchedContentIds.value = ids }
+            watchProgressRepository.observeWatchedMovieIds()
+                .collect { ids -> _watchedMovieIds.value = ids }
         }
     }
 

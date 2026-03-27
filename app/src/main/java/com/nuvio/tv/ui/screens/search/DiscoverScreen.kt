@@ -34,7 +34,8 @@ fun DiscoverScreen(
     onNavigateToDetail: (String, String, String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val watchedContentIds by viewModel.watchedContentIds.collectAsState()
+    val watchedMovieIds by viewModel.watchedMovieIds.collectAsState()
+    val watchedSeriesIds by viewModel.watchedSeriesIds.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
     val discoverFirstItemFocusRequester = remember { FocusRequester() }
     var discoverFocusedItemIndex by rememberSaveable { mutableStateOf(0) }
@@ -78,7 +79,8 @@ fun DiscoverScreen(
             DiscoverSection(
                 uiState = uiState,
                 posterCardStyle = posterCardStyle,
-                watchedContentIds = watchedContentIds,
+                watchedMovieIds = watchedMovieIds,
+                watchedSeriesIds = watchedSeriesIds,
                 focusResults = false,
                 firstItemFocusRequester = discoverFirstItemFocusRequester,
                 focusedItemIndex = discoverFocusedItemIndex,
