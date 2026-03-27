@@ -158,6 +158,7 @@ class HomeViewModel @Inject constructor(
         get() = trailerPreviewAudioUrlsState
 
     init {
+        watchedSeriesStateHolder.loadFromDisk()
         observeLayoutPreferences()
         observeExternalMetaPrefetchPreference()
         loadHomeCatalogOrderPreference()
