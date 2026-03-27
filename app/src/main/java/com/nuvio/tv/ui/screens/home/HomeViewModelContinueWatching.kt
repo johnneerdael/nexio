@@ -270,6 +270,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
 
                         val episodes = meta.videos
                             .filter { it.season != null && it.episode != null && it.season != 0 }
+                            .filter { it.available != false || !it.released.isNullOrBlank() }
                         if (episodes.isEmpty()) return@filter false
 
                         val watchedEpisodes = allWatchedItems
@@ -372,6 +373,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
 
                                     val episodes = meta.videos
                                         .filter { it.season != null && it.episode != null && it.season != 0 }
+                                        .filter { it.available != false || !it.released.isNullOrBlank() }
                                     if (episodes.isEmpty()) return@filter false
 
                                     val watchedEpisodes = updatedWatchedItems

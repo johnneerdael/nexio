@@ -1193,7 +1193,8 @@ class MetaDetailsViewModel @Inject constructor(
         if (!isSeries) return
 
         val episodes = meta.videos.filter {
-            it.season != null && it.episode != null && (it.season ?: 0) > 0
+            it.season != null && it.episode != null && (it.season ?: 0) > 0 &&
+                (it.available != false || !it.released.isNullOrBlank())
         }
         if (episodes.isEmpty()) return
 
