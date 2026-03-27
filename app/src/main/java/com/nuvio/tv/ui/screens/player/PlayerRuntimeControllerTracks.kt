@@ -817,8 +817,15 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
         return
     }
 
-    val addonMatch = state.addonSubtitles.firstOrNull { subtitle ->
-        targets.any { target -> PlayerSubtitleUtils.matchesLanguageCode(subtitle.lang, target) }
+    val addonMatch = run {
+        // Try each target in priority order so primary language is preferred over secondary.
+        for (target in targets) {
+            val match = state.addonSubtitles.firstOrNull { subtitle ->
+                PlayerSubtitleUtils.matchesLanguageCode(subtitle.lang, target)
+            }
+            if (match != null) return@run match
+        }
+        null
     }
     if (addonMatch != null) {
         autoSubtitleSelected = true
