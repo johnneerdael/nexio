@@ -41,11 +41,17 @@
     <string name="error_meta_tried_none">Addons de métadonnées tentés : %1$s. Aucun d\'entre eux n\'a fourni de métadonnées pour l\'id=%2$s (type=%3$s).</string>
     <string name="error_meta_tried_generic">Addons de métadonnées tentés : %1$s. Impossible de charger les métadonnées pour l\'id=%2$s (type=%3$s).</string>
     <string name="error_meta_tried_issues">Addons de métadonnées tentés : %1$s. Impossible de charger les métadonnées pour l\'id=%2$s (type=%3$s). Problèmes : %4$s.</string>
+    <string name="error_stream_no_supported_addon">Aucun addon installé ne supporte les flux pour \"%1$s\".</string>
+    <string name="error_stream_tried_none">Addons de flux tentés : %1$s. Aucun d\'entre eux n\'a retourné de flux pour l\'id=%2$s (type=%3$s).</string>
+    <string name="error_stream_tried_generic">Addons de flux tentés : %1$s. Les flux n\'ont pas pu être chargés pour l\'id=%2$s (type=%3$s).</string>
+    <string name="error_stream_tried_issues">Addons de flux tentés : %1$s. Les flux n\'ont pas pu être chargés pour l\'id=%2$s (type=%3$s). Problèmes : %4$s.</string>
 
     <!-- ContinueWatchingSection -->
-    <string name="continue_watching">Reprendre le visionnage</string>
+    <string name="continue_watching">Visionnage en cours</string>
     <string name="cw_upcoming">À venir</string>
     <string name="cw_next_up">Épisode suivant</string>
+    <string name="cw_new_episode">Nouvel Épisode</string>
+    <string name="cw_new_season">Nouvelle Saison</string>
     <string name="cw_resume">Reprendre</string>
     <string name="cw_percent_watched">%1$d%% regardé</string>
     <string name="cw_hours_min_left">%1$dh %2$dm restantes</string>
@@ -118,8 +124,27 @@
     <string name="cast_role_writer">Scénariste</string>
     <string name="detail_tab_ratings">Notes</string>
     <string name="detail_tab_more_like_this">Similaires</string>
+    <string name="detail_comments_title">Commentaires</string>
+    <string name="detail_comments_subtitle">Critiques de Trakt</string>
     <string name="detail_section_network">Chaîne</string>
     <string name="detail_section_production">Production</string>
+    <string name="detail_comments_empty">Aucune critique Trakt n\'est encore disponible.</string>
+    <string name="detail_comments_error">Impossible de charger les critiques Trakt pour le moment.</string>
+    <string name="detail_comments_spoiler_hidden">Critique avec spoiler. Appuyez sur OK pour révéler.</string>
+    <string name="detail_comments_reveal_spoiler">Révéler le spoiler</string>
+    <string name="detail_comments_reveal_spoiler_hint">Appuyez sur OK pour révéler le spoiler.</string>
+    <string name="detail_comments_back_hint">Appuyez sur Retour pour fermer</string>
+    <string name="detail_comments_badge_review">Critique</string>
+    <string name="detail_comments_badge_spoiler">Spoiler</string>
+    <string name="detail_comments_badge_rating">%1$d/10</string>
+    <string name="detail_comments_likes">%1$d J\'aime</string>
+    <string name="tmdb_entity_kind_company">Société de Production</string>
+    <string name="tmdb_entity_kind_network">Chaîne</string>
+    <string name="tmdb_entity_rail_popular">Populaires</string>
+    <string name="tmdb_entity_rail_top_rated">Meilleures Notes</string>
+    <string name="tmdb_entity_rail_recent">Nouveautés</string>
+    <string name="tmdb_entity_empty_title">Aucun titre trouvé</string>
+    <string name="tmdb_entity_empty_subtitle">TMDB n\'a actuellement aucun titre consultable pour cette sélection.</string>
     <string name="episodes_unavailable">Indisponible</string>
     <string name="series_status_ended">Terminée</string>
     <string name="series_status_continuing">En cours</string>
@@ -178,6 +203,23 @@
     <string name="settings_playback_subtitle">Lecteur, sous-titres et lecture automatique.</string>
     <string name="settings_trakt_subtitle">Ouvrir l\'écran de connexion Trakt.</string>
     <string name="settings_about_subtitle">Version et politiques.</string>
+    <string name="settings_network">Débit réseau</string>
+    <string name="settings_network_subtitle">Diagnostics de la latence et du débit descendant</string>
+    <string name="settings_advanced">Avancés</string>
+    <string name="settings_advanced_subtitle">Lancer les diagnostics de vitesse réseau</string>
+    <string name="network_speed_test_run">Lancer le test de débit</string>
+    <string name="network_speed_test_running">Test de débit en cours</string>
+    <string name="network_speed_test_subtitle">Mesurer la latence et le débit descendant</string>
+    <string name="network_testing_latency">Mesure de la latence</string>
+    <string name="network_testing_download">Mesure du débit descendant</string>
+    <string name="network_results_title">Résultats</string>
+    <string name="network_latency_label">Latence</string>
+    <string name="network_download_label">Débit descendant</string>
+    <string name="network_error_prefix">Erreur : %1$s</string>
+    <string name="network_powered_by_fast">Propulsé par fast.com</string>
+    <string name="network_connection_wifi">Wi-Fi</string>
+    <string name="network_connection_ethernet">Ethernet</string>
+    <string name="network_connection_offline">Hors ligne</string>
     <string name="settings_debug">Débogage</string>
     <string name="settings_debug_subtitle">Outils développeur et options expérimentales.</string>
     <string name="settings_plugins_section_subtitle">Gérer les dépôts, fournisseurs et états des plugins.</string>
@@ -402,6 +444,8 @@
     <string name="layout_modern_sidebar_sub">Activer la navigation par barre latérale flottante.</string>
     <string name="layout_modern_sidebar_blur">Flou de la barre latérale moderne</string>
     <string name="layout_modern_sidebar_blur_sub">Activer l\'effet de flou pour les surfaces de la barre latérale moderne.</string>
+    <string name="layout_fullscreen_hero_backdrop">Arrière-plan en plein écran</string>
+    <string name="layout_fullscreen_hero_backdrop_sub">Étendre l\'arrière-plan pour couvrir la totalité de l\'écran.</string>
     <string name="layout_show_hero">Afficher la section vedette</string>
     <string name="layout_show_hero_sub">Afficher le carrousel vedette en haut de l\'accueil.</string>
     <string name="layout_show_discover">Afficher Découvrir dans la recherche</string>
@@ -418,10 +462,14 @@
     <string name="layout_section_detail_desc">Paramètres pour les écrans de détail et d\'épisodes.</string>
     <string name="layout_blur_unwatched">Flouter les épisodes non vus</string>
     <string name="layout_blur_unwatched_sub">Flouter les miniatures d\'épisodes jusqu\'à ce qu\'ils soient vus pour éviter les spoilers.</string>
+    <string name="layout_blur_cw_next_up">Flouter les épisodes non vus dans le visionnage en cours</string>
+    <string name="layout_blur_cw_next_up_sub">Flouter les miniatures des épisodes suivants dans le visionnage en cours pour éviter les spoilers.</string>
     <string name="layout_trailer_button">Afficher le bouton bande-annonce</string>
     <string name="layout_trailer_button_sub">Afficher le bouton bande-annonce sur la page de détail (uniquement quand une bande-annonce est disponible).</string>
     <string name="layout_prefer_external_meta">Préférer les métadonnées de l\'addon externe</string>
     <string name="layout_prefer_external_meta_sub">Utiliser les métadonnées de l\'addon externe au lieu de l\'addon de catalogue.</string>
+    <string name="layout_show_full_release_date">Afficher la date de sortie complète</string>
+    <string name="layout_show_full_release_date_sub">Pour les films, afficher la date de sortie complète au lieu de l\'année seulement.</string>
     <string name="layout_section_focused">Affiche au focus</string>
     <string name="layout_section_focused_desc">Comportement avancé des cartes d\'affiches au focus.</string>
     <string name="layout_expand_poster">Étendre l\'affiche au focus en arrière-plan</string>
@@ -505,6 +553,10 @@
     <string name="tmdb_subtitle">Choisir les champs de métadonnées provenant de TMDB</string>
     <string name="tmdb_enable_title">Activer l\'enrichissement TMDB</string>
     <string name="tmdb_enable_subtitle">Utiliser TMDB comme source de métadonnées pour enrichir les données de l\'addon</string>
+    <string name="tmdb_modern_home_title">Activer sur l\'accueil Moderne</string>
+    <string name="tmdb_modern_home_subtitle">Appliquer également l\'enrichissement TMDB aux vedettes et aux cartes au focus de l\'accueil Moderne</string>
+    <string name="tmdb_enrich_continue_watching_title">Enrichir le visionnage en cours</string>
+    <string name="tmdb_enrich_continue_watching_subtitle">Appliquer l\'enrichissement TMDB aux éléments du visionnage en cours</string>
     <string name="tmdb_language_title">Langue</string>
     <string name="tmdb_language_subtitle">Langue des métadonnées TMDB pour le titre, le logo et les champs activés</string>
     <string name="tmdb_artwork_title">Illustrations</string>
@@ -542,11 +594,13 @@
     <string name="trakt_login_instruction">Appuyez sur Connexion pour démarrer l\'authentification Trakt. Un code QR apparaîtra ici.</string>
     <string name="trakt_missing_credentials">TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET manquants dans local.properties.</string>
     <string name="trakt_watch_progress_title">Progression</string>
-    <string name="trakt_watch_progress_subtitle">Choisir quelle source de progression alimente \"Reprendre\" et \"Reprendre le visionnage\"</string>
+    <string name="trakt_watch_progress_subtitle">Choisir quelle source de progression alimente la reprise et le visionnage en cours</string>
     <string name="trakt_watch_progress_dialog_title">Progression</string>
-    <string name="trakt_watch_progress_dialog_subtitle">Choisir si \"Reprendre\" et \"Reprendre le visionnage\" utilisent Trakt ou Nuvio Sync, tout en maintenant le scrobbling Trakt actif.</string>
+    <string name="trakt_watch_progress_dialog_subtitle">Choisir si la reprise et le visionnage en cours utilisent Trakt ou Nuvio Sync, tout en maintenant le scrobbling Trakt actif.</string>
     <string name="trakt_watch_progress_source_trakt">Trakt</string>
     <string name="trakt_watch_progress_source_nuvio">Nuvio Sync</string>
+    <string name="trakt_setting_on">Activé</string>
+    <string name="trakt_setting_off">Désactivé</string>
     <string name="trakt_watch_progress_trakt_selected">Source de progression réglée sur Trakt</string>
     <string name="trakt_watch_progress_nuvio_selected">Source de progression réglée sur Nuvio Sync</string>
     <string name="trakt_continue_watching_window">Fenêtre de visionnage en cours</string>
@@ -557,6 +611,12 @@
     <string name="trakt_unaired_hidden">Masqués</string>
     <string name="trakt_unaired_now_shown">Les épisodes suivants non diffusés sont désormais affichés</string>
     <string name="trakt_unaired_now_hidden">Les épisodes suivants non diffusés sont désormais masqués</string>
+    <string name="trakt_comments_title">Commentaires</string>
+    <string name="trakt_comments_subtitle">Afficher les critiques Trakt sur les pages de métadonnées</string>
+    <string name="trakt_comments_dialog_title">Commentaires</string>
+    <string name="trakt_comments_dialog_subtitle">Choisissez si les pages de métadonnées doivent afficher les critiques Trakt lorsque votre compte est connecté.</string>
+    <string name="trakt_comments_now_shown">Les critiques Trakt sont désormais affichées sur les pages de métadonnées</string>
+    <string name="trakt_comments_now_hidden">Les critiques Trakt sont désormais masquées des pages de métadonnées</string>
     <string name="trakt_cached_label">En cache</string>
     <string name="trakt_stat_movies">Films</string>
     <string name="trakt_stat_shows">Séries</string>
@@ -640,6 +700,37 @@
     <string name="profile_add_new">Ajouter un profil</string>
     <string name="profile_cancel">Annuler</string>
     <string name="profile_save">Enregistrer</string>
+    <string name="profile_pin_title">Verrouillage du profil par code PIN</string>
+    <string name="profile_pin_enabled_subtitle">Un code PIN à 4 chiffres est requis pour accéder à ce profil.</string>
+    <string name="profile_pin_disabled_subtitle">Définissez un code PIN à 4 chiffres pour verrouiller ce profil.</string>
+    <string name="profile_pin_set">Définir le code PIN</string>
+    <string name="profile_pin_change">Modifier le code PIN</string>
+    <string name="profile_pin_remove">Supprimer le code PIN</string>
+    <string name="profile_pin_set_title">Définir le code PIN du profil</string>
+    <string name="profile_pin_set_subtitle">Saisissez un code PIN à 4 chiffres et confirmez-le.</string>
+    <string name="profile_pin_enter">Saisir le code PIN à 4 chiffres</string>
+    <string name="profile_pin_confirm">Confirmer le code PIN à 4 chiffres</string>
+    <string name="profile_pin_mismatch">Les codes PIN ne correspondent pas.</string>
+    <string name="profile_pin_save">Enregistrer le code PIN</string>
+    <string name="profile_pin_unlock_title">Déverrouiller %1$s</string>
+    <string name="profile_pin_unlock_subtitle">Saisissez le code PIN à 4 chiffres pour continuer.</string>
+    <string name="profile_pin_verifying">Vérification...</string>
+    <string name="profile_pin_unlock_action">Déverrouiller</string>
+    <string name="profile_pin_overlay_unlock_heading">Saisissez votre code PIN pour accéder à %1$s.</string>
+    <string name="profile_pin_overlay_set_heading">Créez un code PIN à 4 chiffres pour %1$s.</string>
+    <string name="profile_pin_overlay_confirm_heading">Confirmez votre nouveau code PIN.</string>
+    <string name="profile_pin_overlay_unlock_support">Utilisez votre télécommande ou votre clavier pour saisir les 4 chiffres.</string>
+    <string name="profile_pin_overlay_change_verify_kicker">Contrôle de sécurité requis.</string>
+    <string name="profile_pin_overlay_change_verify_heading">Saisissez le code PIN actuel de %1$s pour le modifier.</string>
+    <string name="profile_pin_overlay_change_verify_support">Saisissez le code PIN actuel à 4 chiffres avant d\'en définir un nouveau.</string>
+    <string name="profile_pin_overlay_remove_verify_kicker">Contrôle de sécurité requis.</string>
+    <string name="profile_pin_overlay_remove_verify_heading">Saisissez le code PIN actuel de %1$s pour le supprimer.</string>
+    <string name="profile_pin_overlay_remove_verify_support">Saisissez le code PIN actuel à 4 chiffres pour le supprimer.</string>
+    <string name="profile_pin_overlay_set_support">Le code PIN sera requis pour accéder à ce profil.</string>
+    <string name="profile_pin_overlay_confirm_support">Saisissez à nouveau les 4 chiffres pour terminer la configuration.</string>
+    <string name="profile_pin_overlay_mismatch">Les codes PIN ne correspondent pas. Réessayez la saisie.</string>
+    <string name="profile_pin_overlay_forgot_hint">Code PIN oublié ? Réinitialisez-le depuis votre compte Nuvio sur le site web.</string>
+    <string name="profile_pin_overlay_back_hint">Appuyez sur Retour pour annuler</string>
 
 
     <!-- AddonManagerScreen -->
@@ -800,7 +891,7 @@
     <string name="next_episode_playing_via">Lecture via %1$s dans %2$ds</string>
     <string name="next_episode_play">Lire</string>
     <string name="next_episode_unaired">Non diffusé</string>
-    <string name="next_episode_not_aired_yet">Le prochain épisode n\'est pas encore diffusé</string>
+    <string name="next_episode_not_aired_yet">L\'épisode suivant n\'est pas encore diffusé</string>
     <string name="skip_intro">Passer le générique</string>
     <string name="skip_ending">Passer les crédits</string>
     <string name="skip_recap">Passer le résumé</string>
@@ -948,6 +1039,9 @@
     <string name="cast_detail_error">Une erreur est survenue</string>
     <string name="cast_detail_retry">Réessayer</string>
     <string name="cast_detail_filmography">Filmographie</string>
+    <string name="cast_detail_born">Naissance : %1$s</string>
+    <string name="cast_detail_born_died">Naissance : %1$s — †%2$s</string>
+    <string name="cast_detail_age">%1$d ans</string>
 
     <!-- CatalogSeeAllScreen -->
     <string name="catalog_see_all_from">depuis %1$s</string>
@@ -1023,6 +1117,9 @@
     <string name="settings_rounded_ui">Interface arrondie</string>
     <string name="cd_expand_sidebar">Développer la barre latérale</string>
 
+    <string name="update_checking">Vérification des mises à jour…</string>
+    <string name="update_download_complete">Téléchargement terminé. Prêt à installer.</string>
+    <string name="update_up_to_date">Le système est à jour. Dernières modifications :</string>
     <string name="update_close">Fermer</string>
     <string name="update_open_settings">Ouvrir les paramètres</string>
     <string name="update_install">Installer</string>
