@@ -281,28 +281,24 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                         }
                     }
                 }.toSet()
-                val newFullyWatched = (allSeedContentIds - nextUpContentIds - olderSeedsWithNextUp - inProgressContentIds)
+                val newFullyWatched = allSeedContentIds
                     .filter { contentId ->
-                        // Verify against meta: a series is only "fully watched" when ALL
-                        // known episodes (including scheduled/unaired) are completed.
+                        // Verify against watched items: the series is only "fully watched"
+                        // when every episode in meta is marked as watched.
                         val cacheKey = "series:$contentId"
                         val meta = synchronized(cwMetaCache) { cwMetaCache[cacheKey] }
                             ?: synchronized(cwMetaCache) { cwMetaCache["tv:$contentId"] }
-                        if (meta == null) return@filter false // no meta cached → don't badge
+                        if (meta == null) return@filter false
 
-                        val airedEpisodes = meta.videos.filter { video ->
-                            video.season != null && video.episode != null && video.season != 0
-                        }
-                        if (airedEpisodes.isEmpty()) return@filter false
+                        val episodes = meta.videos
+                            .filter { it.season != null && it.episode != null && it.season != 0 }
+                        if (episodes.isEmpty()) return@filter false
 
-                        // All episodes from meta must have a completed seed
-                        val completedEpisodes = nextUpSeeds
-                            .filter { it.contentId == contentId && it.season != null && it.episode != null }
-                            .filter { shouldUseAsCompletedSeed(it) }
-                            .map { it.season!! to it.episode!! }
-                            .toSet()
-                        airedEpisodes.all { video ->
-                            (video.season!! to video.episode!!) in completedEpisodes
+                        val watchedEpisodes = watchedItemsPreferences
+                            .getWatchedEpisodesForContent(contentId)
+                            .first()
+                        episodes.all { video ->
+                            (video.season!! to video.episode!!) in watchedEpisodes
                         }
                     }
                     .toSet()
@@ -347,25 +343,22 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                     }
                                 }
                             }.toSet()
-                            val updatedFullyWatched = (allSeedContentIds - nextUpContentIds - updatedOlderWithNextUp - inProgressContentIds)
+                            val updatedFullyWatched = allSeedContentIds
                                 .filter { contentId ->
                                     val cacheKey = "series:$contentId"
                                     val meta = synchronized(cwMetaCache) { cwMetaCache[cacheKey] }
                                         ?: synchronized(cwMetaCache) { cwMetaCache["tv:$contentId"] }
                                     if (meta == null) return@filter false
 
-                                    val airedEpisodes = meta.videos.filter { video ->
-                                        video.season != null && video.episode != null && video.season != 0
-                                    }
-                                    if (airedEpisodes.isEmpty()) return@filter false
+                                    val episodes = meta.videos
+                                        .filter { it.season != null && it.episode != null && it.season != 0 }
+                                    if (episodes.isEmpty()) return@filter false
 
-                                    val completedEpisodes = nextUpSeeds
-                                        .filter { it.contentId == contentId && it.season != null && it.episode != null }
-                                        .filter { shouldUseAsCompletedSeed(it) }
-                                        .map { it.season!! to it.episode!! }
-                                        .toSet()
-                                    airedEpisodes.all { video ->
-                                        (video.season!! to video.episode!!) in completedEpisodes
+                                    val watchedEpisodes = watchedItemsPreferences
+                                        .getWatchedEpisodesForContent(contentId)
+                                        .first()
+                                    episodes.all { video ->
+                                        (video.season!! to video.episode!!) in watchedEpisodes
                                     }
                                 }
                                 .toSet()
