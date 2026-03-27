@@ -8,7 +8,7 @@
     <string name="home_no_addons">Δεν έχετε εγκαταστήσει πρόσθετα. Προσθέστε ένα για να ξεκινήσετε.</string>
     <string name="home_no_catalog_addons">Δεν έχετε εγκαταστήσει πρόσθετα καταλόγου. Εγκαταστήστε ένα πρόσθετο καταλόγου για να δείτε περιεχόμενο.</string>
     <string name="auth_notice_nuvio_logged_out">Έχετε αποσυνδεθεί από το Nuvio. Συνδεθείτε ξανά.</string>
-    <string name="auth_notice_trakt_logged_out">Έχετε αποσυνδεθεί από το Trakt. Επανασυνδεθείτε.</string>
+    <string name="auth_notice_trakt_logged_out">Έχετε αποσυνδεθεί από το Trakt. Συνδεθείτε ξανά.</string>
     <string name="error_generic">Προέκυψε σφάλμα</string>
 
     <!-- ErrorState -->
@@ -148,8 +148,8 @@
     <string name="tmdb_entity_empty_title">Δεν βρέθηκαν τίτλοι</string>
     <string name="tmdb_entity_empty_subtitle">Το TMDB δεν έχει προς το παρόν διαθέσιμους τίτλους για αυτή την επιλογή.</string>
     <string name="episodes_unavailable">Μη διαθέσιμο</string>
-    <string name="series_status_ended">Τέλος</string>
-    <string name="series_status_continuing">Συνεχίζεται</string>
+    <string name="series_status_ended">Τελείωσε</string>
+    <string name="series_status_continuing">Ανανεώθηκε</string>
     <string name="series_status_current">Τρέχον</string>
     <string name="series_status_cancelled">Ακυρώθηκε</string>
     <string name="series_status_released">Κυκλοφόρησε</string>
@@ -335,14 +335,14 @@
     <!-- PlaybackSubtitleSettings -->
     <string name="sub_section">Υπότιτλοι</string>
     <string name="sub_not_set">Δεν ορίστηκε</string>
-    <string name="sub_forced_lang">Εξαναγκασμένο</string>
+    <string name="sub_forced_lang">Εξαναγκασμένος</string>
     <string name="sub_preferred_lang">Προτιμώμενη γλώσσα</string>
     <string name="sub_secondary_lang">Δευτερεύουσα προτιμώμενη γλώσσα</string>
     <string name="sub_organization">Οργάνωση υπότιτλων</string>
     <string name="sub_size">Μέγεθος</string>
     <string name="sub_vertical_offset">Κάθετη μετατόπιση</string>
     <string name="sub_bold">Έντονα</string>
-    <string name="sub_bold_sub">Χρήση έντονου βάρους γραμματοσειράς για υπότιτλους</string>
+    <string name="sub_bold_sub">Χρήση έντονης γραμματοσειράς για υπότιτλους</string>
     <string name="sub_text_color">Χρώμα κειμένου</string>
     <string name="sub_bg_color">Χρώμα φόντου</string>
     <string name="sub_outline">Περίγραμμα</string>
@@ -495,15 +495,15 @@
     <string name="layout_trailer_hero_media">Ηρωικό μέσο</string>
     <string name="layout_preset_compact">Συμπαγές</string>
     <string name="layout_preset_dense">Πυκνό</string>
-    <string name="layout_preset_standard">Standard</string>
+    <string name="layout_preset_standard">Βασικό</string>
     <string name="layout_preset_balanced">Ισορροπημένο</string>
     <string name="layout_preset_comfort">Άνετο</string>
     <string name="layout_preset_large">Μεγάλο</string>
-    <string name="layout_preset_sharp">Αιχμηρό</string>
+    <string name="layout_preset_sharp">Έντονο</string>
     <string name="layout_preset_subtle">Διακριτικό</string>
     <string name="layout_preset_classic">Κλασικό</string>
     <string name="layout_preset_rounded">Στρογγυλεμένο</string>
-    <string name="layout_preset_pill">Pill</string>
+    <string name="layout_preset_pill">Οβάλ</string>
     <string name="layout_card_width">Πλάτος</string>
     <string name="layout_card_radius">Ακτίνα γωνιών</string>
     <string name="layout_reset_default">Επαναφορά σε προεπιλογή</string>
@@ -914,16 +914,16 @@
     <string name="next_episode_play">Αναπαραγωγή</string>
     <string name="next_episode_unaired">Δεν έχει προβληθεί</string>
     <string name="next_episode_not_aired_yet">Το επόμενο επεισόδιο δεν έχει προβληθεί ακόμα</string>
-    <string name="skip_intro">Παράλειψη intro</string>
-    <string name="skip_ending">Παράλειψη ending</string>
-    <string name="skip_recap">Παράλειψη recap</string>
+    <string name="skip_intro">Παράλειψη αρχής</string>
+    <string name="skip_ending">Παράλειψη τέλους</string>
+    <string name="skip_recap">Παράλειψη ανασκόπισης</string>
     <string name="skip_generic">Παράλειψη</string>
     <string name="display_mode_refresh">Ανανέωση</string>
     <string name="display_mode_resolution">Ανάλυση</string>
 
   
     <!-- SearchScreen -->
-    <string name="search_keyboard_hint">Πατήστε Done στο πληκτρολόγιο για αναζήτηση</string>
+    <string name="search_keyboard_hint">Πατήστε Τέλος στο πληκτρολόγιο για αναζήτηση</string>
     <string name="search_placeholder">Αναζήτηση ταινιών &amp; σειρών</string>
     <string name="search_start_title">Ξεκινήστε την αναζήτηση</string>
     <string name="search_start_subtitle">Εισάγετε τουλάχιστον 2 χαρακτήρες</string>
