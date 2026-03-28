@@ -5,6 +5,7 @@
 
 package com.nuvio.tv.ui.screens.home
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.animateDpAsState
@@ -515,6 +516,12 @@ fun ModernHomeContent(
             if (!shouldPlayHeroTrailer) {
                 heroTrailerFirstFrameRendered = false
             }
+        }
+
+        val isTrailerPlayingFullscreen = fullScreenBackdrop && shouldPlayHeroTrailer && heroTrailerFirstFrameRendered
+        BackHandler(enabled = isTrailerPlayingFullscreen) {
+            focusedCatalogSelection = null
+            expandedCatalogFocusKey = null
         }
         val liveHeroSceneState = remember(
             heroBackdrop,

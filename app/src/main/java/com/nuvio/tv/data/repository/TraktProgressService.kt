@@ -1158,7 +1158,7 @@ class TraktProgressService @Inject constructor(
         }
         val inProgressMovies = getPlayback("movies", force = force, startAt = playbackStartAt).mapNotNull { mapPlaybackMovie(it) }
         val inProgressEpisodes = getPlayback("episodes", force = force, startAt = playbackStartAt)
-            .mapNotNull { mapPlaybackEpisode(it, applyAddonRemap = false) }
+            .mapNotNull { mapPlaybackEpisode(it, applyAddonRemap = true) }
 
         val mergedByKey = linkedMapOf<String, WatchProgress>()
 
@@ -1212,7 +1212,7 @@ class TraktProgressService @Inject constructor(
                     continue
                 }
 
-                val mapped = mapEpisodeHistoryItem(item, applyAddonRemap = false) ?: continue
+                val mapped = mapEpisodeHistoryItem(item, applyAddonRemap = true) ?: continue
                 results.putIfAbsent(mapped.contentId, mapped)
                 if (results.size >= maxRecentEpisodeHistoryEntries) {
                     shouldStop = true
