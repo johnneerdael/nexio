@@ -447,8 +447,8 @@
     <string name="layout_modern_sidebar_blur">Moderne Seitenleiste „unscharf”</string>
     <string name="layout_modern_sidebar_blur_sub">Wechseln Sie den Unschärfeeffekt für moderne Seitenleistenoberflächen.</string>
 	<string name="layout_fullscreen_hero_backdrop">Vollbild-Hintergrund (Hero)</string>
-	<string name="layout_fullscreen_hero_backdrop_sub">Erweitert den Hero-Hintergrund, sodass er den gesamten Bildschirm ausfüllt.</string>	<string name="layout_show_hero">Hero-Bereich anzeigen</string>
-    <string name="layout_show_hero">Show Hero Section</string>
+	<string name="layout_fullscreen_hero_backdrop_sub">Erweitert den Hero-Hintergrund, sodass er den gesamten Bildschirm ausfüllt.</string>
+	<string name="layout_show_hero">Hero-Bereich anzeigen</string>
     <string name="layout_show_hero_sub">Hero-Karussell oben auf der Startseite anzeigen.</string>
     <string name="layout_show_discover">Entdecken in der Suche anzeigen</string>
     <string name="layout_show_discover_sub">Entdecken-Bereich anzeigen, wenn die Suche leer ist.</string>

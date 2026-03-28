@@ -775,7 +775,6 @@
     <string name="trakt_unaired_shown">Prikazano</string>
     <string name="trakt_unaired_hidden">Skrito</string>
 	<string name="trakt_unaired_now_shown">Naslednje epizode, ki še niso izdane, so zdaj prikazane</string>																					  
-	<string name="trakt_unaired_hidden">Skrito</string>												 												   
 	<string name="trakt_comments_title">Komentarji</string>
     <string name="trakt_comments_subtitle">Prikaži ocene s Trakta na straneh z metapodatki</string>
     <string name="trakt_comments_dialog_title">Komentarji</string>
@@ -1539,7 +1538,6 @@
     <string name="update_close">Zapri</string>
 	<string name="update_download_complete">Prenos je končan. Pripravljeno na namestitev.</string>
     <string name="update_up_to_date">Sistem je posodobljen. Najnovejše spremembe:</string>
-    <string name="update_close">Zapri</string>										  
     <string name="update_open_settings">Odpri nastavitve</string>
     <string name="update_install">Namesti</string>
     <string name="update_ignore">Prezri</string>
