@@ -102,6 +102,8 @@ fun LibraryScreen(
     onNavigateToDetail: (String, String, String?) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val watchedMovieIds by viewModel.watchedMovieIds.collectAsState()
+    val watchedSeriesIds by viewModel.watchedSeriesIds.collectAsState()
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var expandedPicker by remember { mutableStateOf<String?>(null) }
     val primaryFocusRequester = remember { FocusRequester() }
@@ -321,9 +323,11 @@ fun LibraryScreen(
 
         items(uiState.visibleItems, key = { "${it.type}:${it.id}" }) { item ->
             val focusKey = "${item.type}:${item.id}"
+            val isSeries = item.type.equals("series", ignoreCase = true) || item.type.equals("tv", ignoreCase = true)
             GridContentCard(
                 item = item.toMetaPreview().copy(posterShape = PosterShape.POSTER),
                 posterCardStyle = posterCardStyle,
+                isWatched = if (isSeries) item.id in watchedSeriesIds else item.id in watchedMovieIds,
                 focusRequester = posterFocusRequesters[focusKey],
                 showLabel = true,
                 onFocused = {
