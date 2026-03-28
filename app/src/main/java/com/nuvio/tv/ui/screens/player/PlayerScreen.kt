@@ -541,14 +541,11 @@ fun PlayerScreen(
                         
                         // Apply vertical offset (-20 = very bottom, 0 = default, 50 = middle)
                         // Convert percentage to fraction for bottom padding
-                        val bottomPaddingFraction = (0.06f + (subtitleStyle.verticalOffset / 250f)).coerceIn(0f, 0.4f)
+                        val bottomPaddingFraction = (
+                            0.06f +
+                                (subtitleStyle.verticalOffset / 250f)
+                            ).coerceIn(0f, 0.4f)
                         setBottomPaddingFraction(bottomPaddingFraction)
-
-                        // Also apply explicit bottom padding based on view height for stronger offset effect
-                        post {
-                            val extraPadding = (height * (subtitleStyle.verticalOffset / 400f)).toInt().coerceAtLeast(0)
-                            setPadding(paddingLeft, paddingTop, paddingRight, extraPadding)
-                        }
                     }
                 },
                 modifier = Modifier.fillMaxSize()
