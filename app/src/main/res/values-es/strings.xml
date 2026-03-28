@@ -939,7 +939,6 @@
     <string name="profile_manage_title">Administrar perfiles</string>
     <string name="profile_manage_subtitle">Selecciona un perfil para editar, cambiar o crear uno nuevo</string>
     <string name="profile_manage_hint">Selecciona un perfil para administrar</string>
-    <string name="profile_shares_primary">Comparte %1$s del principal</string>
     <string name="profile_choose_avatar">Elige avatar</string>
     <string name="profile_avatar_none_selected">Ningún avatar seleccionado</string>
     <string name="profile_avatar_focus_hint">Enfoca un avatar para ver su nombre</string>
@@ -1033,12 +1032,8 @@
     <string name="library_sort_added_asc">Añadido ↑</string>
     <string name="library_sort_title_asc">Título A-Z</string>
     <string name="library_sort_title_desc">Título Z-A</string>
-    <string name="library_empty_local_subtitle">Comienza a guardar tus favoritos para verlos aquí</string>
-    <string name="library_empty_trakt_subtitle">Usa + en detalles para añadir elementos a lista de deseos o listas</string>
-    <string name="account_sign_in_description">Inicia sesión para sincronizar tu biblioteca, progreso de visualización, complementos y complementos en dispositivos. La sincronización de biblioteca usa Sincronización Nuvio cuando Trakt no está conectado, y el progreso de visualización puede usar Trakt o Sincronización Nuvio.</string>
     <string name="account_sync_restart_note">La sincronización no es en tiempo real en dispositivos activos. Reinicia este dispositivo después de iniciar sesión o para recopilar cambios realizados en otro lugar.</string>
     <string name="ratings_load_error">No se pudo cargar calificaciones de episodios.</string>
-    <string name="profile_selection_hint">Mantén para administrar perfil</string>
     <string name="profile_selection_options_title">Opciones de perfil</string>
     <string name="profile_delete_confirm_title">¿Eliminar perfil?</string>
     <string name="profile_delete_confirm_subtitle">Esto eliminará permanentemente este perfil y todos sus datos, incluida la biblioteca, historial de visualización y configuración de complementos. Esto no se puede deshacer.</string>
@@ -1049,9 +1044,6 @@
     <string name="cast_detail_age">edad %1$d</string>
     <string name="update_download">Descargar</string>
     <string name="update_downloading_ellipsis">Descargando…</string>
-    <string name="update_checking">Buscando actualizaciones…</string>
-    <string name="update_download_complete">Descarga completada. Listo para instalar.</string>
-    <string name="update_up_to_date">El sistema está actualizado. Últimos cambios:</string>
     <string name="watchlist_added">Añadido a lista de deseos</string>
     <string name="watchlist_removed">Eliminado de lista de deseos</string>
 </resources>
