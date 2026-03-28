@@ -81,6 +81,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val watchedSeriesStateHolder: com.nuvio.tv.data.local.WatchedSeriesStateHolder,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val itemId: String = savedStateHandle["itemId"] ?: ""
@@ -388,6 +389,7 @@ class MetaDetailsViewModel @Inject constructor(
                         state.copy(watchedEpisodes = watchedSet)
                     }
                 }
+                reevaluateSeriesWatchedBadge()
                 calculateNextToWatch()
             }
         }
@@ -581,6 +583,7 @@ class MetaDetailsViewModel @Inject constructor(
         }
 
         // Calculate next to watch after meta is loaded
+        reevaluateSeriesWatchedBadge()
         calculateNextToWatch()
 
         // Start fetching trailer after meta is loaded
@@ -1180,6 +1183,31 @@ class MetaDetailsViewModel @Inject constructor(
         return videos
             .filter { it.season == season }
             .sortedBy { it.episode }
+    }
+
+    private fun reevaluateSeriesWatchedBadge() {
+        val contentId = _effectiveContentId.value
+        val meta = _uiState.value.meta ?: return
+        val isSeries = meta.apiType.equals("series", ignoreCase = true) ||
+            meta.apiType.equals("tv", ignoreCase = true)
+        if (!isSeries) return
+
+        val episodes = meta.videos.filter {
+            it.season != null && it.episode != null && (it.season ?: 0) > 0 &&
+                (it.available != false || !it.released.isNullOrBlank())
+        }
+        if (episodes.isEmpty()) return
+
+        val watchedEpisodes = _uiState.value.watchedEpisodes
+        val allWatched = episodes.all { video ->
+            (video.season!! to video.episode!!) in watchedEpisodes
+        }
+
+        val current = watchedSeriesStateHolder.fullyWatchedSeriesIds.value
+        val updated = if (allWatched) current + contentId else current - contentId
+        if (updated != current) {
+            watchedSeriesStateHolder.update(updated)
+        }
     }
 
     private fun calculateNextToWatch() {
