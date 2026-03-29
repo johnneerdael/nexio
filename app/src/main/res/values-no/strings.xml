@@ -17,28 +17,28 @@
     <string name="error_state_possible_fix">Mulig løsning: %1$s</string>
     <string name="error_state_fix_retry_soon">Prøv igjen om en stund.</string>
     <string name="error_state_issue_no_metadata_any_addon">Denne IDen kunne ikke laste detaljer fordi ingen av de installerte tilleggene returnerte metadata.</string>
-    <string name="error_state_fix_no_metadata_any_addon">Prøv et annet tillegg, deaktiver \"Foretrekk ekstern metatillegg\" i Oppsettinnstillinger, eller bekreft at et installert tillegg støtter denne IDen.</string>
+    <string name="error_state_fix_no_metadata_any_addon">Prøv et annet tillegg, deaktiver \"Foretrekk eksternt metatillegg\" i Oppsettinnstillinger, eller bekreft at et installert tillegg støtter denne IDen.</string>
     <string name="error_state_prefix_no_supported_metadata">Ingen installerte tillegg støtter metadata for </string>
     <string name="error_state_prefix_no_addon_for_id">Ingen installerte tillegg kunne gi metadata for id=</string>
     <string name="error_state_fix_no_supported_metadata">Installer eller oppdater et tillegg som støtter denne innholdstypen, og prøv igjen.</string>
     <string name="error_state_prefix_tried_meta_addons">Prøvde metatillegg:</string>
     <string name="error_state_fix_tried_meta_addons">Installer et tillegg som støtter denne IDen, eller konfigurer/oppdater tillegget og prøv igjen.</string>
     <string name="error_state_issue_missing_metadata_for_id">har ikke metadata for denne IDen</string>
-    <string name="error_state_fix_missing_metadata_for_id">Åpne denne IDen fra et annet tillegg, deaktiver \"Foretrekk ekstern metatillegg\", eller kontroller at tillegget støtter denne IDen.</string>
-    <string name="error_state_issue_addon_unreachable">kunne ikke nåes</string>
-    <string name="error_state_fix_addon_unreachable">Kontroller internettilkoblingen din, bekreft at tilleggs-URL-en fortsatt fungerer, og prøv igjen.</string>
+    <string name="error_state_fix_missing_metadata_for_id">Åpne denne IDen fra et annet tillegg, deaktiver \"Foretrekk eksternt metatillegg\", eller kontroller at tillegget støtter denne IDen.</string>
+    <string name="error_state_issue_addon_unreachable">Kunne ikke nåes</string>
+    <string name="error_state_fix_addon_unreachable">Kontroller internettilkoblingen din, bekreft at tillegglenken fortsatt fungerer, og prøv igjen.</string>
     <string name="error_state_issue_addon_connection_failed">Tilkoblingen ble avslått</string>
-    <string name="error_state_fix_addon_connection_failed">Kontroller at tilleggsserveren er online og tilgjengelig, og prøv igjen.</string>
-    <string name="error_state_issue_addon_timeout">tok for lang tid å svare</string>
+    <string name="error_state_fix_addon_connection_failed">Kontroller at tilleggsserveren er på nett og tilgjengelig, og prøv igjen.</string>
+    <string name="error_state_issue_addon_timeout">Tok for lang tid å svare</string>
     <string name="error_state_fix_addon_timeout">Prøv igjen om en stund, eller prøv et annet tillegg hvis dette fortsetter å skje.</string>
-    <string name="error_state_issue_addon_cleartext">bruker en usikker HTTP-tilkobling som Android blokkerte</string>
-    <string name="error_state_fix_addon_cleartext">Bytt tilleggs-URLen til HTTPS eller oppdater tilleggskonfigurasjonen.</string>
+    <string name="error_state_issue_addon_cleartext">Bruker en usikker HTTP-tilkobling som Android blokkerte</string>
+    <string name="error_state_fix_addon_cleartext">Bytt tilleggslenken til HTTPS eller oppdater tilleggskonfigurasjonen.</string>
     <string name="error_state_fix_addon_generic">Prøv igjen, oppdater eller reinstaller tillegget, eller prøv et annet tillegg.</string>
     <string name="error_state_addon_issue_template">%1$s: %2$s.</string>
     <string name="error_meta_not_found">Metadata ikke funnet</string>
     <string name="error_meta_no_supported_addon">Ingen installerte tillegg støtter metadata for \"%1$s\".</string>
     <string name="error_meta_no_addon_for_id">Ingen installerte tillegg kunne gi metadata for id=%1$s (type=%2$s).</string>
-    <string name="error_meta_tried_none">Prøvde metatillegg: %1$s. Ingen av dem ga metadata for id=%2$s (type=%3$s).</string>
+    <string name="error_meta_tried_none">Prøvde metatillegg: %1$s. Ingen av dem gav metadata for id=%2$s (type=%3$s).</string>
     <string name="error_meta_tried_generic">Prøvde metatillegg: %1$s. Metadata kunne ikke lastes for id=%2$s (type=%3$s).</string>
     <string name="error_meta_tried_issues">Prøvde metatillegg: %1$s. Metadata kunne ikke lastes for id=%2$s (type=%3$s). Problemer: %4$s.</string>
     <string name="error_stream_no_supported_addon">Ingen installerte tillegg støtter strømmer for \"%1$s\".</string>
@@ -74,11 +74,11 @@
     <string name="hero_writer">Skribent: %1$s</string>
     <string name="hero_play">Spill av</string>
     <string name="hero_play_episode">Spill av S%1$d, E%2$d</string>
-    <string name="hero_add_to_library">Legg til i bibliotek</string>
-    <string name="hero_remove_from_library">Fjern fra bibliotek</string>
+    <string name="hero_add_to_library">Legg til i biblioteket</string>
+    <string name="hero_remove_from_library">Fjern fra biblioteket</string>
     <string name="hero_mark_watched">Merk som sett</string>
     <string name="hero_mark_unwatched">Merk som usett</string>
-    <string name="hero_play_trailer">Spill trailer</string>
+    <string name="hero_play_trailer">Spill av trailer</string>
     <string name="hero_press_back_trailer">Trykk tilbake for å avslutte trailer</string>
     <string name="cd_rating">Vurdering</string>
 
@@ -98,19 +98,19 @@
     <string name="episodes_season_actions">Sesonghandlinger</string>
 
     <!-- MetaDetailsViewModel -->
-    <string name="detail_added_to_library">Lagt til i bibliotek</string>
-    <string name="detail_removed_from_library">Fjernet fra bibliotek</string>
-    <string name="detail_episode_marked_watched">Episode merket som sett</string>
-    <string name="detail_episode_marked_unwatched">Episode merket som usett</string>
+    <string name="detail_added_to_library">Lagt til i biblioteket</string>
+    <string name="detail_removed_from_library">Fjernet fra biblioteket</string>
+    <string name="detail_episode_marked_watched">Episode markert som sett</string>
+    <string name="detail_episode_marked_unwatched">Episode markert som usett</string>
     <string name="detail_lists_updated">Lister oppdatert</string>
     <string name="detail_movie_marked_watched">Merket som sett</string>
     <string name="detail_movie_marked_unwatched">Merket som usett</string>
     <string name="detail_all_episodes_watched">Alle episoder allerede sett</string>
     <string name="detail_no_watched_episodes">Ingen sette episoder i denne sesongen</string>
     <string name="detail_all_previous_watched">Alle tidligere episoder allerede sett</string>
-    <string name="detail_marked_episodes_watched">Episoder merket som sett: %1$d</string>
-    <string name="detail_marked_episodes_unwatched">Episoder merket som usett: %1$d</string>
-    <string name="detail_marked_previous_watched">Tidligere episoder merket som sett: %1$d</string>
+    <string name="detail_marked_episodes_watched">Episoder markert som sett: %1$d</string>
+    <string name="detail_marked_episodes_unwatched">Episoder markert som usett: %1$d</string>
+    <string name="detail_marked_previous_watched">Tidligere episoder markert som sett: %1$d</string>
 
     <!-- MetaDetailsScreen -->
     <string name="detail_btn_play">Spill av</string>
@@ -130,9 +130,9 @@
     <string name="detail_section_production">Produksjon</string>
     <string name="detail_comments_empty">Ingen Traktanmeldelser tilgjengelig ennå.</string>
     <string name="detail_comments_error">Kunne ikke laste Traktanmeldelser akkurat nå.</string>
-    <string name="detail_comments_spoiler_hidden">Spoileranmeldelse. Trykk OK for å avsløre.</string>
-    <string name="detail_comments_reveal_spoiler">Avslør spoiler</string>
-    <string name="detail_comments_reveal_spoiler_hint">Trykk OK for å avsløre spoiler.</string>
+    <string name="detail_comments_spoiler_hidden">Spoileranmeldelse. Trykk OK for å vise.</string>
+    <string name="detail_comments_reveal_spoiler">Vis spoiler</string>
+    <string name="detail_comments_reveal_spoiler_hint">Trykk OK for å vise spoiler.</string>
     <string name="detail_comments_back_hint">Klikk tilbake for å lukke</string>
     <string name="detail_comments_badge_review">Anmeldelse</string>
     <string name="detail_comments_badge_spoiler">Spoiler</string>
@@ -144,7 +144,7 @@
     <string name="tmdb_entity_rail_top_rated">Toppvurdert</string>
     <string name="tmdb_entity_rail_recent">Nylig</string>
     <string name="tmdb_entity_empty_title">Ingen titler funnet</string>
-    <string name="tmdb_entity_empty_subtitle">TMDB har ikke for øyeblikket blarbare titler for denne valget.</string>
+    <string name="tmdb_entity_empty_subtitle">TMDB har ingen titler man kan bla gjennom akkurat nå, for dette valget.</string>
     <string name="episodes_unavailable">Utilgjengelig</string>
     <string name="series_status_ended">Avsluttet</string>
     <string name="series_status_continuing">Pågår</string>
@@ -168,7 +168,7 @@
     <string name="appearance_language_restart_hint">Start appen på nytt for å bruke språkendringen.</string>
 
     <!-- Font -->
-    <string name="appearance_font">Appskrift</string>
+    <string name="appearance_font">Skrifttype</string>
     <string name="appearance_font_subtitle">Velg din foretrukne skrift</string>
     <string name="appearance_font_dialog_title">Velg skrift</string>
 
@@ -197,18 +197,18 @@
     <string name="settings_layout">Oppsett</string>
     <string name="settings_layout_subtitle">Hjemmestruktur og plakatstiler.</string>
     <string name="settings_plugins">Programtillegg</string>
-    <string name="settings_plugins_subtitle">Depoter og leverandører.</string>
+    <string name="settings_plugins_subtitle">Arkiver og leverandører.</string>
     <string name="settings_integration">Integrasjon</string>
     <string name="settings_playback">Avspilling</string>
     <string name="settings_playback_subtitle">Spiller, undertekster og autoavspilling.</string>
-    <string name="settings_trakt_subtitle">Åpne Trakt-tilkoblingssvermen.</string>
+    <string name="settings_trakt_subtitle">Åpne tilkoblingsside for Trakt.</string>
     <string name="settings_about_subtitle">Versjon og retningslinjer.</string>
     <string name="settings_network">Nettverkshastighet</string>
     <string name="settings_network_subtitle">Ventetid og nedlastingsdiagnostikk</string>
     <string name="settings_advanced">Avansert</string>
     <string name="settings_advanced_subtitle">Kjør nettverkshastighetsdiagnostikk</string>
-    <string name="network_speed_test_run">Kjør hastighetstesten</string>
-    <string name="network_speed_test_running">Kjører hastighetstesten</string>
+    <string name="network_speed_test_run">Kjør hastighetstest</string>
+    <string name="network_speed_test_running">Kjører hastighetstest</string>
     <string name="network_speed_test_subtitle">Mål nedlastingshastighet og ventetid</string>
     <string name="network_testing_latency">Måler ventetid</string>
     <string name="network_testing_download">Måler nedlastingshastighet</string>
@@ -222,7 +222,7 @@
     <string name="network_connection_offline">Frakoblet</string>
     <string name="settings_debug">Feilsøking</string>
     <string name="settings_debug_subtitle">Utviklerverktøy og funksjonsflagg.</string>
-    <string name="settings_plugins_section_subtitle">Administrer depoter, leverandører og programtilleggstilstander.</string>
+    <string name="settings_plugins_section_subtitle">Administrer lagrer, leverandører og programtilleggstilstander.</string>
     <string name="settings_account_section_subtitle">Kontostatus og synkroniseringsstatus.</string>
     <string name="account_stat_addons">tillegg</string>
     <string name="account_stat_plugins">programtillegg</string>
@@ -233,11 +233,11 @@
     <string name="settings_integrations_section_subtitle">Velg TMDB eller MDBList</string>
     <string name="settings_tmdb_subtitle">Kontroller for metadataberikelse</string>
     <string name="settings_mdblist_subtitle">Eksterne vurderingsleverandører</string>
-    <string name="settings_animeskip_subtitle">Tidsmerker for anime intro/outro hopp</string>
+    <string name="settings_animeskip_subtitle">Tidsmerker for anime intro/outro</string>
 
     <!-- PlaybackSettingsScreen -->
     <string name="playback_title">Avspillingsinnstillinger</string>
-    <string name="playback_subtitle">Konfigurer videoavspilling og undertekstAlternativer</string>
+    <string name="playback_subtitle">Konfigurer videoavspilling og undertekst</string>
     <string name="cd_decrease">Reduser</string>
     <string name="cd_increase">Øk</string>
     <string name="action_cancel">Avbryt</string>
@@ -248,7 +248,7 @@
     <string name="supporters_contributors_title">Støttespillere &amp; bidragsytere</string>
     <string name="supporters_contributors_subtitle">Menneskene som støtter Nuvio og bidragsytere som bygger det på TV og mobil.</string>
     <string name="supporters_contributors_supporters_copy">Støttespillere og donorer hjelper til med å holde prosjektet i gang, finansiere infrastruktur og gjøre plass for ambisiøse funksjoner.</string>
-    <string name="supporters_contributors_donate_copy">Nuvio vil forbli gratis og åpen kildekode. Hvis du vil støtte prosjektet, kan du bidra til å dekke tiden og infrastrukturen bak det.</string>
+    <string name="supporters_contributors_donate_copy">Nuvio vil forbli gratis og åpen kildekode. Hvis du vil støtte prosjektet, kan du donere for å dekke kostnadene for infrastrukturen bak det.</string>
     <string name="supporters_contributors_donate_button">Doner til Nuvio</string>
     <string name="supporters_contributors_qr_title">Skann for å donere</string>
     <string name="supporters_contributors_qr_subtitle">Åpne lenken på telefonen din og støtt Nuvio gjennom Ko-fi.</string>
@@ -276,13 +276,13 @@
     <string name="playback_loading_overlay">Lastingoverlegg</string>
     <string name="playback_loading_overlay_sub">Vis lasteskjerm til første videobilde vises.</string>
     <string name="playback_pause_overlay">Pauseoverlegg</string>
-    <string name="playback_pause_overlay_sub">Vis detaljoverlegg etter 5 sekunder mens paused.</string>
+    <string name="playback_pause_overlay_sub">Vis detaljoverlegg etter 5 sekunder mens pauset.</string>
     <string name="playback_show_clock_sub">Vis gjeldende tid og sluttid mens kontroller er synlige.</string>
     <string name="playback_osd_clock">OSDklokke</string>
     <string name="playback_skip_intro">Hopp over intro</string>
-    <string name="playback_skip_intro_sub">Bruk introdb.app for å oppdage intros og rekapper.</string>
+    <string name="playback_skip_intro_sub">Bruk introdb.app for å finne introer og oppsummeringer.</string>
     <string name="playback_auto_frame_rate">Automatisk bildefrekvens</string>
-    <string name="playback_section_player">Spiller &amp; strømvalg</string>
+    <string name="playback_section_player">Spiller &amp; strømmevalg</string>
     <string name="playback_section_player_desc">Spillerpreferanse, autoavspilling og kildefiltrering.</string>
     <string name="playback_player">Spiller</string>
     <string name="playback_player_internal">Intern</string>
@@ -291,7 +291,7 @@
     <string name="playback_section_audio">Lyd &amp; trailer</string>
     <string name="playback_section_audio_desc">Traileratferd og lydkontroller.</string>
     <string name="playback_section_subtitles">Undertekster</string>
-    <string name="playback_section_subtitles_desc">Språk, stil og gjengiveelsesmodus.</string>
+    <string name="playback_section_subtitles_desc">Språk, stil og gjengivelsesmodus.</string>
     <string name="playback_afr_open">Åpne</string>
     <string name="playback_afr_closed">Stengt</string>
     <string name="playback_afr_off">Av</string>
@@ -300,25 +300,25 @@
     <string name="playback_afr_on_start_sub">Bytt når avspilling starter.</string>
     <string name="playback_afr_on_start_stop">Ved start/stopp</string>
     <string name="playback_afr_on_start_stop_sub">Bytt ved start og gjenopprett ved stopp.</string>
-    <string name="playback_resolution_matching">Oppløsningssamsvar</string>
-    <string name="playback_resolution_matching_sub">Tillat visningsmodusendringer for å samsvare videooppløsning.</string>
-    <string name="playback_player_external_desc">Åpne strømmer alltid i en ekstern app</string>
+    <string name="playback_resolution_matching">Oppløsningsmatching</string>
+    <string name="playback_resolution_matching_sub">Tillat endringer i visningsmodus for å samsvare med videooppløsning.</string>
+    <string name="playback_player_external_desc">Alltid åpne strøm i ekstern app</string>
     <string name="playback_player_ask_desc">Velg spilleren hver gang</string>
 
     <!-- PlaybackAudioSettings -->
     <string name="audio_trailer_section">Trailer</string>
-    <string name="audio_autoplay_trailers">Autoavspill trailers</string>
-    <string name="audio_autoplay_trailers_sub">Spill automatisk av trailers på detaljedskjermen etter en periode med inaktivitet</string>
+    <string name="audio_autoplay_trailers">Autoavspill trailere</string>
+    <string name="audio_autoplay_trailers_sub">Spill automatisk av trailere på detaljeskjermen etter en periode med inaktivitet</string>
     <string name="audio_trailer_delay">Trailer forsinkelse</string>
     <string name="audio_section">Lyd</string>
     <string name="audio_lang_default">Standard (mediefil)</string>
     <string name="audio_lang_device">Enhetsspråk</string>
-    <string name="audio_preferred_lang">Preferert lydspråk</string>
+    <string name="audio_preferred_lang">Foretrukket lydspråk</string>
     <string name="audio_skip_silence">Hopp over stillhet</string>
-    <string name="audio_skip_silence_sub">Hopp over stille deler av lyd under avspilling</string>
+    <string name="audio_skip_silence_sub">Hopp over stille deler av lyden under avspilling</string>
     <string name="audio_advanced_section">Avansert lyd</string>
     <string name="audio_advanced_warning">Disse innstillingene kan forårsake problemer på noen enheter. Endre bare hvis du vet hva du gjør.</string>
-    <string name="audio_decoder_device_only">Bare enhetsdekodere</string>
+    <string name="audio_decoder_device_only">Kun enhetsdekodere</string>
     <string name="audio_decoder_prefer_device">Foretrekk enhetsdekodere</string>
     <string name="audio_decoder_prefer_app">Foretrekk appdekodere (FFmpeg)</string>
     <string name="audio_decoder_priority">Dekoder prioritering</string>
@@ -328,13 +328,13 @@
     <string name="audio_decoder_device_only_desc">Bruk bare innebygde maskinvaredekodere. Mest kompatibel, men kan ikke støtte alle formater.</string>
     <string name="audio_decoder_prefer_device_desc">Bruk maskinvaredekodere når tilgjengelig, fall tilbake til FFmpeg. Anbefalt for de fleste enheter.</string>
     <string name="audio_decoder_prefer_app_desc">Bruk FFmpeg-dekodere når tilgjengelig. Bedre formatstøtte, men høyere CPU-bruk.</string>
-    <string name="audio_decoder_controls">Kontroller om maskinvare- eller programvarekodere (FFmpeg) brukes til lyd og video</string>
+    <string name="audio_decoder_controls">Kontroller om maskinvare- eller programvaredekodere (FFmpeg) brukes til lyd og video</string>
 
     <!-- PlaybackSubtitleSettings -->
     <string name="sub_section">Undertekster</string>
     <string name="sub_not_set">Ikke angitt</string>
     <string name="sub_forced_lang">Tvunget</string>
-    <string name="sub_preferred_lang">Preferert språk</string>
+    <string name="sub_preferred_lang">Foretrukket språk</string>
     <string name="sub_secondary_lang">Sekundært foretrukket språk</string>
     <string name="sub_organization">Undertekstorganisering</string>
     <string name="sub_size">Størrelse</string>
@@ -344,39 +344,39 @@
     <string name="sub_text_color">Tekstfarge</string>
     <string name="sub_bg_color">Bakgrunnsfarge</string>
     <string name="sub_outline">Oversikt</string>
-    <string name="sub_outline_sub">Legg til omriss rundt underteksttekst for bedre synlighet</string>
+    <string name="sub_outline_sub">Legg til omriss rundt undertekst for bedre synlighet</string>
     <string name="sub_outline_color">Omriss farge</string>
     <string name="sub_advanced_section">Avansert undertekstgjengivelse</string>
     <string name="sub_libass">Bruk libass for ASS/SSA-undertekster</string>
     <string name="sub_libass_sub">Eksperimentell: avansert ASS/SSA-gjengivelse (stiler, plassering, animasjoner)</string>
     <string name="sub_libass_mode">Libass gjengivelsmodus</string>
     <string name="sub_mode_overlay_gl">Overlegg OpenGL (anbefalt)</string>
-    <string name="sub_mode_overlay_gl_sub">Beste kvalitet med HDR-støtte. Gjengiverer undertekster på en separat tråd.</string>
+    <string name="sub_mode_overlay_gl_sub">Best kvalitet med HDR-støtte. Gjengiver undertekster på en separat tråd.</string>
     <string name="sub_mode_overlay_canvas">Overlegg lerret</string>
     <string name="sub_mode_effects_gl">Effekter OpenGL</string>
-    <string name="sub_mode_effects_gl_sub">Animasjonsstøtte ved bruk av Media3-effekter. Raskere enn Canvas.</string>
+    <string name="sub_mode_effects_gl_sub">Animasjonsstøtte ved bruk av Media3-effekter. Raskere enn lerret.</string>
     <string name="sub_mode_effects_canvas">Effekter lerret</string>
-    <string name="sub_mode_effects_canvas_sub">Animasjonsstøtte ved bruk av Media3-effekter med Canvas-gjengivelse.</string>
+    <string name="sub_mode_effects_canvas_sub">Animasjonsstøtte ved bruk av Media3-effekter med lerretgjengivelse.</string>
     <string name="sub_mode_standard">Standardtips</string>
     <string name="sub_mode_standard_sub">Grunnleggende undertekstgjengivelse uten animasjonsstøtte. Mest kompatibel.</string>
     <string name="sub_org_none">Ingen (standardrekkefølge)</string>
     <string name="sub_org_by_lang">Etter språk</string>
     <string name="sub_org_by_addon">Etter tillegg</string>
-    <string name="sub_org_none_desc">Vis undertekster i standard tilleggsresultater-rekkefølge.</string>
+    <string name="sub_org_none_desc">Vis undertekster i standard tilleggsresultatrekkefølge.</string>
     <string name="sub_org_by_lang_desc">Grupper undertekster etter språk.</string>
     <string name="sub_org_by_addon_desc">Grupper undertekster etter tileggskilder.</string>
     <string name="sub_startup_mode_title">Last undertekster fra tillegg</string>
     <string name="sub_startup_mode_fast">Rask oppstart</string>
     <string name="sub_startup_mode_preferred">Foretrukne språk</string>
-    <string name="sub_startup_mode_all">Alle tilleggs-undertekster</string>
-    <string name="sub_startup_mode_fast_desc">Start avspilling umiddelbar. Valg av tilleggs-undertekster kan laste på nytt når du velger dem etter at avspilleren er lastet.</string>
-    <string name="sub_startup_mode_preferred_desc">Henter undertekster fra tillegg før avspilling og legger ved foretrukne/sekundær språkspor.</string>
-    <string name="sub_startup_mode_all_desc">Henter og legger ved alle tilleggs-undertekster før avspilling. Langsom oppstart.</string>
+    <string name="sub_startup_mode_all">Alle tilleggsundertekster</string>
+    <string name="sub_startup_mode_fast_desc">Start avspilling umiddelbart. Valg av undertekst fra tillegg kan laste spilleren på nytt en gang.</string>
+    <string name="sub_startup_mode_preferred_desc">Hent undertekster fra tillegg før avspilling og legger ved foretrukne/sekundære språkspor.</string>
+    <string name="sub_startup_mode_all_desc">Hent og legger ved alle tilleggsundertekster før avspilling. Langsom oppstart.</string>
 
     <!-- PlaybackAutoPlaySettings -->
     <string name="autoplay_reuse_last_link">Bruk siste lenke på nytt</string>
-    <string name="autoplay_reuse_last_link_sub">Autoavspill siste funksjonelle strøm for denne samme filmen/episoden når cachen fortsatt er gyldig</string>
-    <string name="autoplay_last_link_cache">Siste lenke buffering varighet</string>
+    <string name="autoplay_reuse_last_link_sub">Autoavspill siste funksjonelle strøm for den samme filmen/episoden når bufferen fortsatt er gyldig</string>
+    <string name="autoplay_last_link_cache">Siste lenke buffervarighet</string>
     <string name="autoplay_mode_manual">Manuell (velg strøm)</string>
     <string name="autoplay_mode_first">Autoavspill første kilde</string>
     <string name="autoplay_mode_regex">Autoavspill regex match</string>
@@ -388,17 +388,17 @@
     <string name="autoplay_threshold_pct">Prosent</string>
     <string name="autoplay_threshold_min">Minutter før slutt</string>
     <string name="autoplay_threshold_mode">Terskelmodus for neste episode</string>
-    <string name="autoplay_threshold_pct_title">Terskelpersentase</string>
-    <string name="autoplay_threshold_pct_sub">Fallback når ingen udovermerkingsmerke eksisterer.</string>
+    <string name="autoplay_threshold_pct_title">Terskelprosentsats</string>
+    <string name="autoplay_threshold_pct_sub">Fall tilbake når ingen outrotidsmerke eksisterer.</string>
     <string name="autoplay_threshold_min_title">Terskelminutter</string>
-    <string name="autoplay_threshold_min_sub">Fallback når ingen udovermerkingsmerke eksisterer.</string>
+    <string name="autoplay_threshold_min_sub">Fall tilbake når ingen outrotidsmerke eksisterer.</string>
     <string name="autoplay_scope_all">Alle kilder</string>
     <string name="autoplay_scope_addons">Bare installerte tillegg</string>
     <string name="autoplay_scope_plugins">Bare aktiverte programtillegg</string>
-    <string name="autoplay_scope">Autoavspill kildescope</string>
-    <string name="autoplay_timeout_title">Strømvalgs tidsavbrudd</string>
+    <string name="autoplay_scope">Autoavspill kildeomfang</string>
+    <string name="autoplay_timeout_title">Strømvalgtidsavbrudd</string>
     <string name="autoplay_timeout_sub">Ventetid for tillegg før valg.</string>
-    <string name="autoplay_timeout_instant">Omgående</string>
+    <string name="autoplay_timeout_instant">Med en gang</string>
     <string name="autoplay_timeout_unlimited">Ubegrenset</string>
     <string name="autoplay_allowed_addons">Tillatte tillegg</string>
     <string name="autoplay_all_addons">Alle installerte tillegg</string>
