@@ -944,8 +944,8 @@ private suspend fun HomeViewModel.enrichNextUpItem(
     } else {
         null
     }
-    val released = video?.released?.trim()?.takeIf { it.isNotEmpty() }
-        ?: tmdbData?.airDate
+    val released = tmdbData?.airDate
+        ?: video?.released?.trim()?.takeIf { it.isNotEmpty() }
         ?: item.info.released
     val releaseDate = parseEpisodeReleaseDate(released)
     val todayLocal = LocalDate.now(ZoneId.systemDefault())
