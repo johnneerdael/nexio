@@ -915,7 +915,7 @@
     <string name="next_episode_play">Regarder</string>
     <string name="next_episode_unaired">Non diffusé</string>
     <string name="next_episode_not_aired_yet">L\'épisode suivant n\'est pas encore diffusé</string>
-    <string name="skip_intro">Passer l'intro</string>
+    <string name="skip_intro">Passer l\'intro</string>
     <string name="skip_ending">Passer les crédits</string>
     <string name="skip_recap">Passer le résumé</string>
     <string name="skip_generic">Passer</string>
