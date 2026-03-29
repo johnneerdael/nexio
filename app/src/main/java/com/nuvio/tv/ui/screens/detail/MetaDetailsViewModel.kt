@@ -369,6 +369,7 @@ class MetaDetailsViewModel @Inject constructor(
                     }
                 }
                 // Recalculate next to watch when progress changes
+                reevaluateSeriesWatchedBadge()
                 calculateNextToWatch()
             }
         }
@@ -549,11 +550,14 @@ class MetaDetailsViewModel @Inject constructor(
     private fun applyMeta(meta: Meta) {
         // Update the effective content ID so watch-progress observers pick up
         // the canonical ID (e.g. IMDB "tt0396375") instead of the navigation ID
-        // (which may be "tmdb:13836").  This also covers the reverse: if the user
-        // arrived via an IMDB catalog but progress was stored under a tmdb: key,
-        // we still try both.
+        // (which may be "tmdb:13836").  Don't downgrade from an IMDB ID to a
+        // less canonical one (e.g. tmdb:) — Trakt stores progress under IMDB.
         if (meta.id.isNotBlank() && meta.id != itemId) {
-            _effectiveContentId.value = meta.id
+            val currentIsImdb = _effectiveContentId.value.startsWith("tt")
+            val newIsImdb = meta.id.startsWith("tt")
+            if (!currentIsImdb || newIsImdb) {
+                _effectiveContentId.value = meta.id
+            }
         }
 
         val seasons = meta.videos
@@ -1192,19 +1196,25 @@ class MetaDetailsViewModel @Inject constructor(
             meta.apiType.equals("tv", ignoreCase = true)
         if (!isSeries) return
 
-        val episodes = meta.videos.filter {
-            it.season != null && it.episode != null && (it.season ?: 0) > 0 &&
-                (it.available != false || !it.released.isNullOrBlank())
-        }
+        val episodes = meta.watchableEpisodes()
         if (episodes.isEmpty()) return
 
         val watchedEpisodes = _uiState.value.watchedEpisodes
+        val progressMap = _uiState.value.episodeProgressMap
         val allWatched = episodes.all { video ->
-            (video.season!! to video.episode!!) in watchedEpisodes
+            val key = video.season!! to video.episode!!
+            key in watchedEpisodes || progressMap[key]?.isCompleted() == true
         }
 
         val current = watchedSeriesStateHolder.fullyWatchedSeriesIds.value
-        val updated = if (allWatched) current + contentId else current - contentId
+        // Include both effectiveContentId and meta.id so badges match
+        // regardless of whether the catalog uses IMDB or TMDB IDs.
+        val allIds = buildSet {
+            add(contentId)
+            meta.id.takeIf { it.isNotBlank() && it != contentId }?.let { add(it) }
+            itemId.takeIf { it.isNotBlank() && it != contentId }?.let { add(it) }
+        }
+        val updated = if (allWatched) current + allIds else current - allIds
         if (updated != current) {
             watchedSeriesStateHolder.update(updated)
         }
