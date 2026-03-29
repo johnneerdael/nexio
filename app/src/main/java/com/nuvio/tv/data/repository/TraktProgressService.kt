@@ -549,7 +549,39 @@ class TraktProgressService @Inject constructor(
             progress.contentType.equals("series", ignoreCase = true) ||
             progress.contentType.equals("tv", ignoreCase = true)
         ) {
-            invalidateEpisodeProgressCache(progress.contentId)
+            // Optimistically add the episode to the cache instead of invalidating
+            // the entire series cache (which causes all episodes to briefly appear
+            // unwatched until the next Trakt fetch completes).
+            val cacheKey = canonicalLookupKey(effectiveProgress.contentId.trim())
+            val season = effectiveProgress.season
+            val episode = effectiveProgress.episode
+            if (season != null && episode != null) {
+                val completedEntry = effectiveProgress.copy(
+                    position = effectiveProgress.duration.coerceAtLeast(1L),
+                    duration = effectiveProgress.duration.coerceAtLeast(1L),
+                    progressPercent = 100f,
+                    lastWatched = System.currentTimeMillis()
+                )
+                episodeProgressState.update { current ->
+                    val entry = current[cacheKey]
+                    if (entry != null) {
+                        val updatedProgress = entry.progress.toMutableMap().apply {
+                            this[season to episode] = completedEntry
+                        }
+                        current + (cacheKey to entry.copy(progress = updatedProgress))
+                    } else {
+                        // No cache entry yet — force a full fetch instead.
+                        current
+                    }
+                }
+                // If there was no cache entry, fall back to invalidation so the
+                // next observer emission triggers a fresh fetch.
+                if (episodeProgressState.value[cacheKey] == null) {
+                    invalidateEpisodeProgressCache(effectiveProgress.contentId)
+                }
+            } else {
+                invalidateEpisodeProgressCache(effectiveProgress.contentId)
+            }
             updateWatchedShowSeedOptimistically(effectiveProgress)
         }
         refreshNow()

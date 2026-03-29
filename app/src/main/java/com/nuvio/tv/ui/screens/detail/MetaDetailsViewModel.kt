@@ -369,6 +369,7 @@ class MetaDetailsViewModel @Inject constructor(
                     }
                 }
                 // Recalculate next to watch when progress changes
+                reevaluateSeriesWatchedBadge()
                 calculateNextToWatch()
             }
         }
@@ -1192,15 +1193,14 @@ class MetaDetailsViewModel @Inject constructor(
             meta.apiType.equals("tv", ignoreCase = true)
         if (!isSeries) return
 
-        val episodes = meta.videos.filter {
-            it.season != null && it.episode != null && (it.season ?: 0) > 0 &&
-                (it.available != false || !it.released.isNullOrBlank())
-        }
+        val episodes = meta.watchableEpisodes()
         if (episodes.isEmpty()) return
 
         val watchedEpisodes = _uiState.value.watchedEpisodes
+        val progressMap = _uiState.value.episodeProgressMap
         val allWatched = episodes.all { video ->
-            (video.season!! to video.episode!!) in watchedEpisodes
+            val key = video.season!! to video.episode!!
+            key in watchedEpisodes || progressMap[key]?.isCompleted() == true
         }
 
         val current = watchedSeriesStateHolder.fullyWatchedSeriesIds.value
