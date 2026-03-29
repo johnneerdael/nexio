@@ -295,6 +295,15 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                         val hasNextUp = contentId in nextUpContentIds
                         hasSeed && !hasNextUp
                     }
+                    .flatMap { contentId ->
+                        // Include both the candidate ID and the meta ID so badges
+                        // match regardless of whether the catalog uses IMDB or TMDB IDs.
+                        val cacheKey = "series:$contentId"
+                        val meta = synchronized(cwMetaCache) { cwMetaCache[cacheKey] }
+                            ?: synchronized(cwMetaCache) { cwMetaCache["tv:$contentId"] }
+                        val metaId = meta?.id?.takeIf { it.isNotBlank() && it != contentId }
+                        if (metaId != null) listOf(contentId, metaId) else listOf(contentId)
+                    }
                     .toSet()
                 // Preserve entries added by detail screen that CW pipeline cannot validate
                 // (e.g. Trakt series not in candidates because watchedItemsPreferences is empty).
@@ -398,6 +407,13 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                                     val hasSeed = contentId in seedCandidateIds
                                     val hasNextUp = contentId in nextUpContentIds
                                     hasSeed && !hasNextUp
+                                }
+                                .flatMap { contentId ->
+                                    val cacheKey = "series:$contentId"
+                                    val meta = synchronized(cwMetaCache) { cwMetaCache[cacheKey] }
+                                        ?: synchronized(cwMetaCache) { cwMetaCache["tv:$contentId"] }
+                                    val metaId = meta?.id?.takeIf { it.isNotBlank() && it != contentId }
+                                    if (metaId != null) listOf(contentId, metaId) else listOf(contentId)
                                 }
                                 .toSet()
                             if (fullyWatchedSeriesIds.fullyWatchedSeriesIds.value != updatedFullyWatched) {
