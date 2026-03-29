@@ -157,6 +157,8 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
             try {
                 debug.markPhase("filter-snapshot")
                 val cycleStartMs = SystemClock.elapsedRealtime()
+                val useTraktProgress = traktSettingsDataStore.watchProgressSource.first() ==
+                    com.nuvio.tv.data.local.WatchProgressSource.TRAKT
                 val items = snapshot.items
                 val nextUpSeeds = snapshot.nextUpSeeds
                 val daysCap = snapshot.daysCap
@@ -422,7 +424,9 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
 
                             // Inject discovered next-up items into CW (e.g. new season alerts).
                             // Only add genuinely new items — don't replace already-enriched ones.
-                            if (discoveredNextUpItems.isNotEmpty()) {
+                            // Skip CW injection for Trakt users — Trakt's watched/shows includes
+                            // dropped series which shouldn't appear as new episode alerts.
+                            if (discoveredNextUpItems.isNotEmpty() && !useTraktProgress) {
                                 synchronized(discoveredOlderNextUpItems) {
                                     discoveredOlderNextUpItems.removeAll { old ->
                                         discoveredNextUpItems.any { it.info.contentId == old.info.contentId }
@@ -455,8 +459,13 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
 
                 debug.markPhase("merge-lightweight")
                 // Include previously discovered older next-up items so they survive collectLatest restarts.
-                val persistedOlderItems = synchronized(discoveredOlderNextUpItems) {
-                    discoveredOlderNextUpItems.toList()
+                // Skip for Trakt users — async inject is disabled for them.
+                val persistedOlderItems = if (!useTraktProgress) {
+                    synchronized(discoveredOlderNextUpItems) {
+                        discoveredOlderNextUpItems.toList()
+                    }
+                } else {
+                    emptyList()
                 }
                 val allNextUpItems = if (persistedOlderItems.isNotEmpty()) {
                     val recentIds = nextUpItems.map { it.info.contentId }.toSet()
