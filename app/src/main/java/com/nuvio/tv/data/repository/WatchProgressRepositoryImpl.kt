@@ -623,6 +623,12 @@ class WatchProgressRepositoryImpl @Inject constructor(
                     Log.w(TAG, "removeFromHistory remote delete failed; relying on push sync", error)
                 }
         }
+        if (authManager.isAuthenticated && !useTraktProgress) {
+            watchedItemsSyncService.deleteFromRemote(contentId, season, episode)
+                .onFailure { error ->
+                    Log.w(TAG, "removeFromHistory watched item remote delete failed", error)
+                }
+        }
         triggerRemoteSync()
         triggerWatchedItemsSync()
     }
