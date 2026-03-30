@@ -84,9 +84,11 @@ import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.ui.components.SourceChipItem
 import com.nexio.tv.ui.components.SourceChipStatus
 import com.nexio.tv.ui.components.SourceStatusFilterChip
+import com.nexio.tv.ui.components.StreamBadgeKind
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.components.StreamsSkeletonList
 import com.nexio.tv.ui.components.InlineIconText
+import com.nexio.tv.ui.components.streamBadgeKinds
 import com.nexio.tv.ui.screens.player.LoadingOverlay
 import com.nexio.tv.ui.theme.NexioTheme
 import androidx.compose.runtime.DisposableEffect
@@ -970,14 +972,33 @@ private fun StreamCard(
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (stream.isTorrent()) {
-                        StreamTypeChip(text = stringResource(R.string.stream_type_torrent), color = NexioColors.Secondary)
-                    }
-                    if (stream.isYouTube()) {
-                        StreamTypeChip(text = stringResource(R.string.stream_type_youtube), color = Color(0xFFFF0000))
-                    }
-                    if (stream.isExternal()) {
-                        StreamTypeChip(text = stringResource(R.string.stream_type_external), color = NexioColors.Primary)
+                    streamBadgeKinds(stream, item.parsed).forEach { badge ->
+                        when (badge) {
+                            StreamBadgeKind.CACHED -> {
+                                StreamTypeChip(
+                                    text = stringResource(R.string.stream_type_cached),
+                                    color = NexioColors.Success
+                                )
+                            }
+                            StreamBadgeKind.TORRENT -> {
+                                StreamTypeChip(
+                                    text = stringResource(R.string.stream_type_torrent),
+                                    color = NexioColors.Secondary
+                                )
+                            }
+                            StreamBadgeKind.YOUTUBE -> {
+                                StreamTypeChip(
+                                    text = stringResource(R.string.stream_type_youtube),
+                                    color = Color(0xFFFF0000)
+                                )
+                            }
+                            StreamBadgeKind.EXTERNAL -> {
+                                StreamTypeChip(
+                                    text = stringResource(R.string.stream_type_external),
+                                    color = NexioColors.Primary
+                                )
+                            }
+                        }
                     }
                 }
             }

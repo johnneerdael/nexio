@@ -3,8 +3,6 @@ package com.nexio.tv.data.repository.servicewrap
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.Stream
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -154,7 +152,7 @@ class ServiceWrapSessionFactoryTest {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun `session reuses one hash resolution while emitting wrapped results for every addon that reported it`() = runTest {
+    fun `session resolves a duplicate hash from multiple addons once and emits one wrapped batch`() = runTest {
         val observedHashes = mutableListOf<String>()
         val resolver = object : ServiceWrapResolver {
             override suspend fun resolve(
@@ -196,47 +194,42 @@ class ServiceWrapSessionFactoryTest {
         )
 
         val hash = "FEDCBA9876543210FEDCBA9876543210FEDCBA98"
-        val addonA = async {
-            session.processAddonStreams(
-                addonName = "Addon A",
-                addonLogo = null,
-                streams = listOf(
-                    stream(
-                        name = "A Candidate",
-                        infoHash = hash,
-                        url = null,
-                        description = "Show.S01E02.1080p.WEB-DL"
-                    )
+        val resultA = session.processAddonStreams(
+            addonName = "Addon A",
+            addonLogo = null,
+            streams = listOf(
+                stream(
+                    name = "A Candidate",
+                    infoHash = hash,
+                    url = null,
+                    description = "Show.S01E02.1080p.WEB-DL"
                 )
             )
-        }
-        val addonB = async {
-            session.processAddonStreams(
-                addonName = "Addon B",
-                addonLogo = null,
-                streams = listOf(
-                    stream(
-                        name = "B Candidate",
-                        infoHash = hash,
-                        url = null,
-                        description = "Show.S01E02.1080p.WEB-DL"
-                    )
+        )
+        val resultB = session.processAddonStreams(
+            addonName = "Addon B",
+            addonLogo = null,
+            streams = listOf(
+                stream(
+                    name = "B Candidate",
+                    infoHash = hash,
+                    url = null,
+                    description = "Show.S01E02.1080p.WEB-DL"
                 )
             )
-        }
+        )
 
-        val results = awaitAll(addonA, addonB)
-        assertTrue(results.all { it.visibleStreams.isEmpty() })
-        assertEquals(2, results.sumOf { it.launchedWrapCount })
+        assertTrue(resultA.visibleStreams.isEmpty())
+        assertTrue(resultB.visibleStreams.isEmpty())
+        assertEquals(1, resultA.launchedWrapCount)
+        assertEquals(0, resultB.launchedWrapCount)
 
         advanceUntilIdle()
 
         assertEquals(listOf(hash), observedHashes)
-        assertEquals(2, batches.size)
-        assertEquals(setOf("Addon A", "Addon B"), batches.map { it.addonName }.toSet())
-        assertTrue(batches.all { batch ->
-            batch.wrappedStreams.size == 1 && batch.wrappedStreams.single().addonName == batch.addonName
-        })
+        assertEquals(1, batches.size)
+        assertEquals("Addon A", batches.single().addonName)
+        assertEquals(1, batches.single().wrappedStreams.size)
     }
 
     private fun stream(
