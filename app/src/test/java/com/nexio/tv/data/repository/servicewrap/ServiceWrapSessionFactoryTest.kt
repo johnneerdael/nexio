@@ -232,6 +232,49 @@ class ServiceWrapSessionFactoryTest {
         assertEquals(1, batches.single().wrappedStreams.size)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `session leaves cached direct debrid streams visible instead of rewrapping them`() = runTest {
+        val factory = ServiceWrapSessionFactory(
+            extractor = WrapCandidateExtractor(),
+            resolver = object : ServiceWrapResolver {
+                override suspend fun resolve(
+                    candidate: WrapCandidate,
+                    requestContext: ServiceWrapRequestContext
+                ): List<ResolvedServiceWrapStream> = error("resolver should not be called")
+            },
+            wrappedStreamBuilder = WrappedStreamBuilder()
+        )
+        val batches = mutableListOf<ServiceWrapResolvedBatch>()
+        val session = factory.createSession(
+            requestContext = ServiceWrapRequestContext(
+                contentType = "series",
+                season = 1,
+                episode = 2
+            ),
+            scope = this,
+            onResolved = { batch -> batches += batch }
+        )
+
+        val stream = stream(
+            name = "RD+ cached",
+            infoHash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01",
+            url = "https://real-debrid.example/download",
+            description = "⚡ RD+ cached\n📄 Show.S01E02.1080p.WEB-DL.mkv"
+        )
+
+        val result = session.processAddonStreams(
+            addonName = "Addon A",
+            addonLogo = null,
+            streams = listOf(stream)
+        )
+
+        assertEquals(listOf(stream), result.visibleStreams)
+        assertEquals(0, result.launchedWrapCount)
+        advanceUntilIdle()
+        assertTrue(batches.isEmpty())
+    }
+
     private fun stream(
         name: String,
         infoHash: String?,

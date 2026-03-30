@@ -357,6 +357,43 @@ class StreamPresentationEngineTest {
     }
 
     @Test
+    fun `dedupe keeps wrapped cached duplicates per service when info hash and file index match`() {
+        val sharedHash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                    addonName = "Addon A",
+                    name = "⚡ Real-Debrid",
+                    description = "⚡ Real-Debrid",
+                    infoHash = sharedHash,
+                    fileIdx = 0,
+                    wrappedProviderId = "RD"
+                ),
+                stream(
+                    filename = "Show.S01E02.1080p.WEB-DL.x265.Group.mkv",
+                    addonName = "Addon A",
+                    name = "⚡ Premiumize",
+                    description = "⚡ Premiumize",
+                    infoHash = sharedHash,
+                    fileIdx = 0,
+                    wrappedProviderId = "PM"
+                )
+            ),
+            availableAddons = listOf("Addon A"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                groupAcrossAddonsEnabled = true,
+                deduplicateGroupedStreamsEnabled = true
+            ),
+            requestContext = StreamRequestContext(contentType = "series", season = 1, episode = 2)
+        )
+
+        assertEquals(2, result.items.size)
+        assertEquals(listOf("PM", "RD"), result.items.mapNotNull { it.parsed.serviceId }.sorted())
+    }
+
+    @Test
     fun `dedupe keeps uncached fallback when cached duplicate is only available on another service`() {
         val result = StreamPresentationEngine.organize(
             streams = listOf(
@@ -516,6 +553,8 @@ class StreamPresentationEngineTest {
         parserPreset: AddonParserPreset = AddonParserPreset.GENERIC,
         addonName: String = "Test Addon",
         infoHash: String? = null,
+        fileIdx: Int? = null,
+        wrappedProviderId: String? = null,
         videoSizeBytes: Long? = null
     ): Stream {
         return Stream(
@@ -525,7 +564,7 @@ class StreamPresentationEngineTest {
             url = "https://example.com/video.mkv",
             ytId = null,
             infoHash = infoHash,
-            fileIdx = null,
+            fileIdx = fileIdx,
             externalUrl = null,
             behaviorHints = StreamBehaviorHints(
                 notWebReady = null,
@@ -539,7 +578,8 @@ class StreamPresentationEngineTest {
             ),
             addonName = addonName,
             addonLogo = null,
-            addonParserPreset = parserPreset
+            addonParserPreset = parserPreset,
+            wrappedProviderId = wrappedProviderId
         )
     }
 }
