@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +34,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -357,7 +360,7 @@ private fun AndroidTvLauncherCard(
 }
 
 @Composable
-private fun AndroidTvLauncherDialog(
+internal fun AndroidTvLauncherDialog(
     enabled: Boolean,
     selectedFeedKeys: Set<String>,
     feedOptions: List<com.nexio.tv.core.recommendations.AndroidTvFeedOption>,
@@ -365,11 +368,25 @@ private fun AndroidTvLauncherDialog(
     onEnabledChange: (Boolean) -> Unit,
     onToggleFeed: (String) -> Unit
 ) {
+    val toggleButtonFocusRequester = remember { FocusRequester() }
+    val firstFeedFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(enabled, feedOptions) {
+        val shouldFocusFirstFeed = enabled && feedOptions.isNotEmpty()
+        val target = if (shouldFocusFirstFeed) {
+            firstFeedFocusRequester
+        } else {
+            toggleButtonFocusRequester
+        }
+        runCatching { target.requestFocus() }
+    }
+
     NexioDialog(
         onDismiss = onDismiss,
         title = stringResource(R.string.android_tv_channels_dialog_title),
         subtitle = stringResource(R.string.android_tv_channels_dialog_subtitle),
-        width = 760.dp
+        width = 760.dp,
+        suppressFirstKeyUp = false
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -400,6 +417,7 @@ private fun AndroidTvLauncherDialog(
 
             Button(
                 onClick = { onEnabledChange(!enabled) },
+                modifier = Modifier.focusRequester(toggleButtonFocusRequester),
                 colors = ButtonDefaults.colors(
                     containerColor = NexioColors.BackgroundCard,
                     contentColor = if (enabled) NexioColors.Error else NexioColors.Success,
@@ -449,12 +467,17 @@ private fun AndroidTvLauncherDialog(
                 .heightIn(max = 420.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(
+            itemsIndexed(
                 items = feedOptions,
-                key = { item -> item.key }
-            ) { option ->
+                key = { _, item -> item.key }
+            ) { index, option ->
                 val selected = option.key in selectedFeedKeys
                 AndroidTvFeedOptionCard(
+                    modifier = if (index == 0) {
+                        Modifier.focusRequester(firstFeedFocusRequester)
+                    } else {
+                        Modifier
+                    },
                     title = option.title,
                     subtitle = option.subtitle,
                     selected = selected,
@@ -468,6 +491,7 @@ private fun AndroidTvLauncherDialog(
 
 @Composable
 private fun AndroidTvFeedOptionCard(
+    modifier: Modifier = Modifier,
     title: String,
     subtitle: String,
     selected: Boolean,
@@ -476,7 +500,7 @@ private fun AndroidTvFeedOptionCard(
 ) {
     TvCard(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         colors = TvCardDefaults.colors(
             containerColor = if (selected) NexioColors.BackgroundCard else NexioColors.Background,
             focusedContainerColor = NexioColors.BackgroundCard
