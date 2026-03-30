@@ -617,7 +617,13 @@ fun NexioNavHost(
                 onBackPress = {
                     val args = requireNotNull(backStackEntry.arguments)
                     val launchSource = PlayerLaunchSource.from(args.getString("launchSource"))
-                    if (shouldReturnDirectLibraryPlaybackToLibrary(launchSource)) {
+                    if (
+                        shouldReturnDirectLibraryPlaybackToLibrary(
+                            launchSource = launchSource,
+                            contentId = args.getString("contentId"),
+                            videoId = args.getString("videoId")
+                        )
+                    ) {
                         return@PlayerScreen returnPlayerToLibrary()
                     }
                     val returnedToStream = navController.popBackStack(Screen.Stream.route, inclusive = false)
@@ -651,7 +657,13 @@ fun NexioNavHost(
                 onPlaybackEnded = { nextVideoId, nextSeason, nextEpisode ->
                     val args = requireNotNull(backStackEntry.arguments)
                     val launchSource = PlayerLaunchSource.from(args.getString("launchSource"))
-                    if (shouldReturnDirectLibraryPlaybackToLibrary(launchSource)) {
+                    if (
+                        shouldReturnDirectLibraryPlaybackToLibrary(
+                            launchSource = launchSource,
+                            contentId = args.getString("contentId"),
+                            videoId = args.getString("videoId")
+                        )
+                    ) {
                         return@PlayerScreen returnPlayerToLibrary()
                     }
                     val contentType = args.getString("contentType").orEmpty()
@@ -691,7 +703,13 @@ fun NexioNavHost(
                 onPlaybackErrorBack = {
                     val args = requireNotNull(backStackEntry.arguments)
                     val launchSource = PlayerLaunchSource.from(args.getString("launchSource"))
-                    if (shouldReturnDirectLibraryPlaybackToLibrary(launchSource)) {
+                    if (
+                        shouldReturnDirectLibraryPlaybackToLibrary(
+                            launchSource = launchSource,
+                            contentId = args.getString("contentId"),
+                            videoId = args.getString("videoId")
+                        )
+                    ) {
                         return@PlayerScreen returnPlayerToLibrary()
                     }
                     val returnedToStream = navController.popBackStack(Screen.Stream.route, inclusive = false)
