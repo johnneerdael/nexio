@@ -4,7 +4,9 @@ import android.util.Log
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -121,31 +123,32 @@ class OkHttpCustomImdbClient @Inject constructor(
         onFailure: (IOException) -> T,
         onResponse: (Response) -> T
     ): T {
-        var hasRetriedRateLimit = false
+        return withContext(Dispatchers.IO) {
+            var hasRetriedRateLimit = false
 
-        while (true) {
-            try {
-                var retryDelayMs: Long? = null
+            while (true) {
+                try {
+                    var retryDelayMs: Long? = null
 
-                okHttpClient.newCall(request).execute().use { response ->
-                    if (response.code == 429 && !hasRetriedRateLimit) {
-                        retryDelayMs = parseRetryAfterDelayMs(response.header("Retry-After"))
-                        return@use
+                    okHttpClient.newCall(request).execute().use { response ->
+                        if (response.code == 429 && !hasRetriedRateLimit) {
+                            retryDelayMs = parseRetryAfterDelayMs(response.header("Retry-After"))
+                        } else {
+                            return@withContext onResponse(response)
+                        }
                     }
 
-                    return onResponse(response)
+                    if (retryDelayMs != null) {
+                        hasRetriedRateLimit = true
+                        delayMs(retryDelayMs)
+                        continue
+                    }
+                } catch (error: IOException) {
+                    return@withContext onFailure(error)
                 }
-
-                if (retryDelayMs != null) {
-                    hasRetriedRateLimit = true
-                    delayMs(retryDelayMs)
-                    continue
-                }
-
-                error("Unreachable response state for custom IMDb request.")
-            } catch (error: IOException) {
-                return onFailure(error)
             }
+
+            error("Unreachable response state for custom IMDb request.")
         }
     }
 
