@@ -244,9 +244,7 @@ class PlayerRuntimeController(
     internal var aiTranslationSelectionGeneration: Long = 0L
     internal var currentCueGroup: CueGroup = CueGroup.EMPTY_TIME_ZERO
     internal var builtInAiCueGeneration: Long = 0L
-    internal var isExitInProgress: Boolean = false
-    internal var activePlaybackSessionId: Long = 0L
-    internal var nextPlaybackSessionId: Long = 1L
+    internal val playbackSessionGuard = PlayerPlaybackSessionGuard()
 
     internal var lastBufferLogTimeMs: Long = 0L
     internal var lastVodTelemetryRefreshTimeMs: Long = 0L
@@ -357,6 +355,6 @@ class PlayerRuntimeController(
     }
 
     internal fun beginPlayerExit() {
-        isExitInProgress = true
+        playbackSessionGuard.beginPlayerExit()
     }
 }

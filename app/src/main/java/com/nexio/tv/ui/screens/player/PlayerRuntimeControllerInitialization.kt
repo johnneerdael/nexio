@@ -76,6 +76,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
         return
     }
 
+    val playbackSessionId = playbackSessionGuard.beginPlaybackSession()
+
     scope.launch {
         try {
             autoSubtitleSelected = false
@@ -498,11 +500,13 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     .map { subtitle -> toSubtitleConfiguration(subtitle) }
                 val playerListener = object : Player.Listener {
                     override fun onCues(cueGroup: CueGroup) {
+                        if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
                         currentCueGroup = cueGroup
                         handleBuiltInCueGroupUpdate()
                     }
 
                     override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
                         val playerDuration = duration
                         if (playerDuration > lastKnownDuration) {
                             lastKnownDuration = playerDuration
@@ -590,6 +594,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
 
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
                         _uiState.update { it.copy(isPlaying = isPlaying) }
                         if (isPlaying) {
                             userPausedManually = false
@@ -616,10 +621,12 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
 
                     override fun onTracksChanged(tracks: Tracks) {
+                        if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
                         updateAvailableTracks(tracks)
                     }
 
                     override fun onRenderedFirstFrame() {
+                        if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
                         cancelFirstFrameWatchdog()
                         mediaSourceFactory.notifyPlaybackFirstFrameRendered()
                         val startupMs = (System.currentTimeMillis() - playerInitializationStartedAtMs)
@@ -681,6 +688,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
+                        if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
                         cancelFirstFrameWatchdog()
                         if (error.isVc1DecoderFailure() &&
                             !isVc1SoftwareFallbackActiveForCurrentPlayback
@@ -890,6 +898,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 )
             }
         } catch (e: Exception) {
+            if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) {
+                return@launch
+            }
             _uiState.update {
                 it.copy(
                     error = e.message ?: "Failed to initialize player",
