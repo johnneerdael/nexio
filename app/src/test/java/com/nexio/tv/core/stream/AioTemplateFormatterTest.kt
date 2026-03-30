@@ -63,6 +63,7 @@ class AioTemplateFormatterTest {
                 year = "2023",
                 resolution = "2160p",
                 quality = "BluRay",
+                visualTags = listOf("DV"),
                 audioTags = listOf("Atmos", "TrueHD"),
                 audioChannels = listOf("7.1"),
                 duration = null,
@@ -87,10 +88,39 @@ class AioTemplateFormatterTest {
         val detailLine = result.description
 
         assertTrue(titleLine.contains("[[icon:4k]]"))
+        assertTrue(titleLine.contains(" Movie Title (2023)"))
         assertFalse(titleLine.startsWith("⭐"))
         assertTrue(detailLine.contains("[[icon:netflix]] Netflix"))
         assertTrue(detailLine.contains("[[icon:atmos]]"))
         assertTrue(detailLine.contains("[[icon:truehd]]"))
-        assertTrue(detailLine.contains("7.1"))
+        assertTrue(detailLine.contains("[[icon:dovi]]"))
+        assertTrue(detailLine.contains("💾 10.74 GB"))
+        assertTrue(detailLine.contains("[[icon:realdebrid]] Real-Debrid"))
+    }
+
+    @Test
+    fun `built in universal template hides year for series and compacts episode formatting`() {
+        val formatter = AioTemplateFormatter(
+            nameTemplate = AioBuiltInFormatters.UNIVERSAL.nameTemplate,
+            descriptionTemplate = AioBuiltInFormatters.UNIVERSAL.descriptionTemplate
+        )
+        val parseValue = AioParseValue(
+            stream = AioStreamTemplateModel(
+                title = "Last Week Tonight With John Oliver",
+                year = "2026",
+                resolution = "1080p",
+                seasonEpisode = listOf("S13", "E07"),
+                quality = "WEB-DL",
+                audioTags = listOf("DD+"),
+                size = 2_970_000_000L,
+                filename = "Last.Week.Tonight.With.John.Oliver.S13E07.1080p.HMAX.WEB-DL.DDP5.1.mkv"
+            ),
+            metadata = AioMetadataTemplateModel(queryType = "series")
+        )
+
+        val result = formatter.format(parseValue)
+
+        assertEquals("[[icon:fullhd]] Last Week Tonight With John Ol… (S13E07)", result.name)
+        assertFalse(result.name.contains("(2026)"))
     }
 }

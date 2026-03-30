@@ -35,6 +35,8 @@ object InlineIconTokenRegistry {
         InlineIconToken("paramount", R.drawable.formatter_icon_paramount, "Paramount+", ScaleClass.INLINE),
         InlineIconToken("peacock", R.drawable.formatter_icon_peacock, "Peacock", ScaleClass.INLINE),
         InlineIconToken("crunchyroll", R.drawable.formatter_icon_crunchyroll, "Crunchyroll", ScaleClass.INLINE),
+        InlineIconToken("premiumize", R.drawable.formatter_icon_premiumize, "Premiumize", ScaleClass.INLINE),
+        InlineIconToken("realdebrid", R.drawable.formatter_icon_realdebrid, "Real-Debrid", ScaleClass.INLINE),
         InlineIconToken("atmos", R.drawable.formatter_icon_atmos, "Dolby Atmos", ScaleClass.INLINE, aspectRatio = 200f / 75f),
         InlineIconToken("truehd", R.drawable.formatter_icon_truehd, "Dolby TrueHD", ScaleClass.INLINE, aspectRatio = 200f / 49f),
         InlineIconToken("ddp", R.drawable.formatter_icon_ddp, "Dolby Digital+", ScaleClass.INLINE, aspectRatio = 200f / 47f),
