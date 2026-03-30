@@ -48,14 +48,17 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
+import com.nexio.tv.core.stream.AioStrictStreamParser
 import com.nexio.tv.core.stream.StreamCardModel
 import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.core.stream.StreamPresentationEngine
 import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.ui.components.InlineIconText
+import com.nexio.tv.ui.components.StreamBadgeKind
 import com.nexio.tv.ui.components.SourceChipItem
 import com.nexio.tv.ui.components.SourceChipStatus
 import com.nexio.tv.ui.components.SourceStatusFilterChip
+import com.nexio.tv.ui.components.streamBadgeKinds
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
 import androidx.compose.ui.res.stringResource
@@ -71,29 +74,10 @@ internal fun StreamItem(
     onUpKey: (() -> Unit)? = null
 ) {
     val fallbackItem = remember(stream) {
+        val parsed = AioStrictStreamParser.parse(stream)
         StreamCardModel(
             stream = stream,
-            parsed = com.nexio.tv.core.stream.ParsedStreamInfo(
-                stream = stream,
-                title = stream.title ?: stream.name ?: stream.description,
-                filename = stream.behaviorHints?.filename,
-                sizeBytes = stream.behaviorHints?.videoSize,
-                resolution = null,
-                quality = null,
-                encode = null,
-                visualTags = emptyList(),
-                audioTags = emptyList(),
-                audioChannels = emptyList(),
-                languages = emptyList(),
-                year = null,
-                seasons = emptyList(),
-                episodes = emptyList(),
-                releaseGroup = null,
-                serviceId = null,
-                isCached = null,
-                durationMs = null,
-                transportKind = com.nexio.tv.core.stream.StreamTransportKind.OTHER
-            ),
+            parsed = parsed,
             title = stream.getDisplayName(),
             subtitle = stream.getDisplayDescription()?.takeIf { it != stream.getDisplayName() },
             detailLines = emptyList()
@@ -215,14 +199,33 @@ internal fun StreamItem(
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (stream.isTorrent()) {
-                        StreamTypeChip(text = stringResource(R.string.stream_type_torrent), color = NexioColors.Secondary)
-                    }
-                    if (stream.isYouTube()) {
-                        StreamTypeChip(text = stringResource(R.string.stream_type_youtube), color = Color(0xFFFF0000))
-                    }
-                    if (stream.isExternal()) {
-                        StreamTypeChip(text = stringResource(R.string.stream_type_external), color = NexioColors.Primary)
+                    streamBadgeKinds(stream, item.parsed).forEach { badge ->
+                        when (badge) {
+                            StreamBadgeKind.CACHED -> {
+                                StreamTypeChip(
+                                    text = stringResource(R.string.stream_type_cached),
+                                    color = NexioColors.Success
+                                )
+                            }
+                            StreamBadgeKind.TORRENT -> {
+                                StreamTypeChip(
+                                    text = stringResource(R.string.stream_type_torrent),
+                                    color = NexioColors.Secondary
+                                )
+                            }
+                            StreamBadgeKind.YOUTUBE -> {
+                                StreamTypeChip(
+                                    text = stringResource(R.string.stream_type_youtube),
+                                    color = Color(0xFFFF0000)
+                                )
+                            }
+                            StreamBadgeKind.EXTERNAL -> {
+                                StreamTypeChip(
+                                    text = stringResource(R.string.stream_type_external),
+                                    color = NexioColors.Primary
+                                )
+                            }
+                        }
                     }
                 }
             }
