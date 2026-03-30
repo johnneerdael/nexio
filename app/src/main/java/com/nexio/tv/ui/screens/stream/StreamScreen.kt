@@ -241,6 +241,7 @@ fun StreamScreen(
                 // Right side - Streams container
                 RightStreamSection(
                     isLoading = uiState.isLoading,
+                    showNoStreamsState = uiState.showNoStreamsState,
                     error = uiState.error,
                     streams = uiState.presentedStreams,
                     availableAddons = uiState.availableAddons,
@@ -520,6 +521,7 @@ private fun LeftContentSection(
 @Composable
 private fun RightStreamSection(
     isLoading: Boolean,
+    showNoStreamsState: Boolean,
     error: String?,
     streams: List<StreamCardModel>,
     availableAddons: List<String>,
@@ -615,17 +617,17 @@ private fun RightStreamSection(
                 contentAlignment = Alignment.Center
             ) {
                 when {
-                    isLoading -> {
-                        LoadingState()
-                    }
                     error != null -> {
                         ErrorState(
                             message = error,
                             onRetry = onRetry
                         )
                     }
-                    streams.isEmpty() -> {
+                    streams.isEmpty() && showNoStreamsState -> {
                         EmptyState()
+                    }
+                    isLoading || streams.isEmpty() -> {
+                        LoadingState()
                     }
                     else -> {
                         StreamsList(
