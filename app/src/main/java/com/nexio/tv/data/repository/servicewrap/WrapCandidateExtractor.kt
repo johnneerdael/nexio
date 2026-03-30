@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository.servicewrap
 
+import com.nexio.tv.core.stream.StreamTransportKind
 import com.nexio.tv.domain.model.Stream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -12,8 +13,13 @@ class WrapCandidateExtractor @Inject constructor() {
         addonLogo: String?,
         stream: Stream
     ): WrapCandidate? {
-        val infoHash = extractInfoHash(stream) ?: return null
         val parsed = parseSourceStream(stream)
+        if (parsed.transportKind != StreamTransportKind.P2P &&
+            parsed.transportKind != StreamTransportKind.UNCACHED
+        ) {
+            return null
+        }
+        val infoHash = extractInfoHash(stream) ?: return null
         return WrapCandidate(
             normalizedInfoHash = infoHash,
             magnetUri = buildMagnetUri(infoHash, stream, parsed),
