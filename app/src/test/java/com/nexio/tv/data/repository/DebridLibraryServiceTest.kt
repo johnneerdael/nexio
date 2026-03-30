@@ -5,7 +5,10 @@ import com.nexio.tv.data.local.RealDebridAuthState
 import com.nexio.tv.data.remote.api.PremiumizeApi
 import com.nexio.tv.data.remote.api.RealDebridApi
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDownloadDto
+import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentFileDto
+import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentInfoDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentDto
+import com.nexio.tv.data.remote.dto.debrid.RealDebridUnrestrictLinkDto
 import io.mockk.coEvery
 import io.mockk.coJustRun
 import io.mockk.every
@@ -49,6 +52,40 @@ class DebridLibraryServiceTest {
                 )
             )
         )
+        coEvery { realDebridApi.getTorrentInfo(any(), "resolved") } returns Response.success(
+            RealDebridTorrentInfoDto(
+                id = "resolved",
+                filename = "Resolved.Movie.2024.mkv",
+                status = "downloaded",
+                links = listOf("https://rd.test/link/resolved"),
+                files = listOf(
+                    RealDebridTorrentFileDto(
+                        id = 10,
+                        path = "/Resolved.Movie.2024.mkv",
+                        bytes = 1_000L,
+                        selected = 1
+                    )
+                ),
+                ended = "2026-03-30T12:00:00Z"
+            )
+        )
+        coEvery { realDebridApi.getTorrentInfo(any(), "unresolved") } returns Response.success(
+            RealDebridTorrentInfoDto(
+                id = "unresolved",
+                filename = "Unresolved.Movie.2024.mkv",
+                status = "downloaded",
+                links = listOf("https://rd.test/link/unresolved"),
+                files = listOf(
+                    RealDebridTorrentFileDto(
+                        id = 11,
+                        path = "/Unresolved.Movie.2024.mkv",
+                        bytes = 1_000L,
+                        selected = 1
+                    )
+                ),
+                ended = "2026-03-30T11:00:00Z"
+            )
+        )
         coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(
             listOf(
                 RealDebridDownloadDto(
@@ -60,6 +97,7 @@ class DebridLibraryServiceTest {
                 )
             )
         )
+        coEvery { realDebridApi.unrestrictLink(any(), any(), any()) } returns Response.error(503, mockk(relaxed = true))
         val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
 
         val service = DebridLibraryService(
@@ -107,6 +145,32 @@ class DebridLibraryServiceTest {
                 )
             )
         )
+        coEvery { realDebridApi.getTorrentInfo(any(), "multi-link") } returns Response.success(
+            RealDebridTorrentInfoDto(
+                id = "multi-link",
+                filename = "Playable.Movie.2024",
+                status = "downloaded",
+                links = listOf(
+                    "https://rd.test/link/readme",
+                    "https://rd.test/link/video"
+                ),
+                files = listOf(
+                    RealDebridTorrentFileDto(
+                        id = 20,
+                        path = "/README.txt",
+                        bytes = 100L,
+                        selected = 1
+                    ),
+                    RealDebridTorrentFileDto(
+                        id = 21,
+                        path = "/Playable.Movie.2024.mkv",
+                        bytes = 2_000L,
+                        selected = 1
+                    )
+                ),
+                ended = "2026-03-30T12:00:00Z"
+            )
+        )
         coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(
             listOf(
                 RealDebridDownloadDto(
@@ -125,6 +189,7 @@ class DebridLibraryServiceTest {
                 )
             )
         )
+        coEvery { realDebridApi.unrestrictLink(any(), any(), any()) } returns Response.error(503, mockk(relaxed = true))
         val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
 
         val service = DebridLibraryService(
@@ -166,6 +231,23 @@ class DebridLibraryServiceTest {
                 )
             )
         )
+        coEvery { realDebridApi.getTorrentInfo(any(), "generic-name") } returns Response.success(
+            RealDebridTorrentInfoDto(
+                id = "generic-name",
+                filename = "Some torrent job",
+                status = "downloaded",
+                links = listOf("https://rd.test/link/video"),
+                files = listOf(
+                    RealDebridTorrentFileDto(
+                        id = 30,
+                        path = "/Playable.Movie.2024.mkv",
+                        bytes = 2_000L,
+                        selected = 1
+                    )
+                ),
+                ended = "2026-03-30T12:00:00Z"
+            )
+        )
         coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(
             listOf(
                 RealDebridDownloadDto(
@@ -177,6 +259,7 @@ class DebridLibraryServiceTest {
                 )
             )
         )
+        coEvery { realDebridApi.unrestrictLink(any(), any(), any()) } returns Response.error(503, mockk(relaxed = true))
         val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
 
         val service = DebridLibraryService(
@@ -193,6 +276,170 @@ class DebridLibraryServiceTest {
 
         assertEquals("https://rd.test/download/video.mkv", item.directPlaybackUrl)
         assertEquals("Playable.Movie.2024", item.name)
+    }
+
+    @Test
+    fun `refresh real debrid unrestricts selected file links when downloads list has no match`() = runTest {
+        val realDebridApi = mockk<RealDebridApi>()
+        val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
+        val premiumizeApi = mockk<PremiumizeApi>()
+        val premiumizeService = mockk<PremiumizeService>()
+
+        stubAuthenticatedRealDebrid(realDebridAuthDataStore)
+        every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
+        coJustRun { premiumizeService.refreshAccountState() }
+
+        coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
+            listOf(
+                RealDebridTorrentDto(
+                    id = "no-download-match",
+                    filename = "Generic release name",
+                    status = "downloaded",
+                    links = listOf("https://real-debrid.com/d/generated-link"),
+                    ended = "2026-03-30T12:00:00Z"
+                )
+            )
+        )
+        coEvery { realDebridApi.getTorrentInfo(any(), "no-download-match") } returns Response.success(
+            RealDebridTorrentInfoDto(
+                id = "no-download-match",
+                filename = "Generic release name",
+                status = "downloaded",
+                links = listOf("https://real-debrid.com/d/generated-link"),
+                files = listOf(
+                    RealDebridTorrentFileDto(
+                        id = 40,
+                        path = "/Actual.Movie.2026.2160p.mkv",
+                        bytes = 4_000L,
+                        selected = 1
+                    )
+                ),
+                ended = "2026-03-30T12:00:00Z"
+            )
+        )
+        coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(emptyList())
+        coEvery { realDebridApi.unrestrictLink(any(), "https://real-debrid.com/d/generated-link", any()) } returns Response.success(
+            RealDebridUnrestrictLinkDto(
+                id = "unrestricted-1",
+                filename = "Actual.Movie.2026.2160p.mkv",
+                mimeType = "video/x-matroska",
+                fileSize = 4_000L,
+                link = "https://real-debrid.com/d/generated-link",
+                download = "https://rd.test/download/actual.mkv",
+                host = "real-debrid.com",
+                chunks = 32,
+                streamable = 1
+            )
+        )
+        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
+
+        val service = DebridLibraryService(
+            realDebridApi = realDebridApi,
+            realDebridAuthDataStore = realDebridAuthDataStore,
+            realDebridAuthService = realDebridAuthService,
+            premiumizeApi = premiumizeApi,
+            premiumizeService = premiumizeService
+        )
+
+        service.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
+
+        val item = service.observeItems().first().single()
+
+        assertEquals("https://rd.test/download/actual.mkv", item.directPlaybackUrl)
+        assertEquals("Actual.Movie.2026.2160p", item.name)
+    }
+
+    @Test
+    fun `refresh real debrid excludes selected sample files from multi file torrents`() = runTest {
+        val realDebridApi = mockk<RealDebridApi>()
+        val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
+        val premiumizeApi = mockk<PremiumizeApi>()
+        val premiumizeService = mockk<PremiumizeService>()
+
+        stubAuthenticatedRealDebrid(realDebridAuthDataStore)
+        every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
+        coJustRun { premiumizeService.refreshAccountState() }
+
+        coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
+            listOf(
+                RealDebridTorrentDto(
+                    id = "samples",
+                    filename = "Hoppers",
+                    status = "downloaded",
+                    links = listOf(
+                        "https://real-debrid.com/d/main",
+                        "https://real-debrid.com/d/sample1",
+                        "https://real-debrid.com/d/sample2"
+                    ),
+                    ended = "2026-03-30T12:00:00Z"
+                )
+            )
+        )
+        coEvery { realDebridApi.getTorrentInfo(any(), "samples") } returns Response.success(
+            RealDebridTorrentInfoDto(
+                id = "samples",
+                filename = "Hoppers",
+                status = "downloaded",
+                links = listOf(
+                    "https://real-debrid.com/d/main",
+                    "https://real-debrid.com/d/sample1",
+                    "https://real-debrid.com/d/sample2"
+                ),
+                files = listOf(
+                    RealDebridTorrentFileDto(
+                        id = 50,
+                        path = "/Hoppers.2026.1080p.TELESYNC.x264-SyncUP.mkv",
+                        bytes = 5_000L,
+                        selected = 1
+                    ),
+                    RealDebridTorrentFileDto(
+                        id = 51,
+                        path = "/Samples/Sample1.mkv",
+                        bytes = 100L,
+                        selected = 1
+                    ),
+                    RealDebridTorrentFileDto(
+                        id = 52,
+                        path = "/Samples/Sample2.mkv",
+                        bytes = 100L,
+                        selected = 1
+                    )
+                ),
+                ended = "2026-03-30T12:00:00Z"
+            )
+        )
+        coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(emptyList())
+        coEvery { realDebridApi.unrestrictLink(any(), "https://real-debrid.com/d/main", any()) } returns Response.success(
+            RealDebridUnrestrictLinkDto(
+                id = "unrestricted-main",
+                filename = "Hoppers.2026.1080p.TELESYNC.x264-SyncUP.mkv",
+                mimeType = "video/x-matroska",
+                fileSize = 5_000L,
+                link = "https://real-debrid.com/d/main",
+                download = "https://rd.test/download/hoppers.mkv",
+                host = "real-debrid.com",
+                chunks = 32,
+                streamable = 1
+            )
+        )
+        coEvery { realDebridApi.unrestrictLink(any(), any(), any()) } returns Response.error(503, mockk(relaxed = true))
+        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
+
+        val service = DebridLibraryService(
+            realDebridApi = realDebridApi,
+            realDebridAuthDataStore = realDebridAuthDataStore,
+            realDebridAuthService = realDebridAuthService,
+            premiumizeApi = premiumizeApi,
+            premiumizeService = premiumizeService
+        )
+
+        service.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
+
+        val items = service.observeItems().first()
+
+        assertEquals(1, items.size)
+        assertEquals("rd:torrent:samples:file:50", items.single().id)
+        assertEquals("Hoppers.2026.1080p.TELESYNC.x264-SyncUP", items.single().name)
     }
 
     private fun stubAuthenticatedRealDebrid(realDebridAuthDataStore: RealDebridAuthDataStore) {

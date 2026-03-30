@@ -3,8 +3,10 @@ package com.nexio.tv.data.remote.api
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDeviceCodeResponseDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDeviceCredentialsResponseDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDownloadDto
+import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentInfoDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTokenResponseDto
+import com.nexio.tv.data.remote.dto.debrid.RealDebridUnrestrictLinkDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridUserDto
 import retrofit2.Response
 import retrofit2.http.Field
@@ -12,6 +14,7 @@ import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface RealDebridApi {
@@ -54,6 +57,20 @@ interface RealDebridApi {
         @Query("page") page: Int = 1,
         @Query("limit") limit: Int = 200
     ): Response<List<RealDebridTorrentDto>>
+
+    @GET("rest/1.0/torrents/info/{id}")
+    suspend fun getTorrentInfo(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String
+    ): Response<RealDebridTorrentInfoDto>
+
+    @FormUrlEncoded
+    @POST("rest/1.0/unrestrict/link")
+    suspend fun unrestrictLink(
+        @Header("Authorization") authorization: String,
+        @Field("link") link: String,
+        @Field("remote") remote: Int = 0
+    ): Response<RealDebridUnrestrictLinkDto>
 
     @GET("rest/1.0/disable_access_token")
     suspend fun disableCurrentAccessToken(
