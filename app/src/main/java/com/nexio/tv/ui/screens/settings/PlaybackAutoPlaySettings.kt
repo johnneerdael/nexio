@@ -86,6 +86,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetReuseLastLinkEnabled: (Boolean) -> Unit,
     onSetGroupStreamsAcrossAddonsEnabled: (Boolean) -> Unit,
     onSetDeduplicateGroupedStreamsEnabled: (Boolean) -> Unit,
+    onSetServiceWrapEnabled: (Boolean) -> Unit,
     onSetFilterWebDolbyVisionStreamsEnabled: (Boolean) -> Unit,
     onSetFilterEpisodeMismatchStreamsEnabled: (Boolean) -> Unit,
     onSetFilterMovieYearMismatchStreamsEnabled: (Boolean) -> Unit,
@@ -121,6 +122,17 @@ internal fun LazyListScope.autoPlaySettingsItems(
             subtitle = stringResource(R.string.streams_deduplicate_grouped_sub),
             isChecked = playerSettings.deduplicateGroupedStreamsEnabled,
             onCheckedChange = onSetDeduplicateGroupedStreamsEnabled,
+            onFocused = onItemFocused
+        )
+    }
+
+    item(key = "streams_service_wrap") {
+        ToggleSettingsItem(
+            icon = Icons.Default.AutoAwesome,
+            title = stringResource(R.string.streams_service_wrap_title),
+            subtitle = stringResource(R.string.streams_service_wrap_sub),
+            isChecked = playerSettings.serviceWrapEnabled,
+            onCheckedChange = onSetServiceWrapEnabled,
             onFocused = onItemFocused
         )
     }

@@ -22,6 +22,7 @@ fun StreamDto.toDomain(
     fileIdx = fileIdx,
     externalUrl = externalUrl,
     behaviorHints = behaviorHints?.toDomain(),
+    sources = sources,
     addonName = addonName,
     addonLogo = addonLogo,
     addonParserPreset = addonParserPreset

@@ -132,7 +132,9 @@ internal fun PlayerRuntimeController.loadSourceStreams(forceRefresh: Boolean) {
                 is NetworkResult.Success -> {
                     val addonStreams = StreamAutoPlaySelector.orderAddonStreams(result.data, installedAddonOrder)
                     val allStreams = addonStreams.flatMap { it.streams }
-                    val availableAddons = addonStreams.map { it.addonName }
+                    val availableAddons = addonStreams
+                        .filter { it.streams.isNotEmpty() }
+                        .map { it.addonName }
                     val selectedFilter = _uiState.value.sourceSelectedAddonFilter
                     val organizedStreams = withContext(Dispatchers.Default) {
                         StreamPresentationEngine.organize(

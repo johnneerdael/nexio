@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import android.util.Log
+import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.core.sync.buildAddonRequestUrl
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
@@ -15,6 +16,8 @@ import com.nexio.tv.domain.model.AddonStreams
 import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.StreamRepository
+import com.nexio.tv.data.repository.servicewrap.ServiceWrapRequestContext
+import com.nexio.tv.data.repository.servicewrap.ServiceWrapSessionFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
@@ -36,6 +39,8 @@ class StreamRepositoryImpl @Inject constructor(
     @Named("addonStreams") private val api: AddonApi,
     private val addonRepository: AddonRepository,
     private val debugSettingsDataStore: DebugSettingsDataStore,
+    private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val serviceWrapSessionFactory: ServiceWrapSessionFactory,
     @Named("addonStreams") private val okHttpClient: OkHttpClient
 ) : StreamRepository {
 
@@ -52,6 +57,7 @@ class StreamRepositoryImpl @Inject constructor(
 
         try {
             val diagnosticsEnabled = debugSettingsDataStore.streamDiagnosticsEnabled.first()
+            val serviceWrapEnabled = playerSettingsDataStore.playerSettings.first().serviceWrapEnabled
             val requestStartedAtNs = System.nanoTime()
             val addons = installedAddons ?: addonRepository.getInstalledAddons().first()
 
@@ -60,13 +66,26 @@ class StreamRepositoryImpl @Inject constructor(
                 addon.supportsStreamResource(type)
             }
 
-            // Accumulate results as they arrive
-            val accumulatedResults = mutableListOf<AddonStreams>()
+            val accumulatedResults = LinkedHashMap<String, AddonStreams>()
             val addonDiagnostics = mutableListOf<AddonFetchDiagnostic>()
 
             coroutineScope {
-                // Channel to receive results as they complete
-                val resultChannel = Channel<AddonFetchResult>(Channel.UNLIMITED)
+                val eventChannel = Channel<StreamPipelineEvent>(Channel.UNLIMITED)
+                val serviceWrapSession = if (serviceWrapEnabled) {
+                    serviceWrapSessionFactory.createSession(
+                        requestContext = ServiceWrapRequestContext(
+                            contentType = type,
+                            season = season,
+                            episode = episode
+                        ),
+                        scope = this,
+                        onResolved = { resolvedBatch ->
+                            eventChannel.send(StreamPipelineEvent.WrapResolved(resolvedBatch))
+                        }
+                    )
+                } else {
+                    null
+                }
 
                 // Launch addon jobs
                 val jobs = streamAddons.map { addon ->
@@ -91,13 +110,11 @@ class StreamRepositoryImpl @Inject constructor(
                                 is NetworkResult.Success -> {
                                     streamCount = streamsResult.data.size
                                     outcome = if (streamCount > 0) "success_non_empty" else "success_empty"
-                                    if (streamCount > 0) {
-                                        emittedAddonStreams = AddonStreams(
-                                            addonName = addon.displayName,
-                                            addonLogo = addon.logo,
-                                            streams = streamsResult.data
-                                        )
-                                    }
+                                    emittedAddonStreams = AddonStreams(
+                                        addonName = addon.displayName,
+                                        addonLogo = addon.logo,
+                                        streams = streamsResult.data
+                                    )
                                 }
                                 is NetworkResult.Error -> {
                                     outcome = "error"
@@ -115,15 +132,17 @@ class StreamRepositoryImpl @Inject constructor(
                             outcome = "exception"
                         } finally {
                             if (shouldReport) {
-                                resultChannel.send(
-                                    AddonFetchResult(
-                                        addonStreams = emittedAddonStreams,
-                                        diagnostic = AddonFetchDiagnostic(
-                                            addonName = addon.displayName,
-                                            outcome = outcome,
-                                            streamCount = streamCount,
-                                            httpCode = httpCode,
-                                            durationMs = (System.nanoTime() - addonStartedAtNs) / 1_000_000L
+                                eventChannel.send(
+                                    StreamPipelineEvent.AddonFetched(
+                                        AddonFetchResult(
+                                            addonStreams = emittedAddonStreams,
+                                            diagnostic = AddonFetchDiagnostic(
+                                                addonName = addon.displayName,
+                                                outcome = outcome,
+                                                streamCount = streamCount,
+                                                httpCode = httpCode,
+                                                durationMs = (System.nanoTime() - addonStartedAtNs) / 1_000_000L
+                                            )
                                         )
                                     )
                                 )
@@ -131,31 +150,62 @@ class StreamRepositoryImpl @Inject constructor(
                         }
                     }
                 }
+                var remainingAddonEvents = jobs.size
+                var pendingWrapEvents = 0
+                while (remainingAddonEvents > 0 || pendingWrapEvents > 0) {
+                    when (val event = eventChannel.receive()) {
+                        is StreamPipelineEvent.AddonFetched -> {
+                            remainingAddonEvents -= 1
+                            addonDiagnostics += event.result.diagnostic
+                            if (diagnosticsEnabled) {
+                                logAddonFetchDiagnostic(
+                                    requestOrigin = requestOrigin,
+                                    type = type,
+                                    season = season,
+                                    episode = episode,
+                                    diagnostic = event.result.diagnostic
+                                )
+                            }
+                            event.result.addonStreams?.let { addonStreams ->
+                                val wrapResult = serviceWrapSession?.processAddonStreams(
+                                    addonName = addonStreams.addonName,
+                                    addonLogo = addonStreams.addonLogo,
+                                    streams = addonStreams.streams
+                                )
+                                pendingWrapEvents += wrapResult?.launchedWrapCount ?: 0
+                                val visibleStreams = wrapResult?.visibleStreams ?: addonStreams.streams
+                                accumulatedResults[addonStreams.addonName] = AddonStreams(
+                                    addonName = addonStreams.addonName,
+                                    addonLogo = addonStreams.addonLogo,
+                                    streams = visibleStreams
+                                )
+                                emit(NetworkResult.Success(accumulatedResults.values.toList()))
+                                Log.d(
+                                    TAG,
+                                    "Emitted ${accumulatedResults.size} addon bucket(s), latest: ${addonStreams.addonName} visible=${visibleStreams.size}"
+                                )
+                            }
+                        }
 
-                val closeJob = launch {
-                    jobs.joinAll()
-                    resultChannel.close()
-                }
-
-                // Emit results as they arrive
-                for (result in resultChannel) {
-                    addonDiagnostics += result.diagnostic
-                    if (diagnosticsEnabled) {
-                        logAddonFetchDiagnostic(
-                            requestOrigin = requestOrigin,
-                            type = type,
-                            season = season,
-                            episode = episode,
-                            diagnostic = result.diagnostic
-                        )
-                    }
-                    result.addonStreams?.let { addonStreams ->
-                        accumulatedResults.add(addonStreams)
-                        emit(NetworkResult.Success(accumulatedResults.toList()))
-                        Log.d(TAG, "Emitted ${accumulatedResults.size} addon(s), latest: ${addonStreams.addonName} with ${addonStreams.streams.size} streams")
+                        is StreamPipelineEvent.WrapResolved -> {
+                            pendingWrapEvents -= 1
+                            val batch = event.batch
+                            val existing = accumulatedResults[batch.addonName]
+                            val mergedStreams = when {
+                                existing == null -> batch.wrappedStreams
+                                batch.wrappedStreams.isEmpty() -> existing.streams
+                                else -> existing.streams + batch.wrappedStreams
+                            }
+                            accumulatedResults[batch.addonName] = AddonStreams(
+                                addonName = batch.addonName,
+                                addonLogo = batch.addonLogo ?: existing?.addonLogo,
+                                streams = mergedStreams
+                            )
+                            emit(NetworkResult.Success(accumulatedResults.values.toList()))
+                        }
                     }
                 }
-                closeJob.join()
+                jobs.joinAll()
             }
 
             if (diagnosticsEnabled) {
@@ -236,8 +286,10 @@ class StreamRepositoryImpl @Inject constructor(
         val calls = okHttpClient.dispatcher.runningCalls() + okHttpClient.dispatcher.queuedCalls()
         var cancelledCount = 0
         calls.forEach { call ->
-            val tag = call.request().tag(StreamSearchRequestTag::class.java)
-            if (tag?.requestId == requestId) {
+            val request = call.request()
+            val tag = request.tag(StreamSearchRequestTag::class.java)
+            val isStreamRequest = request.url.encodedPath.contains("/stream/")
+            if (isStreamRequest && tag?.requestId == requestId) {
                 cancelledCount += 1
                 call.cancel()
             }
@@ -306,6 +358,11 @@ private data class AddonFetchResult(
     val addonStreams: AddonStreams?,
     val diagnostic: AddonFetchDiagnostic
 )
+
+private sealed interface StreamPipelineEvent {
+    data class AddonFetched(val result: AddonFetchResult) : StreamPipelineEvent
+    data class WrapResolved(val batch: com.nexio.tv.data.repository.servicewrap.ServiceWrapResolvedBatch) : StreamPipelineEvent
+}
 
 private data class AddonFetchDiagnostic(
     val addonName: String,

@@ -1,10 +1,15 @@
 package com.nexio.tv.data.remote.api
 
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeAccountInfoDto
+import com.nexio.tv.data.remote.dto.debrid.PremiumizeCacheCheckDto
+import com.nexio.tv.data.remote.dto.debrid.PremiumizeDirectDownloadDto
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeItemDetailsDto
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeListAllDto
 import retrofit2.Response
+import retrofit2.http.Field
+import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Query
 
 interface PremiumizeApi {
@@ -23,4 +28,17 @@ interface PremiumizeApi {
         @Query("apikey") apiKey: String,
         @Query("id") id: String
     ): Response<PremiumizeItemDetailsDto>
+
+    @GET("cache/check")
+    suspend fun checkCache(
+        @Query("apikey") apiKey: String,
+        @Query("items[]") items: List<String>
+    ): Response<PremiumizeCacheCheckDto>
+
+    @FormUrlEncoded
+    @POST("transfer/directdl")
+    suspend fun createDirectDownload(
+        @Query("apikey") apiKey: String,
+        @Field("src") source: String
+    ): Response<PremiumizeDirectDownloadDto>
 }

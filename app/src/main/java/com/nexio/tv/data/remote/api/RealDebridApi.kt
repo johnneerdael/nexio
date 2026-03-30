@@ -3,12 +3,16 @@ package com.nexio.tv.data.remote.api
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDeviceCodeResponseDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDeviceCredentialsResponseDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDownloadDto
-import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentInfoDto
+import com.nexio.tv.data.remote.dto.debrid.RealDebridInstantAvailabilityFileDto
+import com.nexio.tv.data.remote.dto.debrid.RealDebridMagnetDto
+import com.nexio.tv.data.remote.dto.debrid.RealDebridMediaInfoDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentDto
+import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentInfoDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTokenResponseDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridUnrestrictLinkDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridUserDto
 import retrofit2.Response
+import retrofit2.http.DELETE
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
@@ -58,11 +62,32 @@ interface RealDebridApi {
         @Query("limit") limit: Int = 200
     ): Response<List<RealDebridTorrentDto>>
 
+    @GET("rest/1.0/torrents/instantAvailability/{hash}")
+    suspend fun getInstantAvailability(
+        @Header("Authorization") authorization: String,
+        @Path(value = "hash", encoded = true) hash: String
+    ): Response<Map<String, Map<String, List<Map<String, RealDebridInstantAvailabilityFileDto>>>>>
+
+    @FormUrlEncoded
+    @POST("rest/1.0/torrents/addMagnet")
+    suspend fun addMagnet(
+        @Header("Authorization") authorization: String,
+        @Field("magnet") magnet: String
+    ): Response<RealDebridMagnetDto>
+
     @GET("rest/1.0/torrents/info/{id}")
     suspend fun getTorrentInfo(
         @Header("Authorization") authorization: String,
         @Path("id") id: String
     ): Response<RealDebridTorrentInfoDto>
+
+    @FormUrlEncoded
+    @POST("rest/1.0/torrents/selectFiles/{id}")
+    suspend fun selectFiles(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String,
+        @Field("files") files: String
+    ): Response<Unit>
 
     @FormUrlEncoded
     @POST("rest/1.0/unrestrict/link")
@@ -71,6 +96,18 @@ interface RealDebridApi {
         @Field("link") link: String,
         @Field("remote") remote: Int = 0
     ): Response<RealDebridUnrestrictLinkDto>
+
+    @GET("rest/1.0/streaming/mediaInfos/{id}")
+    suspend fun getMediaInfos(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String
+    ): Response<RealDebridMediaInfoDto>
+
+    @DELETE("rest/1.0/torrents/delete/{id}")
+    suspend fun deleteTorrent(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String
+    ): Response<Unit>
 
     @GET("rest/1.0/disable_access_token")
     suspend fun disableCurrentAccessToken(
