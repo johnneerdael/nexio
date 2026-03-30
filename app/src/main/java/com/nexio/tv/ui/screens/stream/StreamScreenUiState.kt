@@ -8,6 +8,7 @@ import com.nexio.tv.ui.components.SourceChipStatus
 
 data class StreamScreenUiState(
     val isLoading: Boolean = true,
+    val showNoStreamsState: Boolean = false,
     val isDirectAutoPlayFlow: Boolean = false,
     val showDirectAutoPlayOverlay: Boolean = false,
     val directAutoPlayMessage: String? = null,
