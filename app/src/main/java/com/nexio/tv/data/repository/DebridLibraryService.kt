@@ -163,6 +163,7 @@ class DebridLibraryService @Inject constructor(
     }
 
     private suspend fun fetchRealDebridTorrents(): List<LibraryEntry> {
+        val playbackHeaders = buildRealDebridPlaybackHeaders()
         val torrentsResponse = realDebridAuthService.executeAuthorizedRequest { authHeader ->
             realDebridApi.getTorrents(authorization = authHeader)
         } ?: return emptyList()
@@ -184,11 +185,12 @@ class DebridLibraryService @Inject constructor(
             .mapNotNull { torrent ->
                 val resolvedDownload = torrent.links.orEmpty()
                     .mapNotNull { link -> resolvedDownloadsByLink[link] }
-                    .firstOrNull()
+                    .firstOrNull(::isLikelyPlayable)
                     ?: return@mapNotNull null
                 mapRealDebridTorrent(
                     torrent = torrent,
-                    directPlaybackUrl = resolvedDownload.downloadUrl
+                    resolvedDownload = resolvedDownload,
+                    playbackHeaders = playbackHeaders
                 )
             }
             .toList()
@@ -220,12 +222,15 @@ class DebridLibraryService @Inject constructor(
 
     private fun mapRealDebridTorrent(
         torrent: RealDebridTorrentDto,
-        directPlaybackUrl: String
+        resolvedDownload: RealDebridResolvedDownload,
+        playbackHeaders: Map<String, String>?
     ): LibraryEntry {
-        val filename = torrent.filename.orEmpty().ifBlank { "Real-Debrid Torrent" }
+        val filename = resolvedDownload.filename
+            ?.takeIf { it.isNotBlank() }
+            ?: torrent.filename.orEmpty().ifBlank { "Real-Debrid Torrent" }
         return LibraryEntry(
             id = "rd:torrent:${torrent.id}",
-            type = inferContentType(filename, mimeType = null),
+            type = inferContentType(filename, mimeType = resolvedDownload.mimeType),
             name = stripVideoExtension(filename),
             poster = null,
             background = null,
@@ -237,7 +242,8 @@ class DebridLibraryService @Inject constructor(
             addonBaseUrl = null,
             listKeys = setOf(REAL_DEBRID_LIST_KEY),
             listedAt = parseIsoToMillis(torrent.ended ?: torrent.added),
-            directPlaybackUrl = directPlaybackUrl,
+            directPlaybackUrl = resolvedDownload.downloadUrl,
+            playbackHeaders = playbackHeaders,
             playbackStreamName = filename,
             playbackFilename = filename
         )
@@ -278,6 +284,13 @@ class DebridLibraryService @Inject constructor(
         return isLikelyVideo(torrent.filename, mimeType = null)
     }
 
+    private fun isLikelyPlayable(download: RealDebridResolvedDownload): Boolean {
+        return isLikelyVideo(
+            filename = download.filename ?: extractFilenameFromUrl(download.downloadUrl),
+            mimeType = download.mimeType
+        )
+    }
+
     private fun isLikelyPlayable(file: PremiumizeListAllFileDto): Boolean {
         return isLikelyVideo(file.name, file.mimeType)
     }
@@ -306,8 +319,21 @@ class DebridLibraryService @Inject constructor(
         val downloadUrl = download.download?.takeIf { it.isNotBlank() } ?: return null
         return RealDebridResolvedDownload(
             link = link,
-            downloadUrl = downloadUrl
+            downloadUrl = downloadUrl,
+            filename = download.filename,
+            mimeType = download.mimeType
         )
+    }
+
+    private fun extractFilenameFromUrl(url: String): String? {
+        val path = url.substringBefore('?').substringAfterLast('/')
+        return path.takeIf { it.isNotBlank() }
+    }
+
+    private suspend fun buildRealDebridPlaybackHeaders(): Map<String, String>? {
+        val accessToken = realDebridAuthDataStore.state.first().accessToken?.takeIf { it.isNotBlank() }
+            ?: return null
+        return mapOf("Authorization" to "Bearer $accessToken")
     }
 
     private fun parseIsoToMillis(rawValue: String?): Long {
@@ -331,6 +357,8 @@ class DebridLibraryService @Inject constructor(
 
     private data class RealDebridResolvedDownload(
         val link: String,
-        val downloadUrl: String
+        val downloadUrl: String,
+        val filename: String?,
+        val mimeType: String?
     )
 }
