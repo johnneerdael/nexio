@@ -303,7 +303,9 @@ class StreamScreenViewModel @Inject constructor(
                             installedAddonOrder
                         )
                         val allStreams = orderedAddonStreams.flatMap { it.streams }
-                        val availableAddons = orderedAddonStreams.map { it.addonName }
+                        val availableAddons = orderedAddonStreams
+                            .filter { it.streams.isNotEmpty() }
+                            .map { it.addonName }
                         val selectedAutoPlayStream = if (autoPlayHandledForSession) {
                             null
                         } else {

@@ -16,9 +16,14 @@ data class Stream(
     val fileIdx: Int?,
     val externalUrl: String?,
     val behaviorHints: StreamBehaviorHints?,
+    val sources: List<String>? = null,
     val addonName: String,
     val addonLogo: String?,
-    val addonParserPreset: AddonParserPreset = AddonParserPreset.GENERIC
+    val addonParserPreset: AddonParserPreset = AddonParserPreset.GENERIC,
+    val serviceWrapSourceHash: String? = null,
+    val wrappedProviderId: String? = null,
+    val wrappedOriginalAddonName: String? = null,
+    val wrappedOriginalStreamKey: String? = null
 ) {
     /**
      * Returns the primary stream source URL

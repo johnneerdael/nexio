@@ -418,6 +418,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setDeduplicateGroupedStreamsEnabled(enabled)
     }
 
+    suspend fun setServiceWrapEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setServiceWrapEnabled(enabled)
+    }
+
     suspend fun setFilterWebDolbyVisionStreamsEnabled(enabled: Boolean) {
         playerSettingsDataStore.setFilterWebDolbyVisionStreamsEnabled(enabled)
     }

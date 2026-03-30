@@ -8,6 +8,8 @@ import com.nexio.tv.data.repository.StreamRepositoryImpl
 import com.nexio.tv.data.repository.SubtitleRepositoryImpl
 import com.nexio.tv.data.repository.SyncRepositoryImpl
 import com.nexio.tv.data.repository.WatchProgressRepositoryImpl
+import com.nexio.tv.data.repository.servicewrap.DebridAvailabilityResolver
+import com.nexio.tv.data.repository.servicewrap.ServiceWrapResolver
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.LibraryRepository
@@ -57,4 +59,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindWatchProgressRepository(impl: WatchProgressRepositoryImpl): WatchProgressRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindServiceWrapResolver(impl: DebridAvailabilityResolver): ServiceWrapResolver
 }

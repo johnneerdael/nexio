@@ -1,11 +1,15 @@
 package com.nexio.tv.data.repository
 
+import android.util.Log
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.data.local.PlayerSettings
+import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.data.remote.api.StreamSearchRequestTag
 import com.nexio.tv.data.remote.dto.StreamDto
 import com.nexio.tv.data.remote.dto.StreamResponseDto
+import com.nexio.tv.data.repository.servicewrap.ServiceWrapSessionFactory
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
 import com.nexio.tv.domain.model.ContentType
@@ -13,10 +17,13 @@ import com.nexio.tv.domain.repository.AddonRepository
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okhttp3.Call
 import okhttp3.Dispatcher
@@ -31,14 +38,27 @@ import retrofit2.Response
 
 class StreamRepositoryImplTest {
 
+    private fun mockAndroidLog() {
+        mockkStatic(Log::class)
+        every { Log.d(any<String>(), any<String>()) } returns 0
+        every { Log.e(any<String>(), any<String>()) } returns 0
+        every { Log.e(any<String>(), any<String>(), any<Throwable>()) } returns 0
+        every { Log.w(any<String>(), any<String>()) } returns 0
+    }
+
     @Test
     fun `getStreamsFromAllAddons emits progressive results and completes`() = runTest {
+        mockAndroidLog()
+
         val addonApi = mockk<AddonApi>()
         val addonRepository = mockk<AddonRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
+        val serviceWrapSessionFactory = mockk<ServiceWrapSessionFactory>(relaxed = true)
         val okHttpClient = mockk<OkHttpClient>(relaxed = true)
         val dispatcher = mockk<Dispatcher>()
         every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
+        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
         every { okHttpClient.dispatcher } returns dispatcher
         every { dispatcher.runningCalls() } returns mutableListOf()
         every { dispatcher.queuedCalls() } returns mutableListOf()
@@ -65,35 +85,46 @@ class StreamRepositoryImplTest {
             api = addonApi,
             addonRepository = addonRepository,
             debugSettingsDataStore = debugSettingsDataStore,
+            playerSettingsDataStore = playerSettingsDataStore,
+            serviceWrapSessionFactory = serviceWrapSessionFactory,
             okHttpClient = okHttpClient
         )
 
-        val emissions = withTimeout(5_000L) {
-            repository.getStreamsFromAllAddons(
-                type = "movie",
-                videoId = "tt1234567",
-                requestOrigin = "test_progressive",
-                requestId = "request-progressive"
-            ).toList()
+        val emissions = withContext(Dispatchers.Default.limitedParallelism(1)) {
+            withTimeout(5_000L) {
+                repository.getStreamsFromAllAddons(
+                    type = "movie",
+                    videoId = "tt1234567",
+                    requestOrigin = "test_progressive",
+                    requestId = "request-progressive"
+                ).toList()
+            }
         }
 
         assertTrue(emissions.first() is NetworkResult.Loading)
         val successes = emissions.filterIsInstance<NetworkResult.Success<List<com.nexio.tv.domain.model.AddonStreams>>>()
-        assertEquals(2, successes.size)
+        assertEquals(3, successes.size)
         assertEquals(1, successes[0].data.size)
         assertEquals(2, successes[1].data.size)
+        assertEquals(3, successes[2].data.size)
+        assertTrue(successes[0].data.single().streams.isEmpty())
         val finalAddonNames = successes.last().data.map { it.addonName }.toSet()
-        assertEquals(setOf("Addon A", "Addon C"), finalAddonNames)
+        assertEquals(setOf("Addon A", "Addon B", "Addon C"), finalAddonNames)
     }
 
     @Test
     fun `getStreamsFromAllAddons completes with empty success when no addon returns links`() = runTest {
+        mockAndroidLog()
+
         val addonApi = mockk<AddonApi>()
         val addonRepository = mockk<AddonRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
+        val serviceWrapSessionFactory = mockk<ServiceWrapSessionFactory>(relaxed = true)
         val okHttpClient = mockk<OkHttpClient>(relaxed = true)
         val dispatcher = mockk<Dispatcher>()
         every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
+        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
         every { okHttpClient.dispatcher } returns dispatcher
         every { dispatcher.runningCalls() } returns mutableListOf()
         every { dispatcher.queuedCalls() } returns mutableListOf()
@@ -116,29 +147,39 @@ class StreamRepositoryImplTest {
             api = addonApi,
             addonRepository = addonRepository,
             debugSettingsDataStore = debugSettingsDataStore,
+            playerSettingsDataStore = playerSettingsDataStore,
+            serviceWrapSessionFactory = serviceWrapSessionFactory,
             okHttpClient = okHttpClient
         )
 
-        val emissions = withTimeout(5_000L) {
-            repository.getStreamsFromAllAddons(
-                type = "movie",
-                videoId = "tt7654321",
-                requestOrigin = "test_no_results",
-                requestId = "request-empty"
-            ).toList()
+        val emissions = withContext(Dispatchers.Default.limitedParallelism(1)) {
+            withTimeout(5_000L) {
+                repository.getStreamsFromAllAddons(
+                    type = "movie",
+                    videoId = "tt7654321",
+                    requestOrigin = "test_no_results",
+                    requestId = "request-empty"
+                ).toList()
+            }
         }
 
         assertTrue(emissions.first() is NetworkResult.Loading)
         val successes = emissions.filterIsInstance<NetworkResult.Success<List<com.nexio.tv.domain.model.AddonStreams>>>()
         assertEquals(1, successes.size)
-        assertTrue(successes.single().data.isEmpty())
+        assertEquals(1, successes.single().data.size)
+        assertEquals("Addon C", successes.single().data.single().addonName)
+        assertTrue(successes.single().data.single().streams.isEmpty())
     }
 
     @Test
     fun `cancelActiveStreamRequests only cancels matching tagged addon stream calls`() {
+        mockAndroidLog()
+
         val addonApi = mockk<AddonApi>()
         val addonRepository = mockk<AddonRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
+        val serviceWrapSessionFactory = mockk<ServiceWrapSessionFactory>(relaxed = true)
         val okHttpClient = mockk<OkHttpClient>()
         val dispatcher = mockk<Dispatcher>()
         val runningStreamCall = mockk<Call>(relaxed = true)
@@ -146,6 +187,7 @@ class StreamRepositoryImplTest {
         val metaCall = mockk<Call>(relaxed = true)
 
         every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
+        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
         every { okHttpClient.dispatcher } returns dispatcher
         every { dispatcher.runningCalls() } returns mutableListOf(runningStreamCall, metaCall)
         every { dispatcher.queuedCalls() } returns mutableListOf(queuedStreamCall)
@@ -166,6 +208,8 @@ class StreamRepositoryImplTest {
             api = addonApi,
             addonRepository = addonRepository,
             debugSettingsDataStore = debugSettingsDataStore,
+            playerSettingsDataStore = playerSettingsDataStore,
+            serviceWrapSessionFactory = serviceWrapSessionFactory,
             okHttpClient = okHttpClient
         )
 

@@ -37,3 +37,27 @@ data class PremiumizeItemDetailsDto(
     @Json(name = "duration") val duration: String? = null,
     @Json(name = "transcode_status") val transcodeStatus: String? = null
 )
+
+data class PremiumizeCacheCheckDto(
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "response") val response: List<Boolean> = emptyList(),
+    @Json(name = "transcoded") val transcoded: List<Boolean> = emptyList(),
+    @Json(name = "filename") val filename: List<String> = emptyList(),
+    @Json(name = "filesize") val filesize: List<String> = emptyList()
+)
+
+data class PremiumizeDirectDownloadDto(
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "location") val location: String? = null,
+    @Json(name = "filename") val filename: String? = null,
+    @Json(name = "filesize") val filesize: Long? = null,
+    @Json(name = "content") val content: List<PremiumizeDirectDownloadContentDto> = emptyList()
+)
+
+data class PremiumizeDirectDownloadContentDto(
+    @Json(name = "path") val path: String? = null,
+    @Json(name = "size") val size: Long? = null,
+    @Json(name = "link") val link: String? = null,
+    @Json(name = "stream_link") val streamLink: String? = null,
+    @Json(name = "transcode_status") val transcodeStatus: String? = null
+)

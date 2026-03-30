@@ -243,6 +243,9 @@ fun PlaybackSettingsContent(
                 onSetDeduplicateGroupedStreamsEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setDeduplicateGroupedStreamsEnabled(enabled) }
                 },
+                onSetServiceWrapEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setServiceWrapEnabled(enabled) }
+                },
                 onSetFilterWebDolbyVisionStreamsEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setFilterWebDolbyVisionStreamsEnabled(enabled) }
                 },
