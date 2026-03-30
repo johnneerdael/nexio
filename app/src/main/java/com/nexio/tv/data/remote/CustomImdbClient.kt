@@ -1,5 +1,6 @@
 package com.nexio.tv.data.remote
 
+import android.util.Log
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
@@ -11,6 +12,8 @@ import okhttp3.Response
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val CUSTOM_IMDB_CLIENT_TAG = "CustomImdbClient"
 
 fun normalizeCustomImdbBaseUrl(rawBaseUrl: String): String {
     return rawBaseUrl.trim().trimEnd('/')
@@ -60,6 +63,12 @@ class OkHttpCustomImdbClient @Inject constructor(
             request = request,
             onFailure = { false }
         ) { response ->
+            if (!response.isSuccessful) {
+                Log.w(
+                    CUSTOM_IMDB_CLIENT_TAG,
+                    "Custom IMDb validation failed with HTTP ${response.code} for $normalizedBaseUrl"
+                )
+            }
             response.isSuccessful
         }
     }
@@ -89,6 +98,10 @@ class OkHttpCustomImdbClient @Inject constructor(
             onFailure = { emptyMap() }
         ) { response ->
             if (!response.isSuccessful) {
+                Log.w(
+                    CUSTOM_IMDB_CLIENT_TAG,
+                    "Custom IMDb ratings request failed with HTTP ${response.code} for $normalizedTconst"
+                )
                 return@executeWithRateLimitRetry emptyMap()
             }
 

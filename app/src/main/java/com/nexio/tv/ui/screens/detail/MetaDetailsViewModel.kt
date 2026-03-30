@@ -10,6 +10,7 @@ import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
+import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktCommentItemDto
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
@@ -80,6 +81,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val traktAuthService: TraktAuthService,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
+    private val imdbSettingsDataStore: ImdbSettingsDataStore,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
     private val mdbListRepository: MDBListRepository,
@@ -127,6 +129,7 @@ class MetaDetailsViewModel @Inject constructor(
         observeMovieWatched()
         observeBlurUnwatchedEpisodes()
         observeHideUnreleasedContent()
+        observeEpisodeRatingsProviderChanges()
         loadMeta()
     }
 
@@ -137,6 +140,26 @@ class MetaDetailsViewModel @Inject constructor(
                 .collectLatest { enabled ->
                     hideUnreleasedContent = enabled
                 }
+        }
+    }
+
+    private fun observeEpisodeRatingsProviderChanges() {
+        viewModelScope.launch {
+            var previousState: ImdbEpisodeRatingsRefreshState? = null
+
+            imdbSettingsDataStore.settings.collectLatest { settings ->
+                val currentState = settings.toEpisodeRatingsRefreshState()
+                val shouldReload = shouldReloadEpisodeRatingsForImdbSettingsChange(
+                    previous = previousState,
+                    current = currentState
+                )
+                previousState = currentState
+
+                if (!shouldReload) return@collectLatest
+
+                val currentMeta = _uiState.value.meta ?: return@collectLatest
+                loadEpisodeRatingsAsync(currentMeta)
+            }
         }
     }
 
