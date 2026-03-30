@@ -35,4 +35,20 @@ class PlayerDirectLibraryPlaybackTest {
         assertEquals(PlayerLaunchSource.LIBRARY_DIRECT, args.launchSource)
         assertTrue(shouldReturnDirectLibraryPlaybackToLibrary(args.launchSource))
     }
+
+    @Test
+    fun `debrid library content id still returns to library when launch source is missing`() {
+        assertTrue(
+            shouldReturnDirectLibraryPlaybackToLibrary(
+                launchSource = PlayerLaunchSource.STREAM,
+                contentId = "rd:torrent:abc123"
+            )
+        )
+        assertTrue(
+            shouldReturnDirectLibraryPlaybackToLibrary(
+                launchSource = PlayerLaunchSource.OTHER,
+                videoId = "pm:item:xyz987"
+            )
+        )
+    }
 }

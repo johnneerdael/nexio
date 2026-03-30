@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.data.local.RealDebridAuthDataStore
+import com.nexio.tv.data.local.RealDebridAuthState
 import com.nexio.tv.data.remote.api.PremiumizeApi
 import com.nexio.tv.data.remote.api.RealDebridApi
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDownloadDto
@@ -28,6 +29,14 @@ class DebridLibraryServiceTest {
         val premiumizeService = mockk<PremiumizeService>()
 
         every { realDebridAuthDataStore.isAuthenticated } returns flowOf(true)
+        every { realDebridAuthDataStore.state } returns flowOf(
+            RealDebridAuthState(
+                accessToken = "rd-access-token",
+                refreshToken = "refresh-token",
+                userClientId = "client-id",
+                userClientSecret = "client-secret"
+            )
+        )
         every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
         coJustRun { premiumizeService.refreshAccountState() }
 
@@ -77,6 +86,77 @@ class DebridLibraryServiceTest {
         assertEquals(listOf(DebridLibraryService.REAL_DEBRID_LIST_KEY), tabs.map { it.key })
         assertEquals(1, items.size)
         assertEquals("https://rd.test/download/resolved.mkv", items.single().directPlaybackUrl)
+        assertEquals("Bearer rd-access-token", items.single().playbackHeaders?.get("Authorization"))
         assertTrue(items.single().listKeys.contains(DebridLibraryService.REAL_DEBRID_LIST_KEY))
+    }
+
+    @Test
+    fun `refresh real debrid prefers playable download entries over non video links`() = runTest {
+        val realDebridApi = mockk<RealDebridApi>()
+        val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
+        val realDebridAuthService = mockk<RealDebridAuthService>()
+        val premiumizeApi = mockk<PremiumizeApi>()
+        val premiumizeService = mockk<PremiumizeService>()
+
+        every { realDebridAuthDataStore.isAuthenticated } returns flowOf(true)
+        every { realDebridAuthDataStore.state } returns flowOf(
+            RealDebridAuthState(
+                accessToken = "rd-access-token",
+                refreshToken = "refresh-token",
+                userClientId = "client-id",
+                userClientSecret = "client-secret"
+            )
+        )
+        every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
+        coJustRun { premiumizeService.refreshAccountState() }
+
+        coEvery { realDebridAuthService.executeAuthorizedRequest<List<RealDebridTorrentDto>>(any()) } returns Response.success(
+            listOf(
+                RealDebridTorrentDto(
+                    id = "multi-link",
+                    filename = "Playable.Movie.2024",
+                    status = "downloaded",
+                    links = listOf(
+                        "https://rd.test/link/readme",
+                        "https://rd.test/link/video"
+                    ),
+                    ended = "2026-03-30T12:00:00Z"
+                )
+            )
+        )
+        coEvery { realDebridAuthService.executeAuthorizedRequest<List<RealDebridDownloadDto>>(any()) } returns Response.success(
+            listOf(
+                RealDebridDownloadDto(
+                    id = "download-readme",
+                    filename = "README.txt",
+                    mimeType = "text/plain",
+                    link = "https://rd.test/link/readme",
+                    download = "https://rd.test/download/readme.txt"
+                ),
+                RealDebridDownloadDto(
+                    id = "download-video",
+                    filename = "Playable.Movie.2024.mkv",
+                    mimeType = "video/x-matroska",
+                    link = "https://rd.test/link/video",
+                    download = "https://rd.test/download/video.mkv"
+                )
+            )
+        )
+
+        val service = DebridLibraryService(
+            realDebridApi = realDebridApi,
+            realDebridAuthDataStore = realDebridAuthDataStore,
+            realDebridAuthService = realDebridAuthService,
+            premiumizeApi = premiumizeApi,
+            premiumizeService = premiumizeService
+        )
+
+        service.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
+
+        val item = service.observeItems().first().single()
+
+        assertEquals("https://rd.test/download/video.mkv", item.directPlaybackUrl)
+        assertEquals("Playable.Movie.2024.mkv", item.playbackFilename)
+        assertEquals("Playable.Movie.2024", item.name)
     }
 }
