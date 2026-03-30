@@ -45,8 +45,12 @@ class InlineIconTokenRegistryTest {
         assertNotNull(InlineIconTokenRegistry.resolve("stereo"))
         assertNotNull(InlineIconTokenRegistry.resolve("dovi"))
         assertNotNull(InlineIconTokenRegistry.resolve("hdr10"))
+        assertNotNull(InlineIconTokenRegistry.resolve("premiumize"))
+        assertNotNull(InlineIconTokenRegistry.resolve("realdebrid"))
         assertEquals(ScaleClass.INLINE, InlineIconTokenRegistry.resolve("atmos")?.scaleClass)
         assertEquals(ScaleClass.INLINE, InlineIconTokenRegistry.resolve("dovi")?.scaleClass)
+        assertEquals(ScaleClass.INLINE, InlineIconTokenRegistry.resolve("premiumize")?.scaleClass)
+        assertEquals(ScaleClass.INLINE, InlineIconTokenRegistry.resolve("realdebrid")?.scaleClass)
     }
 
     @Test

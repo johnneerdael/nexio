@@ -20,12 +20,12 @@ class StreamPresentationEngineTest {
 
         val item = organize(stream)
 
-        assertEquals("[[icon:fullhd]]Shrinking (S03 E06)", item.title)
+        assertEquals("[[icon:fullhd]] Shrinking (S03E06)", item.title)
         assertEquals(
             listOf(
-                "🎥 Streaming    [[icon:atmos]]  [[icon:ddp]]   ⏱️ Unknown",
-                "💾 10.74 GB • ☁️ Premiumize • Torrentio",
-                "🗣️ 🇬🇧 🇮🇹 • 👤 TheShrink",
+                "[[icon:atmos]] [[icon:ddp]]",
+                "💾 10.74 GB",
+                "[[icon:appletv]] Apple TV+ • [[icon:premiumize]] Premiumize",
                 "📄 Shrinking.S03E06.Dereks.Dont.Die.1080p.ATVP.WEB-DL.DDP5.1.Atmos.ENG.ITA.H264-TheShrink.mkv"
             ),
             item.detailLines
@@ -43,12 +43,12 @@ class StreamPresentationEngineTest {
 
         val item = organize(stream)
 
-        assertEquals("[[icon:4k]]Shelter (2026)", item.title)
+        assertEquals("[[icon:4k]] Shelter (2026)", item.title)
         assertEquals(
             listOf(
-                "🎥 Streaming       ⏱️ Unknown",
-                "💾 10.74 GB • ☁️ Real-Debrid • Torrentio",
-                "🗣️ 🌎 🇫🇷 • 👤 Slay3R",
+                "[[icon:hdr10]]",
+                "💾 10.74 GB",
+                "[[icon:realdebrid]] Real-Debrid",
                 "📄 Shelter.2026.MULTi.VFQ.2160p.HDR.WEB-DL.H265-Slay3R.mkv"
             ),
             item.detailLines
@@ -67,10 +67,12 @@ class StreamPresentationEngineTest {
         val item = organize(stream)
         val detailOutput = item.detailLines.joinToString("\n")
 
-        assertEquals("[[icon:4k]]Movie Title (2023)", item.title)
+        assertEquals("[[icon:4k]] Movie Title (2023)", item.title)
         assertTrue(detailOutput.contains("[[icon:netflix]] Netflix"))
         assertTrue(detailOutput.contains("[[icon:atmos]]"))
         assertTrue(detailOutput.contains("[[icon:truehd]]"))
+        assertTrue(detailOutput.contains("[[icon:dovi]]"))
+        assertTrue(detailOutput.contains("[[icon:realdebrid]] Real-Debrid"))
     }
 
     @Test
