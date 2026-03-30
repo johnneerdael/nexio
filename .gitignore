@@ -48,7 +48,16 @@ docs/
 nexio-web/ecosystem.config.cjs
 nexio-web/.env
 openspec/
+!openspec/
+!openspec/AGENTS.md
+!openspec/project.md
+!openspec/changes/
+!openspec/changes/enforce-verified-portal-auth/
+!openspec/changes/enforce-verified-portal-auth/**
 screenshots/
 scripts/
 supabase/
+!supabase/
+!supabase/account_settings_sync.sql
+!supabase/config.toml
 .cxx-build/
