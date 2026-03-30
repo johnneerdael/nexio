@@ -7,11 +7,12 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -187,17 +188,9 @@ fun MDBListSettingsContent(
 
     if (showCatalogDialog && uiState.enabled && uiState.apiKey.isNotBlank()) {
         var topListSearch by remember { mutableStateOf("") }
+        val keyboardController = LocalSoftwareKeyboardController.current
         val filteredTopLists = remember(uiState.topLists, topListSearch) {
-            val query = topListSearch.trim().lowercase()
-            if (query.isBlank()) {
-                uiState.topLists
-            } else {
-                uiState.topLists.filter { option ->
-                    option.title.lowercase().contains(query) ||
-                        option.owner.lowercase().contains(query) ||
-                        option.listId.lowercase().contains(query)
-                }
-            }
+            filterMDBListTopLists(uiState.topLists, topListSearch)
         }
 
         NexioDialog(
@@ -255,47 +248,13 @@ fun MDBListSettingsContent(
                             style = MaterialTheme.typography.bodySmall,
                             color = NexioColors.TextSecondary
                         )
-                        Card(
-                            onClick = {},
-                            colors = CardDefaults.colors(
-                                containerColor = NexioColors.BackgroundElevated,
-                                focusedContainerColor = NexioColors.BackgroundElevated
-                            ),
-                            border = CardDefaults.border(
-                                border = Border(
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, NexioColors.Border),
-                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
-                                ),
-                                focusedBorder = Border(
-                                    border = androidx.compose.foundation.BorderStroke(2.dp, NexioColors.FocusRing),
-                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
-                                )
-                            ),
-                            shape = CardDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
-                            scale = CardDefaults.scale(focusedScale = 1f),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                                BasicTextField(
-                                    value = topListSearch,
-                                    onValueChange = { topListSearch = it },
-                                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = NexioColors.TextPrimary),
-                                    cursorBrush = SolidColor(NexioColors.Primary),
-                                    singleLine = true,
-                                    decorationBox = { inner ->
-                                        if (topListSearch.isBlank()) {
-                                            Text(
-                                                text = stringResource(R.string.mdblist_top_lists_search_hint),
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = NexioColors.TextTertiary
-                                            )
-                                        }
-                                        inner()
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        SettingsCatalogSearchField(
+                            value = topListSearch,
+                            onValueChange = { topListSearch = it },
+                            placeholderTextRes = R.string.mdblist_top_lists_search_hint,
+                            keyboardController = keyboardController
+                        )
                     }
 
                     items(items = filteredTopLists, key = { it.key }) { option ->
