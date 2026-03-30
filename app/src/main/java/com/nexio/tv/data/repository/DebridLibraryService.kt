@@ -181,7 +181,6 @@ class DebridLibraryService @Inject constructor(
             .asSequence()
             .filter { it.status.equals("downloaded", ignoreCase = true) }
             .filter { it.links.orEmpty().isNotEmpty() }
-            .filter(::isLikelyPlayable)
             .mapNotNull { torrent ->
                 val resolvedDownload = torrent.links.orEmpty()
                     .mapNotNull { link -> resolvedDownloadsByLink[link] }

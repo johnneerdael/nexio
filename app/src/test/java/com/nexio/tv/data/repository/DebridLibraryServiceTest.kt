@@ -24,23 +24,14 @@ class DebridLibraryServiceTest {
     fun `refresh real debrid exposes resolved download urls and filters unresolved torrents`() = runTest {
         val realDebridApi = mockk<RealDebridApi>()
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
-        val realDebridAuthService = mockk<RealDebridAuthService>()
         val premiumizeApi = mockk<PremiumizeApi>()
         val premiumizeService = mockk<PremiumizeService>()
 
-        every { realDebridAuthDataStore.isAuthenticated } returns flowOf(true)
-        every { realDebridAuthDataStore.state } returns flowOf(
-            RealDebridAuthState(
-                accessToken = "rd-access-token",
-                refreshToken = "refresh-token",
-                userClientId = "client-id",
-                userClientSecret = "client-secret"
-            )
-        )
+        stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
         coJustRun { premiumizeService.refreshAccountState() }
 
-        coEvery { realDebridAuthService.executeAuthorizedRequest<List<RealDebridTorrentDto>>(any()) } returns Response.success(
+        coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
             listOf(
                 RealDebridTorrentDto(
                     id = "resolved",
@@ -58,7 +49,7 @@ class DebridLibraryServiceTest {
                 )
             )
         )
-        coEvery { realDebridAuthService.executeAuthorizedRequest<List<RealDebridDownloadDto>>(any()) } returns Response.success(
+        coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(
             listOf(
                 RealDebridDownloadDto(
                     id = "download-1",
@@ -69,6 +60,7 @@ class DebridLibraryServiceTest {
                 )
             )
         )
+        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
 
         val service = DebridLibraryService(
             realDebridApi = realDebridApi,
@@ -94,23 +86,14 @@ class DebridLibraryServiceTest {
     fun `refresh real debrid prefers playable download entries over non video links`() = runTest {
         val realDebridApi = mockk<RealDebridApi>()
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
-        val realDebridAuthService = mockk<RealDebridAuthService>()
         val premiumizeApi = mockk<PremiumizeApi>()
         val premiumizeService = mockk<PremiumizeService>()
 
-        every { realDebridAuthDataStore.isAuthenticated } returns flowOf(true)
-        every { realDebridAuthDataStore.state } returns flowOf(
-            RealDebridAuthState(
-                accessToken = "rd-access-token",
-                refreshToken = "refresh-token",
-                userClientId = "client-id",
-                userClientSecret = "client-secret"
-            )
-        )
+        stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
         coJustRun { premiumizeService.refreshAccountState() }
 
-        coEvery { realDebridAuthService.executeAuthorizedRequest<List<RealDebridTorrentDto>>(any()) } returns Response.success(
+        coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
             listOf(
                 RealDebridTorrentDto(
                     id = "multi-link",
@@ -124,7 +107,7 @@ class DebridLibraryServiceTest {
                 )
             )
         )
-        coEvery { realDebridAuthService.executeAuthorizedRequest<List<RealDebridDownloadDto>>(any()) } returns Response.success(
+        coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(
             listOf(
                 RealDebridDownloadDto(
                     id = "download-readme",
@@ -142,6 +125,7 @@ class DebridLibraryServiceTest {
                 )
             )
         )
+        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
 
         val service = DebridLibraryService(
             realDebridApi = realDebridApi,
@@ -158,5 +142,71 @@ class DebridLibraryServiceTest {
         assertEquals("https://rd.test/download/video.mkv", item.directPlaybackUrl)
         assertEquals("Playable.Movie.2024.mkv", item.playbackFilename)
         assertEquals("Playable.Movie.2024", item.name)
+    }
+
+    @Test
+    fun `refresh real debrid keeps torrents whose resolved download is playable even when torrent filename is generic`() = runTest {
+        val realDebridApi = mockk<RealDebridApi>()
+        val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
+        val premiumizeApi = mockk<PremiumizeApi>()
+        val premiumizeService = mockk<PremiumizeService>()
+
+        stubAuthenticatedRealDebrid(realDebridAuthDataStore)
+        every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
+        coJustRun { premiumizeService.refreshAccountState() }
+
+        coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
+            listOf(
+                RealDebridTorrentDto(
+                    id = "generic-name",
+                    filename = "Some torrent job",
+                    status = "downloaded",
+                    links = listOf("https://rd.test/link/video"),
+                    ended = "2026-03-30T12:00:00Z"
+                )
+            )
+        )
+        coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(
+            listOf(
+                RealDebridDownloadDto(
+                    id = "download-video",
+                    filename = "Playable.Movie.2024.mkv",
+                    mimeType = "video/x-matroska",
+                    link = "https://rd.test/link/video",
+                    download = "https://rd.test/download/video.mkv"
+                )
+            )
+        )
+        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
+
+        val service = DebridLibraryService(
+            realDebridApi = realDebridApi,
+            realDebridAuthDataStore = realDebridAuthDataStore,
+            realDebridAuthService = realDebridAuthService,
+            premiumizeApi = premiumizeApi,
+            premiumizeService = premiumizeService
+        )
+
+        service.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
+
+        val item = service.observeItems().first().single()
+
+        assertEquals("https://rd.test/download/video.mkv", item.directPlaybackUrl)
+        assertEquals("Playable.Movie.2024", item.name)
+    }
+
+    private fun stubAuthenticatedRealDebrid(realDebridAuthDataStore: RealDebridAuthDataStore) {
+        val now = System.currentTimeMillis()
+        every { realDebridAuthDataStore.isAuthenticated } returns flowOf(true)
+        every { realDebridAuthDataStore.state } returns flowOf(
+            RealDebridAuthState(
+                accessToken = "rd-access-token",
+                refreshToken = "refresh-token",
+                userClientId = "client-id",
+                userClientSecret = "client-secret",
+                createdAt = now,
+                expiresIn = 3600
+            )
+        )
     }
 }
