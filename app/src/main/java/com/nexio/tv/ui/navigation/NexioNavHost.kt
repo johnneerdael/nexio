@@ -21,6 +21,7 @@ import com.nexio.tv.ui.screens.home.HomeScreen
 import com.nexio.tv.ui.screens.addon.AddonManagerScreen
 import com.nexio.tv.ui.screens.addon.CatalogOrderScreen
 import com.nexio.tv.ui.screens.library.LibraryScreen
+import com.nexio.tv.ui.screens.player.PlayerLaunchSource
 import com.nexio.tv.ui.screens.player.PlayerScreen
 import com.nexio.tv.ui.screens.search.DiscoverScreen
 import com.nexio.tv.ui.screens.search.SearchScreen
@@ -44,6 +45,16 @@ fun NexioNavHost(
     startDestination: String = Screen.Home.route,
     hideBuiltInHeaders: Boolean = false
 ) {
+    fun returnPlayerToLibrary() {
+        val returnedToLibrary = navController.popBackStack(Screen.Library.route, inclusive = false)
+        if (!returnedToLibrary) {
+            navController.navigate(Screen.Library.route) {
+                popUpTo(Screen.Player.route) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
+
     fun isStreamToPlayer(from: String, to: String): Boolean {
         return from.startsWith("stream/") && to.startsWith("player/")
     }
@@ -435,7 +446,8 @@ fun NexioNavHost(
                                 filename = playbackInfo.filename,
                                 videoHash = playbackInfo.videoHash,
                                 videoSize = playbackInfo.videoSize,
-                                startFromBeginning = startFromBeginning
+                                startFromBeginning = startFromBeginning,
+                                launchSource = PlayerLaunchSource.STREAM
                             )
                         )
                     }
@@ -468,7 +480,8 @@ fun NexioNavHost(
                                 filename = playbackInfo.filename,
                                 videoHash = playbackInfo.videoHash,
                                 videoSize = playbackInfo.videoSize,
-                                startFromBeginning = startFromBeginning
+                                startFromBeginning = startFromBeginning,
+                                launchSource = PlayerLaunchSource.STREAM
                             )
                         ) {
                             popUpTo(Screen.Stream.route) { inclusive = true }
@@ -592,14 +605,23 @@ fun NexioNavHost(
                     type = NavType.StringType
                     nullable = true
                     defaultValue = "false"
+                },
+                navArgument("launchSource") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = PlayerLaunchSource.STREAM.routeValue
                 }
             )
         ) { backStackEntry ->
             PlayerScreen(
                 onBackPress = {
+                    val args = requireNotNull(backStackEntry.arguments)
+                    val launchSource = PlayerLaunchSource.from(args.getString("launchSource"))
+                    if (shouldReturnDirectLibraryPlaybackToLibrary(launchSource)) {
+                        return@PlayerScreen returnPlayerToLibrary()
+                    }
                     val returnedToStream = navController.popBackStack(Screen.Stream.route, inclusive = false)
                     if (!returnedToStream) {
-                        val args = requireNotNull(backStackEntry.arguments)
                         val returnToDetailOnBack = args.getString("returnToDetailOnBack")
                             ?.toBooleanStrictOrNull() == true
                         val contentType = args.getString("contentType").orEmpty()
@@ -628,6 +650,10 @@ fun NexioNavHost(
                 },
                 onPlaybackEnded = { nextVideoId, nextSeason, nextEpisode ->
                     val args = requireNotNull(backStackEntry.arguments)
+                    val launchSource = PlayerLaunchSource.from(args.getString("launchSource"))
+                    if (shouldReturnDirectLibraryPlaybackToLibrary(launchSource)) {
+                        return@PlayerScreen returnPlayerToLibrary()
+                    }
                     val contentType = args.getString("contentType").orEmpty()
                     val contentId = args.getString("contentId").orEmpty()
                     val returnToDetailOnBack = args.getString("returnToDetailOnBack")
@@ -663,9 +689,13 @@ fun NexioNavHost(
                     }
                 },
                 onPlaybackErrorBack = {
+                    val args = requireNotNull(backStackEntry.arguments)
+                    val launchSource = PlayerLaunchSource.from(args.getString("launchSource"))
+                    if (shouldReturnDirectLibraryPlaybackToLibrary(launchSource)) {
+                        return@PlayerScreen returnPlayerToLibrary()
+                    }
                     val returnedToStream = navController.popBackStack(Screen.Stream.route, inclusive = false)
                     if (!returnedToStream) {
-                        val args = requireNotNull(backStackEntry.arguments)
                         val videoId = args.getString("videoId").orEmpty()
                         val contentType = args.getString("contentType").orEmpty()
                         val title = args.getString("title").orEmpty()
@@ -756,7 +786,8 @@ fun NexioNavHost(
                                 logo = entry.logo,
                                 videoId = entry.id,
                                 filename = entry.playbackFilename,
-                                headers = entry.playbackHeaders
+                                headers = entry.playbackHeaders,
+                                launchSource = PlayerLaunchSource.LIBRARY_DIRECT
                             )
                         )
                     } else {

@@ -5,6 +5,7 @@ import com.nexio.tv.data.remote.api.PremiumizeApi
 import com.nexio.tv.data.remote.api.RealDebridApi
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeItemDetailsDto
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeListAllFileDto
+import com.nexio.tv.data.remote.dto.debrid.RealDebridDownloadDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentDto
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryListTab
@@ -162,18 +163,34 @@ class DebridLibraryService @Inject constructor(
     }
 
     private suspend fun fetchRealDebridTorrents(): List<LibraryEntry> {
-        val response = realDebridAuthService.executeAuthorizedRequest { authHeader ->
+        val torrentsResponse = realDebridAuthService.executeAuthorizedRequest { authHeader ->
             realDebridApi.getTorrents(authorization = authHeader)
         } ?: return emptyList()
+        val downloadsResponse = realDebridAuthService.executeAuthorizedRequest { authHeader ->
+            realDebridApi.getDownloads(authorization = authHeader)
+        } ?: return emptyList()
 
-        if (!response.isSuccessful) return emptyList()
+        if (!torrentsResponse.isSuccessful || !downloadsResponse.isSuccessful) return emptyList()
 
-        return response.body().orEmpty()
+        val resolvedDownloadsByLink = downloadsResponse.body().orEmpty()
+            .mapNotNull(::toResolvedDownload)
+            .associateBy { it.link }
+
+        return torrentsResponse.body().orEmpty()
             .asSequence()
             .filter { it.status.equals("downloaded", ignoreCase = true) }
             .filter { it.links.orEmpty().isNotEmpty() }
             .filter(::isLikelyPlayable)
-            .map(::mapRealDebridTorrent)
+            .mapNotNull { torrent ->
+                val resolvedDownload = torrent.links.orEmpty()
+                    .mapNotNull { link -> resolvedDownloadsByLink[link] }
+                    .firstOrNull()
+                    ?: return@mapNotNull null
+                mapRealDebridTorrent(
+                    torrent = torrent,
+                    directPlaybackUrl = resolvedDownload.downloadUrl
+                )
+            }
             .toList()
     }
 
@@ -201,9 +218,11 @@ class DebridLibraryService @Inject constructor(
         }
     }
 
-    private fun mapRealDebridTorrent(torrent: RealDebridTorrentDto): LibraryEntry {
+    private fun mapRealDebridTorrent(
+        torrent: RealDebridTorrentDto,
+        directPlaybackUrl: String
+    ): LibraryEntry {
         val filename = torrent.filename.orEmpty().ifBlank { "Real-Debrid Torrent" }
-        val primaryLink = torrent.links?.firstOrNull().orEmpty()
         return LibraryEntry(
             id = "rd:torrent:${torrent.id}",
             type = inferContentType(filename, mimeType = null),
@@ -218,7 +237,7 @@ class DebridLibraryService @Inject constructor(
             addonBaseUrl = null,
             listKeys = setOf(REAL_DEBRID_LIST_KEY),
             listedAt = parseIsoToMillis(torrent.ended ?: torrent.added),
-            directPlaybackUrl = primaryLink,
+            directPlaybackUrl = directPlaybackUrl,
             playbackStreamName = filename,
             playbackFilename = filename
         )
@@ -282,6 +301,15 @@ class DebridLibraryService @Inject constructor(
         return filename.substringBeforeLast('.', filename)
     }
 
+    private fun toResolvedDownload(download: RealDebridDownloadDto): RealDebridResolvedDownload? {
+        val link = download.link?.takeIf { it.isNotBlank() } ?: return null
+        val downloadUrl = download.download?.takeIf { it.isNotBlank() } ?: return null
+        return RealDebridResolvedDownload(
+            link = link,
+            downloadUrl = downloadUrl
+        )
+    }
+
     private fun parseIsoToMillis(rawValue: String?): Long {
         if (rawValue.isNullOrBlank()) return 0L
         return runCatching { OffsetDateTime.parse(rawValue).toInstant().toEpochMilli() }.getOrDefault(0L)
@@ -300,4 +328,9 @@ class DebridLibraryService @Inject constructor(
             Regex("""\b\d{1,2}x\d{1,2}\b""")
         )
     }
+
+    private data class RealDebridResolvedDownload(
+        val link: String,
+        val downloadUrl: String
+    )
 }
