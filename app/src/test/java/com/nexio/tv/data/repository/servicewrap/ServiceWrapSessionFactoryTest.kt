@@ -3,6 +3,8 @@ package com.nexio.tv.data.repository.servicewrap
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.Stream
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -148,6 +150,93 @@ class ServiceWrapSessionFactoryTest {
         advanceUntilIdle()
         assertEquals(1, batches.size)
         assertTrue(batches.single().wrappedStreams.isEmpty())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `session reuses one hash resolution while emitting wrapped results for every addon that reported it`() = runTest {
+        val observedHashes = mutableListOf<String>()
+        val resolver = object : ServiceWrapResolver {
+            override suspend fun resolve(
+                candidate: WrapCandidate,
+                requestContext: ServiceWrapRequestContext
+            ): List<ResolvedServiceWrapStream> {
+                observedHashes += candidate.normalizedInfoHash
+                return listOf(
+                    ResolvedServiceWrapStream(
+                        provider = ServiceWrapProvider.REAL_DEBRID,
+                        normalizedInfoHash = candidate.normalizedInfoHash,
+                        playbackUrl = "https://rd.example/${candidate.normalizedInfoHash}",
+                        selectedFileIndex = 0,
+                        filename = "Show.S01E02.1080p.WEB-DL.mkv",
+                        folderName = "Show Season 1",
+                        sizeBytes = 4_000_000_000L,
+                        durationMs = 3_600_000L,
+                        bitrate = 8_000_000L,
+                        width = 1920,
+                        height = 1080
+                    )
+                )
+            }
+        }
+        val factory = ServiceWrapSessionFactory(
+            extractor = WrapCandidateExtractor(),
+            resolver = resolver,
+            wrappedStreamBuilder = WrappedStreamBuilder()
+        )
+        val batches = mutableListOf<ServiceWrapResolvedBatch>()
+        val session = factory.createSession(
+            requestContext = ServiceWrapRequestContext(
+                contentType = "series",
+                season = 1,
+                episode = 2
+            ),
+            scope = this,
+            onResolved = { batch -> batches += batch }
+        )
+
+        val hash = "FEDCBA9876543210FEDCBA9876543210FEDCBA98"
+        val addonA = async {
+            session.processAddonStreams(
+                addonName = "Addon A",
+                addonLogo = null,
+                streams = listOf(
+                    stream(
+                        name = "A Candidate",
+                        infoHash = hash,
+                        url = null,
+                        description = "Show.S01E02.1080p.WEB-DL"
+                    )
+                )
+            )
+        }
+        val addonB = async {
+            session.processAddonStreams(
+                addonName = "Addon B",
+                addonLogo = null,
+                streams = listOf(
+                    stream(
+                        name = "B Candidate",
+                        infoHash = hash,
+                        url = null,
+                        description = "Show.S01E02.1080p.WEB-DL"
+                    )
+                )
+            )
+        }
+
+        val results = awaitAll(addonA, addonB)
+        assertTrue(results.all { it.visibleStreams.isEmpty() })
+        assertEquals(2, results.sumOf { it.launchedWrapCount })
+
+        advanceUntilIdle()
+
+        assertEquals(listOf(hash), observedHashes)
+        assertEquals(2, batches.size)
+        assertEquals(setOf("Addon A", "Addon B"), batches.map { it.addonName }.toSet())
+        assertTrue(batches.all { batch ->
+            batch.wrappedStreams.size == 1 && batch.wrappedStreams.single().addonName == batch.addonName
+        })
     }
 
     private fun stream(
