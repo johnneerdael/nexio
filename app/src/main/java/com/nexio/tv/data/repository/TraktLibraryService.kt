@@ -366,7 +366,9 @@ class TraktLibraryService @Inject constructor(
             try {
                 val previous = snapshotState.value
                 val refreshed = runCatching { fetchSnapshot() }.getOrNull()
-                val snapshotToUse = refreshed ?: previous
+                val baseSnapshot = applyMetadata(refreshed ?: previous, metadataState.value)
+                val primedMetadata = primeMetadata(baseSnapshot.allEntries)
+                val snapshotToUse = applyMetadata(baseSnapshot, primedMetadata)
                 snapshotState.value = snapshotToUse
                 lastRefreshMs = now
                 hydrateMetadata(snapshotToUse.allEntries)
@@ -405,7 +407,7 @@ class TraktLibraryService @Inject constructor(
         mutation: suspend () -> Unit
     ) {
         val before = snapshotState.value
-        val optimisticSnapshot = optimistic(before)
+        val optimisticSnapshot = applyMetadata(optimistic(before), metadataState.value)
         snapshotState.value = optimisticSnapshot
         hydrateMetadata(optimisticSnapshot.allEntries)
         try {
@@ -903,6 +905,66 @@ class TraktLibraryService @Inject constructor(
                 genres = if (entry.genres.isEmpty()) metadata.genres else entry.genres
             )
         }
+    }
+
+    private fun applyMetadata(
+        snapshot: Snapshot,
+        metadataMap: Map<String, LibraryMetadata>
+    ): Snapshot {
+        if (snapshot.allEntries.isEmpty() || metadataMap.isEmpty()) return snapshot
+        return snapshot.copy(
+            entriesByList = snapshot.entriesByList.mapValues { (_, entries) ->
+                enrichEntries(entries, metadataMap)
+            },
+            allEntries = enrichEntries(snapshot.allEntries, metadataMap)
+        )
+    }
+
+    private suspend fun primeMetadata(entries: List<LibraryEntry>): Map<String, LibraryMetadata> {
+        if (entries.isEmpty()) return metadataState.value
+
+        val claimedEntries = metadataMutex.withLock {
+            val current = metadataState.value
+            entries.take(metadataHydrationLimit)
+                .map { contentKey(it.id, it.type) to it }
+                .distinctBy { it.first }
+                .mapNotNull { (key, entry) ->
+                    if (current.containsKey(key) || inFlightMetadataKeys.contains(key)) {
+                        null
+                    } else {
+                        inFlightMetadataKeys.add(key)
+                        key to entry
+                    }
+                }
+        }
+
+        if (claimedEntries.isEmpty()) return metadataState.value
+
+        val fetchedMetadata = try {
+            coroutineScope {
+                claimedEntries.map { (key, entry) ->
+                    async {
+                        metadataFetchSemaphore.withPermit {
+                            key to fetchMetadata(entry)
+                        }
+                    }
+                }.mapNotNull { deferred ->
+                    val (key, metadata) = deferred.await()
+                    metadata?.let { key to it }
+                }.toMap()
+            }
+        } finally {
+            metadataMutex.withLock {
+                claimedEntries.forEach { (key, _) -> inFlightMetadataKeys.remove(key) }
+            }
+        }
+
+        if (fetchedMetadata.isEmpty()) return metadataState.value
+
+        metadataState.update { current ->
+            current + fetchedMetadata
+        }
+        return metadataState.value
     }
 
     private fun hydrateMetadata(entries: List<LibraryEntry>) {
