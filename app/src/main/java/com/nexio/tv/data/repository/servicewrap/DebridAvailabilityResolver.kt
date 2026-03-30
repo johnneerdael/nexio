@@ -109,9 +109,10 @@ class DebridAvailabilityResolver @Inject constructor(
         val availabilityBody = availabilityResponse.body() ?: return emptyList()
         if (!availabilityResponse.isSuccessful) return emptyList()
 
-        val variants = availabilityBody[candidate.normalizedInfoHash]
-            ?.get("rd")
-            .orEmpty()
+        val variants = extractRealDebridVariants(
+            availabilityBody = availabilityBody,
+            normalizedInfoHash = candidate.normalizedInfoHash
+        )
         if (variants.isEmpty()) return emptyList()
 
         val selectedVariant = chooseRealDebridVariant(variants, candidate, requestContext) ?: return emptyList()
@@ -417,4 +418,24 @@ class DebridAvailabilityResolver @Inject constructor(
             "webm"
         )
     }
+}
+
+internal fun extractRealDebridVariants(
+    availabilityBody: Map<String, Map<String, List<Map<String, RealDebridInstantAvailabilityFileDto>>>>,
+    normalizedInfoHash: String
+): List<Map<String, RealDebridInstantAvailabilityFileDto>> {
+    val providerMap = availabilityBody[normalizedInfoHash]
+        ?: availabilityBody[normalizedInfoHash.lowercase(Locale.US)]
+        ?: availabilityBody[normalizedInfoHash.uppercase(Locale.US)]
+        ?: availabilityBody.entries.firstOrNull { (hash, _) ->
+            hash.equals(normalizedInfoHash, ignoreCase = true)
+        }?.value
+        ?: return emptyList()
+
+    return providerMap["rd"]
+        ?: providerMap["RD"]
+        ?: providerMap.entries.firstOrNull { (providerId, _) ->
+            providerId.equals("rd", ignoreCase = true)
+        }?.value
+        .orEmpty()
 }
