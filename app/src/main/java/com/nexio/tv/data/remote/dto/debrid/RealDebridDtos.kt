@@ -48,3 +48,35 @@ data class RealDebridTorrentDto(
     @Json(name = "added") val added: String? = null,
     @Json(name = "ended") val ended: String? = null
 )
+
+data class RealDebridTorrentInfoDto(
+    @Json(name = "id") val id: String,
+    @Json(name = "filename") val filename: String? = null,
+    @Json(name = "original_filename") val originalFilename: String? = null,
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "links") val links: List<String>? = null,
+    @Json(name = "files") val files: List<RealDebridTorrentFileDto>? = null,
+    @Json(name = "bytes") val bytes: Long? = null,
+    @Json(name = "progress") val progress: Int? = null,
+    @Json(name = "added") val added: String? = null,
+    @Json(name = "ended") val ended: String? = null
+)
+
+data class RealDebridTorrentFileDto(
+    @Json(name = "id") val id: Int,
+    @Json(name = "path") val path: String? = null,
+    @Json(name = "bytes") val bytes: Long? = null,
+    @Json(name = "selected") val selected: Int? = null
+)
+
+data class RealDebridUnrestrictLinkDto(
+    @Json(name = "id") val id: String,
+    @Json(name = "filename") val filename: String? = null,
+    @Json(name = "mimeType") val mimeType: String? = null,
+    @Json(name = "filesize") val fileSize: Long? = null,
+    @Json(name = "link") val link: String? = null,
+    @Json(name = "host") val host: String? = null,
+    @Json(name = "chunks") val chunks: Int? = null,
+    @Json(name = "download") val download: String? = null,
+    @Json(name = "streamable") val streamable: Int? = null
+)
