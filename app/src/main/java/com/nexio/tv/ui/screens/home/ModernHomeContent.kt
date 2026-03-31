@@ -140,6 +140,20 @@ internal fun shouldUnlockModernHomeTrailerAutoplay(
     selectionStillFocused &&
     lifecycleResumed
 
+internal fun resolveEffectiveModernHomeTrailerPlaybackTarget(
+    requestedTarget: com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget,
+    effectiveExpandEnabled: Boolean
+): com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget {
+    return if (
+        requestedTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD &&
+        !effectiveExpandEnabled
+    ) {
+        com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
+    } else {
+        requestedTarget
+    }
+}
+
 @Composable
 internal fun ModernHomeContent(
     contentState: ModernHomeContentState,
@@ -178,6 +192,10 @@ internal fun ModernHomeContent(
     val effectiveExpandEnabled =
         (contentState.focusedPosterBackdropExpandEnabled && expandControlAvailable) ||
             landscapeExpandedCardMode
+    val effectiveTrailerPlaybackTarget = resolveEffectiveModernHomeTrailerPlaybackTarget(
+        requestedTarget = trailerPlaybackTarget,
+        effectiveExpandEnabled = effectiveExpandEnabled
+    )
     val shouldActivateFocusedPosterFlow = effectiveExpandEnabled
     val visibleCatalogRows = remember(contentState.catalogRows) {
         contentState.catalogRows.filter { it.items.isNotEmpty() }
@@ -677,7 +695,7 @@ internal fun ModernHomeContent(
         val unlockedTrailerForFocusedItem = unlockedTrailerFocusKey == focusedCatalogSelection?.focusKey
         val heroTrailerPreviewUrl = if (
             contentState.focusedPosterBackdropTrailerEnabled &&
-            trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
+            effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
             unlockedTrailerForFocusedItem
         ) {
             heroTrailerItemId?.let { contentState.trailerPreviewUrls[it] }
@@ -686,7 +704,7 @@ internal fun ModernHomeContent(
         }
         val heroTrailerPreviewAudioUrl = if (
             contentState.focusedPosterBackdropTrailerEnabled &&
-            trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
+            effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
             unlockedTrailerForFocusedItem
         ) {
             heroTrailerItemId?.let { contentState.trailerPreviewAudioUrls[it] }
@@ -695,7 +713,7 @@ internal fun ModernHomeContent(
         }
         val heroTrailerExternalUrl = if (
             contentState.focusedPosterBackdropTrailerEnabled &&
-            trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
+            effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
             unlockedTrailerForFocusedItem
         ) {
             heroTrailerItemId?.let { contentState.trailerPreviewExternalUrls[it] }
@@ -705,7 +723,7 @@ internal fun ModernHomeContent(
         val heroTrailerActive = !heroTrailerPreviewUrl.isNullOrBlank() || !heroTrailerExternalUrl.isNullOrBlank()
         val expandedTrailerItemId = focusedCatalogSelection?.payload?.itemId
         val expandedCardTrailerActive = if (
-            trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD &&
+            effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD &&
             !expandedCatalogFocusKey.isNullOrBlank() &&
             expandedTrailerItemId != null &&
             unlockedTrailerForFocusedItem
@@ -716,7 +734,7 @@ internal fun ModernHomeContent(
             false
         }
         val internalHomeTrailerPlaying = if (
-            trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
+            effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
         ) {
             !heroTrailerPreviewUrl.isNullOrBlank()
         } else {
@@ -811,9 +829,9 @@ internal fun ModernHomeContent(
                 .fillMaxWidth(MODERN_HERO_TEXT_WIDTH_FRACTION)
         )
 
-        LaunchedEffect(heroTrailerItemId, heroTrailerExternalUrl, trailerPlaybackTarget) {
+        LaunchedEffect(heroTrailerItemId, heroTrailerExternalUrl, effectiveTrailerPlaybackTarget) {
             if (heroTrailerItemId == null || heroTrailerExternalUrl.isNullOrBlank()) return@LaunchedEffect
-            if (trailerPlaybackTarget != com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA) return@LaunchedEffect
+            if (effectiveTrailerPlaybackTarget != com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA) return@LaunchedEffect
             val launchKey = "$heroTrailerItemId|$heroTrailerExternalUrl"
             if (lastExternalTrailerLaunchKey == launchKey) return@LaunchedEffect
             lastExternalTrailerLaunchKey = launchKey
@@ -936,8 +954,7 @@ internal fun ModernHomeContent(
                         } else {
                             null
                         },
-                        focusedPosterBackdropTrailerPlaybackTarget =
-                            contentState.focusedPosterBackdropTrailerPlaybackTarget,
+                        focusedPosterBackdropTrailerPlaybackTarget = effectiveTrailerPlaybackTarget,
                         trailerPlaybackUnlockedFocusKey = unlockedTrailerFocusKey,
                         focusedPosterBackdropTrailerMuted =
                             contentState.focusedPosterBackdropTrailerMuted,

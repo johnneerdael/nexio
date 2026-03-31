@@ -48,8 +48,6 @@ fun NexioNavHost(
     idleScreensaverVisible: Boolean = false,
     onModernHomeTrailerPlaybackStarted: () -> Unit = {},
     onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit = {},
-    onDetailTrailerPlaybackStarted: () -> Unit = {},
-    onDetailTrailerPlaybackStopped: () -> Unit = {},
     onDetailTrailerPlaybackActiveChanged: (Boolean) -> Unit = {}
 ) {
     fun returnPlayerToLibrary() {
@@ -266,9 +264,7 @@ fun NexioNavHost(
             MetaDetailsScreen(
                 returnFocusSeason = returnFocusSeason,
                 returnFocusEpisode = returnFocusEpisode,
-                onDetailTrailerPlaybackStarted = onDetailTrailerPlaybackStarted,
-                onDetailTrailerPlaybackStopped = onDetailTrailerPlaybackStopped,
-                onDetailTrailerPlaybackActiveChanged = onDetailTrailerPlaybackActiveChanged,
+                onTrailerPlaybackActiveChanged = onDetailTrailerPlaybackActiveChanged,
                 onBackPress = { navController.popBackStack() },
                 onNavigateToCastDetail = { personId, personName, preferCrew ->
                     navController.navigate(Screen.CastDetail.createRoute(personId, personName, preferCrew))

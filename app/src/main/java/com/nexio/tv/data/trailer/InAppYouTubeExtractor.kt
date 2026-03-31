@@ -44,7 +44,7 @@ private data class WatchConfig(
     val visitorData: String?
 )
 
-private data class StreamCandidate(
+internal data class StreamCandidate(
     val client: String,
     val priority: Int,
     val url: String,
@@ -73,6 +73,34 @@ private data class ManifestCandidate(
 )
 
 private val DEFAULT_HEADERS = buildStableYouTubeRequestHeaders()
+
+internal fun sortTrailerCandidatesForPlayback(items: List<StreamCandidate>): List<StreamCandidate> {
+    return items.sortedWith(
+        compareBy<StreamCandidate> { trailerContainerPreference(it.ext) }
+            .thenBy { if (it.hasN) 1 else 0 }
+            .thenByDescending { it.score }
+            .thenBy { it.priority }
+    )
+}
+
+internal fun selectPreferredCombinedTrailerUrl(
+    manifestUrl: String?,
+    progressiveUrl: String?
+): String? {
+    val normalizedManifestUrl = manifestUrl?.takeIf { it.isNotBlank() }
+    if (normalizedManifestUrl != null) {
+        return normalizedManifestUrl
+    }
+    return progressiveUrl?.takeIf { it.isNotBlank() }
+}
+
+private fun trailerContainerPreference(ext: String): Int {
+    return when (ext.lowercase()) {
+        "mp4", "m4a" -> 0
+        "webm" -> 1
+        else -> 2
+    }
+}
 
 private val CLIENTS = listOf(
     YouTubeClient(
@@ -316,18 +344,13 @@ class InAppYouTubeExtractor @Inject constructor() {
             }
         }
 
-        val bestProgressive = sortCandidates(progressive).firstOrNull()
+        val bestProgressive = sortTrailerCandidatesForPlayback(progressive).firstOrNull()
         val bestVideo = pickBestForClient(adaptiveVideo, PREFERRED_SEPARATE_CLIENT)
         val bestAudio = pickBestForClient(adaptiveAudio, PREFERRED_SEPARATE_CLIENT)
-
-        val bestCombinedIsManifest = bestManifest != null &&
-            (bestProgressive == null || bestManifest.height > bestProgressive.height)
-
-        val combinedUrl = if (bestCombinedIsManifest) {
-            bestManifest.manifestUrl
-        } else {
-            bestProgressive?.url
-        }
+        val combinedUrl = selectPreferredCombinedTrailerUrl(
+            manifestUrl = bestManifest?.manifestUrl,
+            progressiveUrl = bestProgressive?.url
+        )
 
         val playbackSource = selectPreferredTrailerPlaybackSource(
             combinedUrl = combinedUrl?.let { resolveReachableUrl(it) },
@@ -340,6 +363,10 @@ class InAppYouTubeExtractor @Inject constructor() {
                 TAG,
                 "Kotlin selection video=${summarizeUrl(playbackSource.videoUrl)} " +
                     "audioPresent=${!playbackSource.audioUrl.isNullOrBlank()} " +
+                    "combinedSelected=${!combinedUrl.isNullOrBlank()} " +
+                    "manifestAvailable=${bestManifest != null} " +
+                    "bestProgressiveExt=${bestProgressive?.ext.orEmpty()} " +
+                    "bestAdaptiveVideoExt=${bestVideo?.ext.orEmpty()} " +
                     "progressiveCount=${progressive.size} " +
                     "adaptiveVideoCount=${adaptiveVideo.size} adaptiveAudioCount=${adaptiveAudio.size}"
             )
@@ -567,29 +594,12 @@ class InAppYouTubeExtractor @Inject constructor() {
         return bitrate * 1_000_000.0 + audioSampleRate
     }
 
-    private fun sortCandidates(items: List<StreamCandidate>): List<StreamCandidate> {
-        return items.sortedWith(
-            compareByDescending<StreamCandidate> { it.score }
-                .thenBy { if (it.hasN) 1 else 0 }
-                .thenBy { containerPreference(it.ext) }
-                .thenBy { it.priority }
-        )
-    }
-
-    private fun containerPreference(ext: String): Int {
-        return when (ext.lowercase()) {
-            "mp4", "m4a" -> 0
-            "webm" -> 1
-            else -> 2
-        }
-    }
-
     private fun pickBestForClient(items: List<StreamCandidate>, clientKey: String): StreamCandidate? {
         val sameClient = items.filter { it.client == clientKey }
         if (sameClient.isNotEmpty()) {
-            return sortCandidates(sameClient).firstOrNull()
+            return sortTrailerCandidatesForPlayback(sameClient).firstOrNull()
         }
-        return sortCandidates(items).firstOrNull()
+        return sortTrailerCandidatesForPlayback(items).firstOrNull()
     }
 
     private suspend fun resolveReachableUrl(url: String): String {

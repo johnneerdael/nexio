@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.components
 
+import android.net.Uri
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
@@ -32,14 +33,31 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.data.trailer.YoutubeChunkedDataSourceFactory
+import com.nexio.tv.data.trailer.shouldUseYouTubeChunkedTransfer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.delay
 
 private const val TAG = "TrailerPlayer"
+
+internal fun shouldUseChunkedTrailerDataSource(
+    trailerUrl: String?,
+    trailerAudioUrl: String?
+): Boolean {
+    val videoUsesChunking = trailerUrl
+        ?.takeIf { it.isNotBlank() }
+        ?.let { shouldUseYouTubeChunkedTransfer(Uri.parse(it)) }
+        ?: false
+    val audioUsesChunking = trailerAudioUrl
+        ?.takeIf { it.isNotBlank() }
+        ?.let { shouldUseYouTubeChunkedTransfer(Uri.parse(it)) }
+        ?: false
+    return videoUsesChunking || audioUsesChunking
+}
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
@@ -109,14 +127,23 @@ fun TrailerPlayer(
     }
     val releaseCalled = remember(trailerPlayer) { AtomicBoolean(false) }
 
-    fun buildTrailerMediaSourceFactory() = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
+    fun buildTrailerMediaSourceFactory(
+        videoUrl: String,
+        audioUrl: String?
+    ): DefaultMediaSourceFactory {
+        return if (shouldUseChunkedTrailerDataSource(videoUrl, audioUrl)) {
+            DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
+        } else {
+            DefaultMediaSourceFactory(DefaultHttpDataSource.Factory())
+        }
+    }
 
     fun prepareTrailerMediaSource(
         player: ExoPlayer,
         videoUrl: String,
         audioUrl: String?
     ) {
-        val mediaSourceFactory = buildTrailerMediaSourceFactory()
+        val mediaSourceFactory = buildTrailerMediaSourceFactory(videoUrl, audioUrl)
         if (!audioUrl.isNullOrBlank()) {
             val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(videoUrl))
             val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(audioUrl))

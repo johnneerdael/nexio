@@ -1,7 +1,9 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ModernHomeTrailerBehaviorTest {
@@ -61,5 +63,27 @@ class ModernHomeTrailerBehaviorTest {
         assertTrue(shouldDismissModernHomeTrailerOnBack(heroTrailerActive = true, expandedCardTrailerActive = false))
         assertTrue(shouldDismissModernHomeTrailerOnBack(heroTrailerActive = false, expandedCardTrailerActive = true))
         assertFalse(shouldDismissModernHomeTrailerOnBack(heroTrailerActive = false, expandedCardTrailerActive = false))
+    }
+
+    @Test
+    fun `expanded card trailer target falls back to hero media when expanded playback is unavailable`() {
+        assertEquals(
+            FocusedPosterTrailerPlaybackTarget.HERO_MEDIA,
+            resolveEffectiveModernHomeTrailerPlaybackTarget(
+                requestedTarget = FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD,
+                effectiveExpandEnabled = false
+            )
+        )
+    }
+
+    @Test
+    fun `expanded card trailer target remains expanded when expanded playback is available`() {
+        assertEquals(
+            FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD,
+            resolveEffectiveModernHomeTrailerPlaybackTarget(
+                requestedTarget = FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD,
+                effectiveExpandEnabled = true
+            )
+        )
     }
 }

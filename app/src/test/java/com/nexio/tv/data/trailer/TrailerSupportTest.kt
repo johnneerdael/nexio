@@ -11,6 +11,48 @@ import org.junit.Test
 class TrailerSupportTest {
 
     @Test
+    fun `selectPreferredCombinedTrailerUrl prefers manifest for playback compatibility`() {
+        val selected = selectPreferredCombinedTrailerUrl(
+            manifestUrl = "https://example.com/trailer/master.m3u8",
+            progressiveUrl = "https://example.com/trailer/video.webm"
+        )
+
+        assertEquals("https://example.com/trailer/master.m3u8", selected)
+    }
+
+    @Test
+    fun `sortTrailerCandidatesForPlayback prefers mp4 over higher spec webm`() {
+        val sorted = sortTrailerCandidatesForPlayback(
+            listOf(
+                StreamCandidate(
+                    client = "android_vr",
+                    priority = 0,
+                    url = "https://example.com/trailer/video.webm",
+                    score = 1080_060_000.0,
+                    hasN = false,
+                    itag = "303",
+                    height = 1080,
+                    fps = 60,
+                    ext = "webm"
+                ),
+                StreamCandidate(
+                    client = "ios",
+                    priority = 1,
+                    url = "https://example.com/trailer/video.mp4",
+                    score = 720_030_000.0,
+                    hasN = false,
+                    itag = "22",
+                    height = 720,
+                    fps = 30,
+                    ext = "mp4"
+                )
+            )
+        )
+
+        assertEquals("https://example.com/trailer/video.mp4", sorted.first().url)
+    }
+
+    @Test
     fun `selectPreferredTrailerPlaybackSource prefers combined trailer source over split adaptive playback`() {
         val selected = selectPreferredTrailerPlaybackSource(
             combinedUrl = "https://example.com/trailer/master.m3u8",
