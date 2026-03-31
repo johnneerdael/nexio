@@ -72,8 +72,16 @@ Nexio can render inline icon tokens such as `[[icon:4k]]`, `[[icon:ddp]]`, and `
 Use them for:
 - resolution badges
 - audio and HDR badges
-- service or network markers
+- TV studio markers such as Netflix or Disney+
+- debrid service markers such as Real-Debrid, Premiumize, TorBox, or AllDebrid
 - special release labels such as SeaDex or repack hints
+
+The built-in `Universal` formatter uses this directly now:
+- line 1 uses headline resolution badges like `[[icon:4k]]`
+- line 2 uses visual and audio badges like `[[icon:dovi]]`, `[[icon:hdr10]]`, and `[[icon:atmos]]`
+- line 4 can render provider icons such as `[[icon:netflix]]`, debrid icons such as `[[icon:realdebrid]]`, `[[icon:premiumize]]`, `[[icon:torbox]]`, and `[[icon:alldebrid]]`, and usenet provider icons such as `[[icon:easynews]]`, `[[icon:nzbdav]]`, `[[icon:altmount]]`, `[[icon:stremionntp]]`, and `[[icon:stremthrunewz]]`
+
+If you are building your own formatter, the same icon tokens are available in custom templates.
 
 ## Custom formatter workflow
 1. Select `Custom` from the formatter list.

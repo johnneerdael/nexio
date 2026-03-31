@@ -87,6 +87,30 @@ You can place icon tokens anywhere plain text is allowed:
 | `[[icon:peacock]]` | Peacock |
 | `[[icon:crunchyroll]]` | Crunchyroll |
 
+#### Debrid and cloud providers
+| Token | Meaning |
+| :--- | :--- |
+| `[[icon:realdebrid]]` | Real-Debrid |
+| `[[icon:premiumize]]` | Premiumize |
+| `[[icon:alldebrid]]` | AllDebrid |
+| `[[icon:debridlink]]` | Debrid-Link |
+| `[[icon:torbox]]` | TorBox |
+| `[[icon:offcloud]]` | Offcloud |
+| `[[icon:putio]]` | put.io |
+| `[[icon:easydebrid]]` | EasyDebrid |
+| `[[icon:debrider]]` | Debrider |
+| `[[icon:pikpak]]` | PikPak |
+| `[[icon:seedr]]` | Seedr |
+
+#### Usenet providers
+| Token | Meaning |
+| :--- | :--- |
+| `[[icon:easynews]]` | Easynews |
+| `[[icon:nzbdav]]` | NzbDAV |
+| `[[icon:altmount]]` | AltMount |
+| `[[icon:stremionntp]]` | Stremio NNTP |
+| `[[icon:stremthrunewz]]` | StremThru Newz |
+
 #### Audio formats
 | Token | Meaning |
 | :--- | :--- |
@@ -119,6 +143,19 @@ You can place icon tokens anywhere plain text is allowed:
 - Keep them near the start of a title or the start of a short metadata line so they read like badges rather than decoration.
 - Prefer one or two strong icons over a long chain of small badges.
 - If you need broad compatibility outside icon-aware surfaces, include a text fallback nearby such as `{stream.audioTags::join(' • ')}`.
+
+### Universal formatter examples
+The built-in `Universal` formatter currently uses icon tokens in three main places:
+
+- Title line: headline resolution badges such as `[[icon:4k]]`, `[[icon:2k]]`, and `[[icon:fullhd]]`
+- Badge line: visual and audio badges such as `[[icon:dovi]]`, `[[icon:hdr10]]`, `[[icon:atmos]]`, and `[[icon:dtshd]]`
+- Provider line: filename-based platform icons such as `[[icon:netflix]]` plus service icons such as `[[icon:realdebrid]]`, `[[icon:premiumize]]`, `[[icon:torbox]]`, `[[icon:alldebrid]]`, `[[icon:easynews]]`, or `[[icon:stremthrunewz]]`
+
+That means custom templates can mix platform and debrid badges in the same line, for example:
+
+```text
+{stream.filename::~NF["[[icon:netflix]] Netflix"||""]}{stream.filename::~NF::and::service.name::exists[" • "||""]}{service.name::~Real-Debrid["[[icon:realdebrid]] Real-Debrid"||"{service.name}"]}
+```
 
 ## Variables
 
