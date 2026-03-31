@@ -454,6 +454,12 @@ class TraktProgressService @Inject constructor(
         return hasLoadedRemoteProgress
     }
 
+    fun observeRemoteWatchedSeriesSeedsLoaded(): Flow<Boolean> {
+        return watchedShowsState
+            .map { hasLoadedWatchedShows }
+            .distinctUntilChanged()
+    }
+
     fun observeContinueWatchingNextUp(): Flow<List<NextUpEntry>> {
         return combine(
             myShowsNextUp,
