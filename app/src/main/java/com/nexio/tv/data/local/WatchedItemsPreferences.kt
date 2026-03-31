@@ -13,8 +13,10 @@ import com.nexio.tv.domain.model.WatchedItem
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -50,8 +52,13 @@ class WatchedItemsPreferences internal constructor(
         .distinctUntilChanged()
 
     private val allItems: Flow<List<WatchedItem>> = sessionIdentities.flatMapLatest { identity ->
-        dataStore.data.map { preferences ->
-            resolveStoredItems(preferences, identity)
+        flow {
+            migrateSourcesIntoActiveSession(identity)
+            emitAll(
+                dataStore.data.map { preferences ->
+                    decodeWatchedItems(preferences[watchedItemsKey(identity.primaryKey)] ?: emptySet())
+                }
+            )
         }
     }
 
@@ -80,7 +87,7 @@ class WatchedItemsPreferences internal constructor(
         dataStore.edit { preferences ->
             val identity = currentSessionIdentity()
             val key = watchedItemsKey(identity.primaryKey)
-            val currentItems = migrateLegacyItemsIfNeeded(preferences, identity)
+            val currentItems = migrateSourcesIntoActiveSession(preferences, identity)
             val updated = upsertWatchedItem(
                 items = currentItems,
                 item = item,
@@ -106,7 +113,7 @@ class WatchedItemsPreferences internal constructor(
         dataStore.edit { preferences ->
             val identity = currentSessionIdentity()
             val key = watchedItemsKey(identity.primaryKey)
-            val currentItems = migrateLegacyItemsIfNeeded(preferences, identity)
+            val currentItems = migrateSourcesIntoActiveSession(preferences, identity)
             val updated = removeWatchedItems(
                 items = currentItems,
                 contentIds = contentIds,
@@ -118,12 +125,7 @@ class WatchedItemsPreferences internal constructor(
     }
 
     suspend fun getAllItems(): List<WatchedItem> {
-        dataStore.edit { preferences ->
-            migrateLegacyItemsIfNeeded(
-                preferences = preferences,
-                identity = currentSessionIdentity()
-            )
-        }
+        migrateSourcesIntoActiveSession(currentSessionIdentity())
         return allItems.first()
     }
 
@@ -131,7 +133,7 @@ class WatchedItemsPreferences internal constructor(
         dataStore.edit { preferences ->
             val identity = currentSessionIdentity()
             val key = watchedItemsKey(identity.primaryKey)
-            val currentItems = migrateLegacyItemsIfNeeded(preferences, identity)
+            val currentItems = migrateSourcesIntoActiveSession(preferences, identity)
             val localKeys = currentItems.map { Triple(it.contentId, it.season, it.episode) }.toSet()
 
             val newItems = remoteItems.filter { remote ->
@@ -148,7 +150,7 @@ class WatchedItemsPreferences internal constructor(
         dataStore.edit { preferences ->
             val identity = currentSessionIdentity()
             val key = watchedItemsKey(identity.primaryKey)
-            val currentItems = migrateLegacyItemsIfNeeded(preferences, identity)
+            val currentItems = migrateSourcesIntoActiveSession(preferences, identity)
             val current = encodeWatchedItems(currentItems)
             if (remoteItems.isEmpty() && current.isNotEmpty()) {
                 Log.w(TAG, "replaceWithRemoteItems: remote list empty while local has ${current.size} entries; preserving local watched items")
@@ -169,26 +171,35 @@ class WatchedItemsPreferences internal constructor(
     private fun watchedItemsKey(sessionKey: String) =
         stringSetPreferencesKey(WATCHED_ITEMS_KEY_PREFIX + sessionKey.lowercase())
 
-    private fun resolveStoredItems(
+    private suspend fun migrateSourcesIntoActiveSession(
+        identity: TraktSessionIdentity
+    ) {
+        dataStore.edit { preferences ->
+            migrateSourcesIntoActiveSession(preferences, identity)
+        }
+    }
+
+    private fun readMigrationSourceItems(
         preferences: Preferences,
         identity: TraktSessionIdentity
     ): List<WatchedItem> {
-        val resolved = buildList {
-            addAll(decodeWatchedItems(preferences[watchedItemsKey(identity.primaryKey)] ?: emptySet()))
+        return buildList {
             addAll(decodeWatchedItems(preferences[legacyWatchedItemsKey] ?: emptySet()))
             identity.migrationKeys.forEach { key ->
                 addAll(decodeWatchedItems(preferences[watchedItemsKey(key)] ?: emptySet()))
             }
         }
-        return mergeWatchedItems(resolved)
     }
 
-    private fun migrateLegacyItemsIfNeeded(
+    private fun migrateSourcesIntoActiveSession(
         preferences: MutablePreferences,
         identity: TraktSessionIdentity
     ): List<WatchedItem> {
-        val merged = resolveStoredItems(preferences, identity)
         val primaryKey = watchedItemsKey(identity.primaryKey)
+        val merged = mergeWatchedItems(
+            decodeWatchedItems(preferences[primaryKey] ?: emptySet()) +
+                readMigrationSourceItems(preferences, identity)
+        )
         preferences[primaryKey] = encodeWatchedItems(merged)
         preferences.remove(legacyWatchedItemsKey)
         identity.migrationKeys.forEach { migrationKey ->

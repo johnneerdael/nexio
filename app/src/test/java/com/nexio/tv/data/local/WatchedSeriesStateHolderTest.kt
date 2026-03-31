@@ -130,12 +130,48 @@ class WatchedSeriesStateHolderTest {
     }
 
     @Test
-    fun `token derived holder bucket migrates when user metadata arrives`() = runTest {
+    fun `guest holder bucket migrates into session identity`() = runTest {
         val prefs = InMemorySharedPreferences()
         val authState = MutableStateFlow(
             TraktAuthState(
                 accessToken = "access",
                 refreshToken = "refresh",
+                sessionIdentity = "session-123",
+                username = null,
+                userSlug = null
+            )
+        )
+        val context = mockk<Context> {
+            every {
+                getSharedPreferences("watched_series_state", Context.MODE_PRIVATE)
+            } returns prefs
+        }
+        val authStore = mockk<TraktAuthDataStore> {
+            every { state } returns authState
+        }
+
+        prefs.edit()
+            .putString(
+                "entries_guest",
+                "[{\"ids\":[\"tmdb:101\",\"tt1234567\"]}]"
+            )
+            .apply()
+        val holder = WatchedSeriesStateHolder(context, authStore, backgroundScope)
+
+        advanceUntilIdle()
+
+        assertEquals("session-123", holder.activeSessionKey.value)
+        assertTrue(holder.isSeriesWatched("tmdb:101"))
+    }
+
+    @Test
+    fun `session identity holder bucket migrates when user metadata arrives`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        val authState = MutableStateFlow(
+            TraktAuthState(
+                accessToken = "access",
+                refreshToken = "refresh",
+                sessionIdentity = "session-123",
                 username = null,
                 userSlug = null
             )
@@ -152,7 +188,7 @@ class WatchedSeriesStateHolderTest {
         val holder = WatchedSeriesStateHolder(context, authStore, backgroundScope)
         holder.setSeriesWatched(ids = listOf("tmdb:101", "tt1234567"), watched = true)
 
-        assertTrue(holder.activeSessionKey.value.startsWith("auth_"))
+        assertEquals("session-123", holder.activeSessionKey.value)
         assertTrue(holder.isSeriesWatched("tmdb:101"))
 
         authState.value = authState.value.copy(username = "alice", userSlug = "alice")
