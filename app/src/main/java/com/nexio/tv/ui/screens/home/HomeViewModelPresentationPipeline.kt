@@ -22,8 +22,14 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 private data class CoreLayoutPrefs(
@@ -283,6 +289,77 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
         }
 
         trailerPreviewLoadingIds.remove(itemId)
+    }
+}
+
+internal fun HomeViewModel.observeModernHomePresentationPipeline() {
+    viewModelScope.launch {
+        var fullPresentationBuildJob: Job? = null
+        combine(
+            uiState.map { state ->
+                ModernHomePresentationInput(
+                    catalogRows = state.catalogRows,
+                    continueWatchingItems = state.continueWatchingItems,
+                    useLandscapePosters = state.modernLandscapePostersEnabled,
+                    showCatalogTypeSuffix = state.catalogTypeSuffixEnabled,
+                    localeTag = ""
+                )
+            },
+            modernHomePresentationLocaleTag
+        ) { input, localeTag ->
+            input.copy(localeTag = localeTag)
+        }
+            .distinctUntilChanged()
+            .collectLatest { input ->
+                fullPresentationBuildJob?.cancel()
+                modernHomePresentationGeneration += 1L
+                val generation = modernHomePresentationGeneration
+                val shouldWarmStart = uiState.value.modernHomePresentation.rows.isEmpty()
+                val visibleCatalogRowCount = input.catalogRows.count { it.items.isNotEmpty() }
+                val warmStartCatalogRowCount = if (input.continueWatchingItems.isNotEmpty()) 2 else 3
+                suspend fun buildPresentation(maxCatalogRows: Int? = null): ModernHomePresentationState {
+                    return withContext(Dispatchers.Default) {
+                        val buildContext = currentCoroutineContext()
+                        modernHomePresentationBuildMutex.withLock {
+                            buildModernHomePresentation(
+                                input = input,
+                                cache = modernCarouselRowBuildCache,
+                                context = appContext,
+                                maxCatalogRows = maxCatalogRows,
+                                cancellationCheck = { buildContext.ensureActive() }
+                            )
+                        }
+                    }
+                }
+
+                if (shouldWarmStart && visibleCatalogRowCount > warmStartCatalogRowCount) {
+                    val warmStartPresentation = buildPresentation(maxCatalogRows = warmStartCatalogRowCount)
+                    if (!currentCoroutineContext().isActive || generation != modernHomePresentationGeneration) {
+                        return@collectLatest
+                    }
+                    _uiState.update { state ->
+                        if (state.modernHomePresentation == warmStartPresentation) {
+                            state
+                        } else {
+                            state.copy(modernHomePresentation = warmStartPresentation)
+                        }
+                    }
+                }
+
+                fullPresentationBuildJob = viewModelScope.launch {
+                    val presentation = buildPresentation()
+                    if (!currentCoroutineContext().isActive || generation != modernHomePresentationGeneration) {
+                        return@launch
+                    }
+                    _uiState.update { state ->
+                        if (state.modernHomePresentation == presentation) {
+                            state
+                        } else {
+                            state.copy(modernHomePresentation = presentation)
+                        }
+                    }
+                }
+            }
     }
 }
 

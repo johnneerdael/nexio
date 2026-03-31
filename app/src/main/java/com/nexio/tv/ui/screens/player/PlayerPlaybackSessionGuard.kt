@@ -20,6 +20,8 @@ internal class PlayerPlaybackSessionGuard {
         activePlaybackSessionId = 0L
     }
 
+    fun activePlaybackSessionId(): Long = activePlaybackSessionId
+
     fun shouldHandleCallback(playbackSessionId: Long): Boolean {
         return !isExitInProgress &&
             playbackSessionId != 0L &&

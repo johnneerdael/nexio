@@ -60,6 +60,11 @@ class PlayerRuntimeController(
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {
+    internal data class DeferredPlayerRequestIdentity(
+        val streamUrl: String,
+        val headers: Map<String, String>
+    )
+
 
     companion object {
         internal const val TAG = "PlayerViewModel"
@@ -269,6 +274,8 @@ class PlayerRuntimeController(
     internal var hasRetriedCurrentStreamAfter416: Boolean = false
     internal var hasRetriedCurrentStreamAfterUnexpectedNpe: Boolean = false
     internal var hasRetriedCurrentStreamAfterMediaPeriodHolderCrash: Boolean = false
+    internal var hasRetriedCurrentStreamAfterTransientError: Boolean = false
+    internal var preserveTransientRetryStateForRequest: DeferredPlayerRequestIdentity? = null
     internal var timeoutRecoveryAttempts: Int = 0
     internal val dv5SoftwareToneMapPreferredStreamUrls: MutableSet<String> = mutableSetOf()
     internal val dv5HardwareToneMapPreferredStreamUrls: MutableSet<String> = mutableSetOf()
