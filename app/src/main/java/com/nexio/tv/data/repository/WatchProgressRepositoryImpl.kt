@@ -3,6 +3,7 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.WatchedItemsPreferences
+import com.nexio.tv.data.local.WatchedSeriesStateHolder
 import com.nexio.tv.data.local.WatchProgressPreferences
 import com.nexio.tv.domain.model.WatchedItem
 import com.nexio.tv.domain.model.WatchProgress
@@ -34,6 +35,7 @@ import javax.inject.Singleton
 class WatchProgressRepositoryImpl @Inject constructor(
     private val watchProgressPreferences: WatchProgressPreferences,
     private val watchedItemsPreferences: WatchedItemsPreferences,
+    private val watchedSeriesStateHolder: WatchedSeriesStateHolder,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktProgressService: TraktProgressService,
     private val metaRepository: MetaRepository
@@ -308,7 +310,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
         }
         traktProgressService.removeFromHistory(contentId, season, episode)
         watchProgressPreferences.removeProgress(contentId, season, episode)
-        watchedItemsPreferences.unmarkAsWatched(contentId, season, episode)
+        watchedItemsPreferences.unmarkAsWatched(
+            contentIds = watchedItemContentIds(contentId),
+            season = season,
+            episode = episode
+        )
     }
 
     override suspend fun clearShowProgress(contentId: String) {
@@ -317,7 +323,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
         }
         traktProgressService.clearShowProgress(contentId)
         watchProgressPreferences.removeProgress(contentId, null, null)
-        watchedItemsPreferences.unmarkAsWatched(contentId, null, null)
+        watchedItemsPreferences.unmarkAsWatched(
+            contentIds = watchedItemContentIds(contentId),
+            season = null,
+            episode = null
+        )
     }
 
     override suspend fun markAsCompleted(progress: WatchProgress) {
@@ -340,14 +350,15 @@ class WatchProgressRepositoryImpl @Inject constructor(
                 year = null
             )
             watchedItemsPreferences.markAsWatched(
-                WatchedItem(
+                item = WatchedItem(
                     contentId = completed.contentId,
                     contentType = completed.contentType,
                     title = completed.name,
                     season = completed.season,
                     episode = completed.episode,
                     watchedAt = completed.lastWatched
-                )
+                ),
+                contentIds = watchedItemContentIds(completed.contentId)
             )
         }.onFailure {
             traktProgressService.applyOptimisticRemoval(
@@ -370,6 +381,10 @@ class WatchProgressRepositoryImpl @Inject constructor(
         } else {
             progress.contentId
         }
+    }
+
+    private fun watchedItemContentIds(contentId: String): Set<String> {
+        return watchedSeriesStateHolder.matchingEntryIds(contentId)
     }
 
     private fun mergeProgressLists(
