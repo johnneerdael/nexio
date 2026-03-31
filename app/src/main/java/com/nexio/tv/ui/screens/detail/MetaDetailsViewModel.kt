@@ -52,6 +52,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -63,6 +64,58 @@ import javax.inject.Inject
 
 private const val TAG = "MetaDetailsViewModel"
 private const val TRAKT_REVIEWS_PAGE_SIZE = 8
+
+internal fun resolveSeriesEpisodeProgressIds(
+    routeItemId: String,
+    metaId: String?,
+    rememberedRouteIds: Set<String> = emptySet(),
+    rememberedMetaIds: Set<String> = emptySet()
+): Set<String> {
+    return buildSet {
+        addAll(rememberedRouteIds)
+        addAll(rememberedMetaIds)
+        addAll(
+            expandSeriesContentIdAliases(
+                listOfNotNull(
+                    routeItemId.takeIf { it.isNotBlank() },
+                    metaId?.takeIf { it.isNotBlank() }
+                )
+            )
+        )
+    }
+}
+
+internal class LatestSeriesWatchedBadgeScheduler(
+    private val scope: kotlinx.coroutines.CoroutineScope,
+    private val persist: suspend (Collection<String>, Boolean) -> Unit
+) {
+    private data class PendingBadgeWrite(
+        val ids: Collection<String>,
+        val watched: Boolean
+    )
+
+    private val lock = Any()
+    private var pendingWrite: PendingBadgeWrite? = null
+    private var drainJob: Job? = null
+
+    fun submit(ids: Collection<String>, watched: Boolean) {
+        if (ids.isEmpty()) return
+        synchronized(lock) {
+            pendingWrite = PendingBadgeWrite(ids = ids, watched = watched)
+            if (drainJob?.isActive == true) {
+                return
+            }
+            drainJob = scope.launch {
+                while (true) {
+                    val next = synchronized(lock) {
+                        pendingWrite.also { pendingWrite = null }
+                    } ?: return@launch
+                    persist(next.ids, next.watched)
+                }
+            }
+        }
+    }
+}
 
 private data class TraktReviewQuery(
     val pathId: String,
@@ -124,6 +177,9 @@ class MetaDetailsViewModel @Inject constructor(
     private var isLoadingMoreReviews = false
     private var currentTraktPathIds: List<String> = emptyList()
     private var currentTraktIsShow = false
+    private val seriesWatchedBadgeScheduler = LatestSeriesWatchedBadgeScheduler(viewModelScope) { ids, watched ->
+        watchedSeriesStateHolder.setSeriesWatched(ids = ids, watched = watched)
+    }
 
     init {
         observeLibraryState()
@@ -265,7 +321,7 @@ class MetaDetailsViewModel @Inject constructor(
     private fun observeWatchProgress() {
         if (itemType.lowercase() == "movie") return
         viewModelScope.launch {
-            watchProgressRepository.getAllEpisodeProgress(itemId)
+            observeSeriesEpisodeProgress()
                 .distinctUntilChanged()
                 .collectLatest { progressMap ->
                 _uiState.update { state ->
@@ -284,7 +340,7 @@ class MetaDetailsViewModel @Inject constructor(
     private fun observeWatchedEpisodes() {
         if (itemType.lowercase() == "movie") return
         viewModelScope.launch {
-            watchProgressRepository.getAllEpisodeProgress(itemId)
+            observeSeriesEpisodeProgress()
                 .map { progressMap ->
                     progressMap
                         .filterValues { it.isCompleted() }
@@ -304,6 +360,14 @@ class MetaDetailsViewModel @Inject constructor(
             }
         }
     }
+
+    private fun observeSeriesEpisodeProgress() =
+        _uiState
+            .map { state -> currentSeriesEpisodeProgressIds(state.meta) }
+            .distinctUntilChanged()
+            .flatMapLatest { ids ->
+                watchProgressRepository.getAllEpisodeProgress(ids)
+            }
 
     private fun observeMovieWatched() {
         if (itemType.lowercase() != "movie") return
@@ -1702,17 +1766,26 @@ class MetaDetailsViewModel @Inject constructor(
         }
         if (episodes.isEmpty()) return
 
-        val ids = expandSeriesContentIdAliases(listOf(itemId, meta.id))
+        val ids = currentSeriesEpisodeProgressIds(meta)
         if (ids.isEmpty()) return
 
-        viewModelScope.launch {
-            watchedSeriesStateHolder.setSeriesWatched(
-                ids = ids,
-                watched = episodes.all { video ->
-                    (video.season!! to video.episode!!) in watchedEpisodes
-                }
-            )
-        }
+        seriesWatchedBadgeScheduler.submit(
+            ids = ids,
+            watched = episodes.all { video ->
+                (video.season!! to video.episode!!) in watchedEpisodes
+            }
+        )
+    }
+
+    private fun currentSeriesEpisodeProgressIds(meta: Meta?): Set<String> {
+        return resolveSeriesEpisodeProgressIds(
+            routeItemId = itemId,
+            metaId = meta?.id,
+            rememberedRouteIds = watchedSeriesStateHolder.matchingEntryIds(itemId),
+            rememberedMetaIds = meta?.id
+                ?.let(watchedSeriesStateHolder::matchingEntryIds)
+                .orEmpty()
+        )
     }
 
     private fun extractImdbId(rawId: String?): String? {

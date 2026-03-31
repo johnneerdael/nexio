@@ -78,6 +78,54 @@ class HomeViewModelContinueWatchingParityTest {
     }
 
     @Test
+    fun `buildWatchedSeriesCandidateStates includes remote-hydrated show level watched items`() {
+        val watchedItems = listOf(
+            WatchedItem(
+                contentId = "tmdb:101",
+                contentType = "series",
+                title = "Remote Hydrated Show",
+                season = null,
+                episode = null,
+                watchedAt = 1_000L
+            )
+        )
+
+        val states = buildWatchedSeriesCandidateStates(
+            watchedItems = watchedItems,
+            snapshot = ContinueWatchingSnapshot()
+        )
+
+        assertEquals(1, states.size)
+        assertEquals(setOf("tmdb:101"), states.first().ids)
+        assertTrue(states.first().watched)
+    }
+
+    @Test
+    fun `buildSeriesNextUpLookupCandidatesFromWatchedItems includes remote-hydrated old shows`() {
+        val watchedItems = listOf(
+            WatchedItem(
+                contentId = "tmdb:101",
+                contentType = "series",
+                title = "Remote Hydrated Show",
+                season = null,
+                episode = null,
+                watchedAt = 1_000L
+            )
+        )
+
+        val candidates = buildSeriesNextUpLookupCandidatesFromWatchedItems(
+            watchedItems = watchedItems,
+            snapshot = ContinueWatchingSnapshot(),
+            currentEntries = emptyList(),
+            discoveredEntryKeys = emptySet()
+        )
+
+        assertEquals(1, candidates.size)
+        assertEquals("tmdb:101", candidates.first().contentId)
+        assertEquals("Remote Hydrated Show", candidates.first().title)
+    }
+
+    @Test
     fun `resolveWatchedSeriesBootstrapWindow preserves persisted cache on first empty bootstrap read`() {
         val decision = resolveWatchedSeriesBootstrapWindow(
             watchedItems = emptyList(),

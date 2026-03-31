@@ -172,6 +172,18 @@ class WatchedItemsPreferences internal constructor(
         }
     }
 
+    suspend fun replaceWithRemoteSeriesItems(remoteItems: List<WatchedItem>) {
+        dataStore.edit { preferences ->
+            val identity = currentSessionIdentity()
+            val key = watchedItemsKey(identity.primaryKey)
+            val currentItems = migrateSourcesIntoActiveSession(preferences, identity)
+            val preservedItems = currentItems.filterNot(::isRemoteSeriesSeedItem)
+            preferences[key] = encodeWatchedItems(
+                mergeWatchedItems(preservedItems + remoteItems)
+            )
+        }
+    }
+
     private suspend fun currentSessionIdentity(): TraktSessionIdentity {
         ensureSessionIdentityBackfilled()
         return authState.map(::traktSessionIdentityForState).first()
@@ -228,6 +240,22 @@ class WatchedItemsPreferences internal constructor(
     private fun encodeWatchedItems(items: Collection<WatchedItem>): Set<String> {
         return items.map { gson.toJson(it) }.toSet()
     }
+}
+
+internal fun isSeriesWatchedCandidateItem(item: WatchedItem): Boolean {
+    if (!item.contentType.equals("series", ignoreCase = true) &&
+        !item.contentType.equals("tv", ignoreCase = true)
+    ) {
+        return false
+    }
+    return (item.season != null && item.episode != null) ||
+        (item.season == null && item.episode == null)
+}
+
+private fun isRemoteSeriesSeedItem(item: WatchedItem): Boolean {
+    return isSeriesWatchedCandidateItem(item) &&
+        item.season == null &&
+        item.episode == null
 }
 
 internal fun mergeWatchedItems(
