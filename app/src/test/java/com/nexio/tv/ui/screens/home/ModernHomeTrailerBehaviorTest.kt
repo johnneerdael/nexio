@@ -86,4 +86,46 @@ class ModernHomeTrailerBehaviorTest {
             )
         )
     }
+
+    @Test
+    fun `focused trailer preview retries after autoplay unlock even if an earlier miss was cached`() {
+        assertTrue(
+            shouldRetryFocusedTrailerPreviewAfterAutoplayUnlock(
+                trailerPlaybackUnlocked = true,
+                hasResolvedPreview = false,
+                hasResolvedExternalPreview = false,
+                isCurrentlyLoading = false,
+                hadNegativeCacheMiss = true,
+                alreadyRetriedAfterUnlock = false
+            )
+        )
+    }
+
+    @Test
+    fun `focused trailer preview does not retry after autoplay unlock when preview already exists`() {
+        assertFalse(
+            shouldRetryFocusedTrailerPreviewAfterAutoplayUnlock(
+                trailerPlaybackUnlocked = true,
+                hasResolvedPreview = true,
+                hasResolvedExternalPreview = false,
+                isCurrentlyLoading = false,
+                hadNegativeCacheMiss = true,
+                alreadyRetriedAfterUnlock = false
+            )
+        )
+    }
+
+    @Test
+    fun `focused trailer preview does not retry after autoplay unlock once retry was already consumed`() {
+        assertFalse(
+            shouldRetryFocusedTrailerPreviewAfterAutoplayUnlock(
+                trailerPlaybackUnlocked = true,
+                hasResolvedPreview = false,
+                hasResolvedExternalPreview = false,
+                isCurrentlyLoading = false,
+                hadNegativeCacheMiss = true,
+                alreadyRetriedAfterUnlock = true
+            )
+        )
+    }
 }

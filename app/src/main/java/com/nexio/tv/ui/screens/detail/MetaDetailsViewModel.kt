@@ -120,6 +120,7 @@ class MetaDetailsViewModel @Inject constructor(
     private var nextToWatchJob: Job? = null
     private var idleTimerJob: Job? = null
     private var trailerFetchJob: Job? = null
+    private val loadingSeasonAvailability = mutableSetOf<Int>()
 
     private var hideUnreleasedContent = false
     private var trailerHasPlayed = false
@@ -224,6 +225,9 @@ class MetaDetailsViewModel @Inject constructor(
     fun onEvent(event: MetaDetailsEvent) {
         when (event) {
             is MetaDetailsEvent.OnSeasonSelected -> selectSeason(event.season)
+            is MetaDetailsEvent.OnSeasonShortPress -> playSeasonTrailer(event.season)
+            is MetaDetailsEvent.OnSeasonOptionsOpened -> preloadSeasonMediaAvailability(event.season, forceRefresh = true)
+            is MetaDetailsEvent.OnPlaySeasonRecap -> playSeasonRecap(event.season)
             is MetaDetailsEvent.OnEpisodeClick -> { /* Navigate to stream */ }
             MetaDetailsEvent.OnPlayClick -> { /* Start playback */ }
             MetaDetailsEvent.OnToggleLibrary -> toggleLibrary()
@@ -393,6 +397,9 @@ class MetaDetailsViewModel @Inject constructor(
                     isTrailerLoading = false,
                     showTrailerControls = false,
                     hideLogoDuringTrailer = false,
+                    selectedSeasonHasPlayableTrailerMedia = false,
+                    selectedSeasonHasPlayableRecap = false,
+                    seasonMediaAvailabilityBySeason = emptyMap(),
                     episodeRatings = emptyMap(),
                     isEpisodeRatingsLoading = false,
                     episodeRatingsError = null,
@@ -410,6 +417,7 @@ class MetaDetailsViewModel @Inject constructor(
             isPlayButtonFocused = false
             idleTimerJob?.cancel()
             trailerFetchJob?.cancel()
+            loadingSeasonAvailability.clear()
 
             val metaLookupId = resolveMetaLookupId(itemId = itemId, itemType = itemType)
             val preferExternal = layoutPreferenceDataStore.preferExternalMetaAddonDetail.first()
@@ -1286,9 +1294,80 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun selectSeason(season: Int) {
+        trailerFetchJob?.cancel()
+        _uiState.update {
+            it.withManualSeasonSelection(season).copy(
+                trailerUrl = null,
+                trailerAudioUrl = null,
+                trailerExternalUrl = null,
+                pendingExternalTrailerUrl = null,
+                isTrailerLoading = false,
+                isTrailerPlaying = false,
+                showTrailerControls = false,
+                hideLogoDuringTrailer = false
+            )
+        }
+        trailerHasPlayed = false
+        isPlayButtonFocused = false
+        preloadSeasonMediaAvailability(season)
+        fetchTrailerUrl(useSelectedSeasonForSeries = false)
+    }
+
+    private fun playSeasonTrailer(season: Int) {
         _uiState.update { it.withManualSeasonSelection(season) }
         trailerHasPlayed = false
-        fetchTrailerUrl()
+        fetchSeasonTrailer(playWhenReady = true)
+    }
+
+    private fun playSeasonRecap(season: Int) {
+        _uiState.update { it.withManualSeasonSelection(season) }
+        trailerHasPlayed = false
+        fetchSeasonRecap(playWhenReady = true)
+    }
+
+    private fun preloadSeasonMediaAvailability(season: Int, forceRefresh: Boolean = false) {
+        val meta = _uiState.value.meta ?: return
+        if (parseApiTypeToContentType(meta.apiType) != ContentType.SERIES) return
+        if (!forceRefresh && _uiState.value.seasonMediaAvailabilityBySeason.containsKey(season)) return
+        if (!loadingSeasonAvailability.add(season)) return
+
+        viewModelScope.launch {
+            try {
+                val year = meta.releaseInfo
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { Regex("""\b(19|20)\d{2}\b""").find(it)?.value }
+                val tmdbId = runCatching {
+                    tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
+                }.getOrNull()
+                val seasonTrailerSource = trailerService.getSeasonTrailerPlaybackSource(
+                    title = meta.name,
+                    year = year,
+                    tmdbId = tmdbId,
+                    type = meta.apiType,
+                    seasonNumber = season,
+                    contentId = meta.id
+                )
+                val seasonRecapSource = trailerService.getSeasonRecapPlaybackSource(
+                    title = meta.name,
+                    year = year,
+                    tmdbId = tmdbId,
+                    type = meta.apiType,
+                    seasonNumber = season,
+                    contentId = meta.id
+                )
+                _uiState.update { state ->
+                    state.withSeasonMediaAvailability(
+                        season,
+                        SeasonMediaActionAvailability(
+                            hasTrailerOrTeaser = seasonTrailerSource != null,
+                            hasRecap = seasonRecapSource != null
+                        )
+                    )
+                }
+            } finally {
+                loadingSeasonAvailability.remove(season)
+            }
+        }
     }
 
     internal fun setSelectedSeasonProgrammatically(season: Int) {
@@ -1794,18 +1873,22 @@ class MetaDetailsViewModel @Inject constructor(
         return nextToWatch?.displayText
     }
 
-    private fun fetchTrailerUrl() {
+    private fun fetchTrailerUrl(playWhenReady: Boolean = false, useSelectedSeasonForSeries: Boolean = true) {
         val meta = _uiState.value.meta ?: return
 
         trailerFetchJob?.cancel()
         trailerFetchJob = viewModelScope.launch {
+            val selectedSeason = _uiState.value.selectedSeason
             _uiState.update { state ->
+                val cachedSeasonAvailability = state.seasonMediaAvailabilityBySeason[selectedSeason]
                 state.copy(
                     isTrailerLoading = true,
                     trailerUrl = null,
                     trailerAudioUrl = null,
                     trailerExternalUrl = null,
-                    pendingExternalTrailerUrl = null
+                    pendingExternalTrailerUrl = null,
+                    selectedSeasonHasPlayableTrailerMedia = cachedSeasonAvailability?.hasTrailerOrTeaser == true,
+                    selectedSeasonHasPlayableRecap = cachedSeasonAvailability?.hasRecap == true
                 )
             }
 
@@ -1822,8 +1905,11 @@ class MetaDetailsViewModel @Inject constructor(
                 year = year,
                 tmdbId = tmdbId,
                 type = meta.apiType,
-                seasonNumber = if (parseApiTypeToContentType(meta.apiType) == ContentType.SERIES) {
-                    _uiState.value.selectedSeason
+                seasonNumber = if (
+                    useSelectedSeasonForSeries &&
+                    parseApiTypeToContentType(meta.apiType) == ContentType.SERIES
+                ) {
+                    selectedSeason
                 } else {
                     null
                 },
@@ -1832,22 +1918,29 @@ class MetaDetailsViewModel @Inject constructor(
             )
 
             _uiState.update { state ->
+                val baseState = state
+
                 when (trailerResult) {
-                    is TrailerResolutionResult.Playback -> state.copy(
+                    is TrailerResolutionResult.Playback -> baseState.copy(
                         trailerUrl = trailerResult.source.videoUrl,
                         trailerAudioUrl = trailerResult.source.audioUrl,
                         trailerExternalUrl = null,
-                        isTrailerLoading = false
+                        isTrailerLoading = false,
+                        selectedSeasonHasPlayableTrailerMedia = if (parseApiTypeToContentType(meta.apiType) == ContentType.SERIES) {
+                            state.seasonMediaAvailabilityBySeason[selectedSeason]?.hasTrailerOrTeaser == true
+                        } else {
+                            true
+                        }
                     )
 
-                    is TrailerResolutionResult.External -> state.copy(
+                    is TrailerResolutionResult.External -> baseState.copy(
                         trailerUrl = null,
                         trailerAudioUrl = null,
                         trailerExternalUrl = trailerResult.url,
                         isTrailerLoading = false
                     )
 
-                    null -> state.copy(
+                    null -> baseState.copy(
                         trailerUrl = null,
                         trailerAudioUrl = null,
                         trailerExternalUrl = null,
@@ -1856,6 +1949,140 @@ class MetaDetailsViewModel @Inject constructor(
                 }
             }
 
+            if (playWhenReady && trailerResult is TrailerResolutionResult.Playback) {
+                setTrailerPlaybackState(
+                    isPlaying = true,
+                    showControls = true,
+                    hideLogo = true
+                )
+            }
+
+        }
+    }
+
+    private fun fetchSeasonRecap(playWhenReady: Boolean = false) {
+        val meta = _uiState.value.meta ?: return
+        if (parseApiTypeToContentType(meta.apiType) != ContentType.SERIES) return
+
+        trailerFetchJob?.cancel()
+        trailerFetchJob = viewModelScope.launch {
+            val selectedSeason = _uiState.value.selectedSeason
+            _uiState.update { state ->
+                val cachedSeasonAvailability = state.seasonMediaAvailabilityBySeason[selectedSeason]
+                state.copy(
+                    isTrailerLoading = true,
+                    trailerUrl = null,
+                    trailerAudioUrl = null,
+                    trailerExternalUrl = null,
+                    pendingExternalTrailerUrl = null,
+                    selectedSeasonHasPlayableTrailerMedia = cachedSeasonAvailability?.hasTrailerOrTeaser == true,
+                    selectedSeasonHasPlayableRecap = cachedSeasonAvailability?.hasRecap == true
+                )
+            }
+
+            val year = meta.releaseInfo
+                ?.takeIf { it.isNotBlank() }
+                ?.let { Regex("""\b(19|20)\d{2}\b""").find(it)?.value }
+            val tmdbId = runCatching {
+                tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
+            }.getOrNull()
+            val recapSource = trailerService.getSeasonRecapPlaybackSource(
+                title = meta.name,
+                year = year,
+                tmdbId = tmdbId,
+                type = meta.apiType,
+                seasonNumber = selectedSeason,
+                contentId = meta.id
+            )
+
+            _uiState.update { state ->
+                state.withSeasonMediaAvailability(
+                    selectedSeason,
+                    SeasonMediaActionAvailability(
+                        hasTrailerOrTeaser = state.seasonMediaAvailabilityBySeason[selectedSeason]?.hasTrailerOrTeaser == true,
+                        hasRecap = recapSource != null
+                    )
+                ).copy(
+                    trailerUrl = recapSource?.videoUrl,
+                    trailerAudioUrl = recapSource?.audioUrl,
+                    trailerExternalUrl = null,
+                    isTrailerLoading = false
+                )
+            }
+
+            if (playWhenReady && recapSource != null) {
+                setTrailerPlaybackState(
+                    isPlaying = true,
+                    showControls = true,
+                    hideLogo = true
+                )
+            }
+        }
+    }
+
+    private fun fetchSeasonTrailer(playWhenReady: Boolean = false) {
+        val meta = _uiState.value.meta ?: return
+        if (parseApiTypeToContentType(meta.apiType) != ContentType.SERIES) return
+
+        trailerFetchJob?.cancel()
+        trailerFetchJob = viewModelScope.launch {
+            val selectedSeason = _uiState.value.selectedSeason
+            _uiState.update { state ->
+                val cachedSeasonAvailability = state.seasonMediaAvailabilityBySeason[selectedSeason]
+                state.copy(
+                    isTrailerLoading = true,
+                    trailerUrl = null,
+                    trailerAudioUrl = null,
+                    trailerExternalUrl = null,
+                    pendingExternalTrailerUrl = null,
+                    selectedSeasonHasPlayableTrailerMedia = cachedSeasonAvailability?.hasTrailerOrTeaser == true,
+                    selectedSeasonHasPlayableRecap = cachedSeasonAvailability?.hasRecap == true
+                )
+            }
+
+            val year = meta.releaseInfo
+                ?.takeIf { it.isNotBlank() }
+                ?.let { Regex("""\b(19|20)\d{2}\b""").find(it)?.value }
+            val tmdbId = runCatching {
+                tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
+            }.getOrNull()
+            val seasonTrailerSource = trailerService.getSeasonTrailerPlaybackSource(
+                title = meta.name,
+                year = year,
+                tmdbId = tmdbId,
+                type = meta.apiType,
+                seasonNumber = selectedSeason,
+                contentId = meta.id
+            )
+
+            _uiState.update { state ->
+                state.withSeasonMediaAvailability(
+                    selectedSeason,
+                    SeasonMediaActionAvailability(
+                        hasTrailerOrTeaser = seasonTrailerSource != null,
+                        hasRecap = state.seasonMediaAvailabilityBySeason[selectedSeason]?.hasRecap == true
+                    )
+                ).copy(
+                    trailerUrl = seasonTrailerSource?.videoUrl,
+                    trailerAudioUrl = seasonTrailerSource?.audioUrl,
+                    trailerExternalUrl = null,
+                    isTrailerLoading = false
+                )
+            }
+
+            if (playWhenReady && seasonTrailerSource != null) {
+                setTrailerPlaybackState(
+                    isPlaying = true,
+                    showControls = true,
+                    hideLogo = true
+                )
+            } else if (playWhenReady) {
+                setTrailerPlaybackState(
+                    isPlaying = false,
+                    showControls = false,
+                    hideLogo = false
+                )
+            }
         }
     }
 

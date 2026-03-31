@@ -3,6 +3,7 @@ package com.nexio.tv.data.local
 import android.content.Context
 import com.google.gson.JsonObject
 import com.nexio.tv.core.tmdb.TmdbEnrichment
+import com.nexio.tv.data.remote.api.TmdbVideoResult
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
@@ -209,6 +210,94 @@ class MetadataDiskCacheStoreTest {
         assertEquals(parsed.networks, merged.networks)
     }
 
+    @Test
+    fun `read and write tmdb title videos round-trip by media type and language`() {
+        val store = MetadataDiskCacheStore(
+            context = mockContext(InMemorySharedPreferences())
+        )
+        val videos = listOf(
+            tmdbVideo(key = "trailer-1", type = "Trailer"),
+            tmdbVideo(key = "teaser-1", type = "Teaser")
+        )
+
+        store.writeTmdbTitleVideos(
+            tmdbId = 123,
+            mediaType = "movie",
+            languageTag = "en-US",
+            providerToken = "trailer",
+            videos = videos
+        )
+
+        assertEquals(
+            videos,
+            store.readTmdbTitleVideos(
+                tmdbId = 123,
+                mediaType = "movie",
+                languageTag = "en-US",
+                providerToken = "trailer"
+            )
+        )
+        assertNull(
+            store.readTmdbTitleVideos(
+                tmdbId = 123,
+                mediaType = "tv",
+                languageTag = "en-US",
+                providerToken = "trailer"
+            )
+        )
+    }
+
+    @Test
+    fun `read and write tmdb season videos round-trip by season and language`() {
+        val store = MetadataDiskCacheStore(
+            context = mockContext(InMemorySharedPreferences())
+        )
+        val seasonOneVideos = listOf(tmdbVideo(key = "season-1-trailer", type = "Trailer"))
+        val seasonTwoVideos = listOf(tmdbVideo(key = "season-2-recap", type = "Recap"))
+
+        store.writeTmdbSeasonVideos(
+            tmdbId = 456,
+            seasonNumber = 1,
+            languageTag = "en-US",
+            providerToken = "trailer",
+            videos = seasonOneVideos
+        )
+        store.writeTmdbSeasonVideos(
+            tmdbId = 456,
+            seasonNumber = 2,
+            languageTag = "en-US",
+            providerToken = "trailer",
+            videos = seasonTwoVideos
+        )
+
+        assertEquals(
+            seasonOneVideos,
+            store.readTmdbSeasonVideos(
+                tmdbId = 456,
+                seasonNumber = 1,
+                languageTag = "en-US",
+                providerToken = "trailer"
+            )
+        )
+        assertEquals(
+            seasonTwoVideos,
+            store.readTmdbSeasonVideos(
+                tmdbId = 456,
+                seasonNumber = 2,
+                languageTag = "en-US",
+                providerToken = "trailer"
+            )
+        )
+        assertNull(
+            store.readTmdbSeasonVideos(
+                tmdbId = 456,
+                seasonNumber = 1,
+                languageTag = "nl-NL",
+                providerToken = "trailer"
+            )
+        )
+    }
+
     private fun meta(id: String): Meta {
         return Meta(
             id = id,
@@ -231,6 +320,18 @@ class MetadataDiskCacheStoreTest {
             awards = null,
             language = null,
             links = emptyList()
+        )
+    }
+
+    private fun tmdbVideo(key: String, type: String): TmdbVideoResult {
+        return TmdbVideoResult(
+            key = key,
+            site = "YouTube",
+            type = type,
+            official = true,
+            size = 1080,
+            publishedAt = "2024-01-01T00:00:00Z",
+            id = key
         )
     }
 

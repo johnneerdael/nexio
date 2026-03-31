@@ -223,21 +223,32 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
     title: String,
     releaseInfo: String?,
     apiType: String,
-    fallbackYtId: String? = null
+    fallbackYtId: String? = null,
+    forceRefresh: Boolean = false
 ) {
     if (activeTrailerPreviewItemId != itemId) {
         activeTrailerPreviewItemId = itemId
         trailerPreviewRequestVersion++
     }
 
-    if (trailerPreviewNegativeCache.contains(itemId)) return
+    if (trailerPreviewNegativeCache.containsKey(itemId)) return
     if (trailerPreviewUrlsState.containsKey(itemId) || trailerPreviewExternalUrlsState.containsKey(itemId)) return
-    if (!trailerPreviewLoadingIds.add(itemId)) return
+    if (trailerPreviewLoadingIds.put(itemId, true) != null) return
 
     val requestVersion = trailerPreviewRequestVersion
 
     viewModelScope.launch {
         val tmdbId = runCatching { tmdbService.ensureTmdbId(itemId, apiType) }.getOrNull()
+        if (forceRefresh) {
+            trailerService.invalidateLookupCache(
+                title = title,
+                year = extractYear(releaseInfo),
+                tmdbId = tmdbId,
+                type = apiType,
+                contentId = itemId,
+                fallbackYtIds = listOfNotNull(fallbackYtId)
+            )
+        }
         val trailerResult = trailerService.resolveTrailer(
             title = title,
             year = extractYear(releaseInfo),
@@ -256,9 +267,9 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
 
         when (trailerResult) {
             is TrailerResolutionResult.Playback -> {
-                trailerPreviewNegativeCache.remove(itemId)
-                trailerPreviewExternalUrlsState.remove(itemId)
-                trailerPreviewUrlsState[itemId] = trailerResult.source.videoUrl
+            trailerPreviewNegativeCache.remove(itemId)
+            trailerPreviewExternalUrlsState.remove(itemId)
+            trailerPreviewUrlsState[itemId] = trailerResult.source.videoUrl
                 val audioUrl = trailerResult.source.audioUrl
                 if (audioUrl.isNullOrBlank()) {
                     trailerPreviewAudioUrlsState.remove(itemId)
@@ -275,7 +286,7 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
             }
 
             null -> {
-                trailerPreviewNegativeCache.add(itemId)
+                trailerPreviewNegativeCache[itemId] = true
                 trailerPreviewUrlsState.remove(itemId)
                 trailerPreviewAudioUrlsState.remove(itemId)
                 trailerPreviewExternalUrlsState.remove(itemId)
@@ -532,21 +543,26 @@ private fun HomeViewModel.flushMetadataEnrichmentPipeline() {
     scheduleUpdateCatalogRows()
 }
 
-internal fun HomeViewModel.mergeFocusedItemEnrichment(
+internal fun mergeFocusedItemEnrichment(
     currentItem: MetaPreview,
     tmdbEnrichment: TmdbEnrichment?,
-    externalMeta: Meta?
+    externalMeta: Meta?,
+    tmdbSettings: TmdbSettings = TmdbSettings(
+        useArtwork = true,
+        useBasicInfo = true,
+        useDetails = true
+    )
 ): MetaPreview {
     var merged = currentItem
     if (tmdbEnrichment != null) {
-        if (currentTmdbSettings.useArtwork) {
+        if (tmdbSettings.useArtwork) {
             merged = merged.copy(
                 background = tmdbEnrichment.backdrop ?: merged.background,
                 logo = tmdbEnrichment.logo ?: merged.logo,
                 poster = tmdbEnrichment.poster ?: merged.poster
             )
         }
-        if (currentTmdbSettings.useBasicInfo) {
+        if (tmdbSettings.useBasicInfo) {
             merged = merged.copy(
                 name = tmdbEnrichment.localizedTitle ?: merged.name,
                 description = tmdbEnrichment.description ?: merged.description,
@@ -554,7 +570,7 @@ internal fun HomeViewModel.mergeFocusedItemEnrichment(
                 genres = if (tmdbEnrichment.genres.isNotEmpty()) tmdbEnrichment.genres else merged.genres
             )
         }
-        if (currentTmdbSettings.useDetails) {
+        if (tmdbSettings.useDetails) {
             merged = merged.copy(
                 releaseInfo = tmdbEnrichment.releaseInfo ?: merged.releaseInfo
             )
@@ -575,6 +591,19 @@ internal fun HomeViewModel.mergeFocusedItemEnrichment(
         )
     }
     return merged
+}
+
+internal fun HomeViewModel.mergeFocusedItemEnrichment(
+    currentItem: MetaPreview,
+    tmdbEnrichment: TmdbEnrichment?,
+    externalMeta: Meta?
+): MetaPreview {
+    return mergeFocusedItemEnrichment(
+        currentItem = currentItem,
+        tmdbEnrichment = tmdbEnrichment,
+        externalMeta = externalMeta,
+        tmdbSettings = currentTmdbSettings
+    )
 }
 
 internal suspend fun HomeViewModel.enrichHeroItemsPipeline(

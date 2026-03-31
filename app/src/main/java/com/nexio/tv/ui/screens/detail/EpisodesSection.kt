@@ -89,6 +89,7 @@ fun SeasonTabs(
     seasons: List<Int>,
     selectedSeason: Int,
     onSeasonSelected: (Int) -> Unit,
+    onSeasonShortPress: (Int) -> Unit,
     onSeasonLongPress: (Int) -> Unit = {},
     selectedTabFocusRequester: FocusRequester,
     downFocusRequester: FocusRequester? = null,
@@ -138,7 +139,7 @@ fun SeasonTabs(
                     if (longPressTriggered) {
                         longPressTriggered = false
                     } else {
-                        onSeasonSelected(season)
+                        onSeasonShortPress(season)
                     }
                 },
                 modifier = Modifier
@@ -883,6 +884,7 @@ private fun EpisodeOptionsDialog(
 fun SeasonOptionsDialog(
     season: Int,
     isFullyWatched: Boolean,
+    onPlayRecap: (() -> Unit)?,
     onDismiss: () -> Unit,
     onMarkSeasonWatched: () -> Unit,
     onMarkSeasonUnwatched: () -> Unit
@@ -898,11 +900,26 @@ fun SeasonOptionsDialog(
         title = if (season == 0) stringResource(R.string.episodes_specials) else stringResource(R.string.episodes_season, season),
         subtitle = stringResource(R.string.episodes_season_actions)
     ) {
+        onPlayRecap?.let { playRecap ->
+            Button(
+                onClick = playRecap,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(primaryFocusRequester),
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.episodes_play_recap))
+            }
+        }
+
         Button(
             onClick = if (isFullyWatched) onMarkSeasonUnwatched else onMarkSeasonWatched,
             modifier = Modifier
                 .fillMaxWidth()
-                .focusRequester(primaryFocusRequester),
+                .then(if (onPlayRecap == null) Modifier.focusRequester(primaryFocusRequester) else Modifier),
             colors = ButtonDefaults.colors(
                 containerColor = NexioColors.BackgroundCard,
                 contentColor = NexioColors.TextPrimary

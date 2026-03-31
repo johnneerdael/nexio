@@ -1,5 +1,4 @@
 package com.nexio.tv.ui.screens.detail
-
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.MetaReview
@@ -30,6 +29,9 @@ data class MetaDetailsUiState(
     val showTrailerControls: Boolean = false,
     val hideLogoDuringTrailer: Boolean = false,
     val trailerButtonEnabled: Boolean = false,
+    val selectedSeasonHasPlayableTrailerMedia: Boolean = false,
+    val selectedSeasonHasPlayableRecap: Boolean = false,
+    val seasonMediaAvailabilityBySeason: Map<Int, SeasonMediaActionAvailability> = emptyMap(),
     val librarySourceMode: LibrarySourceMode = LibrarySourceMode.LOCAL,
     val libraryListTabs: List<LibraryListTab> = emptyList(),
     val isInWatchlist: Boolean = false,
@@ -57,8 +59,16 @@ data class MetaDetailsUiState(
     val userMessageIsError: Boolean = false
 )
 
+data class SeasonMediaActionAvailability(
+    val hasTrailerOrTeaser: Boolean = false,
+    val hasRecap: Boolean = false
+)
+
 sealed class MetaDetailsEvent {
     data class OnSeasonSelected(val season: Int) : MetaDetailsEvent()
+    data class OnSeasonShortPress(val season: Int) : MetaDetailsEvent()
+    data class OnSeasonOptionsOpened(val season: Int) : MetaDetailsEvent()
+    data class OnPlaySeasonRecap(val season: Int) : MetaDetailsEvent()
     data class OnEpisodeClick(val video: Video) : MetaDetailsEvent()
     data object OnPlayClick : MetaDetailsEvent()
     data object OnToggleLibrary : MetaDetailsEvent()
@@ -89,14 +99,30 @@ internal fun MetaDetailsUiState.withManualSeasonSelection(season: Int): MetaDeta
     return copy(
         selectedSeason = season,
         episodesForSeason = buildEpisodesForSeason(meta?.videos.orEmpty(), season),
-        manualSeasonOverrideActive = true
+        manualSeasonOverrideActive = true,
+        selectedSeasonHasPlayableTrailerMedia = seasonMediaAvailabilityBySeason[season]?.hasTrailerOrTeaser == true,
+        selectedSeasonHasPlayableRecap = seasonMediaAvailabilityBySeason[season]?.hasRecap == true
     )
 }
 
 internal fun MetaDetailsUiState.withProgrammaticSeasonSelection(season: Int): MetaDetailsUiState {
     return copy(
         selectedSeason = season,
-        episodesForSeason = buildEpisodesForSeason(meta?.videos.orEmpty(), season)
+        episodesForSeason = buildEpisodesForSeason(meta?.videos.orEmpty(), season),
+        selectedSeasonHasPlayableTrailerMedia = seasonMediaAvailabilityBySeason[season]?.hasTrailerOrTeaser == true,
+        selectedSeasonHasPlayableRecap = seasonMediaAvailabilityBySeason[season]?.hasRecap == true
+    )
+}
+
+internal fun MetaDetailsUiState.withSeasonMediaAvailability(
+    season: Int,
+    availability: SeasonMediaActionAvailability
+): MetaDetailsUiState {
+    val updatedAvailability = seasonMediaAvailabilityBySeason + (season to availability)
+    return copy(
+        seasonMediaAvailabilityBySeason = updatedAvailability,
+        selectedSeasonHasPlayableTrailerMedia = if (season == selectedSeason) availability.hasTrailerOrTeaser else selectedSeasonHasPlayableTrailerMedia,
+        selectedSeasonHasPlayableRecap = if (season == selectedSeason) availability.hasRecap else selectedSeasonHasPlayableRecap
     )
 }
 

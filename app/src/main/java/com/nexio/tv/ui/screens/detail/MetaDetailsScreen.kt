@@ -424,6 +424,8 @@ fun MetaDetailsScreen(
                     mdbListRatings = uiState.mdbListRatings,
                     showMdbListImdb = uiState.showMdbListImdb,
                     onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
+                    onSeasonShortPress = { viewModel.onEvent(MetaDetailsEvent.OnSeasonShortPress(it)) },
+                    onSeasonOptionsOpened = { viewModel.onEvent(MetaDetailsEvent.OnSeasonOptionsOpened(it)) },
                     onProgrammaticSeasonSelected = { viewModel.setSelectedSeasonProgrammatically(it) },
                     onEpisodeClick = { video ->
                         onPlayClick(
@@ -478,12 +480,16 @@ fun MetaDetailsScreen(
                     onMarkSeasonUnwatched = { season ->
                         viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonUnwatched(season))
                     },
+                    onPlaySeasonRecap = { season ->
+                        viewModel.onEvent(MetaDetailsEvent.OnPlaySeasonRecap(season))
+                    },
                     onMarkPreviousEpisodesWatched = { video ->
                         viewModel.onEvent(MetaDetailsEvent.OnMarkPreviousEpisodesWatched(video))
                     },
                     isSeasonFullyWatched = { season ->
                         viewModel.isSeasonFullyWatched(season)
                     },
+                    seasonMediaAvailabilityBySeason = uiState.seasonMediaAvailabilityBySeason,
                     trailerUrl = uiState.trailerUrl,
                     trailerAudioUrl = uiState.trailerAudioUrl,
                     trailerExternalUrl = uiState.trailerExternalUrl,
@@ -638,6 +644,8 @@ private fun MetaDetailsContent(
     mdbListRatings: MDBListRatings?,
     showMdbListImdb: Boolean,
     onSeasonSelected: (Int) -> Unit,
+    onSeasonShortPress: (Int) -> Unit,
+    onSeasonOptionsOpened: (Int) -> Unit,
     onProgrammaticSeasonSelected: (Int) -> Unit,
     onEpisodeClick: (Video) -> Unit,
     onPlayClick: (String) -> Unit,
@@ -650,8 +658,10 @@ private fun MetaDetailsContent(
     onCheckInEpisode: (Video) -> Unit,
     onMarkSeasonWatched: (Int) -> Unit,
     onMarkSeasonUnwatched: (Int) -> Unit,
+    onPlaySeasonRecap: (Int) -> Unit,
     onMarkPreviousEpisodesWatched: (Video) -> Unit,
     isSeasonFullyWatched: (Int) -> Boolean,
+    seasonMediaAvailabilityBySeason: Map<Int, SeasonMediaActionAvailability>,
     trailerUrl: String?,
     trailerAudioUrl: String?,
     trailerExternalUrl: String?,
@@ -1323,7 +1333,12 @@ private fun MetaDetailsContent(
                             seasons = seasons,
                             selectedSeason = selectedSeason,
                             onSeasonSelected = onSeasonSelected,
-                            onSeasonLongPress = { seasonOptionsDialogSeason = it },
+                            onSeasonShortPress = onSeasonShortPress,
+                            onSeasonLongPress = {
+                                onSeasonSelected(it)
+                                onSeasonOptionsOpened(it)
+                                seasonOptionsDialogSeason = it
+                            },
                             selectedTabFocusRequester = selectedSeasonFocusRequester,
                             downFocusRequester = seasonDownFocusRequester,
                             onSelectedSeasonDown = seasonEntryEpisodeId?.let { episodeId ->
@@ -1566,6 +1581,14 @@ private fun MetaDetailsContent(
             SeasonOptionsDialog(
                 season = season,
                 isFullyWatched = isSeasonFullyWatched(season),
+                onPlayRecap = if (seasonMediaAvailabilityBySeason[season]?.hasRecap == true) {
+                    {
+                        onPlaySeasonRecap(season)
+                        seasonOptionsDialogSeason = null
+                    }
+                } else {
+                    null
+                },
                 onDismiss = { seasonOptionsDialogSeason = null },
                 onMarkSeasonWatched = {
                     onMarkSeasonWatched(season)
