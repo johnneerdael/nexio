@@ -29,6 +29,7 @@ import com.nexio.tv.domain.repository.LibraryRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -107,6 +108,95 @@ class MetaDetailsSeasonMediaViewModelTest {
         assertFalse(state.showTrailerControls)
         assertFalse(state.hideLogoDuringTrailer)
         assertFalse(state.selectedSeasonHasPlayableTrailerMedia)
+        coVerify(exactly = 1) {
+            trailerService.resolveTrailer(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        }
+        coVerify(exactly = 1) {
+            trailerService.getSeasonTrailerPlaybackSource(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = 2,
+                contentId = any()
+            )
+        }
+    }
+
+    @Test
+    fun `failed season trailer attempt preserves external cta without reviving pending launch`() = runTest(dispatcher) {
+        val trailerService = mockk<TrailerService>()
+        coEvery {
+            trailerService.resolveTrailer(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        } returns TrailerResolutionResult.External("https://youtube.com/watch?v=series")
+        coEvery {
+            trailerService.getSeasonTrailerPlaybackSource(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = 2,
+                contentId = any()
+            )
+        } returns null
+
+        val viewModel = buildViewModel(trailerService)
+        advanceUntilIdle()
+
+        viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
+        assertEquals(
+            "https://youtube.com/watch?v=series",
+            viewModel.uiState.value.pendingExternalTrailerUrl
+        )
+
+        viewModel.onEvent(MetaDetailsEvent.OnSeasonShortPress(2))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(2, state.selectedSeason)
+        assertEquals("https://youtube.com/watch?v=series", state.trailerExternalUrl)
+        assertEquals(null, state.pendingExternalTrailerUrl)
+        assertFalse(state.isTrailerPlaying)
+        assertFalse(state.showTrailerControls)
+        assertFalse(state.hideLogoDuringTrailer)
+        assertFalse(state.selectedSeasonHasPlayableTrailerMedia)
+        coVerify(exactly = 1) {
+            trailerService.resolveTrailer(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        }
+        coVerify(exactly = 1) {
+            trailerService.getSeasonTrailerPlaybackSource(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = 2,
+                contentId = any()
+            )
+        }
     }
 
     @Test
@@ -151,6 +241,53 @@ class MetaDetailsSeasonMediaViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(2, state.selectedSeason)
         assertEquals("https://example.com/series.m3u8", state.trailerUrl)
+        assertFalse(state.isTrailerPlaying)
+        assertFalse(state.showTrailerControls)
+        assertFalse(state.hideLogoDuringTrailer)
+        assertFalse(state.selectedSeasonHasPlayableRecap)
+    }
+
+    @Test
+    fun `failed season recap attempt preserves external cta without reviving pending launch`() = runTest(dispatcher) {
+        val trailerService = mockk<TrailerService>()
+        coEvery {
+            trailerService.resolveTrailer(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        } returns TrailerResolutionResult.External("https://youtube.com/watch?v=series")
+        coEvery {
+            trailerService.getSeasonRecapPlaybackSource(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = 2,
+                contentId = any()
+            )
+        } returns null
+
+        val viewModel = buildViewModel(trailerService)
+        advanceUntilIdle()
+
+        viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
+        assertEquals(
+            "https://youtube.com/watch?v=series",
+            viewModel.uiState.value.pendingExternalTrailerUrl
+        )
+
+        viewModel.onEvent(MetaDetailsEvent.OnPlaySeasonRecap(2))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(2, state.selectedSeason)
+        assertEquals("https://youtube.com/watch?v=series", state.trailerExternalUrl)
+        assertEquals(null, state.pendingExternalTrailerUrl)
         assertFalse(state.isTrailerPlaying)
         assertFalse(state.showTrailerControls)
         assertFalse(state.hideLogoDuringTrailer)

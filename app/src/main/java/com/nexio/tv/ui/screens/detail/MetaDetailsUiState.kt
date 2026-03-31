@@ -131,14 +131,13 @@ internal fun MetaDetailsUiState.withFailedSeasonMediaPlaybackAttempt(
     availability: SeasonMediaActionAvailability,
     previousTrailerUrl: String?,
     previousTrailerAudioUrl: String?,
-    previousTrailerExternalUrl: String?,
-    previousPendingExternalTrailerUrl: String?
+    previousTrailerExternalUrl: String?
 ): MetaDetailsUiState {
     return withSeasonMediaAvailability(season, availability).copy(
         trailerUrl = previousTrailerUrl,
         trailerAudioUrl = previousTrailerAudioUrl,
         trailerExternalUrl = previousTrailerExternalUrl,
-        pendingExternalTrailerUrl = previousPendingExternalTrailerUrl,
+        pendingExternalTrailerUrl = null,
         isTrailerLoading = false,
         isTrailerPlaying = false,
         showTrailerControls = false,
