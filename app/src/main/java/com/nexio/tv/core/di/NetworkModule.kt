@@ -9,6 +9,7 @@ import com.nexio.tv.data.remote.api.AniSkipApi
 import com.nexio.tv.data.remote.api.AnimeSkipApi
 import com.nexio.tv.data.remote.api.ArmApi
 import com.nexio.tv.data.remote.CustomImdbClient
+import com.nexio.tv.data.remote.api.EasyDebridApi
 import com.nexio.tv.data.remote.api.GitHubReleaseApi
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.api.IntroDbApi
@@ -20,6 +21,7 @@ import com.nexio.tv.data.remote.api.RealDebridApi
 import com.nexio.tv.data.remote.api.RpdbApi
 import com.nexio.tv.data.remote.api.TopPostersApi
 import com.nexio.tv.data.remote.api.TmdbApi
+import com.nexio.tv.data.remote.api.TorBoxApi
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import dagger.Module
@@ -402,6 +404,36 @@ object NetworkModule {
     @Singleton
     fun providePremiumizeApi(@Named("premiumize") retrofit: Retrofit): PremiumizeApi =
         retrofit.create(PremiumizeApi::class.java)
+
+    @Provides
+    @Singleton
+    @Named("torBox")
+    fun provideTorBoxRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://api.torbox.app/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideTorBoxApi(@Named("torBox") retrofit: Retrofit): TorBoxApi =
+        retrofit.create(TorBoxApi::class.java)
+
+    @Provides
+    @Singleton
+    @Named("easyDebrid")
+    fun provideEasyDebridRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://easydebrid.com/api/v1/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideEasyDebridApi(@Named("easyDebrid") retrofit: Retrofit): EasyDebridApi =
+        retrofit.create(EasyDebridApi::class.java)
 
     // --- Poster ratings APIs ---
 

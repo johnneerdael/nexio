@@ -538,7 +538,7 @@
 
     <!-- DebridSettingsContent -->
     <string name="debrid_title">Debrid</string>
-    <string name="debrid_subtitle">Connect Premiumize or Real-Debrid and surface saved streams in Library</string>
+    <string name="debrid_subtitle">Connect Real-Debrid, Premiumize, TorBox, or EasyDebrid for Service Wrap and debrid playback</string>
     <string name="debrid_real_debrid_title">Real-Debrid</string>
     <string name="debrid_real_debrid_description">Use Real-Debrid device auth to import your downloads. Nexio prefers the standard client-secret flow and falls back to the open-source credentials flow when needed.</string>
     <string name="debrid_real_debrid_unavailable">Set `REAL_DEBRID_CLIENT_ID` in local properties to enable device auth</string>
@@ -550,6 +550,16 @@
     <string name="debrid_premiumize_connected_customer">Customer %1$d</string>
     <string name="debrid_premiumize_key_title">Premiumize API Key</string>
     <string name="debrid_premiumize_key_subtitle">Enter your Premiumize API key</string>
+    <string name="debrid_torbox_title">TorBox</string>
+    <string name="debrid_torbox_description">Add your TorBox API key to use TorBox for Service Wrap and debrid playback.</string>
+    <string name="debrid_torbox_connected_account">%1$s%2$s</string>
+    <string name="debrid_torbox_key_title">TorBox API Key</string>
+    <string name="debrid_torbox_key_subtitle">Enter your TorBox API key</string>
+    <string name="debrid_easydebrid_title">EasyDebrid</string>
+    <string name="debrid_easydebrid_description">Add your EasyDebrid API key to resolve cached torrents through EasyDebrid.</string>
+    <string name="debrid_easydebrid_connected_user">User %1$s</string>
+    <string name="debrid_easydebrid_key_title">EasyDebrid API Key</string>
+    <string name="debrid_easydebrid_key_subtitle">Enter your EasyDebrid API key</string>
     <string name="debrid_api_key_placeholder">Enter API key</string>
     <string name="debrid_unavailable">Unavailable</string>
     <string name="debrid_connected">Connected</string>

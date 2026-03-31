@@ -163,6 +163,10 @@ class LibraryRepositoryImpl @Inject constructor(
         debridLibraryService.refreshNow(DebridLibraryService.RefreshTarget.PREMIUMIZE)
     }
 
+    override suspend fun refreshTorBoxNow() {
+        debridLibraryService.refreshNow(DebridLibraryService.RefreshTarget.TORBOX)
+    }
+
     private suspend fun requireTraktAuth() {
         if (!traktAuthDataStore.isEffectivelyAuthenticated.first()) {
             throw IllegalStateException("Trakt authentication required")

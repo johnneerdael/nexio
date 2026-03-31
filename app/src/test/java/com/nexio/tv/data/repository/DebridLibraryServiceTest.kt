@@ -4,11 +4,15 @@ import com.nexio.tv.data.local.RealDebridAuthDataStore
 import com.nexio.tv.data.local.RealDebridAuthState
 import com.nexio.tv.data.remote.api.PremiumizeApi
 import com.nexio.tv.data.remote.api.RealDebridApi
+import com.nexio.tv.data.remote.api.TorBoxApi
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDownloadDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentFileDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentInfoDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridUnrestrictLinkDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxEnvelopeDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxFileDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxTorrentListItemDto
 import io.mockk.coEvery
 import io.mockk.coJustRun
 import io.mockk.every
@@ -29,10 +33,13 @@ class DebridLibraryServiceTest {
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
         val premiumizeApi = mockk<PremiumizeApi>()
         val premiumizeService = mockk<PremiumizeService>()
+        val torBoxApi = mockk<TorBoxApi>()
+        val torBoxService = mockk<TorBoxService>()
 
         stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
         coJustRun { premiumizeService.refreshAccountState() }
+        stubDisconnectedTorBox(torBoxService)
 
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
             listOf(
@@ -105,7 +112,9 @@ class DebridLibraryServiceTest {
             realDebridAuthDataStore = realDebridAuthDataStore,
             realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
-            premiumizeService = premiumizeService
+            premiumizeService = premiumizeService,
+            torBoxApi = torBoxApi,
+            torBoxService = torBoxService
         )
 
         service.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
@@ -126,10 +135,13 @@ class DebridLibraryServiceTest {
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
         val premiumizeApi = mockk<PremiumizeApi>()
         val premiumizeService = mockk<PremiumizeService>()
+        val torBoxApi = mockk<TorBoxApi>()
+        val torBoxService = mockk<TorBoxService>()
 
         stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
         coJustRun { premiumizeService.refreshAccountState() }
+        stubDisconnectedTorBox(torBoxService)
 
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
             listOf(
@@ -197,7 +209,9 @@ class DebridLibraryServiceTest {
             realDebridAuthDataStore = realDebridAuthDataStore,
             realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
-            premiumizeService = premiumizeService
+            premiumizeService = premiumizeService,
+            torBoxApi = torBoxApi,
+            torBoxService = torBoxService
         )
 
         service.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
@@ -215,10 +229,13 @@ class DebridLibraryServiceTest {
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
         val premiumizeApi = mockk<PremiumizeApi>()
         val premiumizeService = mockk<PremiumizeService>()
+        val torBoxApi = mockk<TorBoxApi>()
+        val torBoxService = mockk<TorBoxService>()
 
         stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
         coJustRun { premiumizeService.refreshAccountState() }
+        stubDisconnectedTorBox(torBoxService)
 
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
             listOf(
@@ -267,7 +284,9 @@ class DebridLibraryServiceTest {
             realDebridAuthDataStore = realDebridAuthDataStore,
             realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
-            premiumizeService = premiumizeService
+            premiumizeService = premiumizeService,
+            torBoxApi = torBoxApi,
+            torBoxService = torBoxService
         )
 
         service.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
@@ -284,10 +303,13 @@ class DebridLibraryServiceTest {
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
         val premiumizeApi = mockk<PremiumizeApi>()
         val premiumizeService = mockk<PremiumizeService>()
+        val torBoxApi = mockk<TorBoxApi>()
+        val torBoxService = mockk<TorBoxService>()
 
         stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
         coJustRun { premiumizeService.refreshAccountState() }
+        stubDisconnectedTorBox(torBoxService)
 
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
             listOf(
@@ -338,7 +360,9 @@ class DebridLibraryServiceTest {
             realDebridAuthDataStore = realDebridAuthDataStore,
             realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
-            premiumizeService = premiumizeService
+            premiumizeService = premiumizeService,
+            torBoxApi = torBoxApi,
+            torBoxService = torBoxService
         )
 
         service.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
@@ -355,10 +379,13 @@ class DebridLibraryServiceTest {
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
         val premiumizeApi = mockk<PremiumizeApi>()
         val premiumizeService = mockk<PremiumizeService>()
+        val torBoxApi = mockk<TorBoxApi>()
+        val torBoxService = mockk<TorBoxService>()
 
         stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
         coJustRun { premiumizeService.refreshAccountState() }
+        stubDisconnectedTorBox(torBoxService)
 
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
             listOf(
@@ -409,6 +436,7 @@ class DebridLibraryServiceTest {
             )
         )
         coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(emptyList())
+        coEvery { realDebridApi.unrestrictLink(any(), any(), any()) } returns Response.error(503, mockk(relaxed = true))
         coEvery { realDebridApi.unrestrictLink(any(), "https://real-debrid.com/d/main", any()) } returns Response.success(
             RealDebridUnrestrictLinkDto(
                 id = "unrestricted-main",
@@ -422,7 +450,6 @@ class DebridLibraryServiceTest {
                 streamable = 1
             )
         )
-        coEvery { realDebridApi.unrestrictLink(any(), any(), any()) } returns Response.error(503, mockk(relaxed = true))
         val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
 
         val service = DebridLibraryService(
@@ -430,7 +457,9 @@ class DebridLibraryServiceTest {
             realDebridAuthDataStore = realDebridAuthDataStore,
             realDebridAuthService = realDebridAuthService,
             premiumizeApi = premiumizeApi,
-            premiumizeService = premiumizeService
+            premiumizeService = premiumizeService,
+            torBoxApi = torBoxApi,
+            torBoxService = torBoxService
         )
 
         service.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
@@ -440,6 +469,91 @@ class DebridLibraryServiceTest {
         assertEquals(1, items.size)
         assertEquals("rd:torrent:samples:file:50", items.single().id)
         assertEquals("Hoppers.2026.1080p.TELESYNC.x264-SyncUP", items.single().name)
+    }
+
+    @Test
+    fun `refresh torbox exposes cached playable files with direct playback urls`() = runTest {
+        val realDebridApi = mockk<RealDebridApi>()
+        val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
+        val premiumizeApi = mockk<PremiumizeApi>()
+        val premiumizeService = mockk<PremiumizeService>()
+        val torBoxApi = mockk<TorBoxApi>()
+        val torBoxService = mockk<TorBoxService>()
+
+        every { realDebridAuthDataStore.isAuthenticated } returns flowOf(false)
+        every { realDebridAuthDataStore.state } returns flowOf(RealDebridAuthState())
+        every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
+        coJustRun { premiumizeService.refreshAccountState() }
+        every { torBoxService.observeAccountState() } returns flowOf(
+            TorBoxAccountState(apiKey = "tb-key", email = "user@example.com", plan = "pro", isConnected = true)
+        )
+        coJustRun { torBoxService.refreshAccountState() }
+
+        coEvery {
+            torBoxApi.getMyTorrentList(
+                authorization = "Bearer tb-key",
+                id = null,
+                bypassCache = true,
+                offset = null,
+                limit = 100
+            )
+        } returns Response.success(
+            TorBoxEnvelopeDto(
+                success = true,
+                data = listOf(
+                    TorBoxTorrentListItemDto(
+                        id = 22,
+                        hash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01",
+                        name = "TorBox.Movie.2026",
+                        downloadFinished = true,
+                        downloadPresent = true,
+                        createdAt = "2026-03-30T12:00:00Z",
+                        files = listOf(
+                            TorBoxFileDto(
+                                id = 7,
+                                name = "TorBox.Movie.2026.1080p.mkv",
+                                shortName = "TorBox.Movie.2026.1080p.mkv",
+                                size = 4_000_000_000L,
+                                mimeType = "video/x-matroska"
+                            )
+                        )
+                    )
+                )
+            )
+        )
+        coEvery {
+            torBoxApi.requestDownloadLink(
+                token = "tb-key",
+                torrentId = 22,
+                fileId = 7,
+                zipLink = false,
+                redirect = false
+            )
+        } returns Response.success(
+            TorBoxEnvelopeDto(success = true, data = "https://tb.test/download/movie.mkv")
+        )
+
+        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
+        val service = DebridLibraryService(
+            realDebridApi = realDebridApi,
+            realDebridAuthDataStore = realDebridAuthDataStore,
+            realDebridAuthService = realDebridAuthService,
+            premiumizeApi = premiumizeApi,
+            premiumizeService = premiumizeService,
+            torBoxApi = torBoxApi,
+            torBoxService = torBoxService
+        )
+
+        service.refreshNow(DebridLibraryService.RefreshTarget.TORBOX)
+
+        val tabs = service.observeListTabs().first()
+        val items = service.observeItems().first()
+
+        assertEquals(listOf(DebridLibraryService.TORBOX_LIST_KEY), tabs.map { it.key })
+        assertEquals(1, items.size)
+        assertEquals("https://tb.test/download/movie.mkv", items.single().directPlaybackUrl)
+        assertEquals(setOf(DebridLibraryService.TORBOX_LIST_KEY), items.single().listKeys)
+        assertEquals("TorBox.Movie.2026.1080p", items.single().name)
     }
 
     private fun stubAuthenticatedRealDebrid(realDebridAuthDataStore: RealDebridAuthDataStore) {
@@ -455,5 +569,10 @@ class DebridLibraryServiceTest {
                 expiresIn = 3600
             )
         )
+    }
+
+    private fun stubDisconnectedTorBox(torBoxService: TorBoxService) {
+        every { torBoxService.observeAccountState() } returns flowOf(TorBoxAccountState())
+        coJustRun { torBoxService.refreshAccountState() }
     }
 }

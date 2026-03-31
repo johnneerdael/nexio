@@ -30,7 +30,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 3
+internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 4
 
 internal fun observeAccountConfigSyncChanges(
     heroCatalogSelections: Flow<Unit>,
@@ -47,6 +47,10 @@ internal fun observeAccountConfigSyncChanges(
     posterRatingsSettings: Flow<Unit>,
     premiumizeSettings: Flow<Unit>,
     premiumizeAccountState: Flow<Unit>,
+    torBoxSettings: Flow<Unit>,
+    torBoxAccountState: Flow<Unit>,
+    easyDebridSettings: Flow<Unit>,
+    easyDebridAccountState: Flow<Unit>,
     realDebridState: Flow<Unit>,
     traktAuthState: Flow<Unit>,
     traktCatalogPreferences: Flow<Unit>
@@ -66,6 +70,10 @@ internal fun observeAccountConfigSyncChanges(
         posterRatingsSettings,
         premiumizeSettings,
         premiumizeAccountState,
+        torBoxSettings,
+        torBoxAccountState,
+        easyDebridSettings,
+        easyDebridAccountState,
         realDebridState,
         traktAuthState,
         traktCatalogPreferences

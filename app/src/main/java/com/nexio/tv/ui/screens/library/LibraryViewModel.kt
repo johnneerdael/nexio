@@ -158,6 +158,12 @@ class LibraryViewModel @Inject constructor(
                     refreshBlock = { libraryRepository.refreshPremiumizeNow() }
                 }
 
+                selectedList?.key == DebridLibraryService.TORBOX_LIST_KEY -> {
+                    startMessage = "Syncing TorBox library..."
+                    successMessage = "TorBox library synced"
+                    refreshBlock = { libraryRepository.refreshTorBoxNow() }
+                }
+
                 selectedList?.type == LibraryListTab.Type.SERVICE ||
                     state.sourceMode == LibrarySourceMode.DEBRID -> {
                     startMessage = "Syncing debrid libraries..."
