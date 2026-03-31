@@ -430,7 +430,6 @@ class AccountSettingsSyncService @Inject constructor(
         layoutPreferenceDataStore.setCatalogTypeSuffixEnabled(settings.layout.catalogTypeSuffixEnabled)
         layoutPreferenceDataStore.setHideUnreleasedContent(settings.layout.hideUnreleasedContent)
         layoutPreferenceDataStore.setBlurUnwatchedEpisodes(settings.layout.blurUnwatchedEpisodes)
-        layoutPreferenceDataStore.setContinueWatchingBlurEnabled(settings.layout.continueWatchingBlurEnabled)
         layoutPreferenceDataStore.setPreferExternalMetaAddonDetail(settings.layout.preferExternalMetaAddonDetail)
         layoutPreferenceDataStore.setFocusedPosterBackdropExpandEnabled(settings.layout.focusedPosterBackdropExpandEnabled)
         layoutPreferenceDataStore.setFocusedPosterBackdropExpandDelaySeconds(settings.layout.focusedPosterBackdropExpandDelaySeconds)

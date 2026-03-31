@@ -47,6 +47,14 @@ interface TmdbApi {
         @Query("language") language: String = "en-US"
     ): Response<TmdbVideosResponse>
 
+    @GET("tv/{tv_id}/season/{season_number}/videos")
+    suspend fun getTvSeasonVideos(
+        @Path("tv_id") tvId: Int,
+        @Path("season_number") seasonNumber: Int,
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String = "en-US"
+    ): Response<TmdbVideosResponse>
+
     @GET("movie/{movie_id}")
     suspend fun getMovieDetails(
         @Path("movie_id") movieId: Int,
@@ -358,8 +366,7 @@ data class TmdbTvContentRatingItem(
 @JsonClass(generateAdapter = true)
 data class TmdbImage(
     @Json(name = "file_path") val filePath: String? = null,
-    @Json(name = "iso_639_1") val iso6391: String? = null,
-    @Json(name = "iso_3166_1") val iso31661: String? = null
+    @Json(name = "iso_639_1") val iso6391: String? = null
 )
 
 @JsonClass(generateAdapter = true)

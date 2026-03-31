@@ -46,6 +46,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -63,7 +65,6 @@ import android.view.KeyEvent
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 import androidx.tv.material3.Border
@@ -88,10 +89,7 @@ import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.components.StreamsSkeletonList
 import com.nexio.tv.ui.components.InlineIconText
 import com.nexio.tv.ui.components.streamBadgeKinds
-import com.nexio.tv.ui.input.DpadRepeatThrottleState
-import com.nexio.tv.ui.input.consumeThrottledDirectionalRepeat
 import com.nexio.tv.ui.screens.player.LoadingOverlay
-import com.nexio.tv.ui.stream.inlineStreamText
 import com.nexio.tv.ui.theme.NexioTheme
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -196,7 +194,9 @@ fun StreamScreen(
     }
 
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NexioColors.Background)
     ) {
         // Full screen backdrop
         StreamBackdrop(
@@ -361,6 +361,7 @@ private fun StreamGradientLayer(
 ) {
     Box(
         modifier = modifier
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             .drawWithCache {
                 val leftGradient = Brush.horizontalGradient(
                     colorStops = arrayOf(
@@ -663,18 +664,13 @@ private fun AddonFilterChips(
 ) {
     val chipMap = sourceChips.associateBy { it.name }
     var chipRowHasFocus by remember { mutableStateOf(false) }
-    var repeatThrottleState by remember { mutableStateOf(DpadRepeatThrottleState()) }
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
         modifier = Modifier
             .onFocusChanged { chipRowHasFocus = it.hasFocus }
-            .onPreviewKeyEvent { event ->
-                val throttleResult =
-                    event.consumeThrottledDirectionalRepeat(repeatThrottleState)
-                repeatThrottleState = throttleResult.updatedState
-                if (throttleResult.consumed) return@onPreviewKeyEvent true
-                if (event.nativeKeyEvent.action != android.view.KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+            .onKeyEvent { event ->
+                if (event.nativeKeyEvent.action != android.view.KeyEvent.ACTION_DOWN) return@onKeyEvent false
                 val allOptions = listOf<String?>(null) + orderedNames
                 val currentIdx = allOptions.indexOf(selectedAddon)
                 when (event.key) {
@@ -822,7 +818,6 @@ private fun StreamsList(
 ) {
     val firstCardFocusRequester = remember { FocusRequester() }
     val restoreFocusRequester = remember { FocusRequester() }
-    var repeatThrottleState by remember { mutableStateOf(DpadRepeatThrottleState()) }
     val firstStreamKey = streams.firstOrNull()?.let { first ->
         "${first.stream.addonName}_${first.stream.url ?: first.stream.infoHash ?: first.stream.ytId ?: "unknown"}"
     }
@@ -856,13 +851,9 @@ private fun StreamsList(
             .fillMaxSize()
             .padding(16.dp)
             .onFocusChanged { onFocusChanged(it.hasFocus) }
-            .onPreviewKeyEvent { event ->
-                val throttleResult =
-                    event.consumeThrottledDirectionalRepeat(repeatThrottleState)
-                repeatThrottleState = throttleResult.updatedState
-                if (throttleResult.consumed) return@onPreviewKeyEvent true
-                if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
-                if (availableAddons.isEmpty()) return@onPreviewKeyEvent false
+            .onKeyEvent { event ->
+                if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onKeyEvent false
+                if (availableAddons.isEmpty()) return@onKeyEvent false
                 val allOptions = listOf<String?>(null) + availableAddons
                 val currentIdx = allOptions.indexOf(selectedAddonFilter)
                 when (event.key) {
@@ -911,9 +902,9 @@ private fun StreamCard(
 ) {
     val stream = item.stream
     val context = LocalContext.current
-    val streamName = remember(item) { inlineStreamText(item.title).orEmpty() }
-    val streamSubtitle = remember(item) { inlineStreamText(item.subtitle) }
-    val detailLines = remember(item) { item.detailLines.mapNotNull(::inlineStreamText) }
+    val streamName = remember(item) { item.title }
+    val streamSubtitle = remember(item) { item.subtitle }
+    val detailLines = remember(item) { item.detailLines }
     val addonLogoModel = remember(context, stream.addonLogo) {
         stream.addonLogo?.let { logo ->
             ImageRequest.Builder(context)

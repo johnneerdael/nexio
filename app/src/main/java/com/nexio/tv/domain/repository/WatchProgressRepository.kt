@@ -31,10 +31,7 @@ interface WatchProgressRepository {
     /**
      * Get all episode progress for a series as a map of (season, episode) to progress
      */
-    fun getAllEpisodeProgress(contentIds: Collection<String>): Flow<Map<Pair<Int, Int>, WatchProgress>>
-
-    fun getAllEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> =
-        getAllEpisodeProgress(listOf(contentId))
+    fun getAllEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>>
 
     /**
      * Returns whether the item is marked as watched/completed.

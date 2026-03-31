@@ -124,8 +124,8 @@ fun GridContentCard(
                 },
             shape = CardDefaults.shape(shape = cardShape),
             colors = CardDefaults.colors(
-                containerColor = Color.Transparent,
-                focusedContainerColor = Color.Transparent
+                containerColor = NexioColors.BackgroundCard,
+                focusedContainerColor = NexioColors.BackgroundCard
             ),
             border = CardDefaults.border(
                 focusedBorder = Border(

@@ -1,6 +1,5 @@
 package com.nexio.tv.ui.screens.detail
 
-import android.text.format.DateFormat
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -1060,10 +1059,7 @@ private fun formatEpisodeRuntime(runtimeMinutes: Int): String {
 
 private fun formatEpisodeCardDate(isoDate: String): String {
     val locale = Locale.getDefault()
-    val outputFormat = SimpleDateFormat(
-        DateFormat.getBestDateTimePattern(locale, "dMMMMy"),
-        locale
-    )
+    val outputFormat = SimpleDateFormat("MMM d, yyyy", locale)
     return try {
         val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")

@@ -138,7 +138,6 @@ data class LayoutSettings(
     val catalogTypeSuffixEnabled: Boolean = true,
     val hideUnreleasedContent: Boolean = false,
     val blurUnwatchedEpisodes: Boolean = false,
-    val continueWatchingBlurEnabled: Boolean = false,
     val preferExternalMetaAddonDetail: Boolean = false,
     val focusedPosterBackdropExpandEnabled: Boolean = false,
     val focusedPosterBackdropExpandDelaySeconds: Int = 3,

@@ -23,9 +23,6 @@ import javax.inject.Singleton
 
 private const val TAG = "InAppYouTubeExtractor"
 private const val EXTRACTOR_TIMEOUT_MS = 30_000L
-private const val DEFAULT_USER_AGENT =
-    "Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 " +
-        "(KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
 private const val PREFERRED_SEPARATE_CLIENT = "android_vr"
 
 private val VIDEO_ID_REGEX = Regex("^[a-zA-Z0-9_-]{11}$")
@@ -75,10 +72,7 @@ private data class ManifestCandidate(
     val bandwidth: Long
 )
 
-private val DEFAULT_HEADERS = mapOf(
-    "accept-language" to "en-US,en;q=0.9",
-    "user-agent" to DEFAULT_USER_AGENT
-)
+private val DEFAULT_HEADERS = buildStableYouTubeRequestHeaders()
 
 private val CLIENTS = listOf(
     YouTubeClient(
@@ -410,7 +404,7 @@ class InAppYouTubeExtractor @Inject constructor() {
         val headers = buildMap {
             putAll(DEFAULT_HEADERS)
             put("content-type", "application/json")
-            put("origin", "https://www.youtube.com")
+            put("origin", YOUTUBE_STABLE_ORIGIN)
             put("x-youtube-client-name", client.id)
             put("x-youtube-client-version", client.version)
             put("user-agent", client.userAgent)
@@ -707,7 +701,7 @@ class InAppYouTubeExtractor @Inject constructor() {
             }
         }
         if (source.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
-            headers.add("User-Agent", DEFAULT_USER_AGENT)
+            headers.add("User-Agent", YOUTUBE_STABLE_WEB_USER_AGENT)
         }
         return headers.build()
     }
