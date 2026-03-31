@@ -6,6 +6,7 @@ import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.domain.model.StreamBehaviorHints
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TrailerSupportTest {
@@ -118,6 +119,56 @@ class TrailerSupportTest {
     }
 
     @Test
+    fun `rankTmdbVideoCandidates excludes recaps from normal trailer playback selection`() {
+        val ranked = rankTmdbVideoCandidates(
+            listOf(
+                tmdbVideo(
+                    key = "recap1234567",
+                    type = "Recap",
+                    official = true,
+                    size = 1080,
+                    publishedAt = "2024-04-01T00:00:00Z"
+                ),
+                tmdbVideo(
+                    key = "trailer12345",
+                    type = "Trailer",
+                    official = true,
+                    size = 720,
+                    publishedAt = "2024-03-01T00:00:00Z"
+                )
+            )
+        )
+
+        assertEquals(1, ranked.size)
+        assertEquals("trailer12345", ranked.single().key)
+    }
+
+    @Test
+    fun `rankTmdbRecapCandidates prefers official recaps over featurettes`() {
+        val ranked = rankTmdbRecapCandidates(
+            listOf(
+                tmdbVideo(
+                    key = "featurette11",
+                    type = "Featurette",
+                    official = true,
+                    size = 1080,
+                    publishedAt = "2024-03-01T00:00:00Z"
+                ),
+                tmdbVideo(
+                    key = "recap1234567",
+                    type = "Recap",
+                    official = true,
+                    size = 720,
+                    publishedAt = "2024-04-01T00:00:00Z"
+                )
+            )
+        )
+
+        assertEquals(1, ranked.size)
+        assertEquals("recap1234567", ranked.single().key)
+    }
+
+    @Test
     fun `selectStreailerTrailerCandidate prefers explicit trailer streams and ignores recaps`() {
         val candidate = selectStreailerTrailerCandidate(
             listOf(
@@ -151,6 +202,117 @@ class TrailerSupportTest {
         )
 
         assertEquals("https://www.youtube.com/watch?v=extvideo123", candidate?.externalUrl)
+    }
+
+    @Test
+    fun `selectStreailerTrailerCandidate prefers teaser and excludes generic non trailer clips`() {
+        val candidate = selectStreailerTrailerCandidate(
+            listOf(
+                streailerStream(
+                    name = "Behind the scenes",
+                    ytId = "clipvideo01"
+                ),
+                streailerStream(
+                    name = "Official Teaser",
+                    ytId = "teaservid01",
+                    bingeGroup = "teaser"
+                )
+            )
+        )
+
+        assertEquals("teaservid01", candidate?.youtubeId)
+    }
+
+    @Test
+    fun `selectStreailerTrailerCandidate returns null when only generic clips are present`() {
+        val candidate = selectStreailerTrailerCandidate(
+            listOf(
+                streailerStream(
+                    name = "Behind the scenes",
+                    ytId = "clipvideo01"
+                )
+            )
+        )
+
+        assertNull(candidate)
+    }
+
+    @Test
+    fun `selectStreailerRecapCandidate only returns recap streams`() {
+        val candidate = selectStreailerRecapCandidate(
+            listOf(
+                streailerStream(
+                    name = "🎬 Trailer",
+                    ytId = "trailerabc1",
+                    bingeGroup = "trailer"
+                ),
+                streailerStream(
+                    name = "📝 Season Recap",
+                    ytId = "recapvideo1",
+                    bingeGroup = "recap"
+                )
+            )
+        )
+
+        assertEquals("recapvideo1", candidate?.youtubeId)
+    }
+
+    @Test
+    fun `selectSeasonStreailerTrailerCandidate only returns matching season trailer or teaser`() {
+        val candidate = selectSeasonStreailerTrailerCandidate(
+            streams = listOf(
+                streailerStream(
+                    name = "Season 2 Trailer",
+                    ytId = "season2trr1",
+                    bingeGroup = "trailer"
+                ),
+                streailerStream(
+                    name = "Season 1 Teaser",
+                    ytId = "season1tsr1",
+                    bingeGroup = "teaser"
+                )
+            ),
+            seasonNumber = 1
+        )
+
+        assertEquals("season1tsr1", candidate?.youtubeId)
+    }
+
+    @Test
+    fun `selectSeasonStreailerRecapCandidate ignores recap for other seasons`() {
+        val candidate = selectSeasonStreailerRecapCandidate(
+            streams = listOf(
+                streailerStream(
+                    name = "Season 2 Recap",
+                    ytId = "season2rcp1",
+                    bingeGroup = "recap"
+                )
+            ),
+            seasonNumber = 1
+        )
+
+        assertNull(candidate)
+    }
+
+    @Test
+    fun `orderedSeasonRecapCandidates uses tmdb recap before streailer recap`() {
+        val ordered = orderedSeasonRecapCandidates(
+            tmdbResults = listOf(
+                tmdbVideo(
+                    key = "tmdbrecap01",
+                    type = "Recap",
+                    official = true,
+                    size = 1080,
+                    publishedAt = "2024-05-01T00:00:00Z"
+                )
+            ),
+            streailerRecap = StreailerTrailerCandidate(youtubeId = "streailer01")
+        )
+
+        assertEquals(2, ordered.size)
+        assertTrue(ordered.first() is SeasonMediaCandidate.TmdbYouTube)
+        assertEquals("tmdbrecap01", (ordered.first() as SeasonMediaCandidate.TmdbYouTube).youtubeId)
+        assertTrue(ordered.last() is SeasonMediaCandidate.Streailer)
     }
 
     @Test

@@ -7,6 +7,7 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.tmdb.TmdbEnrichment
+import com.nexio.tv.data.remote.api.TmdbVideoResult
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
@@ -24,9 +25,12 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val PREFS_NAME = "metadata_disk_cache_v1"
         private const val META_PREFIX = "meta::"
         private const val TMDB_PREFIX = "tmdb::"
+        private const val TMDB_TITLE_VIDEOS_PREFIX = "tmdb_videos::"
+        private const val TMDB_SEASON_VIDEOS_PREFIX = "tmdb_season_videos::"
         private const val HOME_REF_PREFIX = "home_ref::"
         private const val LANGUAGE_EPOCH_KEY = "metadata_language_epoch"
         private const val TMDB_CACHE_SCHEMA_VERSION = 1
+        private const val TMDB_VIDEO_CACHE_SCHEMA_VERSION = 1
     }
 
     private val gson = Gson()
@@ -111,6 +115,68 @@ class MetadataDiskCacheStore @Inject constructor(
         }.onFailure { error ->
             Log.w(TAG, "Failed to write TMDB enrichment disk cache entry", error)
         }
+    }
+
+    fun readTmdbTitleVideos(
+        tmdbId: Int,
+        mediaType: String,
+        languageTag: String,
+        providerToken: String
+    ): List<TmdbVideoResult>? {
+        val key = buildTmdbTitleVideosKey(
+            tmdbId = tmdbId,
+            mediaType = mediaType,
+            languageTag = languageTag,
+            providerToken = providerToken
+        )
+        return readTmdbVideosEntry(key)
+    }
+
+    fun writeTmdbTitleVideos(
+        tmdbId: Int,
+        mediaType: String,
+        languageTag: String,
+        providerToken: String,
+        videos: List<TmdbVideoResult>
+    ) {
+        val key = buildTmdbTitleVideosKey(
+            tmdbId = tmdbId,
+            mediaType = mediaType,
+            languageTag = languageTag,
+            providerToken = providerToken
+        )
+        writeTmdbVideosEntry(key, videos)
+    }
+
+    fun readTmdbSeasonVideos(
+        tmdbId: Int,
+        seasonNumber: Int,
+        languageTag: String,
+        providerToken: String
+    ): List<TmdbVideoResult>? {
+        val key = buildTmdbSeasonVideosKey(
+            tmdbId = tmdbId,
+            seasonNumber = seasonNumber,
+            languageTag = languageTag,
+            providerToken = providerToken
+        )
+        return readTmdbVideosEntry(key)
+    }
+
+    fun writeTmdbSeasonVideos(
+        tmdbId: Int,
+        seasonNumber: Int,
+        languageTag: String,
+        providerToken: String,
+        videos: List<TmdbVideoResult>
+    ) {
+        val key = buildTmdbSeasonVideosKey(
+            tmdbId = tmdbId,
+            seasonNumber = seasonNumber,
+            languageTag = languageTag,
+            providerToken = providerToken
+        )
+        writeTmdbVideosEntry(key, videos)
     }
 
     fun removeMetaEntriesForItem(itemKey: String): List<String> {
@@ -256,7 +322,12 @@ class MetadataDiskCacheStore @Inject constructor(
             var removedCount = 0
             prefs.all.entries
                 .asSequence()
-                .filter { (key, _) -> key.startsWith(META_PREFIX) || key.startsWith(TMDB_PREFIX) }
+                .filter { (key, _) ->
+                    key.startsWith(META_PREFIX) ||
+                        key.startsWith(TMDB_PREFIX) ||
+                        key.startsWith(TMDB_TITLE_VIDEOS_PREFIX) ||
+                        key.startsWith(TMDB_SEASON_VIDEOS_PREFIX)
+                }
                 .forEach { (key, value) ->
                     if (removedCount >= maxEntries) return@forEach
                     val payload = (value as? String).orEmpty()
@@ -268,7 +339,7 @@ class MetadataDiskCacheStore @Inject constructor(
                         meta?.poster?.let(removedImageUrls::add)
                         meta?.background?.let(removedImageUrls::add)
                         meta?.logo?.let(removedImageUrls::add)
-                    } else {
+                    } else if (key.startsWith(TMDB_PREFIX)) {
                         val enrichment = runCatching { decodeTmdbEnrichmentSafely(root) }.getOrNull()
                         enrichment?.poster?.let(removedImageUrls::add)
                         enrichment?.backdrop?.let(removedImageUrls::add)
@@ -290,6 +361,54 @@ class MetadataDiskCacheStore @Inject constructor(
 
     private fun buildTmdbKey(tmdbKey: String, languageTag: String, providerToken: String): String {
         return "$TMDB_PREFIX$tmdbKey::$languageTag::$providerToken"
+    }
+
+    private fun buildTmdbTitleVideosKey(
+        tmdbId: Int,
+        mediaType: String,
+        languageTag: String,
+        providerToken: String
+    ): String {
+        return "$TMDB_TITLE_VIDEOS_PREFIX$tmdbId::${mediaType.trim().lowercase()}::$languageTag::$providerToken"
+    }
+
+    private fun buildTmdbSeasonVideosKey(
+        tmdbId: Int,
+        seasonNumber: Int,
+        languageTag: String,
+        providerToken: String
+    ): String {
+        return "$TMDB_SEASON_VIDEOS_PREFIX$tmdbId::$seasonNumber::$languageTag::$providerToken"
+    }
+
+    private fun readTmdbVideosEntry(key: String): List<TmdbVideoResult>? {
+        return runCatching {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
+            val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
+            val epoch = root.get("languageEpoch")?.asInt ?: 0
+            if (epoch != currentLanguageEpoch()) return null
+            val schemaVersion = root.get("tmdbVideoSchemaVersion")?.asInt ?: 0
+            if (schemaVersion != TMDB_VIDEO_CACHE_SCHEMA_VERSION) return null
+            decodeTmdbVideosSafely(root)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to read TMDB videos disk cache entry", error)
+        }.getOrNull()
+    }
+
+    private fun writeTmdbVideosEntry(key: String, videos: List<TmdbVideoResult>) {
+        runCatching {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val payload = JsonObject().apply {
+                add("value", gson.toJsonTree(videos))
+                addProperty("languageEpoch", currentLanguageEpoch())
+                addProperty("tmdbVideoSchemaVersion", TMDB_VIDEO_CACHE_SCHEMA_VERSION)
+                addProperty("updatedAtMs", System.currentTimeMillis())
+            }
+            prefs.edit().putString(key, gson.toJson(payload)).apply()
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to write TMDB videos disk cache entry", error)
+        }
     }
 
     /**
@@ -315,6 +434,12 @@ class MetadataDiskCacheStore @Inject constructor(
         val parsed = runCatching { gson.fromJson(value, TmdbEnrichment::class.java) }.getOrNull() ?: return null
         val valueObj = value.asJsonObject
         return mergeTmdbEnrichmentCollections(parsed, valueObj)
+    }
+
+    private fun decodeTmdbVideosSafely(root: JsonObject): List<TmdbVideoResult>? {
+        val value = root.get("value") ?: return null
+        val type = object : TypeToken<List<TmdbVideoResult>>() {}.type
+        return runCatching { gson.fromJson<List<TmdbVideoResult>>(value, type) }.getOrNull()
     }
 
     private fun readCastMembers(obj: JsonObject, key: String): List<MetaCastMember> {

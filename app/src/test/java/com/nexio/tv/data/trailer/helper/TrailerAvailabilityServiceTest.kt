@@ -1,13 +1,15 @@
 package com.nexio.tv.data.trailer.helper
 
+import android.util.Log
 import com.nexio.tv.data.local.YouTubeTrailerAuthDataStore
 import com.nexio.tv.data.local.YouTubeTrailerAuthSettings
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import io.mockk.slot
-import io.mockk.withArg
+import io.mockk.unmockkStatic
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -15,16 +17,30 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.After
+import org.junit.Before
 import org.junit.Test
 
 class TrailerAvailabilityServiceTest {
 
+    @Before
+    fun setUp() {
+        mockkStatic(Log::class)
+        every { Log.d(any<String>(), any<String>()) } returns 0
+        every { Log.w(any<String>(), any<String>()) } returns 0
+    }
+
+    @After
+    fun tearDown() {
+        unmockkStatic(Log::class)
+    }
+
     @Test
     fun `signed out does not invoke helper`() = runTest {
-        val authDataStore = mockk<YouTubeTrailerAuthDataStore>()
-        val tokenStore = mockk<YouTubeTrailerTokenStore>()
-        val authService = mockk<YouTubeDeviceCodeAuthService>()
-        val bundledHelper = mockk<BundledTrailerHelper>()
+        val authDataStore = mockk<YouTubeTrailerAuthDataStore>(relaxed = true)
+        val tokenStore = mockk<YouTubeTrailerTokenStore>(relaxed = true)
+        val authService = mockk<YouTubeDeviceCodeAuthService>(relaxed = true)
+        val bundledHelper = mockk<BundledTrailerHelper>(relaxed = true)
         every { authDataStore.settings } returns flowOf(YouTubeTrailerAuthSettings(isSignedIn = false))
 
         val service = TrailerAvailabilityService(
@@ -47,6 +63,7 @@ class TrailerAvailabilityServiceTest {
         val tokenStore = mockk<YouTubeTrailerTokenStore>()
         val authService = mockk<YouTubeDeviceCodeAuthService>()
         val bundledHelper = mockk<BundledTrailerHelper>()
+        val savedSession = slot<YouTubeTrailerTokenSession>()
         every { authDataStore.settings } returns flowOf(YouTubeTrailerAuthSettings(isSignedIn = true))
         every {
             tokenStore.state
@@ -78,10 +95,10 @@ class TrailerAvailabilityServiceTest {
 
     @Test
     fun `signed in helper playback is returned and cached`() = runTest {
-        val authDataStore = mockk<YouTubeTrailerAuthDataStore>()
-        val tokenStore = mockk<YouTubeTrailerTokenStore>()
-        val authService = mockk<YouTubeDeviceCodeAuthService>()
-        val bundledHelper = mockk<BundledTrailerHelper>()
+        val authDataStore = mockk<YouTubeTrailerAuthDataStore>(relaxed = true)
+        val tokenStore = mockk<YouTubeTrailerTokenStore>(relaxed = true)
+        val authService = mockk<YouTubeDeviceCodeAuthService>(relaxed = true)
+        val bundledHelper = mockk<BundledTrailerHelper>(relaxed = true)
         val requestSlot = slot<TrailerHelperRequest>()
         every { authDataStore.settings } returns flowOf(YouTubeTrailerAuthSettings(isSignedIn = true))
         every {
@@ -132,6 +149,7 @@ class TrailerAvailabilityServiceTest {
         val tokenStore = mockk<YouTubeTrailerTokenStore>(relaxed = true)
         val authService = mockk<YouTubeDeviceCodeAuthService>()
         val bundledHelper = mockk<BundledTrailerHelper>()
+        val savedSession = slot<YouTubeTrailerTokenSession>()
         every { authDataStore.settings } returns flowOf(YouTubeTrailerAuthSettings(isSignedIn = true))
         every {
             tokenStore.state
@@ -178,14 +196,9 @@ class TrailerAvailabilityServiceTest {
         assertNull(service.resolveAuthenticatedYouTubePlayback("https://www.youtube.com/watch?v=testvideo04"))
 
         coVerify(exactly = 1) { authService.refreshAccessToken("refresh-token") }
-        coVerify(exactly = 1) {
-            tokenStore.saveSession(
-                withArg {
-                    assertEquals("fresh-token", it.accessToken)
-                    assertEquals("refresh-token", it.refreshToken)
-                }
-            )
-        }
+        coVerify(exactly = 1) { tokenStore.saveSession(capture(savedSession)) }
+        assertEquals("fresh-token", savedSession.captured.accessToken)
+        assertEquals("refresh-token", savedSession.captured.refreshToken)
     }
 
     private fun cache(): TrailerHelperCache {

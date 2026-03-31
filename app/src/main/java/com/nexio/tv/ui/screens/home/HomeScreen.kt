@@ -540,7 +540,9 @@ private fun ModernHomeRoute(
         uiState.posterLabelsEnabled,
         viewModel.trailerPreviewUrls,
         viewModel.trailerPreviewAudioUrls,
-        viewModel.trailerPreviewExternalUrls
+        viewModel.trailerPreviewExternalUrls,
+        viewModel.trailerPreviewLoadingItemIds,
+        viewModel.trailerPreviewNegativeCacheIds
     ) {
         ModernHomeContentState(
             catalogRows = uiState.catalogRows,
@@ -560,7 +562,9 @@ private fun ModernHomeRoute(
             posterLabelsEnabled = uiState.posterLabelsEnabled,
             trailerPreviewUrls = viewModel.trailerPreviewUrls,
             trailerPreviewAudioUrls = viewModel.trailerPreviewAudioUrls,
-            trailerPreviewExternalUrls = viewModel.trailerPreviewExternalUrls
+            trailerPreviewExternalUrls = viewModel.trailerPreviewExternalUrls,
+            trailerPreviewLoadingIds = viewModel.trailerPreviewLoadingItemIds,
+            trailerPreviewNegativeCacheIds = viewModel.trailerPreviewNegativeCacheIds
         )
     }
     val preloadAdjacentItem = remember(viewModel) {
@@ -574,6 +578,11 @@ private fun ModernHomeRoute(
     val requestTrailerPreview = remember(viewModel) {
         { itemId: String, title: String, releaseInfo: String?, apiType: String, fallbackYtId: String? ->
             viewModel.requestTrailerPreview(itemId, title, releaseInfo, apiType, fallbackYtId)
+        }
+    }
+    val retryTrailerPreview = remember(viewModel) {
+        { itemId: String, title: String, releaseInfo: String?, apiType: String, fallbackYtId: String? ->
+            viewModel.retryTrailerPreview(itemId, title, releaseInfo, apiType, fallbackYtId)
         }
     }
     val removeContinueWatching = remember(viewModel) {
@@ -623,6 +632,7 @@ private fun ModernHomeRoute(
         onItemFocus = remember(viewModel) { { item -> viewModel.onItemFocus(item) } },
         onPreloadAdjacentItem = preloadAdjacentItem,
         onRequestTrailerPreview = requestTrailerPreview,
+        onRetryTrailerPreview = retryTrailerPreview,
         onModernHomeTrailerPlaybackStarted = onModernHomeTrailerPlaybackStarted,
         onModernHomeTrailerPlaybackActiveChanged = onModernHomeTrailerPlaybackActiveChanged,
         onSaveFocusState = saveModernFocusState

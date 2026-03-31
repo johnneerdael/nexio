@@ -3,6 +3,7 @@ package com.nexio.tv.data.trailer
 import android.util.Log
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.tmdb.TmdbMetadataService
+import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TmdbVideoResult
@@ -26,6 +27,7 @@ import kotlinx.coroutines.withContext
 private const val TAG = "TrailerService"
 private const val STREAILER_ADDON_ID = "org.streailer.trailer"
 private const val TMDB_TRAILER_FALLBACK_LANGUAGE = "en-US"
+private const val TMDB_TRAILER_CACHE_PROVIDER = "trailer"
 private val YOUTUBE_SOURCE_CACHE_TTL: Duration = Duration.ofHours(3)
 private val YOUTUBE_VIDEO_ID_REGEX = Regex("^[a-zA-Z0-9_-]{11}$")
 
@@ -46,6 +48,7 @@ class TrailerService(
     private val tmdbApi: TmdbApi,
     private val inAppYouTubeExtractor: InAppYouTubeExtractor,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
+    private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val tmdbMetadataService: TmdbMetadataService,
     private val addonRepository: AddonRepository,
     private val streamRepository: StreamRepository,
@@ -58,6 +61,7 @@ class TrailerService(
         tmdbApi: TmdbApi,
         inAppYouTubeExtractor: InAppYouTubeExtractor,
         tmdbSettingsDataStore: TmdbSettingsDataStore,
+        metadataDiskCacheStore: MetadataDiskCacheStore,
         tmdbMetadataService: TmdbMetadataService,
         addonRepository: AddonRepository,
         streamRepository: StreamRepository,
@@ -67,6 +71,7 @@ class TrailerService(
         tmdbApi = tmdbApi,
         inAppYouTubeExtractor = inAppYouTubeExtractor,
         tmdbSettingsDataStore = tmdbSettingsDataStore,
+        metadataDiskCacheStore = metadataDiskCacheStore,
         tmdbMetadataService = tmdbMetadataService,
         addonRepository = addonRepository,
         streamRepository = streamRepository,
@@ -76,6 +81,27 @@ class TrailerService(
 
     private val lookupCache = ConcurrentHashMap<String, CachedTrailerLookup>()
     private val youtubeSourceCache = ConcurrentHashMap<String, CachedTrailerPlaybackSource>()
+
+    fun invalidateLookupCache(
+        title: String,
+        year: String? = null,
+        tmdbId: String? = null,
+        type: String? = null,
+        seasonNumber: Int? = null,
+        contentId: String? = null,
+        fallbackYtIds: List<String> = emptyList()
+    ) {
+        val cacheKeyPrefix = buildLookupCachePrefix(
+            title = title,
+            year = year,
+            tmdbId = tmdbId,
+            type = type,
+            seasonNumber = seasonNumber,
+            contentId = contentId,
+            fallbackYtIds = fallbackYtIds
+        )
+        lookupCache.keys.removeIf { it.startsWith(cacheKeyPrefix) }
+    }
 
     suspend fun resolveTrailer(
         title: String,
@@ -87,16 +113,20 @@ class TrailerService(
         fallbackYtIds: List<String> = emptyList()
     ): TrailerResolutionResult? = withContext(Dispatchers.IO) {
         val helperSignedIn = trailerAvailabilityService.isSignedIn()
-        val cacheKey = listOf(
-            title,
-            year.orEmpty(),
-            tmdbId.orEmpty(),
-            type.orEmpty(),
-            seasonNumber?.toString().orEmpty(),
-            contentId.orEmpty(),
-            fallbackYtIds.joinToString(","),
-            helperSignedIn.toString()
-        ).joinToString("|")
+        val tmdbLanguage = getPreferredTmdbTrailerLanguage()
+        val tmdbApiKey = tmdbSettingsDataStore.settings.first().apiKey.trim()
+        val cacheKey = buildLookupCacheKey(
+            title = title,
+            year = year,
+            tmdbId = tmdbId,
+            type = type,
+            seasonNumber = seasonNumber,
+            contentId = contentId,
+            fallbackYtIds = fallbackYtIds,
+            helperSignedIn = helperSignedIn,
+            tmdbLanguage = tmdbLanguage,
+            tmdbApiKey = tmdbApiKey
+        )
 
         when (val cached = lookupCache[cacheKey]) {
             is CachedTrailerLookup.Hit -> return@withContext cached.result
@@ -169,6 +199,81 @@ class TrailerService(
         }
     }
 
+    internal suspend fun getSeasonMediaAvailability(
+        tmdbId: String?,
+        type: String?,
+        seasonNumber: Int?,
+        contentId: String?
+    ): SeasonMediaAvailability = withContext(Dispatchers.IO) {
+        val normalizedSeason = seasonNumber?.takeIf { it >= 0 } ?: return@withContext SeasonMediaAvailability()
+        val numericTmdbId = tmdbId?.toIntOrNull()
+        val mediaType = normalizeTmdbMediaType(type)
+        val apiKey = requireTmdbApiKey()
+        val tmdbLanguage = getPreferredTmdbTrailerLanguage()
+
+        val seasonTmdbVideos = if (numericTmdbId != null && mediaType == "tv" && apiKey != null) {
+            fetchTmdbSeasonVideos(numericTmdbId, normalizedSeason, tmdbLanguage, apiKey)
+        } else {
+            emptyList()
+        }
+        val streams = fetchStreailerStreams(contentId = contentId, type = type).orEmpty()
+        val seasonStreailerTrailer = selectSeasonStreailerTrailerCandidate(streams, normalizedSeason)
+        val seasonStreailerRecap = selectSeasonStreailerRecapCandidate(streams, normalizedSeason)
+
+        SeasonMediaAvailability(
+            hasTrailerOrTeaser = rankTmdbVideoCandidates(seasonTmdbVideos).isNotEmpty() ||
+                hasInternalStreailerCandidate(seasonStreailerTrailer),
+            hasRecap = rankTmdbRecapCandidates(seasonTmdbVideos).isNotEmpty() ||
+                hasInternalStreailerCandidate(seasonStreailerRecap)
+        )
+    }
+
+    internal suspend fun getSeasonTrailerPlaybackSource(
+        title: String,
+        year: String? = null,
+        tmdbId: String? = null,
+        type: String? = null,
+        seasonNumber: Int? = null,
+        contentId: String? = null
+    ): TrailerPlaybackSource? {
+        return when (
+            val result = resolveSeasonTrailer(
+                title = title,
+                year = year,
+                tmdbId = tmdbId,
+                type = type,
+                seasonNumber = seasonNumber,
+                contentId = contentId
+            )
+        ) {
+            is TrailerResolutionResult.Playback -> result.source
+            else -> null
+        }
+    }
+
+    internal suspend fun getSeasonRecapPlaybackSource(
+        title: String,
+        year: String? = null,
+        tmdbId: String? = null,
+        type: String? = null,
+        seasonNumber: Int? = null,
+        contentId: String? = null
+    ): TrailerPlaybackSource? {
+        return when (
+            val result = resolveSeasonRecap(
+                title = title,
+                year = year,
+                tmdbId = tmdbId,
+                type = type,
+                seasonNumber = seasonNumber,
+                contentId = contentId
+            )
+        ) {
+            is TrailerResolutionResult.Playback -> result.source
+            else -> null
+        }
+    }
+
     suspend fun getTrailerPlaybackSourceFromYouTubeUrl(
         youtubeUrl: String,
         title: String? = null,
@@ -189,6 +294,49 @@ class TrailerService(
     fun clearCache() {
         lookupCache.clear()
         youtubeSourceCache.clear()
+    }
+
+    private fun buildLookupCacheKey(
+        title: String,
+        year: String?,
+        tmdbId: String?,
+        type: String?,
+        seasonNumber: Int?,
+        contentId: String?,
+        fallbackYtIds: List<String>,
+        helperSignedIn: Boolean,
+        tmdbLanguage: String,
+        tmdbApiKey: String
+    ): String {
+        return buildString {
+            append(buildLookupCachePrefix(title, year, tmdbId, type, seasonNumber, contentId, fallbackYtIds))
+            append('|')
+            append(helperSignedIn)
+            append('|')
+            append(tmdbLanguage)
+            append('|')
+            append(tmdbApiKey)
+        }
+    }
+
+    private fun buildLookupCachePrefix(
+        title: String,
+        year: String?,
+        tmdbId: String?,
+        type: String?,
+        seasonNumber: Int?,
+        contentId: String?,
+        fallbackYtIds: List<String>
+    ): String {
+        return listOf(
+            title,
+            year.orEmpty(),
+            tmdbId.orEmpty(),
+            type.orEmpty(),
+            seasonNumber?.toString().orEmpty(),
+            contentId.orEmpty(),
+            fallbackYtIds.joinToString(",")
+        ).joinToString("|")
     }
 
     private suspend fun resolveTrailerInternal(
@@ -227,6 +375,56 @@ class TrailerService(
         )
     }
 
+    private suspend fun resolveSeasonTrailer(
+        title: String,
+        year: String?,
+        tmdbId: String?,
+        type: String?,
+        seasonNumber: Int?,
+        contentId: String?
+    ): TrailerResolutionResult? = withContext(Dispatchers.IO) {
+        val normalizedSeason = seasonNumber?.takeIf { it >= 0 } ?: return@withContext null
+        val numericTmdbId = tmdbId?.toIntOrNull()
+        val mediaType = normalizeTmdbMediaType(type)
+        val apiKey = requireTmdbApiKey()
+        val tmdbLanguage = getPreferredTmdbTrailerLanguage()
+
+        if (numericTmdbId != null && mediaType == "tv" && apiKey != null) {
+            val seasonResults = fetchTmdbSeasonVideos(numericTmdbId, normalizedSeason, tmdbLanguage, apiKey)
+            for (candidate in rankTmdbVideoCandidates(seasonResults)) {
+                val key = candidate.key?.trim().orEmpty()
+                if (key.isBlank()) continue
+                resolveYouTubeTrailer(
+                    youtubeUrl = "https://www.youtube.com/watch?v=$key",
+                    title = title,
+                    year = year
+                )?.let { return@withContext it }
+            }
+        }
+
+        val streailerCandidate = fetchStreailerStreams(contentId = contentId, type = type)
+            ?.let { selectSeasonStreailerTrailerCandidate(it, normalizedSeason) }
+
+        streailerCandidate?.youtubeId?.let { ytId ->
+            return@withContext resolveYouTubeTrailer(
+                youtubeUrl = "https://www.youtube.com/watch?v=$ytId",
+                title = title,
+                year = year
+            )
+        }
+
+        val externalUrl = streailerCandidate?.externalUrl?.trim().orEmpty()
+        if (externalUrl.isNotBlank() && extractYouTubeVideoId(externalUrl) != null) {
+            return@withContext resolveYouTubeTrailer(
+                youtubeUrl = externalUrl,
+                title = title,
+                year = year
+            )
+        }
+
+        null
+    }
+
     private suspend fun resolveTrailerPlaybackFromTmdbId(
         tmdbId: String?,
         type: String?,
@@ -249,11 +447,14 @@ class TrailerService(
                         fetchTmdbSeasonVideos(numericTmdbId, season, tmdbLanguage, apiKey)
                     }
                     .orEmpty()
-                if (seasonResults.isNotEmpty()) {
+                val rankedSeasonResults = rankTmdbVideoCandidates(seasonResults)
+                if (rankedSeasonResults.isNotEmpty()) {
                     Log.d(TAG, "Using TMDB season trailer candidates for tmdbId=$numericTmdbId season=$seasonNumber")
-                    seasonResults
+                    rankedSeasonResults
                 } else {
-                    if (seasonNumber != null) {
+                    if (seasonNumber != null && seasonResults.isNotEmpty()) {
+                        Log.d(TAG, "TMDB season videos for tmdbId=$numericTmdbId season=$seasonNumber had no trailer/teaser candidates, falling back to series videos")
+                    } else if (seasonNumber != null) {
                         Log.d(TAG, "No TMDB season trailer found for tmdbId=$numericTmdbId season=$seasonNumber, falling back to series videos")
                     }
                     fetchTmdbTvVideos(numericTmdbId, tmdbLanguage, apiKey)
@@ -282,22 +483,7 @@ class TrailerService(
         title: String?,
         year: String?
     ): TrailerResolutionResult? = withContext(Dispatchers.IO) {
-        val normalizedContentId = contentId?.trim()?.takeIf { it.isNotEmpty() } ?: return@withContext null
-        val normalizedType = normalizeStreailerType(type) ?: return@withContext null
-        val addon = addonRepository.getInstalledAddons().first()
-            .firstOrNull { it.id == STREAILER_ADDON_ID }
-            ?: return@withContext null
-
-        val streamResult = streamRepository.getStreamsFromAddon(
-            baseUrl = addon.baseUrl,
-            type = normalizedType,
-            videoId = normalizedContentId
-        )
-
-        val streams = when (streamResult) {
-            is NetworkResult.Success -> streamResult.data
-            else -> return@withContext null
-        }
+        val streams = fetchStreailerStreams(contentId = contentId, type = type) ?: return@withContext null
 
         val candidate = selectStreailerTrailerCandidate(streams) ?: return@withContext null
         candidate.youtubeId?.let { ytId ->
@@ -319,6 +505,89 @@ class TrailerService(
             )
         } else {
             null
+        }
+    }
+
+    private suspend fun resolveSeasonRecap(
+        title: String,
+        year: String?,
+        tmdbId: String?,
+        type: String?,
+        seasonNumber: Int?,
+        contentId: String?
+    ): TrailerResolutionResult? = withContext(Dispatchers.IO) {
+        val numericTmdbId = tmdbId?.toIntOrNull()
+        val normalizedSeason = seasonNumber?.takeIf { it >= 0 } ?: return@withContext null
+        val mediaType = normalizeTmdbMediaType(type)
+        val tmdbLanguage = getPreferredTmdbTrailerLanguage()
+        val apiKey = requireTmdbApiKey()
+
+        val tmdbRecapResults = if (numericTmdbId != null && mediaType == "tv" && apiKey != null) {
+            fetchTmdbSeasonVideos(numericTmdbId, normalizedSeason, tmdbLanguage, apiKey)
+        } else {
+            emptyList()
+        }
+        val streailerRecap = fetchStreailerStreams(contentId = contentId, type = type)
+            ?.let { selectSeasonStreailerRecapCandidate(it, normalizedSeason) }
+
+        for (candidate in orderedSeasonRecapCandidates(tmdbRecapResults, streailerRecap)) {
+            when (candidate) {
+                is SeasonMediaCandidate.TmdbYouTube -> {
+                    resolveYouTubeTrailer(
+                        youtubeUrl = "https://www.youtube.com/watch?v=${candidate.youtubeId}",
+                        title = title,
+                        year = year
+                    )?.let { return@withContext it }
+                }
+
+                is SeasonMediaCandidate.Streailer -> {
+                    val streailerCandidate = candidate.candidate
+                    val resolved = when {
+                        !streailerCandidate.youtubeId.isNullOrBlank() -> resolveYouTubeTrailer(
+                            youtubeUrl = "https://www.youtube.com/watch?v=${streailerCandidate.youtubeId}",
+                            title = title,
+                            year = year
+                        )
+
+                        else -> {
+                            val youtubeId = extractYouTubeVideoId(streailerCandidate.externalUrl.orEmpty())
+                                ?: null
+                            youtubeId?.let {
+                                resolveYouTubeTrailer(
+                                    youtubeUrl = "https://www.youtube.com/watch?v=$it",
+                                    title = title,
+                                    year = year
+                                )
+                            }
+                        }
+                    }
+                    if (resolved != null) return@withContext resolved
+                }
+            }
+        }
+
+        null
+    }
+
+    private suspend fun fetchStreailerStreams(
+        contentId: String?,
+        type: String?
+    ): List<Stream>? = withContext(Dispatchers.IO) {
+        val normalizedContentId = contentId?.trim()?.takeIf { it.isNotEmpty() } ?: return@withContext null
+        val normalizedType = normalizeStreailerType(type) ?: return@withContext null
+        val addon = addonRepository.getInstalledAddons().first()
+            .firstOrNull { it.id == STREAILER_ADDON_ID }
+            ?: return@withContext null
+
+        when (
+            val streamResult = streamRepository.getStreamsFromAddon(
+                baseUrl = addon.baseUrl,
+                type = normalizedType,
+                videoId = normalizedContentId
+            )
+        ) {
+            is NetworkResult.Success -> streamResult.data
+            else -> null
         }
     }
 
@@ -441,13 +710,32 @@ class TrailerService(
         language: String,
         apiKey: String
     ): List<TmdbVideoResult> {
+        metadataDiskCacheStore.readTmdbTitleVideos(
+            tmdbId = tmdbId,
+            mediaType = "movie",
+            languageTag = language,
+            providerToken = TMDB_TRAILER_CACHE_PROVIDER
+        )?.let { return it }
+
         return try {
             val response = tmdbApi.getMovieVideos(
                 movieId = tmdbId,
                 apiKey = apiKey,
                 language = language
             )
-            if (response.isSuccessful) response.body()?.results.orEmpty() else emptyList()
+            if (!response.isSuccessful) {
+                emptyList()
+            } else {
+                val results = response.body()?.results.orEmpty()
+                metadataDiskCacheStore.writeTmdbTitleVideos(
+                    tmdbId = tmdbId,
+                    mediaType = "movie",
+                    languageTag = language,
+                    providerToken = TMDB_TRAILER_CACHE_PROVIDER,
+                    videos = results
+                )
+                results
+            }
         } catch (_: Exception) {
             emptyList()
         }
@@ -458,13 +746,32 @@ class TrailerService(
         language: String,
         apiKey: String
     ): List<TmdbVideoResult> {
+        metadataDiskCacheStore.readTmdbTitleVideos(
+            tmdbId = tmdbId,
+            mediaType = "tv",
+            languageTag = language,
+            providerToken = TMDB_TRAILER_CACHE_PROVIDER
+        )?.let { return it }
+
         return try {
             val response = tmdbApi.getTvVideos(
                 tvId = tmdbId,
                 apiKey = apiKey,
                 language = language
             )
-            if (response.isSuccessful) response.body()?.results.orEmpty() else emptyList()
+            if (!response.isSuccessful) {
+                emptyList()
+            } else {
+                val results = response.body()?.results.orEmpty()
+                metadataDiskCacheStore.writeTmdbTitleVideos(
+                    tmdbId = tmdbId,
+                    mediaType = "tv",
+                    languageTag = language,
+                    providerToken = TMDB_TRAILER_CACHE_PROVIDER,
+                    videos = results
+                )
+                results
+            }
         } catch (_: Exception) {
             emptyList()
         }
@@ -476,6 +783,13 @@ class TrailerService(
         language: String,
         apiKey: String
     ): List<TmdbVideoResult> {
+        metadataDiskCacheStore.readTmdbSeasonVideos(
+            tmdbId = tmdbId,
+            seasonNumber = seasonNumber,
+            languageTag = language,
+            providerToken = TMDB_TRAILER_CACHE_PROVIDER
+        )?.let { return it }
+
         return try {
             val response = tmdbApi.getTvSeasonVideos(
                 tvId = tmdbId,
@@ -483,7 +797,19 @@ class TrailerService(
                 apiKey = apiKey,
                 language = language
             )
-            if (response.isSuccessful) response.body()?.results.orEmpty() else emptyList()
+            if (!response.isSuccessful) {
+                emptyList()
+            } else {
+                val results = response.body()?.results.orEmpty()
+                metadataDiskCacheStore.writeTmdbSeasonVideos(
+                    tmdbId = tmdbId,
+                    seasonNumber = seasonNumber,
+                    languageTag = language,
+                    providerToken = TMDB_TRAILER_CACHE_PROVIDER,
+                    videos = results
+                )
+                results
+            }
         } catch (_: Exception) {
             emptyList()
         }
@@ -573,7 +899,7 @@ internal fun rankTmdbVideoCandidates(results: List<TmdbVideoResult>): List<TmdbV
 internal fun selectStreailerTrailerCandidate(streams: List<Stream>): StreailerTrailerCandidate? {
     return streams
         .asSequence()
-        .filterNot(::isRecapStream)
+        .filter(::isTrailerOrTeaserStream)
         .sortedBy(::streailerTrailerPriority)
         .mapNotNull { stream ->
             when {
@@ -628,7 +954,7 @@ internal fun extractYouTubeVideoId(input: String): String? {
     }.getOrNull()
 }
 
-private fun streailerTrailerPriority(stream: Stream): Int {
+internal fun streailerTrailerPriority(stream: Stream): Int {
     val bingeGroup = stream.behaviorHints?.bingeGroup?.trim()?.lowercase()
     val combinedText = listOf(stream.name, stream.title, stream.description)
         .joinToString(" ")
@@ -637,11 +963,24 @@ private fun streailerTrailerPriority(stream: Stream): Int {
     return when {
         bingeGroup == "trailer" -> 0
         "trailer" in combinedText -> 1
-        else -> 2
+        bingeGroup == "teaser" -> 2
+        "teaser" in combinedText -> 3
+        else -> 4
     }
 }
 
-private fun isRecapStream(stream: Stream): Boolean {
+internal fun isTrailerOrTeaserStream(stream: Stream): Boolean {
+    val bingeGroup = stream.behaviorHints?.bingeGroup?.trim()?.lowercase()
+    if (bingeGroup == "trailer" || bingeGroup == "teaser") return true
+
+    val combinedText = listOf(stream.name, stream.title, stream.description)
+        .joinToString(" ")
+        .lowercase()
+
+    return "trailer" in combinedText || "teaser" in combinedText
+}
+
+internal fun isRecapStream(stream: Stream): Boolean {
     val bingeGroup = stream.behaviorHints?.bingeGroup?.trim()?.lowercase()
     if (bingeGroup == "recap") return true
     val combinedText = listOf(stream.name, stream.title, stream.description)
@@ -652,6 +991,14 @@ private fun isRecapStream(stream: Stream): Boolean {
 
 private fun isValidUrl(url: String?): Boolean {
     return !url.isNullOrBlank() && (url.startsWith("http://") || url.startsWith("https://"))
+}
+
+private fun hasInternalStreailerCandidate(candidate: StreailerTrailerCandidate?): Boolean {
+    return when {
+        candidate == null -> false
+        !candidate.youtubeId.isNullOrBlank() -> true
+        else -> extractYouTubeVideoId(candidate.externalUrl.orEmpty()) != null
+    }
 }
 
 private fun videoTypePriority(type: String?): Int {

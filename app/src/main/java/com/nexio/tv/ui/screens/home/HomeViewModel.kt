@@ -173,8 +173,8 @@ class HomeViewModel @Inject constructor(
     internal var heroEnrichmentJob: Job? = null
     internal var lastHeroEnrichmentSignature: String? = null
     internal var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
-    internal val trailerPreviewLoadingIds = mutableSetOf<String>()
-    internal val trailerPreviewNegativeCache = mutableSetOf<String>()
+    internal val trailerPreviewLoadingIds = mutableStateMapOf<String, Boolean>()
+    internal val trailerPreviewNegativeCache = mutableStateMapOf<String, Boolean>()
     internal val trailerPreviewUrlsState = mutableStateMapOf<String, String>()
     internal val trailerPreviewAudioUrlsState = mutableStateMapOf<String, String>()
     internal val trailerPreviewExternalUrlsState = mutableStateMapOf<String, String>()
@@ -239,6 +239,10 @@ class HomeViewModel @Inject constructor(
         get() = trailerPreviewAudioUrlsState
     val trailerPreviewExternalUrls: Map<String, String>
         get() = trailerPreviewExternalUrlsState
+    val trailerPreviewLoadingItemIds: Set<String>
+        get() = trailerPreviewLoadingIds.keys.toSet()
+    val trailerPreviewNegativeCacheIds: Set<String>
+        get() = trailerPreviewNegativeCache.keys.toSet()
 
     init {
         observeStartupPerfTelemetry()
@@ -361,6 +365,23 @@ class HomeViewModel @Inject constructor(
         apiType = apiType,
         fallbackYtId = fallbackYtId
     )
+    fun retryTrailerPreview(
+        itemId: String,
+        title: String,
+        releaseInfo: String?,
+        apiType: String,
+        fallbackYtId: String? = null
+    ) {
+        trailerPreviewNegativeCache.remove(itemId)
+        requestTrailerPreviewPipeline(
+            itemId = itemId,
+            title = title,
+            releaseInfo = releaseInfo,
+            apiType = apiType,
+            fallbackYtId = fallbackYtId,
+            forceRefresh = true
+        )
+    }
 
     private fun loadHomeCatalogOrderPreference() = loadHomeCatalogOrderPreferencePipeline()
 

@@ -140,6 +140,20 @@ internal fun shouldUnlockModernHomeTrailerAutoplay(
     selectionStillFocused &&
     lifecycleResumed
 
+internal fun shouldRetryFocusedTrailerPreviewAfterAutoplayUnlock(
+    trailerPlaybackUnlocked: Boolean,
+    hasResolvedPreview: Boolean,
+    hasResolvedExternalPreview: Boolean,
+    isCurrentlyLoading: Boolean,
+    hadNegativeCacheMiss: Boolean,
+    alreadyRetriedAfterUnlock: Boolean
+): Boolean = trailerPlaybackUnlocked &&
+    !hasResolvedPreview &&
+    !hasResolvedExternalPreview &&
+    !isCurrentlyLoading &&
+    hadNegativeCacheMiss &&
+    !alreadyRetriedAfterUnlock
+
 internal fun resolveEffectiveModernHomeTrailerPlaybackTarget(
     requestedTarget: com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget,
     effectiveExpandEnabled: Boolean
@@ -173,6 +187,7 @@ internal fun ModernHomeContent(
     onItemFocus: (MetaPreview) -> Unit = {},
     onPreloadAdjacentItem: (MetaPreview) -> Unit = {},
     onRequestTrailerPreview: (String, String, String?, String, String?) -> Unit,
+    onRetryTrailerPreview: (String, String, String?, String, String?) -> Unit,
     onModernHomeTrailerPlaybackStarted: () -> Unit,
     onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
@@ -404,6 +419,7 @@ internal fun ModernHomeContent(
     var expansionInteractionNonce by remember { mutableIntStateOf(0) }
     var lastExternalTrailerLaunchKey by remember { mutableStateOf<String?>(null) }
     var unlockedTrailerFocusKey by remember { mutableStateOf<String?>(null) }
+    var autoplayUnlockRetriedFocusKey by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(
         focusedCatalogSelection?.focusKey,
@@ -424,6 +440,12 @@ internal fun ModernHomeContent(
             )
         ) {
             unlockedTrailerFocusKey = selection.focusKey
+        }
+    }
+
+    LaunchedEffect(unlockedTrailerFocusKey, focusedCatalogSelection?.focusKey) {
+        if (unlockedTrailerFocusKey != focusedCatalogSelection?.focusKey) {
+            autoplayUnlockRetriedFocusKey = null
         }
     }
 
@@ -541,6 +563,38 @@ internal fun ModernHomeContent(
         delay(140)
         if (focusedCatalogSelection?.focusKey != selection.focusKey) return@LaunchedEffect
         onRequestTrailerPreview(
+            selection.payload.itemId,
+            selection.payload.trailerTitle,
+            selection.payload.trailerReleaseInfo,
+            selection.payload.trailerApiType,
+            selection.payload.fallbackTrailerYtId
+        )
+    }
+
+    LaunchedEffect(
+        unlockedTrailerFocusKey,
+        focusedCatalogSelection?.focusKey,
+        focusedCatalogSelection?.payload?.itemId,
+        contentState.trailerPreviewUrls,
+        contentState.trailerPreviewExternalUrls,
+        contentState.trailerPreviewLoadingIds,
+        contentState.trailerPreviewNegativeCacheIds
+    ) {
+        val selection = focusedCatalogSelection ?: return@LaunchedEffect
+        if (!shouldRetryFocusedTrailerPreviewAfterAutoplayUnlock(
+                trailerPlaybackUnlocked = unlockedTrailerFocusKey == selection.focusKey,
+                hasResolvedPreview = !contentState.trailerPreviewUrls[selection.payload.itemId].isNullOrBlank(),
+                hasResolvedExternalPreview = !contentState.trailerPreviewExternalUrls[selection.payload.itemId].isNullOrBlank(),
+                isCurrentlyLoading = selection.payload.itemId in contentState.trailerPreviewLoadingIds,
+                hadNegativeCacheMiss = selection.payload.itemId in contentState.trailerPreviewNegativeCacheIds,
+                alreadyRetriedAfterUnlock = autoplayUnlockRetriedFocusKey == selection.focusKey
+            )
+        ) {
+            return@LaunchedEffect
+        }
+
+        autoplayUnlockRetriedFocusKey = selection.focusKey
+        onRetryTrailerPreview(
             selection.payload.itemId,
             selection.payload.trailerTitle,
             selection.payload.trailerReleaseInfo,
