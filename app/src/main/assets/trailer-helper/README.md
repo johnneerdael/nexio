@@ -5,12 +5,17 @@ This assets directory only carries a JS runtime executable for yt-dlp's challeng
 
 Expected staged payload per ABI:
 - `runtime/arm64-v8a/node/bin/node`
+- `runtime/arm64-v8a/node/lib/libnode.so`
+- `runtime/arm64-v8a/node/lib/libc++_shared.so`
 - `runtime/arm64-v8a/quickjs/qjs`
 - `runtime/armeabi-v7a/node/bin/node`
+- `runtime/armeabi-v7a/node/lib/libnode.so`
+- `runtime/armeabi-v7a/node/lib/libc++_shared.so`
 - `runtime/armeabi-v7a/quickjs/qjs`
 - `runtime/x86_64/node/bin/node`
+- `runtime/x86_64/node/lib/libnode.so`
+- `runtime/x86_64/node/lib/libc++_shared.so`
 - `runtime/x86_64/quickjs/qjs`
-- `runtime/x86/node/bin/node`
 - `runtime/x86/quickjs/qjs`
 
 The Android app selects the first matching ABI from `Build.SUPPORTED_ABIS`, copies that

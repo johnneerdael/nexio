@@ -1,7 +1,6 @@
 package com.nexio.tv.data.trailer.helper
 
 import android.content.Context
-import android.net.Uri
 import android.os.Build
 import android.util.Log
 import com.chaquo.python.PyException
@@ -12,27 +11,32 @@ import com.nexio.tv.data.trailer.YOUTUBE_STABLE_REFERER
 import com.nexio.tv.data.trailer.YOUTUBE_STABLE_WEB_USER_AGENT
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import java.net.URI
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 
 private const val TAG = "BundledTrailerHelper"
 private const val HELPER_ROOT_ASSET_PATH = "trailer-helper"
 private const val HELPER_RUNTIME_ASSET_PATH = "$HELPER_ROOT_ASSET_PATH/runtime"
+private const val NODE_EXECUTABLE_RELATIVE_PATH = "node/bin/node"
+private const val NODE_LIBNODE_RELATIVE_PATH = "node/lib/libnode.so"
+private const val NODE_LIBCPP_RELATIVE_PATH = "node/lib/libc++_shared.so"
+private const val QUICKJS_EXECUTABLE_RELATIVE_PATH = "quickjs/qjs"
 
 fun parseHelperStdout(stdout: String): TrailerHelperPlaybackResult {
     val trimmed = stdout.trim()
     require(trimmed.isNotBlank()) { "Helper output was empty" }
 
     if (trimmed.startsWith("{")) {
-        val json = JSONObject(trimmed)
-        val videoUrl = json.optString("videoUrl").trim()
+        val videoUrl = extractJsonString(trimmed, "videoUrl").orEmpty().trim()
         require(videoUrl.isNotBlank()) { "Missing videoUrl in helper JSON" }
-        val audioUrl = json.optString("audioUrl").trim().ifBlank { null }
-        val expiresAtEpochMs = json.optLong("expiresAtEpochMs").takeIf { it > 0L }
+        val audioUrl = extractJsonString(trimmed, "audioUrl").orEmpty().trim().ifBlank { null }
+        val expiresAtEpochMs = extractJsonLong(trimmed, "expiresAtEpochMs")?.takeIf { it > 0L }
         return TrailerHelperPlaybackResult(
             videoUrl = videoUrl,
             audioUrl = audioUrl,
@@ -159,18 +163,19 @@ class BundledTrailerHelper @Inject constructor(
 
     private fun stageRuntimeIfAvailable(): StagedTrailerHelperRuntime? {
         val runtimeRoot = File(context.filesDir, "trailer-helper/runtime")
-        val nodeExecutable = File(runtimeRoot, "node/bin/node")
-        val quickJsExecutable = File(runtimeRoot, "quickjs/qjs")
+        val nodeExecutable = File(runtimeRoot, NODE_EXECUTABLE_RELATIVE_PATH)
+        val quickJsExecutable = File(runtimeRoot, QUICKJS_EXECUTABLE_RELATIVE_PATH)
 
-        if (!nodeExecutable.exists() && !quickJsExecutable.exists()) {
-            val staged = runCatching { stageRuntimeAssets(runtimeRoot) }.getOrNull()
-            if (staged == null) {
-                return null
-            }
+        if (!hasUsableNodeRuntime(runtimeRoot)) {
+            runCatching { stageRuntimeAssets(runtimeRoot) }.getOrNull()
+        }
+
+        if (!hasUsableNodeRuntime(runtimeRoot) && !quickJsExecutable.exists()) {
+            return null
         }
 
         val selectedRuntime = when {
-            nodeExecutable.exists() -> {
+            hasUsableNodeRuntime(runtimeRoot) -> {
                 nodeExecutable.setExecutable(true)
                 StagedTrailerHelperRuntime(
                     rootDirectory = runtimeRoot,
@@ -189,6 +194,13 @@ class BundledTrailerHelper @Inject constructor(
             else -> null
         }
         return selectedRuntime
+    }
+
+    private fun hasUsableNodeRuntime(runtimeRoot: File): Boolean {
+        val nodeExecutable = File(runtimeRoot, NODE_EXECUTABLE_RELATIVE_PATH)
+        val libnode = File(runtimeRoot, NODE_LIBNODE_RELATIVE_PATH)
+        val libcxx = File(runtimeRoot, NODE_LIBCPP_RELATIVE_PATH)
+        return nodeExecutable.exists() && libnode.exists() && libcxx.exists()
     }
 
     private fun stageRuntimeAssets(runtimeRoot: File) {
@@ -250,18 +262,46 @@ internal fun selectTrailerHelperAbi(
 }
 
 private fun deriveExpiryFromUrl(url: String): Long? {
-    val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return null
-    val expireSeconds = uri.getQueryParameter("expire")?.toLongOrNull() ?: return null
+    val uri = runCatching { URI(url) }.getOrNull() ?: return null
+    val expireSeconds = uri.rawQuery
+        ?.split('&')
+        ?.asSequence()
+        ?.mapNotNull { part ->
+            val keyValue = part.split('=', limit = 2)
+            val key = URLDecoder.decode(keyValue[0], StandardCharsets.UTF_8)
+            if (key != "expire") {
+                return@mapNotNull null
+            }
+            val rawValue = keyValue.getOrNull(1) ?: return@mapNotNull null
+            URLDecoder.decode(rawValue, StandardCharsets.UTF_8).toLongOrNull()
+        }
+        ?.firstOrNull()
+        ?: return null
     return expireSeconds * 1000L
 }
 
+private fun extractJsonString(json: String, key: String): String? {
+    val pattern = Regex("""\"$key\"\s*:\s*\"((?:\\.|[^\\"])*)\"""")
+    val match = pattern.find(json) ?: return null
+    return match.groupValues[1]
+        .replace("\\\\", "\\")
+        .replace("\\\"", "\"")
+        .replace("\\/", "/")
+}
+
+private fun extractJsonLong(json: String, key: String): Long? {
+    val pattern = Regex("""\"$key\"\s*:\s*(-?\d+)""")
+    val match = pattern.find(json) ?: return null
+    return match.groupValues[1].toLongOrNull()
+}
+
 private fun summarizeUrl(url: String): String {
-    val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return url
+    val uri = runCatching { URI(url) }.getOrNull() ?: return url
     val host = uri.host.orEmpty()
     val path = uri.path.orEmpty()
     return "$host$path"
 }
 
 private fun hostOf(url: String): String {
-    return runCatching { Uri.parse(url).host.orEmpty() }.getOrDefault("")
+    return runCatching { URI(url).host.orEmpty() }.getOrDefault("")
 }

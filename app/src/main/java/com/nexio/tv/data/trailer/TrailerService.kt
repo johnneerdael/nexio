@@ -620,7 +620,11 @@ class TrailerService(
                 }
                 return@withContext TrailerResolutionResult.Playback(helperSource)
             }
-            return@withContext null
+            Log.w(
+                TAG,
+                "Authenticated embedded helper did not resolve $youtubeUrl, " +
+                    "falling back to local/public trailer resolution"
+            )
         }
 
         val localSource = runCatching {
