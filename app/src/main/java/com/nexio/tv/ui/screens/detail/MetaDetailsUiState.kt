@@ -126,6 +126,26 @@ internal fun MetaDetailsUiState.withSeasonMediaAvailability(
     )
 }
 
+internal fun MetaDetailsUiState.withFailedSeasonMediaPlaybackAttempt(
+    season: Int,
+    availability: SeasonMediaActionAvailability,
+    previousTrailerUrl: String?,
+    previousTrailerAudioUrl: String?,
+    previousTrailerExternalUrl: String?,
+    previousPendingExternalTrailerUrl: String?
+): MetaDetailsUiState {
+    return withSeasonMediaAvailability(season, availability).copy(
+        trailerUrl = previousTrailerUrl,
+        trailerAudioUrl = previousTrailerAudioUrl,
+        trailerExternalUrl = previousTrailerExternalUrl,
+        pendingExternalTrailerUrl = previousPendingExternalTrailerUrl,
+        isTrailerLoading = false,
+        isTrailerPlaying = false,
+        showTrailerControls = false,
+        hideLogoDuringTrailer = false
+    )
+}
+
 internal fun MetaDetailsUiState.withNextToWatch(nextToWatch: NextToWatch): MetaDetailsUiState {
     val targetSeason = nextToWatch.nextSeason
     val shouldSwitchSeason = shouldAutoSwitchToTargetSeason(
