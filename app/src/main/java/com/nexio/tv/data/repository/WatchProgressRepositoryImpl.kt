@@ -2,7 +2,9 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.TraktAuthDataStore
+import com.nexio.tv.data.local.WatchedItemsPreferences
 import com.nexio.tv.data.local.WatchProgressPreferences
+import com.nexio.tv.domain.model.WatchedItem
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
@@ -31,6 +33,7 @@ import javax.inject.Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class WatchProgressRepositoryImpl @Inject constructor(
     private val watchProgressPreferences: WatchProgressPreferences,
+    private val watchedItemsPreferences: WatchedItemsPreferences,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktProgressService: TraktProgressService,
     private val metaRepository: MetaRepository
@@ -305,6 +308,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         }
         traktProgressService.removeFromHistory(contentId, season, episode)
         watchProgressPreferences.removeProgress(contentId, season, episode)
+        watchedItemsPreferences.unmarkAsWatched(contentId, season, episode)
     }
 
     override suspend fun clearShowProgress(contentId: String) {
@@ -313,6 +317,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
         }
         traktProgressService.clearShowProgress(contentId)
         watchProgressPreferences.removeProgress(contentId, null, null)
+        watchedItemsPreferences.unmarkAsWatched(contentId, null, null)
     }
 
     override suspend fun markAsCompleted(progress: WatchProgress) {
@@ -333,6 +338,16 @@ class WatchProgressRepositoryImpl @Inject constructor(
                 progress = completed,
                 title = completed.name.takeIf { it.isNotBlank() },
                 year = null
+            )
+            watchedItemsPreferences.markAsWatched(
+                WatchedItem(
+                    contentId = completed.contentId,
+                    contentType = completed.contentType,
+                    title = completed.name,
+                    season = completed.season,
+                    episode = completed.episode,
+                    watchedAt = completed.lastWatched
+                )
             )
         }.onFailure {
             traktProgressService.applyOptimisticRemoval(

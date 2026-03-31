@@ -75,6 +75,12 @@ class TraktProgressService @Inject constructor(
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore
 ) {
+    data class SeriesNextUpLookupCandidate(
+        val contentId: String,
+        val title: String,
+        val lastWatchedAtMs: Long
+    )
+
     data class NextUpEntry(
         val contentId: String,
         val contentType: String = "series",
@@ -475,6 +481,29 @@ class TraktProgressService @Inject constructor(
                 )
             }
         }.distinctUntilChanged()
+    }
+
+    suspend fun lookupNextUpForSeriesCandidates(
+        candidates: List<SeriesNextUpLookupCandidate>
+    ): List<NextUpEntry> {
+        if (candidates.isEmpty()) return emptyList()
+        return coroutineScope {
+            candidates.map { candidate ->
+                async {
+                    nextUpFetchSemaphore.withPermit {
+                        ensureShowNextUpEntry(
+                            candidate = WatchedShowIndexEntry(
+                                contentId = candidate.contentId,
+                                name = candidate.title.ifBlank { candidate.contentId },
+                                lastWatchedAtMs = candidate.lastWatchedAtMs,
+                                traktShowId = parseContentIds(candidate.contentId).trakt
+                            ),
+                            forceRefresh = false
+                        )
+                    }
+                }
+            }.awaitAll()
+        }.filterNotNull()
     }
 
     fun observeEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> {

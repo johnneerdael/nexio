@@ -23,9 +23,12 @@ import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.data.local.WatchedItemsPreferences
+import com.nexio.tv.data.local.WatchedSeriesStateHolder
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.repository.MDBListDiscoveryService
+import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.domain.model.Addon
@@ -67,10 +70,13 @@ class HomeViewModel @Inject constructor(
     internal val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     internal val tmdbSettingsDataStore: TmdbSettingsDataStore,
     internal val traktSettingsDataStore: TraktSettingsDataStore,
+    internal val watchedItemsPreferences: WatchedItemsPreferences,
+    internal val watchedSeriesStateHolder: WatchedSeriesStateHolder,
     internal val mdbListSettingsDataStore: MDBListSettingsDataStore,
     internal val traktDiscoverySnapshotStore: TraktDiscoverySnapshotStore,
     internal val mdbListDiscoverySnapshotStore: MDBListDiscoverySnapshotStore,
     internal val continueWatchingSnapshotService: ContinueWatchingSnapshotService,
+    internal val traktProgressService: TraktProgressService,
     internal val traktScrobbleService: TraktScrobbleService,
     internal val traktDiscoveryService: TraktDiscoveryService,
     internal val mdbListDiscoveryService: MDBListDiscoveryService,
@@ -180,6 +186,11 @@ class HomeViewModel @Inject constructor(
     internal var pendingTmdbEnrichItemId: String? = null
     internal val posterLibraryObserverJobs = mutableMapOf<String, Job>()
     internal val movieWatchedObserverJobs = mutableMapOf<String, Job>()
+    internal var seriesWatchedObserverJob: Job? = null
+    internal var seriesNextUpDiscoveryJob: Job? = null
+    internal var lastSeriesNextUpDiscoverySignature: String? = null
+    internal var lastContinueWatchingSnapshot = com.nexio.tv.data.repository.ContinueWatchingSnapshot()
+    internal val discoveredNextUpEntriesByContentId = linkedMapOf<String, TraktProgressService.NextUpEntry>()
     internal var activePosterListPickerInput: LibraryEntryInput? = null
     @Volatile
     internal var externalMetaPrefetchEnabled: Boolean = false
@@ -220,6 +231,9 @@ class HomeViewModel @Inject constructor(
     internal var syntheticSnapshotBatchActive: Boolean = false
 
     init {
+        viewModelScope.launch {
+            watchedSeriesStateHolder.loadFromDisk()
+        }
         observeStartupPerfTelemetry()
         observeDiskFirstHomeStartupToggle()
         observeLocaleChangesForMetadata()
@@ -548,6 +562,8 @@ class HomeViewModel @Inject constructor(
 
     override fun onCleared() {
         posterStatusReconcileJob?.cancel()
+        seriesWatchedObserverJob?.cancel()
+        seriesNextUpDiscoveryJob?.cancel()
         startupDeferralWindowJob?.cancel()
         deferredStartupRefreshJob?.cancel()
         metadataEnrichmentFlushJob?.cancel()

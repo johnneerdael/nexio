@@ -2051,9 +2051,18 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
             }
         }
     val desiredKeys = desiredItemsByKey.keys
-    val desiredMovieKeys = desiredItemsByKey
-        .filterValues { (_, itemType) -> itemType.equals("movie", ignoreCase = true) }
+    val desiredWatchedKeys = desiredItemsByKey
+        .filterValues { (_, itemType) ->
+            itemType.equals("movie", ignoreCase = true) ||
+                itemType.equals("series", ignoreCase = true) ||
+                itemType.equals("tv", ignoreCase = true)
+        }
         .keys
+    val desiredSeriesItemsByKey = desiredItemsByKey
+        .filterValues { (_, itemType) ->
+            itemType.equals("series", ignoreCase = true) ||
+                itemType.equals("tv", ignoreCase = true)
+        }
 
     posterLibraryObserverJobs.keys
         .filterNot { it in desiredKeys }
@@ -2061,10 +2070,36 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
             posterLibraryObserverJobs.remove(staleKey)?.cancel()
         }
     movieWatchedObserverJobs.keys
-        .filterNot { it in desiredMovieKeys }
+        .filterNot { it in desiredWatchedKeys }
         .forEach { staleKey ->
             movieWatchedObserverJobs.remove(staleKey)?.cancel()
         }
+    if (desiredSeriesItemsByKey.isEmpty()) {
+        seriesWatchedObserverJob?.cancel()
+        seriesWatchedObserverJob = null
+    } else {
+        seriesWatchedObserverJob?.cancel()
+        seriesWatchedObserverJob = viewModelScope.launch {
+            watchedSeriesStateHolder.entries.collectLatest { entries ->
+                _uiState.update { state ->
+                    val updatedStatus = state.movieWatchedStatus.toMutableMap()
+                    desiredSeriesItemsByKey.forEach { (statusKey, itemRef) ->
+                        val watched = entries.any { entry ->
+                            entry.ids.any {
+                                it in com.nexio.tv.data.local.expandSeriesContentIdAliases(listOf(itemRef.first))
+                            }
+                        }
+                        updatedStatus[statusKey] = watched
+                    }
+                    if (updatedStatus == state.movieWatchedStatus) {
+                        state
+                    } else {
+                        state.copy(movieWatchedStatus = updatedStatus)
+                    }
+                }
+            }
+        }
+    }
 
     desiredItemsByKey.forEach { (statusKey, itemRef) ->
         val itemId = itemRef.first
@@ -2088,8 +2123,12 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
             }
         }
 
-        if (itemType.equals("movie", ignoreCase = true)) {
-            if (statusKey !in movieWatchedObserverJobs) {
+        if (
+            itemType.equals("movie", ignoreCase = true) ||
+                itemType.equals("series", ignoreCase = true) ||
+                itemType.equals("tv", ignoreCase = true)
+        ) {
+            if (itemType.equals("movie", ignoreCase = true) && statusKey !in movieWatchedObserverJobs) {
                 movieWatchedObserverJobs[statusKey] = viewModelScope.launch {
                     watchProgressRepository.isWatched(contentId = itemId)
                         .distinctUntilChanged()
@@ -2113,11 +2152,11 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
         val trimmedLibraryMembership =
             state.posterLibraryMembership.filterKeys { it in desiredKeys }
         val trimmedMovieWatchedStatus =
-            state.movieWatchedStatus.filterKeys { it in desiredMovieKeys }
+            state.movieWatchedStatus.filterKeys { it in desiredWatchedKeys }
         val trimmedLibraryPending =
             state.posterLibraryPending.filterTo(linkedSetOf()) { it in desiredKeys }
         val trimmedMovieWatchedPending =
-            state.movieWatchedPending.filterTo(linkedSetOf()) { it in desiredMovieKeys }
+            state.movieWatchedPending.filterTo(linkedSetOf()) { it in desiredWatchedKeys }
 
         if (
             trimmedLibraryMembership == state.posterLibraryMembership &&
