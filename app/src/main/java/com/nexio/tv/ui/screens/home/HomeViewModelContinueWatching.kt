@@ -73,8 +73,7 @@ private suspend fun HomeViewModel.syncWatchedSeriesStateFromLocalItems(
         snapshot = snapshot
     )
     if (candidateStates.isEmpty()) {
-        discoveredNextUpEntriesByContentId.clear()
-        lastSeriesNextUpDiscoverySignature = null
+        invalidateSeriesNextUpDiscovery()
         watchedSeriesStateHolder.applyResolvedStates(
             watchedEntries = emptyList(),
             unwatchedEntries = watchedSeriesStateHolder.entries.value.map { it.ids }
@@ -101,11 +100,7 @@ private suspend fun HomeViewModel.syncWatchedSeriesStateFromLocalItems(
     val signature = lookupCandidates
         .joinToString("|") { candidate -> "${candidate.contentId}:${candidate.lastWatchedAtMs}" }
     if (signature.isBlank()) {
-        if (discoveredNextUpEntriesByContentId.isNotEmpty()) {
-            discoveredNextUpEntriesByContentId.clear()
-            publishContinueWatchingSnapshot(snapshot)
-        }
-        lastSeriesNextUpDiscoverySignature = null
+        val clearedDiscoveredItems = invalidateSeriesNextUpDiscovery()
         val confirmedWatched = candidateStates
             .filter { it.watched }
             .map { it.ids }
@@ -113,12 +108,14 @@ private suspend fun HomeViewModel.syncWatchedSeriesStateFromLocalItems(
             watchedEntries = confirmedWatched,
             unwatchedEntries = emptyList()
         )
+        if (clearedDiscoveredItems) {
+            publishContinueWatchingSnapshot(snapshot)
+        }
         return
     }
     if (signature == lastSeriesNextUpDiscoverySignature) return
 
-    lastSeriesNextUpDiscoverySignature = signature
-    seriesNextUpDiscoveryJob?.cancel()
+    val lookupGeneration = beginSeriesNextUpDiscovery(signature)
     val lookupSessionKey = sessionKey
     seriesNextUpDiscoveryJob = viewModelScope.launch {
         val discovered = traktProgressService.lookupNextUpForSeriesCandidates(
@@ -127,7 +124,9 @@ private suspend fun HomeViewModel.syncWatchedSeriesStateFromLocalItems(
         if (
             shouldDiscardSeriesNextUpLookupResults(
                 launchedForSessionKey = lookupSessionKey,
-                activeSessionKey = watchedSeriesStateHolder.activeSessionKey.value
+                activeSessionKey = watchedSeriesStateHolder.activeSessionKey.value,
+                launchedGeneration = lookupGeneration,
+                activeGeneration = seriesNextUpDiscoveryGeneration
             )
         ) {
             return@launch
@@ -162,11 +161,26 @@ private suspend fun HomeViewModel.syncWatchedSeriesStateFromLocalItems(
 private fun HomeViewModel.handleContinueWatchingSessionChange(sessionKey: String) {
     watchedSeriesLocalItemsSessionKey = sessionKey
     watchedSeriesBootstrapEmptyReadPendingForSession = true
+    invalidateSeriesNextUpDiscovery()
+    publishContinueWatchingSnapshot(lastContinueWatchingSnapshot)
+}
+
+private fun HomeViewModel.beginSeriesNextUpDiscovery(signature: String): Long {
+    seriesNextUpDiscoveryGeneration += 1L
     seriesNextUpDiscoveryJob?.cancel()
     seriesNextUpDiscoveryJob = null
+    lastSeriesNextUpDiscoverySignature = signature
+    return seriesNextUpDiscoveryGeneration
+}
+
+private fun HomeViewModel.invalidateSeriesNextUpDiscovery(): Boolean {
+    seriesNextUpDiscoveryGeneration += 1L
+    seriesNextUpDiscoveryJob?.cancel()
+    seriesNextUpDiscoveryJob = null
+    val hadDiscoveredItems = discoveredNextUpEntriesByContentId.isNotEmpty()
     discoveredNextUpEntriesByContentId.clear()
     lastSeriesNextUpDiscoverySignature = null
-    publishContinueWatchingSnapshot(lastContinueWatchingSnapshot)
+    return hadDiscoveredItems
 }
 
 private fun HomeViewModel.publishContinueWatchingSnapshot(snapshot: ContinueWatchingSnapshot) {
@@ -241,9 +255,12 @@ internal fun resolveWatchedSeriesBootstrapWindow(
 
 internal fun shouldDiscardSeriesNextUpLookupResults(
     launchedForSessionKey: String,
-    activeSessionKey: String
+    activeSessionKey: String,
+    launchedGeneration: Long,
+    activeGeneration: Long
 ): Boolean {
-    return launchedForSessionKey != activeSessionKey
+    return launchedForSessionKey != activeSessionKey ||
+        launchedGeneration != activeGeneration
 }
 
 private fun parseEpisodeReleaseDate(raw: String?): LocalDate? {
