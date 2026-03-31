@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.data.repository.parseContentIds
+import java.security.MessageDigest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,14 +26,51 @@ data class WatchedSeriesEntry(
 
 internal const val GUEST_TRAKT_SESSION_KEY = "guest"
 
+internal data class TraktSessionIdentity(
+    val primaryKey: String,
+    val migrationKeys: List<String> = emptyList()
+)
+
 internal fun traktSessionKeyForState(state: TraktAuthState): String {
-    return state.userSlug
+    return traktSessionIdentityForState(state).primaryKey
+}
+
+internal fun traktSessionIdentityForState(state: TraktAuthState): TraktSessionIdentity {
+    val namedKey = state.userSlug
         ?.trim()
         ?.takeIf { it.isNotBlank() }
         ?: state.username
             ?.trim()
             ?.takeIf { it.isNotBlank() }
-        ?: GUEST_TRAKT_SESSION_KEY
+    val tokenFallbackKey = traktTokenFallbackSessionKey(state)
+    return when {
+        namedKey != null && tokenFallbackKey != null && namedKey != tokenFallbackKey -> {
+            TraktSessionIdentity(
+                primaryKey = namedKey,
+                migrationKeys = listOf(tokenFallbackKey)
+            )
+        }
+        namedKey != null -> TraktSessionIdentity(primaryKey = namedKey)
+        tokenFallbackKey != null -> TraktSessionIdentity(primaryKey = tokenFallbackKey)
+        else -> TraktSessionIdentity(primaryKey = GUEST_TRAKT_SESSION_KEY)
+    }
+}
+
+private fun traktTokenFallbackSessionKey(state: TraktAuthState): String? {
+    val tokenMaterial = state.refreshToken
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?: state.accessToken
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        ?: return null
+    return "auth_" + sha256Hex(tokenMaterial).take(16)
+}
+
+private fun sha256Hex(value: String): String {
+    return MessageDigest.getInstance("SHA-256")
+        .digest(value.toByteArray(Charsets.UTF_8))
+        .joinToString(separator = "") { byte -> "%02x".format(byte) }
 }
 
 @Singleton
@@ -56,16 +94,16 @@ class WatchedSeriesStateHolder @Inject constructor(
 
     init {
         scope.launch {
-            sessionKeys()
+            sessionIdentities()
                 .distinctUntilChanged()
-                .collect { sessionKey ->
-                    switchToSession(sessionKey)
+                .collect { identity ->
+                    switchToSession(identity)
                 }
         }
     }
 
     suspend fun loadFromDisk() {
-        switchToSession(currentSessionKey())
+        switchToSession(currentSessionIdentity())
     }
 
     suspend fun setSeriesWatched(ids: Collection<String>, watched: Boolean) {
@@ -166,45 +204,81 @@ class WatchedSeriesStateHolder @Inject constructor(
     }
 
     private suspend fun ensureCurrentSessionLoaded() {
-        val sessionKey = currentSessionKey()
-        if (_activeSessionKey.value != sessionKey) {
-            switchToSession(sessionKey)
+        val sessionIdentity = currentSessionIdentity()
+        if (_activeSessionKey.value != sessionIdentity.primaryKey) {
+            switchToSession(sessionIdentity)
         }
     }
 
-    private suspend fun currentSessionKey(): String {
-        return sessionKeys().first()
+    private suspend fun currentSessionIdentity(): TraktSessionIdentity {
+        return sessionIdentities().first()
     }
 
-    private fun sessionKeys(): Flow<String> {
-        return traktAuthDataStore.state.map { state ->
-            sessionIdForState(state)
-        }
+    private fun sessionIdentities(): Flow<TraktSessionIdentity> {
+        return traktAuthDataStore.state.map(::traktSessionIdentityForState)
     }
 
-    private fun sessionIdForState(state: TraktAuthState): String {
-        return traktSessionKeyForState(state)
-    }
-
-    private fun switchToSession(sessionKey: String) {
-        if (_activeSessionKey.value != sessionKey) {
+    private fun switchToSession(identity: TraktSessionIdentity) {
+        if (_activeSessionKey.value != identity.primaryKey) {
             _entries.value = emptyList()
             knownEntries.value = emptyList()
-            _activeSessionKey.value = sessionKey
+            _activeSessionKey.value = identity.primaryKey
         }
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val restoredWatched = decodeEntries(
-            prefs.getString(prefKeyForActiveSession(prefix = WATCHED_KEY_PREFIX), null).orEmpty()
+        val primaryWatchedKey = prefKeyForActiveSession(prefix = WATCHED_KEY_PREFIX)
+        val primaryKnownKey = prefKeyForActiveSession(prefix = KNOWN_KEY_PREFIX)
+        val restoredWatched = buildRestoredEntries(
+            prefs = prefs,
+            primaryKey = primaryWatchedKey,
+            migrationKeys = identity.migrationKeys,
+            prefix = WATCHED_KEY_PREFIX
         )
-        val restoredKnown = decodeEntries(
-            prefs.getString(prefKeyForActiveSession(prefix = KNOWN_KEY_PREFIX), null).orEmpty()
+        val restoredKnown = buildRestoredEntries(
+            prefs = prefs,
+            primaryKey = primaryKnownKey,
+            migrationKeys = identity.migrationKeys,
+            prefix = KNOWN_KEY_PREFIX
         )
         _entries.value = restoredWatched
         knownEntries.value = mergeWatchedSeriesEntries(restoredKnown + restoredWatched)
+
+        if (identity.migrationKeys.isNotEmpty()) {
+            prefs.edit().apply {
+                putString(primaryWatchedKey, gson.toJson(_entries.value))
+                putString(primaryKnownKey, gson.toJson(knownEntries.value))
+                identity.migrationKeys.forEach { migrationKey ->
+                    remove(prefKey(prefix = WATCHED_KEY_PREFIX, sessionKey = migrationKey))
+                    remove(prefKey(prefix = KNOWN_KEY_PREFIX, sessionKey = migrationKey))
+                }
+            }.apply()
+        }
     }
 
     private fun prefKeyForActiveSession(prefix: String): String {
-        return prefix + _activeSessionKey.value.lowercase()
+        return prefKey(prefix = prefix, sessionKey = _activeSessionKey.value)
+    }
+
+    private fun prefKey(prefix: String, sessionKey: String): String {
+        return prefix + sessionKey.lowercase()
+    }
+
+    private fun buildRestoredEntries(
+        prefs: android.content.SharedPreferences,
+        primaryKey: String,
+        migrationKeys: List<String>,
+        prefix: String
+    ): List<WatchedSeriesEntry> {
+        val restored = buildList {
+            addAll(decodeEntries(prefs.getString(primaryKey, null).orEmpty()))
+            migrationKeys.forEach { migrationKey ->
+                addAll(
+                    decodeEntries(
+                        prefs.getString(prefKey(prefix = prefix, sessionKey = migrationKey), null).orEmpty()
+                    )
+                )
+            }
+        }
+        return mergeWatchedSeriesEntries(restored)
     }
 }
 

@@ -128,4 +128,41 @@ class WatchedSeriesStateHolderTest {
         assertFalse(holder.isSeriesWatched("tmdb:101"))
         assertEquals(setOf("tmdb:101"), holder.matchingEntryIds("tmdb:101"))
     }
+
+    @Test
+    fun `token derived holder bucket migrates when user metadata arrives`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        val authState = MutableStateFlow(
+            TraktAuthState(
+                accessToken = "access",
+                refreshToken = "refresh",
+                username = null,
+                userSlug = null
+            )
+        )
+        val context = mockk<Context> {
+            every {
+                getSharedPreferences("watched_series_state", Context.MODE_PRIVATE)
+            } returns prefs
+        }
+        val authStore = mockk<TraktAuthDataStore> {
+            every { state } returns authState
+        }
+
+        val holder = WatchedSeriesStateHolder(context, authStore, backgroundScope)
+        holder.setSeriesWatched(ids = listOf("tmdb:101", "tt1234567"), watched = true)
+
+        assertTrue(holder.activeSessionKey.value.startsWith("auth_"))
+        assertTrue(holder.isSeriesWatched("tmdb:101"))
+
+        authState.value = authState.value.copy(username = "alice", userSlug = "alice")
+        advanceUntilIdle()
+
+        assertEquals("alice", holder.activeSessionKey.value)
+        assertTrue(holder.isSeriesWatched("tmdb:101"))
+        assertEquals(
+            setOf("tmdb:101", "tt1234567"),
+            holder.matchingEntryIds("tmdb:101")
+        )
+    }
 }

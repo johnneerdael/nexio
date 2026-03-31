@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import android.util.Log
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -38,18 +39,19 @@ class WatchedItemsPreferences internal constructor(
 
     companion object {
         private const val TAG = "WatchedItemsPrefs"
+        private const val LEGACY_WATCHED_ITEMS_KEY = "watched_items"
         private const val WATCHED_ITEMS_KEY_PREFIX = "watched_items_"
     }
 
     private val gson = Gson()
 
-    private val sessionKeys = authState
-        .map(::traktSessionKeyForState)
+    private val sessionIdentities = authState
+        .map(::traktSessionIdentityForState)
         .distinctUntilChanged()
 
-    private val allItems: Flow<List<WatchedItem>> = sessionKeys.flatMapLatest { sessionKey ->
+    private val allItems: Flow<List<WatchedItem>> = sessionIdentities.flatMapLatest { identity ->
         dataStore.data.map { preferences ->
-            decodeWatchedItems(preferences[watchedItemsKey(sessionKey)] ?: emptySet())
+            resolveStoredItems(preferences, identity)
         }
     }
 
@@ -76,8 +78,9 @@ class WatchedItemsPreferences internal constructor(
 
     suspend fun markAsWatched(item: WatchedItem, contentIds: Collection<String>) {
         dataStore.edit { preferences ->
-            val key = watchedItemsKey(currentSessionKey())
-            val currentItems = decodeWatchedItems(preferences[key] ?: emptySet())
+            val identity = currentSessionIdentity()
+            val key = watchedItemsKey(identity.primaryKey)
+            val currentItems = migrateLegacyItemsIfNeeded(preferences, identity)
             val updated = upsertWatchedItem(
                 items = currentItems,
                 item = item,
@@ -101,8 +104,9 @@ class WatchedItemsPreferences internal constructor(
         episode: Int? = null
     ) {
         dataStore.edit { preferences ->
-            val key = watchedItemsKey(currentSessionKey())
-            val currentItems = decodeWatchedItems(preferences[key] ?: emptySet())
+            val identity = currentSessionIdentity()
+            val key = watchedItemsKey(identity.primaryKey)
+            val currentItems = migrateLegacyItemsIfNeeded(preferences, identity)
             val updated = removeWatchedItems(
                 items = currentItems,
                 contentIds = contentIds,
@@ -114,13 +118,20 @@ class WatchedItemsPreferences internal constructor(
     }
 
     suspend fun getAllItems(): List<WatchedItem> {
+        dataStore.edit { preferences ->
+            migrateLegacyItemsIfNeeded(
+                preferences = preferences,
+                identity = currentSessionIdentity()
+            )
+        }
         return allItems.first()
     }
 
     suspend fun mergeRemoteItems(remoteItems: List<WatchedItem>) {
         dataStore.edit { preferences ->
-            val key = watchedItemsKey(currentSessionKey())
-            val currentItems = decodeWatchedItems(preferences[key] ?: emptySet())
+            val identity = currentSessionIdentity()
+            val key = watchedItemsKey(identity.primaryKey)
+            val currentItems = migrateLegacyItemsIfNeeded(preferences, identity)
             val localKeys = currentItems.map { Triple(it.contentId, it.season, it.episode) }.toSet()
 
             val newItems = remoteItems.filter { remote ->
@@ -135,8 +146,10 @@ class WatchedItemsPreferences internal constructor(
 
     suspend fun replaceWithRemoteItems(remoteItems: List<WatchedItem>) {
         dataStore.edit { preferences ->
-            val key = watchedItemsKey(currentSessionKey())
-            val current = preferences[key] ?: emptySet()
+            val identity = currentSessionIdentity()
+            val key = watchedItemsKey(identity.primaryKey)
+            val currentItems = migrateLegacyItemsIfNeeded(preferences, identity)
+            val current = encodeWatchedItems(currentItems)
             if (remoteItems.isEmpty() && current.isNotEmpty()) {
                 Log.w(TAG, "replaceWithRemoteItems: remote list empty while local has ${current.size} entries; preserving local watched items")
                 return@edit
@@ -149,12 +162,42 @@ class WatchedItemsPreferences internal constructor(
         }
     }
 
-    private suspend fun currentSessionKey(): String {
-        return sessionKeys.first()
+    private suspend fun currentSessionIdentity(): TraktSessionIdentity {
+        return sessionIdentities.first()
     }
 
     private fun watchedItemsKey(sessionKey: String) =
         stringSetPreferencesKey(WATCHED_ITEMS_KEY_PREFIX + sessionKey.lowercase())
+
+    private fun resolveStoredItems(
+        preferences: Preferences,
+        identity: TraktSessionIdentity
+    ): List<WatchedItem> {
+        val resolved = buildList {
+            addAll(decodeWatchedItems(preferences[watchedItemsKey(identity.primaryKey)] ?: emptySet()))
+            addAll(decodeWatchedItems(preferences[legacyWatchedItemsKey] ?: emptySet()))
+            identity.migrationKeys.forEach { key ->
+                addAll(decodeWatchedItems(preferences[watchedItemsKey(key)] ?: emptySet()))
+            }
+        }
+        return mergeWatchedItems(resolved)
+    }
+
+    private fun migrateLegacyItemsIfNeeded(
+        preferences: MutablePreferences,
+        identity: TraktSessionIdentity
+    ): List<WatchedItem> {
+        val merged = resolveStoredItems(preferences, identity)
+        val primaryKey = watchedItemsKey(identity.primaryKey)
+        preferences[primaryKey] = encodeWatchedItems(merged)
+        preferences.remove(legacyWatchedItemsKey)
+        identity.migrationKeys.forEach { migrationKey ->
+            preferences.remove(watchedItemsKey(migrationKey))
+        }
+        return merged
+    }
+
+    private val legacyWatchedItemsKey = stringSetPreferencesKey(LEGACY_WATCHED_ITEMS_KEY)
 
     private fun decodeWatchedItems(rawItems: Set<String>): List<WatchedItem> {
         return rawItems.mapNotNull { json ->
@@ -165,6 +208,16 @@ class WatchedItemsPreferences internal constructor(
     private fun encodeWatchedItems(items: Collection<WatchedItem>): Set<String> {
         return items.map { gson.toJson(it) }.toSet()
     }
+}
+
+internal fun mergeWatchedItems(
+    items: Collection<WatchedItem>
+): List<WatchedItem> {
+    val deduped = linkedMapOf<Triple<String, Int?, Int?>, WatchedItem>()
+    items.forEach { item ->
+        deduped[Triple(item.contentId, item.season, item.episode)] = item
+    }
+    return deduped.values.toList()
 }
 
 internal fun watchedItemsContainMatch(
