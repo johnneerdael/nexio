@@ -30,7 +30,7 @@ internal val MODERN_LANDSCAPE_LOGO_GRADIENT = Brush.verticalGradient(
 )
 
 @Immutable
-data class HeroPreview(
+internal data class HeroPreview(
     val title: String,
     val logo: String?,
     val description: String?,
@@ -45,7 +45,7 @@ data class HeroPreview(
 )
 
 @Immutable
-sealed class ModernPayload {
+internal sealed class ModernPayload {
     data class ContinueWatching(val item: ContinueWatchingItem) : ModernPayload()
     data class Catalog(
         val focusKey: String,
@@ -60,14 +60,14 @@ sealed class ModernPayload {
 }
 
 @Immutable
-data class FocusedCatalogSelection(
+internal data class FocusedCatalogSelection(
     val rowKey: String,
     val focusKey: String,
     val payload: ModernPayload.Catalog
 )
 
 @Immutable
-data class ModernCarouselItem(
+internal data class ModernCarouselItem(
     val key: String,
     val title: String,
     val subtitle: String?,
@@ -78,7 +78,7 @@ data class ModernCarouselItem(
 )
 
 @Immutable
-data class HeroCarouselRow(
+internal data class HeroCarouselRow(
     val key: String,
     val title: String,
     val globalRowIndex: Int,
@@ -92,49 +92,18 @@ data class HeroCarouselRow(
 )
 
 @Immutable
-data class CarouselRowLookups(
+internal data class CarouselRowLookups(
     val rowIndexByKey: Map<String, Int>,
     val rowByKey: Map<String, HeroCarouselRow>,
-    val rowKeyByGlobalRowIndex: Map<Int, String>,
-    val firstHeroPreviewByRow: Map<String, HeroPreview>,
-    val fallbackBackdropByRow: Map<String, String>,
     val activeRowKeys: Set<String>,
     val activeItemKeysByRow: Map<String, Set<String>>,
     val activeCatalogItemIds: Set<String>
 )
 
 @Immutable
-data class ModernHomePresentationState(
-    val rows: List<HeroCarouselRow> = emptyList(),
-    val lookups: CarouselRowLookups = CarouselRowLookups(
-        rowIndexByKey = emptyMap(),
-        rowByKey = emptyMap(),
-        rowKeyByGlobalRowIndex = emptyMap(),
-        firstHeroPreviewByRow = emptyMap(),
-        fallbackBackdropByRow = emptyMap(),
-        activeRowKeys = emptySet(),
-        activeItemKeysByRow = emptyMap(),
-        activeCatalogItemIds = emptySet()
-    )
-)
-
-@Immutable
-internal sealed interface SavedModernHomeFocusResolution {
-    data object None : SavedModernHomeFocusResolution
-    data object DeferUntilTargetExists : SavedModernHomeFocusResolution
-    data object FallbackToFirstPreparedRow : SavedModernHomeFocusResolution
-
-    data class Restore(
-        val rowKey: String,
-        val itemIndex: Int
-    ) : SavedModernHomeFocusResolution
-}
-
-@Immutable
 internal data class ModernHomeContentState(
     val catalogRows: List<CatalogRow> = emptyList(),
     val continueWatchingItems: List<ContinueWatchingItem> = emptyList(),
-    val modernHomePresentation: ModernHomePresentationState = ModernHomePresentationState(),
     val modernLandscapePostersEnabled: Boolean = false,
     val catalogTypeSuffixEnabled: Boolean = true,
     val focusedPosterBackdropExpandEnabled: Boolean = false,
@@ -148,7 +117,6 @@ internal data class ModernHomeContentState(
     val posterCardWidthDp: Int = 126,
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12,
-    val continueWatchingBlurEnabled: Boolean = false,
     val posterLabelsEnabled: Boolean = true,
     val trailerPreviewUrls: Map<String, String> = emptyMap(),
     val trailerPreviewAudioUrls: Map<String, String> = emptyMap(),
@@ -159,7 +127,6 @@ internal data class ModernCatalogRowBuildCacheEntry(
     val source: CatalogRow,
     val useLandscapePosters: Boolean,
     val showCatalogTypeSuffix: Boolean,
-    val localeTag: String,
     val mappedRow: HeroCarouselRow
 )
 
@@ -183,7 +150,6 @@ internal class ModernCarouselRowBuildCache {
     var continueWatchingAirsDateTemplate: String = ""
     var continueWatchingUpcomingLabel: String = ""
     var continueWatchingUseLandscapePosters: Boolean = false
-    var continueWatchingLocaleTag: String = ""
     var continueWatchingRow: HeroCarouselRow? = null
     val catalogRows = mutableMapOf<String, ModernCatalogRowBuildCacheEntry>()
     val catalogItemCache = mutableMapOf<String, MutableMap<String, CachedCarouselItem>>()
@@ -192,7 +158,6 @@ internal class ModernCarouselRowBuildCache {
 internal data class CachedCarouselItem(
     val source: MetaPreview,
     val useLandscapePosters: Boolean,
-    val localeTag: String,
     val carouselItem: ModernCarouselItem
 )
 
@@ -245,55 +210,6 @@ internal fun resolveDisplayedHeroPreview(
     } else {
         displayedHeroPreview ?: liveActiveHeroPreview
     }
-}
-
-internal fun resolveSavedModernHomeFocusResolution(
-    hasSavedFocus: Boolean,
-    focusedRowIndex: Int,
-    focusedItemIndex: Int,
-    hasContinueWatching: Boolean,
-    preparedCatalogRowCount: Int,
-    availableCatalogRowCount: Int,
-    rowKeyByGlobalRowIndex: Map<Int, String>,
-    rows: List<HeroCarouselRow>
-): SavedModernHomeFocusResolution {
-    if (!hasSavedFocus) return SavedModernHomeFocusResolution.None
-    if (rows.isEmpty()) return SavedModernHomeFocusResolution.DeferUntilTargetExists
-    val preparedPresentationIncomplete = preparedCatalogRowCount < availableCatalogRowCount
-
-    if (focusedRowIndex == -1) {
-        if (!hasContinueWatching) return SavedModernHomeFocusResolution.None
-        val continueWatchingRow = rows.firstOrNull { it.key == "continue_watching" }
-            ?: return SavedModernHomeFocusResolution.DeferUntilTargetExists
-        val resolvedIndex = focusedItemIndex
-            .coerceAtLeast(0)
-            .coerceAtMost((continueWatchingRow.items.size - 1).coerceAtLeast(0))
-        return SavedModernHomeFocusResolution.Restore(
-            rowKey = continueWatchingRow.key,
-            itemIndex = resolvedIndex
-        )
-    }
-
-    if (focusedRowIndex < 0) return SavedModernHomeFocusResolution.None
-    val rowKey = rowKeyByGlobalRowIndex[focusedRowIndex]
-        ?: return if (preparedPresentationIncomplete) {
-            SavedModernHomeFocusResolution.DeferUntilTargetExists
-        } else {
-            SavedModernHomeFocusResolution.FallbackToFirstPreparedRow
-        }
-    val row = rows.firstOrNull { it.key == rowKey }
-        ?: return if (preparedPresentationIncomplete) {
-            SavedModernHomeFocusResolution.DeferUntilTargetExists
-        } else {
-            SavedModernHomeFocusResolution.FallbackToFirstPreparedRow
-        }
-    val resolvedIndex = focusedItemIndex
-        .coerceAtLeast(0)
-        .coerceAtMost((row.items.size - 1).coerceAtLeast(0))
-    return SavedModernHomeFocusResolution.Restore(
-        rowKey = row.key,
-        itemIndex = resolvedIndex
-    )
 }
 
 internal fun applyTomatoesToContinueWatchingItem(

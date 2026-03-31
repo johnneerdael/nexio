@@ -8,12 +8,9 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
-import com.nexio.tv.data.local.TrailerSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.ImdbSettingsDataStore
-import com.nexio.tv.data.local.WatchedSeriesStateHolder
-import com.nexio.tv.data.local.expandSeriesContentIdAliases
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktCommentItemDto
 import com.nexio.tv.data.trailer.TrailerResolutionResult
@@ -55,7 +52,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -72,58 +68,6 @@ internal fun shouldStopAutoTrailerOnLifecyclePause(
     isTrailerPlaying: Boolean,
     showTrailerControls: Boolean
 ): Boolean = isTrailerPlaying && !showTrailerControls
-
-internal fun resolveSeriesEpisodeProgressIds(
-    routeItemId: String,
-    metaId: String?,
-    rememberedRouteIds: Set<String> = emptySet(),
-    rememberedMetaIds: Set<String> = emptySet()
-): Set<String> {
-    return buildSet {
-        addAll(rememberedRouteIds)
-        addAll(rememberedMetaIds)
-        addAll(
-            expandSeriesContentIdAliases(
-                listOfNotNull(
-                    routeItemId.takeIf { it.isNotBlank() },
-                    metaId?.takeIf { it.isNotBlank() }
-                )
-            )
-        )
-    }
-}
-
-internal class LatestSeriesWatchedBadgeScheduler(
-    private val scope: kotlinx.coroutines.CoroutineScope,
-    private val persist: suspend (Collection<String>, Boolean) -> Unit
-) {
-    private data class PendingBadgeWrite(
-        val ids: Collection<String>,
-        val watched: Boolean
-    )
-
-    private val lock = Any()
-    private var pendingWrite: PendingBadgeWrite? = null
-    private var drainJob: Job? = null
-
-    fun submit(ids: Collection<String>, watched: Boolean) {
-        if (ids.isEmpty()) return
-        synchronized(lock) {
-            pendingWrite = PendingBadgeWrite(ids = ids, watched = watched)
-            if (drainJob?.isActive == true) {
-                return
-            }
-            drainJob = scope.launch {
-                while (true) {
-                    val next = synchronized(lock) {
-                        pendingWrite.also { pendingWrite = null }
-                    } ?: return@launch
-                    persist(next.ids, next.watched)
-                }
-            }
-        }
-    }
-}
 
 private data class TraktReviewQuery(
     val pathId: String,
@@ -153,9 +97,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val watchProgressRepository: WatchProgressRepository,
     private val traktScrobbleService: TraktScrobbleService,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
-    private val trailerSettingsDataStore: TrailerSettingsDataStore,
     private val trailerService: TrailerService,
-    private val watchedSeriesStateHolder: WatchedSeriesStateHolder,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val itemId: String = savedStateHandle["itemId"] ?: ""
@@ -180,8 +122,6 @@ class MetaDetailsViewModel @Inject constructor(
     private var trailerFetchJob: Job? = null
 
     private var hideUnreleasedContent = false
-    private var trailerDelayMs = 7000L
-    private var trailerAutoplayEnabled = false
     private var trailerHasPlayed = false
     private var isPlayButtonFocused = false
     private var currentReviewsMetaId: String? = null
@@ -193,13 +133,9 @@ class MetaDetailsViewModel @Inject constructor(
     private var isLoadingMoreReviews = false
     private var currentTraktPathIds: List<String> = emptyList()
     private var currentTraktIsShow = false
-    private val seriesWatchedBadgeScheduler = LatestSeriesWatchedBadgeScheduler(viewModelScope) { ids, watched ->
-        watchedSeriesStateHolder.setSeriesWatched(ids = ids, watched = watched)
-    }
 
     init {
         observeMetaViewSettings()
-        observeTrailerAutoplaySettings()
         observeLibraryState()
         observeWatchProgress()
         observeWatchedEpisodes()
@@ -223,18 +159,6 @@ class MetaDetailsViewModel @Inject constructor(
                         }
                     }
                 }
-        }
-    }
-
-    private fun observeTrailerAutoplaySettings() {
-        viewModelScope.launch {
-            trailerSettingsDataStore.settings.collectLatest { settings ->
-                trailerAutoplayEnabled = settings.enabled
-                trailerDelayMs = settings.delaySeconds * 1000L
-                if (!settings.enabled) {
-                    idleTimerJob?.cancel()
-                }
-            }
         }
     }
 
@@ -391,7 +315,7 @@ class MetaDetailsViewModel @Inject constructor(
     private fun observeWatchProgress() {
         if (itemType.lowercase() == "movie") return
         viewModelScope.launch {
-            observeSeriesEpisodeProgress()
+            watchProgressRepository.getAllEpisodeProgress(itemId)
                 .distinctUntilChanged()
                 .collectLatest { progressMap ->
                 _uiState.update { state ->
@@ -410,7 +334,7 @@ class MetaDetailsViewModel @Inject constructor(
     private fun observeWatchedEpisodes() {
         if (itemType.lowercase() == "movie") return
         viewModelScope.launch {
-            observeSeriesEpisodeProgress()
+            watchProgressRepository.getAllEpisodeProgress(itemId)
                 .map { progressMap ->
                     progressMap
                         .filterValues { it.isCompleted() }
@@ -425,19 +349,10 @@ class MetaDetailsViewModel @Inject constructor(
                         state.copy(watchedEpisodes = watchedSet)
                     }
                 }
-                reevaluateSeriesWatchedBadge()
                 calculateNextToWatch()
             }
         }
     }
-
-    private fun observeSeriesEpisodeProgress() =
-        _uiState
-            .map { state -> currentSeriesEpisodeProgressIds(state.meta) }
-            .distinctUntilChanged()
-            .flatMapLatest { ids ->
-                watchProgressRepository.getAllEpisodeProgress(ids)
-            }
 
     private fun observeMovieWatched() {
         if (itemType.lowercase() != "movie") return
@@ -679,7 +594,6 @@ class MetaDetailsViewModel @Inject constructor(
         trailerHasPlayed = false
         fetchTrailerUrl()
 
-        reevaluateSeriesWatchedBadge()
         // Calculate next to watch after meta is loaded
         calculateNextToWatch()
     }
@@ -1373,6 +1287,8 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun selectSeason(season: Int) {
         _uiState.update { it.withManualSeasonSelection(season) }
+        trailerHasPlayed = false
+        fetchTrailerUrl()
     }
 
     internal fun setSelectedSeasonProgrammatically(season: Int) {
@@ -1837,41 +1753,6 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
-    private fun reevaluateSeriesWatchedBadge() {
-        val meta = _uiState.value.meta ?: return
-        if (!meta.apiType.equals("series", ignoreCase = true) &&
-            !meta.apiType.equals("tv", ignoreCase = true)
-        ) {
-            return
-        }
-        val watchedEpisodes = _uiState.value.watchedEpisodes
-        val episodes = meta.videos.filter { video ->
-            (video.season ?: 0) > 0 && (video.episode ?: 0) > 0
-        }
-        if (episodes.isEmpty()) return
-
-        val ids = currentSeriesEpisodeProgressIds(meta)
-        if (ids.isEmpty()) return
-
-        seriesWatchedBadgeScheduler.submit(
-            ids = ids,
-            watched = episodes.all { video ->
-                (video.season!! to video.episode!!) in watchedEpisodes
-            }
-        )
-    }
-
-    private fun currentSeriesEpisodeProgressIds(meta: Meta?): Set<String> {
-        return resolveSeriesEpisodeProgressIds(
-            routeItemId = itemId,
-            metaId = meta?.id,
-            rememberedRouteIds = watchedSeriesStateHolder.matchingEntryIds(itemId),
-            rememberedMetaIds = meta?.id
-                ?.let(watchedSeriesStateHolder::matchingEntryIds)
-                .orEmpty()
-        )
-    }
-
     private fun extractImdbId(rawId: String?): String? {
         if (rawId.isNullOrBlank()) return null
         val normalized = rawId.trim()
@@ -1941,6 +1822,11 @@ class MetaDetailsViewModel @Inject constructor(
                 year = year,
                 tmdbId = tmdbId,
                 type = meta.apiType,
+                seasonNumber = if (parseApiTypeToContentType(meta.apiType) == ContentType.SERIES) {
+                    _uiState.value.selectedSeason
+                } else {
+                    null
+                },
                 contentId = meta.id,
                 fallbackYtIds = meta.trailerYtIds
             )
@@ -1970,30 +1856,11 @@ class MetaDetailsViewModel @Inject constructor(
                 }
             }
 
-            if (trailerResult is TrailerResolutionResult.Playback && isPlayButtonFocused) {
-                startIdleTimer()
-            }
         }
     }
 
     private fun startIdleTimer() {
         idleTimerJob?.cancel()
-
-        val state = _uiState.value
-        if (state.trailerUrl.isNullOrBlank()) return
-        if (state.isTrailerPlaying) return
-        if (!trailerAutoplayEnabled) return
-        if (trailerHasPlayed) return
-        if (!isPlayButtonFocused) return
-
-        idleTimerJob = viewModelScope.launch {
-            delay(trailerDelayMs)
-            setTrailerPlaybackState(
-                isPlaying = true,
-                showControls = false,
-                hideLogo = false
-            )
-        }
     }
 
     private fun handlePlayButtonFocused() {

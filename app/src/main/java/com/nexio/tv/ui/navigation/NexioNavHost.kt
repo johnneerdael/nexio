@@ -32,6 +32,7 @@ import com.nexio.tv.ui.screens.settings.SettingsScreen
 import com.nexio.tv.ui.screens.settings.ThemeSettingsScreen
 import com.nexio.tv.ui.screens.settings.TraktScreen
 import com.nexio.tv.ui.screens.settings.TmdbSettingsScreen
+import com.nexio.tv.ui.screens.settings.YouTubeTrailerLoginScreen
 import com.nexio.tv.ui.screens.stream.StreamScreen
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.account.AuthSignInScreen
@@ -46,7 +47,10 @@ fun NexioNavHost(
     hideBuiltInHeaders: Boolean = false,
     idleScreensaverVisible: Boolean = false,
     onModernHomeTrailerPlaybackStarted: () -> Unit = {},
-    onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit = {}
+    onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit = {},
+    onDetailTrailerPlaybackStarted: () -> Unit = {},
+    onDetailTrailerPlaybackStopped: () -> Unit = {},
+    onDetailTrailerPlaybackActiveChanged: (Boolean) -> Unit = {}
 ) {
     fun returnPlayerToLibrary() {
         val returnedToLibrary = navController.popBackStack(Screen.Library.route, inclusive = false)
@@ -262,6 +266,9 @@ fun NexioNavHost(
             MetaDetailsScreen(
                 returnFocusSeason = returnFocusSeason,
                 returnFocusEpisode = returnFocusEpisode,
+                onDetailTrailerPlaybackStarted = onDetailTrailerPlaybackStarted,
+                onDetailTrailerPlaybackStopped = onDetailTrailerPlaybackStopped,
+                onDetailTrailerPlaybackActiveChanged = onDetailTrailerPlaybackActiveChanged,
                 onBackPress = { navController.popBackStack() },
                 onNavigateToCastDetail = { personId, personName, preferCrew ->
                     navController.navigate(Screen.CastDetail.createRoute(personId, personName, preferCrew))
@@ -832,7 +839,10 @@ fun NexioNavHost(
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
                 onNavigateToCatalogs = { navController.navigate(Screen.Catalogs.route) },
-                onNavigateToAuthQrSignIn = { navController.navigate(Screen.AuthQrSignIn.route) }
+                onNavigateToAuthQrSignIn = { navController.navigate(Screen.AuthQrSignIn.route) },
+                onNavigateToYouTubeTrailerLogin = {
+                    navController.navigate(Screen.YouTubeTrailerLogin.route)
+                }
             )
         }
 
@@ -850,6 +860,12 @@ fun NexioNavHost(
 
         composable(Screen.TmdbSettings.route) {
             TmdbSettingsScreen(
+                onBackPress = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.YouTubeTrailerLogin.route) {
+            YouTubeTrailerLoginScreen(
                 onBackPress = { navController.popBackStack() }
             )
         }

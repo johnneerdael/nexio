@@ -14,7 +14,8 @@ class MainActivityIdleScreensaverTest {
             isIdleScreensaverEligibleRoute(
                 currentRoute = Screen.Home.route,
                 playbackIdleSnapshot = PlaybackIdleGateSnapshot(),
-                homeTrailerPlaybackActive = true
+                homeTrailerPlaybackActive = true,
+                detailTrailerPlaybackActive = false
             )
         )
     }
@@ -25,7 +26,20 @@ class MainActivityIdleScreensaverTest {
             isIdleScreensaverEligibleRoute(
                 currentRoute = Screen.Home.route,
                 playbackIdleSnapshot = PlaybackIdleGateSnapshot(),
-                homeTrailerPlaybackActive = false
+                homeTrailerPlaybackActive = false,
+                detailTrailerPlaybackActive = false
+            )
+        )
+    }
+
+    @Test
+    fun `detail route is not eligible while detail trailer is active`() {
+        assertFalse(
+            isIdleScreensaverEligibleRoute(
+                currentRoute = Screen.Detail.route,
+                playbackIdleSnapshot = PlaybackIdleGateSnapshot(),
+                homeTrailerPlaybackActive = false,
+                detailTrailerPlaybackActive = true
             )
         )
     }

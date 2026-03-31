@@ -5,6 +5,8 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.chaquo.python.Python
+import com.chaquo.python.android.AndroidPlatform
 import com.nexio.tv.core.sync.StartupSyncService
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -22,6 +24,9 @@ class NexioApplication : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        if (!Python.isStarted()) {
+            Python.start(AndroidPlatform(this))
+        }
         appScope.launch {
             runPosterCacheCleanup()
         }

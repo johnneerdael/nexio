@@ -14,9 +14,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -36,7 +34,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.nexio.tv.R
@@ -101,7 +98,6 @@ fun GridHomeContent(
     val gridItems = uiState.gridItems
     val continueWatchingItems = uiState.continueWatchingItems
     val continueWatchingOffset = if (continueWatchingItems.isNotEmpty()) 1 else 0
-    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
 
     // Build index-to-section mapping for sticky header
     val sectionMapping = remember(gridItems, continueWatchingOffset) {
@@ -205,9 +201,6 @@ fun GridHomeContent(
                         ) {
                             HeroCarousel(
                                 items = gridItem.items,
-                                modifier = Modifier
-                                    .offset(x = (-24).dp)
-                                    .requiredWidth(screenWidth),
                                 focusRequester = if (shouldRequestInitialFocus) heroFocusRequester else null,
                                 onItemClick = { item ->
                                     onNavigateToDetail(
@@ -231,7 +224,6 @@ fun GridHomeContent(
                             ) {
                                 GridContinueWatchingSection(
                                     items = continueWatchingItems,
-                                    blurEpisodeThumbnail = uiState.continueWatchingBlurEnabled,
                                     focusedItemIndex = if (shouldRequestInitialFocus && !hasHero) 0 else -1,
                                     onItemClick = { item ->
                                         onContinueWatchingClick(item)
@@ -378,7 +370,6 @@ fun GridHomeContent(
                 ) {
                     GridContinueWatchingSection(
                         items = continueWatchingItems,
-                        blurEpisodeThumbnail = uiState.continueWatchingBlurEnabled,
                         focusedItemIndex = if (shouldRequestInitialFocus && !hasHero) 0 else -1,
                         onItemClick = { item ->
                             onContinueWatchingClick(item)

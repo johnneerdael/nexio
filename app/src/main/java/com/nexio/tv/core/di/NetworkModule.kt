@@ -4,7 +4,6 @@ import android.content.Context
 import android.util.Log
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.logging.sanitizeRequestTargetForLogs
-import com.nexio.tv.core.network.allowInvalidCertificates
 import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.data.remote.api.AniSkipApi
 import com.nexio.tv.data.remote.api.AnimeSkipApi
@@ -86,7 +85,6 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideOkHttpClient(@ApplicationContext context: Context): OkHttpClient = OkHttpClient.Builder()
-        .allowInvalidCertificates()
         .cache(Cache(File(context.cacheDir, "http_cache"), 50L * 1024 * 1024)) // 50 MB disk cache
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)

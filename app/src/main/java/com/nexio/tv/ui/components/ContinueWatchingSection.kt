@@ -71,7 +71,6 @@ private val BadgeShape = RoundedCornerShape(4.dp)
 @Composable
 fun ContinueWatchingSection(
     items: List<ContinueWatchingItem>,
-    blurEpisodeThumbnail: Boolean = false,
     onItemClick: (ContinueWatchingItem) -> Unit,
     onDetailsClick: (ContinueWatchingItem) -> Unit = onItemClick,
     onRemoveItem: (ContinueWatchingItem) -> Unit,
@@ -161,7 +160,6 @@ fun ContinueWatchingSection(
 
                 ContinueWatchingCard(
                     item = progress,
-                    blurEpisodeThumbnail = blurEpisodeThumbnail,
                     onClick = { onItemClick(progress) },
                     onLongPress = { optionsItem = progress },
                     modifier = Modifier
@@ -236,7 +234,6 @@ fun ContinueWatchingSection(
 @Composable
 fun ContinueWatchingCard(
     item: ContinueWatchingItem,
-    blurEpisodeThumbnail: Boolean = false,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
@@ -318,11 +315,6 @@ fun ContinueWatchingCard(
             .crossfade(false)
             .memoryCacheKey("${imageModel}_${requestWidthPx}x${requestHeightPx}")
             .size(width = requestWidthPx, height = requestHeightPx)
-            .apply {
-                if (blurEpisodeThumbnail && nextUp != null) {
-                    transformations(com.nexio.tv.ui.util.BlurTransformation())
-                }
-            }
             .build()
     }
 
