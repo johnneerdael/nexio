@@ -526,8 +526,11 @@ private fun MetaInfoRow(
     val context = LocalContext.current
     val genresText = remember(meta.genres) { meta.genres.joinToString(" • ") }
     val runtimeText = remember(meta.runtime) { meta.runtime?.let { formatRuntime(it) } }
-    val yearText = remember(meta.releaseInfo) {
-        meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
+    val yearText = remember(meta.type, meta.releaseInfo) {
+        formatPrimaryReleaseInfo(
+            contentType = meta.type,
+            releaseInfo = meta.releaseInfo
+        )
     }
     val imdbRating = if (hideImdbRating) null else meta.imdbRating
     val shouldShowImdbRating = imdbRating != null
