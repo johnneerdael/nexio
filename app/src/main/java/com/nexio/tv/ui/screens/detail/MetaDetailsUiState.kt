@@ -23,6 +23,8 @@ data class MetaDetailsUiState(
     val episodeProgressMap: Map<Pair<Int, Int>, WatchProgress> = emptyMap(),
     val trailerUrl: String? = null,
     val trailerAudioUrl: String? = null,
+    val trailerExternalUrl: String? = null,
+    val pendingExternalTrailerUrl: String? = null,
     val isTrailerPlaying: Boolean = false,
     val isTrailerLoading: Boolean = false,
     val showTrailerControls: Boolean = false,
@@ -66,6 +68,8 @@ sealed class MetaDetailsEvent {
     data object OnPlayButtonFocused : MetaDetailsEvent()
     data object OnTrailerButtonClick : MetaDetailsEvent()
     data object OnTrailerEnded : MetaDetailsEvent()
+    data object OnLifecyclePause : MetaDetailsEvent()
+    data object OnExternalTrailerConsumed : MetaDetailsEvent()
     data object OnToggleMovieWatched : MetaDetailsEvent()
     data class OnToggleEpisodeWatched(val video: Video) : MetaDetailsEvent()
     data class OnClearEpisodeProgress(val video: Video) : MetaDetailsEvent()

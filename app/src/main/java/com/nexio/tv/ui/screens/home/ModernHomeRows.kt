@@ -2,9 +2,12 @@
 
 package com.nexio.tv.ui.screens.home
 
+import android.content.Intent
+import android.net.Uri
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.BringIntoViewSpec
@@ -42,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -75,9 +79,11 @@ import coil.imageLoader
 import coil.memory.MemoryCache
 import coil.request.ImageRequest
 import com.nexio.tv.R
+import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.components.ContinueWatchingCard
 import com.nexio.tv.ui.components.MonochromePosterPlaceholder
+import com.nexio.tv.ui.components.TrailerPlayer
 import com.nexio.tv.ui.theme.NexioColors
 import kotlin.math.abs
 import kotlinx.coroutines.delay
@@ -144,6 +150,11 @@ private fun ModernCatalogRowItem(
     modernCatalogCardHeight: Dp,
     effectiveExpandEnabled: Boolean,
     isBackdropExpanded: Boolean,
+    playTrailerInExpandedCard: Boolean,
+    focusedPosterBackdropTrailerMuted: Boolean,
+    trailerPreviewUrl: String?,
+    trailerPreviewAudioUrl: String?,
+    trailerPreviewExternalUrl: String?,
     isWatched: Boolean,
     onFocused: () -> Unit,
     onItemFocus: (MetaPreview) -> Unit,
@@ -190,6 +201,11 @@ private fun ModernCatalogRowItem(
         modifier = modifier,
         focusedPosterBackdropExpandEnabled = effectiveExpandEnabled,
         isBackdropExpanded = isBackdropExpanded,
+        playTrailerInExpandedCard = playTrailerInExpandedCard,
+        focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
+        trailerPreviewUrl = trailerPreviewUrl,
+        trailerPreviewAudioUrl = trailerPreviewAudioUrl,
+        trailerPreviewExternalUrl = trailerPreviewExternalUrl,
         isWatched = isWatched,
         focusRequester = requester,
         onFocused = { focusEventId += 1 },
@@ -223,6 +239,11 @@ internal fun ModernRowSection(
     posterCardCornerRadius: Dp,
     effectiveExpandEnabled: Boolean,
     expandedCatalogFocusKeyForRow: String?,
+    focusedPosterBackdropTrailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget,
+    focusedPosterBackdropTrailerMuted: Boolean,
+    trailerPreviewUrls: Map<String, String>,
+    trailerPreviewAudioUrls: Map<String, String>,
+    trailerPreviewExternalUrls: Map<String, String>,
     modernCatalogCardWidth: Dp,
     modernCatalogCardHeight: Dp,
     continueWatchingCardWidth: Dp,
@@ -463,6 +484,24 @@ internal fun ModernRowSection(
                             val metaPreview = item.metaPreview ?: return@itemsIndexed
                             val nextCatalogItem = row.items.getOrNull(index + 1)?.metaPreview
                             val isWatched = remember(metaPreview.id) { isCatalogItemWatched(metaPreview) }
+                            val playTrailerInExpandedCard =
+                                focusedPosterBackdropTrailerPlaybackTarget ==
+                                    FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD
+                            val trailerPreviewUrl = if (playTrailerInExpandedCard) {
+                                trailerPreviewUrls[payload.itemId]
+                            } else {
+                                null
+                            }
+                            val trailerPreviewAudioUrl = if (playTrailerInExpandedCard) {
+                                trailerPreviewAudioUrls[payload.itemId]
+                            } else {
+                                null
+                            }
+                            val trailerPreviewExternalUrl = if (playTrailerInExpandedCard) {
+                                trailerPreviewExternalUrls[payload.itemId]
+                            } else {
+                                null
+                            }
                             ModernCatalogRowItem(
                                 rowKey = row.key,
                                 item = item,
@@ -477,6 +516,11 @@ internal fun ModernRowSection(
                                 isBackdropExpanded = effectiveExpandEnabled &&
                                     !isRowScrolling &&
                                     expandedCatalogFocusKeyForRow == payload.focusKey,
+                                playTrailerInExpandedCard = playTrailerInExpandedCard,
+                                focusedPosterBackdropTrailerMuted = focusedPosterBackdropTrailerMuted,
+                                trailerPreviewUrl = trailerPreviewUrl,
+                                trailerPreviewAudioUrl = trailerPreviewAudioUrl,
+                                trailerPreviewExternalUrl = trailerPreviewExternalUrl,
                                 isWatched = isWatched,
                                 onFocused = onFocused,
                                 onItemFocus = onItemFocus,
@@ -510,6 +554,11 @@ private fun ModernCarouselCard(
     cardHeight: Dp,
     focusedPosterBackdropExpandEnabled: Boolean,
     isBackdropExpanded: Boolean,
+    playTrailerInExpandedCard: Boolean,
+    focusedPosterBackdropTrailerMuted: Boolean,
+    trailerPreviewUrl: String?,
+    trailerPreviewAudioUrl: String?,
+    trailerPreviewExternalUrl: String?,
     isWatched: Boolean,
     focusRequester: FocusRequester,
     onFocused: () -> Unit,
@@ -583,6 +632,8 @@ private fun ModernCarouselCard(
         }
     }
     var landscapeLogoLoadFailed by remember(item.heroPreview.logo) { mutableStateOf(false) }
+    var trailerFirstFrameRendered by remember(trailerPreviewUrl) { mutableStateOf(false) }
+    var lastExternalTrailerLaunchKey by remember { mutableStateOf<String?>(null) }
     val hasImage = !imageUrl.isNullOrBlank()
     val hasLandscapeLogo =
         (useLandscapePosters || isBackdropExpanded) &&
@@ -607,6 +658,22 @@ private fun ModernCarouselCard(
         modifier = modifier.width(animatedCardWidth),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        LaunchedEffect(isBackdropExpanded, isFocused, trailerPreviewUrl, trailerPreviewExternalUrl) {
+            if (!playTrailerInExpandedCard) return@LaunchedEffect
+            if (!isBackdropExpanded || !isFocused) return@LaunchedEffect
+            if (!trailerPreviewUrl.isNullOrBlank()) return@LaunchedEffect
+            val externalUrl = trailerPreviewExternalUrl ?: return@LaunchedEffect
+            val launchKey = "${item.key}|$externalUrl"
+            if (lastExternalTrailerLaunchKey == launchKey) return@LaunchedEffect
+            lastExternalTrailerLaunchKey = launchKey
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(externalUrl)).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                )
+            }
+        }
         Card(
             onClick = {
                 if (longPressTriggered) {
@@ -678,6 +745,23 @@ private fun ModernCarouselCard(
                         Modifier.fillMaxSize()
                     }
                 }
+                val shouldPlayTrailerInCard =
+                    playTrailerInExpandedCard &&
+                        isBackdropExpanded &&
+                        isFocused &&
+                        !trailerPreviewUrl.isNullOrBlank()
+
+                LaunchedEffect(shouldPlayTrailerInCard) {
+                    if (!shouldPlayTrailerInCard) {
+                        trailerFirstFrameRendered = false
+                    }
+                }
+
+                val trailerCoverAlpha by animateFloatAsState(
+                    targetValue = if (shouldPlayTrailerInCard && !trailerFirstFrameRendered) 1f else 0f,
+                    animationSpec = tween(durationMillis = 250),
+                    label = "modernExpandedCardTrailerCoverAlpha"
+                )
 
                 Box(modifier = mediaLayerModifier) {
                     if (hasImage) {
@@ -689,6 +773,31 @@ private fun ModernCarouselCard(
                         )
                     } else {
                         MonochromePosterPlaceholder()
+                    }
+                    if (shouldPlayTrailerInCard) {
+                        TrailerPlayer(
+                            trailerUrl = trailerPreviewUrl,
+                            trailerAudioUrl = trailerPreviewAudioUrl,
+                            isPlaying = true,
+                            onEnded = {
+                                trailerFirstFrameRendered = false
+                            },
+                            onFirstFrameRendered = {
+                                trailerFirstFrameRendered = true
+                            },
+                            muted = focusedPosterBackdropTrailerMuted,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        if (hasImage) {
+                            AsyncImage(
+                                model = imageModel,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer { alpha = trailerCoverAlpha },
+                                contentScale = ContentScale.Crop
+                            )
+                        }
                     }
                 }
 

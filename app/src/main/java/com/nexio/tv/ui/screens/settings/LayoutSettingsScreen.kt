@@ -25,7 +25,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,6 +56,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.ui.components.ClassicLayoutPreview
 import com.nexio.tv.ui.components.GridLayoutPreview
@@ -409,6 +413,20 @@ fun LayoutSettingsContent(
                     )
 
                     CompactToggleRow(
+                        title = stringResource(R.string.layout_trailer_button),
+                        subtitle = stringResource(R.string.layout_trailer_button_sub),
+                        checked = uiState.detailPageTrailerButtonEnabled,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetDetailPageTrailerButtonEnabled(
+                                    !uiState.detailPageTrailerButtonEnabled
+                                )
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.DETAIL_PAGE }
+                    )
+
+                    CompactToggleRow(
                         title = stringResource(R.string.layout_prefer_external_meta),
                         subtitle = stringResource(R.string.layout_prefer_external_meta_sub),
                         checked = uiState.preferExternalMetaAddonDetail,
@@ -473,6 +491,73 @@ fun LayoutSettingsContent(
                         )
                     }
 
+                    CompactToggleRow(
+                        title = stringResource(R.string.layout_autoplay_trailer),
+                        subtitle = stringResource(R.string.layout_autoplay_trailer_sub),
+                        checked = uiState.focusedPosterBackdropTrailerEnabled,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetFocusedPosterBackdropTrailerEnabled(
+                                    !uiState.focusedPosterBackdropTrailerEnabled
+                                )
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
+                    )
+
+                    if (uiState.focusedPosterBackdropTrailerEnabled) {
+                        SettingsActionRow(
+                            title = stringResource(R.string.layout_trailer_location),
+                            subtitle = stringResource(R.string.layout_trailer_location_sub),
+                            value = when (uiState.focusedPosterBackdropTrailerPlaybackTarget) {
+                                FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD ->
+                                    stringResource(R.string.layout_trailer_expanded_card)
+                                FocusedPosterTrailerPlaybackTarget.HERO_MEDIA ->
+                                    stringResource(R.string.layout_trailer_hero_media)
+                            },
+                            onClick = {
+                                val nextTarget =
+                                    if (
+                                        uiState.focusedPosterBackdropTrailerPlaybackTarget ==
+                                        FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
+                                    ) {
+                                        FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD
+                                    } else {
+                                        FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
+                                    }
+                                viewModel.onEvent(
+                                    LayoutSettingsEvent.SetFocusedPosterBackdropTrailerPlaybackTarget(
+                                        nextTarget
+                                    )
+                                )
+                            },
+                            onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER },
+                            trailingIcon = Icons.Default.Tune
+                        )
+
+                        SettingsActionRow(
+                            title = stringResource(R.string.layout_trailer_muted),
+                            subtitle = stringResource(R.string.layout_trailer_muted_sub),
+                            value = if (uiState.focusedPosterBackdropTrailerMuted) {
+                                stringResource(R.string.action_on)
+                            } else {
+                                stringResource(R.string.action_off)
+                            },
+                            onClick = {
+                                viewModel.onEvent(
+                                    LayoutSettingsEvent.SetFocusedPosterBackdropTrailerMuted(
+                                        !uiState.focusedPosterBackdropTrailerMuted
+                                    )
+                                )
+                            },
+                            onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER },
+                            trailingIcon = if (uiState.focusedPosterBackdropTrailerMuted) {
+                                Icons.Default.VolumeUp
+                            } else {
+                                Icons.Default.PlayCircle
+                            }
+                        )
+                    }
                 }
             }
             }

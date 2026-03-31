@@ -785,6 +785,13 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             homeCatalogSnapshotStore.clear()
             truncatedRowCache.clear()
             hasRenderedFirstCatalog = false
+            trailerPreviewLoadingIds.clear()
+            trailerPreviewNegativeCache.clear()
+            trailerPreviewUrlsState.clear()
+            trailerPreviewAudioUrlsState.clear()
+            trailerPreviewExternalUrlsState.clear()
+            activeTrailerPreviewItemId = null
+            trailerPreviewRequestVersion = 0L
             lastCatalogComputationSignature = null
             lastCatalogOrderDiagnosticsSignature = null
             lastHeroEnrichmentSignature = null
@@ -814,6 +821,13 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             lastCatalogOrderDiagnosticsSignature = null
             restoredCatalogSnapshotActive = false
             homeCatalogSnapshotStore.clear()
+            trailerPreviewLoadingIds.clear()
+            trailerPreviewNegativeCache.clear()
+            trailerPreviewUrlsState.clear()
+            trailerPreviewAudioUrlsState.clear()
+            trailerPreviewExternalUrlsState.clear()
+            activeTrailerPreviewItemId = null
+            trailerPreviewRequestVersion = 0L
             catalogsLoadInProgress = false
             _uiState.update { it.copy(isLoading = false, error = "No catalog addons installed") }
             return
@@ -845,6 +859,13 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             staleCatalogKeys.forEach { catalogsMap.remove(it) }
             scheduleUpdateCatalogRows()
         }
+        trailerPreviewLoadingIds.clear()
+        trailerPreviewNegativeCache.clear()
+        trailerPreviewUrlsState.clear()
+        trailerPreviewAudioUrlsState.clear()
+        trailerPreviewExternalUrlsState.clear()
+        activeTrailerPreviewItemId = null
+        trailerPreviewRequestVersion = 0L
         pendingCatalogLoads = catalogsToLoad.size
         catalogsToLoad.forEach { (addon, catalog) ->
             loadCatalogPipeline(addon, catalog, generation)

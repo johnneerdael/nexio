@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -45,6 +46,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import com.nexio.tv.ui.components.TrailerPlayer
 import com.nexio.tv.ui.theme.NexioColors
 
 private const val MODERN_HOME_HERO_LOG_TAG = "ModernHomeHero"
@@ -52,6 +54,9 @@ private const val MODERN_HOME_HERO_LOG_TAG = "ModernHomeHero"
 @Composable
 internal fun ModernHeroMediaLayer(
     heroBackdrop: String?,
+    trailerPreviewUrl: String?,
+    trailerPreviewAudioUrl: String?,
+    trailerMuted: Boolean,
     enrichmentActive: Boolean,
     modifier: Modifier,
     requestWidthPx: Int,
@@ -59,6 +64,7 @@ internal fun ModernHeroMediaLayer(
 ) {
     val localContext = LocalContext.current
     var stableBackdrop by remember { mutableStateOf(heroBackdrop) }
+    var trailerFirstFrameRendered by remember(trailerPreviewUrl) { mutableStateOf(false) }
     LaunchedEffect(heroBackdrop, enrichmentActive) {
         if (!enrichmentActive) {
             stableBackdrop = heroBackdrop
@@ -81,6 +87,35 @@ internal fun ModernHeroMediaLayer(
             contentScale = ContentScale.Crop,
             alignment = Alignment.TopEnd
         )
+        val shouldPlayTrailer = !trailerPreviewUrl.isNullOrBlank()
+        val trailerCoverAlpha by animateFloatAsState(
+            targetValue = if (shouldPlayTrailer && !trailerFirstFrameRendered) 1f else 0f,
+            animationSpec = tween(durationMillis = 250),
+            label = "modernHeroTrailerCoverAlpha"
+        )
+        if (shouldPlayTrailer) {
+            TrailerPlayer(
+                trailerUrl = trailerPreviewUrl,
+                trailerAudioUrl = trailerPreviewAudioUrl,
+                isPlaying = true,
+                onEnded = { trailerFirstFrameRendered = false },
+                onFirstFrameRendered = { trailerFirstFrameRendered = true },
+                muted = trailerMuted,
+                cropToFill = true,
+                modifier = Modifier.fillMaxSize()
+            )
+            if (!stableBackdrop.isNullOrBlank()) {
+                AsyncImage(
+                    model = imageModel,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = trailerCoverAlpha },
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.TopEnd
+                )
+            }
+        }
     }
 }
 

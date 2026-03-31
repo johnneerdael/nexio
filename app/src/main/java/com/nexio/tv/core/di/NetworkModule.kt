@@ -18,6 +18,7 @@ import com.nexio.tv.data.remote.api.OmdbApi
 import com.nexio.tv.data.remote.api.PremiumizeApi
 import com.nexio.tv.data.remote.api.RealDebridApi
 import com.nexio.tv.data.remote.api.RpdbApi
+import com.nexio.tv.data.remote.api.TrailerApi
 import com.nexio.tv.data.remote.api.TopPostersApi
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.squareup.moshi.Moshi
@@ -254,6 +255,21 @@ object NetworkModule {
     @Singleton
     fun provideIntroDbApi(@Named("introDb") retrofit: Retrofit): IntroDbApi =
         retrofit.create(IntroDbApi::class.java)
+
+    @Provides
+    @Singleton
+    @Named("trailer")
+    fun provideTrailerRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(BuildConfig.TRAILER_API_URL.ifEmpty { "https://localhost/" })
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideTrailerApi(@Named("trailer") retrofit: Retrofit): TrailerApi =
+        retrofit.create(TrailerApi::class.java)
 
     @Provides
     @Singleton
