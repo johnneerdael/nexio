@@ -120,6 +120,9 @@ fun LibraryScreen(
     }
     val firstVisiblePosterKey = visibleItemKeys.firstOrNull()
     val posterCardStyle = PosterCardDefaults.Style
+    val useReadableDebridListLayout = remember(uiState.selectedListKey) {
+        usesReadableDebridListLayout(uiState.selectedListKey)
+    }
 
     LaunchedEffect(uiState.isLoading) {
         if (uiState.isLoading) {
@@ -313,21 +316,42 @@ fun LibraryScreen(
             }
         }
 
-        items(uiState.visibleItems, key = { "${it.type}:${it.id}" }) { item ->
-            val focusKey = "${item.type}:${item.id}"
-            GridContentCard(
-                item = item.toMetaPreview().copy(posterShape = PosterShape.POSTER),
-                posterCardStyle = posterCardStyle,
-                focusRequester = posterFocusRequesters[focusKey],
-                showLabel = true,
-                onFocused = {
-                    lastFocusedPosterKey = focusKey
-                },
-                onClick = {
-                    lastFocusedPosterKey = focusKey
-                    onOpenEntry(item)
-                }
-            )
+        if (useReadableDebridListLayout) {
+            items(
+                items = uiState.visibleItems,
+                key = { "${it.type}:${it.id}" },
+                span = { GridItemSpan(maxLineSpan) }
+            ) { item ->
+                val focusKey = "${item.type}:${item.id}"
+                DebridLibraryListRow(
+                    item = item,
+                    focusRequester = posterFocusRequesters[focusKey],
+                    onFocused = {
+                        lastFocusedPosterKey = focusKey
+                    },
+                    onClick = {
+                        lastFocusedPosterKey = focusKey
+                        onOpenEntry(item)
+                    }
+                )
+            }
+        } else {
+            items(uiState.visibleItems, key = { "${it.type}:${it.id}" }) { item ->
+                val focusKey = "${item.type}:${item.id}"
+                GridContentCard(
+                    item = item.toMetaPreview().copy(posterShape = PosterShape.POSTER),
+                    posterCardStyle = posterCardStyle,
+                    focusRequester = posterFocusRequesters[focusKey],
+                    showLabel = true,
+                    onFocused = {
+                        lastFocusedPosterKey = focusKey
+                    },
+                    onClick = {
+                        lastFocusedPosterKey = focusKey
+                        onOpenEntry(item)
+                    }
+                )
+            }
         }
 
         item(span = { GridItemSpan(maxLineSpan) }) { Spacer(modifier = Modifier.height(8.dp)) }
@@ -620,6 +644,91 @@ private data class LibraryOption(
     val label: String,
     val value: String
 )
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun DebridLibraryListRow(
+    item: com.nexio.tv.domain.model.LibraryEntry,
+    focusRequester: FocusRequester?,
+    onFocused: () -> Unit,
+    onClick: () -> Unit
+) {
+    val primaryText = item.playbackFilename
+        ?.takeIf { it.isNotBlank() }
+        ?: item.playbackStreamName?.takeIf { it.isNotBlank() }
+        ?: item.name
+    val secondaryText = item.name
+        .takeIf { it.isNotBlank() && !it.equals(primaryText, ignoreCase = true) }
+    val detailText = listOfNotNull(
+        item.description?.takeIf { it.isNotBlank() },
+        item.releaseInfo?.takeIf { it.isNotBlank() }
+    ).joinToString("  •  ").takeIf { it.isNotBlank() }
+
+    Card(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged { state ->
+                if (state.isFocused) onFocused()
+            },
+        shape = CardDefaults.shape(shape = RoundedCornerShape(14.dp)),
+        colors = CardDefaults.colors(
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.FocusBackground
+        ),
+        border = CardDefaults.border(
+            border = androidx.tv.material3.Border(
+                border = BorderStroke(1.dp, NexioColors.Border),
+                shape = RoundedCornerShape(14.dp)
+            ),
+            focusedBorder = androidx.tv.material3.Border(
+                border = BorderStroke(2.dp, NexioColors.FocusRing),
+                shape = RoundedCornerShape(14.dp)
+            )
+        ),
+        scale = CardDefaults.scale(
+            focusedScale = 1.02f,
+            pressedScale = 1.0f
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = primaryText,
+                style = MaterialTheme.typography.titleMedium,
+                color = NexioColors.TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            secondaryText?.let { subtitle ->
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NexioColors.TextSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            detailText?.let { details ->
+                Text(
+                    text = details,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NexioColors.TextTertiary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
