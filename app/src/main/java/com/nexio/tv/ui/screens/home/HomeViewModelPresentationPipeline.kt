@@ -66,7 +66,8 @@ private data class LayoutUiPrefs(
     val focusedBackdropTrailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget,
     val posterCardWidthDp: Int,
     val posterCardHeightDp: Int,
-    val posterCardCornerRadiusDp: Int
+    val posterCardCornerRadiusDp: Int,
+    val continueWatchingBlurEnabled: Boolean
 )
 
 @OptIn(FlowPreview::class)
@@ -121,8 +122,9 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
         focusedBackdropPrefsFlow,
         layoutPreferenceDataStore.posterCardWidthDp,
         layoutPreferenceDataStore.posterCardHeightDp,
-        layoutPreferenceDataStore.posterCardCornerRadiusDp
-    ) { corePrefs, focusedBackdropPrefs, posterCardWidthDp, posterCardHeightDp, posterCardCornerRadiusDp ->
+        layoutPreferenceDataStore.posterCardCornerRadiusDp,
+        layoutPreferenceDataStore.continueWatchingBlurEnabled
+    ) { corePrefs, focusedBackdropPrefs, posterCardWidthDp, posterCardHeightDp, posterCardCornerRadiusDp, continueWatchingBlurEnabled ->
         LayoutUiPrefs(
             layout = corePrefs.layout,
             heroCatalogKeys = corePrefs.heroCatalogKeys,
@@ -139,7 +141,8 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             focusedBackdropTrailerPlaybackTarget = focusedBackdropPrefs.trailerPlaybackTarget,
             posterCardWidthDp = posterCardWidthDp,
             posterCardHeightDp = posterCardHeightDp,
-            posterCardCornerRadiusDp = posterCardCornerRadiusDp
+            posterCardCornerRadiusDp = posterCardCornerRadiusDp,
+            continueWatchingBlurEnabled = continueWatchingBlurEnabled
         )
     }
 
@@ -184,7 +187,8 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                         focusedPosterBackdropTrailerPlaybackTarget = prefs.focusedBackdropTrailerPlaybackTarget,
                         posterCardWidthDp = prefs.posterCardWidthDp,
                         posterCardHeightDp = prefs.posterCardHeightDp,
-                        posterCardCornerRadiusDp = prefs.posterCardCornerRadiusDp
+                        posterCardCornerRadiusDp = prefs.posterCardCornerRadiusDp,
+                        continueWatchingBlurEnabled = prefs.continueWatchingBlurEnabled
                     )
                 }
                 if (shouldRefreshCatalogPresentation) {

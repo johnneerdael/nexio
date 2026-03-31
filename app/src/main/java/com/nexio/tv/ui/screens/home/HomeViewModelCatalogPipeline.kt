@@ -1273,7 +1273,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             buildGridItemsFromRowsPipeline(
                 rows = computedDisplayRows,
                 heroItems = computedHeroItems,
-                heroSectionEnabled = heroSectionEnabled
+                heroSectionEnabled = heroSectionEnabled,
+                posterCardWidthDp = currentState.posterCardWidthDp
             )
         } else {
             currentGridItems
@@ -1412,7 +1413,8 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
             buildGridItemsFromRowsPipeline(
                 rows = snapshot.catalogRows,
                 heroItems = snapshot.heroItems,
-                heroSectionEnabled = state.heroSectionEnabled
+                heroSectionEnabled = state.heroSectionEnabled,
+                posterCardWidthDp = state.posterCardWidthDp
             )
         } else {
             state.gridItems
@@ -1769,7 +1771,8 @@ private fun shouldPreserveCachedRow(
 private fun HomeViewModel.buildGridItemsFromRowsPipeline(
     rows: List<CatalogRow>,
     heroItems: List<MetaPreview>,
-    heroSectionEnabled: Boolean
+    heroSectionEnabled: Boolean,
+    posterCardWidthDp: Int
 ): List<GridItem> = buildList {
     if (heroSectionEnabled && heroItems.isNotEmpty()) {
         add(GridItem.Hero(heroItems))
@@ -1784,8 +1787,14 @@ private fun HomeViewModel.buildGridItemsFromRowsPipeline(
                 type = row.apiType
             )
         )
-        val hasEnoughForSeeAll = row.items.size >= 15
-        val displayItems = if (hasEnoughForSeeAll) row.items.take(14) else row.items.take(15)
+        val estimatedColumns = estimatedGridColumnsForPosterWidth(posterCardWidthDp)
+        val visibleSlots = (estimatedColumns * 2).coerceAtLeast(8)
+        val hasEnoughForSeeAll = row.items.size > visibleSlots
+        val displayItems = if (hasEnoughForSeeAll) {
+            row.items.take((visibleSlots - 1).coerceAtLeast(1))
+        } else {
+            row.items.take(visibleSlots)
+        }
         displayItems.forEach { item ->
             add(
                 GridItem.Content(
@@ -1805,6 +1814,15 @@ private fun HomeViewModel.buildGridItemsFromRowsPipeline(
                 )
             )
         }
+    }
+}
+
+private fun estimatedGridColumnsForPosterWidth(posterCardWidthDp: Int): Int {
+    return when {
+        posterCardWidthDp <= 110 -> 7
+        posterCardWidthDp <= 132 -> 6
+        posterCardWidthDp <= 156 -> 5
+        else -> 4
     }
 }
 

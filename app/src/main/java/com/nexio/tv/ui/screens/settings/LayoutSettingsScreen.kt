@@ -413,6 +413,20 @@ fun LayoutSettingsContent(
                     )
 
                     CompactToggleRow(
+                        title = stringResource(R.string.layout_cw_blur),
+                        subtitle = stringResource(R.string.layout_cw_blur_sub),
+                        checked = uiState.continueWatchingBlurEnabled,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetContinueWatchingBlurEnabled(
+                                    !uiState.continueWatchingBlurEnabled
+                                )
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.DETAIL_PAGE }
+                    )
+
+                    CompactToggleRow(
                         title = stringResource(R.string.layout_trailer_button),
                         subtitle = stringResource(R.string.layout_trailer_button_sub),
                         checked = uiState.detailPageTrailerButtonEnabled,

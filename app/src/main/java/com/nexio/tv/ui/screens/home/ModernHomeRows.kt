@@ -99,6 +99,7 @@ private fun ModernContinueWatchingRowItem(
     requester: FocusRequester,
     cardWidth: Dp,
     imageHeight: Dp,
+    continueWatchingBlurEnabled: Boolean,
     onFocused: () -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onShowOptions: (ContinueWatchingItem) -> Unit,
@@ -121,6 +122,7 @@ private fun ModernContinueWatchingRowItem(
 
     ContinueWatchingCard(
         item = item,
+        blurEpisodeThumbnail = continueWatchingBlurEnabled,
         onClick = onClick,
         onLongPress = onLongPress,
         cardWidth = cardWidth,
@@ -249,6 +251,7 @@ internal fun ModernRowSection(
     modernCatalogCardHeight: Dp,
     continueWatchingCardWidth: Dp,
     continueWatchingCardHeight: Dp,
+    continueWatchingBlurEnabled: Boolean,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingOptions: (ContinueWatchingItem) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
@@ -475,6 +478,7 @@ internal fun ModernRowSection(
                                 requester = requester,
                                 cardWidth = continueWatchingCardWidth,
                                 imageHeight = continueWatchingCardHeight,
+                                continueWatchingBlurEnabled = continueWatchingBlurEnabled,
                                 onFocused = onFocused,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onShowOptions = onContinueWatchingOptions
