@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -205,24 +207,24 @@ private fun YouTubeTrailerActivationDialog(
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight()
+                .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.9f)),
             contentAlignment = Alignment.Center
         ) {
             Column(
                 modifier = Modifier
-                    .width(760.dp)
+                    .fillMaxWidth(0.82f)
+                    .widthIn(max = 700.dp)
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
                     .background(NexioColors.BackgroundElevated)
                     .border(1.dp, NexioColors.Border, androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
-                    .padding(horizontal = 36.dp, vertical = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
+                    .padding(horizontal = 32.dp, vertical = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     text = stringResource(R.string.youtube_trailer_login_qr_title),
-                    fontSize = 28.sp,
+                    fontSize = 26.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = NexioColors.TextPrimary,
                     textAlign = TextAlign.Center
@@ -230,13 +232,15 @@ private fun YouTubeTrailerActivationDialog(
                 Text(
                     text = stringResource(R.string.youtube_trailer_login_overlay_subtitle),
                     color = NexioColors.TextSecondary,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
                 )
                 qrBitmap?.let { bitmap ->
                     Image(
                         bitmap = bitmap.asImageBitmap(),
                         contentDescription = stringResource(R.string.youtube_trailer_login_qr_title),
-                        modifier = Modifier.size(280.dp)
+                        modifier = Modifier.size(240.dp)
                     )
                 }
                 Text(
@@ -246,10 +250,11 @@ private fun YouTubeTrailerActivationDialog(
                 )
                 Text(
                     text = uiState.userCode.orEmpty(),
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 42.sp,
+                    fontSize = 36.sp,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp,
+                    letterSpacing = 1.5.sp,
                     color = NexioColors.TextPrimary,
                     textAlign = TextAlign.Center
                 )
