@@ -1,5 +1,6 @@
 package com.nexio.tv.data.trailer.helper
 
+import android.util.Log
 import com.nexio.tv.data.local.YouTubeTrailerAuthDataStore
 import com.nexio.tv.data.local.YouTubeTrailerAuthSettings
 import javax.inject.Inject
@@ -43,6 +44,10 @@ class YouTubeTrailerAuthManager @Inject constructor(
     private val tokenStore: YouTubeTrailerTokenStore,
     private val authService: YouTubeDeviceCodeAuthService
 ) {
+    companion object {
+        private const val TAG = "YouTubeTrailerAuth"
+    }
+
     val uiState: Flow<YouTubeTrailerAuthUiState> = combine(
         authDataStore.settings,
         tokenStore.state
@@ -52,12 +57,15 @@ class YouTubeTrailerAuthManager @Inject constructor(
 
     suspend fun startDeviceFlow(): Result<YouTubeDeviceCodeSession> {
         tokenStore.clearSession()
+        Log.i(TAG, "Starting YouTube trailer device auth flow")
         val result = authService.startDeviceFlow()
         result.getOrNull()?.let { session ->
             authDataStore.saveDeviceFlow(session)
             authDataStore.updateSessionStatusMessage("Approve the code on another device")
+            Log.i(TAG, "Device auth flow awaiting approval code=${session.userCode}")
         } ?: result.exceptionOrNull()?.message?.let { message ->
             authDataStore.updateSessionStatusMessage(message)
+            Log.e(TAG, "Device auth flow failed to start: $message")
         }
         return result
     }
@@ -70,6 +78,7 @@ class YouTubeTrailerAuthManager @Inject constructor(
         return when (val result = authService.pollDeviceToken(deviceCode)) {
             is YouTubeTrailerTokenPollResult.Pending -> {
                 authDataStore.updateSessionStatusMessage("Waiting for approval")
+                Log.d(TAG, "Device auth still pending")
                 result
             }
             is YouTubeTrailerTokenPollResult.SlowDown -> {
@@ -77,26 +86,34 @@ class YouTubeTrailerAuthManager @Inject constructor(
                 authDataStore.updateSessionStatusMessage(
                     "Polling slowed down to ${result.pollIntervalSeconds}s"
                 )
+                Log.w(TAG, "Device auth polling slowed to ${result.pollIntervalSeconds}s")
                 result
             }
             is YouTubeTrailerTokenPollResult.Expired -> {
                 authDataStore.clearDeviceFlow()
                 authDataStore.updateSessionStatusMessage("Device code expired")
+                Log.w(TAG, "Device auth code expired")
                 result
             }
             is YouTubeTrailerTokenPollResult.Denied -> {
                 authDataStore.clearDeviceFlow()
                 authDataStore.updateSessionStatusMessage("Device code was denied")
+                Log.w(TAG, "Device auth was denied by user")
                 result
             }
             is YouTubeTrailerTokenPollResult.Approved -> {
                 tokenStore.saveSession(result.session)
                 authDataStore.markSignedIn("Signed in")
                 authDataStore.clearDeviceFlow()
+                Log.i(
+                    TAG,
+                    "Device auth approved refresh=${!result.session.refreshToken.isNullOrBlank()}"
+                )
                 result
             }
             is YouTubeTrailerTokenPollResult.Failed -> {
                 authDataStore.updateSessionStatusMessage(result.reason)
+                Log.e(TAG, "Device auth failed: ${result.reason}")
                 result
             }
         }
@@ -108,6 +125,7 @@ class YouTubeTrailerAuthManager @Inject constructor(
 
         when {
             !settings.deviceCode.isNullOrBlank() && !settings.isSignedIn -> {
+                Log.d(TAG, "Refresh requested while approval is pending, polling current device code")
                 pollDeviceToken()
             }
             !tokenState.refreshToken.isNullOrBlank() -> {
@@ -115,14 +133,17 @@ class YouTubeTrailerAuthManager @Inject constructor(
                 refreshResult.getOrNull()?.let { session ->
                     tokenStore.saveSession(session)
                     authDataStore.markSignedIn("Session refreshed")
+                    Log.i(TAG, "Trailer auth session refreshed")
                 } ?: refreshResult.exceptionOrNull()?.message?.let { message ->
                     authDataStore.updateSessionStatusMessage(message)
+                    Log.e(TAG, "Trailer auth session refresh failed: $message")
                 }
             }
             else -> {
                 authDataStore.updateSessionStatusMessage(
                     "Sign in first to refresh the trailer session."
                 )
+                Log.w(TAG, "Refresh requested without active device code or refresh token")
             }
         }
     }
@@ -132,11 +153,13 @@ class YouTubeTrailerAuthManager @Inject constructor(
         if (!authDataStore.settings.first().isSignedIn) {
             authDataStore.updateSessionStatusMessage("Signed out")
         }
+        Log.i(TAG, "Pending device auth flow dismissed")
     }
 
     suspend fun signOut() {
         tokenStore.clearSession()
         authDataStore.clearSession()
+        Log.i(TAG, "Trailer auth session signed out")
     }
 
     private fun YouTubeTrailerAuthSettings.toUiState(
