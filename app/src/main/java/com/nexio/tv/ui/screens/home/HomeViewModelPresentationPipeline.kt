@@ -117,14 +117,13 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
 
     val modernLayoutPrefsFlow = layoutPreferenceDataStore.modernLandscapePostersEnabled
 
-    val baseLayoutUiPrefsFlow = combine(
+    val displayLayoutPrefsFlow = combine(
         coreLayoutPrefsFlow,
         focusedBackdropPrefsFlow,
         layoutPreferenceDataStore.posterCardWidthDp,
         layoutPreferenceDataStore.posterCardHeightDp,
-        layoutPreferenceDataStore.posterCardCornerRadiusDp,
-        layoutPreferenceDataStore.continueWatchingBlurEnabled
-    ) { corePrefs, focusedBackdropPrefs, posterCardWidthDp, posterCardHeightDp, posterCardCornerRadiusDp, continueWatchingBlurEnabled ->
+        layoutPreferenceDataStore.posterCardCornerRadiusDp
+    ) { corePrefs, focusedBackdropPrefs, posterCardWidthDp, posterCardHeightDp, posterCardCornerRadiusDp ->
         LayoutUiPrefs(
             layout = corePrefs.layout,
             heroCatalogKeys = corePrefs.heroCatalogKeys,
@@ -142,6 +141,15 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             posterCardWidthDp = posterCardWidthDp,
             posterCardHeightDp = posterCardHeightDp,
             posterCardCornerRadiusDp = posterCardCornerRadiusDp,
+            continueWatchingBlurEnabled = true
+        )
+    }
+
+    val baseLayoutUiPrefsFlow = combine(
+        displayLayoutPrefsFlow,
+        layoutPreferenceDataStore.continueWatchingBlurEnabled
+    ) { prefs, continueWatchingBlurEnabled ->
+        prefs.copy(
             continueWatchingBlurEnabled = continueWatchingBlurEnabled
         )
     }
