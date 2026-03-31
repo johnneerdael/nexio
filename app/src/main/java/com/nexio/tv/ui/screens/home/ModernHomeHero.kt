@@ -33,7 +33,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -81,9 +80,7 @@ internal fun ModernHeroMediaLayer(
         AsyncImage(
             model = imageModel,
             contentDescription = null,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
+            modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
             alignment = Alignment.TopEnd
         )
@@ -126,7 +123,6 @@ internal fun ModernHeroGradientLayer(
 ) {
     Box(
         modifier = modifier
-            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             .drawWithCache {
                 val leftBlendSolidWidth = size.width * 0.018f
                 val horizontalGradientStartX = leftBlendSolidWidth
@@ -142,21 +138,20 @@ internal fun ModernHeroGradientLayer(
                     startX = horizontalGradientStartX,
                     endX = horizontalFadeEndX
                 )
-                val radialGradient = Brush.radialGradient(
-                    colorStops = arrayOf(
-                        0.0f to bgColor.copy(alpha = 0.78f),
-                        0.55f to bgColor.copy(alpha = 0.52f),
-                        0.80f to bgColor.copy(alpha = 0.16f),
-                        1.0f to Color.Transparent
-                    ),
-                    center = Offset(0f, size.height / 2f),
-                    radius = size.height
-                )
+                val verticalStripStartY = size.height * 0.72f
                 val verticalGradient = Brush.verticalGradient(
-                    0.78f to Color.Transparent,
-                    0.90f to bgColor.copy(alpha = 0.72f),
-                    0.96f to bgColor.copy(alpha = 0.98f),
-                    1.0f to bgColor
+                    colorStops = arrayOf(
+                        0.0f to Color.Transparent,
+                        0.46f to bgColor.copy(alpha = 0.72f),
+                        0.78f to bgColor.copy(alpha = 0.94f),
+                        1.0f to bgColor
+                    ),
+                    startY = verticalStripStartY,
+                    endY = size.height
+                )
+                val leadingEdgeGradient = Brush.verticalGradient(
+                    0.0f to bgColor.copy(alpha = 0.18f),
+                    1.0f to Color.Transparent
                 )
                 onDrawBehind {
                     drawRect(
@@ -164,8 +159,15 @@ internal fun ModernHeroGradientLayer(
                         size = Size(leftBlendSolidWidth, size.height)
                     )
                     drawRect(brush = horizontalGradient, size = size)
-                    drawRect(brush = radialGradient, size = size)
-                    drawRect(brush = verticalGradient, size = size)
+                    drawRect(
+                        brush = verticalGradient,
+                        topLeft = Offset(0f, verticalStripStartY),
+                        size = Size(size.width, size.height - verticalStripStartY)
+                    )
+                    drawRect(
+                        brush = leadingEdgeGradient,
+                        size = Size(size.width * 0.1f, size.height)
+                    )
                 }
             }
     )
@@ -204,7 +206,7 @@ private fun HeroTitleContent(
     portraitMode: Boolean
 ) {
     if (preview == null) return
-    val descriptionMaxLines = if (portraitMode) 4 else 5
+    val descriptionMaxLines = 4
     val descriptionScale = if (portraitMode) 0.90f else 1f
     val titleScale = if (portraitMode) 0.92f else 1f
     val metaScale = 1f

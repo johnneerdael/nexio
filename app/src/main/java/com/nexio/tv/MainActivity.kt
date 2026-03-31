@@ -154,7 +154,6 @@ import com.nexio.tv.updater.UpdateViewModel
 import com.nexio.tv.updater.ui.UpdatePromptDialog
 import dagger.hilt.android.AndroidEntryPoint
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.haze
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
@@ -305,6 +304,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        window?.setBackgroundDrawable(null)
         idleScreensaverColdBootRefreshPending = savedInstanceState == null
         handleRecommendationIntent(intent)
         handleTransportValidationIntent(intent)
@@ -1532,9 +1532,6 @@ private fun ModernSidebarScaffold(
         animationSpec = tween(durationMillis = 135, easing = FastOutSlowInEasing),
         label = "sidebarSurfaceAlpha"
     )
-    val shouldApplySidebarHaze = showSidebar && modernSidebarBlurEnabled && (
-        isSidebarExpanded || sidebarCollapsePending
-        )
     val sidebarTransition = updateTransition(
         targetState = isSidebarExpanded,
         label = "sidebarTransition"
@@ -1642,13 +1639,6 @@ private fun ModernSidebarScaffold(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .then(
-                    if (shouldApplySidebarHaze) {
-                        Modifier.haze(sidebarHazeState)
-                    } else {
-                        Modifier
-                    }
-                )
                 .onPreviewKeyEvent { keyEvent ->
                     if (
                         isSidebarExpanded &&
@@ -1868,11 +1858,6 @@ private fun CollapsedSidebarPill(
         Box(
             modifier = Modifier
                 .height(44.dp)
-                .graphicsLayer {
-                    shape = pillShape
-                    clip = true
-                    compositingStrategy = CompositingStrategy.Offscreen
-                }
                 .clip(pillShape)
                 .background(brush = pillBackgroundBrush, shape = pillShape)
                 .border(width = 1.dp, color = pillBorderColor, shape = pillShape)

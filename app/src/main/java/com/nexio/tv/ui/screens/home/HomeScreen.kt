@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -104,10 +105,12 @@ fun HomeScreen(
     val shouldArmStartupTimeout = uiState.isLoading && !hasRenderableContent && uiState.error == null
     val latestMovieWatchedStatus by rememberUpdatedState(uiState.movieWatchedStatus)
     val latestTraktRecommendationRefs by rememberUpdatedState(uiState.traktRecommendationRefs)
-    val isCatalogItemWatched: (MetaPreview) -> Boolean = remember(Unit) {
-        { item -> latestMovieWatchedStatus[homeItemStatusKey(item.id, item.apiType)] == true }
+    val isCatalogItemWatched: (MetaPreview) -> Boolean = remember {
+        { item ->
+            latestMovieWatchedStatus[homeItemStatusKey(item.id, item.apiType)] == true
+        }
     }
-    val onCatalogItemLongPress: (MetaPreview, String) -> Unit = remember(Unit) {
+    val onCatalogItemLongPress: (MetaPreview, String) -> Unit = remember {
         { item, addonBaseUrl ->
             val statusKey = homeItemStatusKey(item.id, item.apiType)
             posterOptionsTarget = HomePosterOptionsTarget(
@@ -181,9 +184,7 @@ fun HomeScreen(
     }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(NexioColors.Background)
+        modifier = Modifier.fillMaxSize()
     ) {
         when {
             uiState.isLoading && !hasRenderableContent && !startupContentGateTimedOut -> {
@@ -480,9 +481,17 @@ private fun ModernHomeRoute(
 ) {
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
     val enrichingItemIdState: State<String?> = viewModel.enrichingItemId.collectAsStateWithLifecycle()
+    val configuration = LocalConfiguration.current
+    val modernHomeLocaleTag = remember(configuration) {
+        configuration.locales.get(0)?.toLanguageTag().orEmpty()
+    }
+    LaunchedEffect(viewModel, modernHomeLocaleTag) {
+        viewModel.updateModernHomePresentationLocaleTag(modernHomeLocaleTag)
+    }
     val modernContentState = remember(
         uiState.catalogRows,
         uiState.continueWatchingItems,
+        uiState.modernHomePresentation,
         uiState.modernLandscapePostersEnabled,
         uiState.catalogTypeSuffixEnabled,
         uiState.focusedPosterBackdropExpandEnabled,
@@ -503,6 +512,7 @@ private fun ModernHomeRoute(
         ModernHomeContentState(
             catalogRows = uiState.catalogRows,
             continueWatchingItems = uiState.continueWatchingItems,
+            modernHomePresentation = uiState.modernHomePresentation,
             modernLandscapePostersEnabled = uiState.modernLandscapePostersEnabled,
             catalogTypeSuffixEnabled = uiState.catalogTypeSuffixEnabled,
             focusedPosterBackdropExpandEnabled = uiState.focusedPosterBackdropExpandEnabled,

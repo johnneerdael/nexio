@@ -1,17 +1,25 @@
 package com.nexio.tv.ui.screens.home
 
+import android.text.format.DateFormat
 import android.util.Log
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.data.local.WatchedSeriesEntry
+import com.nexio.tv.data.local.expandSeriesContentIdAliases
+import com.nexio.tv.data.local.isSeriesWatchedCandidateItem
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
+import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.ContinueWatchingNextUpRef
 import com.nexio.tv.data.repository.ContinueWatchingResumeRef
 import com.nexio.tv.data.repository.ContinueWatchingTimelineRow
+import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.buildMixedContinueWatchingTimeline
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.WatchedItem
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -22,37 +30,250 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+private const val SERIES_NEXT_UP_LOOKUP_LIMIT = 24
+
 internal fun HomeViewModel.loadContinueWatchingPipeline() {
     viewModelScope.launch {
+        watchedSeriesStateHolder.activeSessionKey
+            .drop(1)
+            .collectLatest { sessionKey ->
+                handleContinueWatchingSessionChange(sessionKey)
+            }
+    }
+    viewModelScope.launch {
         continueWatchingSnapshotService.observeSnapshot().collectLatest { snapshot ->
-            val timeline = buildMixedContinueWatchingTimeline(
-                resumeItems = snapshot.resumeItems,
-                nextUpItems = snapshot.nextUpItems,
-                resumeRef = ::resumeRefForContinueWatching,
-                nextUpRef = ::nextUpRefForContinueWatching
-            )
-            val items = timeline.map { row ->
-                when (row) {
-                    is ContinueWatchingTimelineRow.Resume -> row.value.toContinueWatchingInProgress(snapshot.displayMetadataByItemKey)
-                    is ContinueWatchingTimelineRow.NextUp -> row.value.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey)
-                }
-            }
-            val traktUpNextItems = snapshot.traktUpNextItems.map { entry ->
-                entry.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey)
-            }
-
-            _uiState.update { state ->
-                if (state.continueWatchingItems == items && state.traktUpNextItems == traktUpNextItems) {
-                    state
-                } else {
-                    state.copy(
-                        continueWatchingItems = items,
-                        traktUpNextItems = traktUpNextItems
-                    )
-                }
-            }
+            lastContinueWatchingSnapshot = snapshot
+            publishContinueWatchingSnapshot(snapshot)
+            syncWatchedSeriesStateFromLocalItems(snapshot)
         }
     }
+}
+
+private suspend fun HomeViewModel.syncWatchedSeriesStateFromLocalItems(
+    snapshot: ContinueWatchingSnapshot
+) {
+    val sessionKey = watchedSeriesStateHolder.activeSessionKey.value
+    if (watchedSeriesLocalItemsSessionKey != sessionKey) {
+        handleContinueWatchingSessionChange(sessionKey)
+    }
+
+    val watchedItems = watchedItemsPreferences.getAllItems()
+    val bootstrapDecision = resolveWatchedSeriesBootstrapWindow(
+        watchedItems = watchedItems,
+        currentEntries = watchedSeriesStateHolder.entries.value,
+        preserveOnFirstEmptyRead = watchedSeriesBootstrapEmptyReadPendingForSession
+    )
+    watchedSeriesBootstrapEmptyReadPendingForSession = bootstrapDecision.preserveOnFirstEmptyRead
+    if (bootstrapDecision.preservePersistedCache) {
+        publishContinueWatchingSnapshot(snapshot)
+        return
+    }
+
+    val candidateStates = buildWatchedSeriesCandidateStates(
+        watchedItems = watchedItems,
+        snapshot = snapshot,
+        aliasResolver = { item -> expandRememberedSeriesAliases(setOf(item.contentId)) }
+    ).map { candidate ->
+        candidate.copy(ids = expandRememberedSeriesAliases(candidate.ids))
+    }
+    if (candidateStates.isEmpty()) {
+        invalidateSeriesNextUpDiscovery()
+        watchedSeriesStateHolder.applyResolvedStates(
+            watchedEntries = emptyList(),
+            unwatchedEntries = watchedSeriesStateHolder.entries.value.map { it.ids }
+        )
+        publishContinueWatchingSnapshot(snapshot)
+        return
+    }
+
+    val immediateUnwatched = candidateStates
+        .filterNot { it.watched }
+        .map { it.ids }
+    if (immediateUnwatched.isNotEmpty()) {
+        watchedSeriesStateHolder.applyResolvedStates(
+            watchedEntries = emptyList(),
+            unwatchedEntries = immediateUnwatched
+        )
+    }
+
+    val lookupCandidates = buildSeriesNextUpLookupCandidates(
+        watchedItems = watchedItems,
+        snapshot = snapshot,
+        currentEntries = watchedSeriesStateHolder.entries.value
+    )
+    val signature = lookupCandidates
+        .joinToString("|") { candidate -> "${candidate.contentId}:${candidate.lastWatchedAtMs}" }
+    if (signature.isBlank()) {
+        val clearedDiscoveredItems = invalidateSeriesNextUpDiscovery()
+        val confirmedWatched = candidateStates
+            .filter { it.watched }
+            .map { it.ids }
+        watchedSeriesStateHolder.applyResolvedStates(
+            watchedEntries = confirmedWatched,
+            unwatchedEntries = emptyList()
+        )
+        if (clearedDiscoveredItems) {
+            publishContinueWatchingSnapshot(snapshot)
+        }
+        return
+    }
+    if (signature == lastSeriesNextUpDiscoverySignature) return
+
+    val lookupGeneration = beginSeriesNextUpDiscovery(signature)
+    val lookupSessionKey = sessionKey
+    seriesNextUpDiscoveryJob = viewModelScope.launch {
+        val discovered = traktProgressService.lookupNextUpForSeriesCandidates(
+            lookupCandidates.take(SERIES_NEXT_UP_LOOKUP_LIMIT)
+        )
+        if (
+            shouldDiscardSeriesNextUpLookupResults(
+                launchedForSessionKey = lookupSessionKey,
+                activeSessionKey = watchedSeriesStateHolder.activeSessionKey.value,
+                launchedGeneration = lookupGeneration,
+                activeGeneration = seriesNextUpDiscoveryGeneration
+            )
+        ) {
+            return@launch
+        }
+        val discoveredByAliases = discovered.associateBy { entry ->
+            preferredAliasForSeriesContentId(entry.contentId)
+        }
+        val watchedEntries = lookupCandidates
+            .filter { candidate ->
+                preferredAliasForSeriesContentId(candidate.contentId) !in discoveredByAliases
+            }
+            .map { candidate -> expandSeriesContentIdAliases(listOf(candidate.contentId)) }
+        val unwatchedEntries = discovered.map { entry ->
+            expandSeriesContentIdAliases(listOf(entry.contentId))
+        }
+
+        watchedSeriesStateHolder.applyResolvedStates(
+            watchedEntries = watchedEntries,
+            unwatchedEntries = unwatchedEntries
+        )
+
+        val nowMs = System.currentTimeMillis()
+        val airedDiscovered = discovered
+            .filter { entry -> entry.firstAiredMs <= 0L || entry.firstAiredMs <= nowMs }
+            .associateByTo(linkedMapOf()) { entry -> preferredAliasForSeriesContentId(entry.contentId) }
+        discoveredNextUpEntriesByContentId.clear()
+        discoveredNextUpEntriesByContentId.putAll(airedDiscovered)
+        publishContinueWatchingSnapshot(lastContinueWatchingSnapshot)
+    }
+}
+
+private fun HomeViewModel.handleContinueWatchingSessionChange(sessionKey: String) {
+    watchedSeriesLocalItemsSessionKey = sessionKey
+    watchedSeriesBootstrapEmptyReadPendingForSession = true
+    invalidateSeriesNextUpDiscovery()
+    publishContinueWatchingSnapshot(lastContinueWatchingSnapshot)
+}
+
+private fun HomeViewModel.beginSeriesNextUpDiscovery(signature: String): Long {
+    seriesNextUpDiscoveryGeneration += 1L
+    seriesNextUpDiscoveryJob?.cancel()
+    seriesNextUpDiscoveryJob = null
+    lastSeriesNextUpDiscoverySignature = signature
+    return seriesNextUpDiscoveryGeneration
+}
+
+private fun HomeViewModel.invalidateSeriesNextUpDiscovery(): Boolean {
+    seriesNextUpDiscoveryGeneration += 1L
+    seriesNextUpDiscoveryJob?.cancel()
+    seriesNextUpDiscoveryJob = null
+    val hadDiscoveredItems = discoveredNextUpEntriesByContentId.isNotEmpty()
+    discoveredNextUpEntriesByContentId.clear()
+    lastSeriesNextUpDiscoverySignature = null
+    return hadDiscoveredItems
+}
+
+private fun HomeViewModel.publishContinueWatchingSnapshot(snapshot: ContinueWatchingSnapshot) {
+    val injectedNextUpItems = buildList {
+        val snapshotKeys = snapshot.nextUpItems.mapTo(linkedSetOf()) {
+            preferredAliasForSeriesContentId(it.contentId)
+        }
+        addAll(snapshot.nextUpItems)
+        discoveredNextUpEntriesByContentId.forEach { (key, entry) ->
+            if (key !in snapshotKeys) add(entry)
+        }
+    }
+        .distinctBy { preferredAliasForSeriesContentId(it.contentId) }
+        .sortedByDescending { it.activityAtMs }
+    val timeline = buildMixedContinueWatchingTimeline(
+        resumeItems = snapshot.resumeItems,
+        nextUpItems = injectedNextUpItems,
+        resumeRef = ::resumeRefForContinueWatching,
+        nextUpRef = ::nextUpRefForContinueWatching
+    )
+    val items = timeline.map { row ->
+        when (row) {
+            is ContinueWatchingTimelineRow.Resume -> row.value.toContinueWatchingInProgress(snapshot.displayMetadataByItemKey)
+            is ContinueWatchingTimelineRow.NextUp -> row.value.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey)
+        }
+    }
+    val traktUpNextItems = snapshot.traktUpNextItems.map { entry ->
+        entry.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey)
+    }
+
+    _uiState.update { state ->
+        if (state.continueWatchingItems == items && state.traktUpNextItems == traktUpNextItems) {
+            state
+        } else {
+            state.copy(
+                continueWatchingItems = items,
+                traktUpNextItems = traktUpNextItems
+            )
+        }
+    }
+}
+
+private fun HomeViewModel.expandRememberedSeriesAliases(ids: Set<String>): Set<String> {
+    return buildSet {
+        ids.forEach { contentId ->
+            addAll(watchedSeriesStateHolder.matchingEntryIds(contentId))
+        }
+        addAll(ids)
+    }
+}
+
+internal data class WatchedSeriesBootstrapDecision(
+    val preservePersistedCache: Boolean,
+    val preserveOnFirstEmptyRead: Boolean
+)
+
+// Preserve persisted watched-series badges through exactly one empty local-watched read
+// after a session switch/bootstrap, then treat later empty reads as authoritative.
+internal fun resolveWatchedSeriesBootstrapWindow(
+    watchedItems: Collection<WatchedItem>,
+    currentEntries: Collection<WatchedSeriesEntry>,
+    preserveOnFirstEmptyRead: Boolean
+): WatchedSeriesBootstrapDecision {
+    if (watchedItems.isNotEmpty()) {
+        return WatchedSeriesBootstrapDecision(
+            preservePersistedCache = false,
+            preserveOnFirstEmptyRead = false
+        )
+    }
+    if (!preserveOnFirstEmptyRead) {
+        return WatchedSeriesBootstrapDecision(
+            preservePersistedCache = false,
+            preserveOnFirstEmptyRead = false
+        )
+    }
+    return WatchedSeriesBootstrapDecision(
+        preservePersistedCache = currentEntries.isNotEmpty(),
+        preserveOnFirstEmptyRead = false
+    )
+}
+
+internal fun shouldDiscardSeriesNextUpLookupResults(
+    launchedForSessionKey: String,
+    activeSessionKey: String,
+    launchedGeneration: Long,
+    activeGeneration: Long
+): Boolean {
+    return launchedForSessionKey != activeSessionKey ||
+        launchedGeneration != activeGeneration
 }
 
 private fun parseEpisodeReleaseDate(raw: String?): LocalDate? {
@@ -77,11 +298,12 @@ private fun parseEpisodeReleaseDate(raw: String?): LocalDate? {
 
 private fun formatEpisodeAirDateLabel(releaseDate: LocalDate): String {
     val todayLocal = LocalDate.now(ZoneId.systemDefault())
-    val formatter = if (releaseDate.year == todayLocal.year) {
-        DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
-    } else {
-        DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault())
-    }
+    val locale = Locale.getDefault()
+    val skeleton = if (releaseDate.year == todayLocal.year) "dMMM" else "dMMMMy"
+    val formatter = DateTimeFormatter.ofPattern(
+        DateFormat.getBestDateTimePattern(locale, skeleton),
+        locale
+    )
     return releaseDate.format(formatter)
 }
 
@@ -313,6 +535,161 @@ private fun com.nexio.tv.data.repository.TraktProgressService.NextUpEntry.toCont
             releaseInfo = displayMetadata?.releaseInfo
         )
     )
+}
+
+internal data class WatchedSeriesCandidateState(
+    val ids: Set<String>,
+    val watched: Boolean
+)
+
+internal fun buildWatchedSeriesCandidateStates(
+    watchedItems: List<WatchedItem>,
+    snapshot: ContinueWatchingSnapshot,
+    aliasResolver: (WatchedItem) -> Set<String> = { item ->
+        expandSeriesContentIdAliases(listOf(item.contentId))
+    }
+): List<WatchedSeriesCandidateState> {
+    val candidateAliasSets = mergeWatchedSeriesAliasSets(
+        watchedItems
+            .asSequence()
+            .filter(::isSeriesWatchedCandidateItem)
+            .map(aliasResolver)
+            .toList()
+    )
+    if (candidateAliasSets.isEmpty()) return emptyList()
+
+    val activeAliases = buildSet {
+        snapshot.nextUpItems.forEach { entry ->
+            addAll(expandSeriesContentIdAliases(listOf(entry.contentId)))
+        }
+        snapshot.resumeItems
+            .filter { progress -> isSeriesTypeCW(progress.contentType) }
+            .forEach { progress ->
+                addAll(expandSeriesContentIdAliases(listOf(progress.contentId)))
+            }
+    }
+
+    return candidateAliasSets.map { ids ->
+        WatchedSeriesCandidateState(
+            ids = ids,
+            watched = ids.none { it in activeAliases }
+        )
+    }
+}
+
+private fun HomeViewModel.buildSeriesNextUpLookupCandidates(
+    watchedItems: List<WatchedItem>,
+    snapshot: ContinueWatchingSnapshot,
+    currentEntries: List<WatchedSeriesEntry>
+): List<TraktProgressService.SeriesNextUpLookupCandidate> {
+    return buildSeriesNextUpLookupCandidatesFromWatchedItems(
+        watchedItems = watchedItems,
+        snapshot = snapshot,
+        currentEntries = currentEntries,
+        discoveredEntryKeys = discoveredNextUpEntriesByContentId.keys,
+        aliasResolver = { item -> expandRememberedSeriesAliases(setOf(item.contentId)) }
+    )
+}
+
+internal fun buildSeriesNextUpLookupCandidatesFromWatchedItems(
+    watchedItems: List<WatchedItem>,
+    snapshot: ContinueWatchingSnapshot,
+    currentEntries: List<WatchedSeriesEntry>,
+    discoveredEntryKeys: Set<String>,
+    aliasResolver: (WatchedItem) -> Set<String> = { item ->
+        expandSeriesContentIdAliases(listOf(item.contentId))
+    }
+): List<TraktProgressService.SeriesNextUpLookupCandidate> {
+    val activeAliases = buildSet {
+        snapshot.nextUpItems.forEach { entry ->
+            addAll(expandSeriesContentIdAliases(listOf(entry.contentId)))
+        }
+        snapshot.resumeItems
+            .filter { progress -> isSeriesTypeCW(progress.contentType) }
+            .forEach { progress ->
+                addAll(expandSeriesContentIdAliases(listOf(progress.contentId)))
+            }
+    }
+    val watchedByAliasSets = mergeWatchedSeriesAliasSets(
+        watchedItems
+            .asSequence()
+            .filter(::isSeriesWatchedCandidateItem)
+            .groupBy { item ->
+                aliasResolver(item)
+                    .sortedWith(compareBy<String> { aliasPriority(it) }.thenBy { it })
+                    .firstOrNull()
+                    ?: preferredAliasForSeriesContentId(item.contentId)
+            }
+            .values
+            .map { grouped ->
+                grouped.flatMapTo(linkedSetOf()) { item ->
+                    aliasResolver(item)
+                }
+            }
+    )
+
+    return watchedByAliasSets.mapNotNull { aliases ->
+        if (aliases.any { it in activeAliases }) return@mapNotNull null
+        val alreadyWatched = currentEntries.any { entry ->
+            entry.ids.any { it in aliases }
+        }
+        val matchingItems = watchedItems.filter { item ->
+            aliasResolver(item).any { it in aliases }
+        }
+        val latestItem = matchingItems.maxByOrNull { it.watchedAt } ?: return@mapNotNull null
+        val preferredId = aliases
+            .sortedWith(compareBy<String> { aliasPriority(it) }.thenBy { it })
+            .firstOrNull()
+            ?: return@mapNotNull null
+        if (alreadyWatched && preferredAliasForSeriesContentId(preferredId) in discoveredEntryKeys) {
+            return@mapNotNull null
+        }
+        TraktProgressService.SeriesNextUpLookupCandidate(
+            contentId = preferredId,
+            title = latestItem.title,
+            lastWatchedAtMs = latestItem.watchedAt
+        )
+    }
+}
+
+private fun mergeWatchedSeriesAliasSets(aliasSets: List<Set<String>>): List<Set<String>> {
+    val merged = mutableListOf<MutableSet<String>>()
+    aliasSets.forEach { aliases ->
+        if (aliases.isEmpty()) return@forEach
+        val overlapping = merged.filter { current -> current.any { it in aliases } }
+        if (overlapping.isEmpty()) {
+            merged += aliases.toMutableSet()
+        } else {
+            val combined = aliases.toMutableSet()
+            overlapping.forEach { combined += it }
+            merged.removeAll(overlapping.toSet())
+            merged += combined
+        }
+    }
+    return merged.map { it.toSet() }
+}
+
+private fun preferredAliasForSeriesContentId(contentId: String): String {
+    val aliases = expandSeriesContentIdAliases(listOf(contentId))
+    return aliases
+        .sortedWith(compareBy<String> { aliasPriority(it) }.thenBy { it })
+        .firstOrNull()
+        ?: contentId.trim()
+}
+
+private fun aliasPriority(contentId: String): Int {
+    return when {
+        contentId.startsWith("tt", ignoreCase = true) -> 0
+        contentId.startsWith("tmdb:", ignoreCase = true) -> 1
+        contentId.startsWith("trakt:", ignoreCase = true) -> 2
+        contentId.toIntOrNull() != null -> 3
+        else -> 4
+    }
+}
+
+private fun isSeriesTypeCW(contentType: String): Boolean {
+    return contentType.equals("series", ignoreCase = true) ||
+        contentType.equals("tv", ignoreCase = true)
 }
 
 private fun parseTraktIdsForContinueWatching(contentId: String): TraktIdsDto {
