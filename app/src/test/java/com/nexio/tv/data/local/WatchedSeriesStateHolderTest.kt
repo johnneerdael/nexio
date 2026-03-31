@@ -1,10 +1,15 @@
 package com.nexio.tv.data.local
 
 import android.content.Context
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.nexio.tv.testutil.InMemorySharedPreferences
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -33,6 +38,7 @@ class WatchedSeriesStateHolderTest {
         val authStore = mockk<TraktAuthDataStore> {
             every { state } returns authState
         }
+        coEvery { authStore.ensureSessionIdentityBackfilled() } returns Unit
 
         val holder = WatchedSeriesStateHolder(context, authStore, backgroundScope)
         holder.setSeriesWatched(ids = listOf("tmdb:101", "tt1234567"), watched = true)
@@ -74,6 +80,7 @@ class WatchedSeriesStateHolderTest {
         val authStore = mockk<TraktAuthDataStore> {
             every { state } returns authState
         }
+        coEvery { authStore.ensureSessionIdentityBackfilled() } returns Unit
 
         val holder = WatchedSeriesStateHolder(context, authStore, backgroundScope)
         holder.setSeriesWatched(ids = listOf("tmdb:101", "tt1234567"), watched = false)
@@ -111,6 +118,7 @@ class WatchedSeriesStateHolderTest {
         val authStore = mockk<TraktAuthDataStore> {
             every { state } returns authState
         }
+        coEvery { authStore.ensureSessionIdentityBackfilled() } returns Unit
 
         val holder = WatchedSeriesStateHolder(context, authStore, backgroundScope)
         holder.setSeriesWatched(ids = listOf("tmdb:101", "tt1234567"), watched = true)
@@ -149,6 +157,7 @@ class WatchedSeriesStateHolderTest {
         val authStore = mockk<TraktAuthDataStore> {
             every { state } returns authState
         }
+        coEvery { authStore.ensureSessionIdentityBackfilled() } returns Unit
 
         prefs.edit()
             .putString(
@@ -184,6 +193,7 @@ class WatchedSeriesStateHolderTest {
         val authStore = mockk<TraktAuthDataStore> {
             every { state } returns authState
         }
+        coEvery { authStore.ensureSessionIdentityBackfilled() } returns Unit
 
         val holder = WatchedSeriesStateHolder(context, authStore, backgroundScope)
         holder.setSeriesWatched(ids = listOf("tmdb:101", "tt1234567"), watched = true)
@@ -199,6 +209,43 @@ class WatchedSeriesStateHolderTest {
         assertEquals(
             setOf("tmdb:101", "tt1234567"),
             holder.matchingEntryIds("tmdb:101")
+        )
+    }
+
+    @Test
+    fun `legacy auth hash holder bucket migrates after session identity backfill`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        val authStoreFile = java.io.File.createTempFile("trakt-auth-holder-upgrade", ".preferences_pb")
+        authStoreFile.deleteOnExit()
+        val authBacking = PreferenceDataStoreFactory.create(scope = backgroundScope) { authStoreFile }
+        authBacking.edit { store ->
+            store[stringPreferencesKey("access_token")] = "access"
+            store[stringPreferencesKey("refresh_token")] = "refresh"
+        }
+        val authStore = TraktAuthDataStore(dataStore = authBacking)
+        val context = mockk<Context> {
+            every {
+                getSharedPreferences("watched_series_state", Context.MODE_PRIVATE)
+            } returns prefs
+        }
+        val legacyState = TraktAuthState(accessToken = "access", refreshToken = "refresh")
+        val legacyKey = legacyAuthHashSessionKeyForState(legacyState)!!
+        prefs.edit()
+            .putString(
+                "entries_${legacyKey.lowercase()}",
+                "[{\"ids\":[\"tmdb:101\",\"tt1234567\"]}]"
+            )
+            .apply()
+
+        val holder = WatchedSeriesStateHolder(context, authStore, backgroundScope)
+        advanceUntilIdle()
+
+        val sessionIdentity = authStore.state.first().sessionIdentity!!
+        assertEquals(sessionIdentity, holder.activeSessionKey.value)
+        assertTrue(holder.isSeriesWatched("tmdb:101"))
+        assertEquals(
+            setOf("tmdb:101", "tt1234567"),
+            holder.matchingEntryIds("tt1234567")
         )
     }
 }

@@ -28,7 +28,8 @@ private val Context.watchedItemsDataStore: DataStore<Preferences> by preferences
 @Singleton
 class WatchedItemsPreferences internal constructor(
     private val dataStore: DataStore<Preferences>,
-    private val authState: Flow<TraktAuthState>
+    private val authState: Flow<TraktAuthState>,
+    private val ensureSessionIdentityBackfilled: suspend () -> Unit = {}
 ) {
     @Inject
     constructor(
@@ -36,7 +37,8 @@ class WatchedItemsPreferences internal constructor(
         traktAuthDataStore: TraktAuthDataStore
     ) : this(
         dataStore = context.watchedItemsDataStore,
-        authState = traktAuthDataStore.state
+        authState = traktAuthDataStore.state,
+        ensureSessionIdentityBackfilled = traktAuthDataStore::ensureSessionIdentityBackfilled
     )
 
     companion object {
@@ -47,8 +49,10 @@ class WatchedItemsPreferences internal constructor(
 
     private val gson = Gson()
 
-    private val sessionIdentities = authState
-        .map(::traktSessionIdentityForState)
+    private val sessionIdentities = flow {
+        ensureSessionIdentityBackfilled()
+        emitAll(authState.map(::traktSessionIdentityForState))
+    }
         .distinctUntilChanged()
 
     private val allItems: Flow<List<WatchedItem>> = sessionIdentities.flatMapLatest { identity ->
@@ -125,8 +129,12 @@ class WatchedItemsPreferences internal constructor(
     }
 
     suspend fun getAllItems(): List<WatchedItem> {
-        migrateSourcesIntoActiveSession(currentSessionIdentity())
-        return allItems.first()
+        val identity = currentSessionIdentity()
+        var items = emptyList<WatchedItem>()
+        dataStore.edit { preferences ->
+            items = migrateSourcesIntoActiveSession(preferences, identity)
+        }
+        return items
     }
 
     suspend fun mergeRemoteItems(remoteItems: List<WatchedItem>) {
@@ -165,7 +173,8 @@ class WatchedItemsPreferences internal constructor(
     }
 
     private suspend fun currentSessionIdentity(): TraktSessionIdentity {
-        return sessionIdentities.first()
+        ensureSessionIdentityBackfilled()
+        return authState.map(::traktSessionIdentityForState).first()
     }
 
     private fun watchedItemsKey(sessionKey: String) =

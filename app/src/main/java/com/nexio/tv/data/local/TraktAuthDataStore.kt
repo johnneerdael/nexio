@@ -87,6 +87,16 @@ class TraktAuthDataStore internal constructor(
 
     val isEffectivelyAuthenticated: Flow<Boolean> = isAuthenticated
 
+    suspend fun ensureSessionIdentityBackfilled() {
+        dataStore.edit { preferences ->
+            val hasAuthenticatedTokens = !preferences[accessTokenKey].isNullOrBlank() &&
+                !preferences[refreshTokenKey].isNullOrBlank()
+            if (hasAuthenticatedTokens && preferences[sessionIdentityKey].isNullOrBlank()) {
+                preferences[sessionIdentityKey] = UUID.randomUUID().toString()
+            }
+        }
+    }
+
     suspend fun saveToken(token: TraktTokenResponseDto) {
         dataStore.edit { preferences ->
             preferences[accessTokenKey] = token.accessToken
