@@ -98,7 +98,12 @@ class YouTubeDeviceCodeAuthService @Inject constructor(
                 expiresInSeconds = body.expiresInSeconds,
                 intervalSeconds = body.intervalSeconds
             )
-        )
+        ).also {
+            Log.i(
+                TAG,
+                "Device flow started code=${body.userCode} interval=${body.intervalSeconds}s expires=${body.expiresInSeconds}s"
+            )
+        }
     }
 
     suspend fun pollDeviceToken(deviceCode: String): YouTubeTrailerTokenPollResult =
@@ -123,21 +128,43 @@ class YouTubeDeviceCodeAuthService @Inject constructor(
 
             val body = parseTokenResponse(response.body)
             if (response.code in 200..299 && !body?.accessToken.isNullOrBlank()) {
+                Log.i(
+                    TAG,
+                    "Device token approved http=${response.code} refresh=${!body?.refreshToken.isNullOrBlank()}"
+                )
                 return@withContext YouTubeTrailerTokenPollResult.Approved(
                     body!!.toSession(persistedRefreshToken = null)
                 )
             }
 
             return@withContext when (body?.error) {
-                "authorization_pending" -> YouTubeTrailerTokenPollResult.Pending
-                "slow_down" -> YouTubeTrailerTokenPollResult.SlowDown(10)
-                "expired_token" -> YouTubeTrailerTokenPollResult.Expired
-                "access_denied" -> YouTubeTrailerTokenPollResult.Denied
-                else -> YouTubeTrailerTokenPollResult.Failed(
+                "authorization_pending" -> {
+                    Log.d(TAG, "Device token still pending http=${response.code}")
+                    YouTubeTrailerTokenPollResult.Pending
+                }
+                "slow_down" -> {
+                    Log.w(TAG, "Device token poll asked to slow down http=${response.code}")
+                    YouTubeTrailerTokenPollResult.SlowDown(10)
+                }
+                "expired_token" -> {
+                    Log.w(TAG, "Device token expired http=${response.code}")
+                    YouTubeTrailerTokenPollResult.Expired
+                }
+                "access_denied" -> {
+                    Log.w(TAG, "Device token denied http=${response.code}")
+                    YouTubeTrailerTokenPollResult.Denied
+                }
+                else -> {
+                    Log.e(
+                        TAG,
+                        "Device token poll failed http=${response.code} error=${body?.error} desc=${body?.errorDescription}"
+                    )
+                    YouTubeTrailerTokenPollResult.Failed(
                     body?.errorDescription
                         ?: body?.error
                         ?: "Token polling failed (${response.code})"
                 )
+                }
             }
         }
 
@@ -156,9 +183,15 @@ class YouTubeDeviceCodeAuthService @Inject constructor(
             if (response.code in 200..299 && !body?.accessToken.isNullOrBlank()) {
                 return@withContext Result.success(
                     body!!.toSession(persistedRefreshToken = refreshToken)
-                )
+                ).also {
+                    Log.i(TAG, "Access token refreshed http=${response.code}")
+                }
             }
 
+            Log.e(
+                TAG,
+                "Access token refresh failed http=${response.code} error=${body?.error} desc=${body?.errorDescription}"
+            )
             Result.failure(
                 IllegalStateException(
                     body?.errorDescription

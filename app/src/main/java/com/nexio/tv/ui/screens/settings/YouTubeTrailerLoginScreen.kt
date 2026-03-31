@@ -4,20 +4,40 @@ package com.nexio.tv.ui.screens.settings
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -26,6 +46,8 @@ import com.nexio.tv.R
 import com.nexio.tv.core.qr.QrCodeGenerator
 import com.nexio.tv.data.trailer.helper.YouTubeTrailerAuthEvent
 import com.nexio.tv.data.trailer.helper.YouTubeTrailerAuthMode
+import com.nexio.tv.data.trailer.helper.YouTubeTrailerAuthUiState
+import com.nexio.tv.ui.theme.NexioColors
 import java.text.DateFormat
 import java.util.Date
 
@@ -52,6 +74,12 @@ fun YouTubeTrailerLoginContent(
     val verificationLink = uiState.verificationUrlComplete ?: uiState.verificationUrl
     val qrBitmap = remember(verificationLink) {
         verificationLink?.takeIf { it.isNotBlank() }?.let { QrCodeGenerator.generate(it, size = 420) }
+    }
+    var activationOverlayVisible by rememberSaveable(uiState.userCode, uiState.mode) {
+        mutableStateOf(shouldPresentYouTubeTrailerActivationOverlay(uiState))
+    }
+    LaunchedEffect(uiState.mode, uiState.userCode) {
+        activationOverlayVisible = shouldPresentYouTubeTrailerActivationOverlay(uiState)
     }
 
     LazyColumn(
@@ -97,46 +125,6 @@ fun YouTubeTrailerLoginContent(
             }
         }
 
-        if (!uiState.userCode.isNullOrBlank()) {
-            item(key = "youtube_trailer_auth_code") {
-                SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.youtube_trailer_login_qr_title))
-                    Text(text = stringResource(R.string.youtube_trailer_login_qr_subtitle))
-                    qrBitmap?.let { bitmap ->
-                        Image(
-                            bitmap = bitmap.asImageBitmap(),
-                            contentDescription = stringResource(R.string.youtube_trailer_login_qr_title),
-                            modifier = Modifier
-                                .padding(top = 12.dp)
-                                .height(220.dp)
-                        )
-                    }
-                    SettingsActionRow(
-                        title = stringResource(R.string.youtube_trailer_login_code_title),
-                        subtitle = uiState.userCode,
-                        value = uiState.userCode,
-                        enabled = false,
-                        onClick = {}
-                    )
-                    SettingsActionRow(
-                        title = stringResource(R.string.youtube_trailer_login_verification_url_title),
-                        subtitle = verificationLink ?: stringResource(R.string.youtube_trailer_login_not_available),
-                        value = verificationLink ?: stringResource(R.string.youtube_trailer_login_not_available),
-                        enabled = false,
-                        onClick = {}
-                    )
-                    SettingsActionRow(
-                        title = stringResource(R.string.youtube_trailer_login_code_expiry_title),
-                        subtitle = uiState.deviceCodeExpiresAtEpochMs?.let(::formatEpochMs)
-                            ?: stringResource(R.string.youtube_trailer_login_not_available),
-                        value = "${uiState.pollIntervalSeconds}s",
-                        enabled = false,
-                        onClick = {}
-                    )
-                }
-            }
-        }
-
         item(key = "youtube_trailer_auth_actions") {
             SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
                 SettingsActionRow(
@@ -152,6 +140,13 @@ fun YouTubeTrailerLoginContent(
                     },
                     onClick = { viewModel.onEvent(YouTubeTrailerAuthEvent.SignIn) }
                 )
+                if (shouldPresentYouTubeTrailerActivationOverlay(uiState)) {
+                    SettingsActionRow(
+                        title = stringResource(R.string.youtube_trailer_login_show_code_title),
+                        subtitle = stringResource(R.string.youtube_trailer_login_show_code_subtitle),
+                        onClick = { activationOverlayVisible = true }
+                    )
+                }
                 SettingsActionRow(
                     title = stringResource(R.string.youtube_trailer_login_refresh_title),
                     subtitle = stringResource(R.string.youtube_trailer_login_refresh_subtitle),
@@ -173,9 +168,112 @@ fun YouTubeTrailerLoginContent(
             }
         }
     }
+
+    if (activationOverlayVisible && shouldPresentYouTubeTrailerActivationOverlay(uiState)) {
+        YouTubeTrailerActivationDialog(
+            uiState = uiState,
+            verificationLink = verificationLink,
+            qrBitmap = qrBitmap,
+            onDismiss = { activationOverlayVisible = false }
+        )
+    }
 }
 
 private fun formatEpochMs(epochMs: Long): String {
     return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
         .format(Date(epochMs))
+}
+
+internal fun shouldPresentYouTubeTrailerActivationOverlay(
+    uiState: YouTubeTrailerAuthUiState
+): Boolean {
+    return uiState.mode == YouTubeTrailerAuthMode.AWAITING_APPROVAL &&
+        !uiState.userCode.isNullOrBlank()
+}
+
+@Composable
+private fun YouTubeTrailerActivationDialog(
+    uiState: YouTubeTrailerAuthUiState,
+    verificationLink: String?,
+    qrBitmap: android.graphics.Bitmap?,
+    onDismiss: () -> Unit
+) {
+    BackHandler(onBack = onDismiss)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .background(Color.Black.copy(alpha = 0.9f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(760.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
+                    .background(NexioColors.BackgroundElevated)
+                    .border(1.dp, NexioColors.Border, androidx.compose.foundation.shape.RoundedCornerShape(24.dp))
+                    .padding(horizontal = 36.dp, vertical = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = stringResource(R.string.youtube_trailer_login_qr_title),
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = NexioColors.TextPrimary,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = stringResource(R.string.youtube_trailer_login_overlay_subtitle),
+                    color = NexioColors.TextSecondary,
+                    textAlign = TextAlign.Center
+                )
+                qrBitmap?.let { bitmap ->
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = stringResource(R.string.youtube_trailer_login_qr_title),
+                        modifier = Modifier.size(280.dp)
+                    )
+                }
+                Text(
+                    text = verificationLink ?: stringResource(R.string.youtube_trailer_login_not_available),
+                    color = NexioColors.TextSecondary,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = uiState.userCode.orEmpty(),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 42.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp,
+                    color = NexioColors.TextPrimary,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = stringResource(R.string.youtube_trailer_login_overlay_footer),
+                    color = NexioColors.TextSecondary,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = uiState.sessionStatusMessage,
+                    color = NexioColors.TextPrimary,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = stringResource(
+                        R.string.youtube_trailer_login_overlay_meta,
+                        uiState.deviceCodeExpiresAtEpochMs?.let(::formatEpochMs)
+                            ?: stringResource(R.string.youtube_trailer_login_not_available),
+                        uiState.pollIntervalSeconds
+                    ),
+                    color = NexioColors.TextSecondary,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
 }
