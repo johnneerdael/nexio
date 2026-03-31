@@ -248,6 +248,42 @@ class MetadataDiskCacheStoreTest {
     }
 
     @Test
+    fun `readTmdbTitleVideos ignores expired cache entries`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+        prefs.edit().putString(
+            "tmdb_videos::123::movie::en-US::trailer",
+            """
+            {
+              "value": [
+                {
+                  "key": "trailer-1",
+                  "site": "YouTube",
+                  "type": "Trailer",
+                  "official": true,
+                  "size": 1080,
+                  "publishedAt": "2024-01-01T00:00:00Z",
+                  "id": "trailer-1"
+                }
+              ],
+              "languageEpoch": 0,
+              "tmdbVideoSchemaVersion": 1,
+              "updatedAtMs": 1
+            }
+            """.trimIndent()
+        ).apply()
+
+        assertNull(
+            store.readTmdbTitleVideos(
+                tmdbId = 123,
+                mediaType = "movie",
+                languageTag = "en-US",
+                providerToken = "trailer"
+            )
+        )
+    }
+
+    @Test
     fun `read and write tmdb season videos round-trip by season and language`() {
         val store = MetadataDiskCacheStore(
             context = mockContext(InMemorySharedPreferences())
@@ -293,6 +329,42 @@ class MetadataDiskCacheStoreTest {
                 tmdbId = 456,
                 seasonNumber = 1,
                 languageTag = "nl-NL",
+                providerToken = "trailer"
+            )
+        )
+    }
+
+    @Test
+    fun `readTmdbSeasonVideos ignores expired cache entries`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+        prefs.edit().putString(
+            "tmdb_season_videos::456::2::en-US::trailer",
+            """
+            {
+              "value": [
+                {
+                  "key": "season-2-recap",
+                  "site": "YouTube",
+                  "type": "Recap",
+                  "official": true,
+                  "size": 1080,
+                  "publishedAt": "2024-01-01T00:00:00Z",
+                  "id": "season-2-recap"
+                }
+              ],
+              "languageEpoch": 0,
+              "tmdbVideoSchemaVersion": 1,
+              "updatedAtMs": 1
+            }
+            """.trimIndent()
+        ).apply()
+
+        assertNull(
+            store.readTmdbSeasonVideos(
+                tmdbId = 456,
+                seasonNumber = 2,
+                languageTag = "en-US",
                 providerToken = "trailer"
             )
         )

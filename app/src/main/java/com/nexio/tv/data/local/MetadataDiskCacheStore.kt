@@ -12,6 +12,8 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaCompanyKind
+import java.time.Duration
+import java.time.Instant
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,6 +33,7 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val LANGUAGE_EPOCH_KEY = "metadata_language_epoch"
         private const val TMDB_CACHE_SCHEMA_VERSION = 1
         private const val TMDB_VIDEO_CACHE_SCHEMA_VERSION = 1
+        private val TMDB_VIDEO_CACHE_TTL: Duration = Duration.ofHours(12)
     }
 
     private val gson = Gson()
@@ -390,6 +393,8 @@ class MetadataDiskCacheStore @Inject constructor(
             if (epoch != currentLanguageEpoch()) return null
             val schemaVersion = root.get("tmdbVideoSchemaVersion")?.asInt ?: 0
             if (schemaVersion != TMDB_VIDEO_CACHE_SCHEMA_VERSION) return null
+            val updatedAtMs = root.get("updatedAtMs")?.asLong ?: return null
+            if (isTmdbVideoCacheEntryExpired(updatedAtMs)) return null
             decodeTmdbVideosSafely(root)
         }.onFailure { error ->
             Log.w(TAG, "Failed to read TMDB videos disk cache entry", error)
@@ -440,6 +445,11 @@ class MetadataDiskCacheStore @Inject constructor(
         val value = root.get("value") ?: return null
         val type = object : TypeToken<List<TmdbVideoResult>>() {}.type
         return runCatching { gson.fromJson<List<TmdbVideoResult>>(value, type) }.getOrNull()
+    }
+
+    private fun isTmdbVideoCacheEntryExpired(updatedAtMs: Long): Boolean {
+        val updatedAt = Instant.ofEpochMilli(updatedAtMs)
+        return Duration.between(updatedAt, Instant.now()) > TMDB_VIDEO_CACHE_TTL
     }
 
     private fun readCastMembers(obj: JsonObject, key: String): List<MetaCastMember> {
