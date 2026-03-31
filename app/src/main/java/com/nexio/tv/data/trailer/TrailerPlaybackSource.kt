@@ -5,6 +5,23 @@ data class TrailerPlaybackSource(
     val audioUrl: String? = null
 )
 
+internal fun selectPreferredTrailerPlaybackSource(
+    combinedUrl: String?,
+    adaptiveVideoUrl: String?,
+    adaptiveAudioUrl: String?
+): TrailerPlaybackSource? {
+    val normalizedCombinedUrl = combinedUrl?.takeIf { it.isNotBlank() }
+    if (normalizedCombinedUrl != null) {
+        return TrailerPlaybackSource(videoUrl = normalizedCombinedUrl)
+    }
+
+    val normalizedAdaptiveVideoUrl = adaptiveVideoUrl?.takeIf { it.isNotBlank() } ?: return null
+    return TrailerPlaybackSource(
+        videoUrl = normalizedAdaptiveVideoUrl,
+        audioUrl = adaptiveAudioUrl?.takeIf { it.isNotBlank() }
+    )
+}
+
 sealed interface TrailerResolutionResult {
     data class Playback(val source: TrailerPlaybackSource) : TrailerResolutionResult
     data class External(val url: String) : TrailerResolutionResult

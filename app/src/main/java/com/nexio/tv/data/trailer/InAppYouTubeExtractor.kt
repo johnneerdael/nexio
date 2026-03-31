@@ -335,23 +335,23 @@ class InAppYouTubeExtractor @Inject constructor() {
             bestProgressive?.url
         }
 
-        val videoUrl = resolveReachableUrl(bestVideo?.url ?: combinedUrl ?: return null)
-        val audioUrl = bestAudio?.url?.let { resolveReachableUrl(it) }
+        val playbackSource = selectPreferredTrailerPlaybackSource(
+            combinedUrl = combinedUrl?.let { resolveReachableUrl(it) },
+            adaptiveVideoUrl = bestVideo?.url?.let { resolveReachableUrl(it) },
+            adaptiveAudioUrl = bestAudio?.url?.let { resolveReachableUrl(it) }
+        ) ?: return null
 
         if (BuildConfig.DEBUG) {
             Log.d(
                 TAG,
-                "Kotlin selection video=${summarizeUrl(videoUrl)} " +
-                    "audioPresent=${!audioUrl.isNullOrBlank()} " +
+                "Kotlin selection video=${summarizeUrl(playbackSource.videoUrl)} " +
+                    "audioPresent=${!playbackSource.audioUrl.isNullOrBlank()} " +
                     "progressiveCount=${progressive.size} " +
                     "adaptiveVideoCount=${adaptiveVideo.size} adaptiveAudioCount=${adaptiveAudio.size}"
             )
         }
 
-        return TrailerPlaybackSource(
-            videoUrl = videoUrl,
-            audioUrl = audioUrl
-        )
+        return playbackSource
     }
 
     private fun extractVideoId(input: String): String? {

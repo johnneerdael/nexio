@@ -11,6 +11,30 @@ import org.junit.Test
 class TrailerSupportTest {
 
     @Test
+    fun `selectPreferredTrailerPlaybackSource prefers combined trailer source over split adaptive playback`() {
+        val selected = selectPreferredTrailerPlaybackSource(
+            combinedUrl = "https://example.com/trailer/master.m3u8",
+            adaptiveVideoUrl = "https://example.com/trailer/video.mp4",
+            adaptiveAudioUrl = "https://example.com/trailer/audio.m4a"
+        )
+
+        assertEquals("https://example.com/trailer/master.m3u8", selected?.videoUrl)
+        assertNull(selected?.audioUrl)
+    }
+
+    @Test
+    fun `selectPreferredTrailerPlaybackSource falls back to adaptive split playback when combined source is absent`() {
+        val selected = selectPreferredTrailerPlaybackSource(
+            combinedUrl = null,
+            adaptiveVideoUrl = "https://example.com/trailer/video.mp4",
+            adaptiveAudioUrl = "https://example.com/trailer/audio.m4a"
+        )
+
+        assertEquals("https://example.com/trailer/video.mp4", selected?.videoUrl)
+        assertEquals("https://example.com/trailer/audio.m4a", selected?.audioUrl)
+    }
+
+    @Test
     fun `rankTmdbVideoCandidates prefers official trailers before teasers and smaller videos`() {
         val ranked = rankTmdbVideoCandidates(
             listOf(
