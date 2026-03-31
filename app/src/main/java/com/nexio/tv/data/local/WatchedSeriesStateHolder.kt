@@ -4,7 +4,6 @@ import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.data.repository.parseContentIds
-import java.security.MessageDigest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,35 +41,23 @@ internal fun traktSessionIdentityForState(state: TraktAuthState): TraktSessionId
         ?: state.username
             ?.trim()
             ?.takeIf { it.isNotBlank() }
-    val tokenFallbackKey = traktTokenFallbackSessionKey(state)
+    val sessionIdentity = state.sessionIdentity
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
     return when {
-        namedKey != null && tokenFallbackKey != null && namedKey != tokenFallbackKey -> {
+        namedKey != null && sessionIdentity != null && namedKey != sessionIdentity -> {
             TraktSessionIdentity(
                 primaryKey = namedKey,
-                migrationKeys = listOf(tokenFallbackKey)
+                migrationKeys = listOf(sessionIdentity)
             )
         }
         namedKey != null -> TraktSessionIdentity(primaryKey = namedKey)
-        tokenFallbackKey != null -> TraktSessionIdentity(primaryKey = tokenFallbackKey)
+        sessionIdentity != null -> TraktSessionIdentity(
+            primaryKey = sessionIdentity,
+            migrationKeys = listOf(GUEST_TRAKT_SESSION_KEY)
+        )
         else -> TraktSessionIdentity(primaryKey = GUEST_TRAKT_SESSION_KEY)
     }
-}
-
-private fun traktTokenFallbackSessionKey(state: TraktAuthState): String? {
-    val tokenMaterial = state.refreshToken
-        ?.trim()
-        ?.takeIf { it.isNotBlank() }
-        ?: state.accessToken
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-        ?: return null
-    return "auth_" + sha256Hex(tokenMaterial).take(16)
-}
-
-private fun sha256Hex(value: String): String {
-    return MessageDigest.getInstance("SHA-256")
-        .digest(value.toByteArray(Charsets.UTF_8))
-        .joinToString(separator = "") { byte -> "%02x".format(byte) }
 }
 
 @Singleton

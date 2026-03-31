@@ -111,16 +111,56 @@ class WatchedItemsPreferencesTest {
     }
 
     @Test
-    fun `token derived watched items bucket migrates when user metadata arrives`() = runTest {
+    fun `guest watched items migrate into session identity bucket`() = runTest {
         val authState = MutableStateFlow(
             TraktAuthState(
                 accessToken = "access",
                 refreshToken = "refresh",
+                sessionIdentity = "session-123",
                 username = null,
                 userSlug = null
             )
         )
-        val storeFile = File.createTempFile("watched-items-token", ".preferences_pb")
+        val storeFile = File.createTempFile("watched-items-session", ".preferences_pb")
+        storeFile.deleteOnExit()
+        val dataStore = PreferenceDataStoreFactory.create(scope = backgroundScope) { storeFile }
+        val preferences = WatchedItemsPreferences(
+            dataStore = dataStore,
+            authState = authState
+        )
+        val item = watchedItem(
+            contentId = "tmdb:101",
+            season = 1,
+            episode = 1,
+            watchedAt = 1_000L
+        )
+
+        dataStore.edit { store ->
+            store[stringSetPreferencesKey("watched_items_guest")] = setOf(Gson().toJson(item))
+        }
+
+        assertEquals(listOf(item), preferences.getAllItems())
+
+        val stored = dataStore.data.first()
+        assertEquals(
+            setOf(Gson().toJson(item)),
+            stored[stringSetPreferencesKey("watched_items_session-123")]
+        )
+        assertEquals(null, stored[stringSetPreferencesKey("watched_items_guest")])
+    }
+
+    @Test
+    fun `session identity watched items migrate when user metadata arrives`() = runTest {
+        val authState = MutableStateFlow(
+            TraktAuthState(
+                accessToken = "access",
+                refreshToken = "refresh",
+                sessionIdentity = "session-123",
+                username = null,
+                userSlug = null
+            )
+        )
+        val storeFile = File.createTempFile("watched-items-session-to-user", ".preferences_pb")
         storeFile.deleteOnExit()
         val dataStore = PreferenceDataStoreFactory.create(scope = backgroundScope) { storeFile }
         val preferences = WatchedItemsPreferences(
@@ -135,8 +175,10 @@ class WatchedItemsPreferencesTest {
         )
 
         preferences.markAsWatched(item)
-        val tokenKey = "watched_items_" + traktSessionKeyForState(authState.value)
-        assertEquals(setOf(Gson().toJson(item)), dataStore.data.first()[stringSetPreferencesKey(tokenKey)])
+        assertEquals(
+            setOf(Gson().toJson(item)),
+            dataStore.data.first()[stringSetPreferencesKey("watched_items_session-123")]
+        )
 
         authState.value = authState.value.copy(username = "alice", userSlug = "alice")
         advanceUntilIdle()
@@ -145,7 +187,44 @@ class WatchedItemsPreferencesTest {
 
         val stored = dataStore.data.first()
         assertEquals(setOf(Gson().toJson(item)), stored[stringSetPreferencesKey("watched_items_alice")])
-        assertEquals(null, stored[stringSetPreferencesKey(tokenKey)])
+        assertEquals(null, stored[stringSetPreferencesKey("watched_items_session-123")])
+    }
+
+    @Test
+    fun `read flows observe only the active session bucket after migration`() = runTest {
+        val authState = MutableStateFlow(
+            TraktAuthState(
+                accessToken = "access",
+                refreshToken = "refresh",
+                sessionIdentity = "session-123"
+            )
+        )
+        val storeFile = File.createTempFile("watched-items-flow", ".preferences_pb")
+        storeFile.deleteOnExit()
+        val dataStore = PreferenceDataStoreFactory.create(scope = backgroundScope) { storeFile }
+        val preferences = WatchedItemsPreferences(
+            dataStore = dataStore,
+            authState = authState
+        )
+        val item = watchedItem(
+            contentId = "tmdb:101",
+            season = 1,
+            episode = 2,
+            watchedAt = 1_000L
+        )
+
+        dataStore.edit { store ->
+            store[stringSetPreferencesKey("watched_items_guest")] = setOf(Gson().toJson(item))
+        }
+
+        assertEquals(setOf(1 to 2), preferences.getWatchedEpisodesForContent("tmdb:101").first())
+
+        val stored = dataStore.data.first()
+        assertEquals(
+            setOf(Gson().toJson(item)),
+            stored[stringSetPreferencesKey("watched_items_session-123")]
+        )
+        assertEquals(null, stored[stringSetPreferencesKey("watched_items_guest")])
     }
 
     @Test
