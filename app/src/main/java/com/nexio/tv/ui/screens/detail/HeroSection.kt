@@ -715,7 +715,7 @@ private fun formatMDBListRating(provider: String, rating: Double): String {
 }
 
 private fun formatRuntime(runtime: String): String {
-    val minutes = runtime.filter { it.isDigit() }.toIntOrNull() ?: return runtime
+    val minutes = parseRuntimeMinutes(runtime) ?: return runtime
     return if (minutes >= 60) {
         val hours = minutes / 60
         val mins = minutes % 60
@@ -723,6 +723,25 @@ private fun formatRuntime(runtime: String): String {
     } else {
         "${minutes}m"
     }
+}
+
+private fun parseRuntimeMinutes(runtime: String): Int? {
+    val normalized = runtime.trim().lowercase()
+    if (normalized.isBlank()) return null
+
+    Regex("""^(\d+):(\d{2})$""").matchEntire(normalized)?.let { match ->
+        val hours = match.groupValues[1].toIntOrNull() ?: return null
+        val minutes = match.groupValues[2].toIntOrNull() ?: return null
+        return (hours * 60) + minutes
+    }
+
+    val hours = Regex("""(\d+)\s*h""").find(normalized)?.groupValues?.get(1)?.toIntOrNull()
+    val minutes = Regex("""(\d+)\s*m(?:in)?""").find(normalized)?.groupValues?.get(1)?.toIntOrNull()
+    if (hours != null || minutes != null) {
+        return (hours ?: 0) * 60 + (minutes ?: 0)
+    }
+
+    return normalized.filter(Char::isDigit).toIntOrNull()
 }
 
 @Composable
