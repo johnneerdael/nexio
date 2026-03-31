@@ -35,59 +35,64 @@ class WatchedItemsPreferences @Inject constructor(
     private val watchedItemsKey = stringSetPreferencesKey("watched_items")
 
     private val allItems: Flow<List<WatchedItem>> = dataStore.data.map { preferences ->
-        val raw = preferences[watchedItemsKey] ?: emptySet()
-        raw.mapNotNull { json ->
-            runCatching { gson.fromJson(json, WatchedItem::class.java) }.getOrNull()
-        }
+        decodeWatchedItems(preferences[watchedItemsKey] ?: emptySet())
     }
 
     fun isWatched(contentId: String, season: Int? = null, episode: Int? = null): Flow<Boolean> {
         return allItems.map { items ->
-            items.any { item ->
-                item.contentId == contentId &&
-                    item.season == season &&
-                    item.episode == episode
-            }
+            watchedItemsContainMatch(
+                items = items,
+                contentIds = listOf(contentId),
+                season = season,
+                episode = episode
+            )
         }
     }
 
     fun getWatchedEpisodesForContent(contentId: String): Flow<Set<Pair<Int, Int>>> {
         return allItems.map { items ->
-            items.filter { it.contentId == contentId && it.season != null && it.episode != null }
-                .map { it.season!! to it.episode!! }
-                .toSet()
+            watchedEpisodesForContent(items = items, contentIds = listOf(contentId))
         }
     }
 
     suspend fun markAsWatched(item: WatchedItem) {
+        markAsWatched(item = item, contentIds = listOf(item.contentId))
+    }
+
+    suspend fun markAsWatched(item: WatchedItem, contentIds: Collection<String>) {
         store().edit { preferences ->
-            val current = preferences[watchedItemsKey] ?: emptySet()
-            val filtered = current.filterNot { json ->
-                runCatching {
-                    gson.fromJson(json, WatchedItem::class.java)
-                }.getOrNull()?.let { existing ->
-                    existing.contentId == item.contentId &&
-                        existing.season == item.season &&
-                        existing.episode == item.episode
-                } ?: false
-            }
-            preferences[watchedItemsKey] = filtered.toSet() + gson.toJson(item)
+            val currentItems = decodeWatchedItems(preferences[watchedItemsKey] ?: emptySet())
+            val updated = upsertWatchedItem(
+                items = currentItems,
+                item = item,
+                contentIds = contentIds
+            )
+            preferences[watchedItemsKey] = encodeWatchedItems(updated)
         }
     }
 
     suspend fun unmarkAsWatched(contentId: String, season: Int? = null, episode: Int? = null) {
+        unmarkAsWatched(
+            contentIds = listOf(contentId),
+            season = season,
+            episode = episode
+        )
+    }
+
+    suspend fun unmarkAsWatched(
+        contentIds: Collection<String>,
+        season: Int? = null,
+        episode: Int? = null
+    ) {
         store().edit { preferences ->
-            val current = preferences[watchedItemsKey] ?: emptySet()
-            val filtered = current.filterNot { json ->
-                runCatching {
-                    gson.fromJson(json, WatchedItem::class.java)
-                }.getOrNull()?.let { existing ->
-                    existing.contentId == contentId &&
-                        existing.season == season &&
-                        existing.episode == episode
-                } ?: false
-            }
-            preferences[watchedItemsKey] = filtered.toSet()
+            val currentItems = decodeWatchedItems(preferences[watchedItemsKey] ?: emptySet())
+            val updated = removeWatchedItems(
+                items = currentItems,
+                contentIds = contentIds,
+                season = season,
+                episode = episode
+            )
+            preferences[watchedItemsKey] = encodeWatchedItems(updated)
         }
     }
 
@@ -97,18 +102,15 @@ class WatchedItemsPreferences @Inject constructor(
 
     suspend fun mergeRemoteItems(remoteItems: List<WatchedItem>) {
         store().edit { preferences ->
-            val current = preferences[watchedItemsKey] ?: emptySet()
-            val localItems = current.mapNotNull { json ->
-                runCatching { gson.fromJson(json, WatchedItem::class.java) }.getOrNull()
-            }
-            val localKeys = localItems.map { Triple(it.contentId, it.season, it.episode) }.toSet()
+            val currentItems = decodeWatchedItems(preferences[watchedItemsKey] ?: emptySet())
+            val localKeys = currentItems.map { Triple(it.contentId, it.season, it.episode) }.toSet()
 
             val newItems = remoteItems.filter { remote ->
                 Triple(remote.contentId, remote.season, remote.episode) !in localKeys
             }
 
             if (newItems.isNotEmpty()) {
-                preferences[watchedItemsKey] = current + newItems.map { gson.toJson(it) }.toSet()
+                preferences[watchedItemsKey] = encodeWatchedItems(currentItems + newItems)
             }
         }
     }
@@ -124,9 +126,87 @@ class WatchedItemsPreferences @Inject constructor(
             remoteItems.forEach { item ->
                 deduped[Triple(item.contentId, item.season, item.episode)] = item
             }
-            preferences[watchedItemsKey] = deduped.values
-                .map { gson.toJson(it) }
-                .toSet()
+            preferences[watchedItemsKey] = encodeWatchedItems(deduped.values)
         }
     }
+
+    private fun decodeWatchedItems(rawItems: Set<String>): List<WatchedItem> {
+        return rawItems.mapNotNull { json ->
+            runCatching { gson.fromJson(json, WatchedItem::class.java) }.getOrNull()
+        }
+    }
+
+    private fun encodeWatchedItems(items: Collection<WatchedItem>): Set<String> {
+        return items.map { gson.toJson(it) }.toSet()
+    }
+}
+
+internal fun watchedItemsContainMatch(
+    items: Collection<WatchedItem>,
+    contentIds: Collection<String>,
+    season: Int? = null,
+    episode: Int? = null
+): Boolean {
+    val aliases = expandWatchedItemContentIds(contentIds)
+    if (aliases.isEmpty()) return false
+    return items.any { existing ->
+        existing.matchesWatchedItemAliases(aliases) &&
+            existing.season == season &&
+            existing.episode == episode
+    }
+}
+
+internal fun watchedEpisodesForContent(
+    items: Collection<WatchedItem>,
+    contentIds: Collection<String>
+): Set<Pair<Int, Int>> {
+    val aliases = expandWatchedItemContentIds(contentIds)
+    if (aliases.isEmpty()) return emptySet()
+    return items.filter { existing ->
+        existing.matchesWatchedItemAliases(aliases) &&
+            existing.season != null &&
+            existing.episode != null
+    }.map { existing ->
+        existing.season!! to existing.episode!!
+    }.toSet()
+}
+
+internal fun upsertWatchedItem(
+    items: Collection<WatchedItem>,
+    item: WatchedItem,
+    contentIds: Collection<String> = listOf(item.contentId)
+): List<WatchedItem> {
+    return removeWatchedItems(
+        items = items,
+        contentIds = contentIds,
+        season = item.season,
+        episode = item.episode
+    ) + item
+}
+
+internal fun removeWatchedItems(
+    items: Collection<WatchedItem>,
+    contentIds: Collection<String>,
+    season: Int? = null,
+    episode: Int? = null
+): List<WatchedItem> {
+    val aliases = expandWatchedItemContentIds(contentIds)
+    if (aliases.isEmpty()) return items.toList()
+    val clearWholeShow = season == null && episode == null
+    return items.filterNot { existing ->
+        existing.matchesWatchedItemAliases(aliases) &&
+            (clearWholeShow || (existing.season == season && existing.episode == episode))
+    }
+}
+
+private fun expandWatchedItemContentIds(contentIds: Collection<String>): Set<String> {
+    return buildSet {
+        contentIds.forEach { contentId ->
+            addAll(expandSeriesContentIdAliases(listOf(contentId)))
+        }
+    }
+}
+
+private fun WatchedItem.matchesWatchedItemAliases(targetAliases: Set<String>): Boolean {
+    return expandWatchedItemContentIds(listOf(contentId)).any { it in targetAliases }
 }

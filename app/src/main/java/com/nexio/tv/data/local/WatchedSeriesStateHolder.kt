@@ -86,6 +86,15 @@ class WatchedSeriesStateHolder @Inject constructor(
         }
     }
 
+    fun matchingEntryIds(contentId: String): Set<String> {
+        val aliases = expandSeriesContentIdAliases(listOf(contentId))
+        if (aliases.isEmpty()) return emptySet()
+        val entry = _entries.value.firstOrNull { candidate ->
+            candidate.ids.any { it in aliases }
+        }
+        return entry?.ids.orEmpty() + aliases
+    }
+
     private suspend fun persist(entries: List<WatchedSeriesEntry>) {
         _entries.value = mergeWatchedSeriesEntries(entries)
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
