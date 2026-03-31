@@ -73,6 +73,10 @@ user experience.
 The website should appear inside these guides as a companion tool, not as a primary parallel
 product area.
 
+`Troubleshooting` is a primary documentation section in the sidebar and homepage structure, but it
+does not need to occupy the top navigation. It should be reachable from the homepage, sidebar, and
+relevant feature guides without competing with the main journey categories in the top nav.
+
 ### Start Here
 
 - Overview
@@ -132,6 +136,15 @@ This section should hold advanced or optional setup such as:
 - self-hosted IMDb ratings API
 - other niche opt-in workflows that should not distract the default reader path
 
+The `Advanced` section should not duplicate the main feature guides. Main guides remain the source
+of truth for feature value, recommended setup, and short advanced callouts. The Advanced section is
+reserved for long-form optional setup that is one or more of the following:
+
+- self-hosted
+- auth-heavy or multi-step
+- fallback-specific
+- only relevant to a minority of users
+
 ## Page Inventory
 
 ### Pages to replace or retire
@@ -153,16 +166,28 @@ substantially rewritten because they are built on the old split:
 ### Pages that can remain with lighter edits
 
 - `docs-site/index.md`
+
+This page can stay if its framing is updated to support the new app-first model.
+
+### Existing pages to move or absorb into the new IA
+
 - `docs-site/web/account.md`
 - `docs-site/web/security-and-data.md`
 
-These pages can stay if their framing is updated to support the new app-first model.
+These pages should not remain under a standalone `web` silo once the new navigation is in place.
+Their content should be moved or rewritten into the new structure:
+
+- account guidance belongs under `Start Here`
+- security, privacy, and data handling guidance belongs under `Start Here` or `Advanced`, depending
+  on whether the content is default-user guidance or optional power-user detail
 
 ### New pages to add
 
 - `docs-site/start-here/index.md`
 - `docs-site/start-here/recommended-setup.md`
 - `docs-site/start-here/first-run-sync-and-cache.md`
+- `docs-site/start-here/account-and-sign-in.md`
+- `docs-site/start-here/security-and-data.md`
 - `docs-site/watch/home-and-continue-watching.md`
 - `docs-site/watch/details-seasons-and-watching-flow.md`
 - `docs-site/watch/trailers-and-recaps.md`
@@ -222,6 +247,9 @@ This page should cover:
 - the custom YT-DLP fork for ad-free trailer playback
 - optional Streailer fallback, including when to enable it
 
+Short advanced callouts should stay on this page for YouTube login benefits and fallback behavior.
+Only the longer optional setup details should link out to the Advanced section.
+
 ### Playback Tuning
 
 This page should include clear practical guidance on:
@@ -261,6 +289,9 @@ This page should explain in plain language:
 - where the relevant setup lives
 - what configuration is recommended for most users
 
+If a provider-specific or fallback-specific setup path is unusually long or niche, the main page
+should summarize it and link to a dedicated Advanced page instead of duplicating the full steps.
+
 ### Library Integration
 
 This page should explain:
@@ -283,6 +314,9 @@ This page should explain:
 The self-hosted repository should be referenced as an advanced path:
 
 `https://github.com/johnneerdael/nexio-imdbratings`
+
+The main page should explain when most users do and do not need the self-hosted path, while the
+Advanced section holds any long-form self-hosting guidance.
 
 ### Screensaver and Idle Experience
 
@@ -319,6 +353,9 @@ Recommended top navigation:
 - Advanced
 - Developer
 
+`Troubleshooting` should be a dedicated sidebar section and homepage destination, but not a top-nav
+item unless later user testing shows it is needed there.
+
 The sidebar should reinforce this same task-based structure.
 
 ## Writing Standards
@@ -337,6 +374,17 @@ The sidebar should reinforce this same task-based structure.
   formatter customization.
 - Avoid creating separate power-user-only documentation when one page can serve both audiences
   cleanly.
+
+### Main guide versus Advanced boundary
+
+Use this split consistently:
+
+- Main feature guides explain the feature, where users configure it, the recommended setup, and any
+  short advanced callouts needed to keep the page complete.
+- Advanced pages hold long-form optional instructions, self-hosting flows, auth-heavy walkthroughs,
+  and fallback-only configuration that would interrupt the default reader path.
+- Advanced pages should be linked from the relevant main guide rather than standing alone without
+  context.
 
 ### Content shape
 
