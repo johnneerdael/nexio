@@ -1,5 +1,7 @@
 package com.nexio.tv.ui.components
 
+import android.content.Intent
+import android.net.Uri
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -22,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +36,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalDensity
@@ -42,6 +46,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.nexio.tv.R
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -49,6 +55,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.ui.theme.NexioColors
@@ -58,6 +65,7 @@ import coil.request.ImageRequest
 import kotlinx.coroutines.delay
 
 private const val BACKDROP_ASPECT_RATIO = 16f / 9f
+private const val TRAILER_PREVIEW_REQUEST_FOCUS_DEBOUNCE_MS = 140L
 private val YEAR_REGEX = Regex("""\b(19|20)\d{2}\b""")
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -70,6 +78,12 @@ fun ContentCard(
     showLabels: Boolean = true,
     focusedPosterBackdropExpandEnabled: Boolean = false,
     focusedPosterBackdropExpandDelaySeconds: Int = 3,
+    focusedPosterBackdropTrailerEnabled: Boolean = false,
+    focusedPosterBackdropTrailerMuted: Boolean = true,
+    trailerPreviewUrl: String? = null,
+    trailerPreviewAudioUrl: String? = null,
+    trailerPreviewExternalUrl: String? = null,
+    onRequestTrailerPreview: (MetaPreview) -> Unit = {},
     isWatched: Boolean = false,
     onFocus: (MetaPreview) -> Unit = {},
     onLongPress: (() -> Unit)? = null,
@@ -92,8 +106,15 @@ fun ContentCard(
     var longPressTriggered by remember { mutableStateOf(false) }
     var interactionNonce by remember { mutableIntStateOf(0) }
     var isBackdropExpanded by remember { mutableStateOf(false) }
+    var trailerFirstFrameRendered by remember(trailerPreviewUrl) { mutableStateOf(false) }
+    var lastExternalTrailerLaunchKey by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val navLifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleOwner = remember(context, navLifecycleOwner) {
+        context.findLifecycleOwner() ?: navLifecycleOwner
+    }
 
-    val needsFocusState = focusedPosterBackdropExpandEnabled
+    val needsFocusState = focusedPosterBackdropExpandEnabled || focusedPosterBackdropTrailerEnabled
     val lastFocusedRef = remember { booleanArrayOf(false) }
 
     if (focusedPosterBackdropExpandEnabled) {
@@ -113,9 +134,23 @@ fun ContentCard(
             isBackdropExpanded = false
             val backdropDelayMs = delaySeconds * 1000L
             delay(backdropDelayMs)
-            if (isFocused && focusedPosterBackdropExpandEnabled) {
+            if (isFocused &&
+                focusedPosterBackdropExpandEnabled &&
+                lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            ) {
                 isBackdropExpanded = true
             }
+        }
+    }
+
+    if (focusedPosterBackdropTrailerEnabled) {
+        LaunchedEffect(item.id, isFocused, trailerPreviewUrl) {
+            if (!isFocused) return@LaunchedEffect
+            if (trailerPreviewUrl != null || trailerPreviewExternalUrl != null) return@LaunchedEffect
+            delay(TRAILER_PREVIEW_REQUEST_FOCUS_DEBOUNCE_MS)
+            if (!isFocused) return@LaunchedEffect
+            if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@LaunchedEffect
+            onRequestTrailerPreview(item)
         }
     }
 
@@ -151,7 +186,6 @@ fun ContentCard(
     Column(
         modifier = modifier.width(animatedCardWidth)
     ) {
-        val context = LocalContext.current
         val density = LocalDensity.current
         // Keep decode size stable during width animation to avoid recreating requests/painters every frame.
         val maxRequestCardWidth = if (focusedPosterBackdropExpandEnabled) {
@@ -193,6 +227,22 @@ fun ContentCard(
         }
         var logoLoadFailed by remember(item.logo) { mutableStateOf(false) }
         val showExpandedLogo = !item.logo.isNullOrBlank() && !logoLoadFailed
+        LaunchedEffect(isBackdropExpanded, isFocused, trailerPreviewUrl, trailerPreviewExternalUrl) {
+            if (!focusedPosterBackdropTrailerEnabled) return@LaunchedEffect
+            if (!isBackdropExpanded || !isFocused) return@LaunchedEffect
+            if (!trailerPreviewUrl.isNullOrBlank()) return@LaunchedEffect
+            val externalUrl = trailerPreviewExternalUrl ?: return@LaunchedEffect
+            val launchKey = "${item.id}|$externalUrl"
+            if (lastExternalTrailerLaunchKey == launchKey) return@LaunchedEffect
+            lastExternalTrailerLaunchKey = launchKey
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(externalUrl)).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                )
+            }
+        }
 
         Card(
             onClick = {
@@ -283,6 +333,58 @@ fun ContentCard(
                     )
                 } else {
                     MonochromePosterPlaceholder()
+                }
+
+                val shouldPlayTrailerPreview = isBackdropExpanded &&
+                    focusedPosterBackdropTrailerEnabled &&
+                    isFocused &&
+                    trailerPreviewUrl != null
+
+                if (focusedPosterBackdropTrailerEnabled) {
+                    LaunchedEffect(shouldPlayTrailerPreview) {
+                        if (!shouldPlayTrailerPreview) {
+                            trailerFirstFrameRendered = false
+                        }
+                    }
+                }
+
+                val trailerCoverAlpha = if (shouldPlayTrailerPreview) {
+                    val alpha by animateFloatAsState(
+                        targetValue = if (!trailerFirstFrameRendered) 1f else 0f,
+                        animationSpec = tween(durationMillis = 250),
+                        label = "contentCardTrailerCoverAlpha"
+                    )
+                    alpha
+                } else {
+                    0f
+                }
+
+                if (shouldPlayTrailerPreview) {
+                    TrailerPlayer(
+                        trailerUrl = trailerPreviewUrl,
+                        trailerAudioUrl = trailerPreviewAudioUrl,
+                        isPlaying = true,
+                        onEnded = {
+                            trailerFirstFrameRendered = false
+                            isBackdropExpanded = false
+                        },
+                        onFirstFrameRendered = {
+                            trailerFirstFrameRendered = true
+                        },
+                        muted = focusedPosterBackdropTrailerMuted,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                if (shouldPlayTrailerPreview && !imageUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = imageModel,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = trailerCoverAlpha },
+                        contentScale = ContentScale.Crop
+                    )
                 }
 
                 if (isBackdropExpanded) {

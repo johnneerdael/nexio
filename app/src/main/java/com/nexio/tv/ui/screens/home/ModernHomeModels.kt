@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
@@ -53,7 +54,8 @@ internal sealed class ModernPayload {
         val addonBaseUrl: String,
         val trailerTitle: String,
         val trailerReleaseInfo: String?,
-        val trailerApiType: String
+        val trailerApiType: String,
+        val fallbackTrailerYtId: String? = null
     ) : ModernPayload()
 }
 
@@ -106,10 +108,17 @@ internal data class ModernHomeContentState(
     val catalogTypeSuffixEnabled: Boolean = true,
     val focusedPosterBackdropExpandEnabled: Boolean = false,
     val focusedPosterBackdropExpandDelaySeconds: Int = 3,
+    val focusedPosterBackdropTrailerEnabled: Boolean = false,
+    val focusedPosterBackdropTrailerMuted: Boolean = true,
+    val focusedPosterBackdropTrailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget =
+        FocusedPosterTrailerPlaybackTarget.HERO_MEDIA,
     val posterCardWidthDp: Int = 126,
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12,
-    val posterLabelsEnabled: Boolean = true
+    val posterLabelsEnabled: Boolean = true,
+    val trailerPreviewUrls: Map<String, String> = emptyMap(),
+    val trailerPreviewAudioUrls: Map<String, String> = emptyMap(),
+    val trailerPreviewExternalUrls: Map<String, String> = emptyMap()
 )
 
 internal data class ModernCatalogRowBuildCacheEntry(
@@ -465,7 +474,8 @@ internal fun buildCatalogItem(
             addonBaseUrl = row.addonBaseUrl,
             trailerTitle = displayMetadata.title ?: item.name,
             trailerReleaseInfo = displayMetadata.releaseInfo ?: item.releaseInfo,
-            trailerApiType = item.apiType
+            trailerApiType = item.apiType,
+            fallbackTrailerYtId = item.trailerYtIds.firstOrNull()
         ),
         metaPreview = item
     )

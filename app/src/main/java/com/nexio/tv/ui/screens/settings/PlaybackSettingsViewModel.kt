@@ -14,6 +14,8 @@ import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.SubtitleOrganizationMode
+import com.nexio.tv.data.local.TrailerSettings
+import com.nexio.tv.data.local.TrailerSettingsDataStore
 import com.nexio.tv.data.local.VodCacheSizeMode
 import com.nexio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,11 +27,13 @@ import javax.inject.Inject
 @HiltViewModel
 class PlaybackSettingsViewModel @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val trailerSettingsDataStore: TrailerSettingsDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val addonRepository: AddonRepository
 ) : ViewModel() {
 
     val playerSettings: Flow<PlayerSettings> = playerSettingsDataStore.playerSettings
+    val trailerSettings: Flow<TrailerSettings> = trailerSettingsDataStore.settings
     val streamDiagnosticsEnabled: Flow<Boolean> = debugSettingsDataStore.streamDiagnosticsEnabled
     val startupPerfTelemetryEnabled: Flow<Boolean> = debugSettingsDataStore.startupPerfTelemetryEnabled
     val installedAddonNames: Flow<List<String>> = addonRepository.getInstalledAddons().map { addons ->
@@ -71,6 +75,14 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setLoadingOverlayEnabled(enabled: Boolean) {
         playerSettingsDataStore.setLoadingOverlayEnabled(enabled)
+    }
+
+    suspend fun setTrailerEnabled(enabled: Boolean) {
+        trailerSettingsDataStore.setEnabled(enabled)
+    }
+
+    suspend fun setTrailerDelaySeconds(seconds: Int) {
+        trailerSettingsDataStore.setDelaySeconds(seconds)
     }
 
     suspend fun setPauseOverlayEnabled(enabled: Boolean) {

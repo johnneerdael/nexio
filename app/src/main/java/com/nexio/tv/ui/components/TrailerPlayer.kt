@@ -30,6 +30,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
+import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.data.trailer.YoutubeChunkedDataSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -56,7 +57,10 @@ fun TrailerPlayer(
     exit: ExitTransition = fadeOut(animationSpec = tween(500))
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val navLifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleOwner = remember(context, navLifecycleOwner) {
+        context.findLifecycleOwner() ?: navLifecycleOwner
+    }
     val currentIsPlaying by rememberUpdatedState(isPlaying)
     val currentTrailerUrl by rememberUpdatedState(trailerUrl)
     val currentTrailerAudioUrl by rememberUpdatedState(trailerAudioUrl)
