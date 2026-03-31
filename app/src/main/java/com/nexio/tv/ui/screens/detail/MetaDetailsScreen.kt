@@ -1230,13 +1230,11 @@ private fun MetaDetailsContent(
                 isTrailerPlaying = isTrailerPlaying,
                 playButtonFocusRequester = heroPlayFocusRequester,
                 onHeroActionFocused = {
-                    if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
-                        coroutineScope.launch {
-                            listState.animateScrollToItem(0)
-                        }
-                    }
                     initialHeroFocusRequested = true
                     clearPendingRestore()
+                    coroutineScope.launch {
+                        listState.restoreHeroScrollAfterFocus()
+                    }
                 },
                 restorePlayFocusToken = (if (pendingRestoreType == RestoreTarget.HERO) restoreFocusToken else 0) +
                     restorePlayFocusAfterTrailerBackToken,
