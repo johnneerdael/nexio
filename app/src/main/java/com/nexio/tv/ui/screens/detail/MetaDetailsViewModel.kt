@@ -11,6 +11,8 @@ import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.ImdbSettingsDataStore
+import com.nexio.tv.data.local.WatchedSeriesStateHolder
+import com.nexio.tv.data.local.expandSeriesContentIdAliases
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktCommentItemDto
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
@@ -90,6 +92,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val watchProgressRepository: WatchProgressRepository,
     private val traktScrobbleService: TraktScrobbleService,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    private val watchedSeriesStateHolder: WatchedSeriesStateHolder,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val itemId: String = savedStateHandle["itemId"] ?: ""
@@ -296,6 +299,7 @@ class MetaDetailsViewModel @Inject constructor(
                         state.copy(watchedEpisodes = watchedSet)
                     }
                 }
+                reevaluateSeriesWatchedBadge()
                 calculateNextToWatch()
             }
         }
@@ -527,6 +531,7 @@ class MetaDetailsViewModel @Inject constructor(
     private fun applyMeta(meta: Meta) {
         _uiState.update { state -> state.withRefreshedMeta(meta) }
 
+        reevaluateSeriesWatchedBadge()
         // Calculate next to watch after meta is loaded
         calculateNextToWatch()
     }
@@ -1681,6 +1686,32 @@ class MetaDetailsViewModel @Inject constructor(
             } else {
                 state.copy(userMessage = null, userMessageIsError = false)
             }
+        }
+    }
+
+    private fun reevaluateSeriesWatchedBadge() {
+        val meta = _uiState.value.meta ?: return
+        if (!meta.apiType.equals("series", ignoreCase = true) &&
+            !meta.apiType.equals("tv", ignoreCase = true)
+        ) {
+            return
+        }
+        val watchedEpisodes = _uiState.value.watchedEpisodes
+        val episodes = meta.videos.filter { video ->
+            (video.season ?: 0) > 0 && (video.episode ?: 0) > 0
+        }
+        if (episodes.isEmpty()) return
+
+        val ids = expandSeriesContentIdAliases(listOf(itemId, meta.id))
+        if (ids.isEmpty()) return
+
+        viewModelScope.launch {
+            watchedSeriesStateHolder.setSeriesWatched(
+                ids = ids,
+                watched = episodes.all { video ->
+                    (video.season!! to video.episode!!) in watchedEpisodes
+                }
+            )
         }
     }
 
