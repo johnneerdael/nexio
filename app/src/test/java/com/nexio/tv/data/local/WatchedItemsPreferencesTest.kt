@@ -1,9 +1,13 @@
 package com.nexio.tv.data.local
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.nexio.tv.domain.model.WatchedItem
+import com.google.gson.Gson
 import org.junit.Assert.assertEquals
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
@@ -23,8 +27,9 @@ class WatchedItemsPreferencesTest {
         )
         val storeFile = File.createTempFile("watched-items", ".preferences_pb")
         storeFile.deleteOnExit()
+        val dataStore = PreferenceDataStoreFactory.create(scope = backgroundScope) { storeFile }
         val preferences = WatchedItemsPreferences(
-            dataStore = PreferenceDataStoreFactory.create(scope = backgroundScope) { storeFile },
+            dataStore = dataStore,
             authState = authState
         )
         val aliceItem = watchedItem(
@@ -65,6 +70,82 @@ class WatchedItemsPreferencesTest {
         advanceUntilIdle()
 
         assertEquals(listOf(aliceItem), preferences.getAllItems())
+    }
+
+    @Test
+    fun `legacy watched items key migrates into the active session bucket`() = runTest {
+        val authState = MutableStateFlow(
+            TraktAuthState(
+                accessToken = "access",
+                refreshToken = "refresh",
+                username = "alice",
+                userSlug = "alice"
+            )
+        )
+        val storeFile = File.createTempFile("watched-items-legacy", ".preferences_pb")
+        storeFile.deleteOnExit()
+        val dataStore = PreferenceDataStoreFactory.create(scope = backgroundScope) { storeFile }
+        val preferences = WatchedItemsPreferences(
+            dataStore = dataStore,
+            authState = authState
+        )
+        val item = watchedItem(
+            contentId = "tmdb:101",
+            season = 1,
+            episode = 1,
+            watchedAt = 1_000L
+        )
+
+        dataStore.edit { store ->
+            store[stringSetPreferencesKey("watched_items")] = setOf(Gson().toJson(item))
+        }
+
+        assertEquals(listOf(item), preferences.getAllItems())
+
+        val stored = dataStore.data.first()
+        assertEquals(
+            setOf(Gson().toJson(item)),
+            stored[stringSetPreferencesKey("watched_items_alice")]
+        )
+        assertEquals(null, stored[stringSetPreferencesKey("watched_items")])
+    }
+
+    @Test
+    fun `token derived watched items bucket migrates when user metadata arrives`() = runTest {
+        val authState = MutableStateFlow(
+            TraktAuthState(
+                accessToken = "access",
+                refreshToken = "refresh",
+                username = null,
+                userSlug = null
+            )
+        )
+        val storeFile = File.createTempFile("watched-items-token", ".preferences_pb")
+        storeFile.deleteOnExit()
+        val dataStore = PreferenceDataStoreFactory.create(scope = backgroundScope) { storeFile }
+        val preferences = WatchedItemsPreferences(
+            dataStore = dataStore,
+            authState = authState
+        )
+        val item = watchedItem(
+            contentId = "tmdb:101",
+            season = 1,
+            episode = 1,
+            watchedAt = 1_000L
+        )
+
+        preferences.markAsWatched(item)
+        val tokenKey = "watched_items_" + traktSessionKeyForState(authState.value)
+        assertEquals(setOf(Gson().toJson(item)), dataStore.data.first()[stringSetPreferencesKey(tokenKey)])
+
+        authState.value = authState.value.copy(username = "alice", userSlug = "alice")
+        advanceUntilIdle()
+
+        assertEquals(listOf(item), preferences.getAllItems())
+
+        val stored = dataStore.data.first()
+        assertEquals(setOf(Gson().toJson(item)), stored[stringSetPreferencesKey("watched_items_alice")])
+        assertEquals(null, stored[stringSetPreferencesKey(tokenKey)])
     }
 
     @Test
