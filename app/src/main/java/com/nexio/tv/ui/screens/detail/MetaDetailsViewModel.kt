@@ -2007,8 +2007,7 @@ class MetaDetailsViewModel @Inject constructor(
                         availability = availability,
                         previousTrailerUrl = previousState.trailerUrl,
                         previousTrailerAudioUrl = previousState.trailerAudioUrl,
-                        previousTrailerExternalUrl = previousState.trailerExternalUrl,
-                        previousPendingExternalTrailerUrl = previousState.pendingExternalTrailerUrl
+                        previousTrailerExternalUrl = previousState.trailerExternalUrl
                     )
                 } else {
                     state.withSeasonMediaAvailability(
@@ -2086,8 +2085,7 @@ class MetaDetailsViewModel @Inject constructor(
                         availability = availability,
                         previousTrailerUrl = previousState.trailerUrl,
                         previousTrailerAudioUrl = previousState.trailerAudioUrl,
-                        previousTrailerExternalUrl = previousState.trailerExternalUrl,
-                        previousPendingExternalTrailerUrl = previousState.pendingExternalTrailerUrl
+                        previousTrailerExternalUrl = previousState.trailerExternalUrl
                     )
                 } else {
                     state.withSeasonMediaAvailability(

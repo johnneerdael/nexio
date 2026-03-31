@@ -8,7 +8,7 @@ import org.junit.Test
 class MetaDetailsSeasonMediaStateTest {
 
     @Test
-    fun `failed season recap attempt clears playback chrome and preserves previous trailer state`() {
+    fun `failed season recap attempt clears playback chrome without reviving pending external launch`() {
         val updated = MetaDetailsUiState(
             selectedSeason = 2,
             trailerUrl = "https://example.com/series.m3u8",
@@ -26,14 +26,13 @@ class MetaDetailsSeasonMediaStateTest {
             ),
             previousTrailerUrl = "https://example.com/series.m3u8",
             previousTrailerAudioUrl = "https://example.com/series-audio.m4a",
-            previousTrailerExternalUrl = "https://youtube.com/watch?v=series",
-            previousPendingExternalTrailerUrl = "https://youtube.com/watch?v=pending"
+            previousTrailerExternalUrl = "https://youtube.com/watch?v=series"
         )
 
         assertEquals("https://example.com/series.m3u8", updated.trailerUrl)
         assertEquals("https://example.com/series-audio.m4a", updated.trailerAudioUrl)
         assertEquals("https://youtube.com/watch?v=series", updated.trailerExternalUrl)
-        assertEquals("https://youtube.com/watch?v=pending", updated.pendingExternalTrailerUrl)
+        assertEquals(null, updated.pendingExternalTrailerUrl)
         assertFalse(updated.isTrailerPlaying)
         assertFalse(updated.showTrailerControls)
         assertFalse(updated.hideLogoDuringTrailer)
@@ -58,13 +57,13 @@ class MetaDetailsSeasonMediaStateTest {
             ),
             previousTrailerUrl = "https://example.com/series.m3u8",
             previousTrailerAudioUrl = "https://example.com/series-audio.m4a",
-            previousTrailerExternalUrl = "https://youtube.com/watch?v=series",
-            previousPendingExternalTrailerUrl = null
+            previousTrailerExternalUrl = "https://youtube.com/watch?v=series"
         )
 
         assertEquals("https://example.com/series.m3u8", updated.trailerUrl)
         assertEquals("https://example.com/series-audio.m4a", updated.trailerAudioUrl)
         assertEquals("https://youtube.com/watch?v=series", updated.trailerExternalUrl)
+        assertEquals(null, updated.pendingExternalTrailerUrl)
         assertFalse(updated.isTrailerPlaying)
         assertFalse(updated.showTrailerControls)
         assertFalse(updated.hideLogoDuringTrailer)
