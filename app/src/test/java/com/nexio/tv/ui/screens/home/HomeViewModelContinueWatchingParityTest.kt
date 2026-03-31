@@ -1,10 +1,10 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.data.local.WatchedSeriesEntry
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.WatchedItem
-import com.nexio.tv.data.local.WatchedSeriesEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -78,24 +78,68 @@ class HomeViewModelContinueWatchingParityTest {
     }
 
     @Test
-    fun `shouldPreservePersistedWatchedSeriesCache keeps persisted entries during bootstrap empty state`() {
-        val preserve = shouldPreservePersistedWatchedSeriesCache(
+    fun `resolveWatchedSeriesBootstrapWindow preserves persisted cache on first empty bootstrap read`() {
+        val decision = resolveWatchedSeriesBootstrapWindow(
             watchedItems = emptyList(),
             currentEntries = listOf(WatchedSeriesEntry(ids = setOf("tmdb:101", "tt1234567"))),
-            hasHydratedLocalWatchedItems = false
+            preserveOnFirstEmptyRead = true
         )
 
-        assertTrue(preserve)
+        assertTrue(decision.preservePersistedCache)
+        assertFalse(decision.preserveOnFirstEmptyRead)
     }
 
     @Test
-    fun `shouldPreservePersistedWatchedSeriesCache stops preserving once local watched items hydrate`() {
-        val preserve = shouldPreservePersistedWatchedSeriesCache(
+    fun `resolveWatchedSeriesBootstrapWindow treats second empty read as authoritative`() {
+        val firstRead = resolveWatchedSeriesBootstrapWindow(
             watchedItems = emptyList(),
             currentEntries = listOf(WatchedSeriesEntry(ids = setOf("tmdb:101", "tt1234567"))),
-            hasHydratedLocalWatchedItems = true
+            preserveOnFirstEmptyRead = true
+        )
+        val secondRead = resolveWatchedSeriesBootstrapWindow(
+            watchedItems = emptyList(),
+            currentEntries = listOf(WatchedSeriesEntry(ids = setOf("tmdb:101", "tt1234567"))),
+            preserveOnFirstEmptyRead = firstRead.preserveOnFirstEmptyRead
         )
 
-        assertFalse(preserve)
+        assertFalse(secondRead.preservePersistedCache)
+        assertFalse(secondRead.preserveOnFirstEmptyRead)
+    }
+
+    @Test
+    fun `resolveWatchedSeriesBootstrapWindow closes bootstrap window after non-empty read`() {
+        val decision = resolveWatchedSeriesBootstrapWindow(
+            watchedItems = listOf(
+                WatchedItem(
+                    contentId = "show-fully-watched",
+                    contentType = "series",
+                    title = "Show Fully Watched",
+                    season = 1,
+                    episode = 8,
+                    watchedAt = 1_000L
+                )
+            ),
+            currentEntries = listOf(WatchedSeriesEntry(ids = setOf("tmdb:101", "tt1234567"))),
+            preserveOnFirstEmptyRead = true
+        )
+
+        assertFalse(decision.preservePersistedCache)
+        assertFalse(decision.preserveOnFirstEmptyRead)
+    }
+
+    @Test
+    fun `shouldDiscardSeriesNextUpLookupResults drops results after session switch`() {
+        assertTrue(
+            shouldDiscardSeriesNextUpLookupResults(
+                launchedForSessionKey = "alice",
+                activeSessionKey = "bob"
+            )
+        )
+        assertFalse(
+            shouldDiscardSeriesNextUpLookupResults(
+                launchedForSessionKey = "alice",
+                activeSessionKey = "alice"
+            )
+        )
     }
 }
