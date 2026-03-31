@@ -177,9 +177,7 @@
     <string name="youtube_trailer_login_sign_out_subtitle">Remove the trailer auth session from this device</string>
     <string name="youtube_trailer_login_qr_title">Authorize This Device</string>
     <string name="youtube_trailer_login_qr_subtitle">Scan the QR code or open the verification URL on a phone or computer, then enter the code shown below.</string>
-    <string name="youtube_trailer_login_overlay_subtitle">Open the URL on your phone or computer, sign in with Google, then enter this exact TV code. Scanning the QR code alone is not enough.</string>
-    <string name="youtube_trailer_login_overlay_footer">Keep this screen open while Nexio polls for approval. If you close the overlay, use Show Activation Code to reopen it.</string>
-    <string name="youtube_trailer_login_overlay_meta">Expires: %1$s • Poll every %2$ss</string>
+    <string name="youtube_trailer_login_overlay_subtitle">Open the URL on your phone or computer, sign in with Google, then enter this exact TV code.</string>
     <string name="youtube_trailer_login_code_title">Activation Code</string>
     <string name="youtube_trailer_login_verification_url_title">Verification URL</string>
     <string name="youtube_trailer_login_code_expiry_title">Code Expires</string>

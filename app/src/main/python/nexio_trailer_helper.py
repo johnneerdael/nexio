@@ -34,12 +34,6 @@ def resolve_youtube_playback(
         headers["Origin"] = origin
     if referer:
         headers["Referer"] = referer
-    if page_id:
-        headers["X-Goog-PageId"] = page_id
-    if auth_user is not None and auth_user != "":
-        headers["X-Goog-AuthUser"] = str(auth_user)
-    if authorization_header:
-        headers["Authorization"] = authorization_header
     if headers:
         ydl_opts["http_headers"] = headers
 
