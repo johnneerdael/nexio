@@ -43,7 +43,10 @@ import com.nexio.tv.ui.screens.organization.OrganizationDetailScreen
 fun NexioNavHost(
     navController: NavHostController,
     startDestination: String = Screen.Home.route,
-    hideBuiltInHeaders: Boolean = false
+    hideBuiltInHeaders: Boolean = false,
+    idleScreensaverVisible: Boolean = false,
+    onModernHomeTrailerPlaybackStarted: () -> Unit = {},
+    onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit = {}
 ) {
     fun returnPlayerToLibrary() {
         val returnedToLibrary = navController.popBackStack(Screen.Library.route, inclusive = false)
@@ -127,6 +130,9 @@ fun NexioNavHost(
 
         composable(Screen.Home.route) {
             HomeScreen(
+                idleScreensaverVisible = idleScreensaverVisible,
+                onModernHomeTrailerPlaybackStarted = onModernHomeTrailerPlaybackStarted,
+                onModernHomeTrailerPlaybackActiveChanged = onModernHomeTrailerPlaybackActiveChanged,
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 },

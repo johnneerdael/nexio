@@ -128,9 +128,22 @@ internal fun shouldDismissModernHomeTrailerOnBack(
     expandedCardTrailerActive: Boolean
 ): Boolean = heroTrailerActive || expandedCardTrailerActive
 
+internal fun shouldUnlockModernHomeTrailerAutoplay(
+    trailerEnabled: Boolean,
+    autoplayEnabled: Boolean,
+    screensaverVisible: Boolean,
+    selectionStillFocused: Boolean,
+    lifecycleResumed: Boolean
+): Boolean = trailerEnabled &&
+    autoplayEnabled &&
+    !screensaverVisible &&
+    selectionStillFocused &&
+    lifecycleResumed
+
 @Composable
 internal fun ModernHomeContent(
     contentState: ModernHomeContentState,
+    idleScreensaverVisible: Boolean,
     focusState: HomeScreenFocusState,
     enrichingItemIdState: State<String?>,
     onNavigateToDetail: (String, String, String) -> Unit,
@@ -146,6 +159,8 @@ internal fun ModernHomeContent(
     onItemFocus: (MetaPreview) -> Unit = {},
     onPreloadAdjacentItem: (MetaPreview) -> Unit = {},
     onRequestTrailerPreview: (String, String, String?, String, String?) -> Unit,
+    onModernHomeTrailerPlaybackStarted: () -> Unit,
+    onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
     val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
@@ -370,6 +385,29 @@ internal fun ModernHomeContent(
     var expandedCatalogRowKey by remember { mutableStateOf<String?>(null) }
     var expansionInteractionNonce by remember { mutableIntStateOf(0) }
     var lastExternalTrailerLaunchKey by remember { mutableStateOf<String?>(null) }
+    var unlockedTrailerFocusKey by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(
+        focusedCatalogSelection?.focusKey,
+        contentState.focusedPosterBackdropTrailerEnabled,
+        contentState.homeTrailerAutoplayEnabled,
+        contentState.homeTrailerAutoplayDelaySeconds,
+        idleScreensaverVisible
+    ) {
+        unlockedTrailerFocusKey = null
+        val selection = focusedCatalogSelection ?: return@LaunchedEffect
+        delay(contentState.homeTrailerAutoplayDelaySeconds.coerceAtLeast(0) * 1000L)
+        if (shouldUnlockModernHomeTrailerAutoplay(
+                trailerEnabled = contentState.focusedPosterBackdropTrailerEnabled,
+                autoplayEnabled = contentState.homeTrailerAutoplayEnabled,
+                screensaverVisible = idleScreensaverVisible,
+                selectionStillFocused = focusedCatalogSelection?.focusKey == selection.focusKey,
+                lifecycleResumed = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            )
+        ) {
+            unlockedTrailerFocusKey = selection.focusKey
+        }
+    }
 
     LaunchedEffect(
         focusedCatalogSelection?.focusKey,
@@ -474,10 +512,14 @@ internal fun ModernHomeContent(
         focusedCatalogSelection?.payload?.trailerReleaseInfo,
         focusedCatalogSelection?.payload?.trailerApiType,
         focusedCatalogSelection?.payload?.fallbackTrailerYtId,
-        contentState.focusedPosterBackdropTrailerEnabled
+        contentState.focusedPosterBackdropTrailerEnabled,
+        contentState.homeTrailerAutoplayEnabled,
+        idleScreensaverVisible
     ) {
         val selection = focusedCatalogSelection ?: return@LaunchedEffect
         if (!contentState.focusedPosterBackdropTrailerEnabled) return@LaunchedEffect
+        if (!contentState.homeTrailerAutoplayEnabled) return@LaunchedEffect
+        if (idleScreensaverVisible) return@LaunchedEffect
         delay(140)
         if (focusedCatalogSelection?.focusKey != selection.focusKey) return@LaunchedEffect
         onRequestTrailerPreview(
@@ -632,9 +674,11 @@ internal fun ModernHomeContent(
             )
         }
         val heroTrailerItemId = focusedCatalogSelection?.payload?.itemId
+        val unlockedTrailerForFocusedItem = unlockedTrailerFocusKey == focusedCatalogSelection?.focusKey
         val heroTrailerPreviewUrl = if (
             contentState.focusedPosterBackdropTrailerEnabled &&
-            trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
+            trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
+            unlockedTrailerForFocusedItem
         ) {
             heroTrailerItemId?.let { contentState.trailerPreviewUrls[it] }
         } else {
@@ -642,7 +686,8 @@ internal fun ModernHomeContent(
         }
         val heroTrailerPreviewAudioUrl = if (
             contentState.focusedPosterBackdropTrailerEnabled &&
-            trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
+            trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
+            unlockedTrailerForFocusedItem
         ) {
             heroTrailerItemId?.let { contentState.trailerPreviewAudioUrls[it] }
         } else {
@@ -650,7 +695,8 @@ internal fun ModernHomeContent(
         }
         val heroTrailerExternalUrl = if (
             contentState.focusedPosterBackdropTrailerEnabled &&
-            trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
+            trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
+            unlockedTrailerForFocusedItem
         ) {
             heroTrailerItemId?.let { contentState.trailerPreviewExternalUrls[it] }
         } else {
@@ -661,12 +707,37 @@ internal fun ModernHomeContent(
         val expandedCardTrailerActive = if (
             trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD &&
             !expandedCatalogFocusKey.isNullOrBlank() &&
-            expandedTrailerItemId != null
+            expandedTrailerItemId != null &&
+            unlockedTrailerForFocusedItem
         ) {
             !contentState.trailerPreviewUrls[expandedTrailerItemId].isNullOrBlank() ||
                 !contentState.trailerPreviewExternalUrls[expandedTrailerItemId].isNullOrBlank()
         } else {
             false
+        }
+        val internalHomeTrailerPlaying = if (
+            trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
+        ) {
+            !heroTrailerPreviewUrl.isNullOrBlank()
+        } else {
+            val expandedId = expandedTrailerItemId
+            !expandedCatalogFocusKey.isNullOrBlank() &&
+                unlockedTrailerForFocusedItem &&
+                expandedId != null &&
+                !contentState.trailerPreviewUrls[expandedId].isNullOrBlank()
+        }
+        var previousHomeTrailerPlaying by remember { mutableStateOf(false) }
+        LaunchedEffect(internalHomeTrailerPlaying) {
+            onModernHomeTrailerPlaybackActiveChanged(internalHomeTrailerPlaying)
+            if (internalHomeTrailerPlaying && !previousHomeTrailerPlaying) {
+                onModernHomeTrailerPlaybackStarted()
+            }
+            previousHomeTrailerPlaying = internalHomeTrailerPlaying
+        }
+        DisposableEffect(Unit) {
+            onDispose {
+                onModernHomeTrailerPlaybackActiveChanged(false)
+            }
         }
         BackHandler(
             enabled = shouldDismissModernHomeTrailerOnBack(
@@ -867,6 +938,7 @@ internal fun ModernHomeContent(
                         },
                         focusedPosterBackdropTrailerPlaybackTarget =
                             contentState.focusedPosterBackdropTrailerPlaybackTarget,
+                        trailerPlaybackUnlockedFocusKey = unlockedTrailerFocusKey,
                         focusedPosterBackdropTrailerMuted =
                             contentState.focusedPosterBackdropTrailerMuted,
                         trailerPreviewUrls = contentState.trailerPreviewUrls,

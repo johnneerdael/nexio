@@ -20,6 +20,7 @@ import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
+import com.nexio.tv.data.local.TrailerSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
@@ -80,6 +81,7 @@ class HomeViewModel @Inject constructor(
     internal val tmdbService: TmdbService,
     internal val tmdbMetadataService: TmdbMetadataService,
     internal val trailerService: TrailerService,
+    internal val trailerSettingsDataStore: TrailerSettingsDataStore,
     internal val accountSyncRefreshNotifier: AccountSyncRefreshNotifier,
     internal val homeCatalogSnapshotStore: HomeCatalogSnapshotStore,
     internal val homeCatalogRefreshCoordinator: HomeCatalogRefreshCoordinator,
@@ -244,6 +246,7 @@ class HomeViewModel @Inject constructor(
         restorePersistedSyntheticCatalogRows()
         restorePersistedCatalogSnapshot()
         observeLayoutPreferences()
+        observeTrailerAutoplaySettings()
         observeExternalMetaPrefetchPreference()
         loadHomeCatalogOrderPreference()
         loadDisabledHomeCatalogPreference()
@@ -309,6 +312,19 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun observeLayoutPreferences() = observeLayoutPreferencesPipeline()
+
+    private fun observeTrailerAutoplaySettings() {
+        viewModelScope.launch {
+            trailerSettingsDataStore.settings.collectLatest { settings ->
+                _uiState.update { state ->
+                    state.copy(
+                        homeTrailerAutoplayEnabled = settings.enabled,
+                        homeTrailerAutoplayDelaySeconds = settings.delaySeconds
+                    )
+                }
+            }
+        }
+    }
 
     private fun observeExternalMetaPrefetchPreference() = observeExternalMetaPrefetchPreferencePipeline()
 
