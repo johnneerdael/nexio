@@ -15,5 +15,6 @@ Expected staged payload per ABI:
 
 The Android app selects the first matching ABI from `Build.SUPPORTED_ABIS`, copies that
 runtime tree into app-private storage, then runs embedded `yt_dlp` against the live
-YouTube WebView cookie header plus the staged JS runtime executable to resolve
-authenticated trailer playback URLs.
+YouTube bearer authorization header, optional `X-Goog-PageId` and `X-Goog-AuthUser`
+values, plus the staged JS runtime executable to resolve authenticated trailer
+playback URLs.

@@ -56,15 +56,34 @@ fun parseHelperStdout(stdout: String): TrailerHelperPlaybackResult {
     )
 }
 
+internal fun buildTrailerHelperInvocationArgs(
+    request: TrailerHelperRequest,
+    jsRuntimeName: String,
+    jsRuntimePath: String
+): Array<Any?> {
+    return arrayOf(
+        request.youtubeUrl,
+        request.authorizationHeader,
+        request.pageId,
+        request.authUser,
+        jsRuntimeName,
+        jsRuntimePath,
+        YOUTUBE_STABLE_WEB_USER_AGENT,
+        YOUTUBE_STABLE_ACCEPT_LANGUAGE,
+        YOUTUBE_STABLE_ORIGIN,
+        YOUTUBE_STABLE_REFERER
+    )
+}
+
 @Singleton
 class BundledTrailerHelper @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     suspend fun resolve(request: TrailerHelperRequest): TrailerHelperResult = withContext(Dispatchers.IO) {
-        if (request.cookieHeader.isBlank()) {
-            Log.w(TAG, "Embedded trailer helper skipped for blank cookie header")
+        if (request.authorizationHeader.isBlank()) {
+            Log.w(TAG, "Embedded trailer helper skipped for blank authorization header")
             return@withContext TrailerHelperResult.Failure(
-                reason = TrailerHelperFailureReason.CookieMissing
+                reason = TrailerHelperFailureReason.AuthorizationMissing
             )
         }
 
@@ -86,14 +105,11 @@ class BundledTrailerHelper @Inject constructor(
                 python.getModule("nexio_trailer_helper")
                     .callAttr(
                         "resolve_youtube_playback",
-                        request.youtubeUrl,
-                        request.cookieHeader,
-                        runtime.jsRuntimeName,
-                        runtime.jsRuntimeExecutable.absolutePath,
-                        YOUTUBE_STABLE_WEB_USER_AGENT,
-                        YOUTUBE_STABLE_ACCEPT_LANGUAGE,
-                        YOUTUBE_STABLE_ORIGIN,
-                        YOUTUBE_STABLE_REFERER
+                        *buildTrailerHelperInvocationArgs(
+                            request = request,
+                            jsRuntimeName = runtime.jsRuntimeName,
+                            jsRuntimePath = runtime.jsRuntimeExecutable.absolutePath
+                        )
                     )
                     .toString()
             }.getOrElse { error ->

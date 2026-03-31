@@ -71,6 +71,8 @@ android {
 
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
         buildConfigField("String", "TRAILER_API_URL", "\"${localProperties.getProperty("TRAILER_API_URL", "")}\"")
+        buildConfigField("String", "YOUTUBE_TRAILER_CLIENT_ID", "\"${resolveProperty(devProperties, localProperties, "YOUTUBE_TRAILER_CLIENT_ID")}\"")
+        buildConfigField("String", "YOUTUBE_TRAILER_CLIENT_SECRET", "\"${resolveProperty(devProperties, localProperties, "YOUTUBE_TRAILER_CLIENT_SECRET")}\"")
         buildConfigField("String", "REAL_DEBRID_CLIENT_ID", "\"${resolveProperty(devProperties, localProperties, "REAL_DEBRID_CLIENT_ID")}\"")
         buildConfigField("String", "REAL_DEBRID_CLIENT_SECRET", "\"${resolveProperty(devProperties, localProperties, "REAL_DEBRID_CLIENT_SECRET")}\"")
         buildConfigField("String", "TRAKT_CLIENT_ID", "\"${localProperties.getProperty("TRAKT_CLIENT_ID", "")}\"")
@@ -135,6 +137,8 @@ android {
             buildConfigField("String", "TV_LOGIN_WEB_BASE_URL", "\"${devProperties.getProperty("TV_LOGIN_WEB_BASE_URL", "https://app.nuvio.tv/tv-login")}\"")
             buildConfigField("String", "INTRODB_API_URL", "\"${devProperties.getProperty("INTRODB_API_URL", "")}\"")
             buildConfigField("String", "TRAILER_API_URL", "\"${devProperties.getProperty("TRAILER_API_URL", "")}\"")
+            buildConfigField("String", "YOUTUBE_TRAILER_CLIENT_ID", "\"${resolveProperty(devProperties, localProperties, "YOUTUBE_TRAILER_CLIENT_ID")}\"")
+            buildConfigField("String", "YOUTUBE_TRAILER_CLIENT_SECRET", "\"${resolveProperty(devProperties, localProperties, "YOUTUBE_TRAILER_CLIENT_SECRET")}\"")
         }
         release {
             isMinifyEnabled = true
@@ -152,6 +156,8 @@ android {
             buildConfigField("String", "TV_LOGIN_WEB_BASE_URL", "\"${localProperties.getProperty("TV_LOGIN_WEB_BASE_URL", "https://app.nuvio.tv/tv-login")}\"")
             buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
             buildConfigField("String", "TRAILER_API_URL", "\"${localProperties.getProperty("TRAILER_API_URL", "")}\"")
+            buildConfigField("String", "YOUTUBE_TRAILER_CLIENT_ID", "\"${resolveProperty(devProperties, localProperties, "YOUTUBE_TRAILER_CLIENT_ID")}\"")
+            buildConfigField("String", "YOUTUBE_TRAILER_CLIENT_SECRET", "\"${resolveProperty(devProperties, localProperties, "YOUTUBE_TRAILER_CLIENT_SECRET")}\"")
         }
     }
 
