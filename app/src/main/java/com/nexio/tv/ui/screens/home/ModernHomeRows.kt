@@ -240,6 +240,7 @@ internal fun ModernRowSection(
     effectiveExpandEnabled: Boolean,
     expandedCatalogFocusKeyForRow: String?,
     focusedPosterBackdropTrailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget,
+    trailerPlaybackUnlockedFocusKey: String?,
     focusedPosterBackdropTrailerMuted: Boolean,
     trailerPreviewUrls: Map<String, String>,
     trailerPreviewAudioUrls: Map<String, String>,
@@ -486,7 +487,8 @@ internal fun ModernRowSection(
                             val isWatched = remember(metaPreview.id) { isCatalogItemWatched(metaPreview) }
                             val playTrailerInExpandedCard =
                                 focusedPosterBackdropTrailerPlaybackTarget ==
-                                    FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD
+                                    FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD &&
+                                    trailerPlaybackUnlockedFocusKey == payload.focusKey
                             val trailerPreviewUrl = if (playTrailerInExpandedCard) {
                                 trailerPreviewUrls[payload.itemId]
                             } else {

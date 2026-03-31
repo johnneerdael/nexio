@@ -71,6 +71,9 @@ private const val HOME_STARTUP_CONTENT_TIMEOUT_MS = 5_000L
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
+    idleScreensaverVisible: Boolean = false,
+    onModernHomeTrailerPlaybackStarted: () -> Unit = {},
+    onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit = {},
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit = { item ->
         onNavigateToDetail(
@@ -151,6 +154,15 @@ fun HomeScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    DisposableEffect(uiState.homeLayout, onModernHomeTrailerPlaybackActiveChanged) {
+        if (uiState.homeLayout != HomeLayout.MODERN) {
+            onModernHomeTrailerPlaybackActiveChanged(false)
+        }
+        onDispose {
+            onModernHomeTrailerPlaybackActiveChanged(false)
         }
     }
 
@@ -284,6 +296,9 @@ fun HomeScreen(
                             HomeLayout.MODERN -> ModernHomeRoute(
                                 viewModel = viewModel,
                                 uiState = uiState,
+                                idleScreensaverVisible = idleScreensaverVisible,
+                                onModernHomeTrailerPlaybackStarted = onModernHomeTrailerPlaybackStarted,
+                                onModernHomeTrailerPlaybackActiveChanged = onModernHomeTrailerPlaybackActiveChanged,
                                 onNavigateToDetail = onNavigateToDetail,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
@@ -454,6 +469,9 @@ private fun GridHomeRoute(
 private fun ModernHomeRoute(
     viewModel: HomeViewModel,
     uiState: HomeUiState,
+    idleScreensaverVisible: Boolean,
+    onModernHomeTrailerPlaybackStarted: () -> Unit,
+    onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit,
@@ -472,6 +490,8 @@ private fun ModernHomeRoute(
         uiState.focusedPosterBackdropTrailerEnabled,
         uiState.focusedPosterBackdropTrailerMuted,
         uiState.focusedPosterBackdropTrailerPlaybackTarget,
+        uiState.homeTrailerAutoplayEnabled,
+        uiState.homeTrailerAutoplayDelaySeconds,
         uiState.posterCardWidthDp,
         uiState.posterCardHeightDp,
         uiState.posterCardCornerRadiusDp,
@@ -490,6 +510,8 @@ private fun ModernHomeRoute(
             focusedPosterBackdropTrailerEnabled = uiState.focusedPosterBackdropTrailerEnabled,
             focusedPosterBackdropTrailerMuted = uiState.focusedPosterBackdropTrailerMuted,
             focusedPosterBackdropTrailerPlaybackTarget = uiState.focusedPosterBackdropTrailerPlaybackTarget,
+            homeTrailerAutoplayEnabled = uiState.homeTrailerAutoplayEnabled,
+            homeTrailerAutoplayDelaySeconds = uiState.homeTrailerAutoplayDelaySeconds,
             posterCardWidthDp = uiState.posterCardWidthDp,
             posterCardHeightDp = uiState.posterCardHeightDp,
             posterCardCornerRadiusDp = uiState.posterCardCornerRadiusDp,
@@ -543,6 +565,7 @@ private fun ModernHomeRoute(
     }
     ModernHomeContent(
         contentState = modernContentState,
+        idleScreensaverVisible = idleScreensaverVisible,
         focusState = focusState,
         enrichingItemIdState = enrichingItemIdState,
         onNavigateToDetail = onNavigateToDetail,
@@ -558,6 +581,8 @@ private fun ModernHomeRoute(
         onItemFocus = remember(viewModel) { { item -> viewModel.onItemFocus(item) } },
         onPreloadAdjacentItem = preloadAdjacentItem,
         onRequestTrailerPreview = requestTrailerPreview,
+        onModernHomeTrailerPlaybackStarted = onModernHomeTrailerPlaybackStarted,
+        onModernHomeTrailerPlaybackActiveChanged = onModernHomeTrailerPlaybackActiveChanged,
         onSaveFocusState = saveModernFocusState
     )
 }

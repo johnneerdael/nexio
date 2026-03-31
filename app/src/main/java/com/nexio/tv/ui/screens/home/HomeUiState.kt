@@ -34,6 +34,8 @@ data class HomeUiState(
     val focusedPosterBackdropTrailerMuted: Boolean = true,
     val focusedPosterBackdropTrailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget =
         FocusedPosterTrailerPlaybackTarget.HERO_MEDIA,
+    val homeTrailerAutoplayEnabled: Boolean = true,
+    val homeTrailerAutoplayDelaySeconds: Int = 7,
     val posterCardWidthDp: Int = 126,
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12,
