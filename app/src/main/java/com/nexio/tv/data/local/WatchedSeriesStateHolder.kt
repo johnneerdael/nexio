@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.data.repository.parseContentIds
+import java.security.MessageDigest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -13,7 +14,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -44,20 +47,54 @@ internal fun traktSessionIdentityForState(state: TraktAuthState): TraktSessionId
     val sessionIdentity = state.sessionIdentity
         ?.trim()
         ?.takeIf { it.isNotBlank() }
+    val legacyAuthKey = legacyAuthHashSessionKeyForState(state)
     return when {
-        namedKey != null && sessionIdentity != null && namedKey != sessionIdentity -> {
+        namedKey != null -> {
             TraktSessionIdentity(
                 primaryKey = namedKey,
-                migrationKeys = listOf(sessionIdentity)
+                migrationKeys = buildList {
+                    if (sessionIdentity != null && sessionIdentity != namedKey) {
+                        add(sessionIdentity)
+                    }
+                    add(GUEST_TRAKT_SESSION_KEY)
+                    if (
+                        legacyAuthKey != null &&
+                        legacyAuthKey != namedKey &&
+                        legacyAuthKey != sessionIdentity
+                    ) {
+                        add(legacyAuthKey)
+                    }
+                }.distinct()
             )
         }
-        namedKey != null -> TraktSessionIdentity(primaryKey = namedKey)
         sessionIdentity != null -> TraktSessionIdentity(
             primaryKey = sessionIdentity,
-            migrationKeys = listOf(GUEST_TRAKT_SESSION_KEY)
+            migrationKeys = buildList {
+                add(GUEST_TRAKT_SESSION_KEY)
+                if (legacyAuthKey != null && legacyAuthKey != sessionIdentity) {
+                    add(legacyAuthKey)
+                }
+            }.distinct()
         )
         else -> TraktSessionIdentity(primaryKey = GUEST_TRAKT_SESSION_KEY)
     }
+}
+
+internal fun legacyAuthHashSessionKeyForState(state: TraktAuthState): String? {
+    val tokenMaterial = state.refreshToken
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?: state.accessToken
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        ?: return null
+    return "auth_" + sha256Hex(tokenMaterial).take(16)
+}
+
+private fun sha256Hex(value: String): String {
+    return MessageDigest.getInstance("SHA-256")
+        .digest(value.toByteArray(Charsets.UTF_8))
+        .joinToString(separator = "") { byte -> "%02x".format(byte) }
 }
 
 @Singleton
@@ -198,11 +235,15 @@ class WatchedSeriesStateHolder @Inject constructor(
     }
 
     private suspend fun currentSessionIdentity(): TraktSessionIdentity {
-        return sessionIdentities().first()
+        traktAuthDataStore.ensureSessionIdentityBackfilled()
+        return traktAuthDataStore.state.map(::traktSessionIdentityForState).first()
     }
 
     private fun sessionIdentities(): Flow<TraktSessionIdentity> {
-        return traktAuthDataStore.state.map(::traktSessionIdentityForState)
+        return flow {
+            traktAuthDataStore.ensureSessionIdentityBackfilled()
+            emitAll(traktAuthDataStore.state.map(::traktSessionIdentityForState))
+        }
     }
 
     private fun switchToSession(identity: TraktSessionIdentity) {
