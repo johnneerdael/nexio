@@ -270,6 +270,46 @@ class WatchedItemsPreferencesTest {
     }
 
     @Test
+    fun `all legacy auth hash buckets migrate after session identity backfill`() = runTest {
+        val authStoreFile = File.createTempFile("trakt-auth-multi-upgrade", ".preferences_pb")
+        authStoreFile.deleteOnExit()
+        val authStoreBacking = PreferenceDataStoreFactory.create(scope = backgroundScope) { authStoreFile }
+        authStoreBacking.edit { store ->
+            store[androidx.datastore.preferences.core.stringPreferencesKey("access_token")] = "access"
+            store[androidx.datastore.preferences.core.stringPreferencesKey("refresh_token")] = "refresh"
+        }
+        val authDataStore = TraktAuthDataStore(dataStore = authStoreBacking)
+        val storeFile = File.createTempFile("watched-items-auth-hash-multi", ".preferences_pb")
+        storeFile.deleteOnExit()
+        val dataStore = PreferenceDataStoreFactory.create(scope = backgroundScope) { storeFile }
+        val preferences = WatchedItemsPreferences(
+            dataStore = dataStore,
+            authState = authDataStore.state,
+            ensureSessionIdentityBackfilled = authDataStore::ensureSessionIdentityBackfilled
+        )
+        val firstItem = watchedItem(contentId = "tmdb:101", season = 1, episode = 1, watchedAt = 1_000L)
+        val secondItem = watchedItem(contentId = "tt1234567", season = 1, episode = 2, watchedAt = 2_000L)
+        val currentLegacyKey = "watched_items_${legacyAuthHashSessionKeyForState(TraktAuthState(accessToken = "access", refreshToken = "refresh"))}"
+        val olderLegacyKey = "watched_items_${legacyAuthHashSessionKeyForState(TraktAuthState(accessToken = "older-access", refreshToken = "older-refresh"))}"
+
+        dataStore.edit { store ->
+            store[stringSetPreferencesKey(currentLegacyKey)] = setOf(Gson().toJson(firstItem))
+            store[stringSetPreferencesKey(olderLegacyKey)] = setOf(Gson().toJson(secondItem))
+        }
+
+        assertEquals(listOf(firstItem, secondItem), preferences.getAllItems())
+
+        val sessionIdentity = authDataStore.state.first().sessionIdentity!!
+        val stored = dataStore.data.first()
+        assertEquals(
+            setOf(Gson().toJson(firstItem), Gson().toJson(secondItem)),
+            stored[stringSetPreferencesKey("watched_items_${sessionIdentity.lowercase()}")]
+        )
+        assertEquals(null, stored[stringSetPreferencesKey(currentLegacyKey)])
+        assertEquals(null, stored[stringSetPreferencesKey(olderLegacyKey)])
+    }
+
+    @Test
     fun `removeWatchedItems clears all episode rows for show-level alias clear`() {
         val items = listOf(
             watchedItem(contentId = "tmdb:101", season = 1, episode = 1, watchedAt = 1_000L),
