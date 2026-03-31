@@ -22,30 +22,29 @@ class WatchedSeriesStateHolder @Inject constructor(
 ) {
     companion object {
         private const val PREFS_NAME = "watched_series_state"
-        private const val KEY_PREFIX = "entries_"
+        private const val WATCHED_KEY_PREFIX = "entries_"
+        private const val KNOWN_KEY_PREFIX = "known_entries_"
     }
 
     private val gson = Gson()
     private val _entries = MutableStateFlow<List<WatchedSeriesEntry>>(emptyList())
     val entries: StateFlow<List<WatchedSeriesEntry>> = _entries.asStateFlow()
+    private val knownEntries = MutableStateFlow<List<WatchedSeriesEntry>>(emptyList())
 
     suspend fun loadFromDisk() {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val raw = prefs.getString(prefKeyForCurrentSession(), null).orEmpty()
-        if (raw.isBlank()) {
-            _entries.value = emptyList()
-            return
-        }
-        val type = object : TypeToken<List<WatchedSeriesEntry>>() {}.type
-        val restored = runCatching {
-            gson.fromJson<List<WatchedSeriesEntry>>(raw, type).orEmpty()
-        }.getOrDefault(emptyList())
-        _entries.value = mergeWatchedSeriesEntries(restored)
+        val watchedKey = prefKeyForCurrentSession(prefix = WATCHED_KEY_PREFIX)
+        val knownKey = prefKeyForCurrentSession(prefix = KNOWN_KEY_PREFIX)
+        val restoredWatched = decodeEntries(prefs.getString(watchedKey, null).orEmpty())
+        val restoredKnown = decodeEntries(prefs.getString(knownKey, null).orEmpty())
+        _entries.value = restoredWatched
+        knownEntries.value = mergeWatchedSeriesEntries(restoredKnown + restoredWatched)
     }
 
     suspend fun setSeriesWatched(ids: Collection<String>, watched: Boolean) {
         val normalizedIds = expandSeriesContentIdAliases(ids)
         if (normalizedIds.isEmpty()) return
+        rememberSeriesIds(normalizedIds)
         val updated = if (watched) {
             mergeWatchedSeriesEntries(_entries.value + WatchedSeriesEntry(normalizedIds))
         } else {
@@ -54,6 +53,15 @@ class WatchedSeriesStateHolder @Inject constructor(
             }
         }
         persist(updated)
+    }
+
+    suspend fun rememberSeriesIds(ids: Collection<String>) {
+        val normalizedIds = expandSeriesContentIdAliases(ids)
+        if (normalizedIds.isEmpty()) return
+        val updated = mergeWatchedSeriesEntries(
+            knownEntries.value + WatchedSeriesEntry(normalizedIds)
+        )
+        persistKnown(updated)
     }
 
     suspend fun applyResolvedStates(
@@ -89,7 +97,7 @@ class WatchedSeriesStateHolder @Inject constructor(
     fun matchingEntryIds(contentId: String): Set<String> {
         val aliases = expandSeriesContentIdAliases(listOf(contentId))
         if (aliases.isEmpty()) return emptySet()
-        val entry = _entries.value.firstOrNull { candidate ->
+        val entry = knownEntries.value.firstOrNull { candidate ->
             candidate.ids.any { it in aliases }
         }
         return entry?.ids.orEmpty() + aliases
@@ -97,16 +105,37 @@ class WatchedSeriesStateHolder @Inject constructor(
 
     private suspend fun persist(entries: List<WatchedSeriesEntry>) {
         _entries.value = mergeWatchedSeriesEntries(entries)
+        persistKnown(mergeWatchedSeriesEntries(knownEntries.value + _entries.value))
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit()
             .putString(
-                prefKeyForCurrentSession(),
+                prefKeyForCurrentSession(prefix = WATCHED_KEY_PREFIX),
                 gson.toJson(_entries.value)
             )
             .apply()
     }
 
-    private suspend fun prefKeyForCurrentSession(): String {
+    private suspend fun persistKnown(entries: List<WatchedSeriesEntry>) {
+        knownEntries.value = mergeWatchedSeriesEntries(entries)
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString(
+                prefKeyForCurrentSession(prefix = KNOWN_KEY_PREFIX),
+                gson.toJson(knownEntries.value)
+            )
+            .apply()
+    }
+
+    private fun decodeEntries(raw: String): List<WatchedSeriesEntry> {
+        if (raw.isBlank()) return emptyList()
+        val type = object : TypeToken<List<WatchedSeriesEntry>>() {}.type
+        return runCatching {
+            gson.fromJson<List<WatchedSeriesEntry>>(raw, type).orEmpty()
+        }.getOrDefault(emptyList())
+            .let(::mergeWatchedSeriesEntries)
+    }
+
+    private suspend fun prefKeyForCurrentSession(prefix: String): String {
         val state = traktAuthDataStore.state.first()
         val sessionId = state.userSlug
             ?.trim()
@@ -115,7 +144,7 @@ class WatchedSeriesStateHolder @Inject constructor(
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
             ?: "guest"
-        return KEY_PREFIX + sessionId.lowercase()
+        return prefix + sessionId.lowercase()
     }
 }
 
