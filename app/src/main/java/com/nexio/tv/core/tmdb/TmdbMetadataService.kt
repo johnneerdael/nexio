@@ -35,6 +35,58 @@ import javax.inject.Singleton
 import dagger.hilt.android.qualifiers.ApplicationContext
 
 private const val TAG = "TmdbMetadataService"
+private val DEFAULT_IMAGE_LANGUAGE_REGIONS = mapOf(
+    "pt" to "PT",
+    "es" to "ES"
+)
+
+internal fun normalizeTmdbLanguageTag(language: String?): String {
+    val normalized = language
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?.replace('_', '-')
+        ?: return "en-US"
+    val parts = normalized.split('-').filter { it.isNotBlank() }
+    if (parts.isEmpty()) return "en-US"
+    val baseLanguage = parts.first().lowercase(Locale.US)
+    if (baseLanguage == "es" && parts.getOrNull(1)?.equals("419", ignoreCase = true) == true) {
+        return "es-MX"
+    }
+    if (parts.size == 1) return baseLanguage
+
+    val normalizedTail = parts.drop(1).map { part ->
+        when {
+            part.length == 4 && part.all(Char::isLetter) ->
+                part.lowercase(Locale.US).replaceFirstChar { it.titlecase(Locale.US) }
+            (part.length == 2 && part.all(Char::isLetter)) ||
+                (part.length == 3 && part.all(Char::isDigit)) ->
+                part.uppercase(Locale.US)
+            else -> part
+        }
+    }
+    return (listOf(baseLanguage) + normalizedTail).joinToString("-")
+}
+
+internal fun selectBestLocalizedImagePath(
+    images: List<TmdbImage>,
+    normalizedLanguage: String
+): String? {
+    if (images.isEmpty()) return null
+    val languageCode = normalizedLanguage.substringBefore("-")
+    val regionCode =
+        normalizedLanguage.substringAfter("-", "").uppercase(Locale.US).takeIf { it.length == 2 }
+            ?: DEFAULT_IMAGE_LANGUAGE_REGIONS[languageCode]
+    return images
+        .sortedWith(
+            compareByDescending<TmdbImage> { it.iso6391 == languageCode && it.iso31661 == regionCode }
+                .thenByDescending { it.iso6391 == languageCode && it.iso31661 == null }
+                .thenByDescending { it.iso6391 == languageCode }
+                .thenByDescending { it.iso6391 == "en" }
+                .thenByDescending { it.iso6391 == null }
+        )
+        .firstOrNull()
+        ?.filePath
+}
 
 @Singleton
 class TmdbMetadataService @Inject constructor(
@@ -80,9 +132,9 @@ class TmdbMetadataService @Inject constructor(
 
             try {
                 val includeImageLanguage = buildString {
-                    append(normalizedLanguage.substringBefore("-"))
-                    append(",")
                     append(normalizedLanguage)
+                    append(",")
+                    append(normalizedLanguage.substringBefore("-"))
                     append(",en,null")
                 }
 
@@ -173,16 +225,12 @@ class TmdbMetadataService @Inject constructor(
                 val collectionId = details?.belongsToCollection?.id
                 val collectionName = details?.belongsToCollection?.name
 
-                val logoPath = images?.logos
-                    ?.sortedWith(
-                        compareByDescending<com.nexio.tv.data.remote.api.TmdbImage> {
-                            it.iso6391 == normalizedLanguage.substringBefore("-")
-                        }
-                            .thenByDescending { it.iso6391 == "en" }
-                            .thenByDescending { it.iso6391 == null }
+                val logoPath = images?.logos?.let { imageList ->
+                    selectBestLocalizedImagePath(
+                        images = imageList,
+                        normalizedLanguage = normalizedLanguage
                     )
-                    ?.firstOrNull()
-                    ?.filePath
+                }
 
                 val logo = buildImageUrl(logoPath, size = "w500")
 
@@ -391,9 +439,9 @@ class TmdbMetadataService @Inject constructor(
         }
 
         val includeImageLanguage = buildString {
-            append(normalizedLanguage.substringBefore("-"))
-            append(",")
             append(normalizedLanguage)
+            append(",")
+            append(normalizedLanguage.substringBefore("-"))
             append(",en,null")
         }
 
@@ -558,9 +606,9 @@ class TmdbMetadataService @Inject constructor(
             val sortedParts = rawParts.sortedBy { it.releaseDate ?: "9999" }
             
             val includeImageLanguage = buildString {
-                append(normalizedLanguage.substringBefore("-"))
-                append(",")
                 append(normalizedLanguage)
+                append(",")
+                append(normalizedLanguage.substringBefore("-"))
                 append(",en,null")
             }
 
@@ -622,11 +670,7 @@ class TmdbMetadataService @Inject constructor(
     }
 
     private fun normalizeTmdbLanguage(language: String?): String {
-        return language
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?.replace('_', '-')
-            ?: "en-US"
+        return normalizeTmdbLanguageTag(language)
     }
 
     fun currentTmdbLanguageTag(): String {
@@ -647,23 +691,6 @@ class TmdbMetadataService @Inject constructor(
     ): String {
         if (activeProvider == null) return "native"
         return "${activeProvider.provider.name}:${activeProvider.apiKey.hashCode()}"
-    }
-
-    private fun selectBestLocalizedImagePath(
-        images: List<TmdbImage>,
-        normalizedLanguage: String
-    ): String? {
-        if (images.isEmpty()) return null
-        val languageCode = normalizedLanguage.substringBefore("-")
-        return images
-            .sortedWith(
-                compareByDescending<TmdbImage> { it.iso6391 == normalizedLanguage }
-                    .thenByDescending { it.iso6391 == languageCode }
-                    .thenByDescending { it.iso6391 == "en" }
-                    .thenByDescending { it.iso6391 == null }
-            )
-            .firstOrNull()
-            ?.filePath
     }
 
     suspend fun fetchPersonDetail(

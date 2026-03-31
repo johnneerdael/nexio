@@ -462,7 +462,7 @@ internal fun ModernRowSection(
                         is ModernPayload.Catalog -> {
                             val metaPreview = item.metaPreview ?: return@itemsIndexed
                             val nextCatalogItem = row.items.getOrNull(index + 1)?.metaPreview
-                            val isWatched = remember(metaPreview.id) { isCatalogItemWatched(metaPreview) }
+                            val isWatched = isCatalogItemWatched(metaPreview)
                             ModernCatalogRowItem(
                                 rowKey = row.key,
                                 item = item,
@@ -590,7 +590,6 @@ private fun ModernCarouselCard(
             !landscapeLogoLoadFailed
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }
-    val backgroundCardColor = NexioColors.BackgroundCard
     val focusRingColor = NexioColors.FocusRing
     val titleMedium = MaterialTheme.typography.titleMedium
     val focusedBorder = remember(cardShape, focusRingColor) {
@@ -655,8 +654,8 @@ private fun ModernCarouselCard(
                 },
             shape = CardDefaults.shape(shape = cardShape),
             colors = CardDefaults.colors(
-                containerColor = backgroundCardColor,
-                focusedContainerColor = backgroundCardColor
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent
             ),
             border = CardDefaults.border(
                 focusedBorder = focusedBorder

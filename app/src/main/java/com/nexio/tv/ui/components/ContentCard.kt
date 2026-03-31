@@ -257,8 +257,8 @@ fun ContentCard(
                 ),
             shape = CardDefaults.shape(shape = cardShape),
             colors = CardDefaults.colors(
-                containerColor = NexioColors.BackgroundCard,
-                focusedContainerColor = NexioColors.BackgroundCard
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent
             ),
             border = CardDefaults.border(
                 focusedBorder = Border(
