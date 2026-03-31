@@ -9,25 +9,32 @@ import org.junit.Test
 class MainActivityIdleScreensaverTest {
 
     @Test
-    fun `home route is not eligible while modern home trailer is active`() {
-        assertFalse(
-            isIdleScreensaverEligibleRoute(
-                currentRoute = Screen.Home.route,
-                playbackIdleSnapshot = PlaybackIdleGateSnapshot(),
-                homeTrailerPlaybackActive = true,
-                detailTrailerPlaybackActive = false
+    fun `idle timer resets when in app trailer starts`() {
+        assertTrue(
+            shouldRegisterIdleInteractionForTrailerPlaybackTransition(
+                previousActive = false,
+                currentActive = true
             )
         )
     }
 
     @Test
-    fun `home route remains eligible without active home trailer`() {
+    fun `idle timer resets when in app trailer ends`() {
         assertTrue(
+            shouldRegisterIdleInteractionForTrailerPlaybackTransition(
+                previousActive = true,
+                currentActive = false
+            )
+        )
+    }
+
+    @Test
+    fun `home route is not eligible while modern home trailer is active`() {
+        assertFalse(
             isIdleScreensaverEligibleRoute(
                 currentRoute = Screen.Home.route,
                 playbackIdleSnapshot = PlaybackIdleGateSnapshot(),
-                homeTrailerPlaybackActive = false,
-                detailTrailerPlaybackActive = false
+                inAppTrailerPlaybackActive = true
             )
         )
     }
@@ -38,8 +45,18 @@ class MainActivityIdleScreensaverTest {
             isIdleScreensaverEligibleRoute(
                 currentRoute = Screen.Detail.route,
                 playbackIdleSnapshot = PlaybackIdleGateSnapshot(),
-                homeTrailerPlaybackActive = false,
-                detailTrailerPlaybackActive = true
+                inAppTrailerPlaybackActive = true
+            )
+        )
+    }
+
+    @Test
+    fun `home route remains eligible without active in app trailer`() {
+        assertTrue(
+            isIdleScreensaverEligibleRoute(
+                currentRoute = Screen.Home.route,
+                playbackIdleSnapshot = PlaybackIdleGateSnapshot(),
+                inAppTrailerPlaybackActive = false
             )
         )
     }

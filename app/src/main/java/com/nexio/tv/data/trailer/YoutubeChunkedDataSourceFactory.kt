@@ -9,6 +9,19 @@ import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.TransferListener
 
+internal fun shouldUseYouTubeChunkedTransfer(uri: Uri): Boolean {
+    val host = uri.host.orEmpty()
+    if (!host.contains("googlevideo.com")) {
+        return false
+    }
+
+    val path = uri.encodedPath.orEmpty()
+    val isManifestPath = host.startsWith("manifest.") ||
+        path.contains("/manifest/") ||
+        path.endsWith(".m3u8")
+    return !isManifestPath
+}
+
 /**
  * A DataSource.Factory that wraps DefaultHttpDataSource and appends YouTube's
  * `&range=start-end` query parameter on each request. YouTube throttles (and
@@ -58,8 +71,7 @@ class YoutubeChunkedDataSourceFactory(
 
         override fun open(dataSpec: DataSpec): Long {
             val uri = dataSpec.uri
-            val host = uri.host.orEmpty()
-            isYouTubeStream = host.contains("googlevideo.com")
+            isYouTubeStream = shouldUseYouTubeChunkedTransfer(uri)
 
             if (!isYouTubeStream) {
                 return upstream.open(dataSpec)

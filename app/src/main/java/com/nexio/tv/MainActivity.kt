@@ -440,8 +440,8 @@ class MainActivity : ComponentActivity() {
                     val idleScreensaverSessionId by idleScreensaverController.sessionId.collectAsState()
                     val idleLastInteractionAtMs by idleScreensaverController.lastInteractionAtMs.collectAsState()
                     val playbackIdleSnapshot by playbackIdleGateState.snapshot.collectAsState()
-                    var homeTrailerPlaybackActive by remember { mutableStateOf(false) }
-                    var detailTrailerPlaybackActive by remember { mutableStateOf(false) }
+                    var inAppTrailerPlaybackActive by remember { mutableStateOf(false) }
+                    var previousInAppTrailerPlaybackActive by remember { mutableStateOf(false) }
 
                     LaunchedEffect(pendingRecommendation) {
                         val navigation = pendingRecommendation ?: return@LaunchedEffect
@@ -488,24 +488,35 @@ class MainActivity : ComponentActivity() {
                         currentRoute,
                         showStartupSplash,
                         playbackIdleSnapshot,
-                        homeTrailerPlaybackActive,
-                        detailTrailerPlaybackActive
+                        inAppTrailerPlaybackActive
                     ) {
                         isIdleScreensaverEligibleRoute(
                             currentRoute = currentRoute,
                             playbackIdleSnapshot = playbackIdleSnapshot,
-                            homeTrailerPlaybackActive = homeTrailerPlaybackActive,
-                            detailTrailerPlaybackActive = detailTrailerPlaybackActive
+                            inAppTrailerPlaybackActive = inAppTrailerPlaybackActive
                         ) && !showStartupSplash
                     }
 
                     LaunchedEffect(currentRoute) {
-                        if (currentRoute != Screen.Home.route && homeTrailerPlaybackActive) {
-                            homeTrailerPlaybackActive = false
+                        if (
+                            currentRoute != Screen.Home.route &&
+                            currentRoute != Screen.Detail.route &&
+                            inAppTrailerPlaybackActive
+                        ) {
+                            inAppTrailerPlaybackActive = false
                         }
-                        if (currentRoute != Screen.Detail.route && detailTrailerPlaybackActive) {
-                            detailTrailerPlaybackActive = false
+                    }
+
+                    LaunchedEffect(inAppTrailerPlaybackActive) {
+                        if (
+                            shouldRegisterIdleInteractionForTrailerPlaybackTransition(
+                                previousActive = previousInAppTrailerPlaybackActive,
+                                currentActive = inAppTrailerPlaybackActive
+                            )
+                        ) {
+                            idleScreensaverController.registerInteraction()
                         }
+                        previousInAppTrailerPlaybackActive = inAppTrailerPlaybackActive
                     }
 
                     LaunchedEffect(idleScreensaverEligible, idleScreensaverVisible) {
@@ -634,16 +645,10 @@ class MainActivity : ComponentActivity() {
                                 idleScreensaverVisible = idleScreensaverVisible,
                                 idleScreensaverController = idleScreensaverController,
                                 onHomeTrailerPlaybackActiveChanged = { active ->
-                                    homeTrailerPlaybackActive = active
-                                },
-                                onDetailTrailerPlaybackStarted = {
-                                    idleScreensaverController.registerInteraction()
-                                },
-                                onDetailTrailerPlaybackStopped = {
-                                    idleScreensaverController.registerInteraction()
+                                    inAppTrailerPlaybackActive = active
                                 },
                                 onDetailTrailerPlaybackActiveChanged = { active ->
-                                    detailTrailerPlaybackActive = active
+                                    inAppTrailerPlaybackActive = active
                                 },
                                 onExitApp = {
                                     finishAffinity()
@@ -663,16 +668,10 @@ class MainActivity : ComponentActivity() {
                                 idleScreensaverVisible = idleScreensaverVisible,
                                 idleScreensaverController = idleScreensaverController,
                                 onHomeTrailerPlaybackActiveChanged = { active ->
-                                    homeTrailerPlaybackActive = active
-                                },
-                                onDetailTrailerPlaybackStarted = {
-                                    idleScreensaverController.registerInteraction()
-                                },
-                                onDetailTrailerPlaybackStopped = {
-                                    idleScreensaverController.registerInteraction()
+                                    inAppTrailerPlaybackActive = active
                                 },
                                 onDetailTrailerPlaybackActiveChanged = { active ->
-                                    detailTrailerPlaybackActive = active
+                                    inAppTrailerPlaybackActive = active
                                 },
                                 onExitApp = {
                                     finishAffinity()
@@ -1031,8 +1030,7 @@ private data class TransportValidationPlaybackNavigation(
 internal fun isIdleScreensaverEligibleRoute(
     currentRoute: String?,
     playbackIdleSnapshot: PlaybackIdleGateSnapshot,
-    homeTrailerPlaybackActive: Boolean,
-    detailTrailerPlaybackActive: Boolean
+    inAppTrailerPlaybackActive: Boolean
 ): Boolean {
     val route = currentRoute ?: return false
     if (
@@ -1047,14 +1045,19 @@ internal fun isIdleScreensaverEligibleRoute(
     if (route == Screen.Player.route) {
         return playbackIdleSnapshot.hasActiveSession && playbackIdleSnapshot.isPausedByUser
     }
-    if (route == Screen.Home.route && homeTrailerPlaybackActive) {
-        return false
-    }
-    if (route == Screen.Detail.route && detailTrailerPlaybackActive) {
+    if (
+        (route == Screen.Home.route || route == Screen.Detail.route) &&
+        inAppTrailerPlaybackActive
+    ) {
         return false
     }
     return true
 }
+
+internal fun shouldRegisterIdleInteractionForTrailerPlaybackTransition(
+    previousActive: Boolean,
+    currentActive: Boolean
+): Boolean = previousActive != currentActive
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
@@ -1210,8 +1213,6 @@ private fun LegacySidebarScaffold(
     idleScreensaverVisible: Boolean,
     idleScreensaverController: IdleScreensaverController,
     onHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
-    onDetailTrailerPlaybackStarted: () -> Unit,
-    onDetailTrailerPlaybackStopped: () -> Unit,
     onDetailTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onExitApp: () -> Unit
 ) {
@@ -1383,9 +1384,9 @@ private fun LegacySidebarScaffold(
                     onModernHomeTrailerPlaybackActiveChanged = { active ->
                         onHomeTrailerPlaybackActiveChanged(active)
                     },
-                    onDetailTrailerPlaybackStarted = onDetailTrailerPlaybackStarted,
-                    onDetailTrailerPlaybackStopped = onDetailTrailerPlaybackStopped,
-                    onDetailTrailerPlaybackActiveChanged = onDetailTrailerPlaybackActiveChanged
+                    onDetailTrailerPlaybackActiveChanged = { active ->
+                        onDetailTrailerPlaybackActiveChanged(active)
+                    }
                 )
             }
         }
@@ -1476,8 +1477,6 @@ private fun ModernSidebarScaffold(
     idleScreensaverVisible: Boolean,
     idleScreensaverController: IdleScreensaverController,
     onHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
-    onDetailTrailerPlaybackStarted: () -> Unit,
-    onDetailTrailerPlaybackStopped: () -> Unit,
     onDetailTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onExitApp: () -> Unit
 ) {
@@ -1740,9 +1739,9 @@ private fun ModernSidebarScaffold(
                     onModernHomeTrailerPlaybackActiveChanged = { active ->
                         onHomeTrailerPlaybackActiveChanged(active)
                     },
-                    onDetailTrailerPlaybackStarted = onDetailTrailerPlaybackStarted,
-                    onDetailTrailerPlaybackStopped = onDetailTrailerPlaybackStopped,
-                    onDetailTrailerPlaybackActiveChanged = onDetailTrailerPlaybackActiveChanged
+                    onDetailTrailerPlaybackActiveChanged = { active ->
+                        onDetailTrailerPlaybackActiveChanged(active)
+                    }
                 )
             }
         }

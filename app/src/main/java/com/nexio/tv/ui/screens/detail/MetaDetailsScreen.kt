@@ -189,9 +189,7 @@ fun MetaDetailsScreen(
     viewModel: MetaDetailsViewModel = hiltViewModel(),
     returnFocusSeason: Int? = null,
     returnFocusEpisode: Int? = null,
-    onDetailTrailerPlaybackStarted: () -> Unit = {},
-    onDetailTrailerPlaybackStopped: () -> Unit = {},
-    onDetailTrailerPlaybackActiveChanged: (Boolean) -> Unit = {},
+    onTrailerPlaybackActiveChanged: (Boolean) -> Unit = {},
     onBackPress: () -> Unit,
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
     onNavigateToOrganizationDetail: (
@@ -244,16 +242,31 @@ fun MetaDetailsScreen(
 
     val currentIsTrailerPlaying by rememberUpdatedState(uiState.isTrailerPlaying)
     val currentShowTrailerControls by rememberUpdatedState(uiState.showTrailerControls)
-    var previousTrailerPlaying by remember { mutableStateOf(false) }
     var trailerSeekOverlayVisible by remember { mutableStateOf(false) }
     val trailerSeekOverlayState = remember { TrailerSeekOverlayState() }
     var trailerSeekToken by remember { mutableIntStateOf(0) }
     var trailerSeekDeltaMs by remember { mutableLongStateOf(0L) }
     var lastUserInteractionDispatchMs by remember { mutableLongStateOf(0L) }
+    val detailTrailerPlaybackActive = remember(uiState.isTrailerPlaying, uiState.trailerUrl) {
+        shouldShowDetailTrailerTakeover(
+            isTrailerPlaying = uiState.isTrailerPlaying,
+            trailerUrl = uiState.trailerUrl
+        )
+    }
     val onTrailerProgressChanged = remember(trailerSeekOverlayState) {
         { position: Long, duration: Long ->
             trailerSeekOverlayState.positionMs = position
             trailerSeekOverlayState.durationMs = duration
+        }
+    }
+
+    LaunchedEffect(detailTrailerPlaybackActive) {
+        onTrailerPlaybackActiveChanged(detailTrailerPlaybackActive)
+    }
+
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            onTrailerPlaybackActiveChanged(false)
         }
     }
 
@@ -285,22 +298,6 @@ fun MetaDetailsScreen(
         trailerLifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             trailerLifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-
-    LaunchedEffect(uiState.isTrailerPlaying) {
-        onDetailTrailerPlaybackActiveChanged(uiState.isTrailerPlaying)
-        if (uiState.isTrailerPlaying && !previousTrailerPlaying) {
-            onDetailTrailerPlaybackStarted()
-        } else if (!uiState.isTrailerPlaying && previousTrailerPlaying) {
-            onDetailTrailerPlaybackStopped()
-        }
-        previousTrailerPlaying = uiState.isTrailerPlaying
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            onDetailTrailerPlaybackActiveChanged(false)
         }
     }
 
