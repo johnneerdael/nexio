@@ -250,7 +250,7 @@ class WatchedSeriesStateHolderTest {
     }
 
     @Test
-    fun `all legacy auth hash holder buckets migrate after session identity backfill`() = runTest {
+    fun `unrelated legacy auth hash holder buckets do not merge into the active session`() = runTest {
         val prefs = InMemorySharedPreferences()
         val authStoreFile = java.io.File.createTempFile("trakt-auth-holder-multi-upgrade", ".preferences_pb")
         authStoreFile.deleteOnExit()
@@ -288,10 +288,60 @@ class WatchedSeriesStateHolderTest {
         val sessionIdentity = authStore.state.first().sessionIdentity!!
         assertEquals(sessionIdentity, holder.activeSessionKey.value)
         assertTrue(holder.isSeriesWatched("tmdb:101"))
-        assertTrue(holder.isSeriesWatched("tmdb:202"))
+        assertFalse(holder.isSeriesWatched("tmdb:202"))
         assertEquals(
-            setOf("tmdb:202", "tt7654321"),
+            setOf("tt7654321"),
             holder.matchingEntryIds("tt7654321")
+        )
+        assertEquals(
+            "[{\"ids\":[\"tmdb:202\",\"tt7654321\"]}]",
+            prefs.getString("entries_${olderLegacyKey.lowercase()}", null)
+        )
+    }
+
+    @Test
+    fun `known entries auth hash bucket migrates without watched entries bucket`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        val authStoreFile = java.io.File.createTempFile("trakt-auth-holder-known-upgrade", ".preferences_pb")
+        authStoreFile.deleteOnExit()
+        val authBacking = PreferenceDataStoreFactory.create(scope = backgroundScope) { authStoreFile }
+        authBacking.edit { store ->
+            store[stringPreferencesKey("access_token")] = "access"
+            store[stringPreferencesKey("refresh_token")] = "refresh"
+        }
+        val authStore = TraktAuthDataStore(dataStore = authBacking)
+        val context = mockk<Context> {
+            every {
+                getSharedPreferences("watched_series_state", Context.MODE_PRIVATE)
+            } returns prefs
+        }
+        val legacyKey = legacyAuthHashSessionKeyForState(
+            TraktAuthState(accessToken = "access", refreshToken = "refresh")
+        )!!
+        prefs.edit()
+            .putString(
+                "known_entries_${legacyKey.lowercase()}",
+                "[{\"ids\":[\"tmdb:101\",\"tt1234567\"]}]"
+            )
+            .apply()
+
+        val holder = WatchedSeriesStateHolder(context, authStore, backgroundScope)
+        advanceUntilIdle()
+
+        val sessionIdentity = authStore.state.first().sessionIdentity!!
+        assertEquals(sessionIdentity, holder.activeSessionKey.value)
+        assertFalse(holder.isSeriesWatched("tmdb:101"))
+        assertEquals(
+            setOf("tmdb:101", "tt1234567"),
+            holder.matchingEntryIds("tmdb:101")
+        )
+        assertEquals(
+            null,
+            prefs.getString("known_entries_${legacyKey.lowercase()}", null)
+        )
+        assertEquals(
+            "[{\"ids\":[\"tmdb:101\",\"tt1234567\"]}]",
+            prefs.getString("known_entries_${sessionIdentity.lowercase()}", null)
         )
     }
 }
