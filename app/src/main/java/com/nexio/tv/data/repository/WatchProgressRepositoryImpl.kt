@@ -5,6 +5,8 @@ import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.WatchedItemsPreferences
 import com.nexio.tv.data.local.WatchedSeriesStateHolder
 import com.nexio.tv.data.local.WatchProgressPreferences
+import com.nexio.tv.data.local.expandSeriesContentIdAliases
+import com.nexio.tv.data.local.traktSessionKeyForState
 import com.nexio.tv.domain.model.WatchedItem
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.MetaRepository
@@ -58,6 +60,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
     private val inFlightMetadataKeys = mutableSetOf<String>()
     private val metadataHydrationLimit = 30
     private val metadataScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Volatile
+    private var lastRemoteWatchedSeriesHydrationSignature: String? = null
 
     private fun hydrateMetadata(progressList: List<WatchProgress>) {
         val sorted = progressList.sortedByDescending { it.lastWatched }
@@ -196,9 +200,16 @@ class WatchProgressRepositoryImpl @Inject constructor(
                                 // while the first Trakt snapshot is still loading.
                                 emit(emptyList())
                             },
+                        traktProgressService.observeRemoteWatchedSeriesSeeds()
+                            .onStart { emit(emptyList()) },
+                        traktProgressService.observeRemoteSnapshotLoaded()
+                            .onStart { emit(false) },
                         watchProgressPreferences.allRawProgress,
                         metadataState
-                    ) { remoteItems, localItems, metadataMap ->
+                    ) { remoteItems, remoteWatchedSeriesSeeds, remoteSnapshotLoaded, localItems, metadataMap ->
+                        if (remoteSnapshotLoaded) {
+                            hydrateRemoteWatchedSeriesSeeds(remoteWatchedSeriesSeeds)
+                        }
                         val merged = mergeProgressLists(remoteItems, localItems)
                         hydrateMetadata(merged)
                         merged.map { enrichWithMetadata(it, metadataMap) }
@@ -228,30 +239,27 @@ class WatchProgressRepositoryImpl @Inject constructor(
     }
 
     override fun getEpisodeProgress(contentId: String, season: Int, episode: Int): Flow<WatchProgress?> {
-        return traktAuthDataStore.isEffectivelyAuthenticated
-            .distinctUntilChanged()
-            .flatMapLatest { isAuthenticated ->
-                if (isAuthenticated) {
-                    allProgress.map { items ->
-                        items.firstOrNull {
-                            it.contentId == contentId && it.season == season && it.episode == episode
-                        }
-                    }
-                } else {
-                    flowOf(null)
-                }
-            }
+        return getAllEpisodeProgress(contentId)
+            .map { progressMap -> progressMap[season to episode] }
     }
 
-    override fun getAllEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> {
+    override fun getAllEpisodeProgress(contentIds: Collection<String>): Flow<Map<Pair<Int, Int>, WatchProgress>> {
+        val lookupIds = episodeProgressLookupContentIds(contentIds)
+        if (lookupIds.isEmpty()) {
+            return flowOf(emptyMap())
+        }
         return traktAuthDataStore.isEffectivelyAuthenticated
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
                 if (isAuthenticated) {
                     combine(
-                        traktProgressService.observeEpisodeProgress(contentId),
+                        traktProgressService.observeEpisodeProgress(lookupIds),
                         allProgress.map { items ->
-                            items.filter { it.contentId == contentId && it.season != null && it.episode != null }
+                            items.filter { progress ->
+                                progress.season != null &&
+                                    progress.episode != null &&
+                                    watchProgressMatchesAnyContentId(progress, lookupIds)
+                            }
                         }
                     ) { remoteMap, liveEpisodes ->
                         val merged = remoteMap.toMutableMap()
@@ -277,7 +285,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
                 }
 
                 if (season != null && episode != null) {
-                    traktProgressService.observeEpisodeProgress(contentId)
+                    getAllEpisodeProgress(contentId)
                         .map { progressMap ->
                             progressMap[season to episode]?.isCompleted() == true
                         }
@@ -385,6 +393,62 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
     private fun watchedItemContentIds(contentId: String): Set<String> {
         return watchedSeriesStateHolder.matchingEntryIds(contentId)
+    }
+
+    private fun episodeProgressLookupContentIds(contentIds: Collection<String>): Set<String> {
+        return buildSet {
+            contentIds.forEach { contentId ->
+                addAll(watchedItemContentIds(contentId))
+                addAll(expandSeriesContentIdAliases(listOf(contentId)))
+            }
+        }
+    }
+
+    private fun watchProgressMatchesAnyContentId(
+        progress: WatchProgress,
+        lookupIds: Set<String>
+    ): Boolean {
+        return expandSeriesContentIdAliases(listOf(progress.contentId)).any { alias ->
+            alias in lookupIds
+        }
+    }
+
+    private suspend fun hydrateRemoteWatchedSeriesSeeds(
+        remoteSeeds: List<TraktProgressService.RemoteWatchedSeriesSeed>
+    ) {
+        traktAuthDataStore.ensureSessionIdentityBackfilled()
+        val sessionKey = traktSessionKeyForState(traktAuthDataStore.state.first())
+        val signature = buildString {
+            append(sessionKey)
+            remoteSeeds
+                .sortedByDescending { it.lastWatchedAtMs }
+                .forEach { seed ->
+                    append('|')
+                    append(seed.contentId)
+                    append(':')
+                    append(seed.lastWatchedAtMs)
+                    append(':')
+                    append(seed.ids.sorted().joinToString(","))
+                }
+        }
+        if (signature == lastRemoteWatchedSeriesHydrationSignature) return
+
+        watchedItemsPreferences.replaceWithRemoteSeriesItems(
+            remoteSeeds.map { seed ->
+                WatchedItem(
+                    contentId = seed.contentId,
+                    contentType = "series",
+                    title = seed.title,
+                    season = null,
+                    episode = null,
+                    watchedAt = seed.lastWatchedAtMs
+                )
+            }
+        )
+        remoteSeeds.forEach { seed ->
+            watchedSeriesStateHolder.rememberSeriesIds(seed.ids)
+        }
+        lastRemoteWatchedSeriesHydrationSignature = signature
     }
 
     private fun mergeProgressLists(

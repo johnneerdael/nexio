@@ -75,6 +75,15 @@ internal fun toTraktIds(ids: ParsedContentIds): TraktIdsDto {
     )
 }
 
+internal fun allKnownContentIds(ids: TraktIdsDto?, fallback: String? = null): Set<String> {
+    return buildSet {
+        ids?.imdb?.takeIf { it.isNotBlank() }?.let(::add)
+        ids?.tmdb?.let { add("tmdb:$it") }
+        ids?.trakt?.let { add("trakt:$it") }
+        fallback?.trim()?.takeIf { it.isNotBlank() }?.let(::add)
+    }
+}
+
 internal fun TraktIdsDto.hasAnyId(): Boolean {
     return trakt != null || !imdb.isNullOrBlank() || tmdb != null || tvdb != null || !slug.isNullOrBlank()
 }

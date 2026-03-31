@@ -4,6 +4,7 @@ import android.os.SystemClock
 import android.util.Log
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.data.local.expandSeriesContentIdAliases
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
@@ -81,6 +82,13 @@ class TraktProgressService @Inject constructor(
         val lastWatchedAtMs: Long
     )
 
+    data class RemoteWatchedSeriesSeed(
+        val contentId: String,
+        val ids: Set<String>,
+        val title: String,
+        val lastWatchedAtMs: Long
+    )
+
     data class NextUpEntry(
         val contentId: String,
         val contentType: String = "series",
@@ -146,6 +154,7 @@ class TraktProgressService @Inject constructor(
 
     private data class WatchedShowIndexEntry(
         val contentId: String,
+        val ids: Set<String>,
         val name: String,
         val lastWatchedAtMs: Long,
         val traktShowId: Int? = null
@@ -494,6 +503,7 @@ class TraktProgressService @Inject constructor(
                         ensureShowNextUpEntry(
                             candidate = WatchedShowIndexEntry(
                                 contentId = candidate.contentId,
+                                ids = expandSeriesContentIdAliases(listOf(candidate.contentId)),
                                 name = candidate.title.ifBlank { candidate.contentId },
                                 lastWatchedAtMs = candidate.lastWatchedAtMs,
                                 traktShowId = parseContentIds(candidate.contentId).trakt
@@ -506,17 +516,36 @@ class TraktProgressService @Inject constructor(
         }.filterNotNull()
     }
 
-    fun observeEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> {
-        val cacheKey = canonicalLookupKey(contentId)
+    fun observeEpisodeProgress(contentIds: Collection<String>): Flow<Map<Pair<Int, Int>, WatchProgress>> {
+        val cacheKeys = contentIds
+            .map(::canonicalLookupKey)
+            .filter { it.isNotBlank() }
+            .distinct()
+        if (cacheKeys.isEmpty()) {
+            return flow { emit(emptyMap()) }
+        }
         return episodeProgressState
-            .map { state -> state[cacheKey]?.progress ?: emptyMap() }
+            .map { state ->
+                val merged = linkedMapOf<Pair<Int, Int>, WatchProgress>()
+                cacheKeys.forEach { cacheKey ->
+                    state[cacheKey]?.progress?.forEach { (episodeKey, progress) ->
+                        merged[episodeKey] = progress
+                    }
+                }
+                merged
+            }
             .onStart {
                 scope.launch {
-                    ensureEpisodeProgressSnapshot(contentId = cacheKey, forceRefresh = false)
+                    cacheKeys.forEach { cacheKey ->
+                        ensureEpisodeProgressSnapshot(contentId = cacheKey, forceRefresh = false)
+                    }
                 }
             }
             .distinctUntilChanged()
     }
+
+    fun observeEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> =
+        observeEpisodeProgress(listOf(contentId))
 
     fun observeMovieWatched(contentId: String): Flow<Boolean> {
         val rawKey = contentId.trim()
@@ -531,6 +560,43 @@ class TraktProgressService @Inject constructor(
             }
         }
             .onStart { isMovieWatched(rawKey) }
+            .distinctUntilChanged()
+    }
+
+    fun observeShowWatched(contentId: String): Flow<Boolean> {
+        val rawKey = contentId.trim()
+        val canonicalKey = canonicalLookupKey(rawKey)
+        return watchedShowsState
+            .map { watchedShows ->
+                watchedShows.containsKey(rawKey) || watchedShows.containsKey(canonicalKey)
+            }
+            .onStart {
+                scope.launch {
+                    getWatchedShowsSnapshot(forceRefresh = false)
+                }
+            }
+            .distinctUntilChanged()
+    }
+
+    fun observeRemoteWatchedSeriesSeeds(): Flow<List<RemoteWatchedSeriesSeed>> {
+        return watchedShowsState
+            .map { watchedShows ->
+                watchedShows.values
+                    .map { entry ->
+                        RemoteWatchedSeriesSeed(
+                            contentId = entry.contentId,
+                            ids = entry.ids,
+                            title = entry.name,
+                            lastWatchedAtMs = entry.lastWatchedAtMs
+                        )
+                    }
+                    .sortedByDescending { it.lastWatchedAtMs }
+            }
+            .onStart {
+                scope.launch {
+                    getWatchedShowsSnapshot(forceRefresh = false)
+                }
+            }
             .distinctUntilChanged()
     }
 
@@ -1117,6 +1183,7 @@ class TraktProgressService @Inject constructor(
         if (contentId.isBlank()) return null
         return WatchedShowIndexEntry(
             contentId = contentId,
+            ids = allKnownContentIds(show.ids, fallback = contentId),
             name = show.title ?: contentId,
             lastWatchedAtMs = parseIsoToMillis(item.lastWatchedAt),
             traktShowId = show.ids?.trakt

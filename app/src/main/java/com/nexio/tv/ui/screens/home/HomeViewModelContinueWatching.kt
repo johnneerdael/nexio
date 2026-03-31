@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.data.local.WatchedSeriesEntry
 import com.nexio.tv.data.local.expandSeriesContentIdAliases
+import com.nexio.tv.data.local.isSeriesWatchedCandidateItem
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.ContinueWatchingNextUpRef
@@ -70,8 +71,11 @@ private suspend fun HomeViewModel.syncWatchedSeriesStateFromLocalItems(
 
     val candidateStates = buildWatchedSeriesCandidateStates(
         watchedItems = watchedItems,
-        snapshot = snapshot
-    )
+        snapshot = snapshot,
+        aliasResolver = { item -> expandRememberedSeriesAliases(setOf(item.contentId)) }
+    ).map { candidate ->
+        candidate.copy(ids = expandRememberedSeriesAliases(candidate.ids))
+    }
     if (candidateStates.isEmpty()) {
         invalidateSeriesNextUpDiscovery()
         watchedSeriesStateHolder.applyResolvedStates(
@@ -220,6 +224,15 @@ private fun HomeViewModel.publishContinueWatchingSnapshot(snapshot: ContinueWatc
                 traktUpNextItems = traktUpNextItems
             )
         }
+    }
+}
+
+private fun HomeViewModel.expandRememberedSeriesAliases(ids: Set<String>): Set<String> {
+    return buildSet {
+        ids.forEach { contentId ->
+            addAll(watchedSeriesStateHolder.matchingEntryIds(contentId))
+        }
+        addAll(ids)
     }
 }
 
@@ -531,13 +544,16 @@ internal data class WatchedSeriesCandidateState(
 
 internal fun buildWatchedSeriesCandidateStates(
     watchedItems: List<WatchedItem>,
-    snapshot: ContinueWatchingSnapshot
+    snapshot: ContinueWatchingSnapshot,
+    aliasResolver: (WatchedItem) -> Set<String> = { item ->
+        expandSeriesContentIdAliases(listOf(item.contentId))
+    }
 ): List<WatchedSeriesCandidateState> {
     val candidateAliasSets = mergeWatchedSeriesAliasSets(
         watchedItems
             .asSequence()
-            .filter { it.season != null && it.episode != null }
-            .map { item -> expandSeriesContentIdAliases(listOf(item.contentId)) }
+            .filter(::isSeriesWatchedCandidateItem)
+            .map(aliasResolver)
             .toList()
     )
     if (candidateAliasSets.isEmpty()) return emptyList()
@@ -566,6 +582,24 @@ private fun HomeViewModel.buildSeriesNextUpLookupCandidates(
     snapshot: ContinueWatchingSnapshot,
     currentEntries: List<WatchedSeriesEntry>
 ): List<TraktProgressService.SeriesNextUpLookupCandidate> {
+    return buildSeriesNextUpLookupCandidatesFromWatchedItems(
+        watchedItems = watchedItems,
+        snapshot = snapshot,
+        currentEntries = currentEntries,
+        discoveredEntryKeys = discoveredNextUpEntriesByContentId.keys,
+        aliasResolver = { item -> expandRememberedSeriesAliases(setOf(item.contentId)) }
+    )
+}
+
+internal fun buildSeriesNextUpLookupCandidatesFromWatchedItems(
+    watchedItems: List<WatchedItem>,
+    snapshot: ContinueWatchingSnapshot,
+    currentEntries: List<WatchedSeriesEntry>,
+    discoveredEntryKeys: Set<String>,
+    aliasResolver: (WatchedItem) -> Set<String> = { item ->
+        expandSeriesContentIdAliases(listOf(item.contentId))
+    }
+): List<TraktProgressService.SeriesNextUpLookupCandidate> {
     val activeAliases = buildSet {
         snapshot.nextUpItems.forEach { entry ->
             addAll(expandSeriesContentIdAliases(listOf(entry.contentId)))
@@ -579,12 +613,17 @@ private fun HomeViewModel.buildSeriesNextUpLookupCandidates(
     val watchedByAliasSets = mergeWatchedSeriesAliasSets(
         watchedItems
             .asSequence()
-            .filter { it.season != null && it.episode != null }
-            .groupBy { item -> preferredAliasForSeriesContentId(item.contentId) }
+            .filter(::isSeriesWatchedCandidateItem)
+            .groupBy { item ->
+                aliasResolver(item)
+                    .sortedWith(compareBy<String> { aliasPriority(it) }.thenBy { it })
+                    .firstOrNull()
+                    ?: preferredAliasForSeriesContentId(item.contentId)
+            }
             .values
             .map { grouped ->
                 grouped.flatMapTo(linkedSetOf()) { item ->
-                    expandSeriesContentIdAliases(listOf(item.contentId))
+                    aliasResolver(item)
                 }
             }
     )
@@ -595,14 +634,14 @@ private fun HomeViewModel.buildSeriesNextUpLookupCandidates(
             entry.ids.any { it in aliases }
         }
         val matchingItems = watchedItems.filter { item ->
-            expandSeriesContentIdAliases(listOf(item.contentId)).any { it in aliases }
+            aliasResolver(item).any { it in aliases }
         }
         val latestItem = matchingItems.maxByOrNull { it.watchedAt } ?: return@mapNotNull null
         val preferredId = aliases
             .sortedWith(compareBy<String> { aliasPriority(it) }.thenBy { it })
             .firstOrNull()
             ?: return@mapNotNull null
-        if (alreadyWatched && preferredAliasForSeriesContentId(preferredId) in discoveredNextUpEntriesByContentId) {
+        if (alreadyWatched && preferredAliasForSeriesContentId(preferredId) in discoveredEntryKeys) {
             return@mapNotNull null
         }
         TraktProgressService.SeriesNextUpLookupCandidate(
