@@ -32,6 +32,13 @@ import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
+internal fun shouldHydrateRemoteWatchedSeriesSeeds(
+    remoteProgressLoaded: Boolean,
+    remoteWatchedSeriesSeedsLoaded: Boolean
+): Boolean {
+    return remoteProgressLoaded && remoteWatchedSeriesSeedsLoaded
+}
+
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class WatchProgressRepositoryImpl @Inject constructor(
@@ -193,6 +200,17 @@ class WatchProgressRepositoryImpl @Inject constructor(
             .distinctUntilChanged()
             .flatMapLatest { isAuthenticated ->
                 if (isAuthenticated) {
+                    val remoteWatchedSeriesHydrationReady = combine(
+                        traktProgressService.observeRemoteSnapshotLoaded()
+                            .onStart { emit(false) },
+                        traktProgressService.observeRemoteWatchedSeriesSeedsLoaded()
+                            .onStart { emit(false) }
+                    ) { remoteSnapshotLoaded, remoteWatchedSeriesSeedsLoaded ->
+                        shouldHydrateRemoteWatchedSeriesSeeds(
+                            remoteProgressLoaded = remoteSnapshotLoaded,
+                            remoteWatchedSeriesSeedsLoaded = remoteWatchedSeriesSeedsLoaded
+                        )
+                    }
                     combine(
                         traktProgressService.observeAllProgress()
                             .onStart {
@@ -202,12 +220,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
                             },
                         traktProgressService.observeRemoteWatchedSeriesSeeds()
                             .onStart { emit(emptyList()) },
-                        traktProgressService.observeRemoteSnapshotLoaded()
-                            .onStart { emit(false) },
+                        remoteWatchedSeriesHydrationReady,
                         watchProgressPreferences.allRawProgress,
                         metadataState
-                    ) { remoteItems, remoteWatchedSeriesSeeds, remoteSnapshotLoaded, localItems, metadataMap ->
-                        if (remoteSnapshotLoaded) {
+                    ) { remoteItems, remoteWatchedSeriesSeeds, remoteWatchedSeriesHydrationReady, localItems, metadataMap ->
+                        if (remoteWatchedSeriesHydrationReady) {
                             hydrateRemoteWatchedSeriesSeeds(remoteWatchedSeriesSeeds)
                         }
                         val merged = mergeProgressLists(remoteItems, localItems)
