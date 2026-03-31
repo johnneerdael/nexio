@@ -8,6 +8,7 @@ import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.data.local.EasyDebridSettingsDataStore
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.ImdbSettingsDataStore
@@ -24,6 +25,7 @@ import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.data.local.SubtitleOrganizationMode
 import com.nexio.tv.data.local.ThemeDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
+import com.nexio.tv.data.local.TorBoxSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDeviceCodeResponseDto
@@ -49,6 +51,7 @@ import com.nexio.tv.data.remote.supabase.BufferNetworkSettings
 import com.nexio.tv.data.remote.supabase.DebridSyncSettings
 import com.nexio.tv.data.remote.supabase.DebugSettingsPayload
 import com.nexio.tv.data.remote.supabase.CustomFormatterSyncTemplate
+import com.nexio.tv.data.remote.supabase.EasyDebridSyncSettings
 import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.GeminiSyncSettings
 import com.nexio.tv.data.remote.supabase.IntegrationSettings
@@ -63,9 +66,12 @@ import com.nexio.tv.data.remote.supabase.RealDebridSyncSettings
 import com.nexio.tv.data.remote.supabase.StreamSelectionSettings
 import com.nexio.tv.data.remote.supabase.SubtitleSyncSettings
 import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
+import com.nexio.tv.data.remote.supabase.TorBoxSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktSettingsPayload
+import com.nexio.tv.data.repository.EasyDebridService
 import com.nexio.tv.data.repository.PremiumizeService
+import com.nexio.tv.data.repository.TorBoxService
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.AppFont
 import com.nexio.tv.domain.model.AppTheme
@@ -106,6 +112,10 @@ private const val TOP_POSTERS_SECRET_TYPE = "top_posters_api_key"
 private const val TOP_POSTERS_SECRET_REF = "integration:topposters"
 private const val PREMIUMIZE_SECRET_TYPE = "premiumize_api_key"
 private const val PREMIUMIZE_SECRET_REF = "integration:premiumize"
+private const val TORBOX_SECRET_TYPE = "torbox_api_key"
+private const val TORBOX_SECRET_REF = "integration:torbox"
+private const val EASY_DEBRID_SECRET_TYPE = "easydebrid_api_key"
+private const val EASY_DEBRID_SECRET_REF = "integration:easydebrid"
 private const val REAL_DEBRID_ACCESS_SECRET_TYPE = "realdebrid_access_token"
 private const val REAL_DEBRID_REFRESH_SECRET_TYPE = "realdebrid_refresh_token"
 private const val REAL_DEBRID_SECRET_REF = "integration:realdebrid"
@@ -128,6 +138,10 @@ class AccountSettingsSyncService @Inject constructor(
     private val posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     private val premiumizeSettingsDataStore: PremiumizeSettingsDataStore,
     private val premiumizeService: PremiumizeService,
+    private val torBoxSettingsDataStore: TorBoxSettingsDataStore,
+    private val torBoxService: TorBoxService,
+    private val easyDebridSettingsDataStore: EasyDebridSettingsDataStore,
+    private val easyDebridService: EasyDebridService,
     private val realDebridAuthDataStore: RealDebridAuthDataStore,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
@@ -162,6 +176,10 @@ class AccountSettingsSyncService @Inject constructor(
                 posterRatingsSettings = posterRatingsSettingsDataStore.settings.drop(1).map { Unit },
                 premiumizeSettings = premiumizeSettingsDataStore.settings.drop(1).map { Unit },
                 premiumizeAccountState = premiumizeService.observeAccountState().drop(1).map { Unit },
+                torBoxSettings = torBoxSettingsDataStore.settings.drop(1).map { Unit },
+                torBoxAccountState = torBoxService.observeAccountState().drop(1).map { Unit },
+                easyDebridSettings = easyDebridSettingsDataStore.settings.drop(1).map { Unit },
+                easyDebridAccountState = easyDebridService.observeAccountState().drop(1).map { Unit },
                 realDebridState = realDebridAuthDataStore.state.drop(1).map { Unit },
                 traktAuthState = traktAuthDataStore.state.drop(1).map { Unit },
                 traktCatalogPreferences = traktSettingsDataStore.catalogPreferences.drop(1).map { Unit }
@@ -214,6 +232,8 @@ class AccountSettingsSyncService @Inject constructor(
             syncApiKeySecretToRemote(RPDB_SECRET_TYPE, RPDB_SECRET_REF, posterRatingsSettingsDataStore.settings.first().rpdbApiKey)
             syncApiKeySecretToRemote(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF, posterRatingsSettingsDataStore.settings.first().topPostersApiKey)
             syncApiKeySecretToRemote(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF, premiumizeSettingsDataStore.settings.first().apiKey)
+            syncApiKeySecretToRemote(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF, torBoxSettingsDataStore.settings.first().apiKey)
+            syncApiKeySecretToRemote(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF, easyDebridSettingsDataStore.settings.first().apiKey)
             syncRealDebridSecretsToRemote()
             syncTraktSecretsToRemote()
 
@@ -271,6 +291,10 @@ class AccountSettingsSyncService @Inject constructor(
         val playerSettings = playerSettingsDataStore.playerSettings.first()
         val premiumize = premiumizeSettingsDataStore.settings.first()
         val premiumizeAccount = premiumizeService.observeAccountState().first()
+        val torBox = torBoxSettingsDataStore.settings.first()
+        val torBoxAccount = torBoxService.observeAccountState().first()
+        val easyDebrid = easyDebridSettingsDataStore.settings.first()
+        val easyDebridAccount = easyDebridService.observeAccountState().first()
         val realDebrid = realDebridAuthDataStore.state.first()
         val traktAuth = traktAuthDataStore.state.first()
         val traktCatalogPrefs = traktSettingsDataStore.catalogPreferences.first()
@@ -281,6 +305,16 @@ class AccountSettingsSyncService @Inject constructor(
                     premiumize = PremiumizeSyncSettings(
                         configured = premiumize.isConfigured,
                         customerId = premiumizeAccount.customerId
+                    ),
+                    torBox = TorBoxSyncSettings(
+                        configured = torBox.isConfigured,
+                        email = torBoxAccount.email.orEmpty(),
+                        plan = torBoxAccount.plan.orEmpty()
+                    ),
+                    easyDebrid = EasyDebridSyncSettings(
+                        configured = easyDebrid.isConfigured,
+                        userId = easyDebridAccount.userId.orEmpty(),
+                        paidUntil = easyDebridAccount.paidUntil.orEmpty()
                     ),
                     realDebrid = RealDebridSyncSettings(
                         connected = realDebrid.isAuthenticated,
@@ -684,7 +718,11 @@ class AccountSettingsSyncService @Inject constructor(
         posterRatingsSettingsDataStore.setRpdbApiKey(resolveApiKeySecret(RPDB_SECRET_TYPE, RPDB_SECRET_REF))
         posterRatingsSettingsDataStore.setTopPostersApiKey(resolveApiKeySecret(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF))
         premiumizeSettingsDataStore.setApiKey(resolveApiKeySecret(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF))
+        torBoxSettingsDataStore.setApiKey(resolveApiKeySecret(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF))
+        easyDebridSettingsDataStore.setApiKey(resolveApiKeySecret(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF))
         premiumizeService.refreshAccountState()
+        torBoxService.refreshAccountState()
+        easyDebridService.refreshAccountState()
         applyRemoteRealDebridSecrets(settings)
         applyRemoteTraktSecrets(settings)
     }

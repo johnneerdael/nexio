@@ -94,13 +94,15 @@ class AccountConfigSyncContractTest {
         val json = Json.encodeToJsonElement(AccountConfigSyncPayload.serializer(), payload) as JsonObject
 
         assertEquals(setOf("schemaVersion", "integrations", "catalogs", "formatter"), json.keys)
-        assertEquals(3, json["schemaVersion"]?.toString()?.toInt())
+        assertEquals(4, json["schemaVersion"]?.toString()?.toInt())
         assertEquals("\"custom\"", json["formatter"]?.jsonObject?.get("selectedTemplateId")?.toString())
         assertEquals("true", json["integrations"]?.jsonObject?.get("omdb")?.jsonObject?.get("enabled")?.toString())
         assertEquals(
             "https://custom.imdb.example",
             json["integrations"]?.jsonObject?.get("imdb")?.jsonObject?.get("baseUrl")?.toString()?.trim('"')
         )
+        assertTrue(json["integrations"]?.jsonObject?.get("debrid")?.jsonObject?.containsKey("torBox") == true)
+        assertTrue(json["integrations"]?.jsonObject?.get("debrid")?.jsonObject?.containsKey("easyDebrid") == true)
         assertFalse(json.containsKey("appearance"))
         assertFalse(json.containsKey("layout"))
         assertFalse(json.containsKey("playback"))
@@ -180,6 +182,10 @@ class AccountConfigSyncContractTest {
         val posterRatingsSettings = MutableSharedFlow<Unit>(replay = 1)
         val premiumizeSettings = MutableSharedFlow<Unit>(replay = 1)
         val premiumizeAccountState = MutableSharedFlow<Unit>(replay = 1)
+        val torBoxSettings = MutableSharedFlow<Unit>(replay = 1)
+        val torBoxAccountState = MutableSharedFlow<Unit>(replay = 1)
+        val easyDebridSettings = MutableSharedFlow<Unit>(replay = 1)
+        val easyDebridAccountState = MutableSharedFlow<Unit>(replay = 1)
         val realDebridState = MutableSharedFlow<Unit>(replay = 1)
         val traktAuthState = MutableSharedFlow<Unit>(replay = 1)
         val traktCatalogPreferences = MutableSharedFlow<Unit>(replay = 1)
@@ -200,6 +206,10 @@ class AccountConfigSyncContractTest {
                 posterRatingsSettings = posterRatingsSettings,
                 premiumizeSettings = premiumizeSettings,
                 premiumizeAccountState = premiumizeAccountState,
+                torBoxSettings = torBoxSettings,
+                torBoxAccountState = torBoxAccountState,
+                easyDebridSettings = easyDebridSettings,
+                easyDebridAccountState = easyDebridAccountState,
                 realDebridState = realDebridState,
                 traktAuthState = traktAuthState,
                 traktCatalogPreferences = traktCatalogPreferences
@@ -232,6 +242,10 @@ class AccountConfigSyncContractTest {
                 posterRatingsSettings = MutableSharedFlow<Unit>(),
                 premiumizeSettings = MutableSharedFlow<Unit>(),
                 premiumizeAccountState = MutableSharedFlow<Unit>(),
+                torBoxSettings = MutableSharedFlow<Unit>(),
+                torBoxAccountState = MutableSharedFlow<Unit>(),
+                easyDebridSettings = MutableSharedFlow<Unit>(),
+                easyDebridAccountState = MutableSharedFlow<Unit>(),
                 realDebridState = MutableSharedFlow<Unit>(),
                 traktAuthState = MutableSharedFlow<Unit>(),
                 traktCatalogPreferences = MutableSharedFlow<Unit>()

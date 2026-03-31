@@ -1,5 +1,6 @@
--- Account settings sync contract v3.
--- v2 requests remain supported, but v3 is the current contract and includes integrations.imdb.
+-- Account settings sync contract v4.
+-- v2 and v3 requests remain supported, but v4 is the current contract and includes
+-- integrations.imdb, integrations.debrid.torBox, and integrations.debrid.easyDebrid.
 
 create extension if not exists pgcrypto;
 create extension if not exists supabase_vault with schema vault;
@@ -17,6 +18,8 @@ begin
         'imdb_api_key',
         'mdblist_api_key',
         'premiumize_api_key',
+        'torbox_api_key',
+        'easydebrid_api_key',
         'gemini_api_key',
         'rpdb_api_key',
         'top_posters_api_key',
@@ -36,6 +39,8 @@ begin
         'imdb_api_key',
         'mdblist_api_key',
         'premiumize_api_key',
+        'torbox_api_key',
+        'easydebrid_api_key',
         'gemini_api_key',
         'rpdb_api_key',
         'top_posters_api_key',
@@ -58,7 +63,7 @@ end;
 $$;
 
 create or replace function public.sync_pull_account_snapshot(
-  p_contract_version integer default 3
+  p_contract_version integer default 4
 )
 returns jsonb
 language plpgsql
@@ -67,7 +72,11 @@ set search_path = public
 as $$
 declare
   v_user_id uuid := public.sync_owner_id();
-  v_requested_version integer := case when coalesce(p_contract_version, 3) >= 3 then 3 else 2 end;
+  v_requested_version integer := case
+    when coalesce(p_contract_version, 4) >= 4 then 4
+    when coalesce(p_contract_version, 4) >= 3 then 3
+    else 2
+  end;
   v_settings jsonb := '{}'::jsonb;
   v_settings_updated_at timestamptz := null;
   v_addons jsonb := '[]'::jsonb;
@@ -91,6 +100,33 @@ begin
     );
   else
     v_integrations := v_integrations - 'imdb';
+  end if;
+
+  v_integrations := jsonb_set(
+    v_integrations,
+    '{debrid}',
+    coalesce(v_integrations->'debrid', '{}'::jsonb),
+    true
+  );
+  if v_requested_version >= 4 then
+    v_integrations := jsonb_set(
+      jsonb_set(
+        v_integrations,
+        '{debrid,torBox}',
+        coalesce(v_integrations #> '{debrid,torBox}', jsonb_build_object('configured', false, 'email', '', 'plan', '')),
+        true
+      ),
+      '{debrid,easyDebrid}',
+      coalesce(v_integrations #> '{debrid,easyDebrid}', jsonb_build_object('configured', false, 'userId', '', 'paidUntil', '')),
+      true
+    );
+  else
+    v_integrations := jsonb_set(
+      v_integrations,
+      '{debrid}',
+      coalesce(v_integrations->'debrid', '{}'::jsonb) - 'torBox' - 'easyDebrid',
+      true
+    );
   end if;
 
   v_settings := jsonb_set(
@@ -149,7 +185,7 @@ $$;
 create or replace function public.sync_push_account_settings(
   p_settings_payload jsonb,
   p_source text default 'app',
-  p_contract_version integer default 3
+  p_contract_version integer default 4
 )
 returns table(sync_revision bigint, updated_at timestamptz)
 language plpgsql
@@ -160,7 +196,11 @@ declare
   v_user_id uuid := public.sync_owner_id();
   v_revision bigint := public.next_sync_revision();
   v_updated_at timestamptz := now();
-  v_requested_version integer := case when coalesce(p_contract_version, 3) >= 3 then 3 else 2 end;
+  v_requested_version integer := case
+    when coalesce(p_contract_version, 4) >= 4 then 4
+    when coalesce(p_contract_version, 4) >= 3 then 3
+    else 2
+  end;
   v_settings jsonb := coalesce(p_settings_payload, '{}'::jsonb);
 begin
   v_settings := coalesce(v_settings, '{}'::jsonb);
@@ -182,6 +222,33 @@ begin
       v_settings,
       '{integrations,imdb}',
       coalesce(v_settings #> '{integrations,imdb}', jsonb_build_object('enabled', false, 'baseUrl', '')),
+      true
+    );
+  end if;
+
+  v_settings := jsonb_set(
+    v_settings,
+    '{integrations,debrid}',
+    coalesce(v_settings #> '{integrations,debrid}', '{}'::jsonb),
+    true
+  );
+  if v_requested_version >= 4 then
+    v_settings := jsonb_set(
+      jsonb_set(
+        v_settings,
+        '{integrations,debrid,torBox}',
+        coalesce(v_settings #> '{integrations,debrid,torBox}', jsonb_build_object('configured', false, 'email', '', 'plan', '')),
+        true
+      ),
+      '{integrations,debrid,easyDebrid}',
+      coalesce(v_settings #> '{integrations,debrid,easyDebrid}', jsonb_build_object('configured', false, 'userId', '', 'paidUntil', '')),
+      true
+    );
+  else
+    v_settings := jsonb_set(
+      v_settings,
+      '{integrations,debrid}',
+      coalesce(v_settings #> '{integrations,debrid}', '{}'::jsonb) - 'torBox' - 'easyDebrid',
       true
     );
   end if;
@@ -228,6 +295,8 @@ begin
     'imdb_api_key',
     'mdblist_api_key',
     'premiumize_api_key',
+    'torbox_api_key',
+    'easydebrid_api_key',
     'gemini_api_key',
     'rpdb_api_key',
     'top_posters_api_key',
@@ -269,6 +338,8 @@ begin
     'imdb_api_key',
     'mdblist_api_key',
     'premiumize_api_key',
+    'torbox_api_key',
+    'easydebrid_api_key',
     'gemini_api_key',
     'rpdb_api_key',
     'top_posters_api_key',
@@ -307,6 +378,8 @@ begin
     'imdb_api_key',
     'mdblist_api_key',
     'premiumize_api_key',
+    'torbox_api_key',
+    'easydebrid_api_key',
     'gemini_api_key',
     'rpdb_api_key',
     'top_posters_api_key',

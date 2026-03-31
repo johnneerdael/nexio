@@ -55,7 +55,7 @@ data class AccountAddonSecretPayload(
 @Serializable
 data class AccountConfigSyncPayload(
     @EncodeDefault
-    val schemaVersion: Int = 3,
+    val schemaVersion: Int = 4,
     val integrations: IntegrationSettings = IntegrationSettings(),
     val catalogs: CatalogSyncSettings = CatalogSyncSettings(),
     val formatter: FormatterSyncSettings = FormatterSyncSettings()
@@ -162,7 +162,11 @@ data class IntegrationSettings(
 @Serializable
 data class DebridSyncSettings(
     val premiumize: PremiumizeSyncSettings = PremiumizeSyncSettings(),
-    val realDebrid: RealDebridSyncSettings = RealDebridSyncSettings()
+    val realDebrid: RealDebridSyncSettings = RealDebridSyncSettings(),
+    @EncodeDefault
+    val torBox: TorBoxSyncSettings = TorBoxSyncSettings(),
+    @EncodeDefault
+    val easyDebrid: EasyDebridSyncSettings = EasyDebridSyncSettings()
 )
 
 @Serializable
@@ -180,6 +184,20 @@ data class RealDebridSyncSettings(
     val userCode: String = "",
     val verificationUrl: String = "",
     val expiresAt: Long? = null
+)
+
+@Serializable
+data class TorBoxSyncSettings(
+    val configured: Boolean = false,
+    val email: String = "",
+    val plan: String = ""
+)
+
+@Serializable
+data class EasyDebridSyncSettings(
+    val configured: Boolean = false,
+    val userId: String = "",
+    val paidUntil: String = ""
 )
 
 @Serializable

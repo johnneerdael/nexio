@@ -47,11 +47,15 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.R
+import com.nexio.tv.data.local.EasyDebridSettingsDataStore
 import com.nexio.tv.data.local.PremiumizeSettingsDataStore
 import com.nexio.tv.data.local.RealDebridAuthDataStore
+import com.nexio.tv.data.local.TorBoxSettingsDataStore
+import com.nexio.tv.data.repository.EasyDebridService
 import com.nexio.tv.data.repository.PremiumizeService
 import com.nexio.tv.data.repository.RealDebridAuthService
 import com.nexio.tv.data.repository.RealDebridTokenPollResult
+import com.nexio.tv.data.repository.TorBoxService
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -77,7 +81,13 @@ internal data class DebridUiState(
     val realDebridUserCode: String? = null,
     val realDebridVerificationUrl: String? = null,
     val premiumizeConnected: Boolean = false,
-    val premiumizeCustomerId: Int? = null
+    val premiumizeCustomerId: Int? = null,
+    val torBoxConnected: Boolean = false,
+    val torBoxEmail: String? = null,
+    val torBoxPlan: String? = null,
+    val easyDebridConnected: Boolean = false,
+    val easyDebridUserId: String? = null,
+    val easyDebridPaidUntil: String? = null
 )
 
 @Composable
@@ -87,9 +97,15 @@ fun DebridSettingsContent(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val savingPremiumize by viewModel.savingPremiumize.collectAsStateWithLifecycle()
+    val savingTorBox by viewModel.savingTorBox.collectAsStateWithLifecycle()
+    val savingEasyDebrid by viewModel.savingEasyDebrid.collectAsStateWithLifecycle()
     val premiumizeApiKey by viewModel.premiumizeApiKey.collectAsStateWithLifecycle(initialValue = "")
+    val torBoxApiKey by viewModel.torBoxApiKey.collectAsStateWithLifecycle(initialValue = "")
+    val easyDebridApiKey by viewModel.easyDebridApiKey.collectAsStateWithLifecycle(initialValue = "")
     val context = LocalContext.current
     var showPremiumizeDialog by remember { mutableStateOf(false) }
+    var showTorBoxDialog by remember { mutableStateOf(false) }
+    var showEasyDebridDialog by remember { mutableStateOf(false) }
     val premiumizeCustomerId = uiState.premiumizeCustomerId
 
     LaunchedEffect(Unit) {
@@ -175,12 +191,46 @@ fun DebridSettingsContent(
                         onClick = { showPremiumizeDialog = true }
                     )
                 }
+
+                item(key = "debrid_tb") {
+                    SettingsActionRow(
+                        title = stringResource(R.string.debrid_torbox_title),
+                        subtitle = stringResource(R.string.debrid_torbox_description),
+                        value = when {
+                            uiState.torBoxConnected -> buildString {
+                                append(uiState.torBoxEmail ?: stringResource(R.string.debrid_connected))
+                                uiState.torBoxPlan?.takeIf { it.isNotBlank() }?.let { plan ->
+                                    append(" • ")
+                                    append(plan)
+                                }
+                            }
+                            else -> maskApiKey(torBoxApiKey, stringResource(R.string.mdblist_not_set))
+                        },
+                        onClick = { showTorBoxDialog = true }
+                    )
+                }
+
+                item(key = "debrid_ed") {
+                    SettingsActionRow(
+                        title = stringResource(R.string.debrid_easydebrid_title),
+                        subtitle = stringResource(R.string.debrid_easydebrid_description),
+                        value = when {
+                            uiState.easyDebridConnected && !uiState.easyDebridUserId.isNullOrBlank() ->
+                                stringResource(R.string.debrid_easydebrid_connected_user, uiState.easyDebridUserId ?: "")
+                            uiState.easyDebridConnected -> stringResource(R.string.debrid_connected)
+                            else -> maskApiKey(easyDebridApiKey, stringResource(R.string.mdblist_not_set))
+                        },
+                        onClick = { showEasyDebridDialog = true }
+                    )
+                }
             }
         }
     }
 
     if (showPremiumizeDialog) {
-        PremiumizeApiKeyDialog(
+        DebridApiKeyDialog(
+            title = stringResource(R.string.debrid_premiumize_key_title),
+            subtitle = stringResource(R.string.debrid_premiumize_key_subtitle),
             currentValue = premiumizeApiKey,
             saving = savingPremiumize,
             onSave = { value, onSuccess -> viewModel.savePremiumizeApiKey(value, onSuccess) },
@@ -191,10 +241,42 @@ fun DebridSettingsContent(
             onDismiss = { showPremiumizeDialog = false }
         )
     }
+
+    if (showTorBoxDialog) {
+        DebridApiKeyDialog(
+            title = stringResource(R.string.debrid_torbox_key_title),
+            subtitle = stringResource(R.string.debrid_torbox_key_subtitle),
+            currentValue = torBoxApiKey,
+            saving = savingTorBox,
+            onSave = { value, onSuccess -> viewModel.saveTorBoxApiKey(value, onSuccess) },
+            onClear = {
+                viewModel.saveTorBoxApiKey("") { }
+                showTorBoxDialog = false
+            },
+            onDismiss = { showTorBoxDialog = false }
+        )
+    }
+
+    if (showEasyDebridDialog) {
+        DebridApiKeyDialog(
+            title = stringResource(R.string.debrid_easydebrid_key_title),
+            subtitle = stringResource(R.string.debrid_easydebrid_key_subtitle),
+            currentValue = easyDebridApiKey,
+            saving = savingEasyDebrid,
+            onSave = { value, onSuccess -> viewModel.saveEasyDebridApiKey(value, onSuccess) },
+            onClear = {
+                viewModel.saveEasyDebridApiKey("") { }
+                showEasyDebridDialog = false
+            },
+            onDismiss = { showEasyDebridDialog = false }
+        )
+    }
 }
 
 @Composable
-private fun PremiumizeApiKeyDialog(
+private fun DebridApiKeyDialog(
+    title: String,
+    subtitle: String,
     currentValue: String,
     saving: Boolean,
     onSave: (String, onSuccess: () -> Unit) -> Unit,
@@ -208,8 +290,8 @@ private fun PremiumizeApiKeyDialog(
 
     NexioDialog(
         onDismiss = onDismiss,
-        title = stringResource(R.string.debrid_premiumize_key_title),
-        subtitle = stringResource(R.string.debrid_premiumize_key_subtitle),
+        title = title,
+        subtitle = subtitle,
         width = 700.dp
     ) {
         Card(
@@ -314,20 +396,30 @@ class DebridSettingsViewModel @Inject constructor(
     private val realDebridAuthService: RealDebridAuthService,
     realDebridAuthDataStore: RealDebridAuthDataStore,
     private val premiumizeService: PremiumizeService,
-    premiumizeSettingsDataStore: PremiumizeSettingsDataStore
+    premiumizeSettingsDataStore: PremiumizeSettingsDataStore,
+    private val torBoxService: TorBoxService,
+    torBoxSettingsDataStore: TorBoxSettingsDataStore,
+    private val easyDebridService: EasyDebridService,
+    easyDebridSettingsDataStore: EasyDebridSettingsDataStore
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(DebridUiState())
     internal val uiState: StateFlow<DebridUiState> = _uiState.asStateFlow()
     internal val savingPremiumize = MutableStateFlow(false)
+    internal val savingTorBox = MutableStateFlow(false)
+    internal val savingEasyDebrid = MutableStateFlow(false)
     internal val messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     internal val premiumizeApiKey = premiumizeSettingsDataStore.settings.map { it.apiKey }
+    internal val torBoxApiKey = torBoxSettingsDataStore.settings.map { it.apiKey }
+    internal val easyDebridApiKey = easyDebridSettingsDataStore.settings.map { it.apiKey }
 
     init {
         viewModelScope.launch {
             combine(
                 realDebridAuthDataStore.state,
-                premiumizeService.observeAccountState()
-            ) { realDebridState, premiumizeState ->
+                premiumizeService.observeAccountState(),
+                torBoxService.observeAccountState(),
+                easyDebridService.observeAccountState()
+            ) { realDebridState, premiumizeState, torBoxState, easyDebridState ->
                 DebridUiState(
                     realDebridMode = when {
                         realDebridState.isAuthenticated -> DebridConnectionMode.CONNECTED
@@ -339,13 +431,21 @@ class DebridSettingsViewModel @Inject constructor(
                     realDebridUserCode = realDebridState.userCode,
                     realDebridVerificationUrl = realDebridState.verificationUrl,
                     premiumizeConnected = premiumizeState.isConnected,
-                    premiumizeCustomerId = premiumizeState.customerId
+                    premiumizeCustomerId = premiumizeState.customerId,
+                    torBoxConnected = torBoxState.isConnected,
+                    torBoxEmail = torBoxState.email,
+                    torBoxPlan = torBoxState.plan,
+                    easyDebridConnected = easyDebridState.isConnected,
+                    easyDebridUserId = easyDebridState.userId,
+                    easyDebridPaidUntil = easyDebridState.paidUntil
                 )
             }.collect { _uiState.value = it }
         }
 
         viewModelScope.launch {
             premiumizeService.refreshAccountState()
+            torBoxService.refreshAccountState()
+            easyDebridService.refreshAccountState()
         }
     }
 
@@ -391,8 +491,42 @@ class DebridSettingsViewModel @Inject constructor(
                 }
                 .onFailure { error ->
                     messages.tryEmit(error.message ?: "Failed to save Premiumize API key")
-                }
+            }
             savingPremiumize.value = false
+        }
+    }
+
+    fun saveTorBoxApiKey(value: String, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            savingTorBox.value = true
+            torBoxService.validateAndSaveApiKey(value)
+                .onSuccess {
+                    messages.tryEmit(
+                        if (value.isBlank()) "TorBox key cleared" else "TorBox connected"
+                    )
+                    onSuccess()
+                }
+                .onFailure { error ->
+                    messages.tryEmit(error.message ?: "Failed to save TorBox API key")
+                }
+            savingTorBox.value = false
+        }
+    }
+
+    fun saveEasyDebridApiKey(value: String, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            savingEasyDebrid.value = true
+            easyDebridService.validateAndSaveApiKey(value)
+                .onSuccess {
+                    messages.tryEmit(
+                        if (value.isBlank()) "EasyDebrid key cleared" else "EasyDebrid connected"
+                    )
+                    onSuccess()
+                }
+                .onFailure { error ->
+                    messages.tryEmit(error.message ?: "Failed to save EasyDebrid API key")
+                }
+            savingEasyDebrid.value = false
         }
     }
 }

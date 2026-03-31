@@ -1,18 +1,36 @@
 package com.nexio.tv.data.repository.servicewrap
 
+import com.nexio.tv.data.local.EasyDebridSettingsDataStore
 import com.nexio.tv.data.local.PremiumizeSettingsDataStore
+import com.nexio.tv.data.local.TorBoxSettingsDataStore
+import com.nexio.tv.data.remote.api.EasyDebridApi
 import com.nexio.tv.data.remote.api.PremiumizeApi
 import com.nexio.tv.data.remote.api.RealDebridApi
+import com.nexio.tv.data.remote.api.TorBoxApi
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridGenerateDto
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridGenerateRequestDto
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridGeneratedFileDto
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridLookupDetailsResultDto
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridLookupRequestDto
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeDirectDownloadContentDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridInstantAvailabilityFileDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridMediaInfoDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentFileDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentInfoDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxCachedTorrentDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxCheckCachedRequestDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxFileDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxTorrentListItemDto
+import com.nexio.tv.data.repository.EasyDebridService
+import com.nexio.tv.data.repository.PremiumizeService
 import com.nexio.tv.data.repository.RealDebridAuthService
+import com.nexio.tv.data.repository.TorBoxService
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.supervisorScope
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,173 +41,339 @@ class DebridAvailabilityResolver @Inject constructor(
     private val realDebridAuthService: RealDebridAuthService,
     private val realDebridApi: RealDebridApi,
     private val premiumizeApi: PremiumizeApi,
-    private val premiumizeSettingsDataStore: PremiumizeSettingsDataStore
+    private val premiumizeSettingsDataStore: PremiumizeSettingsDataStore,
+    private val premiumizeService: PremiumizeService,
+    private val torBoxApi: TorBoxApi,
+    private val torBoxSettingsDataStore: TorBoxSettingsDataStore,
+    private val torBoxService: TorBoxService,
+    private val easyDebridApi: EasyDebridApi,
+    private val easyDebridSettingsDataStore: EasyDebridSettingsDataStore,
+    private val easyDebridService: EasyDebridService
 ) : ServiceWrapResolver {
+
+    private val backends: List<ServiceWrapProviderBackend> = listOf(
+        RealDebridBackend(),
+        PremiumizeBackend(),
+        TorBoxBackend(),
+        EasyDebridBackend()
+    )
 
     override suspend fun resolve(
         candidate: WrapCandidate,
         requestContext: ServiceWrapRequestContext
     ): List<ResolvedServiceWrapStream> = supervisorScope {
-        val tasks = buildList {
-            if (realDebridAuthService.getCurrentAuthState().isAuthenticated) {
-                add(async { resolveRealDebrid(candidate, requestContext) })
+        val tasks = backends
+            .filter { backend -> backend.isConfigured() }
+            .map { backend ->
+                async {
+                    runCatching {
+                        backend.resolve(candidate, requestContext)
+                    }.getOrDefault(emptyList())
+                }
             }
-            val premiumizeApiKey = premiumizeSettingsDataStore.settings.first().apiKey.trim()
-            if (premiumizeApiKey.isNotBlank()) {
-                add(async { resolvePremiumize(candidate, requestContext, premiumizeApiKey) })
-            }
-        }
-        tasks.flatMap { task -> task.await() }
+        tasks.flatMap { it.await() }
     }
 
-    private suspend fun resolvePremiumize(
-        candidate: WrapCandidate,
-        requestContext: ServiceWrapRequestContext,
-        apiKey: String
-    ): List<ResolvedServiceWrapStream> {
-        val cacheResponse = runCatching {
-            premiumizeApi.checkCache(apiKey = apiKey, items = listOf(candidate.magnetUri))
-        }.getOrNull() ?: return emptyList()
-        val cacheBody = cacheResponse.body() ?: return emptyList()
-        if (!cacheResponse.isSuccessful ||
-            !cacheBody.status.equals("success", ignoreCase = true) ||
-            cacheBody.response.firstOrNull() != true
-        ) {
-            return emptyList()
+    private inner class PremiumizeBackend : ServiceWrapProviderBackend {
+        override val provider: ServiceWrapProvider = ServiceWrapProvider.PREMIUMIZE
+
+        override suspend fun isConfigured(): Boolean {
+            return premiumizeSettingsDataStore.settings.first().apiKey.trim().isNotBlank()
         }
 
-        val directResponse = runCatching {
-            premiumizeApi.createDirectDownload(apiKey = apiKey, source = candidate.magnetUri)
-        }.getOrNull() ?: return emptyList()
-        val directBody = directResponse.body() ?: return emptyList()
-        if (!directResponse.isSuccessful || !directBody.status.equals("success", ignoreCase = true)) {
-            return emptyList()
-        }
+        override suspend fun resolve(
+            candidate: WrapCandidate,
+            requestContext: ServiceWrapRequestContext
+        ): List<ResolvedServiceWrapStream> {
+            val apiKey = premiumizeSettingsDataStore.settings.first().apiKey.trim()
+            if (apiKey.isBlank()) return emptyList()
 
-        val content = directBody.content
-        val selected = if (content.isNotEmpty()) {
-            choosePremiumizeContent(content, candidate, requestContext)
-        } else {
-            PremiumizeSelection(
-                index = 0,
-                path = directBody.filename,
-                size = directBody.filesize,
-                streamUrl = directBody.location
-            )
-        }
-        val playbackUrl = selected.streamUrl?.takeIf { it.isNotBlank() } ?: return emptyList()
-        return listOf(
-            ResolvedServiceWrapStream(
-                provider = ServiceWrapProvider.PREMIUMIZE,
-                normalizedInfoHash = candidate.normalizedInfoHash,
-                playbackUrl = playbackUrl,
-                selectedFileIndex = selected.index,
-                filename = selected.path?.substringAfterLast('/'),
-                folderName = selected.path?.substringBeforeLast('/', "")?.takeIf { it.isNotBlank() },
-                sizeBytes = selected.size,
-                durationMs = null,
-                bitrate = null,
-                width = null,
-                height = null,
-                sourceLink = playbackUrl
-            )
-        )
-    }
+            val cacheResponse = runCatching {
+                premiumizeApi.checkCache(apiKey = apiKey, items = listOf(candidate.magnetUri))
+            }.getOrNull() ?: return emptyList()
+            val cacheBody = cacheResponse.body() ?: return emptyList()
+            if (!cacheResponse.isSuccessful ||
+                !cacheBody.status.equals("success", ignoreCase = true) ||
+                cacheBody.response.firstOrNull() != true
+            ) {
+                return emptyList()
+            }
 
-    private suspend fun resolveRealDebrid(
-        candidate: WrapCandidate,
-        requestContext: ServiceWrapRequestContext
-    ): List<ResolvedServiceWrapStream> {
-        val availabilityResponse = realDebridAuthService.executeAuthorizedRequest { authorization ->
-            realDebridApi.getInstantAvailability(
-                authorization = authorization,
-                hash = candidate.normalizedInfoHash
-            )
-        } ?: return emptyList()
-        val availabilityBody = availabilityResponse.body() ?: return emptyList()
-        if (!availabilityResponse.isSuccessful) return emptyList()
+            val directResponse = runCatching {
+                premiumizeApi.createDirectDownload(apiKey = apiKey, source = candidate.magnetUri)
+            }.getOrNull() ?: return emptyList()
+            val directBody = directResponse.body() ?: return emptyList()
+            if (!directResponse.isSuccessful || !directBody.status.equals("success", ignoreCase = true)) {
+                return emptyList()
+            }
 
-        val variants = extractRealDebridVariants(
-            availabilityBody = availabilityBody,
-            normalizedInfoHash = candidate.normalizedInfoHash
-        )
-        if (variants.isEmpty()) return emptyList()
-
-        val selectedVariant = chooseRealDebridVariant(variants, candidate, requestContext) ?: return emptyList()
-
-        var torrentId: String? = null
-        try {
-            val addMagnetResponse = realDebridAuthService.executeAuthorizedRequest { authorization ->
-                realDebridApi.addMagnet(authorization = authorization, magnet = candidate.magnetUri)
-            } ?: return emptyList()
-            val magnetBody = addMagnetResponse.body() ?: return emptyList()
-            if (!addMagnetResponse.isSuccessful) return emptyList()
-            torrentId = magnetBody.id
-
-            val selectedIds = selectedVariant.fileIds.joinToString(",")
-            val selectResponse = realDebridAuthService.executeAuthorizedRequest { authorization ->
-                realDebridApi.selectFiles(
-                    authorization = authorization,
-                    id = torrentId,
-                    files = selectedIds
-                )
-            } ?: return emptyList()
-            if (!selectResponse.isSuccessful) return emptyList()
-
-            val torrentInfo = pollTorrentInfo(torrentId) ?: return emptyList()
-            val resolvedFile = resolveTorrentFile(torrentInfo, selectedVariant.targetFileId) ?: return emptyList()
-            val unrestrictResponse = realDebridAuthService.executeAuthorizedRequest { authorization ->
-                realDebridApi.unrestrictLink(
-                    authorization = authorization,
-                    link = resolvedFile.sourceLink
-                )
-            } ?: return emptyList()
-            val unrestrictBody = unrestrictResponse.body() ?: return emptyList()
-            if (!unrestrictResponse.isSuccessful) return emptyList()
-            val playbackUrl = unrestrictBody.download?.takeIf { it.isNotBlank() } ?: return emptyList()
-            val mediaInfo = if (!unrestrictBody.id.isNullOrBlank()) {
-                fetchRealDebridMediaInfo(unrestrictBody.id)
+            val content = directBody.content
+            val selected = if (content.isNotEmpty()) {
+                choosePremiumizeContent(content, candidate, requestContext)
             } else {
-                null
+                PremiumizeSelection(
+                    index = 0,
+                    path = directBody.filename,
+                    size = directBody.filesize,
+                    streamUrl = directBody.location
+                )
             }
-
-            val filename = listOfNotNull(
-                mediaInfo?.filename,
-                unrestrictBody.filename,
-                resolvedFile.file.path?.substringAfterLast('/'),
-                candidate.sourceParsed.filename
-            ).firstOrNull { it.isNotBlank() }
-            val folderName = resolvedFile.file.path
-                ?.substringBeforeLast('/', "")
-                ?.trimStart('/')
-                ?.takeIf { it.isNotBlank() }
-
+            val playbackUrl = selected.streamUrl?.takeIf { it.isNotBlank() } ?: return emptyList()
             return listOf(
                 ResolvedServiceWrapStream(
-                    provider = ServiceWrapProvider.REAL_DEBRID,
+                    provider = provider,
                     normalizedInfoHash = candidate.normalizedInfoHash,
                     playbackUrl = playbackUrl,
-                    selectedFileIndex = resolvedFile.selectedIndex,
-                    filename = filename,
-                    folderName = folderName,
-                    sizeBytes = mediaInfo?.size ?: resolvedFile.file.bytes ?: unrestrictBody.fileSize,
-                    durationMs = mediaInfo?.duration?.times(1000.0)?.toLong(),
-                    bitrate = mediaInfo?.bitrate,
-                    width = mediaInfo?.details?.video?.values?.firstNotNullOfOrNull { it.width },
-                    height = mediaInfo?.details?.video?.values?.firstNotNullOfOrNull { it.height },
-                    sourceLink = resolvedFile.sourceLink
+                    selectedFileIndex = selected.index,
+                    filename = selected.path?.substringAfterLast('/'),
+                    folderName = selected.path?.substringBeforeLast('/', "")?.takeIf { it.isNotBlank() },
+                    sizeBytes = selected.size,
+                    durationMs = null,
+                    bitrate = null,
+                    width = null,
+                    height = null,
+                    sourceLink = playbackUrl
                 )
             )
-        } finally {
-            torrentId?.let { id ->
-                realDebridAuthService.executeAuthorizedRequest { authorization ->
-                    realDebridApi.deleteTorrent(authorization = authorization, id = id)
+        }
+    }
+
+    private inner class RealDebridBackend : ServiceWrapProviderBackend {
+        override val provider: ServiceWrapProvider = ServiceWrapProvider.REAL_DEBRID
+
+        override suspend fun isConfigured(): Boolean {
+            return realDebridAuthService.getCurrentAuthState().isAuthenticated
+        }
+
+        override suspend fun resolve(
+            candidate: WrapCandidate,
+            requestContext: ServiceWrapRequestContext
+        ): List<ResolvedServiceWrapStream> {
+            val availabilityResponse = realDebridAuthService.executeAuthorizedRequest { authorization ->
+                realDebridApi.getInstantAvailability(
+                    authorization = authorization,
+                    hash = candidate.normalizedInfoHash
+                )
+            } ?: return emptyList()
+            val availabilityBody = availabilityResponse.body() ?: return emptyList()
+            if (!availabilityResponse.isSuccessful) return emptyList()
+
+            val variants = extractRealDebridVariants(
+                availabilityBody = availabilityBody,
+                normalizedInfoHash = candidate.normalizedInfoHash
+            )
+            if (variants.isEmpty()) return emptyList()
+
+            val selectedVariant = chooseRealDebridVariant(variants, candidate, requestContext) ?: return emptyList()
+
+            var torrentId: String? = null
+            try {
+                val addMagnetResponse = realDebridAuthService.executeAuthorizedRequest { authorization ->
+                    realDebridApi.addMagnet(authorization = authorization, magnet = candidate.magnetUri)
+                } ?: return emptyList()
+                val magnetBody = addMagnetResponse.body() ?: return emptyList()
+                if (!addMagnetResponse.isSuccessful) return emptyList()
+                torrentId = magnetBody.id
+
+                val selectedIds = selectedVariant.fileIds.joinToString(",")
+                val selectResponse = realDebridAuthService.executeAuthorizedRequest { authorization ->
+                    realDebridApi.selectFiles(
+                        authorization = authorization,
+                        id = torrentId,
+                        files = selectedIds
+                    )
+                } ?: return emptyList()
+                if (!selectResponse.isSuccessful) return emptyList()
+
+                val torrentInfo = pollRealDebridTorrentInfo(torrentId) ?: return emptyList()
+                val resolvedFile = resolveRealDebridTorrentFile(torrentInfo, selectedVariant.targetFileId) ?: return emptyList()
+                val unrestrictResponse = realDebridAuthService.executeAuthorizedRequest { authorization ->
+                    realDebridApi.unrestrictLink(
+                        authorization = authorization,
+                        link = resolvedFile.sourceLink
+                    )
+                } ?: return emptyList()
+                val unrestrictBody = unrestrictResponse.body() ?: return emptyList()
+                if (!unrestrictResponse.isSuccessful) return emptyList()
+                val playbackUrl = unrestrictBody.download?.takeIf { it.isNotBlank() } ?: return emptyList()
+                val mediaInfo = if (!unrestrictBody.id.isNullOrBlank()) {
+                    fetchRealDebridMediaInfo(unrestrictBody.id)
+                } else {
+                    null
+                }
+
+                val filename = listOfNotNull(
+                    mediaInfo?.filename,
+                    unrestrictBody.filename,
+                    resolvedFile.file.path?.substringAfterLast('/'),
+                    candidate.sourceParsed.filename
+                ).firstOrNull { it.isNotBlank() }
+                val folderName = resolvedFile.file.path
+                    ?.substringBeforeLast('/', "")
+                    ?.trimStart('/')
+                    ?.takeIf { it.isNotBlank() }
+
+                return listOf(
+                    ResolvedServiceWrapStream(
+                        provider = provider,
+                        normalizedInfoHash = candidate.normalizedInfoHash,
+                        playbackUrl = playbackUrl,
+                        selectedFileIndex = resolvedFile.selectedIndex,
+                        filename = filename,
+                        folderName = folderName,
+                        sizeBytes = mediaInfo?.size ?: resolvedFile.file.bytes ?: unrestrictBody.fileSize,
+                        durationMs = mediaInfo?.duration?.times(1000.0)?.toLong(),
+                        bitrate = mediaInfo?.bitrate,
+                        width = mediaInfo?.details?.video?.values?.firstNotNullOfOrNull { it.width },
+                        height = mediaInfo?.details?.video?.values?.firstNotNullOfOrNull { it.height },
+                        sourceLink = resolvedFile.sourceLink
+                    )
+                )
+            } finally {
+                torrentId?.let { id ->
+                    realDebridAuthService.executeAuthorizedRequest { authorization ->
+                        realDebridApi.deleteTorrent(authorization = authorization, id = id)
+                    }
                 }
             }
         }
     }
 
-    private suspend fun pollTorrentInfo(torrentId: String): RealDebridTorrentInfoDto? {
+    private inner class TorBoxBackend : ServiceWrapProviderBackend {
+        override val provider: ServiceWrapProvider = ServiceWrapProvider.TORBOX
+
+        override suspend fun isConfigured(): Boolean {
+            return torBoxSettingsDataStore.settings.first().apiKey.trim().isNotBlank()
+        }
+
+        override suspend fun resolve(
+            candidate: WrapCandidate,
+            requestContext: ServiceWrapRequestContext
+        ): List<ResolvedServiceWrapStream> {
+            val apiKey = torBoxSettingsDataStore.settings.first().apiKey.trim()
+            if (apiKey.isBlank()) return emptyList()
+
+            val cacheResponse = runCatching {
+                torBoxApi.checkCachedTorrents(
+                    authorization = "Bearer $apiKey",
+                    body = TorBoxCheckCachedRequestDto(hashes = listOf(candidate.normalizedInfoHash))
+                )
+            }.getOrNull() ?: return emptyList()
+            val cacheBody = cacheResponse.body() ?: return emptyList()
+            if (!cacheResponse.isSuccessful || cacheBody.success == false) {
+                return emptyList()
+            }
+
+            val cachedTorrent = cacheBody.data
+                ?.firstOrNull { it.hash.equals(candidate.normalizedInfoHash, ignoreCase = true) }
+                ?: cacheBody.data?.firstOrNull()
+                ?: return emptyList()
+            val cachedSelection = chooseTorBoxFile(cachedTorrent, candidate, requestContext) ?: return emptyList()
+
+            val createResponse = runCatching {
+                torBoxApi.createTorrent(
+                    authorization = "Bearer $apiKey",
+                    magnet = candidate.magnetUri.toPlainTextBody(),
+                    allowZip = "false".toPlainTextBody(),
+                    addOnlyIfCached = "true".toPlainTextBody()
+                )
+            }.getOrNull() ?: return emptyList()
+            val createBody = createResponse.body() ?: return emptyList()
+            if (!createResponse.isSuccessful || createBody.success == false) {
+                return emptyList()
+            }
+
+            val torrentId = createBody.data?.resolvedTorrentId() ?: return emptyList()
+            val torrentItem = pollTorBoxTorrent(apiKey, torrentId) ?: return emptyList()
+            val selectedFile = chooseTorBoxFileFromItem(torrentItem, candidate, requestContext, cachedSelection.file.id)
+                ?: cachedSelection
+
+            val requestLinkResponse = runCatching {
+                torBoxApi.requestDownloadLink(
+                    token = apiKey,
+                    torrentId = torrentId,
+                    fileId = selectedFile.file.id
+                )
+            }.getOrNull() ?: return emptyList()
+            val requestLinkBody = requestLinkResponse.body() ?: return emptyList()
+            val playbackUrl = requestLinkBody.data?.takeIf { requestLinkResponse.isSuccessful && requestLinkBody.success != false && it.isNotBlank() }
+                ?: return emptyList()
+
+            val path = selectedFile.path
+            return listOf(
+                ResolvedServiceWrapStream(
+                    provider = provider,
+                    normalizedInfoHash = candidate.normalizedInfoHash,
+                    playbackUrl = playbackUrl,
+                    selectedFileIndex = selectedFile.index,
+                    filename = selectedFile.filename,
+                    folderName = path?.substringBeforeLast('/', "")?.takeIf { it.isNotBlank() },
+                    sizeBytes = selectedFile.file.size ?: cachedTorrent.size,
+                    durationMs = null,
+                    bitrate = null,
+                    width = null,
+                    height = null,
+                    sourceLink = playbackUrl
+                )
+            )
+        }
+    }
+
+    private inner class EasyDebridBackend : ServiceWrapProviderBackend {
+        override val provider: ServiceWrapProvider = ServiceWrapProvider.EASY_DEBRID
+
+        override suspend fun isConfigured(): Boolean {
+            return easyDebridSettingsDataStore.settings.first().apiKey.trim().isNotBlank()
+        }
+
+        override suspend fun resolve(
+            candidate: WrapCandidate,
+            requestContext: ServiceWrapRequestContext
+        ): List<ResolvedServiceWrapStream> {
+            val apiKey = easyDebridSettingsDataStore.settings.first().apiKey.trim()
+            if (apiKey.isBlank()) return emptyList()
+
+            val authorization = "Bearer $apiKey"
+            val lookupBody = runCatching {
+                easyDebridApi.lookupDetails(
+                    authorization = authorization,
+                    body = EasyDebridLookupRequestDto(urls = listOf(candidate.magnetUri))
+                )
+            }.getOrNull()?.body() ?: return emptyList()
+
+            val lookupResult = lookupBody.result.firstOrNull()?.takeIf { it.cached } ?: return emptyList()
+
+            val generateBody = runCatching {
+                easyDebridApi.generate(
+                    authorization = authorization,
+                    body = EasyDebridGenerateRequestDto(url = candidate.magnetUri)
+                )
+            }.getOrNull()?.body() ?: return emptyList()
+
+            val selectedFile = chooseEasyDebridFile(generateBody, lookupResult, candidate, requestContext)
+                ?: return emptyList()
+            val playbackUrl = selectedFile.file.url?.takeIf { it.isNotBlank() } ?: return emptyList()
+            val directory = selectedFile.file.directory.joinToString("/").takeIf { it.isNotBlank() }
+            return listOf(
+                ResolvedServiceWrapStream(
+                    provider = provider,
+                    normalizedInfoHash = candidate.normalizedInfoHash,
+                    playbackUrl = playbackUrl,
+                    selectedFileIndex = selectedFile.index,
+                    filename = selectedFile.file.filename,
+                    folderName = directory,
+                    sizeBytes = selectedFile.file.size,
+                    durationMs = null,
+                    bitrate = null,
+                    width = null,
+                    height = null,
+                    sourceLink = playbackUrl
+                )
+            )
+        }
+    }
+
+    private suspend fun pollRealDebridTorrentInfo(torrentId: String): RealDebridTorrentInfoDto? {
         repeat(20) { attempt ->
             val infoResponse = realDebridAuthService.executeAuthorizedRequest { authorization ->
                 realDebridApi.getTorrentInfo(authorization = authorization, id = torrentId)
@@ -203,6 +387,33 @@ class DebridAvailabilityResolver @Inject constructor(
                     return body
                 }
                 if (body.status.equals("error", ignoreCase = true) || body.status.equals("dead", ignoreCase = true)) {
+                    return null
+                }
+            }
+            if (attempt < 19) {
+                delay(300L)
+            }
+        }
+        return null
+    }
+
+    private suspend fun pollTorBoxTorrent(apiKey: String, torrentId: Int): TorBoxTorrentListItemDto? {
+        repeat(20) { attempt ->
+            val response = runCatching {
+                torBoxApi.getMyTorrentList(
+                    authorization = "Bearer $apiKey",
+                    id = torrentId,
+                    bypassCache = true
+                )
+            }.getOrNull() ?: return null
+            val body = response.body()
+            val item = body?.data?.firstOrNull { it.id == torrentId } ?: body?.data?.firstOrNull()
+            if (response.isSuccessful && body?.success != false && item != null) {
+                if (item.isDownloaded() || item.resolvedState().equals("downloaded", ignoreCase = true)) {
+                    return item
+                }
+                val state = item.resolvedState().orEmpty()
+                if (state.equals("error", ignoreCase = true) || state.equals("failed", ignoreCase = true)) {
                     return null
                 }
             }
@@ -294,7 +505,7 @@ class DebridAvailabilityResolver @Inject constructor(
         }
     }
 
-    private fun resolveTorrentFile(
+    private fun resolveRealDebridTorrentFile(
         torrentInfo: RealDebridTorrentInfoDto,
         targetFileId: Int
     ): RealDebridResolvedFile? {
@@ -311,6 +522,111 @@ class DebridAvailabilityResolver @Inject constructor(
             selectedIndex = selectedIndex,
             sourceLink = sourceLink
         )
+    }
+
+    private fun chooseTorBoxFile(
+        torrent: TorBoxCachedTorrentDto,
+        candidate: WrapCandidate,
+        requestContext: ServiceWrapRequestContext
+    ): TorBoxSelection? {
+        return torrent.files.mapIndexedNotNull { index, file ->
+            val filename = file.shortName?.takeIf { it.isNotBlank() } ?: file.name?.takeIf { it.isNotBlank() }
+            if (filename == null) return@mapIndexedNotNull null
+            val score = scoreCandidateFile(
+                filename = filename,
+                fullPath = filename,
+                sizeBytes = file.size,
+                candidate = candidate,
+                requestContext = requestContext
+            )
+            TorBoxSelection(
+                index = index,
+                file = file,
+                filename = filename,
+                path = filename,
+                score = score
+            )
+        }.maxWithOrNull(compareBy<TorBoxSelection> { it.score }.thenBy { it.file.size ?: 0L })
+    }
+
+    private fun chooseTorBoxFileFromItem(
+        torrent: TorBoxTorrentListItemDto,
+        candidate: WrapCandidate,
+        requestContext: ServiceWrapRequestContext,
+        preferredFileId: Int?
+    ): TorBoxSelection? {
+        val candidateSelections = torrent.files.mapIndexedNotNull { index, file ->
+            val filename = file.shortName?.takeIf { it.isNotBlank() } ?: file.name?.takeIf { it.isNotBlank() }
+            if (filename == null) return@mapIndexedNotNull null
+            var score = scoreCandidateFile(
+                filename = filename,
+                fullPath = filename,
+                sizeBytes = file.size,
+                candidate = candidate,
+                requestContext = requestContext
+            )
+            if (preferredFileId != null && preferredFileId == file.id) {
+                score += 250
+            }
+            TorBoxSelection(
+                index = index,
+                file = file,
+                filename = filename,
+                path = filename,
+                score = score
+            )
+        }
+        return candidateSelections.maxWithOrNull(compareBy<TorBoxSelection> { it.score }.thenBy { it.file.size ?: 0L })
+    }
+
+    private fun chooseEasyDebridFile(
+        generate: EasyDebridGenerateDto,
+        lookup: EasyDebridLookupDetailsResultDto,
+        candidate: WrapCandidate,
+        requestContext: ServiceWrapRequestContext
+    ): EasyDebridSelection? {
+        val lookupFilesByName = lookup.files.associateBy { normalizeLookupKey(it.name, it.folder) }
+        return generate.files.mapIndexedNotNull { index, file ->
+            val filename = file.filename?.trim()?.takeIf { it.isNotBlank() } ?: return@mapIndexedNotNull null
+            val path = buildEasyDebridPath(file)
+            var score = scoreCandidateFile(
+                filename = filename,
+                fullPath = path,
+                sizeBytes = file.size,
+                candidate = candidate,
+                requestContext = requestContext
+            )
+            val lookupMatch = lookupFilesByName[normalizeLookupKey(filename, file.directory.joinToString("/"))]
+            if (lookupMatch != null) {
+                score += 120
+            }
+            EasyDebridSelection(
+                index = index,
+                file = file,
+                score = score
+            )
+        }.maxWithOrNull(compareBy<EasyDebridSelection> { it.score }.thenBy { it.file.size ?: 0L })
+    }
+
+    private fun buildEasyDebridPath(file: EasyDebridGeneratedFileDto): String {
+        val directory = file.directory.joinToString("/").trim('/')
+        return if (directory.isBlank()) {
+            file.filename.orEmpty()
+        } else {
+            "$directory/${file.filename.orEmpty()}"
+        }
+    }
+
+    private fun normalizeLookupKey(name: String?, folder: String?): String? {
+        val filename = name?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val path = buildString {
+            folder?.trim('/')?.takeIf { it.isNotBlank() }?.let {
+                append(it)
+                append('/')
+            }
+            append(filename)
+        }
+        return normalizeMatchKey(path)
     }
 
     private fun scoreCandidateFile(
@@ -378,6 +694,8 @@ class DebridAvailabilityResolver @Inject constructor(
             ?.takeIf { it.isNotBlank() }
     }
 
+    private fun String.toPlainTextBody() = toRequestBody("text/plain".toMediaType())
+
     private data class PremiumizeSelection(
         val index: Int,
         val path: String?,
@@ -403,6 +721,20 @@ class DebridAvailabilityResolver @Inject constructor(
         val file: RealDebridTorrentFileDto,
         val selectedIndex: Int,
         val sourceLink: String
+    )
+
+    private data class TorBoxSelection(
+        val index: Int,
+        val file: TorBoxFileDto,
+        val filename: String,
+        val path: String?,
+        val score: Int
+    )
+
+    private data class EasyDebridSelection(
+        val index: Int,
+        val file: EasyDebridGeneratedFileDto,
+        val score: Int
     )
 
     private companion object {

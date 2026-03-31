@@ -3,6 +3,7 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.data.local.RealDebridAuthDataStore
 import com.nexio.tv.data.remote.api.PremiumizeApi
 import com.nexio.tv.data.remote.api.RealDebridApi
+import com.nexio.tv.data.remote.api.TorBoxApi
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeItemDetailsDto
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeListAllFileDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDownloadDto
@@ -10,6 +11,8 @@ import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentFileDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentInfoDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridUnrestrictLinkDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxFileDto
+import com.nexio.tv.data.remote.dto.debrid.TorBoxTorrentListItemDto
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryListTab
 import kotlinx.coroutines.Dispatchers
@@ -36,12 +39,15 @@ class DebridLibraryService @Inject constructor(
     private val realDebridAuthDataStore: RealDebridAuthDataStore,
     private val realDebridAuthService: RealDebridAuthService,
     private val premiumizeApi: PremiumizeApi,
-    private val premiumizeService: PremiumizeService
+    private val premiumizeService: PremiumizeService,
+    private val torBoxApi: TorBoxApi,
+    private val torBoxService: TorBoxService
 ) {
     enum class RefreshTarget {
         ALL,
         REAL_DEBRID,
-        PREMIUMIZE
+        PREMIUMIZE,
+        TORBOX
     }
 
     private data class Snapshot(
@@ -73,9 +79,14 @@ class DebridLibraryService @Inject constructor(
     fun observeIsConnected(): Flow<Boolean> {
         return combine(
             realDebridAuthDataStore.isAuthenticated,
-            premiumizeService.observeAccountState()
-        ) { rdAuthenticated, pmState ->
-            rdAuthenticated || pmState.isConnected || pmState.apiKey.isNotBlank()
+            premiumizeService.observeAccountState(),
+            torBoxService.observeAccountState()
+        ) { rdAuthenticated, pmState, torBoxState ->
+            rdAuthenticated ||
+                pmState.isConnected ||
+                pmState.apiKey.isNotBlank() ||
+                torBoxState.isConnected ||
+                torBoxState.apiKey.isNotBlank()
         }.distinctUntilChanged()
     }
 
@@ -103,20 +114,23 @@ class DebridLibraryService @Inject constructor(
             val current = snapshotState.value
             val refreshRealDebrid = target == RefreshTarget.ALL || target == RefreshTarget.REAL_DEBRID
             val refreshPremiumize = target == RefreshTarget.ALL || target == RefreshTarget.PREMIUMIZE
+            val refreshTorBox = target == RefreshTarget.ALL || target == RefreshTarget.TORBOX
 
-            val baseTabs = if (refreshRealDebrid || refreshPremiumize) {
+            val baseTabs = if (refreshRealDebrid || refreshPremiumize || refreshTorBox) {
                 current.listTabs.filterNot { tab ->
                     (refreshRealDebrid && tab.key == REAL_DEBRID_LIST_KEY) ||
-                        (refreshPremiumize && tab.key == PREMIUMIZE_LIST_KEY)
+                        (refreshPremiumize && tab.key == PREMIUMIZE_LIST_KEY) ||
+                        (refreshTorBox && tab.key == TORBOX_LIST_KEY)
                 }
             } else {
                 current.listTabs
             }
 
-            val baseItems = if (refreshRealDebrid || refreshPremiumize) {
+            val baseItems = if (refreshRealDebrid || refreshPremiumize || refreshTorBox) {
                 current.items.filterNot { entry ->
                     (refreshRealDebrid && entry.listKeys.contains(REAL_DEBRID_LIST_KEY)) ||
-                        (refreshPremiumize && entry.listKeys.contains(PREMIUMIZE_LIST_KEY))
+                        (refreshPremiumize && entry.listKeys.contains(PREMIUMIZE_LIST_KEY)) ||
+                        (refreshTorBox && entry.listKeys.contains(TORBOX_LIST_KEY))
                 }
             } else {
                 current.items
@@ -151,6 +165,23 @@ class DebridLibraryService @Inject constructor(
                             description = "Files from your Premiumize cloud that have a direct stream link."
                         )
                         items += premiumizeItems
+                    }
+                }
+            }
+
+            if (refreshTorBox) {
+                torBoxService.refreshAccountState()
+                val torBoxState = torBoxService.observeAccountState().first()
+                if (torBoxState.apiKey.isNotBlank()) {
+                    val torBoxItems = fetchTorBoxItems(torBoxState.apiKey)
+                    if (torBoxItems.isNotEmpty()) {
+                        tabs += LibraryListTab(
+                            key = TORBOX_LIST_KEY,
+                            title = "TorBox",
+                            type = LibraryListTab.Type.SERVICE,
+                            description = "Cached files from your TorBox torrent list."
+                        )
+                        items += torBoxItems
                     }
                 }
             }
@@ -252,6 +283,43 @@ class DebridLibraryService @Inject constructor(
         }
     }
 
+    private suspend fun fetchTorBoxItems(apiKey: String): List<LibraryEntry> = withContext(Dispatchers.IO) {
+        val response = runCatching {
+            torBoxApi.getMyTorrentList(
+                authorization = "Bearer $apiKey",
+                bypassCache = true,
+                limit = 100
+            )
+        }.getOrNull() ?: return@withContext emptyList()
+        if (!response.isSuccessful) return@withContext emptyList()
+
+        val candidates = response.body()?.data.orEmpty()
+            .filter { it.id != null && it.files.isNotEmpty() }
+            .filter { it.isDownloaded() || it.resolvedState().equals("downloaded", ignoreCase = true) }
+            .take(100)
+
+        val detailsSemaphore = Semaphore(6)
+        coroutineScope {
+            candidates.flatMap { torrent ->
+                torrent.files.map { file -> torrent to file }
+            }.map { (torrent, file) ->
+                async {
+                    detailsSemaphore.withPermit {
+                        if (!isLikelyPlayable(file) || isLikelySampleFile(file)) {
+                            return@withPermit null
+                        }
+                        val directUrl = requestTorBoxDownload(
+                            apiKey = apiKey,
+                            torrentId = torrent.id ?: return@withPermit null,
+                            fileId = file.id ?: return@withPermit null
+                        ) ?: return@withPermit null
+                        mapTorBoxItem(torrent, file, directUrl)
+                    }
+                }
+            }.awaitAll().filterNotNull()
+        }
+    }
+
     private fun mapRealDebridTorrentFile(
         torrent: RealDebridTorrentDto,
         info: RealDebridTorrentInfoDto,
@@ -318,6 +386,36 @@ class DebridLibraryService @Inject constructor(
         )
     }
 
+    private fun mapTorBoxItem(
+        torrent: TorBoxTorrentListItemDto,
+        file: TorBoxFileDto,
+        directUrl: String
+    ): LibraryEntry {
+        val filename = file.shortName
+            ?.takeIf { it.isNotBlank() }
+            ?: file.name
+            ?.takeIf { it.isNotBlank() }
+            ?: torrent.name.orEmpty().ifBlank { "TorBox File" }
+        return LibraryEntry(
+            id = "tb:torrent:${torrent.id}:file:${file.id}",
+            type = inferContentType(filename, file.mimeType),
+            name = stripVideoExtension(filename),
+            poster = null,
+            background = null,
+            logo = null,
+            description = torrent.name,
+            releaseInfo = file.size?.takeIf { it > 0L }?.let { "${it / (1024 * 1024)} MB" },
+            imdbRating = null,
+            genres = emptyList(),
+            addonBaseUrl = null,
+            listKeys = setOf(TORBOX_LIST_KEY),
+            listedAt = parseIsoToMillis(torrent.createdAt ?: torrent.legacyCreatedAt),
+            directPlaybackUrl = directUrl,
+            playbackStreamName = filename,
+            playbackFilename = filename
+        )
+    }
+
     private fun isLikelyPlayable(download: RealDebridResolvedDownload): Boolean {
         return isLikelyVideo(
             filename = download.filename ?: extractFilenameFromUrl(download.downloadUrl),
@@ -336,12 +434,27 @@ class DebridLibraryService @Inject constructor(
         return isLikelyVideo(file.name, file.mimeType)
     }
 
+    private fun isLikelyPlayable(file: TorBoxFileDto): Boolean {
+        return isLikelyVideo(file.shortName ?: file.name, file.mimeType)
+    }
+
     private fun isLikelySampleFile(file: RealDebridTorrentFileDto): Boolean {
         val normalizedPath = file.path.orEmpty().trim().lowercase()
         if (normalizedPath.isBlank()) return false
         val segments = normalizedPath.split('/').filter { it.isNotBlank() }
         if (segments.any { it == "sample" || it == "samples" }) return true
         val filename = extractFilenameFromPath(normalizedPath).orEmpty()
+        return filename.startsWith("sample.") ||
+            filename.startsWith("sample-") ||
+            filename.contains(".sample.")
+    }
+
+    private fun isLikelySampleFile(file: TorBoxFileDto): Boolean {
+        val normalizedName = (file.name ?: file.shortName).orEmpty().trim().lowercase()
+        if (normalizedName.isBlank()) return false
+        val segments = normalizedName.split('/').filter { it.isNotBlank() }
+        if (segments.any { it == "sample" || it == "samples" }) return true
+        val filename = extractFilenameFromPath(normalizedName).orEmpty()
         return filename.startsWith("sample.") ||
             filename.startsWith("sample-") ||
             filename.contains(".sample.")
@@ -417,6 +530,26 @@ class DebridLibraryService @Inject constructor(
         return mapOf("Authorization" to "Bearer $accessToken")
     }
 
+    private suspend fun requestTorBoxDownload(
+        apiKey: String,
+        torrentId: Int,
+        fileId: Int
+    ): String? {
+        val response = runCatching {
+            torBoxApi.requestDownloadLink(
+                token = apiKey,
+                torrentId = torrentId,
+                fileId = fileId,
+                zipLink = false,
+                redirect = false
+            )
+        }.getOrNull() ?: return null
+        if (!response.isSuccessful) return null
+        val body = response.body()
+        if (body?.success == false) return null
+        return body?.data?.takeIf { it.isNotBlank() }
+    }
+
     private fun parseIsoToMillis(rawValue: String?): Long {
         if (rawValue.isNullOrBlank()) return 0L
         return runCatching { OffsetDateTime.parse(rawValue).toInstant().toEpochMilli() }.getOrDefault(0L)
@@ -425,6 +558,7 @@ class DebridLibraryService @Inject constructor(
     companion object {
         const val REAL_DEBRID_LIST_KEY = "service:realdebrid"
         const val PREMIUMIZE_LIST_KEY = "service:premiumize"
+        const val TORBOX_LIST_KEY = "service:torbox"
 
         private val VIDEO_EXTENSIONS = listOf(
             ".mkv", ".mp4", ".avi", ".mov", ".wmv", ".ts", ".m2ts", ".webm", ".mpg", ".mpeg"

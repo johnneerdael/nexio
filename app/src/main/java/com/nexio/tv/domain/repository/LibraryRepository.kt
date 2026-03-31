@@ -42,4 +42,5 @@ interface LibraryRepository {
     suspend fun refreshDebridNow()
     suspend fun refreshRealDebridNow()
     suspend fun refreshPremiumizeNow()
+    suspend fun refreshTorBoxNow()
 }

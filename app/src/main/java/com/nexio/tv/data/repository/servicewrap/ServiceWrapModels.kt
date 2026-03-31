@@ -41,7 +41,9 @@ enum class ServiceWrapProvider(
     val shortName: String
 ) {
     REAL_DEBRID(providerId = "RD", displayName = "Real-Debrid", shortName = "RD"),
-    PREMIUMIZE(providerId = "PM", displayName = "Premiumize", shortName = "PM")
+    PREMIUMIZE(providerId = "PM", displayName = "Premiumize", shortName = "PM"),
+    TORBOX(providerId = "TB", displayName = "TorBox", shortName = "TB"),
+    EASY_DEBRID(providerId = "ED", displayName = "EasyDebrid", shortName = "ED")
 }
 
 data class WrapCandidate(
