@@ -253,29 +253,28 @@ class WatchedSeriesStateHolder @Inject constructor(
             _activeSessionKey.value = identity.primaryKey
         }
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val migrationKeys = resolveMigrationKeys(prefs, identity)
         val primaryWatchedKey = prefKeyForActiveSession(prefix = WATCHED_KEY_PREFIX)
         val primaryKnownKey = prefKeyForActiveSession(prefix = KNOWN_KEY_PREFIX)
         val restoredWatched = buildRestoredEntries(
             prefs = prefs,
             primaryKey = primaryWatchedKey,
-            migrationKeys = migrationKeys,
+            migrationKeys = identity.migrationKeys,
             prefix = WATCHED_KEY_PREFIX
         )
         val restoredKnown = buildRestoredEntries(
             prefs = prefs,
             primaryKey = primaryKnownKey,
-            migrationKeys = migrationKeys,
+            migrationKeys = identity.migrationKeys,
             prefix = KNOWN_KEY_PREFIX
         )
         _entries.value = restoredWatched
         knownEntries.value = mergeWatchedSeriesEntries(restoredKnown + restoredWatched)
 
-        if (migrationKeys.isNotEmpty()) {
+        if (identity.migrationKeys.isNotEmpty()) {
             prefs.edit().apply {
                 putString(primaryWatchedKey, gson.toJson(_entries.value))
                 putString(primaryKnownKey, gson.toJson(knownEntries.value))
-                migrationKeys.forEach { migrationKey ->
+                identity.migrationKeys.forEach { migrationKey ->
                     remove(prefKey(prefix = WATCHED_KEY_PREFIX, sessionKey = migrationKey))
                     remove(prefKey(prefix = KNOWN_KEY_PREFIX, sessionKey = migrationKey))
                 }
@@ -308,20 +307,6 @@ class WatchedSeriesStateHolder @Inject constructor(
             }
         }
         return mergeWatchedSeriesEntries(restored)
-    }
-
-    private fun resolveMigrationKeys(
-        prefs: android.content.SharedPreferences,
-        identity: TraktSessionIdentity
-    ): List<String> {
-        val prefixedAuthKeys = prefs.all.keys
-            .mapNotNull { key ->
-                key.takeIf { it.startsWith(WATCHED_KEY_PREFIX + "auth_") }
-                    ?.removePrefix(WATCHED_KEY_PREFIX)
-            }
-        return (identity.migrationKeys + prefixedAuthKeys)
-            .filterNot { it.equals(identity.primaryKey, ignoreCase = true) }
-            .distinct()
     }
 }
 

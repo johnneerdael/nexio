@@ -270,7 +270,7 @@ class WatchedItemsPreferencesTest {
     }
 
     @Test
-    fun `all legacy auth hash buckets migrate after session identity backfill`() = runTest {
+    fun `unrelated legacy auth hash buckets do not merge into the active session`() = runTest {
         val authStoreFile = File.createTempFile("trakt-auth-multi-upgrade", ".preferences_pb")
         authStoreFile.deleteOnExit()
         val authStoreBacking = PreferenceDataStoreFactory.create(scope = backgroundScope) { authStoreFile }
@@ -297,16 +297,19 @@ class WatchedItemsPreferencesTest {
             store[stringSetPreferencesKey(olderLegacyKey)] = setOf(Gson().toJson(secondItem))
         }
 
-        assertEquals(listOf(firstItem, secondItem), preferences.getAllItems())
+        assertEquals(listOf(firstItem), preferences.getAllItems())
 
         val sessionIdentity = authDataStore.state.first().sessionIdentity!!
         val stored = dataStore.data.first()
         assertEquals(
-            setOf(Gson().toJson(firstItem), Gson().toJson(secondItem)),
+            setOf(Gson().toJson(firstItem)),
             stored[stringSetPreferencesKey("watched_items_${sessionIdentity.lowercase()}")]
         )
         assertEquals(null, stored[stringSetPreferencesKey(currentLegacyKey)])
-        assertEquals(null, stored[stringSetPreferencesKey(olderLegacyKey)])
+        assertEquals(
+            setOf(Gson().toJson(secondItem)),
+            stored[stringSetPreferencesKey(olderLegacyKey)]
+        )
     }
 
     @Test
