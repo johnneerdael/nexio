@@ -233,7 +233,7 @@ private fun YouTubeTrailerActivationDialog(
                     text = stringResource(R.string.youtube_trailer_login_overlay_subtitle),
                     color = NexioColors.TextSecondary,
                     textAlign = TextAlign.Center,
-                    maxLines = 3,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 qrBitmap?.let { bitmap ->
@@ -256,26 +256,6 @@ private fun YouTubeTrailerActivationDialog(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.5.sp,
                     color = NexioColors.TextPrimary,
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = stringResource(R.string.youtube_trailer_login_overlay_footer),
-                    color = NexioColors.TextSecondary,
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = uiState.sessionStatusMessage,
-                    color = NexioColors.TextPrimary,
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = stringResource(
-                        R.string.youtube_trailer_login_overlay_meta,
-                        uiState.deviceCodeExpiresAtEpochMs?.let(::formatEpochMs)
-                            ?: stringResource(R.string.youtube_trailer_login_not_available),
-                        uiState.pollIntervalSeconds
-                    ),
-                    color = NexioColors.TextSecondary,
                     textAlign = TextAlign.Center
                 )
             }
