@@ -6,6 +6,7 @@ import enum
 import functools
 import hashlib
 import json
+import os
 import re
 import time
 import urllib.parse
@@ -769,7 +770,11 @@ class YoutubeBaseInfoExtractor(InfoExtractor):
 
     @property
     def is_authenticated(self):
-        return self._has_auth_cookies
+        return self._has_auth_cookies or self._has_external_auth
+
+    @property
+    def _has_external_auth(self):
+        return bool(os.environ.get('YTDLP_YT_AUTHORIZATION'))
 
     @property
     def _has_auth_cookies(self):
@@ -920,6 +925,20 @@ class YoutubeBaseInfoExtractor(InfoExtractor):
 
         return headers
 
+    def _generate_external_auth_headers(self, origin=None):
+        authorization = os.environ.get('YTDLP_YT_AUTHORIZATION')
+        if not authorization:
+            return {}
+
+        headers = {
+            'Authorization': authorization,
+            'X-Origin': origin,
+        }
+        if page_id := os.environ.get('YTDLP_YT_PAGE_ID'):
+            headers['X-Goog-PageId'] = page_id
+        headers['X-Goog-AuthUser'] = os.environ.get('YTDLP_YT_AUTHUSER', '0')
+        return headers
+
     def generate_api_headers(
             self, *, ytcfg=None, delegated_session_id=None, user_session_id=None, session_index=None,
             visitor_data=None, api_hostname=None, default_client='web', **kwargs):
@@ -938,6 +957,7 @@ class YoutubeBaseInfoExtractor(InfoExtractor):
                 user_session_id=user_session_id,
                 session_index=session_index,
                 origin=origin),
+            **self._generate_external_auth_headers(origin=origin),
         }
         return filter_dict(headers)
 

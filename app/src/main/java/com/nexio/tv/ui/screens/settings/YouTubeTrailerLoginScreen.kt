@@ -2,35 +2,32 @@
 
 package com.nexio.tv.ui.screens.settings
 
-import android.view.ViewGroup
-import android.webkit.CookieManager
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nexio.tv.R
-import com.nexio.tv.data.trailer.YOUTUBE_STABLE_WEB_USER_AGENT
-import com.nexio.tv.ui.theme.NexioColors
+import com.nexio.tv.core.qr.QrCodeGenerator
+import com.nexio.tv.data.trailer.helper.YouTubeTrailerAuthEvent
+import com.nexio.tv.data.trailer.helper.YouTubeTrailerAuthMode
+import java.text.DateFormat
+import java.util.Date
 
 @Composable
 fun YouTubeTrailerLoginScreen(
@@ -52,6 +49,10 @@ fun YouTubeTrailerLoginContent(
     viewModel: YouTubeTrailerLoginViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val verificationLink = uiState.verificationUrlComplete ?: uiState.verificationUrl
+    val qrBitmap = remember(verificationLink) {
+        verificationLink?.takeIf { it.isNotBlank() }?.let { QrCodeGenerator.generate(it, size = 420) }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -66,29 +67,27 @@ fun YouTubeTrailerLoginContent(
         }
 
         item(key = "youtube_trailer_auth_status") {
-            SettingsGroupCard(
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
                 SettingsActionRow(
                     title = stringResource(R.string.youtube_trailer_login_status_title),
                     subtitle = uiState.sessionStatusMessage,
-                    value = if (uiState.isSignedIn) {
-                        stringResource(R.string.youtube_trailer_login_status_signed_in)
-                    } else {
-                        stringResource(R.string.youtube_trailer_login_status_signed_out)
+                    value = when (uiState.mode) {
+                        YouTubeTrailerAuthMode.CONNECTED ->
+                            stringResource(R.string.youtube_trailer_login_status_signed_in)
+                        YouTubeTrailerAuthMode.AWAITING_APPROVAL ->
+                            stringResource(R.string.youtube_trailer_login_status_pending)
+                        YouTubeTrailerAuthMode.DISCONNECTED ->
+                            stringResource(R.string.youtube_trailer_login_status_signed_out)
                     },
                     enabled = false,
                     onClick = {}
                 )
                 SettingsActionRow(
-                    title = stringResource(R.string.youtube_trailer_login_last_refresh_title),
-                    subtitle = uiState.lastCookieRefreshEpochMs?.toString()
+                    title = stringResource(R.string.youtube_trailer_login_access_token_title),
+                    subtitle = uiState.accessTokenExpiresAtEpochMs?.let(::formatEpochMs)
                         ?: stringResource(R.string.youtube_trailer_login_not_available),
-                    value = if (uiState.sessionVersion > 0) {
-                        stringResource(
-                            R.string.youtube_trailer_login_session_version,
-                            uiState.sessionVersion
-                        )
+                    value = if (uiState.hasRefreshToken) {
+                        stringResource(R.string.youtube_trailer_login_access_token_connected)
                     } else {
                         stringResource(R.string.youtube_trailer_login_not_available)
                     },
@@ -98,20 +97,72 @@ fun YouTubeTrailerLoginContent(
             }
         }
 
+        if (!uiState.userCode.isNullOrBlank()) {
+            item(key = "youtube_trailer_auth_code") {
+                SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.youtube_trailer_login_qr_title))
+                    Text(text = stringResource(R.string.youtube_trailer_login_qr_subtitle))
+                    qrBitmap?.let { bitmap ->
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = stringResource(R.string.youtube_trailer_login_qr_title),
+                            modifier = Modifier
+                                .padding(top = 12.dp)
+                                .height(220.dp)
+                        )
+                    }
+                    SettingsActionRow(
+                        title = stringResource(R.string.youtube_trailer_login_code_title),
+                        subtitle = uiState.userCode,
+                        value = uiState.userCode,
+                        enabled = false,
+                        onClick = {}
+                    )
+                    SettingsActionRow(
+                        title = stringResource(R.string.youtube_trailer_login_verification_url_title),
+                        subtitle = verificationLink ?: stringResource(R.string.youtube_trailer_login_not_available),
+                        value = verificationLink ?: stringResource(R.string.youtube_trailer_login_not_available),
+                        enabled = false,
+                        onClick = {}
+                    )
+                    SettingsActionRow(
+                        title = stringResource(R.string.youtube_trailer_login_code_expiry_title),
+                        subtitle = uiState.deviceCodeExpiresAtEpochMs?.let(::formatEpochMs)
+                            ?: stringResource(R.string.youtube_trailer_login_not_available),
+                        value = "${uiState.pollIntervalSeconds}s",
+                        enabled = false,
+                        onClick = {}
+                    )
+                }
+            }
+        }
+
         item(key = "youtube_trailer_auth_actions") {
-            SettingsGroupCard(
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            SettingsGroupCard(modifier = Modifier.fillMaxWidth()) {
                 SettingsActionRow(
-                    title = stringResource(R.string.youtube_trailer_login_sign_in_title),
-                    subtitle = stringResource(R.string.youtube_trailer_login_sign_in_subtitle),
+                    title = if (uiState.mode == YouTubeTrailerAuthMode.AWAITING_APPROVAL) {
+                        stringResource(R.string.youtube_trailer_login_restart_title)
+                    } else {
+                        stringResource(R.string.youtube_trailer_login_sign_in_title)
+                    },
+                    subtitle = if (uiState.mode == YouTubeTrailerAuthMode.AWAITING_APPROVAL) {
+                        stringResource(R.string.youtube_trailer_login_restart_subtitle)
+                    } else {
+                        stringResource(R.string.youtube_trailer_login_sign_in_subtitle)
+                    },
                     onClick = { viewModel.onEvent(YouTubeTrailerAuthEvent.SignIn) }
                 )
                 SettingsActionRow(
                     title = stringResource(R.string.youtube_trailer_login_refresh_title),
                     subtitle = stringResource(R.string.youtube_trailer_login_refresh_subtitle),
-                    enabled = uiState.isSignedIn,
+                    enabled = uiState.mode != YouTubeTrailerAuthMode.DISCONNECTED || uiState.hasRefreshToken,
                     onClick = { viewModel.onEvent(YouTubeTrailerAuthEvent.RefreshSession) }
+                )
+                SettingsActionRow(
+                    title = stringResource(R.string.youtube_trailer_login_cancel_pending_title),
+                    subtitle = stringResource(R.string.youtube_trailer_login_cancel_pending_subtitle),
+                    enabled = uiState.mode == YouTubeTrailerAuthMode.AWAITING_APPROVAL,
+                    onClick = { viewModel.onEvent(YouTubeTrailerAuthEvent.DismissEmbeddedLoginSurface) }
                 )
                 SettingsActionRow(
                     title = stringResource(R.string.youtube_trailer_login_sign_out_title),
@@ -121,76 +172,10 @@ fun YouTubeTrailerLoginContent(
                 )
             }
         }
-
-        if (uiState.showEmbeddedLoginSurface) {
-            item(key = "youtube_trailer_auth_placeholder") {
-                EmbeddedYouTubeLoginSurface(
-                    onPageFinished = viewModel::onAuthPageFinished,
-                    onClose = {
-                        viewModel.onEvent(YouTubeTrailerAuthEvent.DismissEmbeddedLoginSurface)
-                    }
-                )
-            }
-        }
     }
 }
 
-@Composable
-private fun EmbeddedYouTubeLoginSurface(
-    onPageFinished: (String?) -> Unit,
-    onClose: () -> Unit
-) {
-    val context = LocalContext.current
-    val loginUrl = "https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fm.youtube.com%2F"
-
-    SettingsGroupCard(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text(text = stringResource(R.string.youtube_trailer_login_placeholder_title))
-        Text(text = stringResource(R.string.youtube_trailer_login_placeholder_subtitle))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(420.dp)
-                .clip(RoundedCornerShape(SettingsSecondaryCardRadius))
-                .background(NexioColors.BackgroundCard)
-        ) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = {
-                    CookieManager.getInstance().setAcceptCookie(true)
-                    WebView(context).apply {
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.mediaPlaybackRequiresUserGesture = false
-                        settings.userAgentString = YOUTUBE_STABLE_WEB_USER_AGENT
-                        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-                        webViewClient = object : WebViewClient() {
-                            override fun onPageFinished(view: WebView?, url: String?) {
-                                super.onPageFinished(view, url)
-                                onPageFinished(url)
-                            }
-                        }
-                        loadUrl(loginUrl)
-                    }
-                },
-                update = { webView ->
-                    if (webView.url.isNullOrBlank()) {
-                        webView.loadUrl(loginUrl)
-                    }
-                }
-            )
-        }
-        SettingsActionRow(
-            title = stringResource(R.string.action_close),
-            subtitle = stringResource(
-                R.string.youtube_trailer_login_placeholder_close_subtitle
-            ),
-            onClick = onClose
-        )
-    }
+private fun formatEpochMs(epochMs: Long): String {
+    return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+        .format(Date(epochMs))
 }

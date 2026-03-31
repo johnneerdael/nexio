@@ -4,6 +4,38 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class BundledTrailerHelperTest {
+    @Test
+    fun `builds helper invocation args for bearer auth`() {
+        val request = TrailerHelperRequest(
+            youtubeUrl = "https://www.youtube.com/watch?v=abc123",
+            authorizationHeader = "Bearer test-token",
+            pageId = "delegated-page",
+            authUser = "2"
+        )
+
+        val args = buildTrailerHelperInvocationArgs(
+            request = request,
+            jsRuntimeName = "node",
+            jsRuntimePath = "/runtime/node"
+        )
+
+        assertEquals(
+            listOf(
+                "https://www.youtube.com/watch?v=abc123",
+                "Bearer test-token",
+                "delegated-page",
+                "2",
+                "node",
+                "/runtime/node",
+                "Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 " +
+                    "(KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+                "en-US,en;q=0.9",
+                "https://www.youtube.com",
+                "https://www.youtube.com/"
+            ),
+            args.toList()
+        )
+    }
 
     @Test
     fun `parses video and audio urls from helper stdout`() {

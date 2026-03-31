@@ -8,11 +8,13 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
 
 private const val TAG = "TrailerAvailability"
+private const val TOKEN_REFRESH_LEEWAY_MS = 60_000L
 
 @Singleton
 class TrailerAvailabilityService @Inject constructor(
     private val authDataStore: YouTubeTrailerAuthDataStore,
-    private val cookieStore: YouTubeTrailerCookieStore,
+    private val tokenStore: YouTubeTrailerTokenStore,
+    private val authService: YouTubeDeviceCodeAuthService,
     private val bundledTrailerHelper: BundledTrailerHelper,
     private val helperCache: TrailerHelperCache
 ) {
@@ -36,9 +38,9 @@ class TrailerAvailabilityService @Inject constructor(
             return null
         }
 
-        val cookieHeader = cookieStore.currentYouTubeCookieHeader()
-        if (cookieHeader.isNullOrBlank()) {
-            Log.w(TAG, "Signed-in helper had no current YouTube cookie header")
+        val authState = ensureFreshAuthorizationState()
+        if (authState == null) {
+            Log.w(TAG, "Signed-in helper had no valid bearer authorization header")
             helperCache.storeMiss(cacheKey)
             return null
         }
@@ -46,7 +48,9 @@ class TrailerAvailabilityService @Inject constructor(
         val result = bundledTrailerHelper.resolve(
             TrailerHelperRequest(
                 youtubeUrl = youtubeUrl,
-                cookieHeader = cookieHeader
+                authorizationHeader = authState.authorizationHeader,
+                pageId = authState.pageId,
+                authUser = authState.authUser
             )
         )
 
@@ -75,4 +79,49 @@ class TrailerAvailabilityService @Inject constructor(
             }
         }
     }
+
+    private suspend fun ensureFreshAuthorizationState(): ResolvedAuthState? {
+        var tokenState = tokenStore.state.first()
+        val expiresAtEpochMs = tokenState.expiresAtEpochMs
+        val now = System.currentTimeMillis()
+        val isExpiring = expiresAtEpochMs != null && expiresAtEpochMs <= now + TOKEN_REFRESH_LEEWAY_MS
+
+        if ((tokenState.accessToken.isNullOrBlank() || isExpiring) && !tokenState.refreshToken.isNullOrBlank()) {
+            val refreshed = authService.refreshAccessToken(tokenState.refreshToken)
+            refreshed.getOrNull()?.let { session ->
+                tokenStore.saveSession(
+                    session.copy(
+                        refreshToken = session.refreshToken ?: tokenState.refreshToken
+                    )
+                )
+                authDataStore.markSignedIn("Session refreshed")
+                tokenState = tokenStore.state.first()
+            } ?: refreshed.exceptionOrNull()?.message?.let { message ->
+                Log.w(TAG, "Failed to refresh YouTube trailer auth token: $message")
+                authDataStore.updateSessionStatusMessage(message)
+            }
+        }
+
+        val resolvedExpiryEpochMs = tokenState.expiresAtEpochMs
+        if (isExpiring && resolvedExpiryEpochMs != null && resolvedExpiryEpochMs <= now + TOKEN_REFRESH_LEEWAY_MS) {
+            return null
+        }
+
+        val authorizationHeader = tokenState.accessToken
+            ?.takeIf { it.isNotBlank() }
+            ?.let { "Bearer $it" }
+            ?: return null
+
+        return ResolvedAuthState(
+            authorizationHeader = authorizationHeader,
+            pageId = tokenState.delegatedPageId,
+            authUser = tokenState.authUser ?: "0"
+        )
+    }
 }
+
+private data class ResolvedAuthState(
+    val authorizationHeader: String,
+    val pageId: String?,
+    val authUser: String?
+)

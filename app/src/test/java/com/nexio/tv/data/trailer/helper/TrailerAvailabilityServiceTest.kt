@@ -7,6 +7,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.withArg
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -21,13 +22,15 @@ class TrailerAvailabilityServiceTest {
     @Test
     fun `signed out does not invoke helper`() = runTest {
         val authDataStore = mockk<YouTubeTrailerAuthDataStore>()
-        val cookieStore = mockk<YouTubeTrailerCookieStore>()
+        val tokenStore = mockk<YouTubeTrailerTokenStore>()
+        val authService = mockk<YouTubeDeviceCodeAuthService>()
         val bundledHelper = mockk<BundledTrailerHelper>()
         every { authDataStore.settings } returns flowOf(YouTubeTrailerAuthSettings(isSignedIn = false))
 
         val service = TrailerAvailabilityService(
             authDataStore = authDataStore,
-            cookieStore = cookieStore,
+            tokenStore = tokenStore,
+            authService = authService,
             bundledTrailerHelper = bundledHelper,
             helperCache = cache()
         )
@@ -40,18 +43,28 @@ class TrailerAvailabilityServiceTest {
 
     @Test
     fun `signed in helper failure caches miss and avoids repeated helper calls`() = runTest {
-        val authDataStore = mockk<YouTubeTrailerAuthDataStore>()
-        val cookieStore = mockk<YouTubeTrailerCookieStore>()
+        val authDataStore = mockk<YouTubeTrailerAuthDataStore>(relaxed = true)
+        val tokenStore = mockk<YouTubeTrailerTokenStore>()
+        val authService = mockk<YouTubeDeviceCodeAuthService>()
         val bundledHelper = mockk<BundledTrailerHelper>()
         every { authDataStore.settings } returns flowOf(YouTubeTrailerAuthSettings(isSignedIn = true))
-        coEvery { cookieStore.currentYouTubeCookieHeader() } returns "SID=abc; HSID=def"
-        coEvery {
-            bundledHelper.resolve(any())
-        } returns TrailerHelperResult.Failure(TrailerHelperFailureReason.ProcessFailed)
+        every {
+            tokenStore.state
+        } returns flowOf(
+            YouTubeTrailerTokenState(
+                accessToken = "access-token",
+                refreshToken = "refresh-token",
+                tokenType = "Bearer",
+                authUser = "0"
+            )
+        )
+        coEvery { bundledHelper.resolve(any()) } returns
+            TrailerHelperResult.Failure(TrailerHelperFailureReason.ProcessFailed)
 
         val service = TrailerAvailabilityService(
             authDataStore = authDataStore,
-            cookieStore = cookieStore,
+            tokenStore = tokenStore,
+            authService = authService,
             bundledTrailerHelper = bundledHelper,
             helperCache = cache()
         )
@@ -66,24 +79,35 @@ class TrailerAvailabilityServiceTest {
     @Test
     fun `signed in helper playback is returned and cached`() = runTest {
         val authDataStore = mockk<YouTubeTrailerAuthDataStore>()
-        val cookieStore = mockk<YouTubeTrailerCookieStore>()
+        val tokenStore = mockk<YouTubeTrailerTokenStore>()
+        val authService = mockk<YouTubeDeviceCodeAuthService>()
         val bundledHelper = mockk<BundledTrailerHelper>()
         val requestSlot = slot<TrailerHelperRequest>()
         every { authDataStore.settings } returns flowOf(YouTubeTrailerAuthSettings(isSignedIn = true))
-        coEvery { cookieStore.currentYouTubeCookieHeader() } returns "SID=abc; HSID=def"
-        coEvery {
-            bundledHelper.resolve(capture(requestSlot))
-        } returns TrailerHelperResult.Playback(
-            TrailerHelperPlaybackResult(
-                videoUrl = "https://video.example/stream.m3u8",
-                audioUrl = "https://audio.example/stream.m4a",
-                expiresAtEpochMs = 1_900_000_000_000L
+        every {
+            tokenStore.state
+        } returns flowOf(
+            YouTubeTrailerTokenState(
+                accessToken = "access-token",
+                refreshToken = "refresh-token",
+                tokenType = "Bearer",
+                delegatedPageId = "page-42",
+                authUser = "0"
             )
         )
+        coEvery { bundledHelper.resolve(capture(requestSlot)) } returns
+            TrailerHelperResult.Playback(
+                TrailerHelperPlaybackResult(
+                    videoUrl = "https://video.example/stream.m3u8",
+                    audioUrl = "https://audio.example/stream.m4a",
+                    expiresAtEpochMs = 1_900_000_000_000L
+                )
+            )
 
         val service = TrailerAvailabilityService(
             authDataStore = authDataStore,
-            cookieStore = cookieStore,
+            tokenStore = tokenStore,
+            authService = authService,
             bundledTrailerHelper = bundledHelper,
             helperCache = cache()
         )
@@ -96,8 +120,72 @@ class TrailerAvailabilityServiceTest {
         assertEquals("https://audio.example/stream.m4a", first?.audioUrl)
         assertEquals(first, second)
         assertEquals(youtubeUrl, requestSlot.captured.youtubeUrl)
-        assertEquals("SID=abc; HSID=def", requestSlot.captured.cookieHeader)
+        assertEquals("Bearer access-token", requestSlot.captured.authorizationHeader)
+        assertEquals("page-42", requestSlot.captured.pageId)
+        assertEquals("0", requestSlot.captured.authUser)
         coVerify(exactly = 1) { bundledHelper.resolve(any()) }
+    }
+
+    @Test
+    fun `expiring access token is refreshed before helper invocation`() = runTest {
+        val authDataStore = mockk<YouTubeTrailerAuthDataStore>(relaxed = true)
+        val tokenStore = mockk<YouTubeTrailerTokenStore>(relaxed = true)
+        val authService = mockk<YouTubeDeviceCodeAuthService>()
+        val bundledHelper = mockk<BundledTrailerHelper>()
+        every { authDataStore.settings } returns flowOf(YouTubeTrailerAuthSettings(isSignedIn = true))
+        every {
+            tokenStore.state
+        } returnsMany listOf(
+            flowOf(
+                YouTubeTrailerTokenState(
+                    accessToken = "stale-token",
+                    refreshToken = "refresh-token",
+                    tokenType = "Bearer",
+                    expiresInSeconds = 1,
+                    createdAtEpochMs = System.currentTimeMillis() - 10_000L
+                )
+            ),
+            flowOf(
+                YouTubeTrailerTokenState(
+                    accessToken = "fresh-token",
+                    refreshToken = "refresh-token",
+                    tokenType = "Bearer",
+                    expiresInSeconds = 3600,
+                    createdAtEpochMs = System.currentTimeMillis()
+                )
+            )
+        )
+        coEvery { authService.refreshAccessToken("refresh-token") } returns Result.success(
+            YouTubeTrailerTokenSession(
+                accessToken = "fresh-token",
+                refreshToken = null,
+                tokenType = "Bearer",
+                expiresInSeconds = 3600
+            )
+        )
+        coEvery { bundledHelper.resolve(any()) } returns TrailerHelperResult.Failure(
+            TrailerHelperFailureReason.ProcessFailed
+        )
+
+        val service = TrailerAvailabilityService(
+            authDataStore = authDataStore,
+            tokenStore = tokenStore,
+            authService = authService,
+            bundledTrailerHelper = bundledHelper,
+            helperCache = cache()
+        )
+
+        assertNull(service.resolveAuthenticatedYouTubePlayback("https://www.youtube.com/watch?v=testvideo04"))
+
+        coVerify(exactly = 1) { authService.refreshAccessToken("refresh-token") }
+        coVerify(exactly = 1) {
+            tokenStore.saveSession(
+                withArg {
+                    assertEquals("fresh-token", it.accessToken)
+                    assertEquals("refresh-token", it.refreshToken)
+                }
+            )
+        }
     }
 
     private fun cache(): TrailerHelperCache {

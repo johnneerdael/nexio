@@ -1,4 +1,5 @@
 import json
+import os
 from urllib.parse import parse_qs, urlparse
 
 import yt_dlp
@@ -6,7 +7,9 @@ import yt_dlp
 
 def resolve_youtube_playback(
     youtube_url,
-    cookie_header,
+    authorization_header,
+    page_id,
+    auth_user,
     js_runtime_name,
     js_runtime_path,
     user_agent,
@@ -31,16 +34,47 @@ def resolve_youtube_playback(
         headers["Origin"] = origin
     if referer:
         headers["Referer"] = referer
-    if cookie_header:
-        headers["Cookie"] = cookie_header
+    if page_id:
+        headers["X-Goog-PageId"] = page_id
+    if auth_user is not None and auth_user != "":
+        headers["X-Goog-AuthUser"] = str(auth_user)
+    if authorization_header:
+        headers["Authorization"] = authorization_header
     if headers:
         ydl_opts["http_headers"] = headers
 
     if js_runtime_name and js_runtime_path:
         ydl_opts["js_runtimes"] = {js_runtime_name: {"path": js_runtime_path}}
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(youtube_url, download=False)
+    previous_env = {
+        "YTDLP_YT_AUTHORIZATION": os.environ.get("YTDLP_YT_AUTHORIZATION"),
+        "YTDLP_YT_PAGE_ID": os.environ.get("YTDLP_YT_PAGE_ID"),
+        "YTDLP_YT_AUTHUSER": os.environ.get("YTDLP_YT_AUTHUSER"),
+    }
+    try:
+        if authorization_header:
+            os.environ["YTDLP_YT_AUTHORIZATION"] = authorization_header
+        else:
+            os.environ.pop("YTDLP_YT_AUTHORIZATION", None)
+
+        if page_id:
+            os.environ["YTDLP_YT_PAGE_ID"] = page_id
+        else:
+            os.environ.pop("YTDLP_YT_PAGE_ID", None)
+
+        if auth_user is not None and auth_user != "":
+            os.environ["YTDLP_YT_AUTHUSER"] = str(auth_user)
+        else:
+            os.environ.pop("YTDLP_YT_AUTHUSER", None)
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(youtube_url, download=False)
+    finally:
+        for key, value in previous_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
     payload = _playback_payload_from_info(info)
     return json.dumps(payload)

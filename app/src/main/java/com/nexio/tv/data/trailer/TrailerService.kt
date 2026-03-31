@@ -36,7 +36,8 @@ private sealed interface CachedTrailerLookup {
 
 private data class CachedTrailerPlaybackSource(
     val playbackSource: TrailerPlaybackSource,
-    val cachedAt: Instant
+    val cachedAt: Instant,
+    val authBacked: Boolean
 )
 
 @Singleton
@@ -326,11 +327,31 @@ class TrailerService(
         title: String?,
         year: String?
     ): TrailerResolutionResult? = withContext(Dispatchers.IO) {
+        val helperSignedIn = trailerAvailabilityService.isSignedIn()
         val youtubeKey = extractYouTubeVideoId(youtubeUrl)
         if (!youtubeKey.isNullOrBlank()) {
-            getValidCachedYoutubeSource(youtubeKey)?.let { cached ->
+            getValidCachedYoutubeSource(
+                youtubeKey = youtubeKey,
+                requireAuthBacked = helperSignedIn
+            )?.let { cached ->
                 return@withContext TrailerResolutionResult.Playback(cached)
             }
+        }
+
+        if (helperSignedIn) {
+            val helperSource = trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl)
+            if (helperSource != null) {
+                Log.d(TAG, "Resolved $youtubeUrl via authenticated embedded helper")
+                if (!youtubeKey.isNullOrBlank()) {
+                    youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
+                        playbackSource = helperSource,
+                        cachedAt = Instant.now(clock),
+                        authBacked = true
+                    )
+                }
+                return@withContext TrailerResolutionResult.Playback(helperSource)
+            }
+            return@withContext null
         }
 
         val localSource = runCatching {
@@ -341,22 +362,11 @@ class TrailerService(
             if (!youtubeKey.isNullOrBlank()) {
                 youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
                     playbackSource = localSource,
-                    cachedAt = Instant.now(clock)
+                    cachedAt = Instant.now(clock),
+                    authBacked = false
                 )
             }
             return@withContext TrailerResolutionResult.Playback(localSource)
-        }
-
-        val helperSource = trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl)
-        if (helperSource != null) {
-            Log.d(TAG, "Resolved $youtubeUrl via authenticated embedded helper")
-            if (!youtubeKey.isNullOrBlank()) {
-                youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
-                    playbackSource = helperSource,
-                    cachedAt = Instant.now(clock)
-                )
-            }
-            return@withContext TrailerResolutionResult.Playback(helperSource)
         }
 
         if (BuildConfig.TRAILER_API_URL.isNotBlank()) {
@@ -378,7 +388,8 @@ class TrailerService(
                 if (!youtubeKey.isNullOrBlank()) {
                     youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
                         playbackSource = playbackSource,
-                        cachedAt = Instant.now(clock)
+                        cachedAt = Instant.now(clock),
+                        authBacked = false
                     )
                 }
                 return@withContext TrailerResolutionResult.Playback(playbackSource)
@@ -487,8 +498,15 @@ class TrailerService(
         return apiKey.takeIf { it.isNotBlank() }
     }
 
-    private fun getValidCachedYoutubeSource(youtubeKey: String): TrailerPlaybackSource? {
+    private fun getValidCachedYoutubeSource(
+        youtubeKey: String,
+        requireAuthBacked: Boolean
+    ): TrailerPlaybackSource? {
         val cached = youtubeSourceCache[youtubeKey] ?: return null
+        if (requireAuthBacked && !cached.authBacked) {
+            youtubeSourceCache.remove(youtubeKey, cached)
+            return null
+        }
         val age = Duration.between(cached.cachedAt, Instant.now(clock))
         if (age <= YOUTUBE_SOURCE_CACHE_TTL) {
             return cached.playbackSource
