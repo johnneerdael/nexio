@@ -364,10 +364,16 @@ private fun ClassicHomeRoute(
     onCatalogItemLongPress: (MetaPreview, String) -> Unit
 ) {
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
+    val requestTrailerPreview = remember(viewModel) {
+        { item: MetaPreview -> viewModel.requestTrailerPreview(item) }
+    }
     ClassicHomeContent(
         uiState = uiState,
         posterCardStyle = posterCardStyle,
         focusState = focusState,
+        trailerPreviewUrls = viewModel.trailerPreviewUrls,
+        trailerPreviewAudioUrls = viewModel.trailerPreviewAudioUrls,
+        trailerPreviewExternalUrls = viewModel.trailerPreviewExternalUrls,
         onNavigateToDetail = onNavigateToDetail,
         onContinueWatchingClick = onContinueWatchingClick,
         onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
@@ -388,6 +394,7 @@ private fun ClassicHomeRoute(
         },
         isCatalogItemWatched = isCatalogItemWatched,
         onCatalogItemLongPress = onCatalogItemLongPress,
+        onRequestTrailerPreview = requestTrailerPreview,
         onItemFocus = { item ->
             viewModel.onItemFocus(item)
         },
@@ -462,10 +469,16 @@ private fun ModernHomeRoute(
         uiState.catalogTypeSuffixEnabled,
         uiState.focusedPosterBackdropExpandEnabled,
         uiState.focusedPosterBackdropExpandDelaySeconds,
+        uiState.focusedPosterBackdropTrailerEnabled,
+        uiState.focusedPosterBackdropTrailerMuted,
+        uiState.focusedPosterBackdropTrailerPlaybackTarget,
         uiState.posterCardWidthDp,
         uiState.posterCardHeightDp,
         uiState.posterCardCornerRadiusDp,
-        uiState.posterLabelsEnabled
+        uiState.posterLabelsEnabled,
+        viewModel.trailerPreviewUrls,
+        viewModel.trailerPreviewAudioUrls,
+        viewModel.trailerPreviewExternalUrls
     ) {
         ModernHomeContentState(
             catalogRows = uiState.catalogRows,
@@ -474,10 +487,16 @@ private fun ModernHomeRoute(
             catalogTypeSuffixEnabled = uiState.catalogTypeSuffixEnabled,
             focusedPosterBackdropExpandEnabled = uiState.focusedPosterBackdropExpandEnabled,
             focusedPosterBackdropExpandDelaySeconds = uiState.focusedPosterBackdropExpandDelaySeconds,
+            focusedPosterBackdropTrailerEnabled = uiState.focusedPosterBackdropTrailerEnabled,
+            focusedPosterBackdropTrailerMuted = uiState.focusedPosterBackdropTrailerMuted,
+            focusedPosterBackdropTrailerPlaybackTarget = uiState.focusedPosterBackdropTrailerPlaybackTarget,
             posterCardWidthDp = uiState.posterCardWidthDp,
             posterCardHeightDp = uiState.posterCardHeightDp,
             posterCardCornerRadiusDp = uiState.posterCardCornerRadiusDp,
-            posterLabelsEnabled = uiState.posterLabelsEnabled
+            posterLabelsEnabled = uiState.posterLabelsEnabled,
+            trailerPreviewUrls = viewModel.trailerPreviewUrls,
+            trailerPreviewAudioUrls = viewModel.trailerPreviewAudioUrls,
+            trailerPreviewExternalUrls = viewModel.trailerPreviewExternalUrls
         )
     }
     val preloadAdjacentItem = remember(viewModel) {
@@ -486,6 +505,11 @@ private fun ModernHomeRoute(
     val loadMoreCatalog = remember(viewModel) {
         { catalogId: String, addonId: String, type: String ->
             viewModel.onEvent(HomeEvent.OnLoadMoreCatalog(catalogId, addonId, type))
+        }
+    }
+    val requestTrailerPreview = remember(viewModel) {
+        { itemId: String, title: String, releaseInfo: String?, apiType: String, fallbackYtId: String? ->
+            viewModel.requestTrailerPreview(itemId, title, releaseInfo, apiType, fallbackYtId)
         }
     }
     val removeContinueWatching = remember(viewModel) {
@@ -533,6 +557,7 @@ private fun ModernHomeRoute(
         onCatalogItemLongPress = onCatalogItemLongPress,
         onItemFocus = remember(viewModel) { { item -> viewModel.onItemFocus(item) } },
         onPreloadAdjacentItem = preloadAdjacentItem,
+        onRequestTrailerPreview = requestTrailerPreview,
         onSaveFocusState = saveModernFocusState
     )
 }

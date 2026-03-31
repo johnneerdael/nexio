@@ -5,10 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.TmdbSettings
+import com.nexio.tv.data.trailer.TrailerResolutionResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.async
@@ -36,7 +38,10 @@ private data class CoreLayoutPrefs(
 
 private data class FocusedBackdropPrefs(
     val expandEnabled: Boolean,
-    val expandDelaySeconds: Int
+    val expandDelaySeconds: Int,
+    val trailerEnabled: Boolean,
+    val trailerMuted: Boolean,
+    val trailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget
 )
 
 private data class LayoutUiPrefs(
@@ -50,6 +55,9 @@ private data class LayoutUiPrefs(
     val modernLandscapePostersEnabled: Boolean,
     val focusedBackdropExpandEnabled: Boolean,
     val focusedBackdropExpandDelaySeconds: Int,
+    val focusedBackdropTrailerEnabled: Boolean,
+    val focusedBackdropTrailerMuted: Boolean,
+    val focusedBackdropTrailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget,
     val posterCardWidthDp: Int,
     val posterCardHeightDp: Int,
     val posterCardCornerRadiusDp: Int
@@ -86,11 +94,17 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
 
     val focusedBackdropPrefsFlow = combine(
         layoutPreferenceDataStore.focusedPosterBackdropExpandEnabled,
-        layoutPreferenceDataStore.focusedPosterBackdropExpandDelaySeconds
-    ) { expandEnabled, expandDelaySeconds ->
+        layoutPreferenceDataStore.focusedPosterBackdropExpandDelaySeconds,
+        layoutPreferenceDataStore.focusedPosterBackdropTrailerEnabled,
+        layoutPreferenceDataStore.focusedPosterBackdropTrailerMuted,
+        layoutPreferenceDataStore.focusedPosterBackdropTrailerPlaybackTarget
+    ) { expandEnabled, expandDelaySeconds, trailerEnabled, trailerMuted, trailerPlaybackTarget ->
         FocusedBackdropPrefs(
             expandEnabled = expandEnabled,
-            expandDelaySeconds = expandDelaySeconds
+            expandDelaySeconds = expandDelaySeconds,
+            trailerEnabled = trailerEnabled,
+            trailerMuted = trailerMuted,
+            trailerPlaybackTarget = trailerPlaybackTarget
         )
     }
 
@@ -114,6 +128,9 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
             modernLandscapePostersEnabled = false,
             focusedBackdropExpandEnabled = focusedBackdropPrefs.expandEnabled,
             focusedBackdropExpandDelaySeconds = focusedBackdropPrefs.expandDelaySeconds,
+            focusedBackdropTrailerEnabled = focusedBackdropPrefs.trailerEnabled,
+            focusedBackdropTrailerMuted = focusedBackdropPrefs.trailerMuted,
+            focusedBackdropTrailerPlaybackTarget = focusedBackdropPrefs.trailerPlaybackTarget,
             posterCardWidthDp = posterCardWidthDp,
             posterCardHeightDp = posterCardHeightDp,
             posterCardCornerRadiusDp = posterCardCornerRadiusDp
@@ -156,6 +173,9 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                         modernLandscapePostersEnabled = prefs.modernLandscapePostersEnabled,
                         focusedPosterBackdropExpandEnabled = prefs.focusedBackdropExpandEnabled,
                         focusedPosterBackdropExpandDelaySeconds = prefs.focusedBackdropExpandDelaySeconds,
+                        focusedPosterBackdropTrailerEnabled = prefs.focusedBackdropTrailerEnabled,
+                        focusedPosterBackdropTrailerMuted = prefs.focusedBackdropTrailerMuted,
+                        focusedPosterBackdropTrailerPlaybackTarget = prefs.focusedBackdropTrailerPlaybackTarget,
                         posterCardWidthDp = prefs.posterCardWidthDp,
                         posterCardHeightDp = prefs.posterCardHeightDp,
                         posterCardCornerRadiusDp = prefs.posterCardCornerRadiusDp
@@ -185,6 +205,84 @@ internal fun HomeViewModel.observeExternalMetaPrefetchPreferencePipeline() {
                     }
                 }
             }
+    }
+}
+
+internal fun HomeViewModel.requestTrailerPreviewPipeline(item: MetaPreview) {
+    requestTrailerPreviewPipeline(
+        itemId = item.id,
+        title = item.name,
+        releaseInfo = item.releaseInfo,
+        apiType = item.apiType,
+        fallbackYtId = item.trailerYtIds.firstOrNull()
+    )
+}
+
+internal fun HomeViewModel.requestTrailerPreviewPipeline(
+    itemId: String,
+    title: String,
+    releaseInfo: String?,
+    apiType: String,
+    fallbackYtId: String? = null
+) {
+    if (activeTrailerPreviewItemId != itemId) {
+        activeTrailerPreviewItemId = itemId
+        trailerPreviewRequestVersion++
+    }
+
+    if (trailerPreviewNegativeCache.contains(itemId)) return
+    if (trailerPreviewUrlsState.containsKey(itemId) || trailerPreviewExternalUrlsState.containsKey(itemId)) return
+    if (!trailerPreviewLoadingIds.add(itemId)) return
+
+    val requestVersion = trailerPreviewRequestVersion
+
+    viewModelScope.launch {
+        val tmdbId = runCatching { tmdbService.ensureTmdbId(itemId, apiType) }.getOrNull()
+        val trailerResult = trailerService.resolveTrailer(
+            title = title,
+            year = extractYear(releaseInfo),
+            tmdbId = tmdbId,
+            type = apiType,
+            contentId = itemId,
+            fallbackYtIds = listOfNotNull(fallbackYtId)
+        )
+
+        val isLatestFocusedItem =
+            activeTrailerPreviewItemId == itemId && trailerPreviewRequestVersion == requestVersion
+        if (!isLatestFocusedItem) {
+            trailerPreviewLoadingIds.remove(itemId)
+            return@launch
+        }
+
+        when (trailerResult) {
+            is TrailerResolutionResult.Playback -> {
+                trailerPreviewNegativeCache.remove(itemId)
+                trailerPreviewExternalUrlsState.remove(itemId)
+                trailerPreviewUrlsState[itemId] = trailerResult.source.videoUrl
+                val audioUrl = trailerResult.source.audioUrl
+                if (audioUrl.isNullOrBlank()) {
+                    trailerPreviewAudioUrlsState.remove(itemId)
+                } else {
+                    trailerPreviewAudioUrlsState[itemId] = audioUrl
+                }
+            }
+
+            is TrailerResolutionResult.External -> {
+                trailerPreviewNegativeCache.remove(itemId)
+                trailerPreviewUrlsState.remove(itemId)
+                trailerPreviewAudioUrlsState.remove(itemId)
+                trailerPreviewExternalUrlsState[itemId] = trailerResult.url
+            }
+
+            null -> {
+                trailerPreviewNegativeCache.add(itemId)
+                trailerPreviewUrlsState.remove(itemId)
+                trailerPreviewAudioUrlsState.remove(itemId)
+                trailerPreviewExternalUrlsState.remove(itemId)
+            }
+        }
+
+        trailerPreviewLoadingIds.remove(itemId)
     }
 }
 
@@ -398,11 +496,22 @@ private fun HomeViewModel.flushMetadataEnrichmentPipeline() {
     catalogsMap.forEach { (key, row) ->
         var mutableItems: MutableList<MetaPreview>? = null
         row.items.forEachIndexed { index, currentItem ->
+            val incomingTrailerYtIds = metaByItemId[currentItem.id]?.trailerYtIds.orEmpty()
             val mergedItem = mergeFocusedItemEnrichment(
                 currentItem = currentItem,
                 tmdbEnrichment = tmdbByItemId[currentItem.id],
                 externalMeta = metaByItemId[currentItem.id]
             )
+            if (incomingTrailerYtIds.isNotEmpty() &&
+                !trailerPreviewUrlsState.containsKey(currentItem.id) &&
+                !trailerPreviewExternalUrlsState.containsKey(currentItem.id)
+            ) {
+                trailerPreviewNegativeCache.remove(currentItem.id)
+                if (activeTrailerPreviewItemId == currentItem.id) {
+                    trailerPreviewRequestVersion++
+                    requestTrailerPreviewPipeline(mergedItem)
+                }
+            }
             if (mergedItem != currentItem) {
                 val updatedItems = mutableItems ?: row.items.toMutableList().also { mutableItems = it }
                 updatedItems[index] = mergedItem
@@ -423,7 +532,7 @@ private fun HomeViewModel.flushMetadataEnrichmentPipeline() {
     scheduleUpdateCatalogRows()
 }
 
-private fun HomeViewModel.mergeFocusedItemEnrichment(
+internal fun HomeViewModel.mergeFocusedItemEnrichment(
     currentItem: MetaPreview,
     tmdbEnrichment: TmdbEnrichment?,
     externalMeta: Meta?
@@ -457,7 +566,12 @@ private fun HomeViewModel.mergeFocusedItemEnrichment(
             logo = externalMeta.logo ?: merged.logo,
             description = externalMeta.description ?: merged.description,
             imdbRating = externalMeta.imdbRating ?: merged.imdbRating,
-            genres = if (externalMeta.genres.isNotEmpty()) externalMeta.genres else merged.genres
+            genres = if (externalMeta.genres.isNotEmpty()) externalMeta.genres else merged.genres,
+            trailerYtIds = if (externalMeta.trailerYtIds.isNotEmpty()) {
+                externalMeta.trailerYtIds
+            } else {
+                merged.trailerYtIds
+            }
         )
     }
     return merged

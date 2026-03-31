@@ -12,6 +12,8 @@
 
     <!-- ErrorState -->
     <string name="action_retry">Retry</string>
+    <string name="action_on">On</string>
+    <string name="action_off">Off</string>
 
     <!-- ContinueWatchingSection -->
     <string name="continue_watching">Continue Watching</string>
@@ -189,6 +191,10 @@
     <string name="playback_osd_clock">OSD Clock</string>
     <string name="playback_skip_intro">Skip Intro</string>
     <string name="playback_skip_intro_sub">Use introdb.app to detect intros and recaps.</string>
+    <string name="playback_autoplay_trailers">Autoplay Trailers</string>
+    <string name="playback_autoplay_trailers_sub">Allow detail and home trailer previews to start automatically after the configured delay.</string>
+    <string name="playback_trailer_delay">Trailer Delay</string>
+    <string name="playback_trailer_delay_sub">How long to wait before auto-starting a trailer preview.</string>
     <string name="playback_auto_frame_rate">Auto Frame Rate</string>
     <string name="playback_section_player">Player &amp; Stream Selection</string>
     <string name="playback_section_player_desc">Player preference, auto-play, and source filtering.</string>
@@ -441,6 +447,8 @@
     <string name="layout_section_detail_desc">Settings for the detail and episode screens.</string>
     <string name="layout_blur_unwatched">Blur Unwatched Episodes</string>
     <string name="layout_blur_unwatched_sub">Blur episode thumbnails until watched to avoid spoilers.</string>
+    <string name="layout_trailer_button">Trailer Button</string>
+    <string name="layout_trailer_button_sub">Show the trailer action on the detail page when a trailer is available.</string>
     <string name="layout_prefer_external_meta">Prefer meta from external addon</string>
     <string name="layout_prefer_external_meta_sub">Use metadata from external addon instead of catalog addon.</string>
     <string name="layout_section_focused">Focused Poster</string>
@@ -449,6 +457,14 @@
     <string name="layout_expand_poster_sub">Expand focused poster after idle delay.</string>
     <string name="layout_expand_delay">Backdrop Expand Delay</string>
     <string name="layout_expand_delay_sub">How long to wait before expanding focused cards.</string>
+    <string name="layout_autoplay_trailer">Autoplay Trailer</string>
+    <string name="layout_autoplay_trailer_sub">Start trailer previews for the focused poster when a trailer source is available.</string>
+    <string name="layout_trailer_muted">Mute Trailer Previews</string>
+    <string name="layout_trailer_muted_sub">Start focused-poster trailer previews muted.</string>
+    <string name="layout_trailer_location">Trailer Playback Target</string>
+    <string name="layout_trailer_location_sub">Choose whether focused-poster trailers play in hero media or the expanded card.</string>
+    <string name="layout_trailer_expanded_card">Expanded Card</string>
+    <string name="layout_trailer_hero_media">Hero Media</string>
     <string name="layout_section_card_style">Poster Card Style</string>
     <string name="layout_section_card_style_desc">Tune card width and corner radius.</string>
     <string name="layout_open">Open</string>
