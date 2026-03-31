@@ -23,6 +23,18 @@ data class WatchedSeriesEntry(
     val ids: Set<String>
 )
 
+internal const val GUEST_TRAKT_SESSION_KEY = "guest"
+
+internal fun traktSessionKeyForState(state: TraktAuthState): String {
+    return state.userSlug
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?: state.username
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        ?: GUEST_TRAKT_SESSION_KEY
+}
+
 @Singleton
 class WatchedSeriesStateHolder @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
@@ -30,7 +42,6 @@ class WatchedSeriesStateHolder @Inject constructor(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
     companion object {
-        private const val GUEST_SESSION_ID = "guest"
         private const val PREFS_NAME = "watched_series_state"
         private const val WATCHED_KEY_PREFIX = "entries_"
         private const val KNOWN_KEY_PREFIX = "known_entries_"
@@ -40,7 +51,7 @@ class WatchedSeriesStateHolder @Inject constructor(
     private val _entries = MutableStateFlow<List<WatchedSeriesEntry>>(emptyList())
     val entries: StateFlow<List<WatchedSeriesEntry>> = _entries.asStateFlow()
     private val knownEntries = MutableStateFlow<List<WatchedSeriesEntry>>(emptyList())
-    private val _activeSessionKey = MutableStateFlow(GUEST_SESSION_ID)
+    private val _activeSessionKey = MutableStateFlow(GUEST_TRAKT_SESSION_KEY)
     val activeSessionKey: StateFlow<String> = _activeSessionKey.asStateFlow()
 
     init {
@@ -172,13 +183,7 @@ class WatchedSeriesStateHolder @Inject constructor(
     }
 
     private fun sessionIdForState(state: TraktAuthState): String {
-        return state.userSlug
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?: state.username
-                ?.trim()
-                ?.takeIf { it.isNotBlank() }
-            ?: GUEST_SESSION_ID
+        return traktSessionKeyForState(state)
     }
 
     private fun switchToSession(sessionKey: String) {

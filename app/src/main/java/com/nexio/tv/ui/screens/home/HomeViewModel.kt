@@ -190,6 +190,7 @@ class HomeViewModel @Inject constructor(
     internal var seriesWatchedObserverJob: Job? = null
     internal var seriesNextUpDiscoveryJob: Job? = null
     internal var lastSeriesNextUpDiscoverySignature: String? = null
+    internal var seriesNextUpDiscoveryGeneration: Long = 0L
     internal var lastContinueWatchingSnapshot = com.nexio.tv.data.repository.ContinueWatchingSnapshot()
     internal val discoveredNextUpEntriesByContentId = linkedMapOf<String, TraktProgressService.NextUpEntry>()
     internal var watchedSeriesBootstrapEmptyReadPendingForSession: Boolean = true

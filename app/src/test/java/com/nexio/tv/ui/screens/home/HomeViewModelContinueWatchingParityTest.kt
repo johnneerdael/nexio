@@ -132,13 +132,37 @@ class HomeViewModelContinueWatchingParityTest {
         assertTrue(
             shouldDiscardSeriesNextUpLookupResults(
                 launchedForSessionKey = "alice",
-                activeSessionKey = "bob"
+                activeSessionKey = "bob",
+                launchedGeneration = 2L,
+                activeGeneration = 2L
             )
         )
         assertFalse(
             shouldDiscardSeriesNextUpLookupResults(
                 launchedForSessionKey = "alice",
-                activeSessionKey = "alice"
+                activeSessionKey = "alice",
+                launchedGeneration = 2L,
+                activeGeneration = 2L
+            )
+        )
+    }
+
+    @Test
+    fun `shouldDiscardSeriesNextUpLookupResults drops stale same-session generations`() {
+        assertTrue(
+            shouldDiscardSeriesNextUpLookupResults(
+                launchedForSessionKey = "alice",
+                activeSessionKey = "alice",
+                launchedGeneration = 2L,
+                activeGeneration = 3L
+            )
+        )
+        assertFalse(
+            shouldDiscardSeriesNextUpLookupResults(
+                launchedForSessionKey = "alice",
+                activeSessionKey = "alice",
+                launchedGeneration = 3L,
+                activeGeneration = 3L
             )
         )
     }

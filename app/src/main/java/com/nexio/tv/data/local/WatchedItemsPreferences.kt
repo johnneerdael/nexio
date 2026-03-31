@@ -5,13 +5,15 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import android.util.Log
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
 import com.nexio.tv.domain.model.WatchedItem
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,21 +23,34 @@ private val Context.watchedItemsDataStore: DataStore<Preferences> by preferences
 )
 
 @Singleton
-class WatchedItemsPreferences @Inject constructor(
-    @ApplicationContext private val context: Context
+class WatchedItemsPreferences internal constructor(
+    private val dataStore: DataStore<Preferences>,
+    private val authState: Flow<TraktAuthState>
 ) {
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        traktAuthDataStore: TraktAuthDataStore
+    ) : this(
+        dataStore = context.watchedItemsDataStore,
+        authState = traktAuthDataStore.state
+    )
+
     companion object {
         private const val TAG = "WatchedItemsPrefs"
+        private const val WATCHED_ITEMS_KEY_PREFIX = "watched_items_"
     }
 
-    private val dataStore = context.watchedItemsDataStore
-    private fun store() = dataStore
-
     private val gson = Gson()
-    private val watchedItemsKey = stringSetPreferencesKey("watched_items")
 
-    private val allItems: Flow<List<WatchedItem>> = dataStore.data.map { preferences ->
-        decodeWatchedItems(preferences[watchedItemsKey] ?: emptySet())
+    private val sessionKeys = authState
+        .map(::traktSessionKeyForState)
+        .distinctUntilChanged()
+
+    private val allItems: Flow<List<WatchedItem>> = sessionKeys.flatMapLatest { sessionKey ->
+        dataStore.data.map { preferences ->
+            decodeWatchedItems(preferences[watchedItemsKey(sessionKey)] ?: emptySet())
+        }
     }
 
     fun isWatched(contentId: String, season: Int? = null, episode: Int? = null): Flow<Boolean> {
@@ -60,14 +75,15 @@ class WatchedItemsPreferences @Inject constructor(
     }
 
     suspend fun markAsWatched(item: WatchedItem, contentIds: Collection<String>) {
-        store().edit { preferences ->
-            val currentItems = decodeWatchedItems(preferences[watchedItemsKey] ?: emptySet())
+        dataStore.edit { preferences ->
+            val key = watchedItemsKey(currentSessionKey())
+            val currentItems = decodeWatchedItems(preferences[key] ?: emptySet())
             val updated = upsertWatchedItem(
                 items = currentItems,
                 item = item,
                 contentIds = contentIds
             )
-            preferences[watchedItemsKey] = encodeWatchedItems(updated)
+            preferences[key] = encodeWatchedItems(updated)
         }
     }
 
@@ -84,15 +100,16 @@ class WatchedItemsPreferences @Inject constructor(
         season: Int? = null,
         episode: Int? = null
     ) {
-        store().edit { preferences ->
-            val currentItems = decodeWatchedItems(preferences[watchedItemsKey] ?: emptySet())
+        dataStore.edit { preferences ->
+            val key = watchedItemsKey(currentSessionKey())
+            val currentItems = decodeWatchedItems(preferences[key] ?: emptySet())
             val updated = removeWatchedItems(
                 items = currentItems,
                 contentIds = contentIds,
                 season = season,
                 episode = episode
             )
-            preferences[watchedItemsKey] = encodeWatchedItems(updated)
+            preferences[key] = encodeWatchedItems(updated)
         }
     }
 
@@ -101,8 +118,9 @@ class WatchedItemsPreferences @Inject constructor(
     }
 
     suspend fun mergeRemoteItems(remoteItems: List<WatchedItem>) {
-        store().edit { preferences ->
-            val currentItems = decodeWatchedItems(preferences[watchedItemsKey] ?: emptySet())
+        dataStore.edit { preferences ->
+            val key = watchedItemsKey(currentSessionKey())
+            val currentItems = decodeWatchedItems(preferences[key] ?: emptySet())
             val localKeys = currentItems.map { Triple(it.contentId, it.season, it.episode) }.toSet()
 
             val newItems = remoteItems.filter { remote ->
@@ -110,14 +128,15 @@ class WatchedItemsPreferences @Inject constructor(
             }
 
             if (newItems.isNotEmpty()) {
-                preferences[watchedItemsKey] = encodeWatchedItems(currentItems + newItems)
+                preferences[key] = encodeWatchedItems(currentItems + newItems)
             }
         }
     }
 
     suspend fun replaceWithRemoteItems(remoteItems: List<WatchedItem>) {
-        store().edit { preferences ->
-            val current = preferences[watchedItemsKey] ?: emptySet()
+        dataStore.edit { preferences ->
+            val key = watchedItemsKey(currentSessionKey())
+            val current = preferences[key] ?: emptySet()
             if (remoteItems.isEmpty() && current.isNotEmpty()) {
                 Log.w(TAG, "replaceWithRemoteItems: remote list empty while local has ${current.size} entries; preserving local watched items")
                 return@edit
@@ -126,9 +145,16 @@ class WatchedItemsPreferences @Inject constructor(
             remoteItems.forEach { item ->
                 deduped[Triple(item.contentId, item.season, item.episode)] = item
             }
-            preferences[watchedItemsKey] = encodeWatchedItems(deduped.values)
+            preferences[key] = encodeWatchedItems(deduped.values)
         }
     }
+
+    private suspend fun currentSessionKey(): String {
+        return sessionKeys.first()
+    }
+
+    private fun watchedItemsKey(sessionKey: String) =
+        stringSetPreferencesKey(WATCHED_ITEMS_KEY_PREFIX + sessionKey.lowercase())
 
     private fun decodeWatchedItems(rawItems: Set<String>): List<WatchedItem> {
         return rawItems.mapNotNull { json ->
