@@ -101,6 +101,7 @@ import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.ui.components.ErrorState
 import com.nexio.tv.ui.components.MetaDetailsSkeleton
 import com.nexio.tv.ui.components.NexioDialog
+import com.nexio.tv.ui.components.TrailerPlayer
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -165,6 +166,15 @@ private fun resolveDetailReturnEpisodeFocusTarget(
 }
 
 private const val USER_INTERACTION_DISPATCH_DEBOUNCE_MS = 120L
+
+internal fun shouldShowDetailTrailerTakeover(
+    isTrailerPlaying: Boolean,
+    trailerUrl: String?
+): Boolean = isTrailerPlaying && !trailerUrl.isNullOrBlank()
+
+internal fun shouldShowDetailScrollableContent(
+    showTrailerTakeover: Boolean
+): Boolean = !showTrailerTakeover
 
 @Stable
 private class TrailerSeekOverlayState {
@@ -643,6 +653,12 @@ private fun MetaDetailsContent(
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> },
     onReviewFocused: (Int) -> Unit = {}
 ) {
+    val showTrailerTakeover = remember(isTrailerPlaying, trailerUrl) {
+        shouldShowDetailTrailerTakeover(
+            isTrailerPlaying = isTrailerPlaying,
+            trailerUrl = trailerUrl
+        )
+    }
     val isSeries = remember(meta.type, meta.videos) {
         meta.type == ContentType.SERIES || meta.videos.isNotEmpty()
     }
@@ -1026,8 +1042,9 @@ private fun MetaDetailsContent(
     }
 
     // Backdrop alpha for crossfade
+    var trailerFirstFrameRendered by remember(trailerUrl) { mutableStateOf(false) }
     val backdropAlpha by animateFloatAsState(
-        targetValue = if (isTrailerPlaying) 0f else 1f,
+        targetValue = if (showTrailerTakeover && trailerFirstFrameRendered) 0f else 1f,
         animationSpec = tween(durationMillis = 800),
         label = "backdropFade"
     )
@@ -1170,9 +1187,73 @@ private fun MetaDetailsContent(
         label = "bottomGradientFade"
     )
 
+    val heroSection: @Composable () -> Unit = {
+        Box {
+            HeroContentSection(
+                meta = meta,
+                nextEpisode = nextEpisode,
+                nextToWatch = nextToWatch,
+                onPlayClick = heroPlayClick,
+                isInLibrary = isInLibrary,
+                onToggleLibrary = onToggleLibrary,
+                onLibraryLongPress = {
+                    if (librarySourceMode == LibrarySourceMode.TRAKT) {
+                        onLibraryLongPress()
+                    }
+                },
+                isMovieWatched = isMovieWatched,
+                isMovieWatchedPending = isMovieWatchedPending,
+                onToggleMovieWatched = onToggleMovieWatched,
+                mdbListRatings = mdbListRatings,
+                hideMetaInfoImdb = showMdbListImdb,
+                trailerAvailable = !trailerUrl.isNullOrBlank() || !trailerExternalUrl.isNullOrBlank(),
+                onTrailerClick = onTrailerButtonClick,
+                hideLogoDuringTrailer = hideLogoDuringTrailer,
+                isTrailerPlaying = isTrailerPlaying,
+                playButtonFocusRequester = heroPlayFocusRequester,
+                onHeroActionFocused = {
+                    if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
+                        coroutineScope.launch {
+                            listState.animateScrollToItem(0)
+                        }
+                    }
+                    initialHeroFocusRequested = true
+                    clearPendingRestore()
+                },
+                restorePlayFocusToken = (if (pendingRestoreType == RestoreTarget.HERO) restoreFocusToken else 0) +
+                    restorePlayFocusAfterTrailerBackToken,
+                onPlayFocusRestored = {
+                    onPlayButtonFocused()
+                    initialHeroFocusRequested = true
+                    clearPendingRestore()
+                }
+            )
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Sticky background — backdrop or trailer
         Box(modifier = Modifier.fillMaxSize()) {
+            if (showTrailerTakeover) {
+                TrailerPlayer(
+                    trailerUrl = trailerUrl,
+                    trailerAudioUrl = trailerAudioUrl,
+                    isPlaying = true,
+                    onEnded = {
+                        trailerFirstFrameRendered = false
+                        onTrailerEnded()
+                    },
+                    onFirstFrameRendered = {
+                        trailerFirstFrameRendered = true
+                    },
+                    seekRequestToken = trailerSeekToken,
+                    seekDeltaMs = trailerSeekDeltaMs,
+                    onProgressChanged = onTrailerProgressChanged,
+                    onRemoteKey = onTrailerControlKey,
+                    cropToFill = true,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
             // Backdrop image (fades out when trailer plays)
             AsyncImage(
                 model = backdropRequest,
@@ -1208,107 +1289,68 @@ private fun MetaDetailsContent(
             )
         }
 
-        // Single scrollable column with hero + content
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            state = listState
-        ) {
-            // Hero as first item in the lazy column
-            item(key = "hero", contentType = "hero") {
-                Box {
-                    HeroContentSection(
-                        meta = meta,
-                        nextEpisode = nextEpisode,
-                        nextToWatch = nextToWatch,
-                        onPlayClick = heroPlayClick,
-                        isInLibrary = isInLibrary,
-                        onToggleLibrary = onToggleLibrary,
-                        onLibraryLongPress = {
-                            if (librarySourceMode == LibrarySourceMode.TRAKT) {
-                                onLibraryLongPress()
-                            }
-                        },
-                        isMovieWatched = isMovieWatched,
-                        isMovieWatchedPending = isMovieWatchedPending,
-                        onToggleMovieWatched = onToggleMovieWatched,
-                        mdbListRatings = mdbListRatings,
-                        hideMetaInfoImdb = showMdbListImdb,
-                        trailerAvailable = !trailerUrl.isNullOrBlank() || !trailerExternalUrl.isNullOrBlank(),
-                        onTrailerClick = onTrailerButtonClick,
-                        hideLogoDuringTrailer = hideLogoDuringTrailer,
-                        isTrailerPlaying = isTrailerPlaying,
-                        playButtonFocusRequester = heroPlayFocusRequester,
-                        onHeroActionFocused = {
-                            if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
-                                coroutineScope.launch {
-                                    listState.animateScrollToItem(0)
-                                }
-                            }
-                            initialHeroFocusRequested = true
-                            clearPendingRestore()
-                        },
-                        restorePlayFocusToken = (if (pendingRestoreType == RestoreTarget.HERO) restoreFocusToken else 0) +
-                                restorePlayFocusAfterTrailerBackToken,
-                        onPlayFocusRestored = {
-                            onPlayButtonFocused()
-                            initialHeroFocusRequested = true
-                            clearPendingRestore()
-                        }
-                    )
+        if (shouldShowDetailScrollableContent(showTrailerTakeover)) {
+            // Single scrollable column with hero + content
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState
+            ) {
+                // Hero as first item in the lazy column
+                item(key = "hero", contentType = "hero") {
+                    heroSection()
                 }
-            }
 
-            // Season tabs and episodes for series
-            if (isSeries && seasons.isNotEmpty()) {
-                item(key = "season_tabs", contentType = "season_tabs") {
-                    SeasonTabs(
-                        seasons = seasons,
-                        selectedSeason = selectedSeason,
-                        onSeasonSelected = onSeasonSelected,
-                        onSeasonLongPress = { seasonOptionsDialogSeason = it },
-                        selectedTabFocusRequester = selectedSeasonFocusRequester,
-                        downFocusRequester = seasonDownFocusRequester,
-                        onSelectedSeasonDown = seasonEntryEpisodeId?.let { episodeId ->
-                            { requestSeasonEntryRestore(episodeId) }
-                        }
-                    )
+                // Season tabs and episodes for series
+                if (isSeries && seasons.isNotEmpty()) {
+                    item(key = "season_tabs", contentType = "season_tabs") {
+                        SeasonTabs(
+                            seasons = seasons,
+                            selectedSeason = selectedSeason,
+                            onSeasonSelected = onSeasonSelected,
+                            onSeasonLongPress = { seasonOptionsDialogSeason = it },
+                            selectedTabFocusRequester = selectedSeasonFocusRequester,
+                            downFocusRequester = seasonDownFocusRequester,
+                            onSelectedSeasonDown = seasonEntryEpisodeId?.let { episodeId ->
+                                { requestSeasonEntryRestore(episodeId) }
+                            }
+                        )
+                    }
+                    item(key = "episodes_$selectedSeason", contentType = "episodes") {
+                        val isEpisodeRestoreActive = pendingRestoreType == RestoreTarget.EPISODE ||
+                            pendingRestoreType == RestoreTarget.SEASON_ENTRY
+                        EpisodesRow(
+                            episodes = episodesForSeason,
+                            episodeProgressMap = episodeProgressMap,
+                            episodeRatings = episodeRatings,
+                            watchedEpisodes = watchedEpisodes,
+                            episodeWatchedPendingKeys = episodeWatchedPendingKeys,
+                            blurUnwatchedEpisodes = blurUnwatchedEpisodes,
+                            onEpisodeClick = episodeClick,
+                            onToggleEpisodeWatched = onToggleEpisodeWatched,
+                            onClearEpisodeProgress = onClearEpisodeProgress,
+                            onCheckInEpisode = onCheckInEpisode,
+                            onMarkSeasonWatched = onMarkSeasonWatched,
+                            onMarkSeasonUnwatched = onMarkSeasonUnwatched,
+                            isSeasonFullyWatched = isSeasonFullyWatched(selectedSeason),
+                            selectedSeason = selectedSeason,
+                            onMarkPreviousEpisodesWatched = onMarkPreviousEpisodesWatched,
+                            upFocusRequester = selectedSeasonFocusRequester,
+                            downFocusRequester = episodesDownFocusRequester,
+                            episodeFocusRequesters = seasonEpisodeFocusRequesters,
+                            restoreEpisodeId = if (isEpisodeRestoreActive) pendingRestoreEpisodeId else null,
+                            restoreFocusToken = if (isEpisodeRestoreActive) restoreFocusToken else 0,
+                            onRestoreFocusHandled = {
+                                clearPendingRestore()
+                            },
+                            onEpisodeFocused = { episodeId ->
+                                lastFocusedEpisodeIdBySeason[selectedSeason] = episodeId
+                            },
+                            scrollToEpisodeId = if (lastFocusedEpisodeIdBySeason[selectedSeason] == null) {
+                                seasonEntryEpisodeId
+                            } else null
+                        )
+                    }
                 }
-                item(key = "episodes_$selectedSeason", contentType = "episodes") {
-                    val isEpisodeRestoreActive = pendingRestoreType == RestoreTarget.EPISODE ||
-                        pendingRestoreType == RestoreTarget.SEASON_ENTRY
-                    EpisodesRow(
-                        episodes = episodesForSeason,
-                        episodeProgressMap = episodeProgressMap,
-                        episodeRatings = episodeRatings,
-                        watchedEpisodes = watchedEpisodes,
-                        episodeWatchedPendingKeys = episodeWatchedPendingKeys,
-                        blurUnwatchedEpisodes = blurUnwatchedEpisodes,
-                        onEpisodeClick = episodeClick,
-                        onToggleEpisodeWatched = onToggleEpisodeWatched,
-                        onClearEpisodeProgress = onClearEpisodeProgress,
-                        onCheckInEpisode = onCheckInEpisode,
-                        onMarkSeasonWatched = onMarkSeasonWatched,
-                        onMarkSeasonUnwatched = onMarkSeasonUnwatched,
-                        isSeasonFullyWatched = isSeasonFullyWatched(selectedSeason),
-                        selectedSeason = selectedSeason,
-                        onMarkPreviousEpisodesWatched = onMarkPreviousEpisodesWatched,
-                        upFocusRequester = selectedSeasonFocusRequester,
-                        downFocusRequester = episodesDownFocusRequester,
-                        episodeFocusRequesters = seasonEpisodeFocusRequesters,
-                        restoreEpisodeId = if (isEpisodeRestoreActive) pendingRestoreEpisodeId else null,
-                        restoreFocusToken = if (isEpisodeRestoreActive) restoreFocusToken else 0,
-                        onRestoreFocusHandled = {
-                            clearPendingRestore()
-                        },
-                        onEpisodeFocused = { episodeId ->
-                            lastFocusedEpisodeIdBySeason[selectedSeason] = episodeId
-                        },
-                        scrollToEpisodeId = if (lastFocusedEpisodeIdBySeason[selectedSeason] == null) {
-                            seasonEntryEpisodeId
-                        } else null
-                    )
-                }
-            }
 
             // Cast / More like this section
             if (hasPeopleSection) {
@@ -1499,6 +1541,9 @@ private fun MetaDetailsContent(
                     }
                 }
             }
+            }
+        } else {
+            heroSection()
         }
 
         seasonOptionsDialogSeason?.let { season ->

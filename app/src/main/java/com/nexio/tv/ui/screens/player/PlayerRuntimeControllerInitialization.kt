@@ -847,6 +847,28 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             return
                         }
 
+                        val responseCode =
+                            (error.cause as? androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)?.responseCode
+                        if (responseCode == 416 && !hasRetriedCurrentStreamAfter416) {
+                            retryCurrentStreamFromStartAfter416()
+                            return
+                        }
+
+                        if (error.isGenericTransientPlaybackFailure() &&
+                            !hasRetriedCurrentStreamAfterTransientError
+                        ) {
+                            hasRetriedCurrentStreamAfterTransientError = true
+                            Log.w(
+                                PlayerRuntimeController.TAG,
+                                "Transient playback failure detected, retrying stream once " +
+                                    "code=${error.errorCode} " +
+                                    "host=${currentStreamUrl.safeHost()} " +
+                                    "positionMs=$currentPosition"
+                            )
+                            retryCurrentStreamAfterTransientError(currentPosition)
+                            return
+                        }
+
                         val detailedError = buildString {
                             append(error.message ?: "Playback error")
                             val cause = error.cause
@@ -856,12 +878,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                                 append(": ${cause.message}")
                             }
                             append(" [${error.errorCode}]")
-                        }
-                        val responseCode =
-                            (error.cause as? androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)?.responseCode
-                        if (responseCode == 416 && !hasRetriedCurrentStreamAfter416) {
-                            retryCurrentStreamFromStartAfter416()
-                            return
                         }
                         _uiState.update {
                             it.copy(
@@ -908,6 +924,25 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 )
             }
         }
+    }
+}
+
+private fun PlaybackException.isGenericTransientPlaybackFailure(): Boolean {
+    if (errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS) {
+        val responseCode =
+            (cause as? androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)?.responseCode
+        return responseCode == 408 ||
+            responseCode == 429 ||
+            (responseCode != null && responseCode in 500..599)
+    }
+    // Keep transient decoder retries enabled to match the upstream #1170 parity target.
+    return when (errorCode) {
+        PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+        PlaybackException.ERROR_CODE_DECODING_FAILED -> true
+        else -> false
     }
 }
 
@@ -1105,6 +1140,17 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     timeoutRecoveryAttempts = 0
     hasRetriedCurrentStreamAfterUnexpectedNpe = false
     hasRetriedCurrentStreamAfterMediaPeriodHolderCrash = false
+    if (shouldPreserveTransientRetryState(
+            preservedRequest = preserveTransientRetryStateForRequest,
+            nextStreamUrl = currentStreamUrl,
+            nextHeaders = currentHeaders
+        )
+    ) {
+        preserveTransientRetryStateForRequest = null
+    } else {
+        preserveTransientRetryStateForRequest = null
+        hasRetriedCurrentStreamAfterTransientError = false
+    }
     isExperimentalDv7ToDv81ActiveForCurrentPlayback = false
     isAv1FfmpegFallbackActiveForCurrentPlayback = false
     isVc1SoftwareFallbackActiveForCurrentPlayback = false

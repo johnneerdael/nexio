@@ -25,9 +25,12 @@ import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.data.local.WatchedItemsPreferences
+import com.nexio.tv.data.local.WatchedSeriesStateHolder
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.repository.MDBListDiscoveryService
+import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.domain.model.Addon
@@ -70,10 +73,13 @@ class HomeViewModel @Inject constructor(
     internal val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     internal val tmdbSettingsDataStore: TmdbSettingsDataStore,
     internal val traktSettingsDataStore: TraktSettingsDataStore,
+    internal val watchedItemsPreferences: WatchedItemsPreferences,
+    internal val watchedSeriesStateHolder: WatchedSeriesStateHolder,
     internal val mdbListSettingsDataStore: MDBListSettingsDataStore,
     internal val traktDiscoverySnapshotStore: TraktDiscoverySnapshotStore,
     internal val mdbListDiscoverySnapshotStore: MDBListDiscoverySnapshotStore,
     internal val continueWatchingSnapshotService: ContinueWatchingSnapshotService,
+    internal val traktProgressService: TraktProgressService,
     internal val traktScrobbleService: TraktScrobbleService,
     internal val traktDiscoveryService: TraktDiscoveryService,
     internal val mdbListDiscoveryService: MDBListDiscoveryService,
@@ -122,6 +128,13 @@ class HomeViewModel @Inject constructor(
     internal val _enrichingItemId = MutableStateFlow<String?>(null)
     val enrichingItemId: StateFlow<String?> = _enrichingItemId.asStateFlow()
     internal fun setEnrichingItemId(id: String?) { _enrichingItemId.value = id }
+    internal val modernHomePresentationLocaleTag =
+        MutableStateFlow(AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext))
+    internal fun updateModernHomePresentationLocaleTag(localeTag: String) {
+        modernHomePresentationLocaleTag.update { current ->
+            if (current == localeTag) current else localeTag
+        }
+    }
 
     internal val catalogsMap = linkedMapOf<String, CatalogRow>()
     internal val catalogOrder = mutableListOf<String>()
@@ -188,10 +201,21 @@ class HomeViewModel @Inject constructor(
     internal var adjacentItemPrefetchJob: Job? = null
     internal var pendingAdjacentPrefetchItemId: String? = null
     internal val prefetchedTmdbIds = Collections.synchronizedSet(mutableSetOf<String>())
+    internal val modernCarouselRowBuildCache = ModernCarouselRowBuildCache()
+    internal val modernHomePresentationBuildMutex = Mutex()
+    internal var modernHomePresentationGeneration: Long = 0L
     internal var tmdbEnrichFocusJob: Job? = null
     internal var pendingTmdbEnrichItemId: String? = null
     internal val posterLibraryObserverJobs = mutableMapOf<String, Job>()
     internal val movieWatchedObserverJobs = mutableMapOf<String, Job>()
+    internal var seriesWatchedObserverJob: Job? = null
+    internal var seriesNextUpDiscoveryJob: Job? = null
+    internal var lastSeriesNextUpDiscoverySignature: String? = null
+    internal var seriesNextUpDiscoveryGeneration: Long = 0L
+    internal var lastContinueWatchingSnapshot = com.nexio.tv.data.repository.ContinueWatchingSnapshot()
+    internal val discoveredNextUpEntriesByContentId = linkedMapOf<String, TraktProgressService.NextUpEntry>()
+    internal var watchedSeriesBootstrapEmptyReadPendingForSession: Boolean = true
+    internal var watchedSeriesLocalItemsSessionKey: String? = null
     internal var activePosterListPickerInput: LibraryEntryInput? = null
     @Volatile
     internal var externalMetaPrefetchEnabled: Boolean = false
@@ -239,6 +263,9 @@ class HomeViewModel @Inject constructor(
         get() = trailerPreviewExternalUrlsState
 
     init {
+        viewModelScope.launch {
+            watchedSeriesStateHolder.loadFromDisk()
+        }
         observeStartupPerfTelemetry()
         observeDiskFirstHomeStartupToggle()
         observeLocaleChangesForMetadata()
@@ -247,6 +274,7 @@ class HomeViewModel @Inject constructor(
         restorePersistedCatalogSnapshot()
         observeLayoutPreferences()
         observeTrailerAutoplaySettings()
+        observeModernHomePresentation()
         observeExternalMetaPrefetchPreference()
         loadHomeCatalogOrderPreference()
         loadDisabledHomeCatalogPreference()
@@ -325,6 +353,8 @@ class HomeViewModel @Inject constructor(
             }
         }
     }
+
+    private fun observeModernHomePresentation() = observeModernHomePresentationPipeline()
 
     private fun observeExternalMetaPrefetchPreference() = observeExternalMetaPrefetchPreferencePipeline()
 
@@ -595,6 +625,8 @@ class HomeViewModel @Inject constructor(
 
     override fun onCleared() {
         posterStatusReconcileJob?.cancel()
+        seriesWatchedObserverJob?.cancel()
+        seriesNextUpDiscoveryJob?.cancel()
         startupDeferralWindowJob?.cancel()
         deferredStartupRefreshJob?.cancel()
         metadataEnrichmentFlushJob?.cancel()

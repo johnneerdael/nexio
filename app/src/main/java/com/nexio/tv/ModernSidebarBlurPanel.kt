@@ -51,7 +51,6 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeChild
 import com.nexio.tv.ui.theme.NexioColors
 import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
@@ -75,23 +74,6 @@ internal fun ModernSidebarBlurPanel(
     onDrawerItemFocused: (Int) -> Unit,
     onDrawerItemClick: (String) -> Unit
 ) {
-    val delayedBlurProgress =
-        ((sidebarExpandProgress - 0.34f) / 0.66f).coerceIn(0f, 1f)
-    val showPanelBlur = blurEnabled &&
-        isSidebarExpanded &&
-        !sidebarCollapsePending &&
-        delayedBlurProgress > 0f
-    val expandedPanelBlurModifier = if (showPanelBlur) {
-        Modifier.hazeChild(
-            state = sidebarHazeState,
-            shape = panelShape,
-            tint = Color.Unspecified,
-            blurRadius = (26f * delayedBlurProgress).dp,
-            noiseFactor = 0.04f * delayedBlurProgress
-        )
-    } else {
-        Modifier
-    }
     val bgElevated = NexioColors.BackgroundElevated
     val bgCard = NexioColors.BackgroundCard
     val borderBase = NexioColors.Border
@@ -117,7 +99,6 @@ internal fun ModernSidebarBlurPanel(
                 scaleY = s
                 transformOrigin = TransformOrigin(0f, 0f)
             }
-            .then(expandedPanelBlurModifier)
             .graphicsLayer {
                 shape = panelShape
                 clip = true
