@@ -182,6 +182,7 @@ class HomeViewModel @Inject constructor(
     internal var adjacentItemPrefetchJob: Job? = null
     internal var pendingAdjacentPrefetchItemId: String? = null
     internal val prefetchedTmdbIds = Collections.synchronizedSet(mutableSetOf<String>())
+    internal val modernCarouselRowBuildCache = ModernCarouselRowBuildCache()
     internal var tmdbEnrichFocusJob: Job? = null
     internal var pendingTmdbEnrichItemId: String? = null
     internal val posterLibraryObserverJobs = mutableMapOf<String, Job>()
@@ -191,6 +192,8 @@ class HomeViewModel @Inject constructor(
     internal var lastSeriesNextUpDiscoverySignature: String? = null
     internal var lastContinueWatchingSnapshot = com.nexio.tv.data.repository.ContinueWatchingSnapshot()
     internal val discoveredNextUpEntriesByContentId = linkedMapOf<String, TraktProgressService.NextUpEntry>()
+    internal var watchedSeriesLocalItemsHydratedForSession: Boolean = false
+    internal var watchedSeriesLocalItemsSessionKey: String? = null
     internal var activePosterListPickerInput: LibraryEntryInput? = null
     @Volatile
     internal var externalMetaPrefetchEnabled: Boolean = false
@@ -241,6 +244,7 @@ class HomeViewModel @Inject constructor(
         restorePersistedSyntheticCatalogRows()
         restorePersistedCatalogSnapshot()
         observeLayoutPreferences()
+        observeModernHomePresentation()
         observeExternalMetaPrefetchPreference()
         loadHomeCatalogOrderPreference()
         loadDisabledHomeCatalogPreference()
@@ -306,6 +310,8 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun observeLayoutPreferences() = observeLayoutPreferencesPipeline()
+
+    private fun observeModernHomePresentation() = observeModernHomePresentationPipeline()
 
     private fun observeExternalMetaPrefetchPreference() = observeExternalMetaPrefetchPreferencePipeline()
 

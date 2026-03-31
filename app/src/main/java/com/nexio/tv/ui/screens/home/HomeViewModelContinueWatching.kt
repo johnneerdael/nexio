@@ -43,7 +43,29 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
 private suspend fun HomeViewModel.syncWatchedSeriesStateFromLocalItems(
     snapshot: ContinueWatchingSnapshot
 ) {
+    val sessionKey = watchedSeriesStateHolder.activeSessionKey.value
+    if (watchedSeriesLocalItemsSessionKey != sessionKey) {
+        watchedSeriesLocalItemsSessionKey = sessionKey
+        watchedSeriesLocalItemsHydratedForSession = false
+        discoveredNextUpEntriesByContentId.clear()
+        lastSeriesNextUpDiscoverySignature = null
+    }
+
     val watchedItems = watchedItemsPreferences.getAllItems()
+    if (watchedItems.isNotEmpty()) {
+        watchedSeriesLocalItemsHydratedForSession = true
+    }
+
+    if (shouldPreservePersistedWatchedSeriesCache(
+            watchedItems = watchedItems,
+            currentEntries = watchedSeriesStateHolder.entries.value,
+            hasHydratedLocalWatchedItems = watchedSeriesLocalItemsHydratedForSession
+        )
+    ) {
+        publishContinueWatchingSnapshot(snapshot)
+        return
+    }
+
     val candidateStates = buildWatchedSeriesCandidateStates(
         watchedItems = watchedItems,
         snapshot = snapshot
@@ -166,6 +188,16 @@ private fun HomeViewModel.publishContinueWatchingSnapshot(snapshot: ContinueWatc
     }
 }
 
+internal fun shouldPreservePersistedWatchedSeriesCache(
+    watchedItems: Collection<WatchedItem>,
+    currentEntries: Collection<WatchedSeriesEntry>,
+    hasHydratedLocalWatchedItems: Boolean
+): Boolean {
+    return watchedItems.isEmpty() &&
+        currentEntries.isNotEmpty() &&
+        !hasHydratedLocalWatchedItems
+}
+
 private fun parseEpisodeReleaseDate(raw: String?): LocalDate? {
     if (raw.isNullOrBlank()) return null
     val value = raw.trim()
@@ -188,11 +220,12 @@ private fun parseEpisodeReleaseDate(raw: String?): LocalDate? {
 
 private fun formatEpisodeAirDateLabel(releaseDate: LocalDate): String {
     val todayLocal = LocalDate.now(ZoneId.systemDefault())
-    val formatter = if (releaseDate.year == todayLocal.year) {
-        DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
-    } else {
-        DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault())
-    }
+    val locale = Locale.getDefault()
+    val skeleton = if (releaseDate.year == todayLocal.year) "dMMM" else "dMMMMy"
+    val formatter = DateTimeFormatter.ofPattern(
+        DateFormat.getBestDateTimePattern(locale, skeleton),
+        locale
+    )
     return releaseDate.format(formatter)
 }
 

@@ -4,10 +4,18 @@ import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.data.repository.parseContentIds
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -18,9 +26,11 @@ data class WatchedSeriesEntry(
 @Singleton
 class WatchedSeriesStateHolder @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context,
-    private val traktAuthDataStore: TraktAuthDataStore
+    private val traktAuthDataStore: TraktAuthDataStore,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
     companion object {
+        private const val GUEST_SESSION_ID = "guest"
         private const val PREFS_NAME = "watched_series_state"
         private const val WATCHED_KEY_PREFIX = "entries_"
         private const val KNOWN_KEY_PREFIX = "known_entries_"
@@ -30,18 +40,25 @@ class WatchedSeriesStateHolder @Inject constructor(
     private val _entries = MutableStateFlow<List<WatchedSeriesEntry>>(emptyList())
     val entries: StateFlow<List<WatchedSeriesEntry>> = _entries.asStateFlow()
     private val knownEntries = MutableStateFlow<List<WatchedSeriesEntry>>(emptyList())
+    private val _activeSessionKey = MutableStateFlow(GUEST_SESSION_ID)
+    val activeSessionKey: StateFlow<String> = _activeSessionKey.asStateFlow()
+
+    init {
+        scope.launch {
+            sessionKeys()
+                .distinctUntilChanged()
+                .collect { sessionKey ->
+                    switchToSession(sessionKey)
+                }
+        }
+    }
 
     suspend fun loadFromDisk() {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val watchedKey = prefKeyForCurrentSession(prefix = WATCHED_KEY_PREFIX)
-        val knownKey = prefKeyForCurrentSession(prefix = KNOWN_KEY_PREFIX)
-        val restoredWatched = decodeEntries(prefs.getString(watchedKey, null).orEmpty())
-        val restoredKnown = decodeEntries(prefs.getString(knownKey, null).orEmpty())
-        _entries.value = restoredWatched
-        knownEntries.value = mergeWatchedSeriesEntries(restoredKnown + restoredWatched)
+        switchToSession(currentSessionKey())
     }
 
     suspend fun setSeriesWatched(ids: Collection<String>, watched: Boolean) {
+        ensureCurrentSessionLoaded()
         val normalizedIds = expandSeriesContentIdAliases(ids)
         if (normalizedIds.isEmpty()) return
         rememberSeriesIds(normalizedIds)
@@ -56,6 +73,7 @@ class WatchedSeriesStateHolder @Inject constructor(
     }
 
     suspend fun rememberSeriesIds(ids: Collection<String>) {
+        ensureCurrentSessionLoaded()
         val normalizedIds = expandSeriesContentIdAliases(ids)
         if (normalizedIds.isEmpty()) return
         val updated = mergeWatchedSeriesEntries(
@@ -68,6 +86,7 @@ class WatchedSeriesStateHolder @Inject constructor(
         watchedEntries: Collection<Set<String>>,
         unwatchedEntries: Collection<Set<String>>
     ) {
+        ensureCurrentSessionLoaded()
         var updated = _entries.value
         if (unwatchedEntries.isNotEmpty()) {
             val unwatchedIds = unwatchedEntries.flatMapTo(linkedSetOf()) { expandSeriesContentIdAliases(it) }
@@ -109,7 +128,7 @@ class WatchedSeriesStateHolder @Inject constructor(
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit()
             .putString(
-                prefKeyForCurrentSession(prefix = WATCHED_KEY_PREFIX),
+                prefKeyForActiveSession(prefix = WATCHED_KEY_PREFIX),
                 gson.toJson(_entries.value)
             )
             .apply()
@@ -120,7 +139,7 @@ class WatchedSeriesStateHolder @Inject constructor(
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit()
             .putString(
-                prefKeyForCurrentSession(prefix = KNOWN_KEY_PREFIX),
+                prefKeyForActiveSession(prefix = KNOWN_KEY_PREFIX),
                 gson.toJson(knownEntries.value)
             )
             .apply()
@@ -135,16 +154,52 @@ class WatchedSeriesStateHolder @Inject constructor(
             .let(::mergeWatchedSeriesEntries)
     }
 
-    private suspend fun prefKeyForCurrentSession(prefix: String): String {
-        val state = traktAuthDataStore.state.first()
-        val sessionId = state.userSlug
+    private suspend fun ensureCurrentSessionLoaded() {
+        val sessionKey = currentSessionKey()
+        if (_activeSessionKey.value != sessionKey) {
+            switchToSession(sessionKey)
+        }
+    }
+
+    private suspend fun currentSessionKey(): String {
+        return sessionKeys().first()
+    }
+
+    private fun sessionKeys(): Flow<String> {
+        return traktAuthDataStore.state.map { state ->
+            sessionIdForState(state)
+        }
+    }
+
+    private fun sessionIdForState(state: TraktAuthState): String {
+        return state.userSlug
             ?.trim()
             ?.takeIf { it.isNotBlank() }
             ?: state.username
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
-            ?: "guest"
-        return prefix + sessionId.lowercase()
+            ?: GUEST_SESSION_ID
+    }
+
+    private fun switchToSession(sessionKey: String) {
+        if (_activeSessionKey.value != sessionKey) {
+            _entries.value = emptyList()
+            knownEntries.value = emptyList()
+            _activeSessionKey.value = sessionKey
+        }
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val restoredWatched = decodeEntries(
+            prefs.getString(prefKeyForActiveSession(prefix = WATCHED_KEY_PREFIX), null).orEmpty()
+        )
+        val restoredKnown = decodeEntries(
+            prefs.getString(prefKeyForActiveSession(prefix = KNOWN_KEY_PREFIX), null).orEmpty()
+        )
+        _entries.value = restoredWatched
+        knownEntries.value = mergeWatchedSeriesEntries(restoredKnown + restoredWatched)
+    }
+
+    private fun prefKeyForActiveSession(prefix: String): String {
+        return prefix + _activeSessionKey.value.lowercase()
     }
 }
 
