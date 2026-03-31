@@ -18,6 +18,7 @@ import com.nexio.tv.domain.model.WatchedItem
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -32,6 +33,13 @@ private const val SERIES_NEXT_UP_LOOKUP_LIMIT = 24
 
 internal fun HomeViewModel.loadContinueWatchingPipeline() {
     viewModelScope.launch {
+        watchedSeriesStateHolder.activeSessionKey
+            .drop(1)
+            .collectLatest { sessionKey ->
+                handleContinueWatchingSessionChange(sessionKey)
+            }
+    }
+    viewModelScope.launch {
         continueWatchingSnapshotService.observeSnapshot().collectLatest { snapshot ->
             lastContinueWatchingSnapshot = snapshot
             publishContinueWatchingSnapshot(snapshot)
@@ -45,23 +53,17 @@ private suspend fun HomeViewModel.syncWatchedSeriesStateFromLocalItems(
 ) {
     val sessionKey = watchedSeriesStateHolder.activeSessionKey.value
     if (watchedSeriesLocalItemsSessionKey != sessionKey) {
-        watchedSeriesLocalItemsSessionKey = sessionKey
-        watchedSeriesLocalItemsHydratedForSession = false
-        discoveredNextUpEntriesByContentId.clear()
-        lastSeriesNextUpDiscoverySignature = null
+        handleContinueWatchingSessionChange(sessionKey)
     }
 
     val watchedItems = watchedItemsPreferences.getAllItems()
-    if (watchedItems.isNotEmpty()) {
-        watchedSeriesLocalItemsHydratedForSession = true
-    }
-
-    if (shouldPreservePersistedWatchedSeriesCache(
-            watchedItems = watchedItems,
-            currentEntries = watchedSeriesStateHolder.entries.value,
-            hasHydratedLocalWatchedItems = watchedSeriesLocalItemsHydratedForSession
-        )
-    ) {
+    val bootstrapDecision = resolveWatchedSeriesBootstrapWindow(
+        watchedItems = watchedItems,
+        currentEntries = watchedSeriesStateHolder.entries.value,
+        preserveOnFirstEmptyRead = watchedSeriesBootstrapEmptyReadPendingForSession
+    )
+    watchedSeriesBootstrapEmptyReadPendingForSession = bootstrapDecision.preserveOnFirstEmptyRead
+    if (bootstrapDecision.preservePersistedCache) {
         publishContinueWatchingSnapshot(snapshot)
         return
     }
@@ -117,10 +119,19 @@ private suspend fun HomeViewModel.syncWatchedSeriesStateFromLocalItems(
 
     lastSeriesNextUpDiscoverySignature = signature
     seriesNextUpDiscoveryJob?.cancel()
+    val lookupSessionKey = sessionKey
     seriesNextUpDiscoveryJob = viewModelScope.launch {
         val discovered = traktProgressService.lookupNextUpForSeriesCandidates(
             lookupCandidates.take(SERIES_NEXT_UP_LOOKUP_LIMIT)
         )
+        if (
+            shouldDiscardSeriesNextUpLookupResults(
+                launchedForSessionKey = lookupSessionKey,
+                activeSessionKey = watchedSeriesStateHolder.activeSessionKey.value
+            )
+        ) {
+            return@launch
+        }
         val discoveredByAliases = discovered.associateBy { entry ->
             preferredAliasForSeriesContentId(entry.contentId)
         }
@@ -146,6 +157,16 @@ private suspend fun HomeViewModel.syncWatchedSeriesStateFromLocalItems(
         discoveredNextUpEntriesByContentId.putAll(airedDiscovered)
         publishContinueWatchingSnapshot(lastContinueWatchingSnapshot)
     }
+}
+
+private fun HomeViewModel.handleContinueWatchingSessionChange(sessionKey: String) {
+    watchedSeriesLocalItemsSessionKey = sessionKey
+    watchedSeriesBootstrapEmptyReadPendingForSession = true
+    seriesNextUpDiscoveryJob?.cancel()
+    seriesNextUpDiscoveryJob = null
+    discoveredNextUpEntriesByContentId.clear()
+    lastSeriesNextUpDiscoverySignature = null
+    publishContinueWatchingSnapshot(lastContinueWatchingSnapshot)
 }
 
 private fun HomeViewModel.publishContinueWatchingSnapshot(snapshot: ContinueWatchingSnapshot) {
@@ -188,14 +209,41 @@ private fun HomeViewModel.publishContinueWatchingSnapshot(snapshot: ContinueWatc
     }
 }
 
-internal fun shouldPreservePersistedWatchedSeriesCache(
+internal data class WatchedSeriesBootstrapDecision(
+    val preservePersistedCache: Boolean,
+    val preserveOnFirstEmptyRead: Boolean
+)
+
+// Preserve persisted watched-series badges through exactly one empty local-watched read
+// after a session switch/bootstrap, then treat later empty reads as authoritative.
+internal fun resolveWatchedSeriesBootstrapWindow(
     watchedItems: Collection<WatchedItem>,
     currentEntries: Collection<WatchedSeriesEntry>,
-    hasHydratedLocalWatchedItems: Boolean
+    preserveOnFirstEmptyRead: Boolean
+): WatchedSeriesBootstrapDecision {
+    if (watchedItems.isNotEmpty()) {
+        return WatchedSeriesBootstrapDecision(
+            preservePersistedCache = false,
+            preserveOnFirstEmptyRead = false
+        )
+    }
+    if (!preserveOnFirstEmptyRead) {
+        return WatchedSeriesBootstrapDecision(
+            preservePersistedCache = false,
+            preserveOnFirstEmptyRead = false
+        )
+    }
+    return WatchedSeriesBootstrapDecision(
+        preservePersistedCache = currentEntries.isNotEmpty(),
+        preserveOnFirstEmptyRead = false
+    )
+}
+
+internal fun shouldDiscardSeriesNextUpLookupResults(
+    launchedForSessionKey: String,
+    activeSessionKey: String
 ): Boolean {
-    return watchedItems.isEmpty() &&
-        currentEntries.isNotEmpty() &&
-        !hasHydratedLocalWatchedItems
+    return launchedForSessionKey != activeSessionKey
 }
 
 private fun parseEpisodeReleaseDate(raw: String?): LocalDate? {
