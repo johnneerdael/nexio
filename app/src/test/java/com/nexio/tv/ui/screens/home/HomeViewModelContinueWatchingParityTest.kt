@@ -4,6 +4,7 @@ import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.WatchedItem
+import com.nexio.tv.data.local.WatchedSeriesEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -74,5 +75,27 @@ class HomeViewModelContinueWatchingParityTest {
         assertEquals(setOf("show-fully-watched", "show-with-next-up"), byId.keys)
         assertTrue(byId.getValue("show-fully-watched").watched)
         assertFalse(byId.getValue("show-with-next-up").watched)
+    }
+
+    @Test
+    fun `shouldPreservePersistedWatchedSeriesCache keeps persisted entries during bootstrap empty state`() {
+        val preserve = shouldPreservePersistedWatchedSeriesCache(
+            watchedItems = emptyList(),
+            currentEntries = listOf(WatchedSeriesEntry(ids = setOf("tmdb:101", "tt1234567"))),
+            hasHydratedLocalWatchedItems = false
+        )
+
+        assertTrue(preserve)
+    }
+
+    @Test
+    fun `shouldPreservePersistedWatchedSeriesCache stops preserving once local watched items hydrate`() {
+        val preserve = shouldPreservePersistedWatchedSeriesCache(
+            watchedItems = emptyList(),
+            currentEntries = listOf(WatchedSeriesEntry(ids = setOf("tmdb:101", "tt1234567"))),
+            hasHydratedLocalWatchedItems = true
+        )
+
+        assertFalse(preserve)
     }
 }

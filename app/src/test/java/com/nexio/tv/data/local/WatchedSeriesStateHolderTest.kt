@@ -5,6 +5,7 @@ import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -33,10 +34,10 @@ class WatchedSeriesStateHolderTest {
             every { state } returns authState
         }
 
-        val holder = WatchedSeriesStateHolder(context, authStore)
+        val holder = WatchedSeriesStateHolder(context, authStore, backgroundScope)
         holder.setSeriesWatched(ids = listOf("tmdb:101", "tt1234567"), watched = true)
 
-        val reloaded = WatchedSeriesStateHolder(context, authStore)
+        val reloaded = WatchedSeriesStateHolder(context, authStore, backgroundScope)
         reloaded.loadFromDisk()
 
         assertTrue(reloaded.isSeriesWatched("tmdb:101"))
@@ -74,10 +75,10 @@ class WatchedSeriesStateHolderTest {
             every { state } returns authState
         }
 
-        val holder = WatchedSeriesStateHolder(context, authStore)
+        val holder = WatchedSeriesStateHolder(context, authStore, backgroundScope)
         holder.setSeriesWatched(ids = listOf("tmdb:101", "tt1234567"), watched = false)
 
-        val reloaded = WatchedSeriesStateHolder(context, authStore)
+        val reloaded = WatchedSeriesStateHolder(context, authStore, backgroundScope)
         reloaded.loadFromDisk()
 
         assertFalse(reloaded.isSeriesWatched("tmdb:101"))
@@ -89,5 +90,42 @@ class WatchedSeriesStateHolderTest {
             setOf("tmdb:101", "tt1234567"),
             reloaded.matchingEntryIds("tt1234567")
         )
+    }
+
+    @Test
+    fun `session switch clears in-memory entries without process restart`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        val authState = MutableStateFlow(
+            TraktAuthState(
+                accessToken = "access",
+                refreshToken = "refresh",
+                username = "alice",
+                userSlug = "alice"
+            )
+        )
+        val context = mockk<Context> {
+            every {
+                getSharedPreferences("watched_series_state", Context.MODE_PRIVATE)
+            } returns prefs
+        }
+        val authStore = mockk<TraktAuthDataStore> {
+            every { state } returns authState
+        }
+
+        val holder = WatchedSeriesStateHolder(context, authStore, backgroundScope)
+        holder.setSeriesWatched(ids = listOf("tmdb:101", "tt1234567"), watched = true)
+
+        assertTrue(holder.isSeriesWatched("tmdb:101"))
+
+        authState.value = TraktAuthState(
+            accessToken = "access",
+            refreshToken = "refresh",
+            username = "bob",
+            userSlug = "bob"
+        )
+        advanceUntilIdle()
+
+        assertFalse(holder.isSeriesWatched("tmdb:101"))
+        assertEquals(setOf("tmdb:101"), holder.matchingEntryIds("tmdb:101"))
     }
 }
