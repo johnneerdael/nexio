@@ -99,7 +99,6 @@ private fun ModernContinueWatchingRowItem(
     requester: FocusRequester,
     cardWidth: Dp,
     imageHeight: Dp,
-    continueWatchingBlurEnabled: Boolean,
     onFocused: () -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onShowOptions: (ContinueWatchingItem) -> Unit,
@@ -122,7 +121,6 @@ private fun ModernContinueWatchingRowItem(
 
     ContinueWatchingCard(
         item = item,
-        blurEpisodeThumbnail = continueWatchingBlurEnabled,
         onClick = onClick,
         onLongPress = onLongPress,
         cardWidth = cardWidth,
@@ -251,7 +249,6 @@ internal fun ModernRowSection(
     modernCatalogCardHeight: Dp,
     continueWatchingCardWidth: Dp,
     continueWatchingCardHeight: Dp,
-    continueWatchingBlurEnabled: Boolean,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingOptions: (ContinueWatchingItem) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
@@ -478,7 +475,6 @@ internal fun ModernRowSection(
                                 requester = requester,
                                 cardWidth = continueWatchingCardWidth,
                                 imageHeight = continueWatchingCardHeight,
-                                continueWatchingBlurEnabled = continueWatchingBlurEnabled,
                                 onFocused = onFocused,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onShowOptions = onContinueWatchingOptions
@@ -488,7 +484,7 @@ internal fun ModernRowSection(
                         is ModernPayload.Catalog -> {
                             val metaPreview = item.metaPreview ?: return@itemsIndexed
                             val nextCatalogItem = row.items.getOrNull(index + 1)?.metaPreview
-                            val isWatched = isCatalogItemWatched(metaPreview)
+                            val isWatched = remember(metaPreview.id) { isCatalogItemWatched(metaPreview) }
                             val playTrailerInExpandedCard =
                                 focusedPosterBackdropTrailerPlaybackTarget ==
                                     FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD &&
@@ -647,6 +643,7 @@ private fun ModernCarouselCard(
             !landscapeLogoLoadFailed
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }
+    val backgroundCardColor = NexioColors.BackgroundCard
     val focusRingColor = NexioColors.FocusRing
     val titleMedium = MaterialTheme.typography.titleMedium
     val focusedBorder = remember(cardShape, focusRingColor) {
@@ -727,8 +724,8 @@ private fun ModernCarouselCard(
                 },
             shape = CardDefaults.shape(shape = cardShape),
             colors = CardDefaults.colors(
-                containerColor = Color.Transparent,
-                focusedContainerColor = Color.Transparent
+                containerColor = backgroundCardColor,
+                focusedContainerColor = backgroundCardColor
             ),
             border = CardDefaults.border(
                 focusedBorder = focusedBorder

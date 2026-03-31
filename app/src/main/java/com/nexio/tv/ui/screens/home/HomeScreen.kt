@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -53,6 +53,7 @@ import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.components.PosterCardDefaults
 import com.nexio.tv.ui.components.PosterCardStyle
+import com.nexio.tv.ui.components.TrailerPlayer
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
 import com.nexio.tv.ui.theme.NexioColors
@@ -102,16 +103,16 @@ fun HomeScreen(
     var showHomeContentWithAnimation by rememberSaveable { mutableStateOf(false) }
     var startupContentGateTimedOut by rememberSaveable { mutableStateOf(false) }
     var posterOptionsTarget by remember { mutableStateOf<HomePosterOptionsTarget?>(null) }
+    var posterTrailerPlayback by remember { mutableStateOf<HomePosterTrailerPlayback?>(null) }
     val shouldArmStartupTimeout = uiState.isLoading && !hasRenderableContent && uiState.error == null
     val latestMovieWatchedStatus by rememberUpdatedState(uiState.movieWatchedStatus)
     val latestTraktRecommendationRefs by rememberUpdatedState(uiState.traktRecommendationRefs)
-    val isCatalogItemWatched: (MetaPreview) -> Boolean = remember {
-        { item ->
-            latestMovieWatchedStatus[homeItemStatusKey(item.id, item.apiType)] == true
-        }
+    val isCatalogItemWatched: (MetaPreview) -> Boolean = remember(Unit) {
+        { item -> latestMovieWatchedStatus[homeItemStatusKey(item.id, item.apiType)] == true }
     }
-    val onCatalogItemLongPress: (MetaPreview, String) -> Unit = remember {
+    val onCatalogItemLongPress: (MetaPreview, String) -> Unit = remember(Unit) {
         { item, addonBaseUrl ->
+            viewModel.requestTrailerPreview(item)
             val statusKey = homeItemStatusKey(item.id, item.apiType)
             posterOptionsTarget = HomePosterOptionsTarget(
                 item = item,
@@ -184,7 +185,9 @@ fun HomeScreen(
     }
 
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NexioColors.Background)
     ) {
         when {
             uiState.isLoading && !hasRenderableContent && !startupContentGateTimedOut -> {
@@ -318,6 +321,12 @@ fun HomeScreen(
         val item = selectedPoster.item
         val statusKey = homeItemStatusKey(item.id, item.apiType)
         val isMovie = item.apiType.equals("movie", ignoreCase = true)
+        val trailerPlayback = playableHomeTrailerFor(
+            itemId = item.id,
+            title = item.name,
+            previewUrls = viewModel.trailerPreviewUrls,
+            previewAudioUrls = viewModel.trailerPreviewAudioUrls
+        )
         HomePosterOptionsDialog(
             title = item.name,
             isInLibrary = uiState.posterLibraryMembership[statusKey] == true,
@@ -326,9 +335,14 @@ fun HomeScreen(
             isMovie = isMovie,
             isWatched = uiState.movieWatchedStatus[statusKey] == true,
             isWatchedPending = statusKey in uiState.movieWatchedPending,
+            showPlayTrailer = trailerPlayback != null,
             onDismiss = { posterOptionsTarget = null },
             onDetails = {
                 onNavigateToDetail(item.id, item.apiType, selectedPoster.addonBaseUrl)
+                posterOptionsTarget = null
+            },
+            onPlayTrailer = {
+                posterTrailerPlayback = trailerPlayback
                 posterOptionsTarget = null
             },
             onToggleLibrary = {
@@ -351,6 +365,33 @@ fun HomeScreen(
                 posterOptionsTarget = null
             }
         )
+    }
+
+    val activePosterTrailerPlayback = posterTrailerPlayback
+    LaunchedEffect(activePosterTrailerPlayback != null) {
+        if (activePosterTrailerPlayback != null) {
+            onModernHomeTrailerPlaybackStarted()
+        }
+        onModernHomeTrailerPlaybackActiveChanged(activePosterTrailerPlayback != null)
+    }
+    if (activePosterTrailerPlayback != null) {
+        BackHandler {
+            posterTrailerPlayback = null
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            TrailerPlayer(
+                trailerUrl = activePosterTrailerPlayback.videoUrl,
+                trailerAudioUrl = activePosterTrailerPlayback.audioUrl,
+                isPlaying = true,
+                cropToFill = true,
+                onEnded = { posterTrailerPlayback = null },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
     }
 
     if (uiState.showPosterListPicker) {
@@ -481,17 +522,9 @@ private fun ModernHomeRoute(
 ) {
     val focusState by viewModel.focusState.collectAsStateWithLifecycle()
     val enrichingItemIdState: State<String?> = viewModel.enrichingItemId.collectAsStateWithLifecycle()
-    val configuration = LocalConfiguration.current
-    val modernHomeLocaleTag = remember(configuration) {
-        configuration.locales.get(0)?.toLanguageTag().orEmpty()
-    }
-    LaunchedEffect(viewModel, modernHomeLocaleTag) {
-        viewModel.updateModernHomePresentationLocaleTag(modernHomeLocaleTag)
-    }
     val modernContentState = remember(
         uiState.catalogRows,
         uiState.continueWatchingItems,
-        uiState.modernHomePresentation,
         uiState.modernLandscapePostersEnabled,
         uiState.catalogTypeSuffixEnabled,
         uiState.focusedPosterBackdropExpandEnabled,
@@ -504,7 +537,6 @@ private fun ModernHomeRoute(
         uiState.posterCardWidthDp,
         uiState.posterCardHeightDp,
         uiState.posterCardCornerRadiusDp,
-        uiState.continueWatchingBlurEnabled,
         uiState.posterLabelsEnabled,
         viewModel.trailerPreviewUrls,
         viewModel.trailerPreviewAudioUrls,
@@ -513,7 +545,6 @@ private fun ModernHomeRoute(
         ModernHomeContentState(
             catalogRows = uiState.catalogRows,
             continueWatchingItems = uiState.continueWatchingItems,
-            modernHomePresentation = uiState.modernHomePresentation,
             modernLandscapePostersEnabled = uiState.modernLandscapePostersEnabled,
             catalogTypeSuffixEnabled = uiState.catalogTypeSuffixEnabled,
             focusedPosterBackdropExpandEnabled = uiState.focusedPosterBackdropExpandEnabled,
@@ -526,7 +557,6 @@ private fun ModernHomeRoute(
             posterCardWidthDp = uiState.posterCardWidthDp,
             posterCardHeightDp = uiState.posterCardHeightDp,
             posterCardCornerRadiusDp = uiState.posterCardCornerRadiusDp,
-            continueWatchingBlurEnabled = uiState.continueWatchingBlurEnabled,
             posterLabelsEnabled = uiState.posterLabelsEnabled,
             trailerPreviewUrls = viewModel.trailerPreviewUrls,
             trailerPreviewAudioUrls = viewModel.trailerPreviewAudioUrls,
@@ -609,8 +639,10 @@ private fun HomePosterOptionsDialog(
     isMovie: Boolean,
     isWatched: Boolean,
     isWatchedPending: Boolean,
+    showPlayTrailer: Boolean,
     onDismiss: () -> Unit,
     onDetails: () -> Unit,
+    onPlayTrailer: () -> Unit,
     onToggleLibrary: () -> Unit,
     onToggleWatched: () -> Unit,
     showHideRecommendation: Boolean = false,
@@ -638,6 +670,19 @@ private fun HomePosterOptionsDialog(
             )
         ) {
             Text(stringResource(R.string.cw_action_go_to_details))
+        }
+
+        if (showPlayTrailer) {
+            Button(
+                onClick = onPlayTrailer,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.hero_play_trailer))
+            }
         }
 
         Button(

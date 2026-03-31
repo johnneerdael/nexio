@@ -59,7 +59,6 @@ import com.nexio.tv.ui.components.SourceChipItem
 import com.nexio.tv.ui.components.SourceChipStatus
 import com.nexio.tv.ui.components.SourceStatusFilterChip
 import com.nexio.tv.ui.components.streamBadgeKinds
-import com.nexio.tv.ui.stream.inlineStreamText
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
 import androidx.compose.ui.res.stringResource
@@ -104,9 +103,6 @@ internal fun StreamItem(
     onUpKey: (() -> Unit)? = null
 ) {
     val stream = item.stream
-    val title = remember(item.title) { inlineStreamText(item.title).orEmpty() }
-    val subtitle = remember(item.subtitle) { inlineStreamText(item.subtitle) }
-    val detailLines = remember(item.detailLines) { item.detailLines.mapNotNull(::inlineStreamText) }
     Card(
         onClick = onClick,
         modifier = Modifier
@@ -154,7 +150,7 @@ internal fun StreamItem(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     InlineIconText(
-                        text = title,
+                        text = item.title,
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontWeight = FontWeight.Bold,
                             color = NexioColors.TextPrimary
@@ -179,8 +175,8 @@ internal fun StreamItem(
                     }
                 }
 
-                subtitle?.let { description ->
-                    if (description != title) {
+                item.subtitle?.let { description ->
+                    if (description != item.title) {
                         Text(
                             text = description,
                             style = MaterialTheme.typography.bodySmall,
@@ -189,13 +185,13 @@ internal fun StreamItem(
                     }
                 }
 
-                detailLines.forEachIndexed { index, detail ->
+                item.detailLines.forEachIndexed { index, detail ->
                     InlineIconText(
                         text = detail,
                         style = MaterialTheme.typography.bodySmall.copy(
                             color = NexioTheme.extendedColors.textSecondary
                         ),
-                        maxLines = if (index == detailLines.lastIndex) 1 else 2,
+                        maxLines = if (index == item.detailLines.lastIndex) 1 else 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
