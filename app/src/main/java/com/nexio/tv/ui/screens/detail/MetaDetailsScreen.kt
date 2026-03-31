@@ -371,8 +371,11 @@ fun MetaDetailsScreen(
                 val genresString = remember(meta.genres) {
                     meta.genres.takeIf { it.isNotEmpty() }?.joinToString(" • ")
                 }
-                val yearString = remember(meta.releaseInfo) {
-                    meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
+                val yearString = remember(meta.type, meta.releaseInfo) {
+                    formatPrimaryReleaseInfo(
+                        contentType = meta.type,
+                        releaseInfo = meta.releaseInfo
+                    )
                 }
 
                 MetaDetailsContent(
@@ -1044,7 +1047,11 @@ private fun MetaDetailsContent(
     // Backdrop alpha for crossfade
     var trailerFirstFrameRendered by remember(trailerUrl) { mutableStateOf(false) }
     val backdropAlpha by animateFloatAsState(
-        targetValue = if (showTrailerTakeover && trailerFirstFrameRendered) 0f else 1f,
+        targetValue = when {
+            showTrailerTakeover && trailerFirstFrameRendered -> 0f
+            isScrolledPastHero -> 0.72f
+            else -> 1f
+        },
         animationSpec = tween(durationMillis = 800),
         label = "backdropFade"
     )

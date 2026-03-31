@@ -41,6 +41,7 @@ data class LayoutSettingsUiState(
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12,
     val blurUnwatchedEpisodes: Boolean = false,
+    val continueWatchingBlurEnabled: Boolean = false,
     val detailPageTrailerButtonEnabled: Boolean = false,
     val preferExternalMetaAddonDetail: Boolean = false,
     val hideUnreleasedContent: Boolean = false,
@@ -75,6 +76,7 @@ sealed class LayoutSettingsEvent {
     data class SetPosterCardWidth(val widthDp: Int) : LayoutSettingsEvent()
     data class SetPosterCardCornerRadius(val cornerRadiusDp: Int) : LayoutSettingsEvent()
     data class SetBlurUnwatchedEpisodes(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetContinueWatchingBlurEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetDetailPageTrailerButtonEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetPreferExternalMetaAddonDetail(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetHideUnreleasedContent(val enabled: Boolean) : LayoutSettingsEvent()
@@ -209,6 +211,11 @@ class LayoutSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            layoutPreferenceDataStore.continueWatchingBlurEnabled.distinctUntilChanged().collectLatest { enabled ->
+                updateUiStateIfChanged { it.copy(continueWatchingBlurEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
             layoutPreferenceDataStore.detailPageTrailerButtonEnabled.distinctUntilChanged().collectLatest { enabled ->
                 updateUiStateIfChanged { it.copy(detailPageTrailerButtonEnabled = enabled) }
             }
@@ -252,6 +259,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetPosterCardWidth -> setPosterCardWidth(event.widthDp)
             is LayoutSettingsEvent.SetPosterCardCornerRadius -> setPosterCardCornerRadius(event.cornerRadiusDp)
             is LayoutSettingsEvent.SetBlurUnwatchedEpisodes -> setBlurUnwatchedEpisodes(event.enabled)
+            is LayoutSettingsEvent.SetContinueWatchingBlurEnabled -> setContinueWatchingBlurEnabled(event.enabled)
             is LayoutSettingsEvent.SetDetailPageTrailerButtonEnabled -> setDetailPageTrailerButtonEnabled(event.enabled)
             is LayoutSettingsEvent.SetPreferExternalMetaAddonDetail -> setPreferExternalMetaAddonDetail(event.enabled)
             is LayoutSettingsEvent.SetHideUnreleasedContent -> setHideUnreleasedContent(event.enabled)
@@ -401,6 +409,13 @@ class LayoutSettingsViewModel @Inject constructor(
         }
     }
 
+    private fun setContinueWatchingBlurEnabled(enabled: Boolean) {
+        if (_uiState.value.continueWatchingBlurEnabled == enabled) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setContinueWatchingBlurEnabled(enabled)
+        }
+    }
+
     private fun setDetailPageTrailerButtonEnabled(enabled: Boolean) {
         if (_uiState.value.detailPageTrailerButtonEnabled == enabled) return
         viewModelScope.launch {
@@ -447,6 +462,7 @@ class LayoutSettingsViewModel @Inject constructor(
             layoutPreferenceDataStore.setPosterCardWidthDp(126)
             layoutPreferenceDataStore.setPosterCardHeightDp(189)
             layoutPreferenceDataStore.setPosterCardCornerRadiusDp(12)
+            layoutPreferenceDataStore.setContinueWatchingBlurEnabled(false)
         }
     }
 

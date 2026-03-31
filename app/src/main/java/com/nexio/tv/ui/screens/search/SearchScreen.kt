@@ -104,6 +104,7 @@ fun SearchScreen(
     val strVoiceMicPermission = stringResource(R.string.search_voice_mic_permission)
     val strVoiceFailed = stringResource(R.string.search_voice_failed)
     val strVoiceUnavailable = stringResource(R.string.search_voice_unavailable)
+    val strVoiceListening = stringResource(R.string.search_voice_listening)
     val voiceFocusRequester = remember { FocusRequester() }
     val searchFocusRequester = remember { FocusRequester() }
     val discoverFirstItemFocusRequester = remember { FocusRequester() }
@@ -409,6 +410,8 @@ fun SearchScreen(
                         submitCurrentQuery(uiState.query.trim())
                     },
                     showVoiceSearch = isVoiceSearchAvailable,
+                    isVoiceListening = isVoiceListening,
+                    voiceListeningLabel = strVoiceListening,
                     onVoiceSearch = launchVoiceSearch,
                     onMoveToResults = { focusResults = true },
                     onOpenDiscover = onOpenDiscover,
@@ -448,6 +451,8 @@ fun SearchScreen(
                             submitCurrentQuery(uiState.query.trim())
                         },
                         showVoiceSearch = isVoiceSearchAvailable,
+                        isVoiceListening = isVoiceListening,
+                        voiceListeningLabel = strVoiceListening,
                         onVoiceSearch = launchVoiceSearch,
                         onMoveToResults = {
                             focusResults = true
@@ -567,6 +572,8 @@ private fun SearchInputField(
     onQueryChanged: (String) -> Unit,
     onSubmit: () -> Unit,
     showVoiceSearch: Boolean,
+    isVoiceListening: Boolean,
+    voiceListeningLabel: String,
     onVoiceSearch: () -> Unit,
     onMoveToResults: () -> Unit,
     onOpenDiscover: () -> Unit,
@@ -575,116 +582,147 @@ private fun SearchInputField(
     var isDiscoverButtonFocused by remember { mutableStateOf(false) }
     var isVoiceButtonFocused by remember { mutableStateOf(false) }
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 48.dp)
-            .onGloballyPositioned { onAttached() },
-        verticalAlignment = Alignment.CenterVertically
+            .onGloballyPositioned { onAttached() }
     ) {
-        IconButton(
-            onClick = onOpenDiscover,
-            modifier = Modifier
-                .onFocusChanged { isDiscoverButtonFocused = it.isFocused }
-                .size(56.dp)
-                .searchInputButtonChrome(
-                    isFocused = isDiscoverButtonFocused,
-                    fillColor = NexioColors.BackgroundCard,
-                    focusedBorderColor = NexioColors.FocusRing,
-                    unfocusedBorderColor = NexioColors.Border
-                )
+        Row(
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.Explore,
-                contentDescription = "Open discover",
-                tint = NexioColors.TextPrimary
-            )
-        }
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        if (showVoiceSearch) {
             IconButton(
-                onClick = onVoiceSearch,
+                onClick = onOpenDiscover,
                 modifier = Modifier
-                    .then(
-                        if (voiceFocusRequester != null) {
-                            Modifier.focusRequester(voiceFocusRequester)
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .onFocusChanged { isVoiceButtonFocused = it.isFocused }
+                    .onFocusChanged { isDiscoverButtonFocused = it.isFocused }
                     .size(56.dp)
                     .searchInputButtonChrome(
-                        isFocused = isVoiceButtonFocused,
+                        isFocused = isDiscoverButtonFocused,
                         fillColor = NexioColors.BackgroundCard,
                         focusedBorderColor = NexioColors.FocusRing,
                         unfocusedBorderColor = NexioColors.Border
                     )
             ) {
                 Icon(
-                    imageVector = Icons.Default.Mic,
-                    contentDescription = "Voice search",
+                    imageVector = Icons.Default.Explore,
+                    contentDescription = "Open discover",
                     tint = NexioColors.TextPrimary
                 )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
-        }
 
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChanged,
-            modifier = Modifier
-                .weight(1f)
-                .focusRequester(searchFocusRequester)
-                .onPreviewKeyEvent { keyEvent ->
-                    when (keyEvent.nativeKeyEvent.keyCode) {
-                        KeyEvent.KEYCODE_ENTER,
-                        KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                            if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
-                                onSubmit()
+            if (showVoiceSearch) {
+                IconButton(
+                    onClick = onVoiceSearch,
+                    modifier = Modifier
+                        .then(
+                            if (voiceFocusRequester != null) {
+                                Modifier.focusRequester(voiceFocusRequester)
+                            } else {
+                                Modifier
                             }
-                            return@onPreviewKeyEvent true
-                        }
+                        )
+                        .onFocusChanged { isVoiceButtonFocused = it.isFocused }
+                        .size(56.dp)
+                        .searchInputButtonChrome(
+                            isFocused = isVoiceButtonFocused,
+                            fillColor = NexioColors.BackgroundCard,
+                            focusedBorderColor = NexioColors.FocusRing,
+                            unfocusedBorderColor = NexioColors.Border
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Mic,
+                        contentDescription = "Voice search",
+                        tint = if (isVoiceListening) NexioColors.Primary else NexioColors.TextPrimary
+                    )
+                }
 
-                        KeyEvent.KEYCODE_DPAD_DOWN -> {
-                            if (canMoveToResults) {
+                Spacer(modifier = Modifier.width(12.dp))
+            }
+
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChanged,
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(searchFocusRequester)
+                    .onPreviewKeyEvent { keyEvent ->
+                        when (keyEvent.nativeKeyEvent.keyCode) {
+                            KeyEvent.KEYCODE_ENTER,
+                            KeyEvent.KEYCODE_NUMPAD_ENTER -> {
                                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
-                                    onMoveToResults()
+                                    onSubmit()
                                 }
                                 return@onPreviewKeyEvent true
                             }
+
+                            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                                if (canMoveToResults) {
+                                    if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                                        onMoveToResults()
+                                    }
+                                    return@onPreviewKeyEvent true
+                                }
+                            }
                         }
+                        false
+                    },
+                keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        onSubmit()
+                        keyboardController?.hide()
                     }
-                    false
+                ),
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                placeholder = {
+                    Text(
+                        text = stringResource(R.string.search_placeholder),
+                        color = NexioColors.TextTertiary
+                    )
                 },
-            keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(
-                onDone = {
-                    onSubmit()
-                    keyboardController?.hide()
-                }
-            ),
-            singleLine = true,
-            shape = RoundedCornerShape(12.dp),
-            placeholder = {
-                Text(
-                    text = stringResource(R.string.search_placeholder),
-                    color = NexioColors.TextTertiary
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = NexioColors.BackgroundCard,
+                    unfocusedContainerColor = NexioColors.BackgroundCard,
+                    focusedIndicatorColor = NexioColors.FocusRing,
+                    unfocusedIndicatorColor = NexioColors.Border,
+                    focusedTextColor = NexioColors.TextPrimary,
+                    unfocusedTextColor = NexioColors.TextPrimary,
+                    cursorColor = NexioColors.FocusRing
                 )
-            },
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = NexioColors.BackgroundCard,
-                unfocusedContainerColor = NexioColors.BackgroundCard,
-                focusedIndicatorColor = NexioColors.FocusRing,
-                unfocusedIndicatorColor = NexioColors.Border,
-                focusedTextColor = NexioColors.TextPrimary,
-                unfocusedTextColor = NexioColors.TextPrimary,
-                cursorColor = NexioColors.FocusRing
             )
-        )
+        }
+
+        if (isVoiceListening) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier
+                    .background(
+                        color = NexioColors.BackgroundCard,
+                        shape = RoundedCornerShape(999.dp)
+                    )
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(
+                            color = NexioColors.Primary,
+                            shape = RoundedCornerShape(999.dp)
+                        )
+                )
+                Text(
+                    text = voiceListeningLabel,
+                    color = NexioColors.TextPrimary,
+                    style = androidx.tv.material3.MaterialTheme.typography.labelLarge
+                )
+            }
+        }
     }
 }
 

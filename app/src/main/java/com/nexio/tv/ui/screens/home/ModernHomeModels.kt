@@ -148,6 +148,7 @@ internal data class ModernHomeContentState(
     val posterCardWidthDp: Int = 126,
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12,
+    val continueWatchingBlurEnabled: Boolean = false,
     val posterLabelsEnabled: Boolean = true,
     val trailerPreviewUrls: Map<String, String> = emptyMap(),
     val trailerPreviewAudioUrls: Map<String, String> = emptyMap(),

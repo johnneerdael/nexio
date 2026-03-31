@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.detail
 
 import android.text.format.DateFormat
+import com.nexio.tv.domain.model.ContentType
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -31,4 +32,30 @@ fun formatReleaseDate(
 
 internal fun releaseDatePatternForLocale(locale: Locale): String {
     return DateFormat.getBestDateTimePattern(locale, "dMMMMy")
+}
+
+fun formatPrimaryReleaseInfo(
+    contentType: ContentType,
+    releaseInfo: String?,
+    locale: Locale = Locale.getDefault(),
+    patternResolver: (Locale) -> String = ::releaseDatePatternForLocale
+): String? {
+    val normalizedReleaseInfo = releaseInfo?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return when (contentType) {
+        ContentType.MOVIE -> {
+            formatReleaseDate(
+                isoDate = normalizedReleaseInfo,
+                locale = locale,
+                patternResolver = patternResolver
+            ).ifBlank {
+                extractReleaseYear(normalizedReleaseInfo) ?: normalizedReleaseInfo
+            }
+        }
+
+        else -> extractReleaseYear(normalizedReleaseInfo) ?: normalizedReleaseInfo
+    }
+}
+
+internal fun extractReleaseYear(releaseInfo: String): String? {
+    return Regex("""\b\d{4}\b""").find(releaseInfo)?.value
 }

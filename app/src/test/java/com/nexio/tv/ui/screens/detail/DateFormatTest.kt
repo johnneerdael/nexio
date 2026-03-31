@@ -1,30 +1,47 @@
 package com.nexio.tv.ui.screens.detail
 
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import com.nexio.tv.domain.model.ContentType
 import java.util.Locale
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
 
 class DateFormatTest {
 
     @Test
-    fun `formatReleaseDate uses resolved pattern for timestamp input`() {
-        val formatted = formatReleaseDate(
-            isoDate = "1994-09-22T00:00:00.000Z",
+    fun `movie release info prefers full date when iso date is available`() {
+        val formatted = formatPrimaryReleaseInfo(
+            contentType = ContentType.MOVIE,
+            releaseInfo = "2023-03-15",
             locale = Locale.US,
-            patternResolver = { "d MMMM yyyy" }
+            patternResolver = { "d MMM yyyy" }
         )
 
-        assertEquals("22 September 1994", formatted)
+        assertEquals("15 Mar 2023", formatted)
     }
 
     @Test
-    fun `formatReleaseDate uses resolved pattern for plain date input`() {
-        val formatted = formatReleaseDate(
-            isoDate = "1994-09-22",
-            locale = Locale.US,
-            patternResolver = { "yyyy/MM/dd" }
+    fun `movie release info falls back to year when date cannot be formatted`() {
+        val formatted = formatPrimaryReleaseInfo(
+            contentType = ContentType.MOVIE,
+            releaseInfo = "Released in 1999"
         )
 
-        assertEquals("1994/09/22", formatted)
+        assertEquals("1999", formatted)
+    }
+
+    @Test
+    fun `series release info stays year based`() {
+        val formatted = formatPrimaryReleaseInfo(
+            contentType = ContentType.SERIES,
+            releaseInfo = "2023-03-15"
+        )
+
+        assertEquals("2023", formatted)
+    }
+
+    @Test
+    fun `blank release info returns null`() {
+        assertNull(formatPrimaryReleaseInfo(ContentType.MOVIE, "   "))
     }
 }
