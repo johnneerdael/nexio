@@ -61,6 +61,7 @@ import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
+import com.nexio.tv.data.local.TrailerSettings
 import com.nexio.tv.data.local.VodCacheSizeMode
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
@@ -95,6 +96,7 @@ private fun frameRateMatchingModeLabel(mode: FrameRateMatchingMode, off: String,
 internal fun PlaybackSettingsSections(
     initialFocusRequester: FocusRequester? = null,
     playerSettings: PlayerSettings,
+    trailerSettings: TrailerSettings,
     onShowPlayerPreferenceDialog: () -> Unit,
     onShowAudioLanguageDialog: () -> Unit,
     onShowSecondaryAudioLanguageDialog: () -> Unit,
@@ -127,6 +129,8 @@ internal fun PlaybackSettingsSections(
     onSetPauseOverlayEnabled: (Boolean) -> Unit,
     onSetOsdClockEnabled: (Boolean) -> Unit,
     onSetSkipIntroEnabled: (Boolean) -> Unit,
+    onSetTrailerEnabled: (Boolean) -> Unit,
+    onSetTrailerDelaySeconds: (Int) -> Unit,
     onSetFrameRateMatchingMode: (FrameRateMatchingMode) -> Unit,
     onSetResolutionMatchingEnabled: (Boolean) -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
@@ -302,6 +306,33 @@ internal fun PlaybackSettingsSections(
                     onCheckedChange = onSetSkipIntroEnabled,
                     onFocused = { focusedSection = PlaybackSection.GENERAL },
                     enabled = !generalUi.isExternalPlayer
+                )
+            }
+
+            item(key = "general_trailer_autoplay") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.PlayArrow,
+                    title = stringResource(R.string.playback_autoplay_trailers),
+                    subtitle = stringResource(R.string.playback_autoplay_trailers_sub),
+                    isChecked = trailerSettings.enabled,
+                    onCheckedChange = onSetTrailerEnabled,
+                    onFocused = { focusedSection = PlaybackSection.GENERAL }
+                )
+            }
+
+            item(key = "general_trailer_delay") {
+                SliderSettingsItem(
+                    icon = Icons.Default.Timer,
+                    title = stringResource(R.string.playback_trailer_delay),
+                    subtitle = stringResource(R.string.playback_trailer_delay_sub),
+                    value = trailerSettings.delaySeconds,
+                    valueText = "${trailerSettings.delaySeconds}s",
+                    minValue = 0,
+                    maxValue = 15,
+                    step = 1,
+                    onValueChange = onSetTrailerDelaySeconds,
+                    onFocused = { focusedSection = PlaybackSection.GENERAL },
+                    enabled = trailerSettings.enabled
                 )
             }
 

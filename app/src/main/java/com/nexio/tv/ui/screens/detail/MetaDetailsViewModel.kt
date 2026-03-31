@@ -8,11 +8,14 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.data.local.TrailerSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktCommentItemDto
+import com.nexio.tv.data.trailer.TrailerResolutionResult
+import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.repository.TraktAuthService
@@ -62,6 +65,11 @@ import javax.inject.Inject
 private const val TAG = "MetaDetailsViewModel"
 private const val TRAKT_REVIEWS_PAGE_SIZE = 8
 
+internal fun shouldStopAutoTrailerOnLifecyclePause(
+    isTrailerPlaying: Boolean,
+    showTrailerControls: Boolean
+): Boolean = isTrailerPlaying && !showTrailerControls
+
 private data class TraktReviewQuery(
     val pathId: String,
     val isShowEndpoint: Boolean
@@ -90,6 +98,8 @@ class MetaDetailsViewModel @Inject constructor(
     private val watchProgressRepository: WatchProgressRepository,
     private val traktScrobbleService: TraktScrobbleService,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    private val trailerSettingsDataStore: TrailerSettingsDataStore,
+    private val trailerService: TrailerService,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val itemId: String = savedStateHandle["itemId"] ?: ""
@@ -110,8 +120,14 @@ class MetaDetailsViewModel @Inject constructor(
     private var collectionJob: Job? = null
     private var episodeRatingsJob: Job? = null
     private var nextToWatchJob: Job? = null
+    private var idleTimerJob: Job? = null
+    private var trailerFetchJob: Job? = null
 
     private var hideUnreleasedContent = false
+    private var trailerDelayMs = 7000L
+    private var trailerAutoplayEnabled = false
+    private var trailerHasPlayed = false
+    private var isPlayButtonFocused = false
     private var currentReviewsMetaId: String? = null
     private var tmdbReviewsCache: List<MetaReview> = emptyList()
     private var traktReviewsCache: MutableList<MetaReview> = mutableListOf()
@@ -123,6 +139,8 @@ class MetaDetailsViewModel @Inject constructor(
     private var currentTraktIsShow = false
 
     init {
+        observeMetaViewSettings()
+        observeTrailerAutoplaySettings()
         observeLibraryState()
         observeWatchProgress()
         observeWatchedEpisodes()
@@ -131,6 +149,56 @@ class MetaDetailsViewModel @Inject constructor(
         observeHideUnreleasedContent()
         observeEpisodeRatingsProviderChanges()
         loadMeta()
+    }
+
+    private fun observeMetaViewSettings() {
+        viewModelScope.launch {
+            layoutPreferenceDataStore.detailPageTrailerButtonEnabled
+                .distinctUntilChanged()
+                .collectLatest { enabled ->
+                    _uiState.update { state ->
+                        if (state.trailerButtonEnabled == enabled) {
+                            state
+                        } else {
+                            state.copy(trailerButtonEnabled = enabled)
+                        }
+                    }
+                }
+        }
+    }
+
+    private fun observeTrailerAutoplaySettings() {
+        viewModelScope.launch {
+            trailerSettingsDataStore.settings.collectLatest { settings ->
+                trailerAutoplayEnabled = settings.enabled
+                trailerDelayMs = settings.delaySeconds * 1000L
+                if (!settings.enabled) {
+                    idleTimerJob?.cancel()
+                }
+            }
+        }
+    }
+
+    private fun setTrailerPlaybackState(
+        isPlaying: Boolean,
+        showControls: Boolean,
+        hideLogo: Boolean
+    ) {
+        _uiState.update { state ->
+            if (
+                state.isTrailerPlaying == isPlaying &&
+                state.showTrailerControls == showControls &&
+                state.hideLogoDuringTrailer == hideLogo
+            ) {
+                state
+            } else {
+                state.copy(
+                    isTrailerPlaying = isPlaying,
+                    showTrailerControls = showControls,
+                    hideLogoDuringTrailer = hideLogo
+                )
+            }
+        }
     }
 
     private fun observeHideUnreleasedContent() {
@@ -178,10 +246,12 @@ class MetaDetailsViewModel @Inject constructor(
             MetaDetailsEvent.OnToggleLibrary -> toggleLibrary()
             MetaDetailsEvent.OnRetry -> loadMeta()
             MetaDetailsEvent.OnBackPress -> { /* Handle in screen */ }
-            MetaDetailsEvent.OnUserInteraction -> {}
-            MetaDetailsEvent.OnPlayButtonFocused -> {}
-            MetaDetailsEvent.OnTrailerButtonClick -> {}
-            MetaDetailsEvent.OnTrailerEnded -> {}
+            MetaDetailsEvent.OnUserInteraction -> handleUserInteraction()
+            MetaDetailsEvent.OnPlayButtonFocused -> handlePlayButtonFocused()
+            MetaDetailsEvent.OnTrailerButtonClick -> handleTrailerButtonClick()
+            MetaDetailsEvent.OnTrailerEnded -> handleTrailerEnded()
+            MetaDetailsEvent.OnLifecyclePause -> handleLifecyclePause()
+            MetaDetailsEvent.OnExternalTrailerConsumed -> consumePendingExternalTrailer()
             MetaDetailsEvent.OnToggleMovieWatched -> toggleMovieWatched()
             is MetaDetailsEvent.OnToggleEpisodeWatched -> toggleEpisodeWatched(event.video)
             is MetaDetailsEvent.OnClearEpisodeProgress -> clearEpisodeProgress(event.video)
@@ -332,6 +402,14 @@ class MetaDetailsViewModel @Inject constructor(
                 it.copy(
                     isLoading = true,
                     error = null,
+                    trailerUrl = null,
+                    trailerAudioUrl = null,
+                    trailerExternalUrl = null,
+                    pendingExternalTrailerUrl = null,
+                    isTrailerPlaying = false,
+                    isTrailerLoading = false,
+                    showTrailerControls = false,
+                    hideLogoDuringTrailer = false,
                     episodeRatings = emptyMap(),
                     isEpisodeRatingsLoading = false,
                     episodeRatingsError = null,
@@ -345,6 +423,10 @@ class MetaDetailsViewModel @Inject constructor(
                     collectionName = null
                 )
             }
+            trailerHasPlayed = false
+            isPlayButtonFocused = false
+            idleTimerJob?.cancel()
+            trailerFetchJob?.cancel()
 
             val metaLookupId = resolveMetaLookupId(itemId = itemId, itemType = itemType)
             val preferExternal = layoutPreferenceDataStore.preferExternalMetaAddonDetail.first()
@@ -526,6 +608,8 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun applyMeta(meta: Meta) {
         _uiState.update { state -> state.withRefreshedMeta(meta) }
+        trailerHasPlayed = false
+        fetchTrailerUrl()
 
         // Calculate next to watch after meta is loaded
         calculateNextToWatch()
@@ -1725,8 +1809,178 @@ class MetaDetailsViewModel @Inject constructor(
         return nextToWatch?.displayText
     }
 
+    private fun fetchTrailerUrl() {
+        val meta = _uiState.value.meta ?: return
+
+        trailerFetchJob?.cancel()
+        trailerFetchJob = viewModelScope.launch {
+            _uiState.update { state ->
+                state.copy(
+                    isTrailerLoading = true,
+                    trailerUrl = null,
+                    trailerAudioUrl = null,
+                    trailerExternalUrl = null,
+                    pendingExternalTrailerUrl = null
+                )
+            }
+
+            val year = meta.releaseInfo
+                ?.takeIf { it.isNotBlank() }
+                ?.let { Regex("""\b(19|20)\d{2}\b""").find(it)?.value }
+
+            val tmdbId = runCatching {
+                tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
+            }.getOrNull()
+
+            val trailerResult = trailerService.resolveTrailer(
+                title = meta.name,
+                year = year,
+                tmdbId = tmdbId,
+                type = meta.apiType,
+                contentId = meta.id,
+                fallbackYtIds = meta.trailerYtIds
+            )
+
+            _uiState.update { state ->
+                when (trailerResult) {
+                    is TrailerResolutionResult.Playback -> state.copy(
+                        trailerUrl = trailerResult.source.videoUrl,
+                        trailerAudioUrl = trailerResult.source.audioUrl,
+                        trailerExternalUrl = null,
+                        isTrailerLoading = false
+                    )
+
+                    is TrailerResolutionResult.External -> state.copy(
+                        trailerUrl = null,
+                        trailerAudioUrl = null,
+                        trailerExternalUrl = trailerResult.url,
+                        isTrailerLoading = false
+                    )
+
+                    null -> state.copy(
+                        trailerUrl = null,
+                        trailerAudioUrl = null,
+                        trailerExternalUrl = null,
+                        isTrailerLoading = false
+                    )
+                }
+            }
+
+            if (trailerResult is TrailerResolutionResult.Playback && isPlayButtonFocused) {
+                startIdleTimer()
+            }
+        }
+    }
+
+    private fun startIdleTimer() {
+        idleTimerJob?.cancel()
+
+        val state = _uiState.value
+        if (state.trailerUrl.isNullOrBlank()) return
+        if (state.isTrailerPlaying) return
+        if (!trailerAutoplayEnabled) return
+        if (trailerHasPlayed) return
+        if (!isPlayButtonFocused) return
+
+        idleTimerJob = viewModelScope.launch {
+            delay(trailerDelayMs)
+            setTrailerPlaybackState(
+                isPlaying = true,
+                showControls = false,
+                hideLogo = false
+            )
+        }
+    }
+
+    private fun handlePlayButtonFocused() {
+        if (isPlayButtonFocused) return
+        isPlayButtonFocused = true
+        startIdleTimer()
+    }
+
+    private fun handleUserInteraction() {
+        val state = _uiState.value
+        val shouldStopAutoTrailer = state.isTrailerPlaying && !state.showTrailerControls
+        val hasActiveIdleTimer = idleTimerJob?.isActive == true
+        if (!isPlayButtonFocused && !hasActiveIdleTimer && !shouldStopAutoTrailer) {
+            return
+        }
+
+        idleTimerJob?.cancel()
+        isPlayButtonFocused = false
+
+        if (shouldStopAutoTrailer) {
+            trailerHasPlayed = true
+            setTrailerPlaybackState(
+                isPlaying = false,
+                showControls = false,
+                hideLogo = false
+            )
+        }
+    }
+
+    private fun handleTrailerButtonClick() {
+        val state = _uiState.value
+        idleTimerJob?.cancel()
+        isPlayButtonFocused = false
+
+        when {
+            !state.trailerUrl.isNullOrBlank() -> {
+                setTrailerPlaybackState(
+                    isPlaying = true,
+                    showControls = true,
+                    hideLogo = true
+                )
+            }
+
+            !state.trailerExternalUrl.isNullOrBlank() -> {
+                trailerHasPlayed = true
+                _uiState.update {
+                    it.copy(pendingExternalTrailerUrl = state.trailerExternalUrl)
+                }
+            }
+        }
+    }
+
+    private fun handleTrailerEnded() {
+        trailerHasPlayed = true
+        isPlayButtonFocused = false
+        setTrailerPlaybackState(
+            isPlaying = false,
+            showControls = false,
+            hideLogo = false
+        )
+    }
+
+    private fun handleLifecyclePause() {
+        idleTimerJob?.cancel()
+        isPlayButtonFocused = false
+        val state = _uiState.value
+        if (!shouldStopAutoTrailerOnLifecyclePause(state.isTrailerPlaying, state.showTrailerControls)) {
+            return
+        }
+        trailerHasPlayed = true
+        setTrailerPlaybackState(
+            isPlaying = false,
+            showControls = false,
+            hideLogo = false
+        )
+    }
+
+    private fun consumePendingExternalTrailer() {
+        _uiState.update { state ->
+            if (state.pendingExternalTrailerUrl == null) {
+                state
+            } else {
+                state.copy(pendingExternalTrailerUrl = null)
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
+        idleTimerJob?.cancel()
+        trailerFetchJob?.cancel()
         reviewsJob?.cancel()
         nextToWatchJob?.cancel()
     }

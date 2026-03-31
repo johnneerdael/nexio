@@ -5,7 +5,10 @@
 
 package com.nexio.tv.ui.screens.home
 
+import android.content.Intent
+import android.net.Uri
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
@@ -78,8 +81,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.nexio.tv.R
 import com.nexio.tv.LocalContentFocusRequester
+import com.nexio.tv.core.ui.findLifecycleOwner
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -107,6 +113,21 @@ private const val MODERN_HERO_RAPID_NAV_THRESHOLD_MS = 130L
 private const val MODERN_HERO_RAPID_NAV_SETTLE_MS = 170L
 private const val MODERN_HOME_CONTENT_LOG_TAG = "ModernHomeContent"
 
+internal fun shouldActivateFocusedTrailerPreviewAfterDelay(
+    shouldActivateFocusedPosterFlow: Boolean,
+    isVerticalRowsScrolling: Boolean,
+    selectionStillFocused: Boolean,
+    lifecycleResumed: Boolean
+): Boolean = shouldActivateFocusedPosterFlow &&
+    !isVerticalRowsScrolling &&
+    selectionStillFocused &&
+    lifecycleResumed
+
+internal fun shouldDismissModernHomeTrailerOnBack(
+    heroTrailerActive: Boolean,
+    expandedCardTrailerActive: Boolean
+): Boolean = heroTrailerActive || expandedCardTrailerActive
+
 @Composable
 internal fun ModernHomeContent(
     contentState: ModernHomeContentState,
@@ -124,13 +145,20 @@ internal fun ModernHomeContent(
     onCatalogItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
     onItemFocus: (MetaPreview) -> Unit = {},
     onPreloadAdjacentItem: (MetaPreview) -> Unit = {},
+    onRequestTrailerPreview: (String, String, String?, String, String?) -> Unit,
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
 ) {
     val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
     val useLandscapePosters = contentState.modernLandscapePostersEnabled
+    val context = LocalContext.current
+    val navLifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleOwner = remember(context, navLifecycleOwner) {
+        context.findLifecycleOwner() ?: navLifecycleOwner
+    }
     val showCatalogTypeSuffixInModern = contentState.catalogTypeSuffixEnabled
     val isLandscapeModern = useLandscapePosters
     val expandControlAvailable = !isLandscapeModern
+    val trailerPlaybackTarget = contentState.focusedPosterBackdropTrailerPlaybackTarget
     val landscapeExpandedCardMode = false
     val effectiveExpandEnabled =
         (contentState.focusedPosterBackdropExpandEnabled && expandControlAvailable) ||
@@ -341,6 +369,7 @@ internal fun ModernHomeContent(
     var expandedCatalogFocusKey by remember { mutableStateOf<String?>(null) }
     var expandedCatalogRowKey by remember { mutableStateOf<String?>(null) }
     var expansionInteractionNonce by remember { mutableIntStateOf(0) }
+    var lastExternalTrailerLaunchKey by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(
         focusedCatalogSelection?.focusKey,
@@ -355,9 +384,12 @@ internal fun ModernHomeContent(
         if (isVerticalRowsScrolling) return@LaunchedEffect
         val selection = focusedCatalogSelection ?: return@LaunchedEffect
         delay(contentState.focusedPosterBackdropExpandDelaySeconds.coerceAtLeast(0) * 1000L)
-        if (shouldActivateFocusedPosterFlow &&
-            !isVerticalRowsScrolling &&
-            focusedCatalogSelection?.focusKey == selection.focusKey
+        if (shouldActivateFocusedTrailerPreviewAfterDelay(
+                shouldActivateFocusedPosterFlow = shouldActivateFocusedPosterFlow,
+                isVerticalRowsScrolling = isVerticalRowsScrolling,
+                selectionStillFocused = focusedCatalogSelection?.focusKey == selection.focusKey,
+                lifecycleResumed = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            )
         ) {
             expandedCatalogFocusKey = selection.focusKey
             expandedCatalogRowKey = selection.rowKey
@@ -434,6 +466,27 @@ internal fun ModernHomeContent(
             pendingRowFocusIndex = resolvedIndex
             pendingRowFocusNonce++
         }
+    }
+
+    LaunchedEffect(
+        focusedCatalogSelection?.payload?.itemId,
+        focusedCatalogSelection?.payload?.trailerTitle,
+        focusedCatalogSelection?.payload?.trailerReleaseInfo,
+        focusedCatalogSelection?.payload?.trailerApiType,
+        focusedCatalogSelection?.payload?.fallbackTrailerYtId,
+        contentState.focusedPosterBackdropTrailerEnabled
+    ) {
+        val selection = focusedCatalogSelection ?: return@LaunchedEffect
+        if (!contentState.focusedPosterBackdropTrailerEnabled) return@LaunchedEffect
+        delay(140)
+        if (focusedCatalogSelection?.focusKey != selection.focusKey) return@LaunchedEffect
+        onRequestTrailerPreview(
+            selection.payload.itemId,
+            selection.payload.trailerTitle,
+            selection.payload.trailerReleaseInfo,
+            selection.payload.trailerApiType,
+            selection.payload.fallbackTrailerYtId
+        )
     }
 
     LaunchedEffect(focusState.verticalScrollIndex, focusState.verticalScrollOffset) {
@@ -578,6 +631,54 @@ internal fun ModernHomeContent(
                 if (heroItem == null) activeRowFallbackBackdrop else null
             )
         }
+        val heroTrailerItemId = focusedCatalogSelection?.payload?.itemId
+        val heroTrailerPreviewUrl = if (
+            contentState.focusedPosterBackdropTrailerEnabled &&
+            trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
+        ) {
+            heroTrailerItemId?.let { contentState.trailerPreviewUrls[it] }
+        } else {
+            null
+        }
+        val heroTrailerPreviewAudioUrl = if (
+            contentState.focusedPosterBackdropTrailerEnabled &&
+            trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
+        ) {
+            heroTrailerItemId?.let { contentState.trailerPreviewAudioUrls[it] }
+        } else {
+            null
+        }
+        val heroTrailerExternalUrl = if (
+            contentState.focusedPosterBackdropTrailerEnabled &&
+            trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
+        ) {
+            heroTrailerItemId?.let { contentState.trailerPreviewExternalUrls[it] }
+        } else {
+            null
+        }
+        val heroTrailerActive = !heroTrailerPreviewUrl.isNullOrBlank() || !heroTrailerExternalUrl.isNullOrBlank()
+        val expandedTrailerItemId = focusedCatalogSelection?.payload?.itemId
+        val expandedCardTrailerActive = if (
+            trailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD &&
+            !expandedCatalogFocusKey.isNullOrBlank() &&
+            expandedTrailerItemId != null
+        ) {
+            !contentState.trailerPreviewUrls[expandedTrailerItemId].isNullOrBlank() ||
+                !contentState.trailerPreviewExternalUrls[expandedTrailerItemId].isNullOrBlank()
+        } else {
+            false
+        }
+        BackHandler(
+            enabled = shouldDismissModernHomeTrailerOnBack(
+                heroTrailerActive = heroTrailerActive,
+                expandedCardTrailerActive = expandedCardTrailerActive
+            )
+        ) {
+            expansionInteractionNonce++
+            expandedCatalogFocusKey = null
+            expandedCatalogRowKey = null
+            focusedCatalogSelection = null
+        }
         val catalogBottomPadding = 0.dp
         val heroToCatalogGap = 16.dp
         val rowTitleBottom = 14.dp
@@ -618,6 +719,9 @@ internal fun ModernHomeContent(
 
         ModernHeroSection(
             heroBackdrop = heroBackdrop,
+            trailerPreviewUrl = heroTrailerPreviewUrl,
+            trailerPreviewAudioUrl = heroTrailerPreviewAudioUrl,
+            trailerMuted = contentState.focusedPosterBackdropTrailerMuted,
             preview = resolvedHero,
             activeItemId = activeItemId,
             enrichingItemIdState = enrichingItemIdState,
@@ -635,6 +739,21 @@ internal fun ModernHomeContent(
                 )
                 .fillMaxWidth(MODERN_HERO_TEXT_WIDTH_FRACTION)
         )
+
+        LaunchedEffect(heroTrailerItemId, heroTrailerExternalUrl, trailerPlaybackTarget) {
+            if (heroTrailerItemId == null || heroTrailerExternalUrl.isNullOrBlank()) return@LaunchedEffect
+            if (trailerPlaybackTarget != com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA) return@LaunchedEffect
+            val launchKey = "$heroTrailerItemId|$heroTrailerExternalUrl"
+            if (lastExternalTrailerLaunchKey == launchKey) return@LaunchedEffect
+            lastExternalTrailerLaunchKey = launchKey
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(heroTrailerExternalUrl)).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                )
+            }
+        }
 
         val onPendingRowFocusCleared = remember {
             {
@@ -746,6 +865,13 @@ internal fun ModernHomeContent(
                         } else {
                             null
                         },
+                        focusedPosterBackdropTrailerPlaybackTarget =
+                            contentState.focusedPosterBackdropTrailerPlaybackTarget,
+                        focusedPosterBackdropTrailerMuted =
+                            contentState.focusedPosterBackdropTrailerMuted,
+                        trailerPreviewUrls = contentState.trailerPreviewUrls,
+                        trailerPreviewAudioUrls = contentState.trailerPreviewAudioUrls,
+                        trailerPreviewExternalUrls = contentState.trailerPreviewExternalUrls,
                         modernCatalogCardWidth = modernCatalogCardWidth,
                         modernCatalogCardHeight = modernCatalogCardHeight,
                         continueWatchingCardWidth = continueWatchingCardWidth,
@@ -824,6 +950,9 @@ internal fun ModernHomeContent(
 @Composable
 private fun ModernHeroSection(
     heroBackdrop: String?,
+    trailerPreviewUrl: String?,
+    trailerPreviewAudioUrl: String?,
+    trailerMuted: Boolean,
     preview: HeroPreview?,
     activeItemId: String?,
     enrichingItemIdState: State<String?>,
@@ -844,6 +973,9 @@ private fun ModernHeroSection(
     }
     ModernHeroMediaLayer(
         heroBackdrop = heroBackdrop,
+        trailerPreviewUrl = trailerPreviewUrl,
+        trailerPreviewAudioUrl = trailerPreviewAudioUrl,
+        trailerMuted = trailerMuted,
         enrichmentActive = enrichmentActive,
         modifier = mediaModifier,
         requestWidthPx = requestWidthPx,

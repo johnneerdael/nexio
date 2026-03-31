@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.data.repository.TraktCustomListCatalog
@@ -128,6 +129,40 @@ class HomeViewModelPresentationPipelineTest {
         assertEquals(ContentType.SERIES, preview.type)
         assertEquals("Show A • S2E4 Episode 4", preview.name)
         assertEquals(PosterShape.LANDSCAPE, preview.posterShape)
+    }
+
+    @Test
+    fun `mergeFocusedItemEnrichment carries external trailer ids into the preview`() {
+        val preview = testPreview("tt15940132", "War Machine")
+        val merged = mergeFocusedItemEnrichment(
+            currentItem = preview,
+            tmdbEnrichment = null,
+            externalMeta = Meta(
+                id = preview.id,
+                type = ContentType.MOVIE,
+                name = preview.name,
+                poster = preview.poster,
+                posterShape = preview.posterShape,
+                background = preview.background,
+                logo = preview.logo,
+                description = "Updated description",
+                releaseInfo = preview.releaseInfo,
+                imdbRating = 9.0f,
+                genres = listOf("Action"),
+                runtime = null,
+                director = emptyList(),
+                cast = emptyList(),
+                country = null,
+                awards = null,
+                language = null,
+                links = emptyList(),
+                videos = emptyList(),
+                trailerYtIds = listOf("dQw4w9WgXcQ")
+            )
+        )
+
+        assertEquals(listOf("dQw4w9WgXcQ"), merged.trailerYtIds)
+        assertEquals("Updated description", merged.description)
     }
 
     private fun testPreview(id: String, title: String): MetaPreview {

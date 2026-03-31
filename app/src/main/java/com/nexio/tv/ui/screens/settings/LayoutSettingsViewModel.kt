@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,10 +33,15 @@ data class LayoutSettingsUiState(
     val catalogTypeSuffixEnabled: Boolean = true,
     val focusedPosterBackdropExpandEnabled: Boolean = false,
     val focusedPosterBackdropExpandDelaySeconds: Int = 3,
+    val focusedPosterBackdropTrailerEnabled: Boolean = false,
+    val focusedPosterBackdropTrailerMuted: Boolean = true,
+    val focusedPosterBackdropTrailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget =
+        FocusedPosterTrailerPlaybackTarget.HERO_MEDIA,
     val posterCardWidthDp: Int = 126,
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12,
     val blurUnwatchedEpisodes: Boolean = false,
+    val detailPageTrailerButtonEnabled: Boolean = false,
     val preferExternalMetaAddonDetail: Boolean = false,
     val hideUnreleasedContent: Boolean = false,
     val diskFirstHomeStartupEnabled: Boolean = true
@@ -61,9 +67,15 @@ sealed class LayoutSettingsEvent {
     data class SetCatalogTypeSuffixEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetFocusedPosterBackdropExpandEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetFocusedPosterBackdropExpandDelaySeconds(val seconds: Int) : LayoutSettingsEvent()
+    data class SetFocusedPosterBackdropTrailerEnabled(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetFocusedPosterBackdropTrailerMuted(val muted: Boolean) : LayoutSettingsEvent()
+    data class SetFocusedPosterBackdropTrailerPlaybackTarget(
+        val target: FocusedPosterTrailerPlaybackTarget
+    ) : LayoutSettingsEvent()
     data class SetPosterCardWidth(val widthDp: Int) : LayoutSettingsEvent()
     data class SetPosterCardCornerRadius(val cornerRadiusDp: Int) : LayoutSettingsEvent()
     data class SetBlurUnwatchedEpisodes(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetDetailPageTrailerButtonEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetPreferExternalMetaAddonDetail(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetHideUnreleasedContent(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetDiskFirstHomeStartupEnabled(val enabled: Boolean) : LayoutSettingsEvent()
@@ -162,6 +174,21 @@ class LayoutSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            layoutPreferenceDataStore.focusedPosterBackdropTrailerEnabled.distinctUntilChanged().collectLatest { enabled ->
+                updateUiStateIfChanged { it.copy(focusedPosterBackdropTrailerEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.focusedPosterBackdropTrailerMuted.distinctUntilChanged().collectLatest { muted ->
+                updateUiStateIfChanged { it.copy(focusedPosterBackdropTrailerMuted = muted) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.focusedPosterBackdropTrailerPlaybackTarget.distinctUntilChanged().collectLatest { target ->
+                updateUiStateIfChanged { it.copy(focusedPosterBackdropTrailerPlaybackTarget = target) }
+            }
+        }
+        viewModelScope.launch {
             layoutPreferenceDataStore.posterCardWidthDp.distinctUntilChanged().collectLatest { widthDp ->
                 updateUiStateIfChanged { it.copy(posterCardWidthDp = widthDp) }
             }
@@ -179,6 +206,11 @@ class LayoutSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.blurUnwatchedEpisodes.distinctUntilChanged().collectLatest { enabled ->
                 updateUiStateIfChanged { it.copy(blurUnwatchedEpisodes = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            layoutPreferenceDataStore.detailPageTrailerButtonEnabled.distinctUntilChanged().collectLatest { enabled ->
+                updateUiStateIfChanged { it.copy(detailPageTrailerButtonEnabled = enabled) }
             }
         }
         viewModelScope.launch {
@@ -214,9 +246,13 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetCatalogTypeSuffixEnabled -> setCatalogTypeSuffixEnabled(event.enabled)
             is LayoutSettingsEvent.SetFocusedPosterBackdropExpandEnabled -> setFocusedPosterBackdropExpandEnabled(event.enabled)
             is LayoutSettingsEvent.SetFocusedPosterBackdropExpandDelaySeconds -> setFocusedPosterBackdropExpandDelaySeconds(event.seconds)
+            is LayoutSettingsEvent.SetFocusedPosterBackdropTrailerEnabled -> setFocusedPosterBackdropTrailerEnabled(event.enabled)
+            is LayoutSettingsEvent.SetFocusedPosterBackdropTrailerMuted -> setFocusedPosterBackdropTrailerMuted(event.muted)
+            is LayoutSettingsEvent.SetFocusedPosterBackdropTrailerPlaybackTarget -> setFocusedPosterBackdropTrailerPlaybackTarget(event.target)
             is LayoutSettingsEvent.SetPosterCardWidth -> setPosterCardWidth(event.widthDp)
             is LayoutSettingsEvent.SetPosterCardCornerRadius -> setPosterCardCornerRadius(event.cornerRadiusDp)
             is LayoutSettingsEvent.SetBlurUnwatchedEpisodes -> setBlurUnwatchedEpisodes(event.enabled)
+            is LayoutSettingsEvent.SetDetailPageTrailerButtonEnabled -> setDetailPageTrailerButtonEnabled(event.enabled)
             is LayoutSettingsEvent.SetPreferExternalMetaAddonDetail -> setPreferExternalMetaAddonDetail(event.enabled)
             is LayoutSettingsEvent.SetHideUnreleasedContent -> setHideUnreleasedContent(event.enabled)
             is LayoutSettingsEvent.SetDiskFirstHomeStartupEnabled -> setDiskFirstHomeStartupEnabled(event.enabled)
@@ -320,6 +356,29 @@ class LayoutSettingsViewModel @Inject constructor(
         }
     }
 
+    private fun setFocusedPosterBackdropTrailerEnabled(enabled: Boolean) {
+        if (_uiState.value.focusedPosterBackdropTrailerEnabled == enabled) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setFocusedPosterBackdropTrailerEnabled(enabled)
+        }
+    }
+
+    private fun setFocusedPosterBackdropTrailerMuted(muted: Boolean) {
+        if (_uiState.value.focusedPosterBackdropTrailerMuted == muted) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setFocusedPosterBackdropTrailerMuted(muted)
+        }
+    }
+
+    private fun setFocusedPosterBackdropTrailerPlaybackTarget(
+        target: FocusedPosterTrailerPlaybackTarget
+    ) {
+        if (_uiState.value.focusedPosterBackdropTrailerPlaybackTarget == target) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setFocusedPosterBackdropTrailerPlaybackTarget(target)
+        }
+    }
+
     private fun setPosterCardWidth(widthDp: Int) {
         if (_uiState.value.posterCardWidthDp == widthDp) return
         viewModelScope.launch {
@@ -339,6 +398,13 @@ class LayoutSettingsViewModel @Inject constructor(
         if (_uiState.value.blurUnwatchedEpisodes == enabled) return
         viewModelScope.launch {
             layoutPreferenceDataStore.setBlurUnwatchedEpisodes(enabled)
+        }
+    }
+
+    private fun setDetailPageTrailerButtonEnabled(enabled: Boolean) {
+        if (_uiState.value.detailPageTrailerButtonEnabled == enabled) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setDetailPageTrailerButtonEnabled(enabled)
         }
     }
 
@@ -373,6 +439,11 @@ class LayoutSettingsViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
+            layoutPreferenceDataStore.setFocusedPosterBackdropTrailerEnabled(false)
+            layoutPreferenceDataStore.setFocusedPosterBackdropTrailerMuted(true)
+            layoutPreferenceDataStore.setFocusedPosterBackdropTrailerPlaybackTarget(
+                FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
+            )
             layoutPreferenceDataStore.setPosterCardWidthDp(126)
             layoutPreferenceDataStore.setPosterCardHeightDp(189)
             layoutPreferenceDataStore.setPosterCardCornerRadiusDp(12)

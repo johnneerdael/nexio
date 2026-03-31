@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import androidx.compose.runtime.Immutable
 import com.nexio.tv.data.repository.TraktRecommendationRef
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.LibraryListTab
@@ -29,6 +30,10 @@ data class HomeUiState(
     val catalogTypeSuffixEnabled: Boolean = true,
     val focusedPosterBackdropExpandEnabled: Boolean = false,
     val focusedPosterBackdropExpandDelaySeconds: Int = 3,
+    val focusedPosterBackdropTrailerEnabled: Boolean = false,
+    val focusedPosterBackdropTrailerMuted: Boolean = true,
+    val focusedPosterBackdropTrailerPlaybackTarget: FocusedPosterTrailerPlaybackTarget =
+        FocusedPosterTrailerPlaybackTarget.HERO_MEDIA,
     val posterCardWidthDp: Int = 126,
     val posterCardHeightDp: Int = 189,
     val posterCardCornerRadiusDp: Int = 12,

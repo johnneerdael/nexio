@@ -1,5 +1,7 @@
 package com.nexio.tv.ui.screens.detail
 
+import android.content.Intent
+import android.net.Uri
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
@@ -81,6 +83,7 @@ import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
+import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.LibrarySourceMode
@@ -201,7 +204,12 @@ fun MetaDetailsScreen(
     ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val activity = LocalContext.current as? android.app.Activity
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
+    val navLifecycleOwner = LocalLifecycleOwner.current
+    val trailerLifecycleOwner = remember(context, navLifecycleOwner) {
+        context.findLifecycleOwner() ?: navLifecycleOwner
+    }
     var restorePlayFocusAfterTrailerBackToken by rememberSaveable { mutableIntStateOf(0) }
 
     LaunchedEffect(activity) {
@@ -238,6 +246,30 @@ fun MetaDetailsScreen(
         if (uiState.userMessage != null) {
             delay(2500)
             viewModel.onEvent(MetaDetailsEvent.OnClearMessage)
+        }
+    }
+
+    LaunchedEffect(uiState.pendingExternalTrailerUrl) {
+        val externalTrailerUrl = uiState.pendingExternalTrailerUrl ?: return@LaunchedEffect
+        runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse(externalTrailerUrl)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+        }
+        viewModel.onEvent(MetaDetailsEvent.OnExternalTrailerConsumed)
+    }
+
+    androidx.compose.runtime.DisposableEffect(trailerLifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) {
+                viewModel.onEvent(MetaDetailsEvent.OnLifecyclePause)
+            }
+        }
+        trailerLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            trailerLifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -426,6 +458,7 @@ fun MetaDetailsScreen(
                     },
                     trailerUrl = uiState.trailerUrl,
                     trailerAudioUrl = uiState.trailerAudioUrl,
+                    trailerExternalUrl = uiState.trailerExternalUrl,
                     isTrailerPlaying = uiState.isTrailerPlaying,
                     showTrailerControls = uiState.showTrailerControls,
                     hideLogoDuringTrailer = uiState.hideLogoDuringTrailer,
@@ -593,6 +626,7 @@ private fun MetaDetailsContent(
     isSeasonFullyWatched: (Int) -> Boolean,
     trailerUrl: String?,
     trailerAudioUrl: String?,
+    trailerExternalUrl: String?,
     isTrailerPlaying: Boolean,
     showTrailerControls: Boolean,
     hideLogoDuringTrailer: Boolean,
@@ -648,7 +682,11 @@ private fun MetaDetailsContent(
     ) {
         mutableStateOf(false)
     }
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val screenContext = LocalContext.current
+    val navLifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleOwner = remember(screenContext, navLifecycleOwner) {
+        screenContext.findLifecycleOwner() ?: navLifecycleOwner
+    }
     val coroutineScope = rememberCoroutineScope()
 
     fun clearPendingRestore() {
@@ -1195,10 +1233,10 @@ private fun MetaDetailsContent(
                         onToggleMovieWatched = onToggleMovieWatched,
                         mdbListRatings = mdbListRatings,
                         hideMetaInfoImdb = showMdbListImdb,
-                        trailerAvailable = false,
+                        trailerAvailable = !trailerUrl.isNullOrBlank() || !trailerExternalUrl.isNullOrBlank(),
                         onTrailerClick = onTrailerButtonClick,
-                        hideLogoDuringTrailer = false,
-                        isTrailerPlaying = false,
+                        hideLogoDuringTrailer = hideLogoDuringTrailer,
+                        isTrailerPlaying = isTrailerPlaying,
                         playButtonFocusRequester = heroPlayFocusRequester,
                         onHeroActionFocused = {
                             if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {

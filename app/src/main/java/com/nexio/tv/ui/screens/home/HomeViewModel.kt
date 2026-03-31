@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import android.content.Context
 import android.os.SystemClock
 import android.util.Log
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.locale.AppLocaleResolver
@@ -40,6 +41,7 @@ import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.LibraryRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
+import com.nexio.tv.data.trailer.TrailerService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -77,6 +79,7 @@ class HomeViewModel @Inject constructor(
     internal val mdbListRepository: MDBListRepository,
     internal val tmdbService: TmdbService,
     internal val tmdbMetadataService: TmdbMetadataService,
+    internal val trailerService: TrailerService,
     internal val accountSyncRefreshNotifier: AccountSyncRefreshNotifier,
     internal val homeCatalogSnapshotStore: HomeCatalogSnapshotStore,
     internal val homeCatalogRefreshCoordinator: HomeCatalogRefreshCoordinator,
@@ -166,6 +169,13 @@ class HomeViewModel @Inject constructor(
     internal var heroEnrichmentJob: Job? = null
     internal var lastHeroEnrichmentSignature: String? = null
     internal var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
+    internal val trailerPreviewLoadingIds = mutableSetOf<String>()
+    internal val trailerPreviewNegativeCache = mutableSetOf<String>()
+    internal val trailerPreviewUrlsState = mutableStateMapOf<String, String>()
+    internal val trailerPreviewAudioUrlsState = mutableStateMapOf<String, String>()
+    internal val trailerPreviewExternalUrlsState = mutableStateMapOf<String, String>()
+    internal var activeTrailerPreviewItemId: String? = null
+    internal var trailerPreviewRequestVersion: Long = 0L
     internal val prefetchedExternalMetaIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal val externalMetaPrefetchInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal val prefetchedTomatoesIds = Collections.synchronizedSet(mutableSetOf<String>())
@@ -218,6 +228,13 @@ class HomeViewModel @Inject constructor(
     internal val catalogRowsComputationMutex = Mutex()
     @Volatile
     internal var syntheticSnapshotBatchActive: Boolean = false
+
+    val trailerPreviewUrls: Map<String, String>
+        get() = trailerPreviewUrlsState
+    val trailerPreviewAudioUrls: Map<String, String>
+        get() = trailerPreviewAudioUrlsState
+    val trailerPreviewExternalUrls: Map<String, String>
+        get() = trailerPreviewExternalUrlsState
 
     init {
         observeStartupPerfTelemetry()
@@ -297,6 +314,20 @@ class HomeViewModel @Inject constructor(
 
     fun onItemFocus(item: MetaPreview) = onItemFocusPipeline(item)
     fun preloadAdjacentItem(item: MetaPreview) = preloadAdjacentItemPipeline(item)
+    fun requestTrailerPreview(item: MetaPreview) = requestTrailerPreviewPipeline(item)
+    fun requestTrailerPreview(
+        itemId: String,
+        title: String,
+        releaseInfo: String?,
+        apiType: String,
+        fallbackYtId: String? = null
+    ) = requestTrailerPreviewPipeline(
+        itemId = itemId,
+        title = title,
+        releaseInfo = releaseInfo,
+        apiType = apiType,
+        fallbackYtId = fallbackYtId
+    )
 
     private fun loadHomeCatalogOrderPreference() = loadHomeCatalogOrderPreferencePipeline()
 
