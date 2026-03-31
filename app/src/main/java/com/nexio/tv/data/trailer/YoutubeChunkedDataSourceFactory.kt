@@ -26,21 +26,12 @@ class YoutubeChunkedDataSourceFactory(
         private const val TAG = "YTChunkedDS"
         /** 10 MB chunks – large enough to avoid too many requests, small enough to dodge throttle. */
         private const val CHUNK_SIZE = 10L * 1024 * 1024
-        private const val DEFAULT_USER_AGENT =
-            "Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 " +
-                "(KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
     }
 
     override fun createDataSource(): DataSource {
         val upstream = DefaultHttpDataSource.Factory()
-            .setUserAgent(DEFAULT_USER_AGENT)
-            .setDefaultRequestProperties(
-                mapOf(
-                    "accept-language" to "en-US,en;q=0.9",
-                    "origin" to "https://www.youtube.com",
-                    "referer" to "https://www.youtube.com/"
-                )
-            )
+            .setUserAgent(YOUTUBE_STABLE_WEB_USER_AGENT)
+            .setDefaultRequestProperties(buildStableYouTubeRequestHeaders())
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(15_000)
             .setAllowCrossProtocolRedirects(true)

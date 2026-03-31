@@ -161,7 +161,8 @@ private fun rememberSettingsSectionSpecs() = listOf(
 fun SettingsScreen(
     showBuiltInHeader: Boolean = true,
     onNavigateToCatalogs: () -> Unit = {},
-    onNavigateToAuthQrSignIn: () -> Unit = {}
+    onNavigateToAuthQrSignIn: () -> Unit = {},
+    onNavigateToYouTubeTrailerLogin: () -> Unit = {}
 ) {
     val allSectionSpecs = rememberSettingsSectionSpecs()
     val visibleSections = remember(allSectionSpecs) {
@@ -371,6 +372,7 @@ fun SettingsScreen(
                         SettingsCategory.INTEGRATION -> IntegrationSettingsContent(
                             selectedSection = integrationSection,
                             onSelectSection = { integrationSection = it },
+                            onNavigateToYouTubeTrailerLogin = onNavigateToYouTubeTrailerLogin,
                             initialFocusRequester = if (allowDetailAutofocus) {
                                 contentFocusRequesters[SettingsCategory.INTEGRATION]
                             } else {
@@ -436,6 +438,7 @@ private fun AccountSettingsInline(
 private fun IntegrationSettingsContent(
     selectedSection: IntegrationSettingsSection,
     onSelectSection: (IntegrationSettingsSection) -> Unit,
+    onNavigateToYouTubeTrailerLogin: () -> Unit,
     initialFocusRequester: FocusRequester?,
     hubFocusRequester: FocusRequester,
     debridFocusRequester: FocusRequester,
@@ -545,6 +548,13 @@ private fun IntegrationSettingsContent(
                                 title = "Google Gemini",
                                 subtitle = stringResource(R.string.settings_gemini_subtitle),
                                 onClick = { onSelectSection(IntegrationSettingsSection.Gemini) }
+                            )
+                        }
+                        item(key = "integration_hub_youtube_trailer_login") {
+                            SettingsActionRow(
+                                title = stringResource(R.string.youtube_trailer_login_title),
+                                subtitle = stringResource(R.string.youtube_trailer_login_hub_subtitle),
+                                onClick = onNavigateToYouTubeTrailerLogin
                             )
                         }
                         item(key = "integration_hub_poster_ratings") {

@@ -1273,8 +1273,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             buildGridItemsFromRowsPipeline(
                 rows = computedDisplayRows,
                 heroItems = computedHeroItems,
-                heroSectionEnabled = heroSectionEnabled,
-                posterCardWidthDp = currentState.posterCardWidthDp
+                heroSectionEnabled = heroSectionEnabled
             )
         } else {
             currentGridItems
@@ -1413,8 +1412,7 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
             buildGridItemsFromRowsPipeline(
                 rows = snapshot.catalogRows,
                 heroItems = snapshot.heroItems,
-                heroSectionEnabled = state.heroSectionEnabled,
-                posterCardWidthDp = state.posterCardWidthDp
+                heroSectionEnabled = state.heroSectionEnabled
             )
         } else {
             state.gridItems
@@ -1771,8 +1769,7 @@ private fun shouldPreserveCachedRow(
 private fun HomeViewModel.buildGridItemsFromRowsPipeline(
     rows: List<CatalogRow>,
     heroItems: List<MetaPreview>,
-    heroSectionEnabled: Boolean,
-    posterCardWidthDp: Int
+    heroSectionEnabled: Boolean
 ): List<GridItem> = buildList {
     if (heroSectionEnabled && heroItems.isNotEmpty()) {
         add(GridItem.Hero(heroItems))
@@ -1787,14 +1784,8 @@ private fun HomeViewModel.buildGridItemsFromRowsPipeline(
                 type = row.apiType
             )
         )
-        val estimatedColumns = estimatedGridColumnsForPosterWidth(posterCardWidthDp)
-        val visibleSlots = (estimatedColumns * 2).coerceAtLeast(8)
-        val hasEnoughForSeeAll = row.items.size > visibleSlots
-        val displayItems = if (hasEnoughForSeeAll) {
-            row.items.take((visibleSlots - 1).coerceAtLeast(1))
-        } else {
-            row.items.take(visibleSlots)
-        }
+        val hasEnoughForSeeAll = row.items.size >= 15
+        val displayItems = if (hasEnoughForSeeAll) row.items.take(14) else row.items.take(15)
         displayItems.forEach { item ->
             add(
                 GridItem.Content(
@@ -1814,15 +1805,6 @@ private fun HomeViewModel.buildGridItemsFromRowsPipeline(
                 )
             )
         }
-    }
-}
-
-private fun estimatedGridColumnsForPosterWidth(posterCardWidthDp: Int): Int {
-    return when {
-        posterCardWidthDp <= 110 -> 7
-        posterCardWidthDp <= 132 -> 6
-        posterCardWidthDp <= 156 -> 5
-        else -> 4
     }
 }
 
@@ -2090,18 +2072,9 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
             }
         }
     val desiredKeys = desiredItemsByKey.keys
-    val desiredWatchedKeys = desiredItemsByKey
-        .filterValues { (_, itemType) ->
-            itemType.equals("movie", ignoreCase = true) ||
-                itemType.equals("series", ignoreCase = true) ||
-                itemType.equals("tv", ignoreCase = true)
-        }
+    val desiredMovieKeys = desiredItemsByKey
+        .filterValues { (_, itemType) -> itemType.equals("movie", ignoreCase = true) }
         .keys
-    val desiredSeriesItemsByKey = desiredItemsByKey
-        .filterValues { (_, itemType) ->
-            itemType.equals("series", ignoreCase = true) ||
-                itemType.equals("tv", ignoreCase = true)
-        }
 
     posterLibraryObserverJobs.keys
         .filterNot { it in desiredKeys }
@@ -2109,36 +2082,10 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
             posterLibraryObserverJobs.remove(staleKey)?.cancel()
         }
     movieWatchedObserverJobs.keys
-        .filterNot { it in desiredWatchedKeys }
+        .filterNot { it in desiredMovieKeys }
         .forEach { staleKey ->
             movieWatchedObserverJobs.remove(staleKey)?.cancel()
         }
-    if (desiredSeriesItemsByKey.isEmpty()) {
-        seriesWatchedObserverJob?.cancel()
-        seriesWatchedObserverJob = null
-    } else {
-        seriesWatchedObserverJob?.cancel()
-        seriesWatchedObserverJob = viewModelScope.launch {
-            watchedSeriesStateHolder.entries.collectLatest { entries ->
-                _uiState.update { state ->
-                    val updatedStatus = state.movieWatchedStatus.toMutableMap()
-                    desiredSeriesItemsByKey.forEach { (statusKey, itemRef) ->
-                        val watched = entries.any { entry ->
-                            entry.ids.any {
-                                it in com.nexio.tv.data.local.expandSeriesContentIdAliases(listOf(itemRef.first))
-                            }
-                        }
-                        updatedStatus[statusKey] = watched
-                    }
-                    if (updatedStatus == state.movieWatchedStatus) {
-                        state
-                    } else {
-                        state.copy(movieWatchedStatus = updatedStatus)
-                    }
-                }
-            }
-        }
-    }
 
     desiredItemsByKey.forEach { (statusKey, itemRef) ->
         val itemId = itemRef.first
@@ -2162,12 +2109,8 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
             }
         }
 
-        if (
-            itemType.equals("movie", ignoreCase = true) ||
-                itemType.equals("series", ignoreCase = true) ||
-                itemType.equals("tv", ignoreCase = true)
-        ) {
-            if (itemType.equals("movie", ignoreCase = true) && statusKey !in movieWatchedObserverJobs) {
+        if (itemType.equals("movie", ignoreCase = true)) {
+            if (statusKey !in movieWatchedObserverJobs) {
                 movieWatchedObserverJobs[statusKey] = viewModelScope.launch {
                     watchProgressRepository.isWatched(contentId = itemId)
                         .distinctUntilChanged()
@@ -2191,11 +2134,11 @@ internal fun HomeViewModel.reconcilePosterStatusObserversPipeline(rows: List<Cat
         val trimmedLibraryMembership =
             state.posterLibraryMembership.filterKeys { it in desiredKeys }
         val trimmedMovieWatchedStatus =
-            state.movieWatchedStatus.filterKeys { it in desiredWatchedKeys }
+            state.movieWatchedStatus.filterKeys { it in desiredMovieKeys }
         val trimmedLibraryPending =
             state.posterLibraryPending.filterTo(linkedSetOf()) { it in desiredKeys }
         val trimmedMovieWatchedPending =
-            state.movieWatchedPending.filterTo(linkedSetOf()) { it in desiredWatchedKeys }
+            state.movieWatchedPending.filterTo(linkedSetOf()) { it in desiredMovieKeys }
 
         if (
             trimmedLibraryMembership == state.posterLibraryMembership &&

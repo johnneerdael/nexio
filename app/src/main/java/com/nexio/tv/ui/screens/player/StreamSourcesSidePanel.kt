@@ -26,10 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,13 +40,9 @@ import android.view.KeyEvent
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.core.stream.StreamCardModel
 import com.nexio.tv.ui.components.LoadingIndicator
-import com.nexio.tv.ui.input.DpadRepeatThrottleState
-import com.nexio.tv.ui.input.consumeThrottledDirectionalRepeat
-import com.nexio.tv.ui.stream.inlineStreamText
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
 import androidx.compose.ui.res.stringResource
@@ -85,7 +78,6 @@ internal fun StreamSourcesSidePanel(
     val chipFocusRequesters = remember(orderedAddonNames.size) {
         List(orderedAddonNames.size + 1) { FocusRequester() }
     }
-    var repeatThrottleState by remember { mutableStateOf(DpadRepeatThrottleState()) }
 
     Box(
         modifier = modifier
@@ -211,14 +203,10 @@ internal fun StreamSourcesSidePanel(
                         ),
                         modifier = Modifier
                             .fillMaxHeight()
-                            .onPreviewKeyEvent { event ->
-                                val throttleResult =
-                                    event.consumeThrottledDirectionalRepeat(repeatThrottleState)
-                                repeatThrottleState = throttleResult.updatedState
-                                if (throttleResult.consumed) return@onPreviewKeyEvent true
-                                if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                            .onKeyEvent { event ->
+                                if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onKeyEvent false
                                 val addons = uiState.sourceAvailableAddons
-                                if (addons.isEmpty()) return@onPreviewKeyEvent false
+                                if (addons.isEmpty()) return@onKeyEvent false
                                 val allOptions = listOf<String?>(null) + addons
                                 val currentIdx = allOptions.indexOf(uiState.sourceSelectedAddonFilter)
                                 when (event.key) {
@@ -268,7 +256,7 @@ private fun findCurrentStreamIndex(
     if (hasUrl && hasName) {
         val bothMatch = streams.indexOfFirst { stream ->
             stream.stream.getStreamUrl() == currentStreamUrl &&
-                inlineStreamText(stream.title).equals(inlineStreamText(currentStreamName), ignoreCase = true)
+                stream.title.equals(currentStreamName, ignoreCase = true)
         }
         if (bothMatch >= 0) return bothMatch
     }
@@ -282,7 +270,7 @@ private fun findCurrentStreamIndex(
 
     if (hasName) {
         val nameMatch = streams.indexOfFirst { stream ->
-            inlineStreamText(stream.title).equals(inlineStreamText(currentStreamName), ignoreCase = true)
+            stream.title.equals(currentStreamName, ignoreCase = true)
         }
         if (nameMatch >= 0) return nameMatch
     }

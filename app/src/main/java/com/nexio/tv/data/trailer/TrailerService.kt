@@ -8,6 +8,7 @@ import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TmdbVideoResult
 import com.nexio.tv.data.remote.api.TrailerApi
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.data.trailer.helper.TrailerAvailabilityService
 import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.StreamRepository
@@ -47,6 +48,7 @@ class TrailerService(
     private val tmdbMetadataService: TmdbMetadataService,
     private val addonRepository: AddonRepository,
     private val streamRepository: StreamRepository,
+    private val trailerAvailabilityService: TrailerAvailabilityService,
     private val clock: Clock
 ) {
     @Inject
@@ -57,7 +59,8 @@ class TrailerService(
         tmdbSettingsDataStore: TmdbSettingsDataStore,
         tmdbMetadataService: TmdbMetadataService,
         addonRepository: AddonRepository,
-        streamRepository: StreamRepository
+        streamRepository: StreamRepository,
+        trailerAvailabilityService: TrailerAvailabilityService
     ) : this(
         trailerApi = trailerApi,
         tmdbApi = tmdbApi,
@@ -66,6 +69,7 @@ class TrailerService(
         tmdbMetadataService = tmdbMetadataService,
         addonRepository = addonRepository,
         streamRepository = streamRepository,
+        trailerAvailabilityService = trailerAvailabilityService,
         clock = Clock.systemUTC()
     )
 
@@ -77,16 +81,20 @@ class TrailerService(
         year: String? = null,
         tmdbId: String? = null,
         type: String? = null,
+        seasonNumber: Int? = null,
         contentId: String? = null,
         fallbackYtIds: List<String> = emptyList()
     ): TrailerResolutionResult? = withContext(Dispatchers.IO) {
+        val helperSignedIn = trailerAvailabilityService.isSignedIn()
         val cacheKey = listOf(
             title,
             year.orEmpty(),
             tmdbId.orEmpty(),
             type.orEmpty(),
+            seasonNumber?.toString().orEmpty(),
             contentId.orEmpty(),
-            fallbackYtIds.joinToString(",")
+            fallbackYtIds.joinToString(","),
+            helperSignedIn.toString()
         ).joinToString("|")
 
         when (val cached = lookupCache[cacheKey]) {
@@ -101,6 +109,7 @@ class TrailerService(
                 year = year,
                 tmdbId = tmdbId,
                 type = type,
+                seasonNumber = seasonNumber,
                 contentId = contentId,
                 fallbackYtIds = fallbackYtIds
             )
@@ -118,6 +127,7 @@ class TrailerService(
         year: String? = null,
         tmdbId: String? = null,
         type: String? = null,
+        seasonNumber: Int? = null,
         contentId: String? = null,
         fallbackYtIds: List<String> = emptyList()
     ): TrailerPlaybackSource? {
@@ -127,6 +137,7 @@ class TrailerService(
                 year = year,
                 tmdbId = tmdbId,
                 type = type,
+                seasonNumber = seasonNumber,
                 contentId = contentId,
                 fallbackYtIds = fallbackYtIds
             )
@@ -139,6 +150,7 @@ class TrailerService(
     suspend fun getTrailerPlaybackSourceFromTmdbId(
         tmdbId: String?,
         type: String?,
+        seasonNumber: Int? = null,
         title: String? = null,
         year: String? = null
     ): TrailerPlaybackSource? {
@@ -146,6 +158,7 @@ class TrailerService(
             val result = resolveTrailerPlaybackFromTmdbId(
                 tmdbId = tmdbId,
                 type = type,
+                seasonNumber = seasonNumber,
                 title = title,
                 year = year
             )
@@ -164,8 +177,7 @@ class TrailerService(
             val result = resolveYouTubeTrailer(
                 youtubeUrl = youtubeUrl,
                 title = title,
-                year = year,
-                allowExternalFallback = false
+                year = year
             )
         ) {
             is TrailerResolutionResult.Playback -> result.source
@@ -183,12 +195,14 @@ class TrailerService(
         year: String?,
         tmdbId: String?,
         type: String?,
+        seasonNumber: Int?,
         contentId: String?,
         fallbackYtIds: List<String>
     ): TrailerResolutionResult? {
         resolveTrailerPlaybackFromTmdbId(
             tmdbId = tmdbId,
             type = type,
+            seasonNumber = seasonNumber,
             title = title,
             year = year
         )?.let { return it }
@@ -200,8 +214,7 @@ class TrailerService(
                 resolveYouTubeTrailer(
                     youtubeUrl = "https://www.youtube.com/watch?v=$ytId",
                     title = title,
-                    year = year,
-                    allowExternalFallback = true
+                    year = year
                 )?.let { return it }
             }
 
@@ -216,6 +229,7 @@ class TrailerService(
     private suspend fun resolveTrailerPlaybackFromTmdbId(
         tmdbId: String?,
         type: String?,
+        seasonNumber: Int? = null,
         title: String? = null,
         year: String? = null
     ): TrailerResolutionResult? = withContext(Dispatchers.IO) {
@@ -226,7 +240,24 @@ class TrailerService(
 
         val tmdbResults = when (mediaType) {
             "movie" -> fetchTmdbMovieVideos(numericTmdbId, tmdbLanguage, apiKey)
-            "tv" -> fetchTmdbTvVideos(numericTmdbId, tmdbLanguage, apiKey)
+            "tv" -> {
+                val seasonResults = seasonNumber
+                    ?.takeIf { it >= 0 }
+                    ?.let { season ->
+                        Log.d(TAG, "Trying TMDB season videos for tmdbId=$numericTmdbId season=$season")
+                        fetchTmdbSeasonVideos(numericTmdbId, season, tmdbLanguage, apiKey)
+                    }
+                    .orEmpty()
+                if (seasonResults.isNotEmpty()) {
+                    Log.d(TAG, "Using TMDB season trailer candidates for tmdbId=$numericTmdbId season=$seasonNumber")
+                    seasonResults
+                } else {
+                    if (seasonNumber != null) {
+                        Log.d(TAG, "No TMDB season trailer found for tmdbId=$numericTmdbId season=$seasonNumber, falling back to series videos")
+                    }
+                    fetchTmdbTvVideos(numericTmdbId, tmdbLanguage, apiKey)
+                }
+            }
             else -> fetchTmdbMovieVideos(numericTmdbId, tmdbLanguage, apiKey) +
                 fetchTmdbTvVideos(numericTmdbId, tmdbLanguage, apiKey)
         }
@@ -237,8 +268,7 @@ class TrailerService(
             resolveYouTubeTrailer(
                 youtubeUrl = "https://www.youtube.com/watch?v=$key",
                 title = title,
-                year = year,
-                allowExternalFallback = false
+                year = year
             )?.let { return@withContext it }
         }
 
@@ -273,8 +303,7 @@ class TrailerService(
             return@withContext resolveYouTubeTrailer(
                 youtubeUrl = "https://www.youtube.com/watch?v=$ytId",
                 title = title,
-                year = year,
-                allowExternalFallback = true
+                year = year
             )
         }
 
@@ -285,11 +314,8 @@ class TrailerService(
             resolveYouTubeTrailer(
                 youtubeUrl = externalUrl,
                 title = title,
-                year = year,
-                allowExternalFallback = true
+                year = year
             )
-        } else if (isValidUrl(externalUrl)) {
-            TrailerResolutionResult.External(externalUrl)
         } else {
             null
         }
@@ -298,8 +324,7 @@ class TrailerService(
     private suspend fun resolveYouTubeTrailer(
         youtubeUrl: String,
         title: String?,
-        year: String?,
-        allowExternalFallback: Boolean
+        year: String?
     ): TrailerResolutionResult? = withContext(Dispatchers.IO) {
         val youtubeKey = extractYouTubeVideoId(youtubeUrl)
         if (!youtubeKey.isNullOrBlank()) {
@@ -312,6 +337,7 @@ class TrailerService(
             inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl)
         }.getOrNull()
         if (localSource != null) {
+            Log.d(TAG, "Resolved $youtubeUrl via local in-app extractor")
             if (!youtubeKey.isNullOrBlank()) {
                 youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
                     playbackSource = localSource,
@@ -319,6 +345,18 @@ class TrailerService(
                 )
             }
             return@withContext TrailerResolutionResult.Playback(localSource)
+        }
+
+        val helperSource = trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl)
+        if (helperSource != null) {
+            Log.d(TAG, "Resolved $youtubeUrl via authenticated embedded helper")
+            if (!youtubeKey.isNullOrBlank()) {
+                youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
+                    playbackSource = helperSource,
+                    cachedAt = Instant.now(clock)
+                )
+            }
+            return@withContext TrailerResolutionResult.Playback(helperSource)
         }
 
         if (BuildConfig.TRAILER_API_URL.isNotBlank()) {
@@ -335,6 +373,7 @@ class TrailerService(
                 ?.takeIf(::isValidUrl)
 
             if (backendUrl != null) {
+                Log.d(TAG, "Resolved $youtubeUrl via trailer backend bridge")
                 val playbackSource = TrailerPlaybackSource(videoUrl = backendUrl)
                 if (!youtubeKey.isNullOrBlank()) {
                     youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
@@ -344,10 +383,6 @@ class TrailerService(
                 }
                 return@withContext TrailerResolutionResult.Playback(playbackSource)
             }
-        }
-
-        if (allowExternalFallback && isValidUrl(youtubeUrl)) {
-            return@withContext TrailerResolutionResult.External(youtubeUrl)
         }
 
         null
@@ -377,6 +412,19 @@ class TrailerService(
         return fetchTmdbTvVideosOnce(tmdbId, TMDB_TRAILER_FALLBACK_LANGUAGE, apiKey)
     }
 
+    private suspend fun fetchTmdbSeasonVideos(
+        tmdbId: Int,
+        seasonNumber: Int,
+        preferredLanguage: String,
+        apiKey: String
+    ): List<TmdbVideoResult> {
+        val localized = fetchTmdbSeasonVideosOnce(tmdbId, seasonNumber, preferredLanguage, apiKey)
+        if (localized.isNotEmpty() || preferredLanguage.equals(TMDB_TRAILER_FALLBACK_LANGUAGE, ignoreCase = true)) {
+            return localized
+        }
+        return fetchTmdbSeasonVideosOnce(tmdbId, seasonNumber, TMDB_TRAILER_FALLBACK_LANGUAGE, apiKey)
+    }
+
     private suspend fun fetchTmdbMovieVideosOnce(
         tmdbId: Int,
         language: String,
@@ -402,6 +450,25 @@ class TrailerService(
         return try {
             val response = tmdbApi.getTvVideos(
                 tvId = tmdbId,
+                apiKey = apiKey,
+                language = language
+            )
+            if (response.isSuccessful) response.body()?.results.orEmpty() else emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private suspend fun fetchTmdbSeasonVideosOnce(
+        tmdbId: Int,
+        seasonNumber: Int,
+        language: String,
+        apiKey: String
+    ): List<TmdbVideoResult> {
+        return try {
+            val response = tmdbApi.getTvSeasonVideos(
+                tvId = tmdbId,
+                seasonNumber = seasonNumber,
                 apiKey = apiKey,
                 language = language
             )

@@ -154,6 +154,7 @@ import com.nexio.tv.updater.UpdateViewModel
 import com.nexio.tv.updater.ui.UpdatePromptDialog
 import dagger.hilt.android.AndroidEntryPoint
 import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
@@ -304,7 +305,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-        window?.setBackgroundDrawable(null)
         idleScreensaverColdBootRefreshPending = savedInstanceState == null
         handleRecommendationIntent(intent)
         handleTransportValidationIntent(intent)
@@ -441,6 +441,7 @@ class MainActivity : ComponentActivity() {
                     val idleLastInteractionAtMs by idleScreensaverController.lastInteractionAtMs.collectAsState()
                     val playbackIdleSnapshot by playbackIdleGateState.snapshot.collectAsState()
                     var homeTrailerPlaybackActive by remember { mutableStateOf(false) }
+                    var detailTrailerPlaybackActive by remember { mutableStateOf(false) }
 
                     LaunchedEffect(pendingRecommendation) {
                         val navigation = pendingRecommendation ?: return@LaunchedEffect
@@ -487,18 +488,23 @@ class MainActivity : ComponentActivity() {
                         currentRoute,
                         showStartupSplash,
                         playbackIdleSnapshot,
-                        homeTrailerPlaybackActive
+                        homeTrailerPlaybackActive,
+                        detailTrailerPlaybackActive
                     ) {
                         isIdleScreensaverEligibleRoute(
                             currentRoute = currentRoute,
                             playbackIdleSnapshot = playbackIdleSnapshot,
-                            homeTrailerPlaybackActive = homeTrailerPlaybackActive
+                            homeTrailerPlaybackActive = homeTrailerPlaybackActive,
+                            detailTrailerPlaybackActive = detailTrailerPlaybackActive
                         ) && !showStartupSplash
                     }
 
                     LaunchedEffect(currentRoute) {
                         if (currentRoute != Screen.Home.route && homeTrailerPlaybackActive) {
                             homeTrailerPlaybackActive = false
+                        }
+                        if (currentRoute != Screen.Detail.route && detailTrailerPlaybackActive) {
+                            detailTrailerPlaybackActive = false
                         }
                     }
 
@@ -630,6 +636,15 @@ class MainActivity : ComponentActivity() {
                                 onHomeTrailerPlaybackActiveChanged = { active ->
                                     homeTrailerPlaybackActive = active
                                 },
+                                onDetailTrailerPlaybackStarted = {
+                                    idleScreensaverController.registerInteraction()
+                                },
+                                onDetailTrailerPlaybackStopped = {
+                                    idleScreensaverController.registerInteraction()
+                                },
+                                onDetailTrailerPlaybackActiveChanged = { active ->
+                                    detailTrailerPlaybackActive = active
+                                },
                                 onExitApp = {
                                     finishAffinity()
                                     finishAndRemoveTask()
@@ -649,6 +664,15 @@ class MainActivity : ComponentActivity() {
                                 idleScreensaverController = idleScreensaverController,
                                 onHomeTrailerPlaybackActiveChanged = { active ->
                                     homeTrailerPlaybackActive = active
+                                },
+                                onDetailTrailerPlaybackStarted = {
+                                    idleScreensaverController.registerInteraction()
+                                },
+                                onDetailTrailerPlaybackStopped = {
+                                    idleScreensaverController.registerInteraction()
+                                },
+                                onDetailTrailerPlaybackActiveChanged = { active ->
+                                    detailTrailerPlaybackActive = active
                                 },
                                 onExitApp = {
                                     finishAffinity()
@@ -1007,7 +1031,8 @@ private data class TransportValidationPlaybackNavigation(
 internal fun isIdleScreensaverEligibleRoute(
     currentRoute: String?,
     playbackIdleSnapshot: PlaybackIdleGateSnapshot,
-    homeTrailerPlaybackActive: Boolean
+    homeTrailerPlaybackActive: Boolean,
+    detailTrailerPlaybackActive: Boolean
 ): Boolean {
     val route = currentRoute ?: return false
     if (
@@ -1023,6 +1048,9 @@ internal fun isIdleScreensaverEligibleRoute(
         return playbackIdleSnapshot.hasActiveSession && playbackIdleSnapshot.isPausedByUser
     }
     if (route == Screen.Home.route && homeTrailerPlaybackActive) {
+        return false
+    }
+    if (route == Screen.Detail.route && detailTrailerPlaybackActive) {
         return false
     }
     return true
@@ -1182,6 +1210,9 @@ private fun LegacySidebarScaffold(
     idleScreensaverVisible: Boolean,
     idleScreensaverController: IdleScreensaverController,
     onHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
+    onDetailTrailerPlaybackStarted: () -> Unit,
+    onDetailTrailerPlaybackStopped: () -> Unit,
+    onDetailTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onExitApp: () -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -1351,7 +1382,10 @@ private fun LegacySidebarScaffold(
                     },
                     onModernHomeTrailerPlaybackActiveChanged = { active ->
                         onHomeTrailerPlaybackActiveChanged(active)
-                    }
+                    },
+                    onDetailTrailerPlaybackStarted = onDetailTrailerPlaybackStarted,
+                    onDetailTrailerPlaybackStopped = onDetailTrailerPlaybackStopped,
+                    onDetailTrailerPlaybackActiveChanged = onDetailTrailerPlaybackActiveChanged
                 )
             }
         }
@@ -1442,6 +1476,9 @@ private fun ModernSidebarScaffold(
     idleScreensaverVisible: Boolean,
     idleScreensaverController: IdleScreensaverController,
     onHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
+    onDetailTrailerPlaybackStarted: () -> Unit,
+    onDetailTrailerPlaybackStopped: () -> Unit,
+    onDetailTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onExitApp: () -> Unit
 ) {
     val showSidebar = currentRoute in rootRoutes
@@ -1532,6 +1569,9 @@ private fun ModernSidebarScaffold(
         animationSpec = tween(durationMillis = 135, easing = FastOutSlowInEasing),
         label = "sidebarSurfaceAlpha"
     )
+    val shouldApplySidebarHaze = showSidebar && modernSidebarBlurEnabled && (
+        isSidebarExpanded || sidebarCollapsePending
+        )
     val sidebarTransition = updateTransition(
         targetState = isSidebarExpanded,
         label = "sidebarTransition"
@@ -1639,6 +1679,13 @@ private fun ModernSidebarScaffold(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .then(
+                    if (shouldApplySidebarHaze) {
+                        Modifier.haze(sidebarHazeState)
+                    } else {
+                        Modifier
+                    }
+                )
                 .onPreviewKeyEvent { keyEvent ->
                     if (
                         isSidebarExpanded &&
@@ -1692,7 +1739,10 @@ private fun ModernSidebarScaffold(
                     },
                     onModernHomeTrailerPlaybackActiveChanged = { active ->
                         onHomeTrailerPlaybackActiveChanged(active)
-                    }
+                    },
+                    onDetailTrailerPlaybackStarted = onDetailTrailerPlaybackStarted,
+                    onDetailTrailerPlaybackStopped = onDetailTrailerPlaybackStopped,
+                    onDetailTrailerPlaybackActiveChanged = onDetailTrailerPlaybackActiveChanged
                 )
             }
         }
@@ -1786,10 +1836,8 @@ private fun ModernSidebarScaffold(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .offset {
-                            val collapsedPillOffsetX =
-                                if (isFloatingPillIconOnly && !keepFloatingPillExpanded) 6.dp else 14.dp
                             IntOffset(
-                                collapsedPillOffsetX.roundToPx(),
+                                14.dp.roundToPx(),
                                 (16.dp + sidebarDeflateOffsetY).roundToPx()
                             )
                         }
@@ -1860,6 +1908,11 @@ private fun CollapsedSidebarPill(
         Box(
             modifier = Modifier
                 .height(44.dp)
+                .graphicsLayer {
+                    shape = pillShape
+                    clip = true
+                    compositingStrategy = CompositingStrategy.Offscreen
+                }
                 .clip(pillShape)
                 .background(brush = pillBackgroundBrush, shape = pillShape)
                 .border(width = 1.dp, color = pillBorderColor, shape = pillShape)
@@ -1868,10 +1921,7 @@ private fun CollapsedSidebarPill(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .fillMaxHeight()
-                    .padding(
-                        start = if (iconOnly) 4.dp else 5.dp,
-                        end = if (iconOnly) 4.dp else 12.dp
-                    ),
+                    .padding(start = 5.dp, end = if (iconOnly) 5.dp else 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(if (iconOnly) 0.dp else 9.dp)
             ) {

@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -188,6 +189,9 @@ fun MetaDetailsScreen(
     viewModel: MetaDetailsViewModel = hiltViewModel(),
     returnFocusSeason: Int? = null,
     returnFocusEpisode: Int? = null,
+    onDetailTrailerPlaybackStarted: () -> Unit = {},
+    onDetailTrailerPlaybackStopped: () -> Unit = {},
+    onDetailTrailerPlaybackActiveChanged: (Boolean) -> Unit = {},
     onBackPress: () -> Unit,
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
     onNavigateToOrganizationDetail: (
@@ -240,6 +244,7 @@ fun MetaDetailsScreen(
 
     val currentIsTrailerPlaying by rememberUpdatedState(uiState.isTrailerPlaying)
     val currentShowTrailerControls by rememberUpdatedState(uiState.showTrailerControls)
+    var previousTrailerPlaying by remember { mutableStateOf(false) }
     var trailerSeekOverlayVisible by remember { mutableStateOf(false) }
     val trailerSeekOverlayState = remember { TrailerSeekOverlayState() }
     var trailerSeekToken by remember { mutableIntStateOf(0) }
@@ -280,6 +285,22 @@ fun MetaDetailsScreen(
         trailerLifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             trailerLifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    LaunchedEffect(uiState.isTrailerPlaying) {
+        onDetailTrailerPlaybackActiveChanged(uiState.isTrailerPlaying)
+        if (uiState.isTrailerPlaying && !previousTrailerPlaying) {
+            onDetailTrailerPlaybackStarted()
+        } else if (!uiState.isTrailerPlaying && previousTrailerPlaying) {
+            onDetailTrailerPlaybackStopped()
+        }
+        previousTrailerPlaying = uiState.isTrailerPlaying
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            onDetailTrailerPlaybackActiveChanged(false)
         }
     }
 
@@ -371,11 +392,8 @@ fun MetaDetailsScreen(
                 val genresString = remember(meta.genres) {
                     meta.genres.takeIf { it.isNotEmpty() }?.joinToString(" • ")
                 }
-                val yearString = remember(meta.type, meta.releaseInfo) {
-                    formatPrimaryReleaseInfo(
-                        contentType = meta.type,
-                        releaseInfo = meta.releaseInfo
-                    )
+                val yearString = remember(meta.releaseInfo) {
+                    meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
                 }
 
                 MetaDetailsContent(
@@ -1047,11 +1065,7 @@ private fun MetaDetailsContent(
     // Backdrop alpha for crossfade
     var trailerFirstFrameRendered by remember(trailerUrl) { mutableStateOf(false) }
     val backdropAlpha by animateFloatAsState(
-        targetValue = when {
-            showTrailerTakeover && trailerFirstFrameRendered -> 0f
-            isScrolledPastHero -> 0.72f
-            else -> 1f
-        },
+        targetValue = if (showTrailerTakeover && trailerFirstFrameRendered) 0f else 1f,
         animationSpec = tween(durationMillis = 800),
         label = "backdropFade"
     )

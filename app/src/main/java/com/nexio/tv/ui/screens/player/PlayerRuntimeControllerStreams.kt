@@ -18,7 +18,6 @@ import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.ui.components.SourceChipItem
 import com.nexio.tv.ui.components.SourceChipStatus
-import com.nexio.tv.ui.stream.inlineStreamText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -399,7 +398,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
         it.copy(
             isBuffering = true,
             error = null,
-            currentStreamName = inlineStreamText(stream.name ?: stream.addonName),
+            currentStreamName = stream.name ?: stream.addonName,
             currentStreamUrl = url,
             audioTracks = emptyList(),
             subtitleTracks = emptyList(),
@@ -712,7 +711,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
             currentSeason = currentSeason,
             currentEpisode = currentEpisode,
             currentEpisodeTitle = currentEpisodeTitle,
-            currentStreamName = inlineStreamText(stream.name ?: stream.addonName),
+            currentStreamName = stream.name ?: stream.addonName,
             currentStreamUrl = url,
             audioTracks = emptyList(),
             subtitleTracks = emptyList(),

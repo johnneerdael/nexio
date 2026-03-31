@@ -30,7 +30,6 @@ import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.text.SubtitleParser
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
-import com.nexio.tv.core.network.allowInvalidCertificates
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.VodCacheSizeMode
 import okhttp3.ConnectionPool
@@ -605,7 +604,6 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             maxRequestsPerHost = 12
         }
         return okHttpClient ?: OkHttpClient.Builder()
-            .allowInvalidCertificates()
             .dispatcher(dispatcher)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(45, TimeUnit.SECONDS)

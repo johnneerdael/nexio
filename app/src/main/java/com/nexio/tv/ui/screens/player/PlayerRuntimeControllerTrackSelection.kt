@@ -57,8 +57,6 @@ internal fun PlayerRuntimeController.selectAudioTrack(trackIndex: Int) {
                             .buildUpon()
                             .setOverrideForType(override)
                             .build()
-                        val recoverPositionMs = (player.currentPosition - 1L).coerceAtLeast(0L)
-                        player.seekTo(recoverPositionMs)
                         persistRememberedLinkAudioSelection(trackIndex)
                         return
                     }
