@@ -1,71 +1,17 @@
 # Settings
 
-![Playback settings](/images/tv-app/settings-playback.webp)
-*Settings is organized into TV-friendly categories so playback, integrations, appearance, and catalog behavior stay separated instead of competing on one long page.*
+This is the legacy settings page. The old screen-by-screen breakdown is no longer the main documentation model for playback.
 
-## What Settings is for
-Settings is where you shape Nexio around your device, your integrations, and the way you like to watch. It is split into TV-friendly categories so you can make one kind of change at a time.
+## Start here
 
-## Main categories
-- Account
-- Appearance
-- Layout
-- Integration
-- Playback
-- Catalogs
-- About
-- Debug, on debug builds only
+- [Playback](/playback/) for the current playback entry point
+- [Playback Tuning](/playback/playback-tuning) for buffering and seek behavior
+- [Subtitles and Auto-Translate](/playback/subtitles-and-auto-translate) for Gemini-backed subtitle translation
+- [Audio Codecs and Device Advice](/playback/audio-codecs-and-device-advice) for codec and device limits
 
-## How the screen behaves
-- The left rail is the main navigation.
-- The detail pane opens the selected category and tries to keep focus where you expect it.
-- Some categories open directly inside the settings surface, while others open a dedicated screen.
-- Catalog management is separate so ordering and enablement stay focused.
+## Still relevant
 
-## What each area is good for
-- Account: sign in and manage account-linked features.
-- Appearance: tune the look and feel of the app.
-- Layout: choose the Home style and related browsing behavior.
-- Integration: configure services such as Trakt, TMDB, MDBList, Debrid, Anime Skip, Gemini, and poster ratings.
-- Playback: tune player behavior, audio, subtitles, buffering, stream selection, and logging.
-- Catalogs: manage catalog ordering and visibility.
-- About: app information.
-
-## Integration behavior from the TV
-- Trakt shows login state, sync actions, catalog selection, continue-watching window controls, and whether unaired episodes are included.
-- TMDB lets you enable enrichment and choose which metadata fields Nexio should use.
-- MDBList controls external ratings and list-backed rails.
-- Debrid surfaces account-backed source management.
-- Anime Skip enables skip timestamps for supported anime titles.
-- Gemini enables subtitle translation features when available.
-- Poster ratings controls RPDB and TOPPosters.
-
-![Integration categories](/images/tv-app/settings-integrations.webp)
-*The TV App groups integrations by function, so account-linked services such as Debrid, Trakt, TMDB, MDBList, Anime Skip, and Gemini are easy to find from one screen.*
-
-![TMDB enrichment settings](/images/tv-app/settings-tmdb.webp)
-*TMDB enrichment is configurable by metadata type, which makes it clear what the service is adding to artwork, details, and related title surfaces.*
-
-## Playback settings that matter most
-- Player preference decides whether Nexio uses the built-in player, an external app, or asks every time.
-- Auto-play controls whether Nexio chooses the first source, matches a pattern, or leaves selection manual.
-- VOD cache and parallel connections influence how resilient progressive streams feel during startup and buffering.
-- Subtitle settings control language preference, startup behavior, style, and advanced rendering.
-- Audio settings include decoder priority and passthrough options for premium TV devices.
-
-## Best use guidance
-- Change one section at a time and test it in [Home](./home.md), [Media Detail](./detail.md), or [Playback Interface](./player.md) before changing something else.
-- If a setting is meant for advanced hardware behavior, treat it as a targeted fix rather than a daily toggle.
-- Use playback tuning when the symptom is real and repeatable, not just because a stream had one bad start.
-
-## Troubleshooting
-- If a feature stops working after a settings change, revert the last category you touched first.
-- If an integration disappears from Home or Detail, verify the account connection and the related toggle.
-- If a playback change has no visible effect, make sure you tested it on a stream type that actually uses that code path.
-
-## Related pages
-- [Home](./home.md)
-- [Catalogs and Library](./catalog.md)
-- [Media Detail](./detail.md)
-- [Playback Interface](./player.md)
-- [Search and Cast](./search-and-cast.md)
+- [Home](./home.md) for browse behavior
+- [Media Detail](./detail.md) for title-level actions
+- [Search and Cast](./search-and-cast.md) for finding titles and following cast links
+- [Portal Integrations](/web/admin-workspaces/integrations) for account-backed service setup

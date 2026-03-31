@@ -1,8 +1,6 @@
 # Formatter Reference
 
-This page is the detailed reference for Nexio’s stream formatter. It covers the syntax used by the built-in presets, the live preview, and custom templates.
-
-If you are still learning the workflow, start with [Formatter Getting Started](./formatter-getting-started.md) first.
+If you want the outcome and the recommended template shape, start with [Universal Formatter](/customize/universal-formatter) first. This page is the syntax reference for the portal editor and the built-in templates.
 
 Nexio’s formatter syntax follows the AIO-style formatting lineage popularized by Viren070’s AIOStreams work. The core formatter implementation in Nexio is adapted from earlier open-source formatter code and keeps that same mental model of variables, modifiers, and conditions.
 
