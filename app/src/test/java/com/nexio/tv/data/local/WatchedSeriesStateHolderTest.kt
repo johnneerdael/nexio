@@ -248,4 +248,50 @@ class WatchedSeriesStateHolderTest {
             holder.matchingEntryIds("tt1234567")
         )
     }
+
+    @Test
+    fun `all legacy auth hash holder buckets migrate after session identity backfill`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        val authStoreFile = java.io.File.createTempFile("trakt-auth-holder-multi-upgrade", ".preferences_pb")
+        authStoreFile.deleteOnExit()
+        val authBacking = PreferenceDataStoreFactory.create(scope = backgroundScope) { authStoreFile }
+        authBacking.edit { store ->
+            store[stringPreferencesKey("access_token")] = "access"
+            store[stringPreferencesKey("refresh_token")] = "refresh"
+        }
+        val authStore = TraktAuthDataStore(dataStore = authBacking)
+        val context = mockk<Context> {
+            every {
+                getSharedPreferences("watched_series_state", Context.MODE_PRIVATE)
+            } returns prefs
+        }
+        val currentLegacyKey = legacyAuthHashSessionKeyForState(
+            TraktAuthState(accessToken = "access", refreshToken = "refresh")
+        )!!
+        val olderLegacyKey = legacyAuthHashSessionKeyForState(
+            TraktAuthState(accessToken = "older-access", refreshToken = "older-refresh")
+        )!!
+        prefs.edit()
+            .putString(
+                "entries_${currentLegacyKey.lowercase()}",
+                "[{\"ids\":[\"tmdb:101\",\"tt1234567\"]}]"
+            )
+            .putString(
+                "entries_${olderLegacyKey.lowercase()}",
+                "[{\"ids\":[\"tmdb:202\",\"tt7654321\"]}]"
+            )
+            .apply()
+
+        val holder = WatchedSeriesStateHolder(context, authStore, backgroundScope)
+        advanceUntilIdle()
+
+        val sessionIdentity = authStore.state.first().sessionIdentity!!
+        assertEquals(sessionIdentity, holder.activeSessionKey.value)
+        assertTrue(holder.isSeriesWatched("tmdb:101"))
+        assertTrue(holder.isSeriesWatched("tmdb:202"))
+        assertEquals(
+            setOf("tmdb:202", "tt7654321"),
+            holder.matchingEntryIds("tt7654321")
+        )
+    }
 }

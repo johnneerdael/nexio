@@ -192,9 +192,10 @@ class WatchedItemsPreferences internal constructor(
         preferences: Preferences,
         identity: TraktSessionIdentity
     ): List<WatchedItem> {
+        val migrationKeys = resolveMigrationKeys(preferences, identity)
         return buildList {
             addAll(decodeWatchedItems(preferences[legacyWatchedItemsKey] ?: emptySet()))
-            identity.migrationKeys.forEach { key ->
+            migrationKeys.forEach { key ->
                 addAll(decodeWatchedItems(preferences[watchedItemsKey(key)] ?: emptySet()))
             }
         }
@@ -204,6 +205,7 @@ class WatchedItemsPreferences internal constructor(
         preferences: MutablePreferences,
         identity: TraktSessionIdentity
     ): List<WatchedItem> {
+        val migrationKeys = resolveMigrationKeys(preferences, identity)
         val primaryKey = watchedItemsKey(identity.primaryKey)
         val merged = mergeWatchedItems(
             decodeWatchedItems(preferences[primaryKey] ?: emptySet()) +
@@ -211,10 +213,25 @@ class WatchedItemsPreferences internal constructor(
         )
         preferences[primaryKey] = encodeWatchedItems(merged)
         preferences.remove(legacyWatchedItemsKey)
-        identity.migrationKeys.forEach { migrationKey ->
+        migrationKeys.forEach { migrationKey ->
             preferences.remove(watchedItemsKey(migrationKey))
         }
         return merged
+    }
+
+    private fun resolveMigrationKeys(
+        preferences: Preferences,
+        identity: TraktSessionIdentity
+    ): List<String> {
+        val prefixedAuthKeys = preferences.asMap().keys
+            .mapNotNull { key ->
+                key.name
+                    .takeIf { it.startsWith(WATCHED_ITEMS_KEY_PREFIX + "auth_") }
+                    ?.removePrefix(WATCHED_ITEMS_KEY_PREFIX)
+            }
+        return (identity.migrationKeys + prefixedAuthKeys)
+            .filterNot { it.equals(identity.primaryKey, ignoreCase = true) }
+            .distinct()
     }
 
     private val legacyWatchedItemsKey = stringSetPreferencesKey(LEGACY_WATCHED_ITEMS_KEY)
