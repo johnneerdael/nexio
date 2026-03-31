@@ -123,6 +123,13 @@ class HomeViewModel @Inject constructor(
     internal val _enrichingItemId = MutableStateFlow<String?>(null)
     val enrichingItemId: StateFlow<String?> = _enrichingItemId.asStateFlow()
     internal fun setEnrichingItemId(id: String?) { _enrichingItemId.value = id }
+    internal val modernHomePresentationLocaleTag =
+        MutableStateFlow(AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext))
+    internal fun updateModernHomePresentationLocaleTag(localeTag: String) {
+        modernHomePresentationLocaleTag.update { current ->
+            if (current == localeTag) current else localeTag
+        }
+    }
 
     internal val catalogsMap = linkedMapOf<String, CatalogRow>()
     internal val catalogOrder = mutableListOf<String>()
@@ -183,6 +190,8 @@ class HomeViewModel @Inject constructor(
     internal var pendingAdjacentPrefetchItemId: String? = null
     internal val prefetchedTmdbIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal val modernCarouselRowBuildCache = ModernCarouselRowBuildCache()
+    internal val modernHomePresentationBuildMutex = Mutex()
+    internal var modernHomePresentationGeneration: Long = 0L
     internal var tmdbEnrichFocusJob: Job? = null
     internal var pendingTmdbEnrichItemId: String? = null
     internal val posterLibraryObserverJobs = mutableMapOf<String, Job>()

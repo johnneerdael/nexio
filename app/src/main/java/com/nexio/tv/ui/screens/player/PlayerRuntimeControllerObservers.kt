@@ -444,6 +444,13 @@ internal fun PlayerRuntimeController.retryCurrentStreamAfterMediaPeriodHolderCra
     scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
 }
 
+internal fun PlayerRuntimeController.retryCurrentStreamAfterTransientError(fromPositionMs: Long) {
+    scheduleDeferredPlayerReinitialize(
+        fromPositionMs = fromPositionMs,
+        preserveTransientRetryState = true
+    )
+}
+
 internal fun PlayerRuntimeController.retryCurrentStreamWithSafeAudioFallback(fromPositionMs: Long) {
     scheduleDeferredPlayerReinitialize(fromPositionMs = fromPositionMs)
 }
@@ -580,24 +587,42 @@ internal fun PlayerRuntimeController.maybeScheduleFirstFrameWatchdog() {
 
 private fun PlayerRuntimeController.scheduleDeferredPlayerReinitialize(
     fromPositionMs: Long,
-    clearResumeProgress: Boolean = false
+    clearResumeProgress: Boolean = false,
+    preserveTransientRetryState: Boolean = false
 ) {
-    cancelFirstFrameWatchdog()
-    if (clearResumeProgress) {
-        pendingResumeProgress = null
-    }
-    _uiState.update {
-        it.copy(
-            pendingSeekPosition = if (fromPositionMs > 0L) fromPositionMs else null,
-            error = null,
-            showLoadingOverlay = it.loadingOverlayEnabled
-        )
-    }
+    val scheduledRequest = DeferredPlayerRequestIdentity(
+        streamUrl = currentStreamUrl,
+        headers = currentHeaders
+    )
+    val scheduledPlaybackSessionId = playbackSessionGuard.activePlaybackSessionId()
     scope.launch {
         yield()
+        if (!shouldRunDeferredReinitialize(
+                scheduledRequest = scheduledRequest,
+                currentStreamUrl = currentStreamUrl,
+                currentHeaders = currentHeaders,
+                scheduledPlaybackSessionIsCurrent = playbackSessionGuard.shouldHandleCallback(scheduledPlaybackSessionId)
+            )
+        ) {
+            return@launch
+        }
+        if (preserveTransientRetryState) {
+            preserveTransientRetryStateForRequest = scheduledRequest
+        }
+        cancelFirstFrameWatchdog()
+        if (clearResumeProgress) {
+            pendingResumeProgress = null
+        }
+        _uiState.update {
+            it.copy(
+                pendingSeekPosition = if (fromPositionMs > 0L) fromPositionMs else null,
+                error = null,
+                showLoadingOverlay = it.loadingOverlayEnabled
+            )
+        }
         runCatching {
             releasePlayer()
-            initializePlayer(currentStreamUrl, currentHeaders)
+            initializePlayer(scheduledRequest.streamUrl, scheduledRequest.headers)
         }.onFailure { e ->
             _uiState.update {
                 it.copy(
@@ -608,4 +633,25 @@ private fun PlayerRuntimeController.scheduleDeferredPlayerReinitialize(
             }
         }
     }
+}
+
+internal fun shouldPreserveTransientRetryState(
+    preservedRequest: DeferredPlayerRequestIdentity?,
+    nextStreamUrl: String,
+    nextHeaders: Map<String, String>
+): Boolean {
+    return preservedRequest != null &&
+        preservedRequest.streamUrl == nextStreamUrl &&
+        preservedRequest.headers == nextHeaders
+}
+
+internal fun shouldRunDeferredReinitialize(
+    scheduledRequest: DeferredPlayerRequestIdentity,
+    currentStreamUrl: String,
+    currentHeaders: Map<String, String>,
+    scheduledPlaybackSessionIsCurrent: Boolean
+): Boolean {
+    return scheduledPlaybackSessionIsCurrent &&
+        scheduledRequest.streamUrl == currentStreamUrl &&
+        scheduledRequest.headers == currentHeaders
 }

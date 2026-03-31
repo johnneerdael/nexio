@@ -45,7 +45,8 @@ data class HomeUiState(
     val posterListPickerError: String? = null,
     val traktRecommendationRefs: Map<String, TraktRecommendationRef> = emptyMap(),
     val gridItems: List<GridItem> = emptyList(),
-    val hideUnreleasedContent: Boolean = false
+    val hideUnreleasedContent: Boolean = false,
+    val modernHomePresentation: ModernHomePresentationState = ModernHomePresentationState()
 )
 
 @Immutable
