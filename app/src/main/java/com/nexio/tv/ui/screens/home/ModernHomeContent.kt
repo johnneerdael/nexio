@@ -808,6 +808,7 @@ internal fun ModernHomeContent(
                         modernCatalogCardHeight = modernCatalogCardHeight,
                         continueWatchingCardWidth = continueWatchingCardWidth,
                         continueWatchingCardHeight = continueWatchingCardHeight,
+                        continueWatchingBlurEnabled = contentState.continueWatchingBlurEnabled,
                         onContinueWatchingClick = onContinueWatchingClick,
                         onContinueWatchingOptions = onContinueWatchingOptions,
                         isCatalogItemWatched = isCatalogItemWatched,

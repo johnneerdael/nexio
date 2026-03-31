@@ -1786,8 +1786,10 @@ private fun ModernSidebarScaffold(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .offset {
+                            val collapsedPillOffsetX =
+                                if (isFloatingPillIconOnly && !keepFloatingPillExpanded) 6.dp else 14.dp
                             IntOffset(
-                                14.dp.roundToPx(),
+                                collapsedPillOffsetX.roundToPx(),
                                 (16.dp + sidebarDeflateOffsetY).roundToPx()
                             )
                         }
@@ -1866,7 +1868,10 @@ private fun CollapsedSidebarPill(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .fillMaxHeight()
-                    .padding(start = 5.dp, end = if (iconOnly) 5.dp else 12.dp),
+                    .padding(
+                        start = if (iconOnly) 4.dp else 5.dp,
+                        end = if (iconOnly) 4.dp else 12.dp
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(if (iconOnly) 0.dp else 9.dp)
             ) {

@@ -35,6 +35,7 @@ import com.nexio.tv.ui.theme.NexioColors
 @Composable
 fun GridContinueWatchingSection(
     items: List<ContinueWatchingItem>,
+    blurEpisodeThumbnail: Boolean = false,
     onItemClick: (ContinueWatchingItem) -> Unit,
     onDetailsClick: (ContinueWatchingItem) -> Unit = onItemClick,
     onRemoveItem: (ContinueWatchingItem) -> Unit,
@@ -119,6 +120,7 @@ fun GridContinueWatchingSection(
 
                 ContinueWatchingCard(
                     item = progress,
+                    blurEpisodeThumbnail = blurEpisodeThumbnail,
                     onClick = { onItemClick(progress) },
                     onLongPress = { optionsItem = progress },
                     modifier = focusModifier

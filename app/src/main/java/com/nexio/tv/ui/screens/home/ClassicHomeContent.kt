@@ -183,6 +183,7 @@ fun ClassicHomeContent(
             item(key = "continue_watching", contentType = "continue_watching") {
                 ContinueWatchingSection(
                     items = uiState.continueWatchingItems,
+                    blurEpisodeThumbnail = uiState.continueWatchingBlurEnabled,
                     onItemClick = { item ->
                         onContinueWatchingClick(item)
                     },

@@ -142,8 +142,7 @@ fun CatalogSeeAllScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(NexioColors.Background)
-            .padding(horizontal = 48.dp, vertical = 24.dp)
+            .padding(horizontal = 24.dp, vertical = 24.dp)
     ) {
         // Header
         Row(
@@ -178,7 +177,7 @@ fun CatalogSeeAllScreen(
                     state = gridState,
                     columns = GridCells.Adaptive(minSize = posterCardStyle.width),
                     contentPadding = PaddingValues(
-                        top = 12.dp,
+                        top = 0.dp,
                         bottom = if (catalogRow.isLoading) 80.dp else 32.dp
                     ),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -236,4 +235,3 @@ fun CatalogSeeAllScreen(
         }
     }
 }
-
