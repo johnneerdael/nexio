@@ -139,7 +139,12 @@ internal fun ModernHeroMediaLayer(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = 20.dp, end = 20.dp)
+                    .padding(
+                        top = 20.dp,
+                        end = resolveModernHomeHeroFullscreenHintEndPadding(
+                            fullscreenTrailerActive = false
+                        )
+                    )
                     .wrapContentSize(Alignment.TopEnd)
             ) {
                 Text(
