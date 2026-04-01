@@ -1,14 +1,14 @@
 package com.nexio.tv.data.local
 
-import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
-import java.io.IOException
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -16,7 +16,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -201,13 +200,6 @@ class DebridBenchmarkStoreTest {
     }
 
     @Test
-    fun `latest result returns null when datastore read throws ioexception`() = runTest {
-        val store = DebridBenchmarkStore(crashingDataStore())
-
-        assertEquals(null, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
-    }
-
-    @Test
     @OptIn(ExperimentalCoroutinesApi::class)
     fun `saving another provider does not re emit an unchanged latest result`() = runTest {
         val store = buildStore(backgroundScope)
@@ -241,8 +233,27 @@ class DebridBenchmarkStoreTest {
         collectJob.cancelAndJoin()
     }
 
-    private fun buildDataStore(scope: CoroutineScope, file: File? = null) =
+    @Test
+    fun `corrupt preferences file is recovered and still accepts later saves`() = runTest {
+        val file = newTempBenchmarkStoreFile()
+        file.writeBytes(byteArrayOf(0x01, 0x02, 0x03))
+        val store = buildStore(backgroundScope, file, replaceCorruptionHandler())
+
+        assertEquals(null, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
+
+        val expected = sampleResult(provider = DebridBenchmarkProvider.REAL_DEBRID, measuredAtMs = 12L)
+        store.saveLatest(expected)
+
+        assertEquals(expected, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
+    }
+
+    private fun buildDataStore(
+        scope: CoroutineScope,
+        file: File? = null,
+        corruptionHandler: ReplaceFileCorruptionHandler<androidx.datastore.preferences.core.Preferences> = replaceCorruptionHandler()
+    ) =
         PreferenceDataStoreFactory.create(
+            corruptionHandler = corruptionHandler,
             scope = scope,
             produceFile = {
                 (file ?: newTempBenchmarkStoreFile()).also { it.deleteOnExit() }
@@ -254,7 +265,15 @@ class DebridBenchmarkStoreTest {
     }
 
     private fun buildStore(scope: CoroutineScope, file: File): DebridBenchmarkStore {
-        return DebridBenchmarkStore(buildDataStore(scope, file))
+        return buildStore(scope, file, replaceCorruptionHandler())
+    }
+
+    private fun buildStore(
+        scope: CoroutineScope,
+        file: File,
+        corruptionHandler: ReplaceFileCorruptionHandler<androidx.datastore.preferences.core.Preferences>
+    ): DebridBenchmarkStore {
+        return DebridBenchmarkStore(buildDataStore(scope, file, corruptionHandler))
     }
 
     private fun sampleResult(
@@ -282,17 +301,8 @@ class DebridBenchmarkStoreTest {
         return File.createTempFile("debrid_benchmark_store", ".preferences_pb").also { it.deleteOnExit() }
     }
 
-    private fun crashingDataStore(): DataStore<androidx.datastore.preferences.core.Preferences> {
-        return object : DataStore<androidx.datastore.preferences.core.Preferences> {
-            override val data = flow<androidx.datastore.preferences.core.Preferences> {
-                throw IOException("corruption")
-            }
-
-            override suspend fun updateData(
-                transform: suspend (androidx.datastore.preferences.core.Preferences) -> androidx.datastore.preferences.core.Preferences
-            ): androidx.datastore.preferences.core.Preferences {
-                throw UnsupportedOperationException("not used")
-            }
+    private fun replaceCorruptionHandler() =
+        ReplaceFileCorruptionHandler<androidx.datastore.preferences.core.Preferences> {
+            emptyPreferences()
         }
-    }
 }
