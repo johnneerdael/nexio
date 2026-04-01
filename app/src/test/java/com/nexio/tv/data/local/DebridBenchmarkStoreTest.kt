@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
+import androidx.datastore.preferences.core.Preferences
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -200,6 +202,47 @@ class DebridBenchmarkStoreTest {
     }
 
     @Test
+    fun `latest result rejects fractional numeric payloads`() = runTest {
+        val dataStore = buildDataStore(backgroundScope)
+        val store = DebridBenchmarkStore(dataStore)
+        val key = stringPreferencesKey("debrid_benchmark_latest_real_debrid")
+        dataStore.edit { prefs ->
+            prefs[key] = """
+                {
+                  "provider":"REAL_DEBRID",
+                  "measuredAtMs":5.9,
+                  "summary":{
+                    "startupTimeMs":1.5,
+                    "sustainedThroughputMbps":2.5,
+                    "transferredBytes":12.75,
+                    "elapsedMs":34.25
+                  },
+                  "terminationReason":"COMPLETED"
+                }
+            """.trimIndent()
+        }
+
+        assertEquals(null, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
+    }
+
+    @Test
+    fun `saveLatest writes canonical benchmark payload keys`() = runTest {
+        val recordingDataStore = recordingDataStore()
+        val store = DebridBenchmarkStore(recordingDataStore)
+        val expected = sampleResult(provider = DebridBenchmarkProvider.REAL_DEBRID, measuredAtMs = 42L)
+
+        store.saveLatest(expected)
+
+        val key = stringPreferencesKey("debrid_benchmark_latest_real_debrid")
+        val raw = recordingDataStore.snapshot.value[key]
+
+        assertEquals(
+            """{"provider":"REAL_DEBRID","measuredAtMs":42,"summary":{"startupTimeMs":123,"sustainedThroughputMbps":456.0,"transferredBytes":789,"elapsedMs":1000},"terminationReason":"COMPLETED"}""",
+            raw
+        )
+    }
+
+    @Test
     @OptIn(ExperimentalCoroutinesApi::class)
     fun `saving another provider does not re emit an unchanged latest result`() = runTest {
         val store = buildStore(backgroundScope)
@@ -305,4 +348,22 @@ class DebridBenchmarkStoreTest {
         ReplaceFileCorruptionHandler<androidx.datastore.preferences.core.Preferences> {
             emptyPreferences()
         }
+
+    private fun recordingDataStore(): RecordingDataStore {
+        return RecordingDataStore()
+    }
+
+    private class RecordingDataStore : androidx.datastore.core.DataStore<Preferences> {
+        val snapshot = MutableStateFlow(emptyPreferences())
+
+        override val data = snapshot
+
+        override suspend fun updateData(
+            transform: suspend (Preferences) -> Preferences
+        ): Preferences {
+            val updated = transform(snapshot.value)
+            snapshot.value = updated
+            return updated
+        }
+    }
 }
