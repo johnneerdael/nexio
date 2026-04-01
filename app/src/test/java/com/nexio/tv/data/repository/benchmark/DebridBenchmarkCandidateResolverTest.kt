@@ -1,7 +1,6 @@
 package com.nexio.tv.data.repository.benchmark
 
 import com.nexio.tv.data.repository.DebridLibraryService
-import com.nexio.tv.domain.model.LibraryEntry
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -14,9 +13,9 @@ class DebridBenchmarkCandidateResolverTest {
     @Test
     fun `resolver picks the newest playable real debrid item with a direct playback url`() = runTest {
         val resolver = buildResolver(
-            realDebridItems = listOf(
-                libraryEntry(provider = DebridBenchmarkProvider.REAL_DEBRID, listedAt = 1L, directPlaybackUrl = "a"),
-                libraryEntry(provider = DebridBenchmarkProvider.REAL_DEBRID, listedAt = 2L, directPlaybackUrl = "b")
+            realDebridCandidates = listOf(
+                candidate(provider = DebridBenchmarkProvider.REAL_DEBRID, directUrl = "b"),
+                candidate(provider = DebridBenchmarkProvider.REAL_DEBRID, directUrl = "a")
             )
         )
 
@@ -31,55 +30,31 @@ class DebridBenchmarkCandidateResolverTest {
     }
 
     private fun buildResolver(
-        realDebridItems: List<LibraryEntry> = emptyList(),
-        premiumizeItems: List<LibraryEntry> = emptyList()
+        realDebridCandidates: List<DebridBenchmarkCandidate> = emptyList(),
+        premiumizeCandidates: List<DebridBenchmarkCandidate> = emptyList()
     ): DebridBenchmarkCandidateResolver {
         val debridLibraryService = mockk<DebridLibraryService>()
 
         coEvery {
             debridLibraryService.getBenchmarkCandidates(DebridBenchmarkProvider.REAL_DEBRID)
-        } returns realDebridItems
-            .sortedByDescending { it.listedAt }
-            .map { it.toBenchmarkCandidate(DebridBenchmarkProvider.REAL_DEBRID) }
+        } returns realDebridCandidates
 
         coEvery {
             debridLibraryService.getBenchmarkCandidates(DebridBenchmarkProvider.PREMIUMIZE)
-        } returns premiumizeItems
-            .sortedByDescending { it.listedAt }
-            .map { it.toBenchmarkCandidate(DebridBenchmarkProvider.PREMIUMIZE) }
+        } returns premiumizeCandidates
 
         return DebridBenchmarkCandidateResolver(debridLibraryService)
     }
 
-    private fun libraryEntry(
+    private fun candidate(
         provider: DebridBenchmarkProvider,
-        listedAt: Long,
-        directPlaybackUrl: String? = null
-    ): LibraryEntry {
-        return LibraryEntry(
-            id = "${provider.name.lowercase()}:$listedAt",
-            type = "movie",
-            name = "Item $listedAt",
-            poster = null,
-            background = null,
-            logo = null,
-            description = null,
-            releaseInfo = null,
-            imdbRating = null,
-            genres = emptyList(),
-            addonBaseUrl = null,
-            listKeys = setOf(provider.listKey),
-            listedAt = listedAt,
-            directPlaybackUrl = directPlaybackUrl
-        )
-    }
-
-    private fun LibraryEntry.toBenchmarkCandidate(provider: DebridBenchmarkProvider): DebridBenchmarkCandidate {
+        directUrl: String
+    ): DebridBenchmarkCandidate {
         return DebridBenchmarkCandidate(
             provider = provider,
-            directUrl = directPlaybackUrl.orEmpty(),
-            headers = playbackHeaders.orEmpty(),
-            filename = playbackFilename,
+            directUrl = directUrl,
+            headers = emptyMap(),
+            filename = null,
             sourceSizeBytes = null
         )
     }

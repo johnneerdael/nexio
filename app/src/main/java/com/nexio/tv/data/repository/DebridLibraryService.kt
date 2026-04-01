@@ -77,7 +77,8 @@ class DebridLibraryService @Inject constructor(
     }
 
     suspend fun getBenchmarkCandidates(provider: DebridBenchmarkProvider): List<DebridBenchmarkCandidate> {
-        return observeItems().first()
+        ensureFresh(force = false, target = provider.toRefreshTarget())
+        return snapshotState.value.items
             .asSequence()
             .filter { entry -> entry.listKeys.contains(provider.listKey) }
             .filter { entry -> entry.directPlaybackUrl.isNullOrBlank().not() }
@@ -597,4 +598,11 @@ class DebridLibraryService @Inject constructor(
         val filename: String?,
         val mimeType: String?
     )
+
+    private fun DebridBenchmarkProvider.toRefreshTarget(): RefreshTarget {
+        return when (this) {
+            DebridBenchmarkProvider.REAL_DEBRID -> RefreshTarget.REAL_DEBRID
+            DebridBenchmarkProvider.PREMIUMIZE -> RefreshTarget.PREMIUMIZE
+        }
+    }
 }
