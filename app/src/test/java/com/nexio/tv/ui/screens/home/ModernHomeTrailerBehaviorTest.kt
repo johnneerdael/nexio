@@ -7,6 +7,7 @@ import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ModernHomeTrailerBehaviorTest {
@@ -243,6 +244,30 @@ class ModernHomeTrailerBehaviorTest {
                 fullscreenTrailerActive = true
             )
         )
+    }
+
+    @Test
+    fun `trailer end clears fullscreen hero session and restores focused row`() {
+        val (endedState, focusRestore) = handleModernHomeTrailerEnded(
+            focusedTrailerFocusKey = "row-1:item-2",
+            activeItemIndex = 2,
+            focusedTrailerRowKey = "row-1",
+            state = ModernHomeTrailerEndedState(
+                unlockedTrailerFocusKey = "row-1:item-2",
+                pendingHeroTrailerFocusKey = "row-1:item-2",
+                heroTrailerFullscreenMode = true,
+                fullscreenTrailerTextTimedOut = true,
+                heroFullscreenHintTimedOut = true
+            )
+        )
+
+        assertNull(endedState.unlockedTrailerFocusKey)
+        assertNull(endedState.pendingHeroTrailerFocusKey)
+        assertFalse(endedState.heroTrailerFullscreenMode)
+        assertFalse(endedState.fullscreenTrailerTextTimedOut)
+        assertFalse(endedState.heroFullscreenHintTimedOut)
+        assertEquals("row-1", focusRestore?.first)
+        assertEquals(2, focusRestore?.second)
     }
 
     @Test
