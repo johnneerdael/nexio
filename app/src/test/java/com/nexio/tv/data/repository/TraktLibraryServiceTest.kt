@@ -2,41 +2,94 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.data.local.TraktAuthDataStore
+import com.nexio.tv.data.local.TraktLibrarySnapshotStore
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemDto
+import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListSummaryDto
 import com.nexio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
+import com.nexio.tv.domain.model.LibraryEntry
+import com.nexio.tv.domain.model.LibraryEntryInput
+import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class TraktLibraryServiceTest {
 
     @Test
-    fun `refresh keeps custom lists and hydrates artwork for watchlist and custom list items`() = runTest {
+    fun `restored snapshot is returned without observer fetch`() = runTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val snapshotStore = mockk<TraktLibrarySnapshotStore>()
 
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
+        every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
+        every { snapshotStore.read() } returns samplePersistedSnapshot()
+        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns flowOf(NetworkResult.Loading)
 
-        coEvery { traktAuthService.executeAuthorizedRequest<List<TraktListItemDto>>(any()) } returnsMany listOf(
-            Response.success(
+        val service = TraktLibraryService(
+            traktApi = traktApi,
+            traktAuthService = traktAuthService,
+            metaRepository = metaRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            traktAuthDataStore = traktAuthDataStore,
+            snapshotStore = snapshotStore
+        )
+
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(TraktLibraryService.WATCHLIST_KEY, "personal:123"),
+            service.observeListTabs().first().map { it.key }
+        )
+        assertEquals(
+            listOf("tt1234567", "tmdb:321"),
+            service.observeAllItems().first().map { it.id }
+        )
+        coVerify(exactly = 0) { traktAuthService.executeAuthorizedRequest<Any?>(any()) }
+    }
+
+    @Test
+    fun `refresh persists renewed snapshot`() = runTest {
+        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktAuthService = mockk<TraktAuthService>()
+        val metaRepository = mockk<MetaRepository>()
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val traktAuthState = MutableStateFlow(true)
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val snapshotStore = mockk<TraktLibrarySnapshotStore>(relaxed = true)
+
+        every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
+        every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
+        every { snapshotStore.read() } returns null
+
+        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any()) } returnsMany listOf(
+            successResponse(
                 listOf(
                     TraktListItemDto(
                         rank = 1,
@@ -50,9 +103,147 @@ class TraktLibraryServiceTest {
                     )
                 )
             ),
-            Response.success(emptyList()),
-            Response.success(emptyList()),
-            Response.success(
+            successResponse(emptyList<TraktListItemDto>()),
+            successResponse(emptyList<TraktListSummaryDto>())
+        )
+        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } answers {
+            val type = firstArg<String>()
+            val id = secondArg<String>()
+            flowOf(NetworkResult.Success(meta(id = id, type = type, name = "hydrated-$id", poster = "poster-$id", background = "background-$id", logo = "logo-$id")))
+        }
+
+        val service = TraktLibraryService(
+            traktApi = traktApi,
+            traktAuthService = traktAuthService,
+            metaRepository = metaRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            traktAuthDataStore = traktAuthDataStore,
+            snapshotStore = snapshotStore
+        )
+
+        advanceUntilIdle()
+        service.refreshNow()
+        advanceUntilIdle()
+
+        verify(atLeast = 1) { snapshotStore.write(any()) }
+        assertEquals(listOf(TraktLibraryService.WATCHLIST_KEY), service.observeListTabs().first().map { it.key })
+    }
+
+    @Test
+    fun `warm cache refresh failure preserves restored snapshot`() = runTest {
+        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktAuthService = mockk<TraktAuthService>()
+        val metaRepository = mockk<MetaRepository>()
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val traktAuthState = MutableStateFlow(true)
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val snapshotStore = mockk<TraktLibrarySnapshotStore>(relaxed = true)
+
+        every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
+        every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
+        every { snapshotStore.read() } returns samplePersistedSnapshot()
+        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns flowOf(NetworkResult.Loading)
+        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any()) } returns null
+
+        val service = TraktLibraryService(
+            traktApi = traktApi,
+            traktAuthService = traktAuthService,
+            metaRepository = metaRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            traktAuthDataStore = traktAuthDataStore,
+            snapshotStore = snapshotStore
+        )
+
+        advanceUntilIdle()
+        service.refreshNow()
+        advanceUntilIdle()
+
+        val items = service.observeAllItems().first()
+        assertEquals(listOf("tt1234567", "tmdb:321"), items.map { it.id })
+        assertTrue(items.first().poster == "https://image.test/watchlist/poster.jpg")
+    }
+
+    @Test
+    fun `auth loss clears restored snapshot and persisted cache`() = runTest {
+        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktAuthService = mockk<TraktAuthService>()
+        val metaRepository = mockk<MetaRepository>()
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val traktAuthState = MutableStateFlow(true)
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val snapshotStore = mockk<TraktLibrarySnapshotStore>(relaxed = true)
+
+        every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
+        every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
+        every { snapshotStore.read() } returns samplePersistedSnapshot()
+        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns flowOf(NetworkResult.Loading)
+
+        val service = TraktLibraryService(
+            traktApi = traktApi,
+            traktAuthService = traktAuthService,
+            metaRepository = metaRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            traktAuthDataStore = traktAuthDataStore,
+            snapshotStore = snapshotStore
+        )
+
+        advanceUntilIdle()
+        assertTrue(service.observeHasCache().first())
+
+        traktAuthState.value = false
+        waitUntil {
+            service.observeListTabs().first().isEmpty() &&
+                service.observeAllItems().first().isEmpty() &&
+                !service.observeHasCache().first()
+        }
+
+        assertTrue(service.observeListTabs().first().isEmpty())
+        assertTrue(service.observeAllItems().first().isEmpty())
+        assertTrue(service.observeHasCache().first().not())
+        verify(atLeast = 1) { snapshotStore.clear() }
+    }
+
+    @Test
+    fun `refresh keeps custom lists and hydrates artwork for watchlist and custom list items`() = runTest {
+        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktAuthService = mockk<TraktAuthService>()
+        val metaRepository = mockk<MetaRepository>()
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val traktAuthState = MutableStateFlow(true)
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val snapshotStore = mockk<TraktLibrarySnapshotStore>(relaxed = true)
+
+        every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
+        every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
+        every { snapshotStore.read() } returns null
+
+        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any()) } returnsMany listOf(
+            successResponse(
+                listOf(
+                    TraktListItemDto(
+                        rank = 1,
+                        listedAt = "2026-03-30T12:00:00Z",
+                        type = "movie",
+                        movie = TraktMovieDto(
+                            title = "Watchlist Movie",
+                            year = 2024,
+                            ids = TraktIdsDto(imdb = "tt1234567", trakt = 10)
+                        )
+                    )
+                )
+            ),
+            successResponse(emptyList<TraktListItemDto>()),
+            successResponse(
+                listOf(
+                    TraktListSummaryDto(
+                        name = "My Custom List",
+                        type = "personal",
+                        ids = TraktListIdsDto(trakt = 123L, slug = "my-custom-list")
+                    )
+                )
+            ),
+            successResponse(emptyList<TraktListItemDto>()),
+            successResponse(
                 listOf(
                     TraktListItemDto(
                         rank = 1,
@@ -64,15 +255,6 @@ class TraktLibraryServiceTest {
                             ids = TraktIdsDto(tmdb = 321, trakt = 11)
                         )
                     )
-                )
-            )
-        )
-        coEvery { traktAuthService.executeAuthorizedRequest<List<TraktListSummaryDto>>(any()) } returns Response.success(
-            listOf(
-                TraktListSummaryDto(
-                    name = "My Custom List",
-                    type = "personal",
-                    ids = TraktListIdsDto(trakt = 123L, slug = "my-custom-list")
                 )
             )
         )
@@ -98,11 +280,16 @@ class TraktLibraryServiceTest {
             traktApi = traktApi,
             traktAuthService = traktAuthService,
             metaRepository = metaRepository,
-            debugSettingsDataStore = debugSettingsDataStore
+            debugSettingsDataStore = debugSettingsDataStore,
+            traktAuthDataStore = traktAuthDataStore,
+            snapshotStore = snapshotStore
         )
 
         advanceUntilIdle()
         service.refreshNow()
+        advanceUntilIdle()
+
+        coVerify(exactly = 5) { traktAuthService.executeAuthorizedRequest<Any?>(any()) }
 
         val tabs = service.observeListTabs().first()
         val items = service.observeAllItems().first()
@@ -128,11 +315,16 @@ class TraktLibraryServiceTest {
         val traktAuthService = mockk<TraktAuthService>()
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val traktAuthState = MutableStateFlow(true)
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val snapshotStore = mockk<TraktLibrarySnapshotStore>(relaxed = true)
 
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
+        every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
+        every { snapshotStore.read() } returns null
 
-        coEvery { traktAuthService.executeAuthorizedRequest<List<TraktListItemDto>>(any()) } returnsMany listOf(
-            Response.success(
+        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any()) } returnsMany listOf(
+            successResponse(
                 listOf(
                     TraktListItemDto(
                         rank = 1,
@@ -146,9 +338,9 @@ class TraktLibraryServiceTest {
                     )
                 )
             ),
-            Response.success(emptyList())
+            successResponse(emptyList<TraktListItemDto>()),
+            successResponse(emptyList<TraktListSummaryDto>())
         )
-        coEvery { traktAuthService.executeAuthorizedRequest<List<TraktListSummaryDto>>(any()) } returns Response.success(emptyList())
 
         every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } answers {
             val type = firstArg<String>()
@@ -171,11 +363,16 @@ class TraktLibraryServiceTest {
             traktApi = traktApi,
             traktAuthService = traktAuthService,
             metaRepository = metaRepository,
-            debugSettingsDataStore = debugSettingsDataStore
+            debugSettingsDataStore = debugSettingsDataStore,
+            traktAuthDataStore = traktAuthDataStore,
+            snapshotStore = snapshotStore
         )
 
         advanceUntilIdle()
         service.refreshNow()
+        advanceUntilIdle()
+
+        coVerify(exactly = 3) { traktAuthService.executeAuthorizedRequest<Any?>(any()) }
 
         val item = service.observeAllItems().first().single()
 
@@ -221,5 +418,115 @@ class TraktLibraryServiceTest {
             links = emptyList(),
             trailerYtIds = emptyList()
         )
+    }
+
+    private fun samplePersistedSnapshot(): TraktLibrarySnapshotStore.Snapshot {
+        val watchlistItem = LibraryEntry(
+            id = "tt1234567",
+            type = "movie",
+            name = "tt1234567",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = null,
+            imdbRating = null,
+            genres = emptyList(),
+            addonBaseUrl = null,
+            listKeys = setOf(TraktLibraryService.WATCHLIST_KEY),
+            listedAt = 100L,
+            traktRank = 1,
+            imdbId = "tt1234567",
+            traktId = 10
+        )
+        val personalItem = LibraryEntry(
+            id = "tmdb:321",
+            type = "series",
+            name = "tmdb:321",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = null,
+            imdbRating = null,
+            genres = emptyList(),
+            addonBaseUrl = null,
+            listKeys = setOf("personal:123"),
+            listedAt = 90L,
+            traktRank = 1,
+            tmdbId = 321,
+            traktId = 11
+        )
+        return TraktLibrarySnapshotStore.Snapshot(
+            listTabs = listOf(
+                LibraryListTab(
+                    key = TraktLibraryService.WATCHLIST_KEY,
+                    title = "Watchlist",
+                    type = LibraryListTab.Type.WATCHLIST,
+                    sortBy = "rank",
+                    sortHow = "asc"
+                ),
+                LibraryListTab(
+                    key = "personal:123",
+                    title = "My List",
+                    type = LibraryListTab.Type.PERSONAL,
+                    traktListId = 123L,
+                    slug = "my-list"
+                )
+            ),
+            entriesByList = linkedMapOf(
+                TraktLibraryService.WATCHLIST_KEY to listOf(watchlistItem),
+                "personal:123" to listOf(personalItem)
+            ),
+            metadataByContentKey = mapOf(
+                "movie:tt1234567" to TraktLibrarySnapshotStore.PersistedLibraryMetadata(
+                    name = "Hydrated Watchlist Movie",
+                    poster = "https://image.test/watchlist/poster.jpg",
+                    background = "https://image.test/watchlist/background.jpg",
+                    logo = "https://image.test/watchlist/logo.png",
+                    description = "Hydrated watchlist description",
+                    releaseInfo = "2024",
+                    imdbRating = 8.5f,
+                    genres = listOf("Drama")
+                ),
+                "series:tmdb:321" to TraktLibrarySnapshotStore.PersistedLibraryMetadata(
+                    name = "Hydrated Custom List Show",
+                    poster = "https://image.test/custom/poster.jpg",
+                    background = "https://image.test/custom/background.jpg",
+                    logo = "https://image.test/custom/logo.png",
+                    description = "Hydrated custom list description",
+                    releaseInfo = "2023",
+                    imdbRating = 8.1f,
+                    genres = listOf("Sci-Fi")
+                )
+            ),
+            updatedAtMs = 4321L
+        )
+    }
+
+    @Suppress("unused")
+    private fun sampleLibraryInput(): LibraryEntryInput {
+        return LibraryEntryInput(
+            itemId = "tt1234567",
+            itemType = "movie",
+            title = "Watchlist Movie",
+            traktId = 10,
+            imdbId = "tt1234567"
+        )
+    }
+
+    private suspend fun waitUntil(condition: suspend () -> Boolean) {
+        val deadline = System.currentTimeMillis() + 1_000L
+        while (System.currentTimeMillis() < deadline) {
+            if (condition()) return
+            Thread.sleep(10L)
+        }
+        throw AssertionError("Condition not met before timeout")
+    }
+
+    private fun successResponse(body: Any?): Response<Any?> {
+        return Response.success(body)
     }
 }

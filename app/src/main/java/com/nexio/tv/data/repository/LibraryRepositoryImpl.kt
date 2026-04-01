@@ -49,6 +49,11 @@ class LibraryRepositoryImpl @Inject constructor(
     }
         .distinctUntilChanged()
 
+    override val hasTraktCache: Flow<Boolean> =
+        traktAuthDataStore.isEffectivelyAuthenticated.flatMapLatest { isAuthenticated ->
+            if (isAuthenticated) traktLibraryService.observeHasCache() else flowOf(false)
+        }.distinctUntilChanged()
+
     override val libraryItems: Flow<List<LibraryEntry>> = combine(
         traktAuthDataStore.isEffectivelyAuthenticated.flatMapLatest { isAuthenticated ->
             if (isAuthenticated) traktLibraryService.observeAllItems() else flowOf(emptyList())

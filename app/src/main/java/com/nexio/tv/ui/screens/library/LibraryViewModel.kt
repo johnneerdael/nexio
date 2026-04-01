@@ -95,10 +95,12 @@ class LibraryViewModel @Inject constructor(
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
 
     private var messageClearJob: Job? = null
+    private var initialTraktSyncRequested = false
 
     init {
         observeLayoutPreferences()
         observeLibraryData()
+        observeTraktBootstrap()
     }
 
     fun onSelectTypeTab(tab: LibraryTypeTab) {
@@ -349,16 +351,18 @@ class LibraryViewModel @Inject constructor(
             combine(
                 libraryRepository.sourceMode,
                 libraryRepository.isSyncing,
+                libraryRepository.hasTraktCache,
                 libraryRepository.libraryItems,
                 libraryRepository.listTabs
-            ) { sourceMode, isSyncing, items, listTabs ->
+            ) { sourceMode, isSyncing, hasTraktCache, items, listTabs ->
                 DataBundle(
                     sourceMode = sourceMode,
                     isSyncing = isSyncing,
+                    hasTraktCache = hasTraktCache,
                     items = items,
                     listTabs = listTabs
                 )
-            }.collectLatest { (sourceMode, isSyncing, items, listTabs) ->
+            }.collectLatest { (sourceMode, isSyncing, hasTraktCache, items, listTabs) ->
                 _uiState.update { current ->
                     val supportsListTabs = listTabs.isNotEmpty()
                     val nextSelectedList = when {
@@ -418,10 +422,9 @@ class LibraryViewModel @Inject constructor(
                         selectedSortOption = nextSelectedSort,
                         manageSelectedListKey = nextManageSelected,
                         isSyncing = sourceMode != LibrarySourceMode.LOCAL && isSyncing,
-                        isLoading = sourceMode != LibrarySourceMode.LOCAL &&
-                            isSyncing &&
-                            items.isEmpty() &&
-                            listTabs.isEmpty()
+                        isLoading = sourceMode == LibrarySourceMode.TRAKT &&
+                            !hasTraktCache &&
+                            current.errorMessage == null
                     )
                     updated.withVisibleItems()
                 }
@@ -456,9 +459,40 @@ class LibraryViewModel @Inject constructor(
     private data class DataBundle(
         val sourceMode: LibrarySourceMode,
         val isSyncing: Boolean,
+        val hasTraktCache: Boolean,
         val items: List<LibraryEntry>,
         val listTabs: List<LibraryListTab>
     )
+
+    private fun observeTraktBootstrap() {
+        viewModelScope.launch {
+            combine(
+                libraryRepository.sourceMode,
+                libraryRepository.hasTraktCache
+            ) { sourceMode, hasTraktCache ->
+                sourceMode to hasTraktCache
+            }.collectLatest { (sourceMode, hasTraktCache) ->
+                when {
+                    sourceMode != LibrarySourceMode.TRAKT -> {
+                        initialTraktSyncRequested = false
+                    }
+
+                    hasTraktCache -> {
+                        initialTraktSyncRequested = true
+                    }
+
+                    !initialTraktSyncRequested -> {
+                        initialTraktSyncRequested = true
+                        runCatching {
+                            libraryRepository.refreshTraktNow()
+                        }.onFailure { error ->
+                            setError(error.message ?: "Failed to sync Trakt library")
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     private fun reorderSelectedList(moveUp: Boolean) {
         val state = _uiState.value
@@ -500,7 +534,7 @@ class LibraryViewModel @Inject constructor(
     }
 
     private fun setError(message: String) {
-        _uiState.update { it.copy(errorMessage = message, transientMessage = message) }
+        _uiState.update { it.copy(errorMessage = message, transientMessage = message, isLoading = false) }
         messageClearJob?.cancel()
         messageClearJob = viewModelScope.launch {
             delay(2800)
