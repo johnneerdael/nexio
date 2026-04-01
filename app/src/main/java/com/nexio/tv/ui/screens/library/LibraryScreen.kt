@@ -283,7 +283,7 @@ fun LibraryScreen(
             )
         }
 
-        if (uiState.listTabs.isNotEmpty()) {
+        if (uiState.listTabs.isNotEmpty() || uiState.sourceMode != LibrarySourceMode.LOCAL) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 LibraryActionsRow(
                     pending = uiState.pendingOperation,
@@ -653,16 +653,7 @@ private fun DebridLibraryListRow(
     onFocused: () -> Unit,
     onClick: () -> Unit
 ) {
-    val primaryText = item.playbackFilename
-        ?.takeIf { it.isNotBlank() }
-        ?: item.playbackStreamName?.takeIf { it.isNotBlank() }
-        ?: item.name
-    val secondaryText = item.name
-        .takeIf { it.isNotBlank() && !it.equals(primaryText, ignoreCase = true) }
-    val detailText = listOfNotNull(
-        item.description?.takeIf { it.isNotBlank() },
-        item.releaseInfo?.takeIf { it.isNotBlank() }
-    ).joinToString("  •  ").takeIf { it.isNotBlank() }
+    val presentation = debridRowPresentation(item)
 
     Card(
         onClick = onClick,
@@ -695,37 +686,16 @@ private fun DebridLibraryListRow(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             Text(
-                text = primaryText,
-                style = MaterialTheme.typography.titleMedium,
-                color = NexioColors.TextPrimary,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 3,
+                text = presentation.title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = NexioColors.TextSecondary,
+                fontWeight = FontWeight.Normal,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-
-            secondaryText?.let { subtitle ->
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NexioColors.TextSecondary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            detailText?.let { details ->
-                Text(
-                    text = details,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = NexioColors.TextTertiary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
         }
     }
 }

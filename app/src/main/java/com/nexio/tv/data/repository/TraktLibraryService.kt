@@ -4,6 +4,8 @@ import android.os.SystemClock
 import android.util.Log
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.data.local.TraktAuthDataStore
+import com.nexio.tv.data.local.TraktLibrarySnapshotStore
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktCreateOrUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
@@ -33,7 +35,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -49,7 +50,9 @@ class TraktLibraryService @Inject constructor(
     private val traktApi: TraktApi,
     private val traktAuthService: TraktAuthService,
     private val metaRepository: MetaRepository,
-    private val debugSettingsDataStore: DebugSettingsDataStore
+    private val debugSettingsDataStore: DebugSettingsDataStore,
+    private val traktAuthDataStore: TraktAuthDataStore,
+    private val snapshotStore: TraktLibrarySnapshotStore
 ) {
     private data class LibraryMetadata(
         val name: String?,
@@ -73,6 +76,7 @@ class TraktLibraryService @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val snapshotState = MutableStateFlow(Snapshot())
     private val metadataState = MutableStateFlow<Map<String, LibraryMetadata>>(emptyMap())
+    private val hasCacheState = MutableStateFlow(false)
     private val refreshingState = MutableStateFlow(false)
     private val refreshMutex = Mutex()
     private val metadataMutex = Mutex()
@@ -92,6 +96,16 @@ class TraktLibraryService @Inject constructor(
     private var startupGateInitialized: Boolean = false
 
     init {
+        snapshotStore.read()?.let(::restorePersistedState)
+        scope.launch {
+            traktAuthDataStore.isEffectivelyAuthenticated
+                .distinctUntilChanged()
+                .collectLatest { isAuthenticated ->
+                    if (!isAuthenticated) {
+                        clearCachedState()
+                    }
+                }
+        }
         scope.launch {
             val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
             applyStartupRefreshGate(enabled, "init")
@@ -106,14 +120,12 @@ class TraktLibraryService @Inject constructor(
         return snapshotState
             .map { it.listTabs }
             .distinctUntilChanged()
-            .onStart { ensureFresh() }
     }
 
     fun observeAllItems(): Flow<List<LibraryEntry>> {
         return combine(snapshotState, metadataState) { snapshot, metadata ->
             enrichEntries(snapshot.allEntries, metadata)
         }.distinctUntilChanged()
-            .onStart { ensureFresh() }
     }
 
     fun observeMembership(itemId: String, itemType: String): Flow<Set<String>> {
@@ -121,11 +133,14 @@ class TraktLibraryService @Inject constructor(
         return snapshotState
             .map { snapshot -> snapshot.membershipByContent[key].orEmpty() }
             .distinctUntilChanged()
-            .onStart { ensureFresh() }
     }
 
     fun observeIsRefreshing(): Flow<Boolean> {
         return refreshingState
+    }
+
+    fun observeHasCache(): Flow<Boolean> {
+        return hasCacheState
     }
 
     suspend fun getMembershipSnapshot(item: LibraryEntryInput): ListMembershipSnapshot {
@@ -242,6 +257,7 @@ class TraktLibraryService @Inject constructor(
             current.entriesByList + (createdTab.key to emptyList())
         }
         snapshotState.value = rebuildSnapshot(updatedTabs, updatedEntries)
+        persistCurrentState()
     }
 
     suspend fun updatePersonalList(
@@ -371,6 +387,7 @@ class TraktLibraryService @Inject constructor(
                 val snapshotToUse = applyMetadata(baseSnapshot, primedMetadata)
                 snapshotState.value = snapshotToUse
                 lastRefreshMs = now
+                persistCurrentState()
                 hydrateMetadata(snapshotToUse.allEntries)
                 refreshed != null
             } finally {
@@ -390,10 +407,10 @@ class TraktLibraryService @Inject constructor(
         diskFirstHomeStartupEnabled = enabled
         if (enabled) {
             startupRefreshGateUntilElapsedMs = SystemClock.elapsedRealtime() + startupRefreshGateMs
-            Log.d("TraktLibraryService", "Startup refresh gate open (${startupRefreshGateMs}ms) reason=$reason")
+            logDebug("Startup refresh gate open (${startupRefreshGateMs}ms) reason=$reason")
         } else {
             startupRefreshGateUntilElapsedMs = 0L
-            Log.d("TraktLibraryService", "Startup refresh gate disabled reason=$reason")
+            logDebug("Startup refresh gate disabled reason=$reason")
         }
     }
 
@@ -409,11 +426,13 @@ class TraktLibraryService @Inject constructor(
         val before = snapshotState.value
         val optimisticSnapshot = applyMetadata(optimistic(before), metadataState.value)
         snapshotState.value = optimisticSnapshot
+        persistCurrentState()
         hydrateMetadata(optimisticSnapshot.allEntries)
         try {
             mutation()
         } catch (error: Throwable) {
             snapshotState.value = before
+            persistCurrentState()
             throw error
         }
     }
@@ -987,6 +1006,7 @@ class TraktLibraryService @Inject constructor(
                         metadataState.update { current ->
                             current + (key to metadata)
                         }
+                        persistCurrentState()
                     }
                 } finally {
                     metadataMutex.withLock { inFlightMetadataKeys.remove(key) }
@@ -1036,7 +1056,83 @@ class TraktLibraryService @Inject constructor(
         return null
     }
 
+    private fun restorePersistedState(persisted: TraktLibrarySnapshotStore.Snapshot) {
+        metadataState.value = persisted.metadataByContentKey.mapValues { (_, metadata) ->
+            LibraryMetadata(
+                name = metadata.name,
+                poster = metadata.poster,
+                background = metadata.background,
+                logo = metadata.logo,
+                description = metadata.description,
+                releaseInfo = metadata.releaseInfo,
+                imdbRating = metadata.imdbRating,
+                genres = metadata.genres
+            )
+        }
+        snapshotState.value = rebuildSnapshot(
+            tabs = persisted.listTabs,
+            rawEntriesByList = persisted.entriesByList
+        ).copy(updatedAtMs = persisted.updatedAtMs)
+        lastRefreshMs = persisted.updatedAtMs
+        hasCacheState.value = hasCache(persisted)
+    }
+
+    private fun persistCurrentState() {
+        val snapshot = snapshotState.value
+        if (!hasCache(snapshot)) {
+            hasCacheState.value = false
+            snapshotStore.clear()
+            return
+        }
+        hasCacheState.value = true
+        snapshotStore.write(
+            TraktLibrarySnapshotStore.Snapshot(
+                listTabs = snapshot.listTabs,
+                entriesByList = snapshot.entriesByList,
+                metadataByContentKey = metadataState.value.mapValues { (_, metadata) ->
+                    TraktLibrarySnapshotStore.PersistedLibraryMetadata(
+                        name = metadata.name,
+                        poster = metadata.poster,
+                        background = metadata.background,
+                        logo = metadata.logo,
+                        description = metadata.description,
+                        releaseInfo = metadata.releaseInfo,
+                        imdbRating = metadata.imdbRating,
+                        genres = metadata.genres
+                    )
+                },
+                updatedAtMs = snapshot.updatedAtMs
+            )
+        )
+    }
+
+    private fun clearCachedState() {
+        snapshotState.value = Snapshot()
+        metadataState.value = emptyMap()
+        refreshingState.value = false
+        lastRefreshMs = 0L
+        hasCacheState.value = false
+        snapshotStore.clear()
+    }
+
+    private fun hasCache(snapshot: Snapshot): Boolean {
+        return snapshot.updatedAtMs > 0L ||
+            snapshot.listTabs.isNotEmpty() ||
+            snapshot.entriesByList.values.any { entries -> entries.isNotEmpty() }
+    }
+
+    private fun hasCache(snapshot: TraktLibrarySnapshotStore.Snapshot): Boolean {
+        return snapshot.updatedAtMs > 0L ||
+            snapshot.listTabs.isNotEmpty() ||
+            snapshot.entriesByList.values.any { entries -> entries.isNotEmpty() }
+    }
+
+    private fun logDebug(message: String) {
+        runCatching { Log.d(TAG, message) }
+    }
+
     companion object {
+        private const val TAG = "TraktLibraryService"
         const val WATCHLIST_KEY = "watchlist"
         const val PERSONAL_KEY_PREFIX = "personal:"
         private const val ME_PATH = "me"
