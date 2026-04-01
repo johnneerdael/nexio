@@ -164,6 +164,20 @@ class AddonRepositoryImpl @Inject constructor(
             }.flowOn(Dispatchers.IO)
         }
 
+    override suspend fun getCachedInstalledAddons(): List<Addon> {
+        val addonConfigs = preferences.installedAddons.first()
+        val validConfigs = addonConfigs.mapNotNull { addon ->
+            safeCanonicalizeUrl(addon.url, "cache warmup")?.let { normalized ->
+                addon.copy(url = normalized)
+            }
+        }
+        return applyDisplayNames(
+            validConfigs.mapNotNull { addonConfig ->
+                manifestCache[addonConfig.url]?.copy(parserPreset = addonConfig.parserPreset)
+            }
+        )
+    }
+
     override suspend fun fetchAddon(baseUrl: String): NetworkResult<Addon> {
         return fetchAddon(baseUrl, AddonParserPreset.GENERIC)
     }

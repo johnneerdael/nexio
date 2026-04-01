@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import android.util.Log
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
@@ -22,9 +23,11 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.flowOf
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -32,6 +35,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class IdleScreensaverRepositoryTest {
+    @Before
+    fun setUp() {
+        mockkStatic(Log::class)
+        every { Log.d(any(), any()) } returns 0
+        every { Log.w(any(), any<String>()) } returns 0
+        every { Log.w(any(), any<String>(), any()) } returns 0
+    }
+
     @Test
     fun `findStockCinemetaPopularCatalogRequest matches hidden stock cinemeta popular catalog by type`() {
         val addons = listOf(
@@ -253,7 +264,208 @@ class IdleScreensaverRepositoryTest {
     }
 
     @Test
-    fun `refreshOnColdBoot falls back to cinemeta popular movie and series sources when trakt is not eligible`() = runBlocking {
+    fun `warmFromCache publishes trakt idle pool from cached metadata without MDBList enrichment`() = runBlocking {
+        val addonRepository = mockk<AddonRepository>()
+        val catalogRepository = mockk<CatalogRepository>(relaxed = true)
+        val metaRepository = mockk<MetaRepository>()
+        val mdbListRepository = mockk<MDBListRepository>(relaxed = true)
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val traktSettingsDataStore = mockk<TraktSettingsDataStore>()
+        val traktSnapshotStore = mockk<TraktDiscoverySnapshotStore>()
+        val snapshot = TraktDiscoverySnapshot(
+            trendingMovieItems = listOf(
+                buildPreview("movie-1", ContentType.MOVIE, background = "https://preview/movie.jpg")
+            ),
+            trendingShowItems = listOf(
+                buildPreview("show-1", ContentType.SERIES, background = "https://preview/show.jpg")
+            )
+        )
+
+        every { addonRepository.getInstalledAddons() } returns flowOf(emptyList())
+        every { traktAuthDataStore.isAuthenticated } returns flowOf(true)
+        every { traktSettingsDataStore.catalogPreferences } returns flowOf(
+            TraktCatalogPreferences(
+                enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES, TraktCatalogIds.TRENDING_SHOWS)
+            )
+        )
+        every { traktSnapshotStore.read() } returns snapshot
+        coEvery {
+            metaRepository.getCachedMetaFromAllAddons(
+                type = any(),
+                id = any(),
+                origin = "idle_screensaver_cache"
+            )
+        } answers {
+            val type = firstArg<String>()
+            val id = secondArg<String>()
+            buildMeta(id = id, type = type, includeTrailer = true)
+        }
+
+        val repository = IdleScreensaverRepository(
+            addonRepository = addonRepository,
+            catalogRepository = catalogRepository,
+            metaRepository = metaRepository,
+            mdbListRepository = mdbListRepository,
+            traktAuthDataStore = traktAuthDataStore,
+            traktSettingsDataStore = traktSettingsDataStore,
+            traktDiscoverySnapshotStore = traktSnapshotStore
+        )
+
+        repository.warmFromCache()
+
+        assertEquals(2, repository.slides.value.size)
+        assertEquals(2, repository.trailerCandidates.value.size)
+        assertEquals("Hydrated movie-1", repository.slides.value.first().title)
+        coVerify(exactly = 2) {
+            metaRepository.getCachedMetaFromAllAddons(any(), any(), "idle_screensaver_cache")
+        }
+        coVerify(exactly = 0) { mdbListRepository.enrichPreview(any()) }
+        coVerify(exactly = 0) {
+            catalogRepository.refreshCatalogToDisk(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+        }
+    }
+
+    @Test
+    fun `warmFromCache uses cached cinemeta catalogs without network refresh`() = runBlocking {
+        val addonRepository = mockk<AddonRepository>()
+        val catalogRepository = mockk<CatalogRepository>()
+        val metaRepository = mockk<MetaRepository>()
+        val mdbListRepository = mockk<MDBListRepository>(relaxed = true)
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val traktSettingsDataStore = mockk<TraktSettingsDataStore>()
+        val traktSnapshotStore = mockk<TraktDiscoverySnapshotStore>()
+        val movieRow = buildRow(
+            addonBaseUrl = "https://v3-cinemeta.strem.io",
+            type = ContentType.MOVIE,
+            items = listOf(buildPreview("movie-1", ContentType.MOVIE, "https://image/movie-1.jpg"))
+        )
+        val showRow = buildRow(
+            addonBaseUrl = "https://v3-cinemeta.strem.io",
+            type = ContentType.SERIES,
+            items = listOf(buildPreview("show-1", ContentType.SERIES, "https://image/show-1.jpg"))
+        )
+
+        every { addonRepository.getInstalledAddons() } returns flowOf(
+            listOf(
+                buildAddon(
+                    baseUrl = "https://v3-cinemeta.strem.io",
+                    catalogs = listOf(
+                        CatalogDescriptor(type = ContentType.MOVIE, id = "popular-movie", name = "Popular"),
+                        CatalogDescriptor(type = ContentType.SERIES, id = "popular-series", name = "Popular")
+                    )
+                )
+            )
+        )
+        coEvery {
+            addonRepository.getCachedInstalledAddons()
+        } returns listOf(
+            buildAddon(
+                baseUrl = "https://v3-cinemeta.strem.io",
+                catalogs = listOf(
+                    CatalogDescriptor(type = ContentType.MOVIE, id = "popular-movie", name = "Popular"),
+                    CatalogDescriptor(type = ContentType.SERIES, id = "popular-series", name = "Popular")
+                )
+            )
+        )
+        every { traktAuthDataStore.isAuthenticated } returns flowOf(false)
+        every { traktSettingsDataStore.catalogPreferences } returns flowOf(TraktCatalogPreferences())
+        every { traktSnapshotStore.read() } returns null
+        every {
+            catalogRepository.getCatalogCachedFirst(
+                addonBaseUrl = "https://v3-cinemeta.strem.io",
+                addonId = "cinemeta",
+                addonName = "Cinemeta",
+                catalogId = "popular-movie",
+                catalogName = "Popular",
+                type = "movie",
+                skip = 0,
+                skipStep = 100,
+                extraArgs = emptyMap(),
+                supportsSkip = false,
+                allowNetworkRefresh = false
+            )
+        } returns flowOf(NetworkResult.Success(movieRow))
+        every {
+            catalogRepository.getCatalogCachedFirst(
+                addonBaseUrl = "https://v3-cinemeta.strem.io",
+                addonId = "cinemeta",
+                addonName = "Cinemeta",
+                catalogId = "popular-series",
+                catalogName = "Popular",
+                type = "series",
+                skip = 0,
+                skipStep = 100,
+                extraArgs = emptyMap(),
+                supportsSkip = false,
+                allowNetworkRefresh = false
+            )
+        } returns flowOf(NetworkResult.Success(showRow))
+        coEvery {
+            metaRepository.getCachedMetaFromAllAddons(
+                type = any(),
+                id = any(),
+                origin = "idle_screensaver_cache"
+            )
+        } answers {
+            val type = firstArg<String>()
+            val id = secondArg<String>()
+            buildMeta(id = id, type = type, includeTrailer = true)
+        }
+
+        val repository = IdleScreensaverRepository(
+            addonRepository = addonRepository,
+            catalogRepository = catalogRepository,
+            metaRepository = metaRepository,
+            mdbListRepository = mdbListRepository,
+            traktAuthDataStore = traktAuthDataStore,
+            traktSettingsDataStore = traktSettingsDataStore,
+            traktDiscoverySnapshotStore = traktSnapshotStore
+        )
+
+        repository.warmFromCache()
+
+        assertEquals(2, repository.slides.value.size)
+        assertEquals(2, repository.trailerCandidates.value.size)
+        verify(exactly = 1) {
+            catalogRepository.getCatalogCachedFirst(
+                addonBaseUrl = "https://v3-cinemeta.strem.io",
+                addonId = "cinemeta",
+                addonName = "Cinemeta",
+                catalogId = "popular-movie",
+                catalogName = "Popular",
+                type = "movie",
+                skip = 0,
+                skipStep = 100,
+                extraArgs = emptyMap(),
+                supportsSkip = false,
+                allowNetworkRefresh = false
+            )
+        }
+        verify(exactly = 1) {
+            catalogRepository.getCatalogCachedFirst(
+                addonBaseUrl = "https://v3-cinemeta.strem.io",
+                addonId = "cinemeta",
+                addonName = "Cinemeta",
+                catalogId = "popular-series",
+                catalogName = "Popular",
+                type = "series",
+                skip = 0,
+                skipStep = 100,
+                extraArgs = emptyMap(),
+                supportsSkip = false,
+                allowNetworkRefresh = false
+            )
+        }
+        coVerify(exactly = 1) { addonRepository.getCachedInstalledAddons() }
+        verify(exactly = 0) { addonRepository.getInstalledAddons() }
+        coVerify(exactly = 0) { mdbListRepository.enrichPreview(any()) }
+        coVerify(exactly = 0) {
+            catalogRepository.refreshCatalogToDisk(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+        }
+    }
+
+    @Test
+    fun `refreshOnColdBoot falls back to cinemeta popular movie and series sources when trakt is not eligible even without trailer metadata`() = runBlocking {
         val addonRepository = mockk<AddonRepository>()
         val catalogRepository = mockk<CatalogRepository>()
         val metaRepository = mockk<MetaRepository>()
@@ -342,7 +554,7 @@ class IdleScreensaverRepositoryTest {
         repository.refreshOnColdBoot()
 
         assertEquals(10, repository.slides.value.size)
-        assertEquals(40, repository.trailerCandidates.value.size)
+        assertEquals(0, repository.trailerCandidates.value.size)
         coVerify(exactly = 1) {
             catalogRepository.refreshCatalogToDisk(
                 addonBaseUrl = "https://v3-cinemeta.strem.io",

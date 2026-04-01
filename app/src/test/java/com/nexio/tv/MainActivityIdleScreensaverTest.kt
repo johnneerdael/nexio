@@ -120,6 +120,43 @@ class MainActivityIdleScreensaverTest {
         )
     }
 
+    @Test
+    fun `idle diagnostics logging is debug only`() {
+        assertTrue(shouldLogIdleScreensaverDiagnostics(isDebugBuild = true))
+        assertFalse(shouldLogIdleScreensaverDiagnostics(isDebugBuild = false))
+    }
+
+    @Test
+    fun `idle diagnostics message includes the gating fields`() {
+        val message = buildIdleScreensaverDiagnosticsMessage(
+            event = "start_blocked",
+            currentRoute = Screen.Home.route,
+            idleScreensaverEligible = false,
+            idleScreensaverVisible = false,
+            slideCount = 10,
+            trailerCandidateCount = 39,
+            trailerScreensaverEnabled = true,
+            inAppTrailerPlaybackActive = true,
+            idleLastInteractionAtMs = 1_000L,
+            elapsedMs = 120_000L,
+            remainingDelayMs = 0L,
+            trailerSessionReady = false
+        )
+
+        assertTrue(message.contains("event=start_blocked"))
+        assertTrue(message.contains("route=home"))
+        assertTrue(message.contains("eligible=false"))
+        assertTrue(message.contains("visible=false"))
+        assertTrue(message.contains("slides=10"))
+        assertTrue(message.contains("trailerCandidates=39"))
+        assertTrue(message.contains("trailerEnabled=true"))
+        assertTrue(message.contains("inAppTrailerActive=true"))
+        assertTrue(message.contains("lastInteractionMs=1000"))
+        assertTrue(message.contains("elapsedMs=120000"))
+        assertTrue(message.contains("remainingMs=0"))
+        assertTrue(message.contains("trailerSessionReady=false"))
+    }
+
     private fun buildTrailerCandidate(itemId: String): IdleTrailerScreensaverCandidate {
         return IdleTrailerScreensaverCandidate(
             itemId = itemId,

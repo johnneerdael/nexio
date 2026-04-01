@@ -59,6 +59,15 @@ internal fun shouldUseChunkedTrailerDataSource(
     return videoUsesChunking || audioUsesChunking
 }
 
+internal fun bindTrailerPlayerView(
+    view: PlayerView,
+    player: Player?
+) {
+    if (view.player !== player) {
+        view.player = player
+    }
+}
+
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 fun TrailerPlayer(
@@ -270,7 +279,7 @@ fun TrailerPlayer(
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
-                        player = trailerPlayer
+                        bindTrailerPlayerView(this, trailerPlayer)
                         useController = false
                         isFocusable = true
                         isFocusableInTouchMode = true
@@ -288,6 +297,7 @@ fun TrailerPlayer(
                     }
                 },
                 update = { view ->
+                    bindTrailerPlayerView(view, trailerPlayer)
                     view.resizeMode = if (cropToFill) {
                         AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     } else {

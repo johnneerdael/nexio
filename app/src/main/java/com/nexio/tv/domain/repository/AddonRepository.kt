@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 
 interface AddonRepository {
     fun getInstalledAddons(): Flow<List<Addon>>
+    suspend fun getCachedInstalledAddons(): List<Addon>
     suspend fun fetchAddon(baseUrl: String): NetworkResult<Addon>
     suspend fun addAddon(url: String, parserPreset: AddonParserPreset = AddonParserPreset.GENERIC)
     suspend fun removeAddon(url: String)

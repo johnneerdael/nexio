@@ -9,9 +9,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,6 +36,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,9 +46,26 @@ import com.nexio.tv.ui.components.TrailerPlayer
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
 
-private const val TRAILER_SCREENSAVER_DETAILS_PROMPT_VISIBLE_MS = 10_000L
-private const val TRAILER_SCREENSAVER_DETAILS_PROMPT_FADE_MS = 1_500
+private const val TRAILER_SCREENSAVER_BRANDING_VISIBLE_MS = 20_000L
+private const val TRAILER_SCREENSAVER_BRANDING_FADE_MS = 1_500
 private const val TRAILER_SCREENSAVER_OPEN_GUARD_MS = 180L
+private const val TRAILER_SCREENSAVER_BRANDING_WIDTH_DP = 360
+
+internal data class IdleTrailerBrandingPresentationSpec(
+    val visibleMs: Long,
+    val fadeDurationMs: Int,
+    val contentAlignment: Alignment.Horizontal,
+    val promptTextAlign: TextAlign
+)
+
+internal fun idleTrailerBrandingPresentationSpec(): IdleTrailerBrandingPresentationSpec {
+    return IdleTrailerBrandingPresentationSpec(
+        visibleMs = TRAILER_SCREENSAVER_BRANDING_VISIBLE_MS,
+        fadeDurationMs = TRAILER_SCREENSAVER_BRANDING_FADE_MS,
+        contentAlignment = Alignment.CenterHorizontally,
+        promptTextAlign = TextAlign.Center
+    )
+}
 
 @Composable
 internal fun IdleTrailerScreensaverOverlay(
@@ -67,7 +85,8 @@ internal fun IdleTrailerScreensaverOverlay(
     var sessionMuted by remember(sessionId) { mutableStateOf(true) }
     var pendingOpen by remember(sessionId) { mutableStateOf<IdleTrailerScreensaverCandidate?>(null) }
     var advanceSignal by remember(sessionId) { mutableIntStateOf(0) }
-    val detailsPromptAlpha = remember(sessionId) { Animatable(1f) }
+    val brandingSpec = remember { idleTrailerBrandingPresentationSpec() }
+    val brandingAlpha = remember(sessionId) { Animatable(1f) }
 
     BackHandler(onBack = currentOnDismiss)
 
@@ -82,12 +101,12 @@ internal fun IdleTrailerScreensaverOverlay(
     }
 
     LaunchedEffect(sessionId, currentPlayback.trailerId, currentPlayback.index) {
-        detailsPromptAlpha.stop()
-        detailsPromptAlpha.snapTo(1f)
-        delay(TRAILER_SCREENSAVER_DETAILS_PROMPT_VISIBLE_MS)
-        detailsPromptAlpha.animateTo(
+        brandingAlpha.stop()
+        brandingAlpha.snapTo(1f)
+        delay(brandingSpec.visibleMs)
+        brandingAlpha.animateTo(
             targetValue = 0f,
-            animationSpec = tween(durationMillis = TRAILER_SCREENSAVER_DETAILS_PROMPT_FADE_MS)
+            animationSpec = tween(durationMillis = brandingSpec.fadeDurationMs)
         )
     }
 
@@ -212,9 +231,10 @@ internal fun IdleTrailerScreensaverOverlay(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .fillMaxWidth(0.42f)
+                .width(TRAILER_SCREENSAVER_BRANDING_WIDTH_DP.dp)
                 .padding(start = 44.dp, end = 24.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalAlignment = brandingSpec.contentAlignment
         ) {
             currentPlayback.candidate.logoUrl?.let { logoUrl ->
                 AsyncImage(
@@ -225,8 +245,9 @@ internal fun IdleTrailerScreensaverOverlay(
                     contentDescription = currentPlayback.candidate.title,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .width(TRAILER_SCREENSAVER_BRANDING_WIDTH_DP.dp)
                         .height(96.dp)
+                        .graphicsLayer { alpha = brandingAlpha.value }
                 )
             } ?: androidx.tv.material3.Text(
                 text = currentPlayback.candidate.title,
@@ -234,15 +255,18 @@ internal fun IdleTrailerScreensaverOverlay(
                 fontSize = 36.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                textAlign = brandingSpec.promptTextAlign,
+                modifier = Modifier.graphicsLayer { alpha = brandingAlpha.value }
             )
             androidx.tv.material3.Text(
                 text = "Press OK for details",
                 color = NexioColors.TextSecondary,
                 fontSize = 17.sp,
+                textAlign = brandingSpec.promptTextAlign,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer { alpha = detailsPromptAlpha.value }
+                    .width(TRAILER_SCREENSAVER_BRANDING_WIDTH_DP.dp)
+                    .graphicsLayer { alpha = brandingAlpha.value }
             )
         }
     }
