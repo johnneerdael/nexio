@@ -1337,18 +1337,21 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun playSeasonTrailer(season: Int) {
-        _uiState.update {
-            it.withManualSeasonSelection(season).copy(pendingExternalTrailerUrl = null)
-        }
+        val previousState = _uiState.value
+        prepareSeasonMediaTakeover(season)
         trailerHasPlayed = false
         viewModelScope.launch {
             val availability = ensureSeasonMediaAvailability(season)
             if (!availability.hasTrailerOrTeaser) {
-                setTrailerPlaybackState(
-                    isPlaying = false,
-                    showControls = false,
-                    hideLogo = false
-                )
+                _uiState.update { state ->
+                    state.withFailedSeasonMediaPlaybackAttempt(
+                        season = season,
+                        availability = availability,
+                        previousTrailerUrl = previousState.trailerUrl,
+                        previousTrailerAudioUrl = previousState.trailerAudioUrl,
+                        previousTrailerExternalUrl = previousState.trailerExternalUrl
+                    )
+                }
                 return@launch
             }
             fetchSeasonTrailer(playWhenReady = true)
@@ -1356,21 +1359,45 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun playSeasonRecap(season: Int) {
-        _uiState.update {
-            it.withManualSeasonSelection(season).copy(pendingExternalTrailerUrl = null)
-        }
+        val previousState = _uiState.value
+        prepareSeasonMediaTakeover(season)
         trailerHasPlayed = false
         viewModelScope.launch {
             val availability = ensureSeasonMediaAvailability(season)
             if (!availability.hasRecap) {
-                setTrailerPlaybackState(
-                    isPlaying = false,
-                    showControls = false,
-                    hideLogo = false
-                )
+                _uiState.update { state ->
+                    state.withFailedSeasonMediaPlaybackAttempt(
+                        season = season,
+                        availability = availability,
+                        previousTrailerUrl = previousState.trailerUrl,
+                        previousTrailerAudioUrl = previousState.trailerAudioUrl,
+                        previousTrailerExternalUrl = previousState.trailerExternalUrl
+                    )
+                }
                 return@launch
             }
             fetchSeasonRecap(playWhenReady = true)
+        }
+    }
+
+    private fun prepareSeasonMediaTakeover(season: Int) {
+        trailerFetchJob?.cancel()
+        _uiState.update { state ->
+            val updatedState = state.withManualSeasonSelection(season)
+            val cachedSeasonAvailability = updatedState.seasonMediaAvailabilityBySeason[season]
+            updatedState.copy(
+                pendingExternalTrailerUrl = null,
+                trailerResolutionStatus = TrailerResolutionStatus.RESOLVING,
+                isTrailerLoading = true,
+                trailerUrl = null,
+                trailerAudioUrl = null,
+                trailerExternalUrl = null,
+                isTrailerPlaying = false,
+                showTrailerControls = false,
+                hideLogoDuringTrailer = false,
+                selectedSeasonHasPlayableTrailerMedia = cachedSeasonAvailability?.hasTrailerOrTeaser == true,
+                selectedSeasonHasPlayableRecap = cachedSeasonAvailability?.hasRecap == true
+            )
         }
     }
 

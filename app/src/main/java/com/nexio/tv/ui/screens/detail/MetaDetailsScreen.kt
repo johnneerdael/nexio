@@ -495,7 +495,10 @@ fun MetaDetailsScreen(
                         mdbListRatings = uiState.mdbListRatings,
                         showMdbListImdb = uiState.showMdbListImdb,
                         onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
-                        onSeasonShortPress = { viewModel.onEvent(MetaDetailsEvent.OnSeasonShortPress(it)) },
+                        onSeasonShortPress = {
+                            immediateTrailerTakeoverPending = true
+                            viewModel.onEvent(MetaDetailsEvent.OnSeasonShortPress(it))
+                        },
                         onSeasonOptionsOpened = { viewModel.onEvent(MetaDetailsEvent.OnSeasonOptionsOpened(it)) },
                         onProgrammaticSeasonSelected = { viewModel.setSelectedSeasonProgrammatically(it) },
                         onEpisodeClick = { video ->
@@ -552,6 +555,7 @@ fun MetaDetailsScreen(
                             viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonUnwatched(season))
                         },
                         onPlaySeasonRecap = { season ->
+                            immediateTrailerTakeoverPending = true
                             viewModel.onEvent(MetaDetailsEvent.OnPlaySeasonRecap(season))
                         },
                         onMarkPreviousEpisodesWatched = { video ->
