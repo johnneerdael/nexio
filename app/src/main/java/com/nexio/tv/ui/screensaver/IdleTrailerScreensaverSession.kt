@@ -126,6 +126,7 @@ internal suspend fun prepareIdleTrailerScreensaverSessionFromCandidates(
 internal suspend fun resolveNextIdleTrailerPlayback(
     candidates: List<IdleTrailerScreensaverCandidate>,
     currentIndex: Int,
+    skippedPlaybackKeys: Set<String> = emptySet(),
     resolvePlayback: suspend (
         candidate: IdleTrailerScreensaverCandidate,
         trailerId: String
@@ -140,6 +141,7 @@ internal suspend fun resolveNextIdleTrailerPlayback(
     return resolveIdleTrailerPlaybackInOrder(
         candidates = candidates,
         orderedIndices = orderedIndices,
+        skippedPlaybackKeys = skippedPlaybackKeys,
         resolvePlayback = resolvePlayback
     )
 }
@@ -174,9 +176,15 @@ internal fun buildIdleTrailerYouTubeUrl(trailerId: String): String {
     return "https://www.youtube.com/watch?v=${trailerId.trim()}"
 }
 
+internal fun idleTrailerPlaybackKey(
+    candidate: IdleTrailerScreensaverCandidate,
+    trailerId: String
+): String = "${candidate.itemType}:${candidate.itemId}:${trailerId.trim()}"
+
 private suspend fun resolveIdleTrailerPlaybackInOrder(
     candidates: List<IdleTrailerScreensaverCandidate>,
     orderedIndices: List<Int>,
+    skippedPlaybackKeys: Set<String> = emptySet(),
     resolvePlayback: suspend (
         candidate: IdleTrailerScreensaverCandidate,
         trailerId: String
@@ -185,6 +193,9 @@ private suspend fun resolveIdleTrailerPlaybackInOrder(
     orderedIndices.forEach { index ->
         val candidate = candidates.getOrNull(index) ?: return@forEach
         candidate.trailerYtIds.forEach { trailerId ->
+            if (idleTrailerPlaybackKey(candidate, trailerId) in skippedPlaybackKeys) {
+                return@forEach
+            }
             val source = resolvePlayback(candidate, trailerId) ?: return@forEach
             return IdleTrailerScreensaverPlayback(
                 candidate = candidate,

@@ -179,6 +179,31 @@ class IdleScreensaverOverlayTest {
         assertEquals(TextAlign.Center, spec.promptTextAlign)
     }
 
+    @Test
+    fun `idle trailer first frame timeout advances only once per failed playback key`() {
+        assertTrue(
+            shouldAdvanceIdleTrailerPlaybackAfterFirstFrameTimeout(
+                hasRenderedFirstFrame = false,
+                playbackKey = "movie:tt123:abc123def45",
+                failedPlaybackKeys = emptySet()
+            )
+        )
+        assertTrue(
+            !shouldAdvanceIdleTrailerPlaybackAfterFirstFrameTimeout(
+                hasRenderedFirstFrame = true,
+                playbackKey = "movie:tt123:abc123def45",
+                failedPlaybackKeys = emptySet()
+            )
+        )
+        assertTrue(
+            !shouldAdvanceIdleTrailerPlaybackAfterFirstFrameTimeout(
+                hasRenderedFirstFrame = false,
+                playbackKey = "movie:tt123:abc123def45",
+                failedPlaybackKeys = setOf("movie:tt123:abc123def45")
+            )
+        )
+    }
+
     private fun buildSlide(
         genres: List<String>,
         imdbRating: Float?,
