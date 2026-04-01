@@ -1,6 +1,8 @@
 package com.nexio.tv.data.local
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
@@ -23,13 +25,15 @@ class DebridBenchmarkStoreTest {
         file.deleteOnExit()
         val storeJob = SupervisorJob()
         val storeScope = CoroutineScope(backgroundScope.coroutineContext + storeJob)
+        val expected = sampleResult(provider = DebridBenchmarkProvider.REAL_DEBRID, measuredAtMs = 7L)
         val firstStore = buildStore(storeScope, file)
-        firstStore.saveLatest(sampleResult(provider = DebridBenchmarkProvider.REAL_DEBRID, measuredAtMs = 7L))
+        firstStore.saveLatest(expected)
         storeJob.cancelAndJoin()
 
         val reopenedStore = buildStore(backgroundScope, file)
+        val restored = reopenedStore.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first()
 
-        assertEquals(7L, reopenedStore.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first()?.measuredAtMs)
+        assertEquals(expected, restored)
     }
 
     @Test
@@ -44,11 +48,27 @@ class DebridBenchmarkStoreTest {
     @Test
     fun `premiumize and real debrid latest results remain independent`() = runTest {
         val store = buildStore(backgroundScope)
-        store.saveLatest(sampleResult(provider = DebridBenchmarkProvider.REAL_DEBRID))
-        store.saveLatest(sampleResult(provider = DebridBenchmarkProvider.PREMIUMIZE))
+        val realDebrid = sampleResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            measuredAtMs = 10L,
+            startupTimeMs = 100L,
+            sustainedThroughputMbps = 200.0,
+            transferredBytes = 300L,
+            elapsedMs = 400L
+        )
+        val premiumize = sampleResult(
+            provider = DebridBenchmarkProvider.PREMIUMIZE,
+            measuredAtMs = 11L,
+            startupTimeMs = 101L,
+            sustainedThroughputMbps = 201.0,
+            transferredBytes = 301L,
+            elapsedMs = 401L
+        )
+        store.saveLatest(realDebrid)
+        store.saveLatest(premiumize)
 
-        assertNotNull(store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
-        assertNotNull(store.latestResult(DebridBenchmarkProvider.PREMIUMIZE).first())
+        assertEquals(realDebrid, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
+        assertEquals(premiumize, store.latestResult(DebridBenchmarkProvider.PREMIUMIZE).first())
     }
 
     @Test
@@ -63,33 +83,52 @@ class DebridBenchmarkStoreTest {
         assertNotNull(store.latestResult(DebridBenchmarkProvider.PREMIUMIZE).first())
     }
 
+    @Test
+    fun `latest result ignores malformed payloads`() = runTest {
+        val dataStore = buildDataStore(backgroundScope)
+        val store = DebridBenchmarkStore(dataStore)
+        val key = stringPreferencesKey("debrid_benchmark_latest_real_debrid")
+        dataStore.edit { prefs ->
+            prefs[key] = """{"provider":"REAL_DEBRID","measuredAtMs":5,"summary":{}}"""
+        }
+
+        assertEquals(null, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
+    }
+
+    private fun buildDataStore(scope: CoroutineScope, file: File? = null) =
+        PreferenceDataStoreFactory.create(
+            scope = scope,
+            produceFile = {
+                val tempFile = file ?: File.createTempFile("debrid_benchmark_store", ".preferences_pb")
+                tempFile.deleteOnExit()
+                tempFile
+            }
+        )
+
     private fun buildStore(scope: CoroutineScope): DebridBenchmarkStore {
-        val tempFile = File.createTempFile("debrid_benchmark_store", ".preferences_pb")
-        tempFile.deleteOnExit()
-        return buildStore(scope, tempFile)
+        return buildStore(scope, File.createTempFile("debrid_benchmark_store", ".preferences_pb"))
     }
 
     private fun buildStore(scope: CoroutineScope, file: File): DebridBenchmarkStore {
-        return DebridBenchmarkStore(
-            dataStore = PreferenceDataStoreFactory.create(
-                scope = scope,
-                produceFile = { file }
-            )
-        )
+        return DebridBenchmarkStore(buildDataStore(scope, file))
     }
 
     private fun sampleResult(
         provider: DebridBenchmarkProvider,
-        measuredAtMs: Long = 100L
+        measuredAtMs: Long = 100L,
+        startupTimeMs: Long = 123L,
+        sustainedThroughputMbps: Double = 456.0,
+        transferredBytes: Long = 789L,
+        elapsedMs: Long = 1_000L
     ): DebridBenchmarkResult {
         return DebridBenchmarkResult(
             provider = provider,
             measuredAtMs = measuredAtMs,
             summary = DebridBenchmarkSummary(
-                startupTimeMs = 123L,
-                sustainedThroughputMbps = 456.0,
-                transferredBytes = 789L,
-                elapsedMs = 1_000L
+                startupTimeMs = startupTimeMs,
+                sustainedThroughputMbps = sustainedThroughputMbps,
+                transferredBytes = transferredBytes,
+                elapsedMs = elapsedMs
             ),
             terminationReason = DebridBenchmarkTerminationReason.COMPLETED
         )
