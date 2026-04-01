@@ -17,7 +17,7 @@
 
     <!-- ContinueWatchingSection -->
     <string name="continue_watching">Continue Watching</string>
-    <string name="modern_home_press_up_fullscreen">Press Up for fullscreen</string>
+    <string name="modern_home_press_up_fullscreen">Press ⬆ for fullscreen</string>
     <string name="cw_upcoming">Upcoming</string>
     <string name="cw_next_up">Next Up</string>
     <string name="cw_resume">Resume</string>
