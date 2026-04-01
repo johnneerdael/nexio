@@ -187,6 +187,20 @@ internal fun shouldRenderDetailTrailerPlayer(
     trailerUrl: String?
 ): Boolean = isTrailerPlaying && !trailerUrl.isNullOrBlank()
 
+internal fun shouldDispatchDetailTrailerTakeoverRequest(
+    hasPendingRequest: Boolean,
+    isTrailerTakeoverPending: Boolean,
+    hasClaimedTakeover: Boolean
+): Boolean {
+    if (!hasPendingRequest) return false
+    return !isTrailerTakeoverPending || hasClaimedTakeover
+}
+
+internal fun shouldShowStandaloneDetailTrailerTakeoverOverlay(
+    isTrailerTakeoverPending: Boolean,
+    detailBackdropAlreadyVisible: Boolean
+): Boolean = isTrailerTakeoverPending && !detailBackdropAlreadyVisible
+
 internal fun shouldShowDetailTrailerButton(
     titleHasPlayableTrailerMedia: Boolean,
     trailerUrl: String?,
@@ -200,6 +214,17 @@ internal fun shouldShowDetailTrailerButton(
 internal fun shouldShowDetailScrollableContent(
     showTrailerTakeover: Boolean
 ): Boolean = !showTrailerTakeover
+
+internal fun shouldDispatchDetailTrailerTakeoverRequest(
+    hasPendingRequest: Boolean,
+    isTrailerTakeoverPending: Boolean,
+    hasClaimedTakeover: Boolean
+): Boolean = hasPendingRequest && isTrailerTakeoverPending && hasClaimedTakeover
+
+internal fun shouldShowStandaloneDetailTrailerTakeoverOverlay(
+    isTrailerTakeoverPending: Boolean,
+    detailBackdropAlreadyVisible: Boolean
+): Boolean = isTrailerTakeoverPending && !detailBackdropAlreadyVisible
 
 @Stable
 private class TrailerSeekOverlayState {
@@ -242,7 +267,6 @@ fun MetaDetailsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val screenFocusManager = LocalFocusManager.current
     val activity = context as? android.app.Activity
     val navLifecycleOwner = LocalLifecycleOwner.current
     val trailerLifecycleOwner = remember(context, navLifecycleOwner) {
@@ -251,6 +275,7 @@ fun MetaDetailsScreen(
     var restorePlayFocusAfterTrailerBackToken by rememberSaveable { mutableIntStateOf(0) }
     var immediateTrailerTakeoverPending by rememberSaveable { mutableStateOf(false) }
     var pendingTrailerTakeoverRequest by remember { mutableStateOf<DetailTrailerTakeoverRequest?>(null) }
+    var immediateTrailerTakeoverClaimed by remember { mutableStateOf(false) }
 
     LaunchedEffect(activity) {
         if (activity != null) {
@@ -266,6 +291,7 @@ fun MetaDetailsScreen(
             viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded)
         } else if (immediateTrailerTakeoverPending) {
             immediateTrailerTakeoverPending = false
+            immediateTrailerTakeoverClaimed = false
             pendingTrailerTakeoverRequest = null
         } else {
             onBackPress()
@@ -316,14 +342,37 @@ fun MetaDetailsScreen(
     LaunchedEffect(uiState.isTrailerLoading, uiState.isTrailerPlaying) {
         if (uiState.isTrailerLoading || uiState.isTrailerPlaying) {
             immediateTrailerTakeoverPending = false
+            immediateTrailerTakeoverClaimed = false
             pendingTrailerTakeoverRequest = null
         }
     }
 
     LaunchedEffect(pendingTrailerTakeoverRequest, immediateTrailerTakeoverPending) {
-        val request = pendingTrailerTakeoverRequest ?: return@LaunchedEffect
-        if (!immediateTrailerTakeoverPending) return@LaunchedEffect
+        if (pendingTrailerTakeoverRequest == null || !immediateTrailerTakeoverPending) {
+            immediateTrailerTakeoverClaimed = false
+            return@LaunchedEffect
+        }
+        immediateTrailerTakeoverClaimed = false
         withFrameNanos { }
+        withFrameNanos { }
+        immediateTrailerTakeoverClaimed = true
+    }
+
+    LaunchedEffect(
+        pendingTrailerTakeoverRequest,
+        immediateTrailerTakeoverPending,
+        immediateTrailerTakeoverClaimed
+    ) {
+        val request = pendingTrailerTakeoverRequest ?: return@LaunchedEffect
+        if (
+            !shouldDispatchDetailTrailerTakeoverRequest(
+                hasPendingRequest = true,
+                isTrailerTakeoverPending = immediateTrailerTakeoverPending,
+                hasClaimedTakeover = immediateTrailerTakeoverClaimed
+            )
+        ) {
+            return@LaunchedEffect
+        }
         when (request) {
             DetailTrailerTakeoverRequest.TitleTrailer -> {
                 viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
@@ -335,6 +384,7 @@ fun MetaDetailsScreen(
                 viewModel.onEvent(MetaDetailsEvent.OnPlaySeasonRecap(request.season))
             }
         }
+        immediateTrailerTakeoverClaimed = false
         pendingTrailerTakeoverRequest = null
     }
 
@@ -530,7 +580,6 @@ fun MetaDetailsScreen(
                         showMdbListImdb = uiState.showMdbListImdb,
                         onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
                         onSeasonShortPress = {
-                            screenFocusManager.clearFocus(force = true)
                             requestImmediateTrailerTakeover(DetailTrailerTakeoverRequest.SeasonTrailer(it))
                         },
                         onSeasonOptionsOpened = { viewModel.onEvent(MetaDetailsEvent.OnSeasonOptionsOpened(it)) },
@@ -589,7 +638,6 @@ fun MetaDetailsScreen(
                             viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonUnwatched(season))
                         },
                         onPlaySeasonRecap = { season ->
-                            screenFocusManager.clearFocus(force = true)
                             requestImmediateTrailerTakeover(DetailTrailerTakeoverRequest.SeasonRecap(season))
                         },
                         onMarkPreviousEpisodesWatched = { video ->
@@ -653,7 +701,6 @@ fun MetaDetailsScreen(
                         onTrailerProgressChanged = onTrailerProgressChanged,
                         onTrailerEnded = { viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded) },
                         onTrailerButtonClick = {
-                            screenFocusManager.clearFocus(force = true)
                             requestImmediateTrailerTakeover(DetailTrailerTakeoverRequest.TitleTrailer)
                         },
                         immediateTrailerTakeoverPending = immediateTrailerTakeoverPending,
@@ -715,7 +762,13 @@ fun MetaDetailsScreen(
         )
 
         val immediateTakeoverMeta = uiState.meta
-        if (immediateTrailerTakeoverPending && immediateTakeoverMeta != null) {
+        if (
+            immediateTakeoverMeta != null &&
+            shouldShowStandaloneDetailTrailerTakeoverOverlay(
+                isTrailerTakeoverPending = immediateTrailerTakeoverPending,
+                detailBackdropAlreadyVisible = true
+            )
+        ) {
             ImmediateDetailTrailerTakeoverOverlay(
                 backdropUrl = immediateTakeoverMeta.background ?: immediateTakeoverMeta.poster
             )

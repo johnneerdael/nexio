@@ -40,6 +40,38 @@ class MetaDetailsTrailerLifecycleTest {
     }
 
     @Test
+    fun `detail trailer request waits for takeover claim before dispatching resolve`() {
+        assertFalse(
+            shouldDispatchDetailTrailerTakeoverRequest(
+                hasPendingRequest = true,
+                isTrailerTakeoverPending = true,
+                hasClaimedTakeover = false
+            )
+        )
+    }
+
+    @Test
+    fun `detail trailer request dispatches after takeover claim completes`() {
+        assertTrue(
+            shouldDispatchDetailTrailerTakeoverRequest(
+                hasPendingRequest = true,
+                isTrailerTakeoverPending = true,
+                hasClaimedTakeover = true
+            )
+        )
+    }
+
+    @Test
+    fun `detail screen does not render a second takeover overlay over the existing backdrop`() {
+        assertFalse(
+            shouldShowStandaloneDetailTrailerTakeoverOverlay(
+                isTrailerTakeoverPending = true,
+                detailBackdropAlreadyVisible = true
+            )
+        )
+    }
+
+    @Test
     fun `detail content hides during internal trailer takeover`() {
         assertFalse(
             shouldShowDetailScrollableContent(

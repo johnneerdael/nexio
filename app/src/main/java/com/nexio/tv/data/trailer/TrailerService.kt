@@ -646,17 +646,35 @@ class TrailerService(
         val helperSignedIn = trailerAvailabilityService.isSignedIn()
         val youtubeKey = extractYouTubeVideoId(youtubeUrl)
         if (!youtubeKey.isNullOrBlank()) {
-            getValidCachedYoutubeSource(
-                youtubeKey = youtubeKey,
-                requireAuthBacked = helperSignedIn
-            )?.let { cached ->
-                return@withContext TrailerResolutionResult.Playback(cached)
+            getValidCachedYoutubeSource(youtubeKey)?.let { cached ->
+                trailerDebugLog(
+                    "resolveYouTubeTrailer cache hit key=$youtubeKey authBacked=${cached.authBacked}"
+                )
+                return@withContext TrailerResolutionResult.Playback(cached.playbackSource)
             }
         }
+
+        val localSource = runCatching {
+            inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl)
+        }.getOrNull()
+        if (localSource != null) {
+            trailerDebugLog("resolveYouTubeTrailer native success url=$youtubeUrl")
+            Log.d(TAG, "Resolved $youtubeUrl via local in-app extractor")
+            if (!youtubeKey.isNullOrBlank()) {
+                youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
+                    playbackSource = localSource,
+                    cachedAt = Instant.now(clock),
+                    authBacked = false
+                )
+            }
+            return@withContext TrailerResolutionResult.Playback(localSource)
+        }
+        trailerDebugLog("resolveYouTubeTrailer native miss url=$youtubeUrl")
 
         if (helperSignedIn) {
             val helperSource = trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl)
             if (helperSource != null) {
+                trailerDebugLog("resolveYouTubeTrailer helper success url=$youtubeUrl")
                 Log.d(TAG, "Resolved $youtubeUrl via authenticated embedded helper")
                 if (!youtubeKey.isNullOrBlank()) {
                     youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
@@ -667,26 +685,12 @@ class TrailerService(
                 }
                 return@withContext TrailerResolutionResult.Playback(helperSource)
             }
+            trailerDebugLog("resolveYouTubeTrailer helper miss url=$youtubeUrl")
             Log.w(
                 TAG,
                 "Authenticated embedded helper did not resolve $youtubeUrl, " +
-                    "falling back to local/public trailer resolution"
+                    "falling back to backend/public trailer resolution"
             )
-        }
-
-        val localSource = runCatching {
-            inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl)
-        }.getOrNull()
-        if (localSource != null) {
-            Log.d(TAG, "Resolved $youtubeUrl via local in-app extractor")
-            if (!youtubeKey.isNullOrBlank()) {
-                youtubeSourceCache[youtubeKey] = CachedTrailerPlaybackSource(
-                    playbackSource = localSource,
-                    cachedAt = Instant.now(clock),
-                    authBacked = false
-                )
-            }
-            return@withContext TrailerResolutionResult.Playback(localSource)
         }
 
         if (BuildConfig.TRAILER_API_URL.isNotBlank()) {
@@ -703,6 +707,7 @@ class TrailerService(
                 ?.takeIf(::isValidUrl)
 
             if (backendUrl != null) {
+                trailerDebugLog("resolveYouTubeTrailer backend success url=$youtubeUrl")
                 Log.d(TAG, "Resolved $youtubeUrl via trailer backend bridge")
                 val playbackSource = TrailerPlaybackSource(videoUrl = backendUrl)
                 if (!youtubeKey.isNullOrBlank()) {
@@ -714,6 +719,7 @@ class TrailerService(
                 }
                 return@withContext TrailerResolutionResult.Playback(playbackSource)
             }
+            trailerDebugLog("resolveYouTubeTrailer backend miss url=$youtubeUrl")
         }
 
         null
@@ -887,20 +893,14 @@ class TrailerService(
         return apiKey.takeIf { it.isNotBlank() }
     }
 
-    private fun getValidCachedYoutubeSource(
-        youtubeKey: String,
-        requireAuthBacked: Boolean
-    ): TrailerPlaybackSource? {
+    private fun getValidCachedYoutubeSource(youtubeKey: String): CachedTrailerPlaybackSource? {
         val cached = youtubeSourceCache[youtubeKey] ?: return null
-        if (requireAuthBacked && !cached.authBacked) {
-            youtubeSourceCache.remove(youtubeKey, cached)
-            return null
-        }
         val age = Duration.between(cached.cachedAt, Instant.now(clock))
         if (age <= YOUTUBE_SOURCE_CACHE_TTL) {
-            return cached.playbackSource
+            return cached
         }
         youtubeSourceCache.remove(youtubeKey, cached)
+        trailerDebugLog("resolveYouTubeTrailer cache expired key=$youtubeKey authBacked=${cached.authBacked}")
         return null
     }
 }
