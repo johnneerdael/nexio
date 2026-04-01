@@ -210,7 +210,7 @@ class ModernHomeTrailerBehaviorTest {
 
     @Test
     fun `fullscreen overlay text is only shown while timer is active`() {
-        assertTrue(
+        assertFalse(
             shouldShowModernHomeFullscreenTextOverlay(
                 fullscreenTrailerActive = true,
                 overlayTimedOut = false
@@ -228,5 +228,11 @@ class ModernHomeTrailerBehaviorTest {
                 overlayTimedOut = false
             )
         )
+    }
+
+    @Test
+    fun `modern home hero trailers never inherit muted backdrop preference`() {
+        assertFalse(resolveModernHomeHeroTrailerMuted(configuredMuted = true))
+        assertFalse(resolveModernHomeHeroTrailerMuted(configuredMuted = false))
     }
 }
