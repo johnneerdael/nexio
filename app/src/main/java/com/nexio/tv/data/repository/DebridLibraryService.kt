@@ -77,9 +77,27 @@ class DebridLibraryService @Inject constructor(
     }
 
     suspend fun getBenchmarkCandidates(provider: DebridBenchmarkProvider): List<DebridBenchmarkCandidate> {
-        ensureFresh(force = false, target = provider.toRefreshTarget())
-        return snapshotState.value.items
-            .asSequence()
+        val items = when (provider) {
+            DebridBenchmarkProvider.REAL_DEBRID -> {
+                if (!realDebridAuthDataStore.isAuthenticated.first()) {
+                    emptyList()
+                } else {
+                    fetchRealDebridTorrents()
+                }
+            }
+            DebridBenchmarkProvider.PREMIUMIZE -> {
+                premiumizeService.refreshAccountState()
+                val premiumizeState = premiumizeService.observeAccountState().first()
+                val apiKey = premiumizeState.apiKey.trim()
+                if (apiKey.isBlank()) {
+                    emptyList()
+                } else {
+                    fetchPremiumizeItems(apiKey)
+                }
+            }
+        }
+
+        return items.asSequence()
             .filter { entry -> entry.listKeys.contains(provider.listKey) }
             .filter { entry -> entry.directPlaybackUrl.isNullOrBlank().not() }
             .sortedByDescending { it.listedAt }
@@ -598,11 +616,4 @@ class DebridLibraryService @Inject constructor(
         val filename: String?,
         val mimeType: String?
     )
-
-    private fun DebridBenchmarkProvider.toRefreshTarget(): RefreshTarget {
-        return when (this) {
-            DebridBenchmarkProvider.REAL_DEBRID -> RefreshTarget.REAL_DEBRID
-            DebridBenchmarkProvider.PREMIUMIZE -> RefreshTarget.PREMIUMIZE
-        }
-    }
 }
