@@ -49,6 +49,7 @@ import kotlinx.coroutines.delay
 private const val TRAILER_SCREENSAVER_BRANDING_VISIBLE_MS = 20_000L
 private const val TRAILER_SCREENSAVER_BRANDING_FADE_MS = 1_500
 private const val TRAILER_SCREENSAVER_OPEN_GUARD_MS = 180L
+private const val TRAILER_SCREENSAVER_FIRST_FRAME_TIMEOUT_MS = 5_000L
 private const val TRAILER_SCREENSAVER_BRANDING_WIDTH_DP = 360
 
 internal data class IdleTrailerBrandingPresentationSpec(
@@ -65,6 +66,14 @@ internal fun idleTrailerBrandingPresentationSpec(): IdleTrailerBrandingPresentat
         contentAlignment = Alignment.CenterHorizontally,
         promptTextAlign = TextAlign.Center
     )
+}
+
+internal fun shouldAdvanceIdleTrailerPlaybackAfterFirstFrameTimeout(
+    hasRenderedFirstFrame: Boolean,
+    playbackKey: String,
+    failedPlaybackKeys: Set<String>
+): Boolean {
+    return !hasRenderedFirstFrame && playbackKey !in failedPlaybackKeys
 }
 
 @Composable
@@ -84,6 +93,8 @@ internal fun IdleTrailerScreensaverOverlay(
     var preparedNextPlayback by remember(sessionId) { mutableStateOf<IdleTrailerScreensaverPlayback?>(null) }
     var sessionMuted by remember(sessionId) { mutableStateOf(true) }
     var pendingOpen by remember(sessionId) { mutableStateOf<IdleTrailerScreensaverCandidate?>(null) }
+    var failedPlaybackKeys by remember(sessionId) { mutableStateOf<Set<String>>(emptySet()) }
+    var hasRenderedFirstFrame by remember(sessionId, currentPlayback.index, currentPlayback.trailerId) { mutableStateOf(false) }
     var advanceSignal by remember(sessionId) { mutableIntStateOf(0) }
     val brandingSpec = remember { idleTrailerBrandingPresentationSpec() }
     val brandingAlpha = remember(sessionId) { Animatable(1f) }
@@ -101,6 +112,7 @@ internal fun IdleTrailerScreensaverOverlay(
     }
 
     LaunchedEffect(sessionId, currentPlayback.trailerId, currentPlayback.index) {
+        hasRenderedFirstFrame = false
         brandingAlpha.stop()
         brandingAlpha.snapTo(1f)
         delay(brandingSpec.visibleMs)
@@ -114,8 +126,33 @@ internal fun IdleTrailerScreensaverOverlay(
         preparedNextPlayback = resolveNextIdleTrailerPlayback(
             candidates = sessionStart.candidates,
             currentIndex = currentPlayback.index,
+            skippedPlaybackKeys = failedPlaybackKeys,
             resolvePlayback = currentResolvePlayback
         )
+    }
+
+    LaunchedEffect(
+        sessionId,
+        currentPlayback.index,
+        currentPlayback.trailerId,
+        failedPlaybackKeys
+    ) {
+        val playbackKey = idleTrailerPlaybackKey(
+            candidate = currentPlayback.candidate,
+            trailerId = currentPlayback.trailerId
+        )
+        delay(TRAILER_SCREENSAVER_FIRST_FRAME_TIMEOUT_MS)
+        if (
+            shouldAdvanceIdleTrailerPlaybackAfterFirstFrameTimeout(
+                hasRenderedFirstFrame = hasRenderedFirstFrame,
+                playbackKey = playbackKey,
+                failedPlaybackKeys = failedPlaybackKeys
+            )
+        ) {
+            failedPlaybackKeys = failedPlaybackKeys + playbackKey
+            preparedNextPlayback = null
+            advanceSignal += 1
+        }
     }
 
     LaunchedEffect(advanceSignal) {
@@ -123,6 +160,7 @@ internal fun IdleTrailerScreensaverOverlay(
         val nextPlayback = preparedNextPlayback ?: resolveNextIdleTrailerPlayback(
             candidates = sessionStart.candidates,
             currentIndex = currentPlayback.index,
+            skippedPlaybackKeys = failedPlaybackKeys,
             resolvePlayback = currentResolvePlayback
         )
         if (nextPlayback == null) {
@@ -212,6 +250,7 @@ internal fun IdleTrailerScreensaverOverlay(
             isPlaying = true,
             muted = sessionMuted,
             onEnded = { advanceSignal += 1 },
+            onFirstFrameRendered = { hasRenderedFirstFrame = true },
             onRemoteKey = { keyCode, action, _ ->
                 if (pendingOpen != null) {
                     true

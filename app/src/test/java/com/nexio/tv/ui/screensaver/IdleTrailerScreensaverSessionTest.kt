@@ -70,6 +70,28 @@ class IdleTrailerScreensaverSessionTest {
     }
 
     @Test
+    fun `resolveNextIdleTrailerPlayback skips blacklisted trailer ids and advances to next playable candidate`() = runBlocking {
+        val candidates = listOf(
+            buildCandidate("movie-1", listOf("abc123def45")),
+            buildCandidate("movie-2", listOf("def456ghi78")),
+            buildCandidate("movie-3", listOf("ghi789jkl01"))
+        )
+
+        val playback = resolveNextIdleTrailerPlayback(
+            candidates = candidates,
+            currentIndex = 0,
+            skippedPlaybackKeys = setOf(idleTrailerPlaybackKey(candidates[1], "def456ghi78"))
+        ) { candidate, trailerId ->
+            TrailerPlaybackSource(videoUrl = "https://video.example.com/$trailerId.mp4")
+        }
+
+        requireNotNull(playback)
+        assertEquals("movie-3", playback.candidate.slide.itemId)
+        assertEquals("ghi789jkl01", playback.trailerId)
+        assertEquals(2, playback.index)
+    }
+
+    @Test
     fun `collectIdleTrailerScreensaverCandidates only keeps slides with trailer ids`() {
         val candidates = collectIdleTrailerScreensaverCandidates(
             listOf(
