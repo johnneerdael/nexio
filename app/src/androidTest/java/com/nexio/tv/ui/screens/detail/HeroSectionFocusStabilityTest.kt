@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListPrefetchStrategy
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -22,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -32,6 +34,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.platform.testTag
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.focus.focusRequester
 import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -192,6 +196,50 @@ class HeroSectionFocusStabilityTest {
         assertTrue("Expected reset to index 0, was '$indexText'", indexText.contains("index=0"))
         composeRule.onNodeWithText("Hero for second").assertIsDisplayed()
     }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun moving_between_hero_actions_does_not_correct_small_parent_scroll_offsets() {
+        composeRule.setContent {
+            HeroSectionScrollCorrectionHarness()
+        }
+
+        composeRule.waitForIdle()
+
+        val initialState = composeRule.scrollStateText()
+        assertTrue("Expected initial offset=4, was '$initialState'", initialState.contains("offset=4"))
+
+        composeRule.onRoot().performKeyInput {
+            pressKey(Key.DirectionRight)
+        }
+        composeRule.waitForIdle()
+
+        val afterRight = composeRule.scrollStateText()
+        assertTrue(
+            "Horizontal hero focus should not reset parent scroll offset, was '$afterRight'",
+            afterRight.contains("offset=4")
+        )
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun delayed_hero_focus_request_waits_until_target_is_composed() {
+        composeRule.mainClock.autoAdvance = false
+        try {
+            composeRule.setContent {
+                DelayedFocusRequestHarness()
+            }
+
+            repeat(10) {
+                composeRule.mainClock.advanceTimeByFrame()
+                composeRule.waitForIdle()
+            }
+
+            composeRule.onNodeWithText("Delayed hero").assertIsFocused()
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+        }
+    }
 }
 
 private fun ComposeContentTestRule.directorLineTop(label: String): Float {
@@ -212,6 +260,12 @@ private fun ComposeContentTestRule.nodeHeightByText(label: String): Float {
 
 private fun ComposeContentTestRule.nodeHeightByContentDescription(contentDescription: String): Float {
     return onNodeWithContentDescription(contentDescription).fetchSemanticsNode().boundsInRoot.height
+}
+
+private fun ComposeContentTestRule.scrollStateText(): String {
+    return onNodeWithTag("scroll_state").fetchSemanticsNode().config
+        .getOrElse(SemanticsProperties.Text) { emptyList() }
+        .joinToString(separator = "") { it.text }
 }
 
 @Composable
@@ -307,7 +361,7 @@ private fun HeroSectionFocusHarness() {
                 trailerAvailable = false,
                 playButtonFocusRequester = playButtonFocusRequester,
                 restorePlayFocusToken = 1,
-                onHeroActionFocused = {
+                onPlayFocusRestored = {
                     coroutineScope.launch { listState.restoreHeroScrollAfterFocus() }
                 }
             )
@@ -317,4 +371,126 @@ private fun HeroSectionFocusHarness() {
             Text(text = "Below item $index")
         }
     }
+}
+
+@Composable
+private fun HeroSectionScrollCorrectionHarness() {
+    val playButtonFocusRequester = remember { FocusRequester() }
+    val listState = rememberResettableLazyListState(
+        resetKey = "hero_scroll",
+        firstVisibleItemIndex = 0,
+        firstVisibleItemScrollOffset = 4,
+        prefetchStrategy = LazyListPrefetchStrategy(nestedPrefetchItemCount = 2)
+    )
+    val scrollStateLabel by remember(listState) {
+        derivedStateOf {
+            "index=${listState.firstVisibleItemIndex}, offset=${listState.firstVisibleItemScrollOffset}"
+        }
+    }
+
+    LaunchedEffect(playButtonFocusRequester) {
+        playButtonFocusRequester.requestFocusAfterFrames(frames = 0)
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = scrollStateLabel,
+            modifier = Modifier.testTag("scroll_state")
+        )
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            state = listState
+        ) {
+            item {
+                HeroContentSection(
+                    meta = heroTestMeta(title = "Mike and Nick and Nick and Alice", director = "BenDavid Grabinski"),
+                    nextEpisode = null,
+                    nextToWatch = null,
+                    onPlayClick = {},
+                    isInLibrary = false,
+                    onToggleLibrary = {},
+                    onLibraryLongPress = {},
+                    isMovieWatched = false,
+                    isMovieWatchedPending = false,
+                    onToggleMovieWatched = {},
+                    trailerAvailable = false,
+                    playButtonFocusRequester = playButtonFocusRequester,
+                    restorePlayFocusToken = 0
+                )
+            }
+
+            items((1..12).toList()) { index ->
+                Text(text = "Below item $index")
+            }
+        }
+    }
+}
+
+@Composable
+private fun DelayedFocusRequestHarness() {
+    val heroFocusRequester = remember { FocusRequester() }
+    val fallbackFocusRequester = remember { FocusRequester() }
+    var heroVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        heroFocusRequester.requestFocusAfterFrames(frames = 0)
+    }
+
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        fallbackFocusRequester.requestFocus()
+        repeat(6) {
+            withFrameNanos { }
+        }
+        heroVisible = true
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (heroVisible) {
+            Button(
+                onClick = {},
+                modifier = Modifier.focusRequester(heroFocusRequester)
+            ) {
+                Text("Delayed hero")
+            }
+        }
+
+        Button(
+            onClick = {},
+            modifier = Modifier.focusRequester(fallbackFocusRequester)
+        ) {
+            Text("Fallback")
+        }
+    }
+}
+
+private fun heroTestMeta(
+    title: String,
+    director: String
+): Meta {
+    return Meta(
+        id = title.lowercase().replace(" ", "_"),
+        type = ContentType.MOVIE,
+        rawType = "movie",
+        name = title,
+        poster = null,
+        posterShape = PosterShape.POSTER,
+        background = null,
+        logo = null,
+        description = "Two gangsters and the woman they love try to survive the most dangerous night of their lives.",
+        releaseInfo = "2026-01-30",
+        imdbRating = 6.6f,
+        genres = listOf("Comedy", "Science Fiction", "Crime"),
+        runtime = "107",
+        director = listOf(director),
+        writer = emptyList(),
+        cast = emptyList(),
+        videos = emptyList(),
+        country = "United States of America",
+        awards = null,
+        language = "en",
+        links = emptyList(),
+        ageRating = "R"
+    )
 }

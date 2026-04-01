@@ -46,6 +46,28 @@ class MetaDetailsTrailerLifecycleTest {
     }
 
     @Test
+    fun `detail trailer button shows from metadata before resolution`() {
+        assertTrue(
+            shouldShowDetailTrailerButton(
+                titleHasPlayableTrailerMedia = true,
+                trailerUrl = null,
+                trailerExternalUrl = null
+            )
+        )
+    }
+
+    @Test
+    fun `detail trailer button stays hidden without metadata or resolved source`() {
+        assertFalse(
+            shouldShowDetailTrailerButton(
+                titleHasPlayableTrailerMedia = false,
+                trailerUrl = null,
+                trailerExternalUrl = null
+            )
+        )
+    }
+
+    @Test
     fun `lifecycle pause stops auto-playing trailer`() {
         assertTrue(
             shouldStopAutoTrailerOnLifecyclePause(

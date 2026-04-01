@@ -234,7 +234,19 @@ class TrailerService(
         contentId: String?,
         fallbackYtIds: List<String> = emptyList()
     ): Boolean = withContext(Dispatchers.IO) {
-        if (fallbackYtIds.any { it.isNotBlank() }) return@withContext true
+        val fallbackYtCount = fallbackYtIds.count { it.isNotBlank() }
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                TAG,
+                "getTitleMediaAvailability start tmdbId=$tmdbId type=$type contentId=$contentId fallbackYtIds=$fallbackYtCount"
+            )
+        }
+        if (fallbackYtCount > 0) {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "getTitleMediaAvailability resolved via fallbackYtIds contentId=$contentId")
+            }
+            return@withContext true
+        }
 
         val numericTmdbId = tmdbId?.toIntOrNull()
         val mediaType = normalizeTmdbMediaType(type)
@@ -248,12 +260,25 @@ class TrailerService(
             else -> emptyList()
         }
         if (rankTmdbVideoCandidates(tmdbTitleVideos).isNotEmpty()) {
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    TAG,
+                    "getTitleMediaAvailability resolved via tmdb videos tmdbId=$numericTmdbId mediaType=$mediaType total=${tmdbTitleVideos.size} ranked=${rankTmdbVideoCandidates(tmdbTitleVideos).size}"
+                )
+            }
             return@withContext true
         }
 
         val streailerCandidate = fetchStreailerStreams(contentId = contentId, type = type)
             ?.let(::selectStreailerTrailerCandidate)
-        hasInternalStreailerCandidate(streailerCandidate)
+        val available = hasInternalStreailerCandidate(streailerCandidate)
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                TAG,
+                "getTitleMediaAvailability fallback result contentId=$contentId streailerCandidate=${streailerCandidate != null} available=$available"
+            )
+        }
+        available
     }
 
     internal suspend fun getSeasonTrailerPlaybackSource(
@@ -746,7 +771,12 @@ class TrailerService(
             mediaType = "movie",
             languageTag = language,
             providerToken = TMDB_TRAILER_CACHE_PROVIDER
-        )?.let { return it }
+        )?.let {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "TMDB movie videos cache hit tmdbId=$tmdbId language=$language count=${it.size}")
+            }
+            return it
+        }
 
         return try {
             val response = tmdbApi.getMovieVideos(
@@ -755,9 +785,15 @@ class TrailerService(
                 language = language
             )
             if (!response.isSuccessful) {
+                if (BuildConfig.DEBUG) {
+                    Log.d(TAG, "TMDB movie videos fetch failed tmdbId=$tmdbId language=$language http=${response.code()}")
+                }
                 emptyList()
             } else {
                 val results = response.body()?.results.orEmpty()
+                if (BuildConfig.DEBUG) {
+                    Log.d(TAG, "TMDB movie videos fetch tmdbId=$tmdbId language=$language count=${results.size}")
+                }
                 metadataDiskCacheStore.writeTmdbTitleVideos(
                     tmdbId = tmdbId,
                     mediaType = "movie",
@@ -767,7 +803,10 @@ class TrailerService(
                 )
                 results
             }
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            if (BuildConfig.DEBUG) {
+                Log.w(TAG, "TMDB movie videos fetch exception tmdbId=$tmdbId language=$language: ${error.message}")
+            }
             emptyList()
         }
     }
@@ -782,7 +821,12 @@ class TrailerService(
             mediaType = "tv",
             languageTag = language,
             providerToken = TMDB_TRAILER_CACHE_PROVIDER
-        )?.let { return it }
+        )?.let {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "TMDB tv videos cache hit tmdbId=$tmdbId language=$language count=${it.size}")
+            }
+            return it
+        }
 
         return try {
             val response = tmdbApi.getTvVideos(
@@ -791,9 +835,15 @@ class TrailerService(
                 language = language
             )
             if (!response.isSuccessful) {
+                if (BuildConfig.DEBUG) {
+                    Log.d(TAG, "TMDB tv videos fetch failed tmdbId=$tmdbId language=$language http=${response.code()}")
+                }
                 emptyList()
             } else {
                 val results = response.body()?.results.orEmpty()
+                if (BuildConfig.DEBUG) {
+                    Log.d(TAG, "TMDB tv videos fetch tmdbId=$tmdbId language=$language count=${results.size}")
+                }
                 metadataDiskCacheStore.writeTmdbTitleVideos(
                     tmdbId = tmdbId,
                     mediaType = "tv",
@@ -803,7 +853,10 @@ class TrailerService(
                 )
                 results
             }
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            if (BuildConfig.DEBUG) {
+                Log.w(TAG, "TMDB tv videos fetch exception tmdbId=$tmdbId language=$language: ${error.message}")
+            }
             emptyList()
         }
     }

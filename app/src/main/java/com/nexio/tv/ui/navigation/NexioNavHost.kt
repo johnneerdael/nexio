@@ -48,6 +48,7 @@ fun NexioNavHost(
     idleScreensaverVisible: Boolean = false,
     onModernHomeTrailerPlaybackStarted: () -> Unit = {},
     onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit = {},
+    onModernHomeTrailerFullscreenActiveChanged: (Boolean) -> Unit = {},
     onDetailTrailerPlaybackActiveChanged: (Boolean) -> Unit = {}
 ) {
     fun returnPlayerToLibrary() {
@@ -135,6 +136,7 @@ fun NexioNavHost(
                 idleScreensaverVisible = idleScreensaverVisible,
                 onModernHomeTrailerPlaybackStarted = onModernHomeTrailerPlaybackStarted,
                 onModernHomeTrailerPlaybackActiveChanged = onModernHomeTrailerPlaybackActiveChanged,
+                onModernHomeTrailerFullscreenActiveChanged = onModernHomeTrailerFullscreenActiveChanged,
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 },

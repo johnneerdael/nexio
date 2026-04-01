@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
@@ -1353,6 +1354,12 @@ class MetaDetailsViewModel @Inject constructor(
             val tmdbId = runCatching {
                 tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
             }.getOrNull()
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    TAG,
+                    "preloadTitleTrailerAvailability start itemId=${meta.id} type=${meta.apiType} tmdbId=$tmdbId fallbackYtIds=${meta.trailerYtIds.count { it.isNotBlank() }}"
+                )
+            }
             val available = trailerService.getTitleMediaAvailability(
                 tmdbId = tmdbId,
                 type = meta.apiType,
@@ -1370,6 +1377,13 @@ class MetaDetailsViewModel @Inject constructor(
                         available -> TrailerResolutionStatus.IDLE
                         else -> TrailerResolutionStatus.FAILED
                     }
+                )
+            }
+            if (BuildConfig.DEBUG) {
+                val state = _uiState.value
+                Log.d(
+                    TAG,
+                    "preloadTitleTrailerAvailability result itemId=${meta.id} available=$available resolutionStatus=${state.trailerResolutionStatus} trailerUrl=${!state.trailerUrl.isNullOrBlank()} trailerExternalUrl=${!state.trailerExternalUrl.isNullOrBlank()}"
                 )
             }
         }
@@ -2208,6 +2222,12 @@ class MetaDetailsViewModel @Inject constructor(
         val state = _uiState.value
         idleTimerJob?.cancel()
         isPlayButtonFocused = false
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                TAG,
+                "handleTrailerButtonClick titleAvailable=${state.titleHasPlayableTrailerMedia} loading=${state.isTrailerLoading} trailerUrl=${!state.trailerUrl.isNullOrBlank()} trailerExternalUrl=${!state.trailerExternalUrl.isNullOrBlank()}"
+            )
+        }
 
         when {
             !state.trailerUrl.isNullOrBlank() -> {
@@ -2226,6 +2246,9 @@ class MetaDetailsViewModel @Inject constructor(
             }
 
             state.titleHasPlayableTrailerMedia && !state.isTrailerLoading -> {
+                if (BuildConfig.DEBUG) {
+                    Log.d(TAG, "handleTrailerButtonClick starting trailer resolution")
+                }
                 fetchTrailerUrl(playWhenReady = true, useSelectedSeasonForSeries = false)
             }
         }
