@@ -25,6 +25,16 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 private const val TAG = "TrailerService"
+private fun trailerDebugLog(message: String) {
+    if (!BuildConfig.DEBUG) return
+    runCatching { Log.d(TAG, message) }
+}
+
+private fun trailerWarnLog(message: String) {
+    if (!BuildConfig.DEBUG) return
+    runCatching { Log.w(TAG, message) }
+}
+
 private const val STREAILER_ADDON_ID = "org.streailer.trailer"
 private const val TMDB_TRAILER_FALLBACK_LANGUAGE = "en-US"
 private const val TMDB_TRAILER_CACHE_PROVIDER = "trailer"
@@ -235,16 +245,9 @@ class TrailerService(
         fallbackYtIds: List<String> = emptyList()
     ): Boolean = withContext(Dispatchers.IO) {
         val fallbackYtCount = fallbackYtIds.count { it.isNotBlank() }
-        if (BuildConfig.DEBUG) {
-            Log.d(
-                TAG,
-                "getTitleMediaAvailability start tmdbId=$tmdbId type=$type contentId=$contentId fallbackYtIds=$fallbackYtCount"
-            )
-        }
+        trailerDebugLog("getTitleMediaAvailability start tmdbId=$tmdbId type=$type contentId=$contentId fallbackYtIds=$fallbackYtCount")
         if (fallbackYtCount > 0) {
-            if (BuildConfig.DEBUG) {
-                Log.d(TAG, "getTitleMediaAvailability resolved via fallbackYtIds contentId=$contentId")
-            }
+            trailerDebugLog("getTitleMediaAvailability resolved via fallbackYtIds contentId=$contentId")
             return@withContext true
         }
 
@@ -260,24 +263,16 @@ class TrailerService(
             else -> emptyList()
         }
         if (rankTmdbVideoCandidates(tmdbTitleVideos).isNotEmpty()) {
-            if (BuildConfig.DEBUG) {
-                Log.d(
-                    TAG,
-                    "getTitleMediaAvailability resolved via tmdb videos tmdbId=$numericTmdbId mediaType=$mediaType total=${tmdbTitleVideos.size} ranked=${rankTmdbVideoCandidates(tmdbTitleVideos).size}"
-                )
-            }
+            trailerDebugLog(
+                "getTitleMediaAvailability resolved via tmdb videos tmdbId=$numericTmdbId mediaType=$mediaType total=${tmdbTitleVideos.size} ranked=${rankTmdbVideoCandidates(tmdbTitleVideos).size}"
+            )
             return@withContext true
         }
 
         val streailerCandidate = fetchStreailerStreams(contentId = contentId, type = type)
             ?.let(::selectStreailerTrailerCandidate)
         val available = hasInternalStreailerCandidate(streailerCandidate)
-        if (BuildConfig.DEBUG) {
-            Log.d(
-                TAG,
-                "getTitleMediaAvailability fallback result contentId=$contentId streailerCandidate=${streailerCandidate != null} available=$available"
-            )
-        }
+        trailerDebugLog("getTitleMediaAvailability fallback result contentId=$contentId streailerCandidate=${streailerCandidate != null} available=$available")
         available
     }
 
@@ -772,9 +767,7 @@ class TrailerService(
             languageTag = language,
             providerToken = TMDB_TRAILER_CACHE_PROVIDER
         )?.let {
-            if (BuildConfig.DEBUG) {
-                Log.d(TAG, "TMDB movie videos cache hit tmdbId=$tmdbId language=$language count=${it.size}")
-            }
+            trailerDebugLog("TMDB movie videos cache hit tmdbId=$tmdbId language=$language count=${it.size}")
             return it
         }
 
@@ -785,15 +778,11 @@ class TrailerService(
                 language = language
             )
             if (!response.isSuccessful) {
-                if (BuildConfig.DEBUG) {
-                    Log.d(TAG, "TMDB movie videos fetch failed tmdbId=$tmdbId language=$language http=${response.code()}")
-                }
+                trailerDebugLog("TMDB movie videos fetch failed tmdbId=$tmdbId language=$language http=${response.code()}")
                 emptyList()
             } else {
                 val results = response.body()?.results.orEmpty()
-                if (BuildConfig.DEBUG) {
-                    Log.d(TAG, "TMDB movie videos fetch tmdbId=$tmdbId language=$language count=${results.size}")
-                }
+                trailerDebugLog("TMDB movie videos fetch tmdbId=$tmdbId language=$language count=${results.size}")
                 metadataDiskCacheStore.writeTmdbTitleVideos(
                     tmdbId = tmdbId,
                     mediaType = "movie",
@@ -804,9 +793,7 @@ class TrailerService(
                 results
             }
         } catch (error: Exception) {
-            if (BuildConfig.DEBUG) {
-                Log.w(TAG, "TMDB movie videos fetch exception tmdbId=$tmdbId language=$language: ${error.message}")
-            }
+            trailerWarnLog("TMDB movie videos fetch exception tmdbId=$tmdbId language=$language: ${error.message}")
             emptyList()
         }
     }
@@ -822,9 +809,7 @@ class TrailerService(
             languageTag = language,
             providerToken = TMDB_TRAILER_CACHE_PROVIDER
         )?.let {
-            if (BuildConfig.DEBUG) {
-                Log.d(TAG, "TMDB tv videos cache hit tmdbId=$tmdbId language=$language count=${it.size}")
-            }
+            trailerDebugLog("TMDB tv videos cache hit tmdbId=$tmdbId language=$language count=${it.size}")
             return it
         }
 
@@ -835,15 +820,11 @@ class TrailerService(
                 language = language
             )
             if (!response.isSuccessful) {
-                if (BuildConfig.DEBUG) {
-                    Log.d(TAG, "TMDB tv videos fetch failed tmdbId=$tmdbId language=$language http=${response.code()}")
-                }
+                trailerDebugLog("TMDB tv videos fetch failed tmdbId=$tmdbId language=$language http=${response.code()}")
                 emptyList()
             } else {
                 val results = response.body()?.results.orEmpty()
-                if (BuildConfig.DEBUG) {
-                    Log.d(TAG, "TMDB tv videos fetch tmdbId=$tmdbId language=$language count=${results.size}")
-                }
+                trailerDebugLog("TMDB tv videos fetch tmdbId=$tmdbId language=$language count=${results.size}")
                 metadataDiskCacheStore.writeTmdbTitleVideos(
                     tmdbId = tmdbId,
                     mediaType = "tv",
@@ -854,9 +835,7 @@ class TrailerService(
                 results
             }
         } catch (error: Exception) {
-            if (BuildConfig.DEBUG) {
-                Log.w(TAG, "TMDB tv videos fetch exception tmdbId=$tmdbId language=$language: ${error.message}")
-            }
+            trailerWarnLog("TMDB tv videos fetch exception tmdbId=$tmdbId language=$language: ${error.message}")
             emptyList()
         }
     }

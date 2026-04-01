@@ -34,10 +34,12 @@ import io.mockk.coVerify
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -369,6 +371,72 @@ class MetaDetailsSeasonMediaViewModelTest {
         assertFalse(state.showTrailerControls)
         assertFalse(state.hideLogoDuringTrailer)
         assertFalse(state.selectedSeasonHasPlayableRecap)
+    }
+
+    @Test
+    fun `detail trailer button enters resolving takeover state immediately before trailer resolves`() = runTest(dispatcher) {
+        val trailerService = mockk<TrailerService>()
+        val trailerResolutionGate = CompletableDeferred<TrailerResolutionResult?>()
+
+        coEvery {
+            trailerService.getTitleMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        } returns true
+        coEvery {
+            trailerService.getSeasonMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any()
+            )
+        } returns SeasonMediaAvailability(
+            hasTrailerOrTeaser = false,
+            hasRecap = false
+        )
+        coEvery {
+            trailerService.resolveTrailer(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        } coAnswers {
+            trailerResolutionGate.await()
+        }
+
+        val viewModel = buildViewModel(trailerService)
+        advanceUntilIdle()
+
+        viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
+        runCurrent()
+
+        val resolvingState = viewModel.uiState.value
+        assertTrue(resolvingState.isTrailerLoading)
+        assertEquals(TrailerResolutionStatus.RESOLVING, resolvingState.trailerResolutionStatus)
+        assertFalse(resolvingState.isTrailerPlaying)
+        assertEquals(null, resolvingState.trailerUrl)
+
+        trailerResolutionGate.complete(
+            TrailerResolutionResult.Playback(
+                TrailerPlaybackSource(
+                    videoUrl = "https://example.com/trailer.m3u8",
+                    audioUrl = "https://example.com/trailer-audio.m4a"
+                )
+            )
+        )
+        advanceUntilIdle()
+
+        val resolvedState = viewModel.uiState.value
+        assertFalse(resolvedState.isTrailerLoading)
+        assertTrue(resolvedState.isTrailerPlaying)
+        assertEquals("https://example.com/trailer.m3u8", resolvedState.trailerUrl)
     }
 
     @Test

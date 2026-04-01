@@ -469,7 +469,7 @@ fun HomeScreen(
         val playback = activePosterTrailerPlayback ?: return@LaunchedEffect
         if (uiState.homeLayout == HomeLayout.MODERN && playback.heroPreview != null) {
             delay(10_000L)
-            if (activePosterTrailerPlayback?.itemId == playback.itemId) {
+            if (activePosterTrailerPlayback.itemId == playback.itemId) {
                 modernPosterTrailerTextTimedOut = true
             }
         }
