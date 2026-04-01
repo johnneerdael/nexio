@@ -148,7 +148,11 @@ internal fun shouldPromoteModernHomeHeroTrailerToFullscreen(
 internal fun shouldShowModernHomeFullscreenTextOverlay(
     fullscreenTrailerActive: Boolean,
     overlayTimedOut: Boolean
-): Boolean = fullscreenTrailerActive && !overlayTimedOut
+): Boolean = false
+
+internal fun resolveModernHomeHeroTrailerMuted(
+    configuredMuted: Boolean
+): Boolean = false
 
 internal fun shouldUnlockModernHomeTrailerAutoplay(
     autoplayEnabled: Boolean,
@@ -998,7 +1002,9 @@ internal fun ModernHomeContent(
             trailerPreviewAudioUrl = heroTrailerPreviewAudioUrl,
             showLoadingIndicator = heroTrailerPending && heroTrailerPreviewUrl.isNullOrBlank(),
             showTextOverlay = !heroTrailerFullscreenMode || fullscreenTextOverlayVisible,
-            trailerMuted = contentState.focusedPosterBackdropTrailerMuted,
+            trailerMuted = resolveModernHomeHeroTrailerMuted(
+                configuredMuted = contentState.focusedPosterBackdropTrailerMuted
+            ),
             preview = resolvedHero,
             activeItemId = activeItemId,
             enrichingItemIdState = enrichingItemIdState,
