@@ -370,7 +370,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
         "trakt_items=${traktSnapshotItemKeys(beforeTraktSnapshot).size} mdb_items=${mdbSnapshotItemKeys(beforeMdbSnapshot).size}"
     )
 
-    if (shouldRefreshTraktDiscoveryForState(traktCatalogPreferences, beforeTraktSnapshot)) {
+    if (shouldAttemptSerializedTraktDiscoveryRefresh(traktCatalogPreferences)) {
         Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=trakt_discovery")
         runCatching { traktDiscoveryService.ensureFresh(force = false) }
             .onFailure { error ->
@@ -1865,6 +1865,13 @@ internal fun shouldRefreshTraktDiscoveryForState(
 
     val customKeys = snapshot.customListCatalogs.map { it.key }.toSet()
     return prefs.selectedPopularListKeys.any { it !in customKeys }
+}
+
+internal fun shouldAttemptSerializedTraktDiscoveryRefresh(
+    prefs: TraktCatalogPreferences
+): Boolean {
+    return prefs.enabledCatalogs.any { it != TraktCatalogIds.UP_NEXT } ||
+        prefs.selectedPopularListKeys.isNotEmpty()
 }
 
 internal fun shouldRefreshMDBListDiscoveryForState(
