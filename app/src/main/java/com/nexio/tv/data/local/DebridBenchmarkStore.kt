@@ -54,7 +54,7 @@ class DebridBenchmarkStore internal constructor(
     }
 
     suspend fun saveLatest(result: DebridBenchmarkResult) {
-        require(result.isValid()) { "Invalid DebridBenchmarkResult" }
+        require(result.isCompletedAndValid()) { "Invalid DebridBenchmarkResult" }
         dataStore.edit { preferences ->
             preferences[latestResultKey(result.provider)] = canonicalPayload(result).toString()
         }
@@ -106,6 +106,10 @@ class DebridBenchmarkStore internal constructor(
 
     private fun DebridBenchmarkResult.isValid(): Boolean {
         return measuredAtMs > 0L && summary.isValid()
+    }
+
+    private fun DebridBenchmarkResult.isCompletedAndValid(): Boolean {
+        return terminationReason == DebridBenchmarkTerminationReason.COMPLETED && isValid()
     }
 
     private fun DebridBenchmarkSummary.isValid(): Boolean {

@@ -202,6 +202,35 @@ class DebridBenchmarkStoreTest {
     }
 
     @Test
+    fun `saving a non completed result does not replace a previously valid completed result`() = runTest {
+        val store = buildStore(backgroundScope)
+        val valid = sampleResult(provider = DebridBenchmarkProvider.REAL_DEBRID, measuredAtMs = 10L)
+        store.saveLatest(valid)
+
+        val invalid = DebridBenchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            measuredAtMs = 11L,
+            summary = DebridBenchmarkSummary(
+                startupTimeMs = 1L,
+                sustainedThroughputMbps = 2.0,
+                transferredBytes = 3L,
+                elapsedMs = 4L
+            ),
+            terminationReason = DebridBenchmarkTerminationReason.FAILED
+        )
+
+        val failure = try {
+            store.saveLatest(invalid)
+            null
+        } catch (t: Throwable) {
+            t
+        }
+
+        assertTrue(failure is IllegalArgumentException)
+        assertEquals(valid, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
+    }
+
+    @Test
     fun `latest result rejects fractional numeric payloads`() = runTest {
         val dataStore = buildDataStore(backgroundScope)
         val store = DebridBenchmarkStore(dataStore)
