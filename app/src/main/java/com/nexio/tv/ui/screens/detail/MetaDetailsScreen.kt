@@ -37,6 +37,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -68,7 +69,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListPrefetchStrategy
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.tv.material3.Border
@@ -83,6 +83,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
 import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.domain.model.ContentType
@@ -398,164 +399,166 @@ fun MetaDetailsScreen(
                     meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
                 }
 
-                MetaDetailsContent(
-                    meta = meta,
-                    detailReturnEpisodeFocusRequest = DetailReturnEpisodeFocusRequest(
-                        season = returnFocusSeason,
-                        episode = returnFocusEpisode
-                    ),
-                    seasons = uiState.seasons,
-                    selectedSeason = uiState.selectedSeason,
-                    manualSeasonOverrideActive = uiState.manualSeasonOverrideActive,
-                    episodesForSeason = uiState.episodesForSeason,
-                    isInLibrary = uiState.isInLibrary,
-                    librarySourceMode = uiState.librarySourceMode,
-                    nextToWatch = uiState.nextToWatch,
-                    episodeProgressMap = uiState.episodeProgressMap,
-                    watchedEpisodes = uiState.watchedEpisodes,
-                    episodeWatchedPendingKeys = uiState.episodeWatchedPendingKeys,
-                    blurUnwatchedEpisodes = uiState.blurUnwatchedEpisodes,
-                    isMovieWatched = uiState.isMovieWatched,
-                    isMovieWatchedPending = uiState.isMovieWatchedPending,
-                    moreLikeThis = uiState.moreLikeThis,
-                    reviews = uiState.reviews,
-                    isReviewsLoading = uiState.isReviewsLoading,
-                    reviewsError = uiState.reviewsError,
-                    collection = uiState.collection,
-                    collectionName = uiState.collectionName,
-                    episodeRatings = uiState.episodeRatings,
-                    isEpisodeRatingsLoading = uiState.isEpisodeRatingsLoading,
-                    episodeRatingsError = uiState.episodeRatingsError,
-                    mdbListRatings = uiState.mdbListRatings,
-                    showMdbListImdb = uiState.showMdbListImdb,
-                    onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
-                    onSeasonShortPress = { viewModel.onEvent(MetaDetailsEvent.OnSeasonShortPress(it)) },
-                    onSeasonOptionsOpened = { viewModel.onEvent(MetaDetailsEvent.OnSeasonOptionsOpened(it)) },
-                    onProgrammaticSeasonSelected = { viewModel.setSelectedSeasonProgrammatically(it) },
-                    onEpisodeClick = { video ->
-                        onPlayClick(
-                            video.id,
-                            meta.apiType,
-                            meta.id,
-                            meta.name,
-                            video.thumbnail ?: meta.poster,
-                            meta.background,
-                            meta.logo,
-                            video.season,
-                            video.episode,
-                            video.title,
-                            null,
-                            null,
-                            video.runtime
-                        )
-                    },
-                    onPlayClick = { videoId ->
-                        onPlayClick(
-                            videoId,
-                            meta.apiType,
-                            meta.id,
-                            meta.name,
-                            meta.poster,
-                            meta.background,
-                            meta.logo,
-                            null,
-                            null,
-                            null,
-                            genresString,
-                            yearString,
-                            null
-                        )
-                    },
-                    onPlayButtonFocused = { viewModel.onEvent(MetaDetailsEvent.OnPlayButtonFocused) },
-                    onToggleLibrary = { viewModel.onEvent(MetaDetailsEvent.OnToggleLibrary) },
-                    onLibraryLongPress = { viewModel.onEvent(MetaDetailsEvent.OnLibraryLongPress) },
-                    onToggleMovieWatched = { viewModel.onEvent(MetaDetailsEvent.OnToggleMovieWatched) },
-                    onToggleEpisodeWatched = { video ->
-                        viewModel.onEvent(MetaDetailsEvent.OnToggleEpisodeWatched(video))
-                    },
-                    onClearEpisodeProgress = { video ->
-                        viewModel.onEvent(MetaDetailsEvent.OnClearEpisodeProgress(video))
-                    },
-                    onCheckInEpisode = { video ->
-                        viewModel.onEvent(MetaDetailsEvent.OnCheckInEpisode(video))
-                    },
-                    onMarkSeasonWatched = { season ->
-                        viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonWatched(season))
-                    },
-                    onMarkSeasonUnwatched = { season ->
-                        viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonUnwatched(season))
-                    },
-                    onPlaySeasonRecap = { season ->
-                        viewModel.onEvent(MetaDetailsEvent.OnPlaySeasonRecap(season))
-                    },
-                    onMarkPreviousEpisodesWatched = { video ->
-                        viewModel.onEvent(MetaDetailsEvent.OnMarkPreviousEpisodesWatched(video))
-                    },
-                    isSeasonFullyWatched = { season ->
-                        viewModel.isSeasonFullyWatched(season)
-                    },
-                    seasonMediaAvailabilityBySeason = uiState.seasonMediaAvailabilityBySeason,
-                    trailerUrl = uiState.trailerUrl,
-                    trailerAudioUrl = uiState.trailerAudioUrl,
-                    trailerExternalUrl = uiState.trailerExternalUrl,
-                    isTrailerPlaying = uiState.isTrailerPlaying,
-                    isTrailerLoading = uiState.isTrailerLoading,
-                    showTrailerControls = uiState.showTrailerControls,
-                    hideLogoDuringTrailer = uiState.hideLogoDuringTrailer,
-                    trailerButtonEnabled = uiState.trailerButtonEnabled,
-                    trailerSeekToken = trailerSeekToken,
-                    trailerSeekDeltaMs = trailerSeekDeltaMs,
-                    onTrailerControlKey = { keyCode, action, repeatCount ->
-                        if (!uiState.showTrailerControls || !uiState.isTrailerPlaying) {
-                            false
-                        } else if (action != KeyEvent.ACTION_DOWN) {
-                            false
-                        } else {
-                            val seekStepMs = when {
-                                repeatCount >= 12 -> 12_000L
-                                repeatCount >= 6 -> 8_000L
-                                repeatCount >= 2 -> 5_000L
-                                else -> 3_000L
+                key(meta.id) {
+                    MetaDetailsContent(
+                        meta = meta,
+                        detailReturnEpisodeFocusRequest = DetailReturnEpisodeFocusRequest(
+                            season = returnFocusSeason,
+                            episode = returnFocusEpisode
+                        ),
+                        seasons = uiState.seasons,
+                        selectedSeason = uiState.selectedSeason,
+                        manualSeasonOverrideActive = uiState.manualSeasonOverrideActive,
+                        episodesForSeason = uiState.episodesForSeason,
+                        isInLibrary = uiState.isInLibrary,
+                        librarySourceMode = uiState.librarySourceMode,
+                        nextToWatch = uiState.nextToWatch,
+                        episodeProgressMap = uiState.episodeProgressMap,
+                        watchedEpisodes = uiState.watchedEpisodes,
+                        episodeWatchedPendingKeys = uiState.episodeWatchedPendingKeys,
+                        blurUnwatchedEpisodes = uiState.blurUnwatchedEpisodes,
+                        isMovieWatched = uiState.isMovieWatched,
+                        isMovieWatchedPending = uiState.isMovieWatchedPending,
+                        moreLikeThis = uiState.moreLikeThis,
+                        reviews = uiState.reviews,
+                        isReviewsLoading = uiState.isReviewsLoading,
+                        reviewsError = uiState.reviewsError,
+                        collection = uiState.collection,
+                        collectionName = uiState.collectionName,
+                        episodeRatings = uiState.episodeRatings,
+                        isEpisodeRatingsLoading = uiState.isEpisodeRatingsLoading,
+                        episodeRatingsError = uiState.episodeRatingsError,
+                        mdbListRatings = uiState.mdbListRatings,
+                        showMdbListImdb = uiState.showMdbListImdb,
+                        onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
+                        onSeasonShortPress = { viewModel.onEvent(MetaDetailsEvent.OnSeasonShortPress(it)) },
+                        onSeasonOptionsOpened = { viewModel.onEvent(MetaDetailsEvent.OnSeasonOptionsOpened(it)) },
+                        onProgrammaticSeasonSelected = { viewModel.setSelectedSeasonProgrammatically(it) },
+                        onEpisodeClick = { video ->
+                            onPlayClick(
+                                video.id,
+                                meta.apiType,
+                                meta.id,
+                                meta.name,
+                                video.thumbnail ?: meta.poster,
+                                meta.background,
+                                meta.logo,
+                                video.season,
+                                video.episode,
+                                video.title,
+                                null,
+                                null,
+                                video.runtime
+                            )
+                        },
+                        onPlayClick = { videoId ->
+                            onPlayClick(
+                                videoId,
+                                meta.apiType,
+                                meta.id,
+                                meta.name,
+                                meta.poster,
+                                meta.background,
+                                meta.logo,
+                                null,
+                                null,
+                                null,
+                                genresString,
+                                yearString,
+                                null
+                            )
+                        },
+                        onPlayButtonFocused = { viewModel.onEvent(MetaDetailsEvent.OnPlayButtonFocused) },
+                        onToggleLibrary = { viewModel.onEvent(MetaDetailsEvent.OnToggleLibrary) },
+                        onLibraryLongPress = { viewModel.onEvent(MetaDetailsEvent.OnLibraryLongPress) },
+                        onToggleMovieWatched = { viewModel.onEvent(MetaDetailsEvent.OnToggleMovieWatched) },
+                        onToggleEpisodeWatched = { video ->
+                            viewModel.onEvent(MetaDetailsEvent.OnToggleEpisodeWatched(video))
+                        },
+                        onClearEpisodeProgress = { video ->
+                            viewModel.onEvent(MetaDetailsEvent.OnClearEpisodeProgress(video))
+                        },
+                        onCheckInEpisode = { video ->
+                            viewModel.onEvent(MetaDetailsEvent.OnCheckInEpisode(video))
+                        },
+                        onMarkSeasonWatched = { season ->
+                            viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonWatched(season))
+                        },
+                        onMarkSeasonUnwatched = { season ->
+                            viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonUnwatched(season))
+                        },
+                        onPlaySeasonRecap = { season ->
+                            viewModel.onEvent(MetaDetailsEvent.OnPlaySeasonRecap(season))
+                        },
+                        onMarkPreviousEpisodesWatched = { video ->
+                            viewModel.onEvent(MetaDetailsEvent.OnMarkPreviousEpisodesWatched(video))
+                        },
+                        isSeasonFullyWatched = { season ->
+                            viewModel.isSeasonFullyWatched(season)
+                        },
+                        seasonMediaAvailabilityBySeason = uiState.seasonMediaAvailabilityBySeason,
+                        trailerUrl = uiState.trailerUrl,
+                        trailerAudioUrl = uiState.trailerAudioUrl,
+                        trailerExternalUrl = uiState.trailerExternalUrl,
+                        isTrailerPlaying = uiState.isTrailerPlaying,
+                        isTrailerLoading = uiState.isTrailerLoading,
+                        showTrailerControls = uiState.showTrailerControls,
+                        hideLogoDuringTrailer = uiState.hideLogoDuringTrailer,
+                        trailerButtonEnabled = uiState.trailerButtonEnabled,
+                        trailerSeekToken = trailerSeekToken,
+                        trailerSeekDeltaMs = trailerSeekDeltaMs,
+                        onTrailerControlKey = { keyCode, action, repeatCount ->
+                            if (!uiState.showTrailerControls || !uiState.isTrailerPlaying) {
+                                false
+                            } else if (action != KeyEvent.ACTION_DOWN) {
+                                false
+                            } else {
+                                val seekStepMs = when {
+                                    repeatCount >= 12 -> 12_000L
+                                    repeatCount >= 6 -> 8_000L
+                                    repeatCount >= 2 -> 5_000L
+                                    else -> 3_000L
+                                }
+                                when (keyCode) {
+                                    KeyEvent.KEYCODE_DPAD_CENTER,
+                                    KeyEvent.KEYCODE_ENTER,
+                                    KeyEvent.KEYCODE_NUMPAD_ENTER,
+                                    KeyEvent.KEYCODE_DPAD_UP -> {
+                                        trailerSeekOverlayVisible = true
+                                        true
+                                    }
+                                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                                        trailerSeekOverlayVisible = false
+                                        true
+                                    }
+                                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                                        trailerSeekDeltaMs = -seekStepMs
+                                        trailerSeekToken += 1
+                                        trailerSeekOverlayVisible = true
+                                        true
+                                    }
+                                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                        trailerSeekDeltaMs = seekStepMs
+                                        trailerSeekToken += 1
+                                        trailerSeekOverlayVisible = true
+                                        true
+                                    }
+                                    else -> false
+                                }
                             }
-                            when (keyCode) {
-                                KeyEvent.KEYCODE_DPAD_CENTER,
-                                KeyEvent.KEYCODE_ENTER,
-                                KeyEvent.KEYCODE_NUMPAD_ENTER,
-                                KeyEvent.KEYCODE_DPAD_UP -> {
-                                    trailerSeekOverlayVisible = true
-                                    true
-                                }
-                                KeyEvent.KEYCODE_DPAD_DOWN -> {
-                                    trailerSeekOverlayVisible = false
-                                    true
-                                }
-                                KeyEvent.KEYCODE_DPAD_LEFT -> {
-                                    trailerSeekDeltaMs = -seekStepMs
-                                    trailerSeekToken += 1
-                                    trailerSeekOverlayVisible = true
-                                    true
-                                }
-                                KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                                    trailerSeekDeltaMs = seekStepMs
-                                    trailerSeekToken += 1
-                                    trailerSeekOverlayVisible = true
-                                    true
-                                }
-                                else -> false
-                            }
+                        },
+                        onTrailerProgressChanged = onTrailerProgressChanged,
+                        onTrailerEnded = { viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded) },
+                        onTrailerButtonClick = { viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick) },
+                        restorePlayFocusAfterTrailerBackToken = restorePlayFocusAfterTrailerBackToken,
+                        onNavigateToCastDetail = onNavigateToCastDetail,
+                        onNavigateToOrganizationDetail = onNavigateToOrganizationDetail,
+                        onNavigateToDetail = onNavigateToDetail,
+                        onReviewFocused = { index ->
+                            viewModel.onEvent(MetaDetailsEvent.OnReviewItemFocused(index))
                         }
-                    },
-                    onTrailerProgressChanged = onTrailerProgressChanged,
-                    onTrailerEnded = { viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded) },
-                    onTrailerButtonClick = { viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick) },
-                    restorePlayFocusAfterTrailerBackToken = restorePlayFocusAfterTrailerBackToken,
-                    onNavigateToCastDetail = onNavigateToCastDetail,
-                    onNavigateToOrganizationDetail = onNavigateToOrganizationDetail,
-                    onNavigateToDetail = onNavigateToDetail,
-                    onReviewFocused = { index ->
-                        viewModel.onEvent(MetaDetailsEvent.OnReviewItemFocused(index))
-                    }
-                )
+                    )
+                }
             }
         }
 
@@ -711,7 +714,10 @@ private fun MetaDetailsContent(
         byId ?: bySeasonEpisode ?: nextEpisode
     }
     val nestedPrefetchStrategy = remember { LazyListPrefetchStrategy(nestedPrefetchItemCount = 2) }
-    val listState = rememberLazyListState(prefetchStrategy = nestedPrefetchStrategy)
+    val listState = rememberResettableLazyListState(
+        resetKey = meta.id,
+        prefetchStrategy = nestedPrefetchStrategy
+    )
     val selectedSeasonFocusRequester = remember { FocusRequester() }
     val heroPlayFocusRequester = remember { FocusRequester() }
     val castTabFocusRequester = remember { FocusRequester() }
@@ -720,11 +726,11 @@ private fun MetaDetailsContent(
     val collectionTabFocusRequester = remember { FocusRequester() }
     val ratingsTabFocusRequester = remember { FocusRequester() }
     val ratingsContentFocusRequester = remember { FocusRequester() }
-    var pendingRestoreType by rememberSaveable { mutableStateOf<RestoreTarget?>(null) }
-    var pendingRestoreEpisodeId by rememberSaveable { mutableStateOf<String?>(null) }
-    var pendingRestoreCastPersonId by rememberSaveable { mutableStateOf<Int?>(null) }
-    var pendingRestoreMoreLikeItemId by rememberSaveable { mutableStateOf<String?>(null) }
-    var restoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
+    var pendingRestoreType by rememberSaveable(meta.id) { mutableStateOf<RestoreTarget?>(null) }
+    var pendingRestoreEpisodeId by rememberSaveable(meta.id) { mutableStateOf<String?>(null) }
+    var pendingRestoreCastPersonId by rememberSaveable(meta.id) { mutableStateOf<Int?>(null) }
+    var pendingRestoreMoreLikeItemId by rememberSaveable(meta.id) { mutableStateOf<String?>(null) }
+    var restoreFocusToken by rememberSaveable(meta.id) { mutableIntStateOf(0) }
     var initialHeroFocusRequested by rememberSaveable(meta.id) { mutableStateOf(false) }
     var initialDetailReturnFocusHandled by remember(
         meta.id,
@@ -739,6 +745,7 @@ private fun MetaDetailsContent(
         screenContext.findLifecycleOwner() ?: navLifecycleOwner
     }
     val coroutineScope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
 
     fun clearPendingRestore() {
         pendingRestoreType = null
@@ -794,7 +801,7 @@ private fun MetaDetailsContent(
         pendingRestoreMoreLikeItemId = itemId
     }
 
-    var pendingRestoreCollectionItemId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingRestoreCollectionItemId by rememberSaveable(meta.id) { mutableStateOf<String?>(null) }
     fun markCollectionRestore(itemId: String) {
         pendingRestoreType = RestoreTarget.COLLECTION
         pendingRestoreEpisodeId = null
@@ -1111,7 +1118,8 @@ private fun MetaDetailsContent(
         pendingRestoreType,
         pendingRestoreEpisodeId,
         initialHeroFocusRequested,
-        isTrailerPlaying
+        isTrailerPlaying,
+        meta.id
     ) {
         if (
             !initialHeroFocusRequested &&
@@ -1121,7 +1129,11 @@ private fun MetaDetailsContent(
         ) {
             repeat(3) {
                 if (initialHeroFocusRequested) return@repeat
-                heroPlayFocusRequester.requestFocusAfterFrames()
+                resetFocusToHero(
+                    focusManager = focusManager,
+                    listState = listState,
+                    heroPlayFocusRequester = heroPlayFocusRequester
+                )
                 delay(80)
             }
         }
