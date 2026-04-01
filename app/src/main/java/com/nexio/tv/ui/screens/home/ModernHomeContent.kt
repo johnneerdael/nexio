@@ -156,9 +156,13 @@ internal fun shouldShowModernHomeHeroFullscreenHint(
     hintTimedOut: Boolean
 ): Boolean = heroTrailerPlaying && !fullscreenTrailerActive && !hintTimedOut
 
+internal fun resolveModernHomeHeroFullscreenHintEndPadding(
+    fullscreenTrailerActive: Boolean
+): Dp = if (fullscreenTrailerActive) 20.dp else 76.dp
+
 internal fun resolveModernHomeHeroTrailerMuted(
-    configuredMuted: Boolean
-): Boolean = false
+    fullscreenTrailerActive: Boolean
+): Boolean = !fullscreenTrailerActive
 
 internal fun shouldUnlockModernHomeTrailerAutoplay(
     autoplayEnabled: Boolean,
@@ -1022,7 +1026,7 @@ internal fun ModernHomeContent(
             showFullscreenHint = heroFullscreenHintVisible,
             fullscreenHintText = strPressUpForFullscreen,
             trailerMuted = resolveModernHomeHeroTrailerMuted(
-                configuredMuted = contentState.focusedPosterBackdropTrailerMuted
+                fullscreenTrailerActive = fullscreenTrailerActive
             ),
             onTrailerFirstFrameRendered = {
                 heroFullscreenHintTimedOut = false
