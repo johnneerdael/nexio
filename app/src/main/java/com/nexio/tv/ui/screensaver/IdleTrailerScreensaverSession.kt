@@ -87,14 +87,14 @@ internal suspend fun prepareIdleTrailerScreensaverSession(
         trailerId: String
     ) -> TrailerPlaybackSource?
 ): IdleTrailerScreensaverSessionStart? {
-    return prepareIdleTrailerScreensaverSession(
+    return prepareIdleTrailerScreensaverSessionFromCandidates(
         candidates = collectIdleTrailerScreensaverCandidates(slides),
         shuffleCandidates = shuffleCandidates,
         resolvePlayback = resolvePlayback
     )
 }
 
-internal suspend fun prepareIdleTrailerScreensaverSession(
+internal suspend fun prepareIdleTrailerScreensaverSessionFromCandidates(
     candidates: List<IdleTrailerScreensaverCandidate>,
     shuffleCandidates: (List<IdleTrailerScreensaverCandidate>) -> List<IdleTrailerScreensaverCandidate> = {
         it.shuffled(Random.Default)
