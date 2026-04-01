@@ -213,7 +213,7 @@ internal fun shouldShowDetailScrollableContent(
     isTrailerLoading: Boolean,
     isTrailerTakeoverPending: Boolean
 ): Boolean {
-    return !isTrailerPlaying && !isTrailerLoading
+    return true
 }
 
 @Stable
@@ -1601,28 +1601,8 @@ private fun MetaDetailsContent(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Sticky background — backdrop or trailer
+        // Sticky background — backdrop only. Trailer takeover is rendered above the detail content.
         Box(modifier = Modifier.fillMaxSize()) {
-            if (shouldRenderDetailTrailerPlayer(isTrailerPlaying, trailerUrl)) {
-                TrailerPlayer(
-                    trailerUrl = trailerUrl,
-                    trailerAudioUrl = trailerAudioUrl,
-                    isPlaying = true,
-                    onEnded = {
-                        trailerFirstFrameRendered = false
-                        onTrailerEnded()
-                    },
-                    onFirstFrameRendered = {
-                        trailerFirstFrameRendered = true
-                    },
-                    seekRequestToken = trailerSeekToken,
-                    seekDeltaMs = trailerSeekDeltaMs,
-                    onProgressChanged = onTrailerProgressChanged,
-                    onRemoteKey = onTrailerControlKey,
-                    cropToFill = true,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
             // Backdrop image (fades out when trailer plays)
             AsyncImage(
                 model = backdropRequest,
@@ -1658,18 +1638,11 @@ private fun MetaDetailsContent(
             )
         }
 
-        if (
-            shouldShowDetailScrollableContent(
-                isTrailerPlaying = isTrailerPlaying,
-                isTrailerLoading = isTrailerLoading,
-                isTrailerTakeoverPending = immediateTrailerTakeoverPending
-            )
+        // Single scrollable column with hero + content. Keep it mounted during trailer takeover.
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            state = listState
         ) {
-            // Single scrollable column with hero + content
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                state = listState
-            ) {
                 // Hero as first item in the lazy column
                 item(key = "hero", contentType = "hero") {
                     heroSection()
@@ -1938,9 +1911,39 @@ private fun MetaDetailsContent(
                     }
                 }
             }
+        }
+
+        if (showTrailerTakeover) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(50f)
+            ) {
+                if (shouldRenderDetailTrailerPlayer(isTrailerPlaying, trailerUrl)) {
+                    TrailerPlayer(
+                        trailerUrl = trailerUrl,
+                        trailerAudioUrl = trailerAudioUrl,
+                        isPlaying = true,
+                        onEnded = {
+                            trailerFirstFrameRendered = false
+                            onTrailerEnded()
+                        },
+                        onFirstFrameRendered = {
+                            trailerFirstFrameRendered = true
+                        },
+                        seekRequestToken = trailerSeekToken,
+                        seekDeltaMs = trailerSeekDeltaMs,
+                        onProgressChanged = onTrailerProgressChanged,
+                        onRemoteKey = onTrailerControlKey,
+                        cropToFill = true,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else if (immediateTrailerTakeoverPending || isTrailerLoading) {
+                    ImmediateDetailTrailerTakeoverOverlay(
+                        backdropUrl = meta.background ?: meta.poster
+                    )
+                }
             }
-        } else {
-            heroSection()
         }
 
         seasonOptionsDialogSeason?.let { season ->
