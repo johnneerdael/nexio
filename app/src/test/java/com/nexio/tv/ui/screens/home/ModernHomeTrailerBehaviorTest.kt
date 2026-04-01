@@ -88,42 +88,56 @@ class ModernHomeTrailerBehaviorTest {
     }
 
     @Test
-    fun `focused trailer preview retries after autoplay unlock even if an earlier miss was cached`() {
+    fun `focused trailer preview requests after autoplay unlock when metadata says trailer exists`() {
         assertTrue(
-            shouldRetryFocusedTrailerPreviewAfterAutoplayUnlock(
+            shouldRequestFocusedTrailerPreviewAfterAutoplayUnlock(
                 trailerPlaybackUnlocked = true,
+                hasTrailerMetadataAvailable = true,
                 hasResolvedPreview = false,
                 hasResolvedExternalPreview = false,
                 isCurrentlyLoading = false,
-                hadNegativeCacheMiss = true,
                 alreadyRetriedAfterUnlock = false
             )
         )
     }
 
     @Test
-    fun `focused trailer preview does not retry after autoplay unlock when preview already exists`() {
+    fun `focused trailer preview does not request after autoplay unlock when metadata is missing`() {
         assertFalse(
-            shouldRetryFocusedTrailerPreviewAfterAutoplayUnlock(
+            shouldRequestFocusedTrailerPreviewAfterAutoplayUnlock(
                 trailerPlaybackUnlocked = true,
+                hasTrailerMetadataAvailable = false,
+                hasResolvedPreview = false,
+                hasResolvedExternalPreview = false,
+                isCurrentlyLoading = false,
+                alreadyRetriedAfterUnlock = false
+            )
+        )
+    }
+
+    @Test
+    fun `focused trailer preview does not request after autoplay unlock when preview already exists`() {
+        assertFalse(
+            shouldRequestFocusedTrailerPreviewAfterAutoplayUnlock(
+                trailerPlaybackUnlocked = true,
+                hasTrailerMetadataAvailable = true,
                 hasResolvedPreview = true,
                 hasResolvedExternalPreview = false,
                 isCurrentlyLoading = false,
-                hadNegativeCacheMiss = true,
                 alreadyRetriedAfterUnlock = false
             )
         )
     }
 
     @Test
-    fun `focused trailer preview does not retry after autoplay unlock once retry was already consumed`() {
+    fun `focused trailer preview does not request after autoplay unlock once retry was already consumed`() {
         assertFalse(
-            shouldRetryFocusedTrailerPreviewAfterAutoplayUnlock(
+            shouldRequestFocusedTrailerPreviewAfterAutoplayUnlock(
                 trailerPlaybackUnlocked = true,
+                hasTrailerMetadataAvailable = true,
                 hasResolvedPreview = false,
                 hasResolvedExternalPreview = false,
                 isCurrentlyLoading = false,
-                hadNegativeCacheMiss = true,
                 alreadyRetriedAfterUnlock = true
             )
         )

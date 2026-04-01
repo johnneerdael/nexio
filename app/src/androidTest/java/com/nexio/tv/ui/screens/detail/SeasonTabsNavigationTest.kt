@@ -291,6 +291,10 @@ private fun SeasonNavigationHarness(
                 selectedSeason = it
                 manualSeasonOverrideActive = true
             },
+            onSeasonShortPress = {
+                selectedSeason = it
+                manualSeasonOverrideActive = true
+            },
             selectedTabFocusRequester = selectedTabFocusRequester,
             downFocusRequester = seasonDownFocusRequester,
             onSelectedSeasonDown = seasonEntryEpisodeId?.let { episodeId ->

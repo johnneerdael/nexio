@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withPermit
 
 private data class CoreLayoutPrefs(
     val layout: HomeLayout,
@@ -206,6 +207,54 @@ internal fun HomeViewModel.observeExternalMetaPrefetchPreferencePipeline() {
                 }
             }
     }
+}
+
+internal fun HomeViewModel.refreshTrailerMetadataAvailabilityPipeline(rows: List<CatalogRow>) {
+    val catalogItems = rows
+        .asSequence()
+        .flatMap { it.items.asSequence() }
+        .distinctBy { homeTrailerAvailabilityKey(it.id, it.apiType) }
+        .toList()
+
+    catalogItems.forEach { item ->
+        val availabilityKey = homeTrailerAvailabilityKey(item.id, item.apiType)
+        if (item.trailerYtIds.any { it.isNotBlank() }) {
+            trailerMetadataAvailableState[availabilityKey] = true
+            trailerMetadataAvailabilityInFlightKeys.remove(availabilityKey)
+            return@forEach
+        }
+        if (trailerMetadataAvailableState.containsKey(availabilityKey)) {
+            return@forEach
+        }
+        if (!trailerMetadataAvailabilityInFlightKeys.add(availabilityKey)) {
+            return@forEach
+        }
+
+        viewModelScope.launch {
+            try {
+                trailerMetadataAvailabilitySemaphore.withPermit {
+                    val tmdbId = withContext(Dispatchers.IO) {
+                        runCatching { tmdbService.ensureTmdbId(item.id, item.apiType) }
+                            .getOrNull()
+                    }
+                    val available = trailerService.getTitleMediaAvailability(
+                        tmdbId = tmdbId,
+                        type = item.apiType,
+                        contentId = item.id,
+                        fallbackYtIds = item.trailerYtIds
+                    )
+                    trailerMetadataAvailableState[availabilityKey] = available
+                }
+            } finally {
+                trailerMetadataAvailabilityInFlightKeys.remove(availabilityKey)
+            }
+        }
+    }
+}
+
+internal fun HomeViewModel.clearTrailerMetadataAvailabilityPipeline() {
+    trailerMetadataAvailableState.clear()
+    trailerMetadataAvailabilityInFlightKeys.clear()
 }
 
 internal fun HomeViewModel.requestTrailerPreviewPipeline(item: MetaPreview) {
@@ -517,6 +566,7 @@ private fun HomeViewModel.flushMetadataEnrichmentPipeline() {
                 !trailerPreviewUrlsState.containsKey(currentItem.id) &&
                 !trailerPreviewExternalUrlsState.containsKey(currentItem.id)
             ) {
+                trailerMetadataAvailableState[homeTrailerAvailabilityKey(currentItem.id, currentItem.apiType)] = true
                 trailerPreviewNegativeCache.remove(currentItem.id)
                 if (activeTrailerPreviewItemId == currentItem.id) {
                     trailerPreviewRequestVersion++

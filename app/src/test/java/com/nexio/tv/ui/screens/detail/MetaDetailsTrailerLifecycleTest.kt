@@ -11,17 +11,17 @@ class MetaDetailsTrailerLifecycleTest {
         assertTrue(
             shouldShowDetailTrailerTakeover(
                 isTrailerPlaying = true,
-                trailerUrl = "https://example.com/trailer.m3u8"
+                isTrailerLoading = false
             )
         )
     }
 
     @Test
-    fun `detail screen does not take over without internal trailer url`() {
-        assertFalse(
+    fun `detail screen takes over while trailer is still resolving`() {
+        assertTrue(
             shouldShowDetailTrailerTakeover(
-                isTrailerPlaying = true,
-                trailerUrl = null
+                isTrailerPlaying = false,
+                isTrailerLoading = true
             )
         )
     }
@@ -31,6 +31,16 @@ class MetaDetailsTrailerLifecycleTest {
         assertFalse(
             shouldShowDetailScrollableContent(
                 showTrailerTakeover = true
+            )
+        )
+    }
+
+    @Test
+    fun `detail trailer player only renders when trailer url is ready`() {
+        assertFalse(
+            shouldRenderDetailTrailerPlayer(
+                isTrailerPlaying = true,
+                trailerUrl = null
             )
         )
     }
