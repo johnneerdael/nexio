@@ -71,6 +71,9 @@
 -keep class com.nexio.tv.core.plugin.** { *; }
 -keepclassmembers class com.nexio.tv.core.plugin.** { *; }
 
+# Keep the JavaScriptEngine bridge because yt-dlp resolves it by exact class name from Python.
+-keep class com.nexio.tv.data.trailer.helper.YouTubeJavaScriptEngineBridge { *; }
+
 # ── ExoPlayer / Media3 ────────────────────────────────────────────────────────
 -dontwarn androidx.media3.**
 -keep class androidx.media3.** { *; }

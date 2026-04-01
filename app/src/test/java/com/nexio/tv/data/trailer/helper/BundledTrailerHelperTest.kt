@@ -14,9 +14,7 @@ class BundledTrailerHelperTest {
         )
 
         val args = buildTrailerHelperInvocationArgs(
-            request = request,
-            jsRuntimeName = "node",
-            jsRuntimePath = "/runtime/node"
+            request = request
         )
 
         assertEquals(
@@ -25,8 +23,6 @@ class BundledTrailerHelperTest {
                 "Bearer test-token",
                 "delegated-page",
                 "2",
-                "node",
-                "/runtime/node",
                 "Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 " +
                     "(KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
                 "en-US,en;q=0.9",
@@ -69,13 +65,4 @@ class BundledTrailerHelperTest {
         assertEquals(1_900_000_000_000L, parsed.expiresAtEpochMs)
     }
 
-    @Test
-    fun `selectTrailerHelperAbi picks first supported packaged abi`() {
-        val selected = selectTrailerHelperAbi(
-            supportedAbis = arrayOf("arm64-v8a", "armeabi-v7a"),
-            availableRuntimeAbis = arrayOf("x86_64", "arm64-v8a")
-        )
-
-        assertEquals("arm64-v8a", selected)
-    }
 }
