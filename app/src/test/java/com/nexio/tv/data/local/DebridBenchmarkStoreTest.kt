@@ -140,6 +140,30 @@ class DebridBenchmarkStoreTest {
     }
 
     @Test
+    fun `latest result ignores payloads with non completed termination reason`() = runTest {
+        val dataStore = buildDataStore(backgroundScope)
+        val store = DebridBenchmarkStore(dataStore)
+        val key = stringPreferencesKey("debrid_benchmark_latest_real_debrid")
+        dataStore.edit { prefs ->
+            prefs[key] = """
+                {
+                  "provider":"real_debrid",
+                  "measuredAtMs":5,
+                  "summary":{
+                    "startupTimeMs":1,
+                    "sustainedThroughputMbps":2.5,
+                    "transferredBytes":12,
+                    "elapsedMs":34
+                  },
+                  "terminationReason":"failed"
+                }
+            """.trimIndent()
+        }
+
+        assertEquals(null, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
+    }
+
+    @Test
     fun `latest result preserves missing optional numeric fields`() = runTest {
         val dataStore = buildDataStore(backgroundScope)
         val store = DebridBenchmarkStore(dataStore)
@@ -158,13 +182,13 @@ class DebridBenchmarkStoreTest {
         dataStore.edit { prefs ->
             prefs[key] = """
                 {
-                  "provider":"REAL_DEBRID",
+                  "provider":"real_debrid",
                   "measuredAtMs":5,
                   "summary":{
                     "transferredBytes":12,
                     "elapsedMs":34
                   },
-                  "terminationReason":"COMPLETED"
+                  "terminationReason":"completed"
                 }
             """.trimIndent()
         }
@@ -266,7 +290,7 @@ class DebridBenchmarkStoreTest {
         val raw = recordingDataStore.snapshot.value[key]
 
         assertEquals(
-            """{"provider":"REAL_DEBRID","measuredAtMs":42,"summary":{"startupTimeMs":123,"sustainedThroughputMbps":456.0,"transferredBytes":789,"elapsedMs":1000},"terminationReason":"COMPLETED"}""",
+            """{"provider":"real_debrid","measuredAtMs":42,"summary":{"startupTimeMs":123,"sustainedThroughputMbps":456.0,"transferredBytes":789,"elapsedMs":1000},"terminationReason":"completed"}""",
             raw
         )
     }

@@ -76,7 +76,7 @@ class DebridBenchmarkStore internal constructor(
         val root = runCatching { JsonParser.parseString(raw).asJsonObject }.getOrNull() ?: return null
         return try {
             val providerName = root.stringOrNull("provider")?.trim() ?: return null
-            val parsedProvider = runCatching { DebridBenchmarkProvider.valueOf(providerName) }.getOrNull()
+            val parsedProvider = DebridBenchmarkProvider.fromStorageKey(providerName)
                 ?: return null
             if (parsedProvider != expectedProvider) return null
 
@@ -90,8 +90,9 @@ class DebridBenchmarkStore internal constructor(
                 elapsedMs = summaryJson.strictIntegralLongOrNull("elapsedMs")?.takeIf { it >= 0L } ?: return null
             )
             val terminationReason = root.stringOrNull("terminationReason")?.let { reason ->
-                runCatching { DebridBenchmarkTerminationReason.valueOf(reason) }.getOrNull()
+                DebridBenchmarkTerminationReason.fromWireKey(reason)
             } ?: return null
+            if (terminationReason != DebridBenchmarkTerminationReason.COMPLETED) return null
 
             DebridBenchmarkResult(
                 provider = parsedProvider,
@@ -121,7 +122,7 @@ class DebridBenchmarkStore internal constructor(
 
     private fun canonicalPayload(result: DebridBenchmarkResult): JsonObject {
         return JsonObject().apply {
-            addProperty("provider", result.provider.name)
+            addProperty("provider", result.provider.storageKey)
             addProperty("measuredAtMs", result.measuredAtMs)
             add("summary", JsonObject().apply {
                 result.summary.startupTimeMs?.let { addProperty("startupTimeMs", it) }
@@ -129,7 +130,7 @@ class DebridBenchmarkStore internal constructor(
                 addProperty("transferredBytes", result.summary.transferredBytes)
                 addProperty("elapsedMs", result.summary.elapsedMs)
             })
-            addProperty("terminationReason", result.terminationReason.name)
+            addProperty("terminationReason", result.terminationReason.wireKey)
         }
     }
 
