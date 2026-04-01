@@ -4,7 +4,15 @@ enum class DebridBenchmarkProvider(
     val storageKey: String
 ) {
     REAL_DEBRID(storageKey = "real_debrid"),
-    PREMIUMIZE(storageKey = "premiumize")
+    PREMIUMIZE(storageKey = "premiumize");
+
+    companion object {
+        private val byStorageKey = entries.associateBy { it.storageKey }
+
+        fun fromStorageKey(storageKey: String): DebridBenchmarkProvider? {
+            return byStorageKey[storageKey]
+        }
+    }
 }
 
 data class DebridBenchmarkSummary(
@@ -19,7 +27,24 @@ enum class DebridBenchmarkTerminationReason {
     NO_PLAYABLE_LIBRARY_ITEM,
     CANCELED,
     TIMEOUT,
-    FAILED
+    FAILED;
+
+    val wireKey: String
+        get() = when (this) {
+            COMPLETED -> "completed"
+            NO_PLAYABLE_LIBRARY_ITEM -> "no_playable_library_item"
+            CANCELED -> "canceled"
+            TIMEOUT -> "timeout"
+            FAILED -> "failed"
+        }
+
+    companion object {
+        private val byWireKey = entries.associateBy { it.wireKey }
+
+        fun fromWireKey(wireKey: String): DebridBenchmarkTerminationReason? {
+            return byWireKey[wireKey]
+        }
+    }
 }
 
 data class DebridBenchmarkResult(
