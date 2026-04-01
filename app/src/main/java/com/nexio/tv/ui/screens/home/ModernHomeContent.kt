@@ -514,7 +514,7 @@ internal fun ModernHomeContent(
             "heroAutoplayUnlock wait focusKey=${selection.focusKey} itemId=${selection.itemId} type=${selection.itemType} autoplay=${contentState.homeTrailerAutoplayEnabled} delay=${contentState.homeTrailerAutoplayDelaySeconds}"
         )
         delay(contentState.homeTrailerAutoplayDelaySeconds.coerceAtLeast(0) * 1000L)
-        val selectionStillFocused = focusedTrailerSelection?.focusKey == selection.focusKey
+        val selectionStillFocused = focusedTrailerSelection.focusKey == selection.focusKey
         val lifecycleResumed = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
         val shouldUnlock = shouldUnlockModernHomeTrailerAutoplay(
             autoplayEnabled = contentState.homeTrailerAutoplayEnabled,
