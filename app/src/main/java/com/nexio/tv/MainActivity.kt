@@ -586,7 +586,7 @@ class MainActivity : ComponentActivity() {
                         delay(remainingDelayMs)
                         if (!idleScreensaverEligible || idleScreensaverVisible) return@LaunchedEffect
                         idleTrailerSessionStart = if (mainUiPrefs.trailerScreensaverEnabled) {
-                            com.nexio.tv.ui.screensaver.prepareIdleTrailerScreensaverSession(
+                            com.nexio.tv.ui.screensaver.prepareIdleTrailerScreensaverSessionFromCandidates(
                                 candidates = idleTrailerCandidates
                             ) { candidate, trailerId ->
                                 trailerService.getTrailerPlaybackSourceFromYouTubeUrl(
