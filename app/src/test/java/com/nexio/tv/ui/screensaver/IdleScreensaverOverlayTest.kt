@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screensaver
 
+import android.view.KeyEvent
 import androidx.compose.ui.unit.IntSize
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -120,6 +121,50 @@ class IdleScreensaverOverlayTest {
         assertTrue(endFrame.translationY <= maxTranslationY)
         assertTrue(kotlin.math.abs(endFrame.translationX - startFrame.translationX) >= maxTranslationX * 0.5f)
         assertTrue(kotlin.math.abs(endFrame.translationY - startFrame.translationY) >= maxTranslationY * 0.5f)
+    }
+
+    @Test
+    fun `idle trailer remote key action opens details for ok keys`() {
+        assertEquals(
+            IdleTrailerRemoteKeyAction.OPEN_DETAILS,
+            determineIdleTrailerRemoteKeyAction(
+                keyCode = KeyEvent.KEYCODE_DPAD_CENTER,
+                action = KeyEvent.ACTION_DOWN,
+                sessionMuted = true
+            )
+        )
+    }
+
+    @Test
+    fun `idle trailer remote key action dismisses for back`() {
+        assertEquals(
+            IdleTrailerRemoteKeyAction.DISMISS,
+            determineIdleTrailerRemoteKeyAction(
+                keyCode = KeyEvent.KEYCODE_BACK,
+                action = KeyEvent.ACTION_DOWN,
+                sessionMuted = true
+            )
+        )
+    }
+
+    @Test
+    fun `idle trailer remote key action unmutes session once and keeps consuming later keys`() {
+        assertEquals(
+            IdleTrailerRemoteKeyAction.UNMUTE_SESSION,
+            determineIdleTrailerRemoteKeyAction(
+                keyCode = KeyEvent.KEYCODE_DPAD_LEFT,
+                action = KeyEvent.ACTION_DOWN,
+                sessionMuted = true
+            )
+        )
+        assertEquals(
+            IdleTrailerRemoteKeyAction.CONSUME,
+            determineIdleTrailerRemoteKeyAction(
+                keyCode = KeyEvent.KEYCODE_DPAD_RIGHT,
+                action = KeyEvent.ACTION_DOWN,
+                sessionMuted = false
+            )
+        )
     }
 
     private fun buildSlide(

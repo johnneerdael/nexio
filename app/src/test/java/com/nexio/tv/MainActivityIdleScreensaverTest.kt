@@ -1,9 +1,15 @@
 package com.nexio.tv
 
+import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.ui.navigation.Screen
+import com.nexio.tv.ui.screensaver.IdleScreensaverPresentationMode
+import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverCandidate
+import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverPlayback
+import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverSessionStart
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateSnapshot
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class MainActivityIdleScreensaverTest {
@@ -58,6 +64,78 @@ class MainActivityIdleScreensaverTest {
                 playbackIdleSnapshot = PlaybackIdleGateSnapshot(),
                 inAppTrailerPlaybackActive = false
             )
+        )
+    }
+
+    @Test
+    fun `presentation mode prefers trailer session when feature is enabled and startup succeeded`() {
+        val trailerSession = IdleTrailerScreensaverSessionStart(
+            candidates = listOf(buildTrailerCandidate("movie-1")),
+            initialPlayback = IdleTrailerScreensaverPlayback(
+                candidate = buildTrailerCandidate("movie-1"),
+                trailerId = "abc123def45",
+                source = TrailerPlaybackSource(videoUrl = "https://video.example.com/1.mp4"),
+                index = 0
+            )
+        )
+
+        assertEquals(
+            IdleScreensaverPresentationMode.TRAILER,
+            chooseIdleScreensaverPresentationMode(
+                trailerScreensaverEnabled = true,
+                trailerSessionStart = trailerSession
+            )
+        )
+    }
+
+    @Test
+    fun `presentation mode falls back to image when trailer startup is unavailable`() {
+        assertEquals(
+            IdleScreensaverPresentationMode.IMAGE,
+            chooseIdleScreensaverPresentationMode(
+                trailerScreensaverEnabled = true,
+                trailerSessionStart = null
+            )
+        )
+    }
+
+    @Test
+    fun `presentation mode stays image when trailer feature is disabled`() {
+        val trailerSession = IdleTrailerScreensaverSessionStart(
+            candidates = listOf(buildTrailerCandidate("movie-1")),
+            initialPlayback = IdleTrailerScreensaverPlayback(
+                candidate = buildTrailerCandidate("movie-1"),
+                trailerId = "abc123def45",
+                source = TrailerPlaybackSource(videoUrl = "https://video.example.com/1.mp4"),
+                index = 0
+            )
+        )
+
+        assertEquals(
+            IdleScreensaverPresentationMode.IMAGE,
+            chooseIdleScreensaverPresentationMode(
+                trailerScreensaverEnabled = false,
+                trailerSessionStart = trailerSession
+            )
+        )
+    }
+
+    private fun buildTrailerCandidate(itemId: String): IdleTrailerScreensaverCandidate {
+        return IdleTrailerScreensaverCandidate(
+            itemId = itemId,
+            itemType = "movie",
+            addonBaseUrl = "https://api.example.com",
+            title = "Example $itemId",
+            logoUrl = null,
+            backgroundUrl = "https://image.example.com/$itemId.jpg",
+            fallbackArtworkUrls = listOf("https://image.example.com/$itemId.jpg"),
+            genres = emptyList(),
+            description = null,
+            releaseInfo = "2024",
+            runtime = null,
+            imdbRating = null,
+            tomatoesRating = null,
+            trailerYtIds = listOf("abc123def45")
         )
     }
 }

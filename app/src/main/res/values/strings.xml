@@ -474,6 +474,8 @@
     <string name="layout_hide_unreleased_sub">Hide movies and shows that haven\'t been released yet.</string>
     <string name="layout_section_detail">Detail Page</string>
     <string name="layout_section_detail_desc">Settings for the detail and episode screens.</string>
+    <string name="layout_section_trailer_screensaver">Trailer Screensaver</string>
+    <string name="layout_section_trailer_screensaver_desc">Control trailer playback when the app is idle.</string>
     <string name="layout_blur_unwatched">Blur Unwatched Episodes</string>
     <string name="layout_blur_unwatched_sub">Blur episode thumbnails until watched to avoid spoilers.</string>
     <string name="layout_trailer_button">Trailer Button</string>
@@ -488,6 +490,8 @@
     <string name="layout_expand_delay_sub">How long to wait before expanding focused cards.</string>
     <string name="layout_autoplay_trailer">Autoplay Trailer</string>
     <string name="layout_autoplay_trailer_sub">Start trailer previews for the focused poster when a trailer source is available.</string>
+    <string name="layout_trailer_screensaver">Trailer Screensaver</string>
+    <string name="layout_trailer_screensaver_sub">Play trailer-based screensaver content when the app is idle.</string>
     <string name="layout_trailer_muted">Mute Trailer Previews</string>
     <string name="layout_trailer_muted_sub">Start focused-poster trailer previews muted.</string>
     <string name="layout_trailer_location">Trailer Playback Target</string>

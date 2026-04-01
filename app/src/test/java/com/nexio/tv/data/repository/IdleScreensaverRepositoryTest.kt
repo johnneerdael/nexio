@@ -1,15 +1,30 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.domain.model.MetaLink
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.data.local.TraktCatalogIds
+import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktCatalogPreferences
+import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
+import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.domain.repository.AddonRepository
+import com.nexio.tv.domain.repository.CatalogRepository
+import com.nexio.tv.domain.repository.MetaRepository
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -54,16 +69,16 @@ class IdleScreensaverRepositoryTest {
     }
 
     @Test
-    fun `buildIdleScreensaverSlides keeps top five per row and drops items without artwork`() = runBlocking {
+    fun `buildIdleScreensaverSlides keeps top image-limit items per row and drops items without artwork`() = runBlocking {
         val movieRow = buildRow(
             addonBaseUrl = "https://v3-cinemeta.strem.io",
             type = ContentType.MOVIE,
-            items = (1..6).map { index ->
+            items = (1..21).map { index ->
                 buildPreview(
                     id = "movie-$index",
                     type = ContentType.MOVIE,
-                    background = if (index == 6) null else "https://image/$index.jpg",
-                    poster = if (index == 6) null else "https://poster/$index.jpg"
+                    background = if (index == 21) null else "https://image/$index.jpg",
+                    poster = if (index == 21) null else "https://poster/$index.jpg"
                 )
             }
         )
@@ -78,7 +93,7 @@ class IdleScreensaverRepositoryTest {
         val slides = buildIdleScreensaverSlides(listOf(movieRow, seriesRow))
 
         assertEquals(6, slides.size)
-        assertTrue(slides.none { it.itemId == "movie-6" })
+        assertTrue(slides.none { it.itemId == "movie-21" })
         assertEquals(94.0, slides.first().tomatoesRating ?: 0.0, 0.0)
         assertEquals(
             listOf("movie-1", "movie-2", "movie-3", "movie-4", "movie-5", "series-1"),
@@ -103,30 +118,259 @@ class IdleScreensaverRepositoryTest {
     }
 
     @Test
-    fun `buildIdleScreensaverSlides honors a custom per-row limit for trakt-backed rotations`() = runBlocking {
+    fun `buildIdleScreensaverSlides honors a custom twenty item per-row limit for trakt-backed rotations`() = runBlocking {
         val movieRow = buildRow(
             addonBaseUrl = "https://api.trakt.tv",
             type = ContentType.MOVIE,
-            items = (1..12).map { index ->
+            items = (1..24).map { index ->
                 buildPreview("movie-$index", ContentType.MOVIE, "https://image/movie-$index.jpg")
             }
         )
         val showRow = buildRow(
             addonBaseUrl = "https://api.trakt.tv",
             type = ContentType.SERIES,
-            items = (1..11).map { index ->
+            items = (1..23).map { index ->
                 buildPreview("show-$index", ContentType.SERIES, "https://image/show-$index.jpg")
             }
         )
 
         val slides = buildIdleScreensaverSlides(
             rows = listOf(movieRow, showRow),
-            itemsPerRowLimit = 10
+            itemsPerRowLimit = 20
         )
 
-        assertEquals(20, slides.size)
-        assertEquals("movie-10", slides[9].itemId)
-        assertEquals("show-10", slides.last().itemId)
+        assertEquals(40, slides.size)
+        assertEquals("movie-20", slides[19].itemId)
+        assertEquals("show-20", slides.last().itemId)
+    }
+
+    @Test
+    fun `buildIdleScreensaverSlides exposes mode aware image fallback data and trailer candidates`() = runBlocking {
+        val row = buildRow(
+            addonBaseUrl = "https://api.trakt.tv",
+            type = ContentType.MOVIE,
+            items = listOf(
+                buildPreview(
+                    id = "movie-1",
+                    type = ContentType.MOVIE,
+                    background = "https://preview/background.jpg",
+                    poster = "https://preview/poster.jpg"
+                )
+            )
+        )
+
+        val slides = buildIdleScreensaverSlides(listOf(row)) { preview ->
+            preview.copy(
+                background = "https://hydrated/background.jpg",
+                poster = "https://hydrated/poster.jpg",
+                trailerYtIds = listOf("abc123def45")
+            )
+        }
+
+        val slide = slides.single()
+        val modeData = slide.readPropertyOrNull("modeData")
+        assertTrue("Expected modeData on IdleScreensaverSlide", modeData != null)
+
+        val imageData = modeData?.readPropertyOrNull("image")
+        assertTrue("Expected image mode data on IdleScreensaverSlide.modeData", imageData != null)
+        assertEquals(
+            listOf("https://hydrated/background.jpg", "https://hydrated/poster.jpg"),
+            imageData?.readPropertyOrNull("fallbackArtworkUrls")
+        )
+
+        val trailerData = modeData?.readPropertyOrNull("trailer")
+        assertTrue("Expected trailer mode data on IdleScreensaverSlide.modeData", trailerData != null)
+        assertEquals(
+            listOf("abc123def45"),
+            trailerData?.readPropertyOrNull("trailerYtIds")
+        )
+    }
+
+    @Test
+    fun `refreshOnColdBoot hydrates trakt source items into trailer ready slides`() = runBlocking {
+        val addonRepository = mockk<AddonRepository>()
+        val catalogRepository = mockk<CatalogRepository>(relaxed = true)
+        val metaRepository = mockk<MetaRepository>()
+        val mdbListRepository = mockk<MDBListRepository>()
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val traktSettingsDataStore = mockk<TraktSettingsDataStore>()
+        val traktSnapshotStore = mockk<TraktDiscoverySnapshotStore>()
+        val snapshot = TraktDiscoverySnapshot(
+            trendingMovieItems = listOf(
+                buildPreview("movie-1", ContentType.MOVIE, background = "https://preview/movie.jpg")
+            ),
+            trendingShowItems = listOf(
+                buildPreview("show-1", ContentType.SERIES, background = "https://preview/show.jpg")
+            )
+        )
+
+        every { addonRepository.getInstalledAddons() } returns flowOf(emptyList())
+        every { traktAuthDataStore.isAuthenticated } returns flowOf(true)
+        every { traktSettingsDataStore.catalogPreferences } returns flowOf(
+            TraktCatalogPreferences(
+                enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES, TraktCatalogIds.TRENDING_SHOWS)
+            )
+        )
+        every { traktSnapshotStore.read() } returns snapshot
+        coEvery { mdbListRepository.enrichPreview(any()) } answers { firstArg() }
+        every {
+            metaRepository.getMetaFromAllAddons(
+                type = any(),
+                id = any(),
+                cacheOnDisk = true,
+                writeToDisk = true,
+                origin = "idle_screensaver"
+            )
+        } answers {
+            val type = firstArg<String>()
+            val id = secondArg<String>()
+            flowOf(NetworkResult.Success(buildMeta(id = id, type = type, includeTrailer = id == "movie-1")))
+        }
+
+        val repository = IdleScreensaverRepository(
+            addonRepository = addonRepository,
+            catalogRepository = catalogRepository,
+            metaRepository = metaRepository,
+            mdbListRepository = mdbListRepository,
+            traktAuthDataStore = traktAuthDataStore,
+            traktSettingsDataStore = traktSettingsDataStore,
+            traktDiscoverySnapshotStore = traktSnapshotStore
+        )
+
+        repository.refreshOnColdBoot()
+
+        val slides = repository.slides.value
+        assertEquals(2, slides.size)
+        assertEquals("Hydrated movie-1", slides.first().title)
+        assertEquals(listOf("trailer1234"), slides.first().modeData.trailer?.trailerYtIds)
+        assertNull(slides.last().modeData.trailer)
+        verify(exactly = 2) {
+            metaRepository.getMetaFromAllAddons(any(), any(), true, true, "idle_screensaver")
+        }
+        coVerify(exactly = 0) {
+            catalogRepository.refreshCatalogToDisk(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+        }
+    }
+
+    @Test
+    fun `refreshOnColdBoot falls back to cinemeta popular movie and series sources when trakt is not eligible`() = runBlocking {
+        val addonRepository = mockk<AddonRepository>()
+        val catalogRepository = mockk<CatalogRepository>()
+        val metaRepository = mockk<MetaRepository>()
+        val mdbListRepository = mockk<MDBListRepository>()
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val traktSettingsDataStore = mockk<TraktSettingsDataStore>()
+        val traktSnapshotStore = mockk<TraktDiscoverySnapshotStore>()
+        val movieRow = buildRow(
+            addonBaseUrl = "https://v3-cinemeta.strem.io",
+            type = ContentType.MOVIE,
+            items = (1..21).map { index ->
+                buildPreview("movie-$index", ContentType.MOVIE, "https://image/movie-$index.jpg")
+            }
+        )
+        val showRow = buildRow(
+            addonBaseUrl = "https://v3-cinemeta.strem.io",
+            type = ContentType.SERIES,
+            items = (1..21).map { index ->
+                buildPreview("show-$index", ContentType.SERIES, "https://image/show-$index.jpg")
+            }
+        )
+
+        every { addonRepository.getInstalledAddons() } returns flowOf(
+            listOf(
+                buildAddon(
+                    baseUrl = "https://v3-cinemeta.strem.io",
+                    catalogs = listOf(
+                        CatalogDescriptor(type = ContentType.MOVIE, id = "popular-movie", name = "Popular"),
+                        CatalogDescriptor(type = ContentType.SERIES, id = "popular-series", name = "Popular")
+                    )
+                )
+            )
+        )
+        every { traktAuthDataStore.isAuthenticated } returns flowOf(false)
+        every { traktSettingsDataStore.catalogPreferences } returns flowOf(TraktCatalogPreferences())
+        every { traktSnapshotStore.read() } returns null
+        coEvery { mdbListRepository.enrichPreview(any()) } answers { firstArg() }
+        every {
+            metaRepository.getMetaFromAllAddons(
+                type = any(),
+                id = any(),
+                cacheOnDisk = true,
+                writeToDisk = true,
+                origin = "idle_screensaver"
+            )
+        } returns flowOf(NetworkResult.Error("missing"))
+        coEvery {
+            catalogRepository.refreshCatalogToDisk(
+                addonBaseUrl = "https://v3-cinemeta.strem.io",
+                addonId = "cinemeta",
+                addonName = "Cinemeta",
+                catalogId = "popular-movie",
+                catalogName = "Popular",
+                type = "movie",
+                skip = 0,
+                skipStep = 100,
+                extraArgs = emptyMap(),
+                supportsSkip = false
+            )
+        } returns Result.success(movieRow)
+        coEvery {
+            catalogRepository.refreshCatalogToDisk(
+                addonBaseUrl = "https://v3-cinemeta.strem.io",
+                addonId = "cinemeta",
+                addonName = "Cinemeta",
+                catalogId = "popular-series",
+                catalogName = "Popular",
+                type = "series",
+                skip = 0,
+                skipStep = 100,
+                extraArgs = emptyMap(),
+                supportsSkip = false
+            )
+        } returns Result.success(showRow)
+
+        val repository = IdleScreensaverRepository(
+            addonRepository = addonRepository,
+            catalogRepository = catalogRepository,
+            metaRepository = metaRepository,
+            mdbListRepository = mdbListRepository,
+            traktAuthDataStore = traktAuthDataStore,
+            traktSettingsDataStore = traktSettingsDataStore,
+            traktDiscoverySnapshotStore = traktSnapshotStore
+        )
+
+        repository.refreshOnColdBoot()
+
+        assertEquals(10, repository.slides.value.size)
+        assertEquals(40, repository.trailerCandidates.value.size)
+        coVerify(exactly = 1) {
+            catalogRepository.refreshCatalogToDisk(
+                addonBaseUrl = "https://v3-cinemeta.strem.io",
+                addonId = "cinemeta",
+                addonName = "Cinemeta",
+                catalogId = "popular-movie",
+                catalogName = "Popular",
+                type = "movie",
+                skip = 0,
+                skipStep = 100,
+                extraArgs = emptyMap(),
+                supportsSkip = false
+            )
+        }
+        coVerify(exactly = 1) {
+            catalogRepository.refreshCatalogToDisk(
+                addonBaseUrl = "https://v3-cinemeta.strem.io",
+                addonId = "cinemeta",
+                addonName = "Cinemeta",
+                catalogId = "popular-series",
+                catalogName = "Popular",
+                type = "series",
+                skip = 0,
+                skipStep = 100,
+                extraArgs = emptyMap(),
+                supportsSkip = false
+            )
+        }
     }
 
     @Test
@@ -159,12 +403,12 @@ class IdleScreensaverRepositoryTest {
     }
 
     @Test
-    fun `buildTraktScreensaverRows caps movies and shows at ten items each`() {
+    fun `buildTraktScreensaverRows caps movies and shows at twenty items each`() {
         val snapshot = TraktDiscoverySnapshot(
-            trendingMovieItems = (1..12).map { index ->
+            trendingMovieItems = (1..24).map { index ->
                 buildPreview("movie-$index", ContentType.MOVIE, "https://image/movie-$index.jpg")
             },
-            trendingShowItems = (1..11).map { index ->
+            trendingShowItems = (1..23).map { index ->
                 buildPreview("show-$index", ContentType.SERIES, "https://image/show-$index.jpg")
             }
         )
@@ -172,8 +416,8 @@ class IdleScreensaverRepositoryTest {
         val rows = buildTraktScreensaverRows(snapshot)
 
         assertEquals(2, rows.size)
-        assertEquals(10, rows.first { it.type == ContentType.MOVIE }.items.size)
-        assertEquals(10, rows.first { it.type == ContentType.SERIES }.items.size)
+        assertEquals(20, rows.first { it.type == ContentType.MOVIE }.items.size)
+        assertEquals(20, rows.first { it.type == ContentType.SERIES }.items.size)
         assertEquals("https://api.trakt.tv", rows.first().addonBaseUrl)
     }
 
@@ -231,5 +475,44 @@ class IdleScreensaverRepositoryTest {
             tomatoesRating = 94.0,
             genres = emptyList()
         )
+    }
+
+    private fun buildMeta(
+        id: String,
+        type: String,
+        includeTrailer: Boolean
+    ): Meta {
+        val contentType = if (type == "movie") ContentType.MOVIE else ContentType.SERIES
+        return Meta(
+            id = id,
+            type = contentType,
+            rawType = type,
+            name = "Hydrated $id",
+            poster = "https://meta/$id/poster.jpg",
+            posterShape = PosterShape.POSTER,
+            background = "https://meta/$id/background.jpg",
+            logo = "https://meta/$id/logo.png",
+            description = "Hydrated description for $id",
+            releaseInfo = "2025",
+            imdbRating = 8.1f,
+            genres = listOf("Drama"),
+            runtime = "120m",
+            director = emptyList(),
+            cast = emptyList(),
+            videos = emptyList(),
+            country = null,
+            awards = null,
+            language = null,
+            links = listOf(MetaLink(name = "IMDb", category = "external", url = "https://example.com/$id")),
+            trailerYtIds = if (includeTrailer) listOf("trailer1234") else emptyList()
+        )
+    }
+
+    private fun Any.readPropertyOrNull(name: String): Any? {
+        val getterName = "get" + name.replaceFirstChar { it.uppercase() }
+        val getter = javaClass.methods.firstOrNull { method ->
+            method.name == getterName && method.parameterCount == 0
+        } ?: return null
+        return getter.invoke(this)
     }
 }
