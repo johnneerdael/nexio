@@ -138,11 +138,6 @@ private data class PeopleTabItem(
     val focusRequester: FocusRequester
 )
 
-private data class DetailReturnEpisodeFocusRequest(
-    val season: Int?,
-    val episode: Int?
-)
-
 private fun resolveDetailReturnEpisodeFocusTarget(
     meta: Meta,
     request: DetailReturnEpisodeFocusRequest?,
@@ -211,6 +206,7 @@ fun MetaDetailsScreen(
     viewModel: MetaDetailsViewModel = hiltViewModel(),
     returnFocusSeason: Int? = null,
     returnFocusEpisode: Int? = null,
+    onReturnFocusConsumed: () -> Unit = {},
     onTrailerPlaybackActiveChanged: (Boolean) -> Unit = {},
     onBackPress: () -> Unit,
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
@@ -440,6 +436,19 @@ fun MetaDetailsScreen(
             }
             uiState.meta != null -> {
                 val meta = uiState.meta!!
+                var consumedInitialReturnFocus by rememberSaveable(meta.id) { mutableStateOf(false) }
+                val detailReturnFocusResolution = remember(
+                    meta.id,
+                    returnFocusSeason,
+                    returnFocusEpisode,
+                    consumedInitialReturnFocus
+                ) {
+                    resolveDetailReturnFocusRequest(
+                        returnFocusSeason = returnFocusSeason,
+                        returnFocusEpisode = returnFocusEpisode,
+                        alreadyConsumed = consumedInitialReturnFocus
+                    )
+                }
                 val genresString = remember(meta.genres) {
                     meta.genres.takeIf { it.isNotEmpty() }?.joinToString(" • ")
                 }
@@ -447,13 +456,20 @@ fun MetaDetailsScreen(
                     meta.releaseInfo?.split("-")?.firstOrNull() ?: meta.releaseInfo
                 }
 
+                LaunchedEffect(meta.id, detailReturnFocusResolution.shouldConsumeSavedState) {
+                    if (detailReturnFocusResolution.shouldConsumeSavedState) {
+                        detailFocusDebug(
+                            "consumeReturnFocusSavedState meta=${meta.id} season=$returnFocusSeason episode=$returnFocusEpisode"
+                        )
+                        consumedInitialReturnFocus = true
+                        onReturnFocusConsumed()
+                    }
+                }
+
                 key(meta.id) {
                     MetaDetailsContent(
                         meta = meta,
-                        detailReturnEpisodeFocusRequest = DetailReturnEpisodeFocusRequest(
-                            season = returnFocusSeason,
-                            episode = returnFocusEpisode
-                        ),
+                        detailReturnEpisodeFocusRequest = detailReturnFocusResolution.request,
                         seasons = uiState.seasons,
                         selectedSeason = uiState.selectedSeason,
                         manualSeasonOverrideActive = uiState.manualSeasonOverrideActive,
@@ -1289,16 +1305,20 @@ private fun MetaDetailsContent(
                 isTrailerLoading = isTrailerLoading
             )
         ) {
-            repeat(3) {
-                if (initialHeroFocusRequested) return@repeat
-                logFocusState("autoResetFocusToHero attempt=${it + 1}/3")
-                resetFocusToHero(
-                    focusManager = focusManager,
-                    listState = listState,
-                    heroPlayFocusRequester = heroPlayFocusRequester,
-                    reason = "initial_detail_entry"
-                )
-                delay(80)
+            try {
+                repeat(3) {
+                    if (initialHeroFocusRequested) return@repeat
+                    logFocusState("autoResetFocusToHero attempt=${it + 1}/3")
+                    resetFocusToHero(
+                        focusManager = focusManager,
+                        listState = listState,
+                        heroPlayFocusRequester = heroPlayFocusRequester,
+                        reason = "initial_detail_entry"
+                    )
+                    delay(80)
+                }
+            } finally {
+                logFocusState("autoResetFocusToHero finished")
             }
         }
     }
@@ -1877,7 +1897,10 @@ private fun PeopleSectionTabButton(
             .onFocusChanged { state ->
                 val focusedNow = state.isFocused
                 isFocused = focusedNow
-                if (focusedNow) onFocused()
+                if (focusedNow) {
+                    detailFocusDebug("peopleTabFocused label=$label")
+                    onFocused()
+                }
             },
         colors = CardDefaults.colors(
             containerColor = Color.Transparent,

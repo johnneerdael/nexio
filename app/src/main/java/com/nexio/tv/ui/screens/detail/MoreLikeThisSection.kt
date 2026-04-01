@@ -96,6 +96,7 @@ fun MoreLikeThisSection(
                         focusRequester = focusRequester,
                         upFocusRequester = upFocusRequester,
                         onFocused = {
+                            detailFocusDebug("moreLikeFocused id=${item.id} name=${item.name}")
                             onItemFocused(item)
                             if (isRestoreTarget && restoreFocusToken > 0) {
                                 onRestoreFocusHandled()

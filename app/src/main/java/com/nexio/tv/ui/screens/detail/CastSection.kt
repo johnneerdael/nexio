@@ -154,6 +154,9 @@ fun CastSection(
                             itemWidth = itemWidth,
                             cardSize = cardSize,
                             onFocused = {
+                                detailFocusDebug(
+                                    "castMemberFocused name=${member.name} role=${member.character.orEmpty()} tmdbId=${member.tmdbId}"
+                                )
                                 onCastMemberFocused(member)
                                 if (isRestoreTarget && restoreFocusToken > 0) {
                                     onRestoreFocusHandled()
@@ -206,6 +209,9 @@ fun CastSection(
                         itemWidth = itemWidth,
                         cardSize = cardSize,
                         onFocused = {
+                            detailFocusDebug(
+                                "castMemberFocused name=${member.name} role=${member.character.orEmpty()} tmdbId=${member.tmdbId}"
+                            )
                             onCastMemberFocused(member)
                             if (isRestoreTarget && restoreFocusToken > 0) {
                                 onRestoreFocusHandled()
