@@ -46,6 +46,7 @@ fun NexioNavHost(
     startDestination: String = Screen.Home.route,
     hideBuiltInHeaders: Boolean = false,
     idleScreensaverVisible: Boolean = false,
+    startupSplashVisible: Boolean = false,
     onModernHomeTrailerPlaybackStarted: () -> Unit = {},
     onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit = {},
     onModernHomeTrailerFullscreenActiveChanged: (Boolean) -> Unit = {},
@@ -134,6 +135,7 @@ fun NexioNavHost(
         composable(Screen.Home.route) {
             HomeScreen(
                 idleScreensaverVisible = idleScreensaverVisible,
+                startupSplashVisible = startupSplashVisible,
                 onModernHomeTrailerPlaybackStarted = onModernHomeTrailerPlaybackStarted,
                 onModernHomeTrailerPlaybackActiveChanged = onModernHomeTrailerPlaybackActiveChanged,
                 onModernHomeTrailerFullscreenActiveChanged = onModernHomeTrailerFullscreenActiveChanged,

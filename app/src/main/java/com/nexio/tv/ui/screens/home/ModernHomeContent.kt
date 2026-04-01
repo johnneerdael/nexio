@@ -196,10 +196,12 @@ internal fun handleModernHomeTrailerEnded(
 internal fun shouldUnlockModernHomeTrailerAutoplay(
     autoplayEnabled: Boolean,
     screensaverVisible: Boolean,
+    startupSplashVisible: Boolean,
     selectionStillFocused: Boolean,
     lifecycleResumed: Boolean
 ): Boolean = autoplayEnabled &&
     !screensaverVisible &&
+    !startupSplashVisible &&
     selectionStillFocused &&
     lifecycleResumed
 
@@ -235,6 +237,7 @@ internal fun resolveEffectiveModernHomeTrailerPlaybackTarget(
 internal fun ModernHomeContent(
     contentState: ModernHomeContentState,
     idleScreensaverVisible: Boolean,
+    startupSplashVisible: Boolean,
     focusState: HomeScreenFocusState,
     enrichingItemIdState: State<String?>,
     onNavigateToDetail: (String, String, String) -> Unit,
@@ -506,12 +509,13 @@ internal fun ModernHomeContent(
         contentState.focusedPosterBackdropTrailerEnabled,
         contentState.homeTrailerAutoplayEnabled,
         contentState.homeTrailerAutoplayDelaySeconds,
-        idleScreensaverVisible
+        idleScreensaverVisible,
+        startupSplashVisible
     ) {
         unlockedTrailerFocusKey = null
         val selection = focusedTrailerSelection ?: return@LaunchedEffect
         modernHomeDebugLog(
-            "heroAutoplayUnlock wait focusKey=${selection.focusKey} itemId=${selection.itemId} type=${selection.itemType} autoplay=${contentState.homeTrailerAutoplayEnabled} delay=${contentState.homeTrailerAutoplayDelaySeconds}"
+            "heroAutoplayUnlock wait focusKey=${selection.focusKey} itemId=${selection.itemId} type=${selection.itemType} autoplay=${contentState.homeTrailerAutoplayEnabled} delay=${contentState.homeTrailerAutoplayDelaySeconds} splash=$startupSplashVisible"
         )
         delay(contentState.homeTrailerAutoplayDelaySeconds.coerceAtLeast(0) * 1000L)
         val selectionStillFocused = focusedTrailerSelection.focusKey == selection.focusKey
@@ -519,11 +523,12 @@ internal fun ModernHomeContent(
         val shouldUnlock = shouldUnlockModernHomeTrailerAutoplay(
             autoplayEnabled = contentState.homeTrailerAutoplayEnabled,
             screensaverVisible = idleScreensaverVisible,
+            startupSplashVisible = startupSplashVisible,
             selectionStillFocused = selectionStillFocused,
             lifecycleResumed = lifecycleResumed
         )
         modernHomeDebugLog(
-            "heroAutoplayUnlock eval focusKey=${selection.focusKey} itemId=${selection.itemId} selectionStillFocused=$selectionStillFocused lifecycleResumed=$lifecycleResumed screensaver=$idleScreensaverVisible shouldUnlock=$shouldUnlock"
+            "heroAutoplayUnlock eval focusKey=${selection.focusKey} itemId=${selection.itemId} selectionStillFocused=$selectionStillFocused lifecycleResumed=$lifecycleResumed screensaver=$idleScreensaverVisible splash=$startupSplashVisible shouldUnlock=$shouldUnlock"
         )
         if (shouldUnlock) {
             unlockedTrailerFocusKey = selection.focusKey

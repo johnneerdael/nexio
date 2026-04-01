@@ -840,6 +840,7 @@ class MainActivity : ComponentActivity() {
                                 modernSidebarBlurEnabled = modernSidebarBlurEnabled,
                                 hideBuiltInHeaders = hideBuiltInHeadersForFloatingPill,
                                 idleScreensaverVisible = idleScreensaverVisible,
+                                startupSplashVisible = showStartupSplash,
                                 idleScreensaverController = idleScreensaverController,
                                 onHomeTrailerPlaybackActiveChanged = { active ->
                                     inAppTrailerPlaybackActive = active
@@ -866,6 +867,7 @@ class MainActivity : ComponentActivity() {
                                 sidebarCollapsed = sidebarCollapsed,
                                 hideBuiltInHeaders = false,
                                 idleScreensaverVisible = idleScreensaverVisible,
+                                startupSplashVisible = showStartupSplash,
                                 idleScreensaverController = idleScreensaverController,
                                 onHomeTrailerPlaybackActiveChanged = { active ->
                                     inAppTrailerPlaybackActive = active
@@ -1515,6 +1517,7 @@ private fun LegacySidebarScaffold(
     sidebarCollapsed: Boolean,
     hideBuiltInHeaders: Boolean,
     idleScreensaverVisible: Boolean,
+    startupSplashVisible: Boolean,
     idleScreensaverController: IdleScreensaverController,
     onHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onHomeTrailerFullscreenActiveChanged: (Boolean) -> Unit,
@@ -1684,6 +1687,7 @@ private fun LegacySidebarScaffold(
                     startDestination = startDestination,
                     hideBuiltInHeaders = hideBuiltInHeaders,
                     idleScreensaverVisible = idleScreensaverVisible,
+                    startupSplashVisible = startupSplashVisible,
                     onModernHomeTrailerPlaybackStarted = {
                         idleScreensaverController.registerInteraction()
                     },
@@ -1785,6 +1789,7 @@ private fun ModernSidebarScaffold(
     modernSidebarBlurEnabled: Boolean,
     hideBuiltInHeaders: Boolean,
     idleScreensaverVisible: Boolean,
+    startupSplashVisible: Boolean,
     idleScreensaverController: IdleScreensaverController,
     onHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onHomeTrailerFullscreenActiveChanged: (Boolean) -> Unit,
@@ -2045,6 +2050,7 @@ private fun ModernSidebarScaffold(
                     startDestination = startDestination,
                     hideBuiltInHeaders = hideBuiltInHeaders,
                     idleScreensaverVisible = idleScreensaverVisible,
+                    startupSplashVisible = startupSplashVisible,
                     onModernHomeTrailerPlaybackStarted = {
                         idleScreensaverController.registerInteraction()
                     },

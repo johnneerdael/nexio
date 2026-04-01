@@ -82,6 +82,7 @@ private const val HOME_STARTUP_CONTENT_TIMEOUT_MS = 5_000L
 fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
     idleScreensaverVisible: Boolean = false,
+    startupSplashVisible: Boolean = false,
     onModernHomeTrailerPlaybackStarted: () -> Unit = {},
     onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit = {},
     onModernHomeTrailerFullscreenActiveChanged: (Boolean) -> Unit = {},
@@ -319,6 +320,7 @@ fun HomeScreen(
                                 viewModel = viewModel,
                                 uiState = uiState,
                                 idleScreensaverVisible = idleScreensaverVisible,
+                                startupSplashVisible = startupSplashVisible,
                                 onModernHomeTrailerPlaybackStarted = onModernHomeTrailerPlaybackStarted,
                                 onModernHomeTrailerPlaybackActiveChanged = onModernHomeTrailerPlaybackActiveChanged,
                                 onNavigateToDetail = onNavigateToDetail,
@@ -657,6 +659,7 @@ private fun ModernHomeRoute(
     viewModel: HomeViewModel,
     uiState: HomeUiState,
     idleScreensaverVisible: Boolean,
+    startupSplashVisible: Boolean,
     onModernHomeTrailerPlaybackStarted: () -> Unit,
     onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
@@ -764,6 +767,7 @@ private fun ModernHomeRoute(
     ModernHomeContent(
         contentState = modernContentState,
         idleScreensaverVisible = idleScreensaverVisible,
+        startupSplashVisible = startupSplashVisible,
         focusState = focusState,
         enrichingItemIdState = enrichingItemIdState,
         onNavigateToDetail = onNavigateToDetail,
