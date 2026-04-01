@@ -92,8 +92,10 @@ fun SeasonTabs(
     onSeasonShortPress: (Int) -> Unit,
     onSeasonLongPress: (Int) -> Unit = {},
     selectedTabFocusRequester: FocusRequester,
+    enableFocusRestorer: Boolean = true,
     downFocusRequester: FocusRequester? = null,
-    onSelectedSeasonDown: (() -> Unit)? = null
+    onSelectedSeasonDown: (() -> Unit)? = null,
+    onSeasonTabFocused: ((Int) -> Unit)? = null
 ) {
     // Move season 0 (specials) to the end
     val sortedSeasons = remember(seasons) {
@@ -125,7 +127,13 @@ fun SeasonTabs(
         state = listState,
         modifier = Modifier
             .fillMaxWidth()
-            .focusRestorer(selectedTabFocusRequester),
+            .then(
+                if (enableFocusRestorer) {
+                    Modifier.focusRestorer(selectedTabFocusRequester)
+                } else {
+                    Modifier
+                }
+            ),
         contentPadding = PaddingValues(horizontal = 48.dp, vertical = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -163,12 +171,15 @@ fun SeasonTabs(
                         false
                     }
                     .onFocusChanged {
-                    val nowFocused = it.isFocused
-                    isFocused = nowFocused
-                    if (nowFocused && !isSelected) {
-                        onSeasonSelected(season)
+                        val nowFocused = it.isFocused
+                        isFocused = nowFocused
+                        if (nowFocused) {
+                            onSeasonTabFocused?.invoke(season)
+                            if (!isSelected) {
+                                onSeasonSelected(season)
+                            }
+                        }
                     }
-                }
                     .onPreviewKeyEvent { event ->
                         val native = event.nativeKeyEvent
                         if (native.action == AndroidKeyEvent.ACTION_DOWN) {
