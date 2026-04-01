@@ -84,6 +84,7 @@ fun HomeScreen(
     idleScreensaverVisible: Boolean = false,
     onModernHomeTrailerPlaybackStarted: () -> Unit = {},
     onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit = {},
+    onModernHomeTrailerFullscreenActiveChanged: (Boolean) -> Unit = {},
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit = { item ->
         onNavigateToDetail(
@@ -176,6 +177,14 @@ fun HomeScreen(
         }
         onDispose {
             onModernHomeTrailerPlaybackActiveChanged(false)
+        }
+    }
+    DisposableEffect(uiState.homeLayout, onModernHomeTrailerFullscreenActiveChanged) {
+        if (uiState.homeLayout != HomeLayout.MODERN) {
+            onModernHomeTrailerFullscreenActiveChanged(false)
+        }
+        onDispose {
+            onModernHomeTrailerFullscreenActiveChanged(false)
         }
     }
 
@@ -449,6 +458,12 @@ fun HomeScreen(
             activePosterTrailerPlayback != null || pendingPosterTrailerResolution != null
         )
     }
+    LaunchedEffect(uiState.homeLayout, activePosterTrailerPlayback != null, pendingPosterTrailerResolution != null) {
+        onModernHomeTrailerFullscreenActiveChanged(
+            uiState.homeLayout == HomeLayout.MODERN &&
+                (activePosterTrailerPlayback != null || pendingPosterTrailerResolution != null)
+        )
+    }
     LaunchedEffect(activePosterTrailerPlayback?.itemId, uiState.homeLayout) {
         modernPosterTrailerTextTimedOut = false
         val playback = activePosterTrailerPlayback ?: return@LaunchedEffect
@@ -476,7 +491,7 @@ fun HomeScreen(
                 onEnded = { posterTrailerPlayback = null },
                 modifier = Modifier.fillMaxSize()
             )
-            if (uiState.homeLayout == HomeLayout.MODERN && activePosterTrailerPlayback.heroPreview != null) {
+            if (uiState.homeLayout != HomeLayout.MODERN && activePosterTrailerPlayback.heroPreview != null) {
                 ModernHeroGradientLayer(
                     bgColor = NexioColors.Background,
                     modifier = Modifier.fillMaxSize()

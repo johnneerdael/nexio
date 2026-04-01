@@ -228,10 +228,8 @@ fun HeroContentSection(
                             onClick = onPlayClick,
                             focusRequester = playButtonFocusRequester,
                             restoreFocusToken = restorePlayFocusToken,
-                            onFocusRestored = {
-                                onHeroActionFocused()
-                                onPlayFocusRestored()
-                            }
+                            onFocused = onHeroActionFocused,
+                            onFocusRestored = onPlayFocusRestored
                         )
 
                         ActionIconButton(
@@ -325,9 +323,13 @@ private fun PlayButton(
     onClick: () -> Unit,
     focusRequester: FocusRequester? = null,
     restoreFocusToken: Int = 0,
+    onFocused: () -> Unit = {},
     onFocusRestored: () -> Unit = {}
 ) {
-    LaunchedEffect(restoreFocusToken) {
+    var pendingFocusRestore by remember { mutableStateOf(false) }
+
+    LaunchedEffect(restoreFocusToken, focusRequester) {
+        pendingFocusRestore = restoreFocusToken > 0 && focusRequester != null
         if (restoreFocusToken > 0 && focusRequester != null) {
             focusRequester.requestFocusAfterFrames()
         }
@@ -344,7 +346,11 @@ private fun PlayButton(
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged {
                 if (it.isFocused) {
-                    onFocusRestored()
+                    onFocused()
+                    if (pendingFocusRestore) {
+                        pendingFocusRestore = false
+                        onFocusRestored()
+                    }
                 }
             }
             .focusProperties { up = FocusRequester.Cancel },

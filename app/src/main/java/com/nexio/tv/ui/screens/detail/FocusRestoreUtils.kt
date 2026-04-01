@@ -36,17 +36,19 @@ fun rememberResettableLazyListState(
     return listState
 }
 
-suspend fun FocusRequester.requestFocusAfterFrames(frames: Int = 2) {
+suspend fun FocusRequester.requestFocusAfterFrames(
+    frames: Int = 2,
+    attempts: Int = 4
+) {
     repeat(frames.coerceAtLeast(0)) {
         withFrameNanos { }
     }
-    repeat(4) { attempt ->
-        val requested = runCatching {
+    val retryAttempts = attempts.coerceAtLeast(1)
+    repeat(retryAttempts) { attempt ->
+        runCatching {
             requestFocus()
-            true
-        }.getOrDefault(false)
-        if (requested) return
-        if (attempt < 3) {
+        }
+        if (attempt < retryAttempts - 1) {
             withFrameNanos { }
         }
     }

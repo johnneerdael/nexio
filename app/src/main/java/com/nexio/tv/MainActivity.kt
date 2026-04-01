@@ -464,6 +464,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     var inAppTrailerPlaybackActive by remember { mutableStateOf(false) }
+                    var modernHomeTrailerFullscreenActive by remember { mutableStateOf(false) }
                     var previousInAppTrailerPlaybackActive by remember { mutableStateOf(false) }
                     var idleTrailerSessionStart by remember { mutableStateOf<IdleTrailerScreensaverSessionStart?>(null) }
 
@@ -528,6 +529,9 @@ class MainActivity : ComponentActivity() {
                             inAppTrailerPlaybackActive
                         ) {
                             inAppTrailerPlaybackActive = false
+                        }
+                        if (currentRoute != Screen.Home.route && modernHomeTrailerFullscreenActive) {
+                            modernHomeTrailerFullscreenActive = false
                         }
                     }
 
@@ -700,6 +704,9 @@ class MainActivity : ComponentActivity() {
                                 onHomeTrailerPlaybackActiveChanged = { active ->
                                     inAppTrailerPlaybackActive = active
                                 },
+                                onHomeTrailerFullscreenActiveChanged = { active ->
+                                    modernHomeTrailerFullscreenActive = active
+                                },
                                 onDetailTrailerPlaybackActiveChanged = { active ->
                                     inAppTrailerPlaybackActive = active
                                 },
@@ -722,6 +729,9 @@ class MainActivity : ComponentActivity() {
                                 idleScreensaverController = idleScreensaverController,
                                 onHomeTrailerPlaybackActiveChanged = { active ->
                                     inAppTrailerPlaybackActive = active
+                                },
+                                onHomeTrailerFullscreenActiveChanged = { active ->
+                                    modernHomeTrailerFullscreenActive = active
                                 },
                                 onDetailTrailerPlaybackActiveChanged = { active ->
                                     inAppTrailerPlaybackActive = active
@@ -1320,6 +1330,7 @@ private fun LegacySidebarScaffold(
     idleScreensaverVisible: Boolean,
     idleScreensaverController: IdleScreensaverController,
     onHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
+    onHomeTrailerFullscreenActiveChanged: (Boolean) -> Unit,
     onDetailTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onExitApp: () -> Unit
 ) {
@@ -1327,7 +1338,8 @@ private fun LegacySidebarScaffold(
     val drawerItemFocusRequesters = remember(drawerItems) {
         drawerItems.associate { item -> item.route to FocusRequester() }
     }
-    val showSidebar = currentRoute in rootRoutes
+    var homeTrailerFullscreenActive by remember { mutableStateOf(false) }
+    val showSidebar = currentRoute in rootRoutes && !homeTrailerFullscreenActive
 
     LaunchedEffect(currentRoute) {
         drawerState.setValue(DrawerValue.Closed)
@@ -1491,6 +1503,10 @@ private fun LegacySidebarScaffold(
                     onModernHomeTrailerPlaybackActiveChanged = { active ->
                         onHomeTrailerPlaybackActiveChanged(active)
                     },
+                    onModernHomeTrailerFullscreenActiveChanged = { active ->
+                        homeTrailerFullscreenActive = active
+                        onHomeTrailerFullscreenActiveChanged(active)
+                    },
                     onDetailTrailerPlaybackActiveChanged = { active ->
                         onDetailTrailerPlaybackActiveChanged(active)
                     }
@@ -1584,10 +1600,12 @@ private fun ModernSidebarScaffold(
     idleScreensaverVisible: Boolean,
     idleScreensaverController: IdleScreensaverController,
     onHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
+    onHomeTrailerFullscreenActiveChanged: (Boolean) -> Unit,
     onDetailTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onExitApp: () -> Unit
 ) {
-    val showSidebar = currentRoute in rootRoutes
+    var homeTrailerFullscreenActive by remember { mutableStateOf(false) }
+    val showSidebar = currentRoute in rootRoutes && !homeTrailerFullscreenActive
     val collapsedSidebarWidth = if (sidebarCollapsed) 0.dp else 184.dp
     val openSidebarWidth = 262.dp
 
@@ -1845,6 +1863,10 @@ private fun ModernSidebarScaffold(
                     },
                     onModernHomeTrailerPlaybackActiveChanged = { active ->
                         onHomeTrailerPlaybackActiveChanged(active)
+                    },
+                    onModernHomeTrailerFullscreenActiveChanged = { active ->
+                        homeTrailerFullscreenActive = active
+                        onHomeTrailerFullscreenActiveChanged(active)
                     },
                     onDetailTrailerPlaybackActiveChanged = { active ->
                         onDetailTrailerPlaybackActiveChanged(active)
