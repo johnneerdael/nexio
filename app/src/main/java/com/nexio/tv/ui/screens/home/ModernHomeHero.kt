@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,6 +60,9 @@ internal fun ModernHeroMediaLayer(
     trailerPreviewAudioUrl: String?,
     showLoadingIndicator: Boolean,
     trailerMuted: Boolean,
+    showFullscreenHint: Boolean,
+    fullscreenHintText: String,
+    onTrailerFirstFrameRendered: () -> Unit,
     enrichmentActive: Boolean,
     modifier: Modifier,
     requestWidthPx: Int,
@@ -101,7 +105,10 @@ internal fun ModernHeroMediaLayer(
                 trailerAudioUrl = trailerPreviewAudioUrl,
                 isPlaying = true,
                 onEnded = { trailerFirstFrameRendered = false },
-                onFirstFrameRendered = { trailerFirstFrameRendered = true },
+                onFirstFrameRendered = {
+                    trailerFirstFrameRendered = true
+                    onTrailerFirstFrameRendered()
+                },
                 muted = trailerMuted,
                 cropToFill = true,
                 modifier = Modifier.fillMaxSize()
@@ -126,6 +133,25 @@ internal fun ModernHeroMediaLayer(
                 contentAlignment = Alignment.Center
             ) {
                 LoadingIndicator()
+            }
+        }
+        if (showFullscreenHint && shouldPlayTrailer) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 20.dp, end = 20.dp)
+                    .wrapContentSize(Alignment.TopEnd)
+            ) {
+                Text(
+                    text = fullscreenHintText,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = NexioColors.TextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color.Black.copy(alpha = 0.48f))
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                )
             }
         }
     }
