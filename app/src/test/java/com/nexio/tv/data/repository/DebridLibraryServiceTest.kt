@@ -614,6 +614,110 @@ class DebridLibraryServiceTest {
     }
 
     @Test
+    fun `premiumize benchmark lookup does not suppress later all provider refreshes`() = runTest {
+        val realDebridApi = mockk<RealDebridApi>()
+        val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
+        val premiumizeApi = mockk<PremiumizeApi>()
+        val premiumizeService = mockk<PremiumizeService>()
+        val torBoxApi = mockk<TorBoxApi>()
+        val torBoxService = mockk<TorBoxService>()
+
+        stubAuthenticatedRealDebrid(realDebridAuthDataStore)
+        every { premiumizeService.observeAccountState() } returns flowOf(
+            PremiumizeAccountState(
+                apiKey = "pm-key",
+                isConnected = true
+            )
+        )
+        coJustRun { premiumizeService.refreshAccountState() }
+        stubDisconnectedTorBox(torBoxService)
+
+        coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
+            listOf(
+                RealDebridTorrentDto(
+                    id = "rd-1",
+                    filename = "RealDebrid.Movie.2024.mkv",
+                    status = "downloaded",
+                    links = listOf("https://rd.test/link/rd-1"),
+                    ended = "2026-03-30T12:00:00Z"
+                )
+            )
+        )
+        coEvery { realDebridApi.getTorrentInfo(any(), "rd-1") } returns Response.success(
+            RealDebridTorrentInfoDto(
+                id = "rd-1",
+                filename = "RealDebrid.Movie.2024.mkv",
+                status = "downloaded",
+                links = listOf("https://rd.test/link/rd-1"),
+                files = listOf(
+                    RealDebridTorrentFileDto(
+                        id = 90,
+                        path = "/RealDebrid.Movie.2024.mkv",
+                        bytes = 1_000L,
+                        selected = 1
+                    )
+                ),
+                ended = "2026-03-30T12:00:00Z"
+            )
+        )
+        coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(
+            listOf(
+                RealDebridDownloadDto(
+                    id = "rd-download-1",
+                    filename = "RealDebrid.Movie.2024.mkv",
+                    link = "https://rd.test/link/rd-1",
+                    download = "https://rd.test/download/rd-1.mkv",
+                    mimeType = "video/x-matroska"
+                )
+            )
+        )
+        coEvery { realDebridApi.unrestrictLink(any(), any(), any()) } returns Response.error(503, mockk(relaxed = true))
+
+        coEvery { premiumizeApi.listAllItems("pm-key") } returns Response.success(
+            PremiumizeListAllDto(
+                status = "success",
+                files = listOf(
+                    PremiumizeListAllFileDto(
+                        id = "pm-1",
+                        name = "Premiumize.Movie.2024.mkv",
+                        createdAt = 300L,
+                        mimeType = "video/x-matroska",
+                        path = "/Premiumize.Movie.2024.mkv"
+                    )
+                )
+            )
+        )
+        coEvery { premiumizeApi.getItemDetails("pm-key", "pm-1") } returns Response.success(
+            PremiumizeItemDetailsDto(
+                id = "pm-1",
+                name = "Premiumize.Movie.2024.mkv",
+                streamLink = "https://pm.test/direct/pm-1",
+                mimeType = "video/x-matroska",
+                createdAt = 300L
+            )
+        )
+
+        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
+        val service = DebridLibraryService(
+            realDebridApi = realDebridApi,
+            realDebridAuthDataStore = realDebridAuthDataStore,
+            realDebridAuthService = realDebridAuthService,
+            premiumizeApi = premiumizeApi,
+            premiumizeService = premiumizeService,
+            torBoxApi = torBoxApi,
+            torBoxService = torBoxService
+        )
+
+        service.getBenchmarkCandidates(DebridBenchmarkProvider.PREMIUMIZE)
+        val items = service.observeItems().first()
+
+        assertTrue(items.any { it.listKeys.contains(DebridLibraryService.REAL_DEBRID_LIST_KEY) })
+        assertTrue(items.any { it.listKeys.contains(DebridLibraryService.PREMIUMIZE_LIST_KEY) })
+        coVerify(exactly = 1) { realDebridApi.getTorrents(any(), any(), any()) }
+        coVerify(exactly = 2) { premiumizeApi.listAllItems("pm-key") }
+    }
+
+    @Test
     fun `benchmark lookup does not suppress later all provider refreshes`() = runTest {
         val realDebridApi = mockk<RealDebridApi>()
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
