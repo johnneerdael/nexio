@@ -1,6 +1,7 @@
 package com.nexio.tv.data.local
 
 import android.content.Context
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -15,7 +16,9 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import java.io.IOException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
@@ -34,14 +37,24 @@ class DebridBenchmarkStore internal constructor(
 
     fun latestResult(provider: DebridBenchmarkProvider): Flow<DebridBenchmarkResult?> {
         val key = latestResultKey(provider)
-        return dataStore.data.map { preferences ->
-            preferences[key]?.let { raw ->
-                parseResult(raw, provider)
+        return dataStore.data
+            .catch { throwable ->
+                if (throwable is IOException) {
+                    emit(emptyPreferences())
+                } else {
+                    throw throwable
+                }
             }
-        }.distinctUntilChanged()
+            .map { preferences ->
+                preferences[key]?.let { raw ->
+                    parseResult(raw, provider)
+                }
+            }
+            .distinctUntilChanged()
     }
 
     suspend fun saveLatest(result: DebridBenchmarkResult) {
+        require(result.isValid()) { "Invalid DebridBenchmarkResult" }
         dataStore.edit { preferences ->
             preferences[latestResultKey(result.provider)] = gson.toJson(result)
         }
@@ -61,35 +74,45 @@ class DebridBenchmarkStore internal constructor(
         expectedProvider: DebridBenchmarkProvider
     ): DebridBenchmarkResult? {
         val root = runCatching { JsonParser.parseString(raw).asJsonObject }.getOrNull() ?: return null
-        val providerName = root.stringOrNull("provider")?.trim() ?: return null
-        val parsedProvider = runCatching { DebridBenchmarkProvider.valueOf(providerName) }.getOrNull()
-            ?: return null
-        if (parsedProvider != expectedProvider) return null
+        return try {
+            val providerName = root.stringOrNull("provider")?.trim() ?: return null
+            val parsedProvider = runCatching { DebridBenchmarkProvider.valueOf(providerName) }.getOrNull()
+                ?: return null
+            if (parsedProvider != expectedProvider) return null
 
-        val measuredAtMs = root.longOrNull("measuredAtMs")?.takeIf { it > 0L } ?: return null
-        val summaryJson = root.get("summary")?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
-        val startupTimeMs = summaryJson.longOrNull("startupTimeMs")?.takeIf { it >= 0L }
-        val sustainedThroughputMbps = summaryJson.doubleOrNull("sustainedThroughputMbps")
-            ?.takeIf { it.isFinite() && it >= 0.0 }
-        val transferredBytes = summaryJson.longOrNull("transferredBytes")?.takeIf { it >= 0L }
-            ?: return null
-        val elapsedMs = summaryJson.longOrNull("elapsedMs")?.takeIf { it >= 0L } ?: return null
-        val summary = DebridBenchmarkSummary(
-            startupTimeMs = startupTimeMs,
-            sustainedThroughputMbps = sustainedThroughputMbps,
-            transferredBytes = transferredBytes,
-            elapsedMs = elapsedMs
-        )
-        val terminationReason = root.stringOrNull("terminationReason")?.let { reason ->
-            runCatching { DebridBenchmarkTerminationReason.valueOf(reason) }.getOrNull()
-        } ?: return null
+            val measuredAtMs = root.longOrNull("measuredAtMs")?.takeIf { it > 0L } ?: return null
+            val summaryJson = root.get("summary")?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
+            val summary = DebridBenchmarkSummary(
+                startupTimeMs = summaryJson.optionalLongOrNull("startupTimeMs"),
+                sustainedThroughputMbps = summaryJson.optionalDoubleOrNull("sustainedThroughputMbps"),
+                transferredBytes = summaryJson.longOrNull("transferredBytes")?.takeIf { it >= 0L }
+                    ?: return null,
+                elapsedMs = summaryJson.longOrNull("elapsedMs")?.takeIf { it >= 0L } ?: return null
+            )
+            val terminationReason = root.stringOrNull("terminationReason")?.let { reason ->
+                runCatching { DebridBenchmarkTerminationReason.valueOf(reason) }.getOrNull()
+            } ?: return null
 
-        return DebridBenchmarkResult(
-            provider = parsedProvider,
-            measuredAtMs = measuredAtMs,
-            summary = summary,
-            terminationReason = terminationReason
-        )
+            DebridBenchmarkResult(
+                provider = parsedProvider,
+                measuredAtMs = measuredAtMs,
+                summary = summary,
+                terminationReason = terminationReason
+            ).takeIf { it.isValid() }
+        } catch (_: InvalidDebridBenchmarkPayload) {
+            null
+        }
+    }
+
+    private fun DebridBenchmarkResult.isValid(): Boolean {
+        return measuredAtMs > 0L && summary.isValid()
+    }
+
+    private fun DebridBenchmarkSummary.isValid(): Boolean {
+        return startupTimeMs?.let { it >= 0L } != false &&
+            sustainedThroughputMbps?.let { it.isFinite() && it >= 0.0 } != false &&
+            transferredBytes >= 0L &&
+            elapsedMs >= 0L
     }
 
     private fun com.google.gson.JsonObject.stringOrNull(key: String): String? {
@@ -109,4 +132,17 @@ class DebridBenchmarkStore internal constructor(
             get(key)?.takeIf { !it.isJsonNull }?.asDouble
         }.getOrNull()
     }
+
+    private fun com.google.gson.JsonObject.optionalLongOrNull(key: String): Long? {
+        if (!has(key) || get(key)?.isJsonNull == true) return null
+        return longOrNull(key)?.takeIf { it >= 0L } ?: throw InvalidDebridBenchmarkPayload()
+    }
+
+    private fun com.google.gson.JsonObject.optionalDoubleOrNull(key: String): Double? {
+        if (!has(key) || get(key)?.isJsonNull == true) return null
+        return doubleOrNull(key)?.takeIf { it.isFinite() && it >= 0.0 }
+            ?: throw InvalidDebridBenchmarkPayload()
+    }
+
+    private class InvalidDebridBenchmarkPayload : IllegalArgumentException()
 }

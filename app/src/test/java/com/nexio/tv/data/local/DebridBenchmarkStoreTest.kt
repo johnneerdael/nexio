@@ -1,5 +1,6 @@
 package com.nexio.tv.data.local
 
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -7,6 +8,7 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
+import java.io.IOException
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -14,10 +16,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DebridBenchmarkStoreTest {
@@ -123,13 +127,82 @@ class DebridBenchmarkStoreTest {
                   "summary":{
                     "startupTimeMs":-1,
                     "sustainedThroughputMbps":1e309,
-                    "transferredBytes":-1,
-                    "elapsedMs":-1
+                    "transferredBytes":12,
+                    "elapsedMs":34
                   },
                   "terminationReason":"COMPLETED"
                 }
             """.trimIndent()
         }
+
+        assertEquals(null, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
+    }
+
+    @Test
+    fun `latest result preserves missing optional numeric fields`() = runTest {
+        val dataStore = buildDataStore(backgroundScope)
+        val store = DebridBenchmarkStore(dataStore)
+        val key = stringPreferencesKey("debrid_benchmark_latest_real_debrid")
+        val expected = DebridBenchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            measuredAtMs = 5L,
+            summary = DebridBenchmarkSummary(
+                startupTimeMs = null,
+                sustainedThroughputMbps = null,
+                transferredBytes = 12L,
+                elapsedMs = 34L
+            ),
+            terminationReason = DebridBenchmarkTerminationReason.COMPLETED
+        )
+        dataStore.edit { prefs ->
+            prefs[key] = """
+                {
+                  "provider":"REAL_DEBRID",
+                  "measuredAtMs":5,
+                  "summary":{
+                    "transferredBytes":12,
+                    "elapsedMs":34
+                  },
+                  "terminationReason":"COMPLETED"
+                }
+            """.trimIndent()
+        }
+
+        assertEquals(expected, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
+    }
+
+    @Test
+    fun `saving an invalid result does not replace a previously valid result`() = runTest {
+        val store = buildStore(backgroundScope)
+        val valid = sampleResult(provider = DebridBenchmarkProvider.REAL_DEBRID, measuredAtMs = 10L)
+        store.saveLatest(valid)
+
+        val invalid = DebridBenchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            measuredAtMs = 11L,
+            summary = DebridBenchmarkSummary(
+                startupTimeMs = -1L,
+                sustainedThroughputMbps = Double.NaN,
+                transferredBytes = 12L,
+                elapsedMs = 34L
+            ),
+            terminationReason = DebridBenchmarkTerminationReason.COMPLETED
+        )
+
+        val failure = try {
+            store.saveLatest(invalid)
+            null
+        } catch (t: Throwable) {
+            t
+        }
+
+        assertTrue(failure is IllegalArgumentException)
+        assertEquals(valid, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
+    }
+
+    @Test
+    fun `latest result returns null when datastore read throws ioexception`() = runTest {
+        val store = DebridBenchmarkStore(crashingDataStore())
 
         assertEquals(null, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
     }
@@ -172,14 +245,12 @@ class DebridBenchmarkStoreTest {
         PreferenceDataStoreFactory.create(
             scope = scope,
             produceFile = {
-                val tempFile = file ?: File.createTempFile("debrid_benchmark_store", ".preferences_pb")
-                tempFile.deleteOnExit()
-                tempFile
+                (file ?: newTempBenchmarkStoreFile()).also { it.deleteOnExit() }
             }
         )
 
     private fun buildStore(scope: CoroutineScope): DebridBenchmarkStore {
-        return buildStore(scope, File.createTempFile("debrid_benchmark_store", ".preferences_pb"))
+        return buildStore(scope, newTempBenchmarkStoreFile())
     }
 
     private fun buildStore(scope: CoroutineScope, file: File): DebridBenchmarkStore {
@@ -205,5 +276,23 @@ class DebridBenchmarkStoreTest {
             ),
             terminationReason = DebridBenchmarkTerminationReason.COMPLETED
         )
+    }
+
+    private fun newTempBenchmarkStoreFile(): File {
+        return File.createTempFile("debrid_benchmark_store", ".preferences_pb").also { it.deleteOnExit() }
+    }
+
+    private fun crashingDataStore(): DataStore<androidx.datastore.preferences.core.Preferences> {
+        return object : DataStore<androidx.datastore.preferences.core.Preferences> {
+            override val data = flow<androidx.datastore.preferences.core.Preferences> {
+                throw IOException("corruption")
+            }
+
+            override suspend fun updateData(
+                transform: suspend (androidx.datastore.preferences.core.Preferences) -> androidx.datastore.preferences.core.Preferences
+            ): androidx.datastore.preferences.core.Preferences {
+                throw UnsupportedOperationException("not used")
+            }
+        }
     }
 }
