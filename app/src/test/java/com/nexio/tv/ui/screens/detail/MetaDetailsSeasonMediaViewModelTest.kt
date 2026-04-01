@@ -520,6 +520,150 @@ class MetaDetailsSeasonMediaViewModelTest {
     }
 
     @Test
+    fun `season trailer enters resolving takeover state immediately before availability resolves`() = runTest(dispatcher) {
+        val trailerService = mockk<TrailerService>()
+        val seasonAvailabilityGate = CompletableDeferred<SeasonMediaAvailability>()
+
+        coEvery {
+            trailerService.getTitleMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        } returns false
+        coEvery {
+            trailerService.getSeasonMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any()
+            )
+        } coAnswers {
+            val season = thirdArg<Int?>()
+            if (season == 2) {
+                seasonAvailabilityGate.await()
+            } else {
+                SeasonMediaAvailability(
+                    hasTrailerOrTeaser = false,
+                    hasRecap = false
+                )
+            }
+        }
+        coEvery {
+            trailerService.getSeasonTrailerPlaybackSource(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = 2,
+                contentId = any()
+            )
+        } returns TrailerPlaybackSource(
+            videoUrl = "https://example.com/season-trailer.m3u8",
+            audioUrl = "https://example.com/season-trailer-audio.m4a"
+        )
+
+        val viewModel = buildViewModel(trailerService)
+        advanceUntilIdle()
+
+        viewModel.onEvent(MetaDetailsEvent.OnSeasonShortPress(2))
+        runCurrent()
+
+        val resolvingState = viewModel.uiState.value
+        assertEquals(2, resolvingState.selectedSeason)
+        assertTrue(resolvingState.isTrailerLoading)
+        assertEquals(TrailerResolutionStatus.RESOLVING, resolvingState.trailerResolutionStatus)
+        assertFalse(resolvingState.isTrailerPlaying)
+        assertEquals(null, resolvingState.trailerUrl)
+
+        seasonAvailabilityGate.complete(
+            SeasonMediaAvailability(
+                hasTrailerOrTeaser = true,
+                hasRecap = false
+            )
+        )
+        advanceUntilIdle()
+
+        val resolvedState = viewModel.uiState.value
+        assertFalse(resolvedState.isTrailerLoading)
+        assertTrue(resolvedState.isTrailerPlaying)
+        assertEquals("https://example.com/season-trailer.m3u8", resolvedState.trailerUrl)
+    }
+
+    @Test
+    fun `season recap enters resolving takeover state immediately before availability resolves`() = runTest(dispatcher) {
+        val trailerService = mockk<TrailerService>()
+        val seasonAvailabilityGate = CompletableDeferred<SeasonMediaAvailability>()
+
+        coEvery {
+            trailerService.getTitleMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        } returns false
+        coEvery {
+            trailerService.getSeasonMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any()
+            )
+        } coAnswers {
+            val season = thirdArg<Int?>()
+            if (season == 2) {
+                seasonAvailabilityGate.await()
+            } else {
+                SeasonMediaAvailability(
+                    hasTrailerOrTeaser = false,
+                    hasRecap = false
+                )
+            }
+        }
+        coEvery {
+            trailerService.getSeasonRecapPlaybackSource(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = 2,
+                contentId = any()
+            )
+        } returns TrailerPlaybackSource(
+            videoUrl = "https://example.com/season-recap.m3u8",
+            audioUrl = "https://example.com/season-recap-audio.m4a"
+        )
+
+        val viewModel = buildViewModel(trailerService)
+        advanceUntilIdle()
+
+        viewModel.onEvent(MetaDetailsEvent.OnPlaySeasonRecap(2))
+        runCurrent()
+
+        val resolvingState = viewModel.uiState.value
+        assertEquals(2, resolvingState.selectedSeason)
+        assertTrue(resolvingState.isTrailerLoading)
+        assertEquals(TrailerResolutionStatus.RESOLVING, resolvingState.trailerResolutionStatus)
+        assertFalse(resolvingState.isTrailerPlaying)
+        assertEquals(null, resolvingState.trailerUrl)
+
+        seasonAvailabilityGate.complete(
+            SeasonMediaAvailability(
+                hasTrailerOrTeaser = false,
+                hasRecap = true
+            )
+        )
+        advanceUntilIdle()
+
+        val resolvedState = viewModel.uiState.value
+        assertFalse(resolvedState.isTrailerLoading)
+        assertTrue(resolvedState.isTrailerPlaying)
+        assertEquals("https://example.com/season-recap.m3u8", resolvedState.trailerUrl)
+    }
+
+    @Test
     fun `title trailer resolves on demand instead of eager loading when metadata already says trailer exists`() = runTest(dispatcher) {
         val trailerService = mockk<TrailerService>()
         coEvery {
