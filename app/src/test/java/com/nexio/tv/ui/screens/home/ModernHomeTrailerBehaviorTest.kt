@@ -235,4 +235,36 @@ class ModernHomeTrailerBehaviorTest {
         assertFalse(resolveModernHomeHeroTrailerMuted(configuredMuted = true))
         assertFalse(resolveModernHomeHeroTrailerMuted(configuredMuted = false))
     }
+
+    @Test
+    fun `hero fullscreen hint is shown only while hero trailer is playing and timer is active`() {
+        assertTrue(
+            shouldShowModernHomeHeroFullscreenHint(
+                heroTrailerPlaying = true,
+                fullscreenTrailerActive = false,
+                hintTimedOut = false
+            )
+        )
+        assertFalse(
+            shouldShowModernHomeHeroFullscreenHint(
+                heroTrailerPlaying = false,
+                fullscreenTrailerActive = false,
+                hintTimedOut = false
+            )
+        )
+        assertFalse(
+            shouldShowModernHomeHeroFullscreenHint(
+                heroTrailerPlaying = true,
+                fullscreenTrailerActive = true,
+                hintTimedOut = false
+            )
+        )
+        assertFalse(
+            shouldShowModernHomeHeroFullscreenHint(
+                heroTrailerPlaying = true,
+                fullscreenTrailerActive = false,
+                hintTimedOut = true
+            )
+        )
+    }
 }

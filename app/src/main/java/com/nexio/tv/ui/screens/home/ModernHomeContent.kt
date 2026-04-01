@@ -150,6 +150,12 @@ internal fun shouldShowModernHomeFullscreenTextOverlay(
     overlayTimedOut: Boolean
 ): Boolean = false
 
+internal fun shouldShowModernHomeHeroFullscreenHint(
+    heroTrailerPlaying: Boolean,
+    fullscreenTrailerActive: Boolean,
+    hintTimedOut: Boolean
+): Boolean = heroTrailerPlaying && !fullscreenTrailerActive && !hintTimedOut
+
 internal fun resolveModernHomeHeroTrailerMuted(
     configuredMuted: Boolean
 ): Boolean = false
@@ -242,6 +248,7 @@ internal fun ModernHomeContent(
     val strContinueWatching = stringResource(R.string.continue_watching)
     val strAirsDate = stringResource(R.string.cw_airs_date)
     val strUpcoming = stringResource(R.string.cw_upcoming)
+    val strPressUpForFullscreen = stringResource(R.string.modern_home_press_up_fullscreen)
     val strTypeMovie = stringResource(R.string.type_movie)
     val strTypeSeries = stringResource(R.string.type_series)
     val rowBuildCache = remember { ModernCarouselRowBuildCache() }
@@ -447,6 +454,8 @@ internal fun ModernHomeContent(
     var pendingHeroTrailerFocusKey by remember { mutableStateOf<String?>(null) }
     var heroTrailerFullscreenMode by remember { mutableStateOf(false) }
     var fullscreenTrailerTextTimedOut by remember { mutableStateOf(false) }
+    var heroFullscreenHintTimedOut by remember { mutableStateOf(false) }
+    var heroFullscreenHintSessionNonce by remember { mutableIntStateOf(0) }
     val fullscreenTrailerFocusRequester = remember { FocusRequester() }
 
     val focusedTrailerSelection = remember(activeRowKey, activeItemIndex, rowByKey) {
@@ -497,6 +506,8 @@ internal fun ModernHomeContent(
             pendingHeroTrailerFocusKey = null
             heroTrailerFullscreenMode = false
             fullscreenTrailerTextTimedOut = false
+            heroFullscreenHintTimedOut = false
+            heroFullscreenHintSessionNonce = 0
         }
     }
 
@@ -866,6 +877,11 @@ internal fun ModernHomeContent(
             fullscreenTrailerActive = fullscreenTrailerActive,
             overlayTimedOut = fullscreenTrailerTextTimedOut
         )
+        val heroFullscreenHintVisible = shouldShowModernHomeHeroFullscreenHint(
+            heroTrailerPlaying = heroTrailerInternalPlaying,
+            fullscreenTrailerActive = fullscreenTrailerActive,
+            hintTimedOut = heroFullscreenHintTimedOut
+        )
         val expandedTrailerItemId = focusedTrailerSelection?.itemId
         val expandedCardTrailerActive = if (
             effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD &&
@@ -912,6 +928,7 @@ internal fun ModernHomeContent(
             if (fullscreenTrailerActive) {
                 heroTrailerFullscreenMode = false
                 fullscreenTrailerTextTimedOut = false
+                heroFullscreenHintTimedOut = false
                 unlockedTrailerFocusKey = null
                 pendingHeroTrailerFocusKey = null
                 focusedTrailerSelection?.let { selection ->
@@ -1002,9 +1019,15 @@ internal fun ModernHomeContent(
             trailerPreviewAudioUrl = heroTrailerPreviewAudioUrl,
             showLoadingIndicator = heroTrailerPending && heroTrailerPreviewUrl.isNullOrBlank(),
             showTextOverlay = !heroTrailerFullscreenMode || fullscreenTextOverlayVisible,
+            showFullscreenHint = heroFullscreenHintVisible,
+            fullscreenHintText = strPressUpForFullscreen,
             trailerMuted = resolveModernHomeHeroTrailerMuted(
                 configuredMuted = contentState.focusedPosterBackdropTrailerMuted
             ),
+            onTrailerFirstFrameRendered = {
+                heroFullscreenHintTimedOut = false
+                heroFullscreenHintSessionNonce++
+            },
             preview = resolvedHero,
             activeItemId = activeItemId,
             enrichingItemIdState = enrichingItemIdState,
@@ -1015,6 +1038,15 @@ internal fun ModernHomeContent(
             requestHeightPx = heroMediaHeightPx,
             modifier = heroTitleModifier
         )
+
+        LaunchedEffect(heroTrailerPreviewUrl, heroTrailerFullscreenMode, heroTrailerItemId) {
+            if (heroTrailerPreviewUrl.isNullOrBlank() || heroTrailerFullscreenMode) {
+                heroFullscreenHintTimedOut = false
+                if (heroTrailerPreviewUrl.isNullOrBlank()) {
+                    heroFullscreenHintSessionNonce = 0
+                }
+            }
+        }
 
         LaunchedEffect(heroTrailerItemId, heroTrailerExternalUrl, effectiveTrailerPlaybackTarget) {
             if (heroTrailerItemId == null || heroTrailerExternalUrl.isNullOrBlank()) return@LaunchedEffect
@@ -1028,6 +1060,17 @@ internal fun ModernHomeContent(
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
                 )
+            }
+        }
+
+        LaunchedEffect(heroFullscreenHintSessionNonce, heroTrailerFullscreenMode, heroTrailerPreviewUrl) {
+            if (heroFullscreenHintSessionNonce <= 0 || heroTrailerFullscreenMode || heroTrailerPreviewUrl.isNullOrBlank()) {
+                return@LaunchedEffect
+            }
+            heroFullscreenHintTimedOut = false
+            delay(10_000L)
+            if (!heroTrailerFullscreenMode && !heroTrailerPreviewUrl.isNullOrBlank()) {
+                heroFullscreenHintTimedOut = true
             }
         }
 
@@ -1285,7 +1328,10 @@ private fun ModernHeroSection(
     trailerPreviewAudioUrl: String?,
     showLoadingIndicator: Boolean,
     showTextOverlay: Boolean,
+    showFullscreenHint: Boolean,
+    fullscreenHintText: String,
     trailerMuted: Boolean,
+    onTrailerFirstFrameRendered: () -> Unit,
     preview: HeroPreview?,
     activeItemId: String?,
     enrichingItemIdState: State<String?>,
@@ -1310,6 +1356,9 @@ private fun ModernHeroSection(
         trailerPreviewAudioUrl = trailerPreviewAudioUrl,
         showLoadingIndicator = showLoadingIndicator,
         trailerMuted = trailerMuted,
+        showFullscreenHint = showFullscreenHint,
+        fullscreenHintText = fullscreenHintText,
+        onTrailerFirstFrameRendered = onTrailerFirstFrameRendered,
         enrichmentActive = enrichmentActive,
         modifier = mediaModifier,
         requestWidthPx = requestWidthPx,
