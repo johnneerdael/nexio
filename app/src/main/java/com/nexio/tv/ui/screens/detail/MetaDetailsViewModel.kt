@@ -2197,6 +2197,10 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun handlePlayButtonFocused() {
+        debugLog(
+            TAG,
+            "handlePlayButtonFocused alreadyFocused=$isPlayButtonFocused trailerPlaying=${_uiState.value.isTrailerPlaying} showControls=${_uiState.value.showTrailerControls}"
+        )
         if (isPlayButtonFocused) return
         isPlayButtonFocused = true
         startIdleTimer()
@@ -2257,6 +2261,10 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun handleTrailerEnded() {
+        debugLog(
+            TAG,
+            "handleTrailerEnded trailerPlaying=${_uiState.value.isTrailerPlaying} showControls=${_uiState.value.showTrailerControls}"
+        )
         trailerHasPlayed = true
         isPlayButtonFocused = false
         setTrailerPlaybackState(

@@ -14,7 +14,6 @@ class ModernHomeTrailerBehaviorTest {
     fun `home trailer autoplay remains locked while screensaver is visible`() {
         assertFalse(
             shouldUnlockModernHomeTrailerAutoplay(
-                trailerEnabled = true,
                 autoplayEnabled = true,
                 screensaverVisible = true,
                 selectionStillFocused = true,
@@ -27,7 +26,6 @@ class ModernHomeTrailerBehaviorTest {
     fun `home trailer autoplay unlocks after delay when enabled and resumed`() {
         assertTrue(
             shouldUnlockModernHomeTrailerAutoplay(
-                trailerEnabled = true,
                 autoplayEnabled = true,
                 screensaverVisible = false,
                 selectionStillFocused = true,

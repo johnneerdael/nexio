@@ -74,7 +74,7 @@ import coil.request.ImageRequest
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun HeroContentSection(
+internal fun HeroContentSection(
     meta: Meta,
     nextEpisode: Video?,
     nextToWatch: NextToWatch?,
@@ -92,8 +92,9 @@ fun HeroContentSection(
     hideMetaInfoImdb: Boolean = false,
     isTrailerPlaying: Boolean = false,
     playButtonFocusRequester: FocusRequester? = null,
+    downFocusRequester: FocusRequester? = null,
     restorePlayFocusToken: Int = 0,
-    onHeroActionFocused: () -> Unit = {},
+    onHeroActionFocused: (HeroAction) -> Unit = {},
     onPlayFocusRestored: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -121,6 +122,29 @@ fun HeroContentSection(
         context = context,
         rawRes = com.nexio.tv.R.raw.trailer_play_button
     )
+    val resolvedPlayFocusRequester = playButtonFocusRequester ?: remember { FocusRequester() }
+    val libraryFocusRequester = remember { FocusRequester() }
+    val watchedFocusRequester = remember { FocusRequester() }
+    val trailerFocusRequester = remember { FocusRequester() }
+    val heroActionOrder = remember(meta.apiType, trailerAvailable) {
+        buildHeroActionOrder(
+            isMovie = meta.apiType == "movie",
+            trailerAvailable = trailerAvailable
+        )
+    }
+    val heroActionRequesters = remember(
+        resolvedPlayFocusRequester,
+        libraryFocusRequester,
+        watchedFocusRequester,
+        trailerFocusRequester
+    ) {
+        mapOf(
+            HeroAction.PLAY to resolvedPlayFocusRequester,
+            HeroAction.LIBRARY to libraryFocusRequester,
+            HeroAction.WATCHED to watchedFocusRequester,
+            HeroAction.TRAILER to trailerFocusRequester
+        )
+    }
     val strCreator = stringResource(R.string.hero_creator)
     val strDirector = stringResource(R.string.hero_director)
     val strWriter = stringResource(R.string.hero_writer)
@@ -226,13 +250,17 @@ fun HeroContentSection(
                                 else -> stringResource(R.string.hero_play)
                             },
                             onClick = onPlayClick,
-                            focusRequester = playButtonFocusRequester,
+                            focusRequester = resolvedPlayFocusRequester,
+                            directions = resolveHeroActionDirections(HeroAction.PLAY, heroActionOrder),
+                            actionRequesters = heroActionRequesters,
+                            downFocusRequester = downFocusRequester,
                             restoreFocusToken = restorePlayFocusToken,
                             onFocused = onHeroActionFocused,
                             onFocusRestored = onPlayFocusRestored
                         )
 
                         ActionIconButton(
+                            action = HeroAction.LIBRARY,
                             icon = if (isInLibrary) Icons.Default.Check else null,
                             painter = if (!isInLibrary) {
                                 libraryAddPainter
@@ -242,11 +270,16 @@ fun HeroContentSection(
                             contentDescription = if (isInLibrary) stringResource(R.string.hero_remove_from_library) else stringResource(R.string.hero_add_to_library),
                             onClick = onToggleLibrary,
                             onLongPress = onLibraryLongPress,
+                            focusRequester = libraryFocusRequester,
+                            directions = resolveHeroActionDirections(HeroAction.LIBRARY, heroActionOrder),
+                            actionRequesters = heroActionRequesters,
+                            downFocusRequester = downFocusRequester,
                             onFocused = onHeroActionFocused
                         )
 
                         if (meta.apiType == "movie") {
                             ActionIconButton(
+                                action = HeroAction.WATCHED,
                                 icon = if (isMovieWatched) {
                                     Icons.Default.Visibility
                                 } else {
@@ -262,15 +295,24 @@ fun HeroContentSection(
                                 selected = isMovieWatched,
                                 selectedContainerColor = Color.White,
                                 selectedContentColor = Color.Black,
+                                focusRequester = watchedFocusRequester,
+                                directions = resolveHeroActionDirections(HeroAction.WATCHED, heroActionOrder),
+                                actionRequesters = heroActionRequesters,
+                                downFocusRequester = downFocusRequester,
                                 onFocused = onHeroActionFocused
                             )
                         }
 
                         if (trailerAvailable) {
                             ActionIconButtonPainter(
+                                action = HeroAction.TRAILER,
                                 painter = trailerPainter,
                                 contentDescription = stringResource(R.string.hero_play_trailer),
                                 onClick = onTrailerClick,
+                                focusRequester = trailerFocusRequester,
+                                directions = resolveHeroActionDirections(HeroAction.TRAILER, heroActionOrder),
+                                actionRequesters = heroActionRequesters,
+                                downFocusRequester = downFocusRequester,
                                 onFocused = onHeroActionFocused
                             )
                         }
@@ -321,17 +363,20 @@ fun HeroContentSection(
 private fun PlayButton(
     text: String,
     onClick: () -> Unit,
-    focusRequester: FocusRequester? = null,
+    focusRequester: FocusRequester,
+    directions: HeroActionDirections,
+    actionRequesters: Map<HeroAction, FocusRequester>,
+    downFocusRequester: FocusRequester? = null,
     restoreFocusToken: Int = 0,
-    onFocused: () -> Unit = {},
+    onFocused: (HeroAction) -> Unit = {},
     onFocusRestored: () -> Unit = {}
 ) {
     var pendingFocusRestore by remember { mutableStateOf(false) }
 
     LaunchedEffect(restoreFocusToken, focusRequester) {
-        pendingFocusRestore = restoreFocusToken > 0 && focusRequester != null
-        if (restoreFocusToken > 0 && focusRequester != null) {
-            focusRequester.requestFocusAfterFrames()
+        pendingFocusRestore = restoreFocusToken > 0
+        if (restoreFocusToken > 0) {
+            focusRequester.requestFocusAfterFrames(reason = "play_button_restore_token=$restoreFocusToken")
         }
     }
     val context = LocalContext.current
@@ -343,17 +388,29 @@ private fun PlayButton(
     Button(
         onClick = onClick,
         modifier = Modifier
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .focusRequester(focusRequester)
             .onFocusChanged {
                 if (it.isFocused) {
-                    onFocused()
+                    detailFocusDebug("heroActionFocused action=${HeroAction.PLAY} restored=$pendingFocusRestore")
+                    onFocused(HeroAction.PLAY)
                     if (pendingFocusRestore) {
                         pendingFocusRestore = false
                         onFocusRestored()
                     }
                 }
             }
-            .focusProperties { up = FocusRequester.Cancel },
+            .focusProperties {
+                up = FocusRequester.Cancel
+                directions.left?.let { left = actionRequesters.getValue(it) } ?: run {
+                    if (directions.trapLeft) left = FocusRequester.Cancel
+                }
+                directions.right?.let { right = actionRequesters.getValue(it) } ?: run {
+                    if (directions.trapRight) right = FocusRequester.Cancel
+                }
+                if (downFocusRequester != null) {
+                    down = downFocusRequester
+                }
+            },
         colors = ButtonDefaults.colors(
             containerColor = androidx.compose.ui.graphics.Color.White,
             focusedContainerColor = androidx.compose.ui.graphics.Color.White,
@@ -399,10 +456,15 @@ private fun PlayButton(
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun ActionIconButtonPainter(
+    action: HeroAction,
     painter: Painter,
     contentDescription: String,
     onClick: () -> Unit,
-    onFocused: () -> Unit = {},
+    focusRequester: FocusRequester,
+    directions: HeroActionDirections,
+    actionRequesters: Map<HeroAction, FocusRequester>,
+    downFocusRequester: FocusRequester? = null,
+    onFocused: (HeroAction) -> Unit = {},
     enabled: Boolean = true
 ) {
     IconButton(
@@ -410,10 +472,25 @@ private fun ActionIconButtonPainter(
         enabled = enabled,
         modifier = Modifier
             .size(48.dp)
+            .focusRequester(focusRequester)
             .onFocusChanged { state ->
-                if (state.isFocused) onFocused()
+                if (state.isFocused) {
+                    detailFocusDebug("heroActionFocused action=$action restored=false")
+                    onFocused(action)
+                }
             }
-            .focusProperties { up = FocusRequester.Cancel },
+            .focusProperties {
+                up = FocusRequester.Cancel
+                directions.left?.let { left = actionRequesters.getValue(it) } ?: run {
+                    if (directions.trapLeft) left = FocusRequester.Cancel
+                }
+                directions.right?.let { right = actionRequesters.getValue(it) } ?: run {
+                    if (directions.trapRight) right = FocusRequester.Cancel
+                }
+                if (downFocusRequester != null) {
+                    down = downFocusRequester
+                }
+            },
         colors = IconButtonDefaults.colors(
             containerColor = NexioColors.BackgroundCard,
             focusedContainerColor = NexioColors.Secondary,
@@ -449,16 +526,21 @@ private fun ActionIconButtonPainter(
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun ActionIconButton(
+    action: HeroAction,
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     painter: Painter? = null,
     contentDescription: String,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
+    focusRequester: FocusRequester,
+    directions: HeroActionDirections,
+    actionRequesters: Map<HeroAction, FocusRequester>,
+    downFocusRequester: FocusRequester? = null,
     enabled: Boolean = true,
     selected: Boolean = false,
     selectedContainerColor: Color = Color(0xFF7CFF9B),
     selectedContentColor: Color = Color.Black,
-    onFocused: () -> Unit = {}
+    onFocused: (HeroAction) -> Unit = {}
 ) {
     var longPressTriggered by remember { mutableStateOf(false) }
 
@@ -473,8 +555,12 @@ private fun ActionIconButton(
         enabled = enabled,
         modifier = Modifier
             .size(48.dp)
+            .focusRequester(focusRequester)
             .onFocusChanged { state ->
-                if (state.isFocused) onFocused()
+                if (state.isFocused) {
+                    detailFocusDebug("heroActionFocused action=$action restored=false")
+                    onFocused(action)
+                }
             }
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
@@ -507,7 +593,18 @@ private fun ActionIconButton(
                 }
                 false
             }
-            .focusProperties { up = FocusRequester.Cancel },
+            .focusProperties {
+                up = FocusRequester.Cancel
+                directions.left?.let { left = actionRequesters.getValue(it) } ?: run {
+                    if (directions.trapLeft) left = FocusRequester.Cancel
+                }
+                directions.right?.let { right = actionRequesters.getValue(it) } ?: run {
+                    if (directions.trapRight) right = FocusRequester.Cancel
+                }
+                if (downFocusRequester != null) {
+                    down = downFocusRequester
+                }
+            },
         colors = IconButtonDefaults.colors(
             containerColor = if (selected) selectedContainerColor else NexioColors.BackgroundCard,
             focusedContainerColor = NexioColors.Secondary,

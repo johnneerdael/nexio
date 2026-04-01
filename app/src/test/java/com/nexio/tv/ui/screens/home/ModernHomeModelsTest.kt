@@ -7,6 +7,7 @@ import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.WatchProgress
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -159,6 +160,49 @@ class ModernHomeModelsTest {
         val updated = applyTomatoesToContinueWatchingItem(item, 88.0)
 
         assertEquals(88.0, updated.displayMetadata().tomatoesRating ?: 0.0, 0.0)
+    }
+
+    @Test
+    fun `resolveFocusedTrailerSelection returns continue watching trailer selection`() {
+        val item = ContinueWatchingItem.InProgress(
+            progress = WatchProgress(
+                contentId = "tt123",
+                contentType = "series",
+                name = "Paradise",
+                poster = "poster",
+                backdrop = "backdrop",
+                logo = "logo",
+                videoId = "tt123:1:1",
+                season = 1,
+                episode = 1,
+                episodeTitle = "Episode 1",
+                position = 100L,
+                duration = 1_000L,
+                lastWatched = 1L
+            ),
+            displayMetadata = HomeDisplayMetadata(
+                title = "Paradise",
+                releaseInfo = "2025"
+            )
+        )
+
+        val builtItem = buildContinueWatchingItem(
+            item = item,
+            useLandscapePosters = true,
+            airsDateTemplate = "Airs %s",
+            upcomingLabel = "Upcoming"
+        )
+        val selection = resolveFocusedTrailerSelection(
+            rowKey = "continue_watching",
+            item = builtItem
+        )
+
+        assertEquals("continue_watching", selection?.rowKey)
+        assertEquals("tt123", selection?.itemId)
+        assertEquals("series", selection?.itemType)
+        assertEquals("Paradise", selection?.trailerTitle)
+        assertEquals(builtItem.subtitle, selection?.trailerReleaseInfo)
+        assertNull(selection?.fallbackTrailerYtId)
     }
 
     private fun buildModernCarouselItem(tomatoesText: String?): ModernCarouselItem {
