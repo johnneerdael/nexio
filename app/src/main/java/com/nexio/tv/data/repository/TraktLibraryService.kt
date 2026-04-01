@@ -36,7 +36,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -264,8 +263,10 @@ class TraktLibraryService @Inject constructor(
         } else {
             current.entriesByList + (createdTab.key to emptyList())
         }
-        snapshotState.value = rebuildSnapshot(updatedTabs, updatedEntries)
-        persistCurrentState()
+        persistAndRestoreSnapshot(
+            snapshot = rebuildSnapshot(updatedTabs, updatedEntries),
+            metadata = metadataState.value
+        )
     }
 
     suspend fun updatePersonalList(
@@ -388,16 +389,14 @@ class TraktLibraryService @Inject constructor(
 
             refreshingState.value = true
             try {
-                val previous = snapshotState.value
-                val refreshed = runCatching { fetchSnapshot() }.getOrNull()
-                val baseSnapshot = applyMetadata(refreshed ?: previous, metadataState.value)
-                val primedMetadata = primeMetadata(baseSnapshot.allEntries)
-                val snapshotToUse = applyMetadata(baseSnapshot, primedMetadata)
-                snapshotState.value = snapshotToUse
-                lastRefreshMs = now
-                persistCurrentState()
-                hydrateMetadata(snapshotToUse.allEntries)
-                refreshed != null
+                val previousMetadata = metadataState.value
+                val refreshed = runCatching { fetchSnapshot() }.getOrNull() ?: return@withLock false
+                val baseSnapshot = applyMetadata(refreshed, previousMetadata)
+                val primedMetadata = primeMetadata(baseSnapshot.allEntries, previousMetadata)
+                val snapshotToPersist = applyMetadata(baseSnapshot, primedMetadata)
+                persistAndRestoreSnapshot(snapshotToPersist, primedMetadata)
+                hydrateMetadata(snapshotState.value.allEntries)
+                true
             } finally {
                 refreshingState.value = false
             }
@@ -432,15 +431,14 @@ class TraktLibraryService @Inject constructor(
         mutation: suspend () -> Unit
     ) {
         val before = snapshotState.value
-        val optimisticSnapshot = applyMetadata(optimistic(before), metadataState.value)
-        snapshotState.value = optimisticSnapshot
-        persistCurrentState()
-        hydrateMetadata(optimisticSnapshot.allEntries)
+        val beforeMetadata = metadataState.value
+        val optimisticSnapshot = applyMetadata(optimistic(before), beforeMetadata)
+        persistAndRestoreSnapshot(optimisticSnapshot, beforeMetadata)
+        hydrateMetadata(snapshotState.value.allEntries)
         try {
             mutation()
         } catch (error: Throwable) {
-            snapshotState.value = before
-            persistCurrentState()
+            persistAndRestoreSnapshot(before, beforeMetadata)
             throw error
         }
     }
@@ -947,16 +945,18 @@ class TraktLibraryService @Inject constructor(
         )
     }
 
-    private suspend fun primeMetadata(entries: List<LibraryEntry>): Map<String, LibraryMetadata> {
-        if (entries.isEmpty()) return metadataState.value
+    private suspend fun primeMetadata(
+        entries: List<LibraryEntry>,
+        existingMetadata: Map<String, LibraryMetadata>
+    ): Map<String, LibraryMetadata> {
+        if (entries.isEmpty()) return existingMetadata
 
         val claimedEntries = metadataMutex.withLock {
-            val current = metadataState.value
             entries.take(metadataHydrationLimit)
                 .map { contentKey(it.id, it.type) to it }
                 .distinctBy { it.first }
                 .mapNotNull { (key, entry) ->
-                    if (current.containsKey(key) || inFlightMetadataKeys.contains(key)) {
+                    if (existingMetadata.containsKey(key) || inFlightMetadataKeys.contains(key)) {
                         null
                     } else {
                         inFlightMetadataKeys.add(key)
@@ -965,7 +965,7 @@ class TraktLibraryService @Inject constructor(
                 }
         }
 
-        if (claimedEntries.isEmpty()) return metadataState.value
+        if (claimedEntries.isEmpty()) return existingMetadata
 
         val fetchedMetadata = try {
             coroutineScope {
@@ -986,12 +986,9 @@ class TraktLibraryService @Inject constructor(
             }
         }
 
-        if (fetchedMetadata.isEmpty()) return metadataState.value
+        if (fetchedMetadata.isEmpty()) return existingMetadata
 
-        metadataState.update { current ->
-            current + fetchedMetadata
-        }
-        return metadataState.value
+        return existingMetadata + fetchedMetadata
     }
 
     private fun hydrateMetadata(entries: List<LibraryEntry>) {
@@ -1011,10 +1008,14 @@ class TraktLibraryService @Inject constructor(
                 try {
                     metadataFetchSemaphore.withPermit {
                         val metadata = fetchMetadata(entry) ?: return@launch
-                        metadataState.update { current ->
+                        val updatedMetadata = metadataMutex.withLock {
+                            val current = metadataState.value
+                            if (current.containsKey(key)) return@withLock null
                             current + (key to metadata)
                         }
-                        persistCurrentState()
+                        if (updatedMetadata != null) {
+                            persistAndRestoreSnapshot(snapshotState.value, updatedMetadata)
+                        }
                     }
                 } finally {
                     metadataMutex.withLock { inFlightMetadataKeys.remove(key) }
@@ -1085,42 +1086,47 @@ class TraktLibraryService @Inject constructor(
         hasCacheState.value = hasCache(persisted)
     }
 
-    private fun persistCurrentState() {
-        val snapshot = snapshotState.value
-        if (!hasCache(snapshot)) {
-            hasCacheState.value = false
+    private fun persistAndRestoreSnapshot(
+        snapshot: Snapshot,
+        metadata: Map<String, LibraryMetadata>
+    ) {
+        val persisted = TraktLibrarySnapshotStore.Snapshot(
+            listTabs = snapshot.listTabs,
+            entriesByList = snapshot.entriesByList,
+            metadataByContentKey = metadata.mapValues { (_, value) ->
+                TraktLibrarySnapshotStore.PersistedLibraryMetadata(
+                    name = value.name,
+                    poster = value.poster,
+                    background = value.background,
+                    logo = value.logo,
+                    description = value.description,
+                    releaseInfo = value.releaseInfo,
+                    imdbRating = value.imdbRating,
+                    genres = value.genres
+                )
+            },
+            updatedAtMs = snapshot.updatedAtMs
+        )
+        if (!hasCache(persisted)) {
             snapshotStore.clear()
+            clearInMemorySnapshot()
             return
         }
-        hasCacheState.value = true
-        snapshotStore.write(
-            TraktLibrarySnapshotStore.Snapshot(
-                listTabs = snapshot.listTabs,
-                entriesByList = snapshot.entriesByList,
-                metadataByContentKey = metadataState.value.mapValues { (_, metadata) ->
-                    TraktLibrarySnapshotStore.PersistedLibraryMetadata(
-                        name = metadata.name,
-                        poster = metadata.poster,
-                        background = metadata.background,
-                        logo = metadata.logo,
-                        description = metadata.description,
-                        releaseInfo = metadata.releaseInfo,
-                        imdbRating = metadata.imdbRating,
-                        genres = metadata.genres
-                    )
-                },
-                updatedAtMs = snapshot.updatedAtMs
-            )
-        )
+        snapshotStore.write(persisted)
+        restorePersistedState(snapshotStore.read() ?: persisted)
     }
 
     private fun clearCachedState() {
+        clearInMemorySnapshot()
+        refreshingState.value = false
+        snapshotStore.clear()
+    }
+
+    private fun clearInMemorySnapshot() {
         snapshotState.value = Snapshot()
         metadataState.value = emptyMap()
-        refreshingState.value = false
         lastRefreshMs = 0L
         hasCacheState.value = false
-        snapshotStore.clear()
     }
 
     private fun hasCache(snapshot: Snapshot): Boolean {

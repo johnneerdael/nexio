@@ -23,6 +23,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -50,7 +51,8 @@ class TraktLibraryServiceTest {
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
         every { snapshotStore.read() } returns samplePersistedSnapshot()
-        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns flowOf(NetworkResult.Loading)
+        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns
+            flowOf(NetworkResult.Error("metadata unavailable"))
 
         val service = TraktLibraryService(
             traktApi = traktApi,
@@ -130,6 +132,68 @@ class TraktLibraryServiceTest {
     }
 
     @Test
+    fun `first uncached refresh stays empty until disk snapshot is written`() = runTest {
+        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktAuthService = mockk<TraktAuthService>()
+        val metaRepository = mockk<MetaRepository>()
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val traktAuthState = MutableStateFlow(true)
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val snapshotStore = mockk<TraktLibrarySnapshotStore>()
+        var persistedSnapshot: TraktLibrarySnapshotStore.Snapshot? = null
+        lateinit var service: TraktLibraryService
+
+        every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
+        every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
+        every { snapshotStore.read() } answers { persistedSnapshot }
+        every { snapshotStore.write(any()) } answers {
+            assertTrue(runBlocking { service.observeListTabs().first().isEmpty() })
+            assertTrue(runBlocking { service.observeAllItems().first().isEmpty() })
+            assertTrue(runBlocking { service.observeHasCache().first().not() })
+            persistedSnapshot = firstArg()
+        }
+
+        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any()) } returnsMany listOf(
+            successResponse(
+                listOf(
+                    TraktListItemDto(
+                        rank = 1,
+                        listedAt = "2026-03-30T12:00:00Z",
+                        type = "movie",
+                        movie = TraktMovieDto(
+                            title = "Watchlist Movie",
+                            year = 2024,
+                            ids = TraktIdsDto(imdb = "tt1234567", trakt = 10)
+                        )
+                    )
+                )
+            ),
+            successResponse(emptyList<TraktListItemDto>()),
+            successResponse(emptyList<TraktListSummaryDto>())
+        )
+        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns
+            flowOf(NetworkResult.Error("metadata unavailable"))
+
+        service = TraktLibraryService(
+            traktApi = traktApi,
+            traktAuthService = traktAuthService,
+            metaRepository = metaRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            traktAuthDataStore = traktAuthDataStore,
+            snapshotStore = snapshotStore
+        )
+
+        advanceUntilIdle()
+        assertTrue(service.observeListTabs().first().isEmpty())
+
+        service.refreshNow()
+        advanceUntilIdle()
+
+        assertTrue(service.observeHasCache().first())
+        assertEquals(listOf(TraktLibraryService.WATCHLIST_KEY), service.observeListTabs().first().map { it.key })
+    }
+
+    @Test
     fun `warm cache refresh failure preserves restored snapshot`() = runTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
@@ -142,7 +206,8 @@ class TraktLibraryServiceTest {
         every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
         every { snapshotStore.read() } returns samplePersistedSnapshot()
-        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns flowOf(NetworkResult.Loading)
+        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns
+            flowOf(NetworkResult.Error("metadata unavailable"))
         coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any()) } returns null
 
         val service = TraktLibraryService(
@@ -161,6 +226,68 @@ class TraktLibraryServiceTest {
         val items = service.observeAllItems().first()
         assertEquals(listOf("tt1234567", "tmdb:321"), items.map { it.id })
         assertTrue(items.first().poster == "https://image.test/watchlist/poster.jpg")
+    }
+
+    @Test
+    fun `warm refresh keeps showing persisted cache until replacement snapshot is written`() = runTest {
+        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktAuthService = mockk<TraktAuthService>()
+        val metaRepository = mockk<MetaRepository>()
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val traktAuthState = MutableStateFlow(true)
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val snapshotStore = mockk<TraktLibrarySnapshotStore>()
+        var persistedSnapshot: TraktLibrarySnapshotStore.Snapshot? = samplePersistedSnapshot()
+        lateinit var service: TraktLibraryService
+
+        every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
+        every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
+        every { snapshotStore.read() } answers { persistedSnapshot }
+        every { snapshotStore.write(any()) } answers {
+            assertEquals(
+                listOf("tt1234567", "tmdb:321"),
+                runBlocking { service.observeAllItems().first().map { it.id } }
+            )
+            persistedSnapshot = firstArg()
+        }
+        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns
+            flowOf(NetworkResult.Error("metadata unavailable"))
+        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any()) } returnsMany listOf(
+            successResponse(
+                listOf(
+                    TraktListItemDto(
+                        rank = 1,
+                        listedAt = "2026-04-01T12:00:00Z",
+                        type = "movie",
+                        movie = TraktMovieDto(
+                            title = "Replacement Movie",
+                            year = 2025,
+                            ids = TraktIdsDto(imdb = "tt7654321", trakt = 20)
+                        )
+                    )
+                )
+            ),
+            successResponse(emptyList<TraktListItemDto>()),
+            successResponse(emptyList<TraktListSummaryDto>())
+        )
+
+        service = TraktLibraryService(
+            traktApi = traktApi,
+            traktAuthService = traktAuthService,
+            metaRepository = metaRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            traktAuthDataStore = traktAuthDataStore,
+            snapshotStore = snapshotStore
+        )
+
+        advanceUntilIdle()
+        assertEquals(listOf("tt1234567", "tmdb:321"), service.observeAllItems().first().map { it.id })
+
+        service.refreshNow()
+        advanceUntilIdle()
+
+        assertEquals(listOf("tt7654321"), service.observeAllItems().first().map { it.id })
+        assertEquals(listOf(TraktLibraryService.WATCHLIST_KEY), service.observeListTabs().first().map { it.key })
     }
 
     @Test
