@@ -7,8 +7,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
-import com.nexio.tv.data.repository.DebridBenchmarkProvider
-import com.nexio.tv.data.repository.DebridBenchmarkResult
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton

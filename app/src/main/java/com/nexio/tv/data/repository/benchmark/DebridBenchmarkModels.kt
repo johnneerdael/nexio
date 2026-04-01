@@ -1,4 +1,4 @@
-package com.nexio.tv.data.repository
+package com.nexio.tv.data.repository.benchmark
 
 enum class DebridBenchmarkProvider(
     val storageKey: String
