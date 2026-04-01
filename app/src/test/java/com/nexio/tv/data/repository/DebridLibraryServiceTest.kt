@@ -19,6 +19,7 @@ import com.nexio.tv.data.remote.dto.debrid.TorBoxTorrentListItemDto
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import io.mockk.coEvery
 import io.mockk.coJustRun
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.first
@@ -569,6 +570,70 @@ class DebridLibraryServiceTest {
 
         assertEquals(2, candidates.size)
         assertEquals(listOf("https://pm.test/direct/new", "https://pm.test/direct/old"), candidates.map { it.directUrl })
+    }
+
+    @Test
+    fun `benchmark lookup does not suppress later all provider refreshes`() = runTest {
+        val realDebridApi = mockk<RealDebridApi>()
+        val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
+        val premiumizeApi = mockk<PremiumizeApi>()
+        val premiumizeService = mockk<PremiumizeService>()
+        val torBoxApi = mockk<TorBoxApi>()
+        val torBoxService = mockk<TorBoxService>()
+
+        stubAuthenticatedRealDebrid(realDebridAuthDataStore)
+        every { premiumizeService.observeAccountState() } returns flowOf(
+            PremiumizeAccountState(
+                apiKey = "pm-key",
+                isConnected = true
+            )
+        )
+        coJustRun { premiumizeService.refreshAccountState() }
+        stubDisconnectedTorBox(torBoxService)
+
+        coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(emptyList())
+        coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(emptyList())
+
+        coEvery { premiumizeApi.listAllItems("pm-key") } returns Response.success(
+            PremiumizeListAllDto(
+                status = "success",
+                files = listOf(
+                    PremiumizeListAllFileDto(
+                        id = "pm-1",
+                        name = "Premiumize.Movie.2024.mkv",
+                        createdAt = 300L,
+                        mimeType = "video/x-matroska",
+                        path = "/Premiumize.Movie.2024.mkv"
+                    )
+                )
+            )
+        )
+        coEvery { premiumizeApi.getItemDetails("pm-key", "pm-1") } returns Response.success(
+            PremiumizeItemDetailsDto(
+                id = "pm-1",
+                name = "Premiumize.Movie.2024.mkv",
+                streamLink = "https://pm.test/direct/pm-1",
+                mimeType = "video/x-matroska",
+                createdAt = 300L
+            )
+        )
+
+        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
+        val service = DebridLibraryService(
+            realDebridApi = realDebridApi,
+            realDebridAuthDataStore = realDebridAuthDataStore,
+            realDebridAuthService = realDebridAuthService,
+            premiumizeApi = premiumizeApi,
+            premiumizeService = premiumizeService,
+            torBoxApi = torBoxApi,
+            torBoxService = torBoxService
+        )
+
+        service.getBenchmarkCandidates(DebridBenchmarkProvider.REAL_DEBRID)
+        val items = service.observeItems().first()
+
+        assertTrue(items.any { it.listKeys.contains(DebridLibraryService.PREMIUMIZE_LIST_KEY) })
+        coVerify(exactly = 1) { premiumizeApi.listAllItems("pm-key") }
     }
 
     @Test
