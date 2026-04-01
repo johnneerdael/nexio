@@ -163,6 +163,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -186,6 +187,7 @@ val LocalContentFocusRequester = compositionLocalOf { FocusRequester.Default }
 private const val STARTUP_SPLASH_FIRST_FRAME_TIMEOUT_MS = 4_000L
 private const val STARTUP_SPLASH_LAST_FRAME_HOLD_MS = 150L
 private const val STARTUP_SPLASH_HARD_TIMEOUT_MS = 12_000L
+private const val IDLE_SCREENSAVER_DEBUG_LOG_TAG = "IdleScreensaverDebug"
 
 private data class MainUiPrefs(
     val theme: AppTheme = AppTheme.WHITE,
@@ -522,12 +524,50 @@ class MainActivity : ComponentActivity() {
                         ) && !showStartupSplash
                     }
 
+                    LaunchedEffect(
+                        currentRoute,
+                        idleScreensaverEligible,
+                        idleScreensaverVisible,
+                        idleScreensaverSlides.size,
+                        idleTrailerCandidates.size,
+                        mainUiPrefs.trailerScreensaverEnabled,
+                        inAppTrailerPlaybackActive,
+                        idleLastInteractionAtMs
+                    ) {
+                        logIdleScreensaverDiagnostics(
+                            buildIdleScreensaverDiagnosticsMessage(
+                                event = "state_changed",
+                                currentRoute = currentRoute,
+                                idleScreensaverEligible = idleScreensaverEligible,
+                                idleScreensaverVisible = idleScreensaverVisible,
+                                slideCount = idleScreensaverSlides.size,
+                                trailerCandidateCount = idleTrailerCandidates.size,
+                                trailerScreensaverEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                                inAppTrailerPlaybackActive = inAppTrailerPlaybackActive,
+                                idleLastInteractionAtMs = idleLastInteractionAtMs
+                            )
+                        )
+                    }
+
                     LaunchedEffect(currentRoute) {
                         if (
                             currentRoute != Screen.Home.route &&
                             currentRoute != Screen.Detail.route &&
                             inAppTrailerPlaybackActive
                         ) {
+                            logIdleScreensaverDiagnostics(
+                                buildIdleScreensaverDiagnosticsMessage(
+                                    event = "route_cleared_trailer_state",
+                                    currentRoute = currentRoute,
+                                    idleScreensaverEligible = idleScreensaverEligible,
+                                    idleScreensaverVisible = idleScreensaverVisible,
+                                    slideCount = idleScreensaverSlides.size,
+                                    trailerCandidateCount = idleTrailerCandidates.size,
+                                    trailerScreensaverEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                                    inAppTrailerPlaybackActive = inAppTrailerPlaybackActive,
+                                    idleLastInteractionAtMs = idleLastInteractionAtMs
+                                )
+                            )
                             inAppTrailerPlaybackActive = false
                         }
                         if (currentRoute != Screen.Home.route && modernHomeTrailerFullscreenActive) {
@@ -542,6 +582,19 @@ class MainActivity : ComponentActivity() {
                                 currentActive = inAppTrailerPlaybackActive
                             )
                         ) {
+                            logIdleScreensaverDiagnostics(
+                                buildIdleScreensaverDiagnosticsMessage(
+                                    event = "register_interaction_for_trailer_transition",
+                                    currentRoute = currentRoute,
+                                    idleScreensaverEligible = idleScreensaverEligible,
+                                    idleScreensaverVisible = idleScreensaverVisible,
+                                    slideCount = idleScreensaverSlides.size,
+                                    trailerCandidateCount = idleTrailerCandidates.size,
+                                    trailerScreensaverEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                                    inAppTrailerPlaybackActive = inAppTrailerPlaybackActive,
+                                    idleLastInteractionAtMs = idleLastInteractionAtMs
+                                )
+                            )
                             idleScreensaverController.registerInteraction()
                         }
                         previousInAppTrailerPlaybackActive = inAppTrailerPlaybackActive
@@ -549,6 +602,19 @@ class MainActivity : ComponentActivity() {
 
                     LaunchedEffect(idleScreensaverEligible, idleScreensaverVisible) {
                         if (!idleScreensaverEligible && idleScreensaverVisible) {
+                            logIdleScreensaverDiagnostics(
+                                buildIdleScreensaverDiagnosticsMessage(
+                                    event = "dismiss_for_ineligible_state",
+                                    currentRoute = currentRoute,
+                                    idleScreensaverEligible = idleScreensaverEligible,
+                                    idleScreensaverVisible = idleScreensaverVisible,
+                                    slideCount = idleScreensaverSlides.size,
+                                    trailerCandidateCount = idleTrailerCandidates.size,
+                                    trailerScreensaverEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                                    inAppTrailerPlaybackActive = inAppTrailerPlaybackActive,
+                                    idleLastInteractionAtMs = idleLastInteractionAtMs
+                                )
+                            )
                             idleScreensaverController.dismiss()
                         }
                     }
@@ -583,12 +649,58 @@ class MainActivity : ComponentActivity() {
                             idleScreensaverVisible ||
                             (idleScreensaverSlides.isEmpty() && idleTrailerCandidates.isEmpty())
                         ) {
+                            logIdleScreensaverDiagnostics(
+                                buildIdleScreensaverDiagnosticsMessage(
+                                    event = "start_skipped",
+                                    currentRoute = currentRoute,
+                                    idleScreensaverEligible = idleScreensaverEligible,
+                                    idleScreensaverVisible = idleScreensaverVisible,
+                                    slideCount = idleScreensaverSlides.size,
+                                    trailerCandidateCount = idleTrailerCandidates.size,
+                                    trailerScreensaverEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                                    inAppTrailerPlaybackActive = inAppTrailerPlaybackActive,
+                                    idleLastInteractionAtMs = idleLastInteractionAtMs,
+                                    trailerSessionReady = idleTrailerSessionStart != null
+                                )
+                            )
                             return@LaunchedEffect
                         }
                         val elapsed = (SystemClock.elapsedRealtime() - idleLastInteractionAtMs).coerceAtLeast(0L)
                         val remainingDelayMs = (IDLE_SCREENSAVER_TIMEOUT_MS - elapsed).coerceAtLeast(0L)
+                        logIdleScreensaverDiagnostics(
+                            buildIdleScreensaverDiagnosticsMessage(
+                                event = "start_scheduled",
+                                currentRoute = currentRoute,
+                                idleScreensaverEligible = idleScreensaverEligible,
+                                idleScreensaverVisible = idleScreensaverVisible,
+                                slideCount = idleScreensaverSlides.size,
+                                trailerCandidateCount = idleTrailerCandidates.size,
+                                trailerScreensaverEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                                inAppTrailerPlaybackActive = inAppTrailerPlaybackActive,
+                                idleLastInteractionAtMs = idleLastInteractionAtMs,
+                                elapsedMs = elapsed,
+                                remainingDelayMs = remainingDelayMs,
+                                trailerSessionReady = idleTrailerSessionStart != null
+                            )
+                        )
                         delay(remainingDelayMs)
-                        if (!idleScreensaverEligible || idleScreensaverVisible) return@LaunchedEffect
+                        if (!idleScreensaverEligible || idleScreensaverVisible) {
+                            logIdleScreensaverDiagnostics(
+                                buildIdleScreensaverDiagnosticsMessage(
+                                    event = "start_aborted_after_delay",
+                                    currentRoute = currentRoute,
+                                    idleScreensaverEligible = idleScreensaverEligible,
+                                    idleScreensaverVisible = idleScreensaverVisible,
+                                    slideCount = idleScreensaverSlides.size,
+                                    trailerCandidateCount = idleTrailerCandidates.size,
+                                    trailerScreensaverEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                                    inAppTrailerPlaybackActive = inAppTrailerPlaybackActive,
+                                    idleLastInteractionAtMs = idleLastInteractionAtMs,
+                                    trailerSessionReady = idleTrailerSessionStart != null
+                                )
+                            )
+                            return@LaunchedEffect
+                        }
                         idleTrailerSessionStart = if (mainUiPrefs.trailerScreensaverEnabled) {
                             com.nexio.tv.ui.screensaver.prepareIdleTrailerScreensaverSessionFromCandidates(
                                 candidates = idleTrailerCandidates
@@ -602,10 +714,38 @@ class MainActivity : ComponentActivity() {
                         } else {
                             null
                         }
+                        logIdleScreensaverDiagnostics(
+                            buildIdleScreensaverDiagnosticsMessage(
+                                event = "start_prepared",
+                                currentRoute = currentRoute,
+                                idleScreensaverEligible = idleScreensaverEligible,
+                                idleScreensaverVisible = idleScreensaverVisible,
+                                slideCount = idleScreensaverSlides.size,
+                                trailerCandidateCount = idleTrailerCandidates.size,
+                                trailerScreensaverEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                                inAppTrailerPlaybackActive = inAppTrailerPlaybackActive,
+                                idleLastInteractionAtMs = idleLastInteractionAtMs,
+                                trailerSessionReady = idleTrailerSessionStart != null
+                            )
+                        )
                         if (
                             idleScreensaverSlides.isNotEmpty() ||
                             idleTrailerSessionStart != null
                         ) {
+                            logIdleScreensaverDiagnostics(
+                                buildIdleScreensaverDiagnosticsMessage(
+                                    event = "show_requested",
+                                    currentRoute = currentRoute,
+                                    idleScreensaverEligible = idleScreensaverEligible,
+                                    idleScreensaverVisible = idleScreensaverVisible,
+                                    slideCount = idleScreensaverSlides.size,
+                                    trailerCandidateCount = idleTrailerCandidates.size,
+                                    trailerScreensaverEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                                    inAppTrailerPlaybackActive = inAppTrailerPlaybackActive,
+                                    idleLastInteractionAtMs = idleLastInteractionAtMs,
+                                    trailerSessionReady = idleTrailerSessionStart != null
+                                )
+                            )
                             idleScreensaverController.show()
                         }
                     }
@@ -874,6 +1014,12 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         startupSyncService.setStartupGateOpen(false)
         logStartupPerf("on_start")
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { idleScreensaverRepository.warmFromCache() }
+                .onFailure { error ->
+                    Log.w("MainActivity", "Idle screensaver cache warmup failed", error)
+                }
+        }
         startupPerfWindowOpen = true
         startupWindowOpenedAtMs = SystemClock.elapsedRealtime()
         startupPerfWindowJob?.cancel()
@@ -934,7 +1080,7 @@ class MainActivity : ComponentActivity() {
                         logStartupPerf("trakt_refresh_end")
                     }
             }
-            launch {
+            launch(Dispatchers.IO) {
                 if (!idleScreensaverColdBootRefreshPending) return@launch
                 idleScreensaverColdBootRefreshPending = false
                 runCatching { idleScreensaverRepository.refreshOnColdBoot() }
@@ -1132,6 +1278,47 @@ private data class TransportValidationPlaybackNavigation(
     val title: String,
     val assetPath: String,
 )
+
+internal fun shouldLogIdleScreensaverDiagnostics(isDebugBuild: Boolean): Boolean = isDebugBuild
+
+internal fun buildIdleScreensaverDiagnosticsMessage(
+    event: String,
+    currentRoute: String?,
+    idleScreensaverEligible: Boolean,
+    idleScreensaverVisible: Boolean,
+    slideCount: Int,
+    trailerCandidateCount: Int,
+    trailerScreensaverEnabled: Boolean,
+    inAppTrailerPlaybackActive: Boolean,
+    idleLastInteractionAtMs: Long,
+    elapsedMs: Long? = null,
+    remainingDelayMs: Long? = null,
+    trailerSessionReady: Boolean? = null
+): String {
+    return buildString {
+        append("event=").append(event)
+        append(" route=").append(currentRoute ?: "null")
+        append(" eligible=").append(idleScreensaverEligible)
+        append(" visible=").append(idleScreensaverVisible)
+        append(" slides=").append(slideCount)
+        append(" trailerCandidates=").append(trailerCandidateCount)
+        append(" trailerEnabled=").append(trailerScreensaverEnabled)
+        append(" inAppTrailerActive=").append(inAppTrailerPlaybackActive)
+        append(" lastInteractionMs=").append(idleLastInteractionAtMs)
+        elapsedMs?.let { append(" elapsedMs=").append(it) }
+        remainingDelayMs?.let { append(" remainingMs=").append(it) }
+        trailerSessionReady?.let { append(" trailerSessionReady=").append(it) }
+    }
+}
+
+internal fun logIdleScreensaverDiagnostics(
+    message: String,
+    isDebugBuild: Boolean = BuildConfig.DEBUG,
+    logger: (String, String) -> Int = Log::d
+) {
+    if (!shouldLogIdleScreensaverDiagnostics(isDebugBuild)) return
+    runCatching { logger(IDLE_SCREENSAVER_DEBUG_LOG_TAG, message) }
+}
 
 internal fun isIdleScreensaverEligibleRoute(
     currentRoute: String?,

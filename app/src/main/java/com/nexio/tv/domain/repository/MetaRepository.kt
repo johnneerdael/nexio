@@ -21,6 +21,12 @@ interface MetaRepository {
         writeToDisk: Boolean = true,
         origin: String = "default"
     ): Flow<NetworkResult<Meta>>
+
+    suspend fun getCachedMetaFromAllAddons(
+        type: String,
+        id: String,
+        origin: String = "default"
+    ): Meta?
     
     fun clearCache()
 }

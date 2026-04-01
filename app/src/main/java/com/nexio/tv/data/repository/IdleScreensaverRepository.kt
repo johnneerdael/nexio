@@ -22,6 +22,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -69,6 +70,34 @@ class IdleScreensaverRepository @Inject constructor(
     private val _trailerCandidates = MutableStateFlow<List<IdleTrailerScreensaverCandidate>>(emptyList())
     val trailerCandidates = _trailerCandidates.asStateFlow()
 
+    suspend fun warmFromCache() {
+        refreshMutex.withLock {
+            val selection = selectScreensaverRowsFromCache() ?: return
+            val preparedItems = prepareIdleScreensaverItems(
+                rows = selection.rows,
+                itemsPerRowLimit = TRAILER_SCREENSAVER_CATALOG_LIMIT,
+                hydrateMeta = { preview ->
+                    metaRepository.getCachedMetaFromAllAddons(
+                        type = preview.apiType,
+                        id = preview.id,
+                        origin = "idle_screensaver_cache"
+                    )
+                },
+                enrichPreview = { preview -> preview }
+            )
+            publishPreparedContent(
+                rows = selection.rows,
+                itemsPerRowLimit = selection.itemsPerRowLimit,
+                preparedItems = preparedItems
+            )
+            Log.d(
+                TAG,
+                "Warm cache prepared ${_slides.value.size} idle screensaver slides and " +
+                    "${_trailerCandidates.value.size} trailer candidates"
+            )
+        }
+    }
+
     suspend fun refreshOnColdBoot() {
         refreshMutex.withLock {
             val selection = selectScreensaverRows()
@@ -78,23 +107,15 @@ class IdleScreensaverRepository @Inject constructor(
                 hydrateMeta = { preview -> fetchIdleScreensaverMeta(preview, metaRepository) },
                 enrichPreview = { preview -> mdbListRepository.enrichPreview(preview) }
             )
-
-            val preparedSlides = buildIdleScreensaverSlides(
+            publishPreparedContent(
                 rows = selection.rows,
                 itemsPerRowLimit = selection.itemsPerRowLimit,
-                preparedItemsByKey = preparedItems
+                preparedItems = preparedItems
             )
-            val preparedTrailerCandidates = buildIdleTrailerScreensaverCandidates(
-                rows = selection.rows,
-                itemsPerRowLimit = TRAILER_SCREENSAVER_CATALOG_LIMIT,
-                preparedItemsByKey = preparedItems
-            )
-            _slides.value = preparedSlides
-            _trailerCandidates.value = preparedTrailerCandidates
             Log.d(
                 TAG,
-                "Prepared ${preparedSlides.size} idle screensaver slides and " +
-                    "${preparedTrailerCandidates.size} trailer candidates"
+                "Prepared ${_slides.value.size} idle screensaver slides and " +
+                    "${_trailerCandidates.value.size} trailer candidates"
             )
         }
     }
@@ -121,6 +142,29 @@ class IdleScreensaverRepository @Inject constructor(
         return ScreensaverRowSelection(rows = rows, itemsPerRowLimit = IMAGE_SCREENSAVER_CATALOG_LIMIT)
     }
 
+    private suspend fun selectScreensaverRowsFromCache(): ScreensaverRowSelection? {
+        val traktPrefs = traktSettingsDataStore.catalogPreferences.first()
+        val traktSnapshot = traktDiscoverySnapshotStore.read()
+        val traktAuthenticated = traktAuthDataStore.isAuthenticated.first()
+        if (shouldUseTraktScreensaverSource(traktAuthenticated, traktPrefs, traktSnapshot)) {
+            return ScreensaverRowSelection(
+                rows = buildTraktScreensaverRows(requireNotNull(traktSnapshot)),
+                itemsPerRowLimit = TRAKT_IMAGE_SCREENSAVER_CATALOG_LIMIT
+            )
+        }
+
+        val addons = addonRepository.getCachedInstalledAddons()
+        val movieRequest = findStockCinemetaPopularCatalogRequest(addons, ContentType.MOVIE)
+        val seriesRequest = findStockCinemetaPopularCatalogRequest(addons, ContentType.SERIES)
+        val rows = coroutineScope {
+            listOfNotNull(movieRequest, seriesRequest)
+                .map { request -> async { fetchCachedScreensaverCatalog(request) } }
+                .mapNotNull { deferred -> deferred.await() }
+        }
+        if (rows.isEmpty()) return null
+        return ScreensaverRowSelection(rows = rows, itemsPerRowLimit = IMAGE_SCREENSAVER_CATALOG_LIMIT)
+    }
+
     private suspend fun fetchScreensaverCatalog(request: ScreensaverCatalogRequest): CatalogRow? {
         return runCatching {
             catalogRepository.refreshCatalogToDisk(
@@ -139,6 +183,37 @@ class IdleScreensaverRepository @Inject constructor(
                 error
             )
         }.getOrNull()
+    }
+
+    private suspend fun fetchCachedScreensaverCatalog(request: ScreensaverCatalogRequest): CatalogRow? {
+        return catalogRepository.getCatalogCachedFirst(
+            addonBaseUrl = request.addonBaseUrl,
+            addonId = request.addonId,
+            addonName = request.addonName,
+            catalogId = request.catalogId,
+            catalogName = request.catalogName,
+            type = request.type,
+            allowNetworkRefresh = false
+        ).firstOrNull { result -> result !is com.nexio.tv.core.network.NetworkResult.Loading }
+            ?.let { result -> result as? com.nexio.tv.core.network.NetworkResult.Success<CatalogRow> }
+            ?.data
+    }
+
+    private fun publishPreparedContent(
+        rows: List<CatalogRow>,
+        itemsPerRowLimit: Int,
+        preparedItems: Map<String, PreparedIdleScreensaverItem>
+    ) {
+        _slides.value = buildIdleScreensaverSlides(
+            rows = rows,
+            itemsPerRowLimit = itemsPerRowLimit,
+            preparedItemsByKey = preparedItems
+        )
+        _trailerCandidates.value = buildIdleTrailerScreensaverCandidates(
+            rows = rows,
+            itemsPerRowLimit = TRAILER_SCREENSAVER_CATALOG_LIMIT,
+            preparedItemsByKey = preparedItems
+        )
     }
 }
 

@@ -1,6 +1,8 @@
 package com.nexio.tv.ui.screensaver
 
 import android.view.KeyEvent
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -165,6 +167,16 @@ class IdleScreensaverOverlayTest {
                 sessionMuted = false
             )
         )
+    }
+
+    @Test
+    fun `idle trailer branding presentation keeps logo and prompt visible together for twenty seconds and centers prompt`() {
+        val spec = idleTrailerBrandingPresentationSpec()
+
+        assertEquals(20_000L, spec.visibleMs)
+        assertEquals(1_500, spec.fadeDurationMs)
+        assertEquals(Alignment.CenterHorizontally, spec.contentAlignment)
+        assertEquals(TextAlign.Center, spec.promptTextAlign)
     }
 
     private fun buildSlide(

@@ -271,6 +271,34 @@ class MetaRepositoryImpl @Inject constructor(
         emit(NetworkResult.Error("Meta not found in any addon"))
     }
 
+    override suspend fun getCachedMetaFromAllAddons(
+        type: String,
+        id: String,
+        origin: String
+    ): Meta? {
+        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
+        val providerToken = posterProviderCacheToken(activePosterProvider)
+        val cacheKey = "$type:$id:$providerToken"
+        addonMetaCache[cacheKey]?.let { cached ->
+            return cached
+        }
+        metaCache[cacheKey]?.let { cached ->
+            addonMetaCache[cacheKey] = cached
+            return cached
+        }
+        val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(context)
+        val itemKey = "$type:$id"
+        return metadataDiskCacheStore.readMeta(
+            itemKey = itemKey,
+            languageTag = languageTag,
+            providerToken = providerToken
+        )?.sanitizeCastMembers()?.also { cached ->
+            addonMetaCache[cacheKey] = cached
+            metaCache[cacheKey] = cached
+            Log.d(TAG, "Meta disk cache hit origin=$origin itemKey=$itemKey")
+        }
+    }
+
     private fun buildMetaUrl(baseUrl: String, type: String, id: String): String {
         val encodedType = encodePathSegment(type)
         val encodedId = encodePathSegment(id)
