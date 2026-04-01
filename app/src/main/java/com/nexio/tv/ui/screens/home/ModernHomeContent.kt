@@ -164,6 +164,35 @@ internal fun resolveModernHomeHeroTrailerMuted(
     fullscreenTrailerActive: Boolean
 ): Boolean = !fullscreenTrailerActive
 
+internal data class ModernHomeTrailerEndedState(
+    val unlockedTrailerFocusKey: String? = null,
+    val pendingHeroTrailerFocusKey: String? = null,
+    val heroTrailerFullscreenMode: Boolean = false,
+    val fullscreenTrailerTextTimedOut: Boolean = false,
+    val heroFullscreenHintTimedOut: Boolean = false
+)
+
+internal fun handleModernHomeTrailerEnded(
+    focusedTrailerFocusKey: String?,
+    activeItemIndex: Int,
+    focusedTrailerRowKey: String?,
+    state: ModernHomeTrailerEndedState
+): Pair<ModernHomeTrailerEndedState, Pair<String, Int>?> {
+    val clearedState = state.copy(
+        unlockedTrailerFocusKey = null,
+        pendingHeroTrailerFocusKey = null,
+        heroTrailerFullscreenMode = false,
+        fullscreenTrailerTextTimedOut = false,
+        heroFullscreenHintTimedOut = false
+    )
+    val focusRestore = if (!focusedTrailerFocusKey.isNullOrBlank() && !focusedTrailerRowKey.isNullOrBlank()) {
+        focusedTrailerRowKey to activeItemIndex
+    } else {
+        null
+    }
+    return clearedState to focusRestore
+}
+
 internal fun shouldUnlockModernHomeTrailerAutoplay(
     autoplayEnabled: Boolean,
     screensaverVisible: Boolean,
@@ -1028,6 +1057,30 @@ internal fun ModernHomeContent(
             trailerMuted = resolveModernHomeHeroTrailerMuted(
                 fullscreenTrailerActive = fullscreenTrailerActive
             ),
+            onTrailerEnded = {
+                val (endedState, focusRestore) = handleModernHomeTrailerEnded(
+                    focusedTrailerFocusKey = focusedTrailerSelection?.focusKey,
+                    activeItemIndex = activeItemIndex,
+                    focusedTrailerRowKey = focusedTrailerSelection?.rowKey,
+                    state = ModernHomeTrailerEndedState(
+                        unlockedTrailerFocusKey = unlockedTrailerFocusKey,
+                        pendingHeroTrailerFocusKey = pendingHeroTrailerFocusKey,
+                        heroTrailerFullscreenMode = heroTrailerFullscreenMode,
+                        fullscreenTrailerTextTimedOut = fullscreenTrailerTextTimedOut,
+                        heroFullscreenHintTimedOut = heroFullscreenHintTimedOut
+                    )
+                )
+                unlockedTrailerFocusKey = endedState.unlockedTrailerFocusKey
+                pendingHeroTrailerFocusKey = endedState.pendingHeroTrailerFocusKey
+                heroTrailerFullscreenMode = endedState.heroTrailerFullscreenMode
+                fullscreenTrailerTextTimedOut = endedState.fullscreenTrailerTextTimedOut
+                heroFullscreenHintTimedOut = endedState.heroFullscreenHintTimedOut
+                focusRestore?.let { (rowKey, index) ->
+                    pendingRowFocusKey = rowKey
+                    pendingRowFocusIndex = index
+                    pendingRowFocusNonce++
+                }
+            },
             onTrailerFirstFrameRendered = {
                 heroFullscreenHintTimedOut = false
                 heroFullscreenHintSessionNonce++
@@ -1335,6 +1388,7 @@ private fun ModernHeroSection(
     showFullscreenHint: Boolean,
     fullscreenHintText: String,
     trailerMuted: Boolean,
+    onTrailerEnded: () -> Unit,
     onTrailerFirstFrameRendered: () -> Unit,
     preview: HeroPreview?,
     activeItemId: String?,
@@ -1362,6 +1416,7 @@ private fun ModernHeroSection(
         trailerMuted = trailerMuted,
         showFullscreenHint = showFullscreenHint,
         fullscreenHintText = fullscreenHintText,
+        onTrailerEnded = onTrailerEnded,
         onTrailerFirstFrameRendered = onTrailerFirstFrameRendered,
         enrichmentActive = enrichmentActive,
         modifier = mediaModifier,

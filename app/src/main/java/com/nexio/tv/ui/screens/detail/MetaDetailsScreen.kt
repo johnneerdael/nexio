@@ -1177,6 +1177,7 @@ private fun MetaDetailsContent(
     }
     var hasVisitedPeopleTabs by rememberSaveable(meta.id) { mutableStateOf(false) }
     var hasVisitedSeasonTabs by rememberSaveable(meta.id) { mutableStateOf(false) }
+    var hasUserMovedDownFromHero by rememberSaveable(meta.id) { mutableStateOf(false) }
     var activePeopleTab by rememberSaveable(meta.id) { mutableStateOf(initialPeopleTab) }
     var seasonOptionsDialogSeason by remember { mutableStateOf<Int?>(null) }
     val lastFocusedEpisodeIdBySeason = remember(meta.id) { mutableStateMapOf<Int, String>() }
@@ -1242,6 +1243,16 @@ private fun MetaDetailsContent(
         SectionUpTarget.EPISODE_ENTRY -> seasonDownFocusRequester ?: heroPlayFocusRequester
         SectionUpTarget.HERO_PLAY -> heroPlayFocusRequester
     }
+    val hasActiveLowerContentRestoreTarget = pendingRestoreType == RestoreTarget.SEASON_ENTRY ||
+        pendingRestoreType == RestoreTarget.EPISODE ||
+        pendingRestoreType == RestoreTarget.CAST_MEMBER ||
+        pendingRestoreType == RestoreTarget.MORE_LIKE_THIS ||
+        pendingRestoreType == RestoreTarget.COLLECTION
+    val lowerContentFocusEnabled = shouldEnableLowerContentFocus(
+        hasUserMovedDownFromHero = hasUserMovedDownFromHero,
+        hasVisitedLowerContent = hasVisitedPeopleTabs || hasVisitedSeasonTabs,
+        hasActiveRestoreTarget = hasActiveLowerContentRestoreTarget
+    )
 
     LaunchedEffect(availablePeopleTabs) {
         if (availablePeopleTabs.isNotEmpty() && activePeopleTab !in availablePeopleTabs) {
@@ -1295,6 +1306,20 @@ private fun MetaDetailsContent(
                 "heroTrailerClick meta=${meta.id} titleAvailable=$titleHasPlayableTrailerMedia trailerUrl=${!trailerUrl.isNullOrBlank()} trailerExternalUrl=${!trailerExternalUrl.isNullOrBlank()}"
             )
             onTrailerButtonClick()
+        }
+    }
+    val heroMoveDownRequest: (() -> Unit)? = remember(heroDownFocusRequester, coroutineScope) {
+        val target = heroDownFocusRequester
+        if (target == null) {
+            null
+        } else {
+            {
+                hasUserMovedDownFromHero = true
+                coroutineScope.launch {
+                    logFocusState("heroMoveDownRequested")
+                    target.requestFocusAfterFrames(reason = "hero_move_down")
+                }
+            }
         }
     }
 
@@ -1464,6 +1489,7 @@ private fun MetaDetailsContent(
                 isTrailerPlaying = isTrailerPlaying,
                 playButtonFocusRequester = heroPlayFocusRequester,
                 downFocusRequester = heroDownFocusRequester,
+                onMoveDownRequested = heroMoveDownRequest,
                 onHeroActionFocused = { action ->
                     logFocusState("heroActionFocused action=$action")
                     initialHeroFocusRequested = true
@@ -1568,6 +1594,7 @@ private fun MetaDetailsContent(
                             },
                             selectedTabFocusRequester = selectedSeasonFocusRequester,
                             upFocusRequester = heroPlayFocusRequester,
+                            enableFocus = lowerContentFocusEnabled,
                             enableFocusRestorer = shouldEnableSectionFocusRestorer(
                                 hasVisitedSection = hasVisitedSeasonTabs,
                                 hasActiveRestoreTarget = pendingRestoreType == RestoreTarget.SEASON_ENTRY ||
@@ -1626,6 +1653,7 @@ private fun MetaDetailsContent(
                         PeopleSectionTabs(
                             activeTab = activePeopleTab,
                             tabs = peopleTabItems,
+                            enableFocus = lowerContentFocusEnabled,
                             enableFocusRestorer = shouldEnableSectionFocusRestorer(
                                 hasVisitedSection = hasVisitedPeopleTabs,
                                 hasActiveRestoreTarget = false
@@ -1863,6 +1891,7 @@ private fun navigateToOrganizationDetail(
 private fun PeopleSectionTabs(
     activeTab: PeopleSectionTab,
     tabs: List<PeopleTabItem>,
+    enableFocus: Boolean = true,
     enableFocusRestorer: Boolean = true,
     upFocusRequester: FocusRequester? = null,
     ratingsDownFocusRequester: FocusRequester? = null,
@@ -1900,6 +1929,7 @@ private fun PeopleSectionTabs(
                 label = item.label,
                 selected = activeTab == item.tab,
                 focusRequester = item.focusRequester,
+                enableFocus = enableFocus,
                 upFocusRequester = upFocusRequester,
                 downFocusRequester = if (item.tab == PeopleSectionTab.RATINGS) ratingsDownFocusRequester else null,
                 onFocused = { onTabFocused(item.tab) }
@@ -1914,6 +1944,7 @@ private fun PeopleSectionTabButton(
     label: String,
     selected: Boolean,
     focusRequester: FocusRequester,
+    enableFocus: Boolean = true,
     upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
     onFocused: () -> Unit
@@ -1925,6 +1956,7 @@ private fun PeopleSectionTabButton(
         modifier = Modifier
             .focusRequester(focusRequester)
             .focusProperties {
+                canFocus = enableFocus
                 if (upFocusRequester != null) {
                     up = upFocusRequester
                 }

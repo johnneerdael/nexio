@@ -62,6 +62,7 @@ internal fun ModernHeroMediaLayer(
     trailerMuted: Boolean,
     showFullscreenHint: Boolean,
     fullscreenHintText: String,
+    onTrailerEnded: () -> Unit,
     onTrailerFirstFrameRendered: () -> Unit,
     enrichmentActive: Boolean,
     modifier: Modifier,
@@ -104,7 +105,10 @@ internal fun ModernHeroMediaLayer(
                 trailerUrl = trailerPreviewUrl,
                 trailerAudioUrl = trailerPreviewAudioUrl,
                 isPlaying = true,
-                onEnded = { trailerFirstFrameRendered = false },
+                onEnded = {
+                    trailerFirstFrameRendered = false
+                    onTrailerEnded()
+                },
                 onFirstFrameRendered = {
                     trailerFirstFrameRendered = true
                     onTrailerFirstFrameRendered()

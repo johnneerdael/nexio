@@ -134,6 +134,35 @@ class DetailFocusPolicyTest {
     }
 
     @Test
+    fun lowerContentFocusStaysDisabledOnCleanInitialEntry() {
+        assertFalse(
+            shouldEnableLowerContentFocus(
+                hasUserMovedDownFromHero = false,
+                hasVisitedLowerContent = false,
+                hasActiveRestoreTarget = false
+            )
+        )
+    }
+
+    @Test
+    fun lowerContentFocusEnablesAfterExplicitHeroDownOrRestore() {
+        assertTrue(
+            shouldEnableLowerContentFocus(
+                hasUserMovedDownFromHero = true,
+                hasVisitedLowerContent = false,
+                hasActiveRestoreTarget = false
+            )
+        )
+        assertTrue(
+            shouldEnableLowerContentFocus(
+                hasUserMovedDownFromHero = false,
+                hasVisitedLowerContent = false,
+                hasActiveRestoreTarget = true
+            )
+        )
+    }
+
+    @Test
     fun moviePeopleSectionReturnsUpToHeroPlay() {
         assertEquals(
             SectionUpTarget.HERO_PLAY,

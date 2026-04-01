@@ -94,6 +94,7 @@ internal fun HeroContentSection(
     playButtonFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
     restorePlayFocusToken: Int = 0,
+    onMoveDownRequested: (() -> Unit)? = null,
     onHeroActionFocused: (HeroAction) -> Unit = {},
     onPlayFocusRestored: () -> Unit = {}
 ) {
@@ -255,6 +256,7 @@ internal fun HeroContentSection(
                             actionRequesters = heroActionRequesters,
                             downFocusRequester = downFocusRequester,
                             restoreFocusToken = restorePlayFocusToken,
+                            onMoveDownRequested = onMoveDownRequested,
                             onFocused = onHeroActionFocused,
                             onFocusRestored = onPlayFocusRestored
                         )
@@ -274,6 +276,7 @@ internal fun HeroContentSection(
                             directions = resolveHeroActionDirections(HeroAction.LIBRARY, heroActionOrder),
                             actionRequesters = heroActionRequesters,
                             downFocusRequester = downFocusRequester,
+                            onMoveDownRequested = onMoveDownRequested,
                             onFocused = onHeroActionFocused
                         )
 
@@ -299,6 +302,7 @@ internal fun HeroContentSection(
                                 directions = resolveHeroActionDirections(HeroAction.WATCHED, heroActionOrder),
                                 actionRequesters = heroActionRequesters,
                                 downFocusRequester = downFocusRequester,
+                                onMoveDownRequested = onMoveDownRequested,
                                 onFocused = onHeroActionFocused
                             )
                         }
@@ -313,6 +317,7 @@ internal fun HeroContentSection(
                                 directions = resolveHeroActionDirections(HeroAction.TRAILER, heroActionOrder),
                                 actionRequesters = heroActionRequesters,
                                 downFocusRequester = downFocusRequester,
+                                onMoveDownRequested = onMoveDownRequested,
                                 onFocused = onHeroActionFocused
                             )
                         }
@@ -368,6 +373,7 @@ private fun PlayButton(
     actionRequesters: Map<HeroAction, FocusRequester>,
     downFocusRequester: FocusRequester? = null,
     restoreFocusToken: Int = 0,
+    onMoveDownRequested: (() -> Unit)? = null,
     onFocused: (HeroAction) -> Unit = {},
     onFocusRestored: () -> Unit = {}
 ) {
@@ -389,6 +395,18 @@ private fun PlayButton(
         onClick = onClick,
         modifier = Modifier
             .focusRequester(focusRequester)
+            .onPreviewKeyEvent { event ->
+                if (
+                    onMoveDownRequested != null &&
+                    event.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
+                    event.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN
+                ) {
+                    onMoveDownRequested()
+                    true
+                } else {
+                    false
+                }
+            }
             .onFocusChanged {
                 if (it.isFocused) {
                     detailFocusDebug("heroActionFocused action=${HeroAction.PLAY} restored=$pendingFocusRestore")
@@ -464,6 +482,7 @@ private fun ActionIconButtonPainter(
     directions: HeroActionDirections,
     actionRequesters: Map<HeroAction, FocusRequester>,
     downFocusRequester: FocusRequester? = null,
+    onMoveDownRequested: (() -> Unit)? = null,
     onFocused: (HeroAction) -> Unit = {},
     enabled: Boolean = true
 ) {
@@ -473,6 +492,18 @@ private fun ActionIconButtonPainter(
         modifier = Modifier
             .size(48.dp)
             .focusRequester(focusRequester)
+            .onPreviewKeyEvent { event ->
+                if (
+                    onMoveDownRequested != null &&
+                    event.nativeKeyEvent.action == AndroidKeyEvent.ACTION_DOWN &&
+                    event.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN
+                ) {
+                    onMoveDownRequested()
+                    true
+                } else {
+                    false
+                }
+            }
             .onFocusChanged { state ->
                 if (state.isFocused) {
                     detailFocusDebug("heroActionFocused action=$action restored=false")
@@ -536,6 +567,7 @@ private fun ActionIconButton(
     directions: HeroActionDirections,
     actionRequesters: Map<HeroAction, FocusRequester>,
     downFocusRequester: FocusRequester? = null,
+    onMoveDownRequested: (() -> Unit)? = null,
     enabled: Boolean = true,
     selected: Boolean = false,
     selectedContainerColor: Color = Color(0xFF7CFF9B),
@@ -564,6 +596,14 @@ private fun ActionIconButton(
             }
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
+                if (
+                    onMoveDownRequested != null &&
+                    native.action == AndroidKeyEvent.ACTION_DOWN &&
+                    native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN
+                ) {
+                    onMoveDownRequested()
+                    return@onPreviewKeyEvent true
+                }
                 if (onLongPress != null && native.action == AndroidKeyEvent.ACTION_DOWN) {
                     if (native.keyCode == AndroidKeyEvent.KEYCODE_MENU) {
                         longPressTriggered = true
