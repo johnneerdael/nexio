@@ -20,6 +20,11 @@ internal enum class HeroDownTarget {
     NONE
 }
 
+internal enum class SectionUpTarget {
+    HERO_PLAY,
+    EPISODE_ENTRY
+}
+
 internal fun shouldAutoResetFocusToHero(
     initialHeroFocusRequested: Boolean,
     hasPendingRestoreTarget: Boolean,
@@ -81,3 +86,14 @@ internal fun shouldEnableSectionFocusRestorer(
     hasVisitedSection: Boolean,
     hasActiveRestoreTarget: Boolean
 ): Boolean = hasVisitedSection || hasActiveRestoreTarget
+
+internal fun resolvePeopleSectionUpTarget(
+    isSeries: Boolean,
+    hasEpisodeEntry: Boolean
+): SectionUpTarget {
+    return if (isSeries && hasEpisodeEntry) {
+        SectionUpTarget.EPISODE_ENTRY
+    } else {
+        SectionUpTarget.HERO_PLAY
+    }
+}

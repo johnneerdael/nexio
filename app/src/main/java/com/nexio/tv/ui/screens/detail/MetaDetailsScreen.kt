@@ -1233,6 +1233,15 @@ private fun MetaDetailsContent(
         activePeopleTab == PeopleSectionTab.RATINGS -> ratingsContentFocusRequester
         else -> null
     }
+    val peopleSectionUpFocusRequester = when (
+        resolvePeopleSectionUpTarget(
+            isSeries = isSeries,
+            hasEpisodeEntry = seasonDownFocusRequester != null
+        )
+    ) {
+        SectionUpTarget.EPISODE_ENTRY -> seasonDownFocusRequester ?: heroPlayFocusRequester
+        SectionUpTarget.HERO_PLAY -> heroPlayFocusRequester
+    }
 
     LaunchedEffect(availablePeopleTabs) {
         if (availablePeopleTabs.isNotEmpty() && activePeopleTab !in availablePeopleTabs) {
@@ -1558,6 +1567,7 @@ private fun MetaDetailsContent(
                                 seasonOptionsDialogSeason = it
                             },
                             selectedTabFocusRequester = selectedSeasonFocusRequester,
+                            upFocusRequester = heroPlayFocusRequester,
                             enableFocusRestorer = shouldEnableSectionFocusRestorer(
                                 hasVisitedSection = hasVisitedSeasonTabs,
                                 hasActiveRestoreTarget = pendingRestoreType == RestoreTarget.SEASON_ENTRY ||
@@ -1620,7 +1630,7 @@ private fun MetaDetailsContent(
                                 hasVisitedSection = hasVisitedPeopleTabs,
                                 hasActiveRestoreTarget = false
                             ),
-                            upFocusRequester = seasonDownFocusRequester,
+                            upFocusRequester = peopleSectionUpFocusRequester,
                             ratingsDownFocusRequester = ratingsContentFocusRequester,
                             onTabFocused = { tab ->
                                 hasVisitedPeopleTabs = true
@@ -1651,7 +1661,7 @@ private fun MetaDetailsContent(
                                     cast = normalCastMembers,
                                     title = if (hasPeopleTabs) "" else strTabCast,
                                     leadingCast = directorWriterMembers,
-                                    upFocusRequester = if (hasPeopleTabs) castTabFocusRequester else seasonDownFocusRequester,
+                                    upFocusRequester = if (hasPeopleTabs) castTabFocusRequester else peopleSectionUpFocusRequester,
                                     restorePersonId = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) pendingRestoreCastPersonId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) restoreFocusToken else 0,
                                     onRestoreFocusHandled = {
@@ -1673,7 +1683,7 @@ private fun MetaDetailsContent(
                             PeopleSectionTab.MORE_LIKE_THIS -> {
                                 MoreLikeThisSection(
                                     items = moreLikeThis,
-                                    upFocusRequester = if (hasPeopleTabs) moreLikeTabFocusRequester else seasonDownFocusRequester,
+                                    upFocusRequester = if (hasPeopleTabs) moreLikeTabFocusRequester else peopleSectionUpFocusRequester,
                                     restoreItemId = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) pendingRestoreMoreLikeItemId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.MORE_LIKE_THIS) restoreFocusToken else 0,
                                     onRestoreFocusHandled = {
@@ -1695,7 +1705,7 @@ private fun MetaDetailsContent(
                                     upFocusRequester = if (hasPeopleTabs) {
                                         reviewsTabFocusRequester
                                     } else {
-                                        seasonDownFocusRequester
+                                        peopleSectionUpFocusRequester
                                     },
                                     onReviewFocused = onReviewFocused
                                 )
@@ -1704,7 +1714,7 @@ private fun MetaDetailsContent(
                             PeopleSectionTab.COLLECTION -> {
                                 CollectionSection(
                                     items = collection,
-                                    upFocusRequester = if (hasPeopleTabs) collectionTabFocusRequester else seasonDownFocusRequester,
+                                    upFocusRequester = if (hasPeopleTabs) collectionTabFocusRequester else peopleSectionUpFocusRequester,
                                     restoreItemId = if (pendingRestoreType == RestoreTarget.COLLECTION) pendingRestoreCollectionItemId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.COLLECTION) restoreFocusToken else 0,
                                     onRestoreFocusHandled = {
@@ -1727,7 +1737,7 @@ private fun MetaDetailsContent(
                                     upFocusRequester = if (hasPeopleTabs) {
                                         ratingsTabFocusRequester
                                     } else {
-                                        seasonDownFocusRequester ?: selectedSeasonFocusRequester
+                                        peopleSectionUpFocusRequester
                                     },
                                     firstItemFocusRequester = ratingsContentFocusRequester,
                                     modifier = Modifier.heightIn(min = if (!hasItemsBelow) castSectionHeight else 0.dp)

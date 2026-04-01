@@ -92,6 +92,7 @@ fun SeasonTabs(
     onSeasonShortPress: (Int) -> Unit,
     onSeasonLongPress: (Int) -> Unit = {},
     selectedTabFocusRequester: FocusRequester,
+    upFocusRequester: FocusRequester? = null,
     enableFocusRestorer: Boolean = true,
     downFocusRequester: FocusRequester? = null,
     onSelectedSeasonDown: (() -> Unit)? = null,
@@ -153,6 +154,9 @@ fun SeasonTabs(
                 modifier = Modifier
                     .then(if (isSelected) Modifier.focusRequester(selectedTabFocusRequester) else Modifier)
                     .focusProperties {
+                        if (upFocusRequester != null) {
+                            up = upFocusRequester
+                        }
                         if (isSelected && downFocusRequester != null) {
                             down = downFocusRequester
                         }
