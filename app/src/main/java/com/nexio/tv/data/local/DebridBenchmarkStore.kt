@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
@@ -23,7 +24,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 private val Context.debridBenchmarkDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "debrid_benchmark"
+    name = "debrid_benchmark",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() }
 )
 
 @Singleton
