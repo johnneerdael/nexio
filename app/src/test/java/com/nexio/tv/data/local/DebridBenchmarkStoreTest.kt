@@ -111,6 +111,30 @@ class DebridBenchmarkStoreTest {
     }
 
     @Test
+    fun `latest result ignores payloads with invalid numeric fields`() = runTest {
+        val dataStore = buildDataStore(backgroundScope)
+        val store = DebridBenchmarkStore(dataStore)
+        val key = stringPreferencesKey("debrid_benchmark_latest_real_debrid")
+        dataStore.edit { prefs ->
+            prefs[key] = """
+                {
+                  "provider":"REAL_DEBRID",
+                  "measuredAtMs":5,
+                  "summary":{
+                    "startupTimeMs":-1,
+                    "sustainedThroughputMbps":1e309,
+                    "transferredBytes":-1,
+                    "elapsedMs":-1
+                  },
+                  "terminationReason":"COMPLETED"
+                }
+            """.trimIndent()
+        }
+
+        assertEquals(null, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
+    }
+
+    @Test
     @OptIn(ExperimentalCoroutinesApi::class)
     fun `saving another provider does not re emit an unchanged latest result`() = runTest {
         val store = buildStore(backgroundScope)
