@@ -16,6 +16,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 private val Context.debridBenchmarkDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -37,7 +38,7 @@ class DebridBenchmarkStore internal constructor(
             preferences[key]?.let { raw ->
                 parseResult(raw, provider)
             }
-        }
+        }.distinctUntilChanged()
     }
 
     suspend fun saveLatest(result: DebridBenchmarkResult) {
@@ -66,7 +67,7 @@ class DebridBenchmarkStore internal constructor(
         if (parsedProvider != expectedProvider) return null
 
         val measuredAtMs = root.longOrNull("measuredAtMs")?.takeIf { it > 0L } ?: return null
-        val summaryJson = root.getAsJsonObject("summary") ?: return null
+        val summaryJson = root.get("summary")?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
         val summary = DebridBenchmarkSummary(
             startupTimeMs = summaryJson.longOrNull("startupTimeMs"),
             sustainedThroughputMbps = summaryJson.doubleOrNull("sustainedThroughputMbps"),

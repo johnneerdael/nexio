@@ -9,9 +9,12 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -93,6 +96,52 @@ class DebridBenchmarkStoreTest {
         }
 
         assertEquals(null, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
+    }
+
+    @Test
+    fun `latest result ignores payloads with non object summary`() = runTest {
+        val dataStore = buildDataStore(backgroundScope)
+        val store = DebridBenchmarkStore(dataStore)
+        val key = stringPreferencesKey("debrid_benchmark_latest_real_debrid")
+        dataStore.edit { prefs ->
+            prefs[key] = """{"provider":"REAL_DEBRID","measuredAtMs":5,"summary":1,"terminationReason":"COMPLETED"}"""
+        }
+
+        assertEquals(null, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
+    }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `saving another provider does not re emit an unchanged latest result`() = runTest {
+        val store = buildStore(backgroundScope)
+        val realDebrid = sampleResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            measuredAtMs = 10L
+        )
+        store.saveLatest(realDebrid)
+
+        val emissions = mutableListOf<DebridBenchmarkResult?>()
+        val collectJob = backgroundScope.launch {
+            store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).collect { emissions += it }
+        }
+
+        runCurrent()
+        assertEquals(listOf(realDebrid), emissions)
+
+        store.saveLatest(
+            sampleResult(
+                provider = DebridBenchmarkProvider.PREMIUMIZE,
+                measuredAtMs = 11L,
+                startupTimeMs = 101L,
+                sustainedThroughputMbps = 201.0,
+                transferredBytes = 301L,
+                elapsedMs = 401L
+            )
+        )
+        runCurrent()
+        assertEquals(listOf(realDebrid), emissions)
+
+        collectJob.cancelAndJoin()
     }
 
     private fun buildDataStore(scope: CoroutineScope, file: File? = null) =
