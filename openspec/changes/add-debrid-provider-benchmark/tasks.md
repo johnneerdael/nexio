@@ -1,0 +1,6 @@
+- [ ] Add spec deltas for manual Real-Debrid and Premiumize benchmark collection on the Debrid integration screen.
+- [ ] Add failing unit tests for latest-result benchmark persistence, sustained-window summary derivation, and provider candidate resolution.
+- [ ] Implement the benchmark models, local latest-result store, and single-flight benchmark service with typed runtime states.
+- [ ] Implement direct provider benchmark transport that streams bytes to a discard sink and records TTFB plus sustained-throughput metrics.
+- [ ] Integrate benchmark controls, live progress, cancellation, and latest-result summaries into the Debrid settings ViewModel and UI.
+- [ ] Validate the OpenSpec change and run focused Android verification targets.
