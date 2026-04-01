@@ -82,6 +82,7 @@ private enum class LayoutSettingsSection {
     HOME_LAYOUT,
     HOME_CONTENT,
     DETAIL_PAGE,
+    TRAILER_SCREENSAVER,
     FOCUSED_POSTER,
     POSTER_CARD_STYLE
 }
@@ -96,12 +97,14 @@ fun LayoutSettingsContent(
     var homeLayoutExpanded by rememberSaveable { mutableStateOf(false) }
     var homeContentExpanded by rememberSaveable { mutableStateOf(false) }
     var detailPageExpanded by rememberSaveable { mutableStateOf(false) }
+    var trailerScreensaverExpanded by rememberSaveable { mutableStateOf(false) }
     var focusedPosterExpanded by rememberSaveable { mutableStateOf(false) }
     var posterCardStyleExpanded by rememberSaveable { mutableStateOf(false) }
 
     val defaultHomeLayoutHeaderFocus = remember { FocusRequester() }
     val homeContentHeaderFocus = remember { FocusRequester() }
     val detailPageHeaderFocus = remember { FocusRequester() }
+    val trailerScreensaverHeaderFocus = remember { FocusRequester() }
     val focusedPosterHeaderFocus = remember { FocusRequester() }
     val posterCardStyleHeaderFocus = remember { FocusRequester() }
     val homeLayoutHeaderFocus = initialFocusRequester ?: defaultHomeLayoutHeaderFocus
@@ -122,6 +125,11 @@ fun LayoutSettingsContent(
     LaunchedEffect(detailPageExpanded, focusedSection) {
         if (!detailPageExpanded && focusedSection == LayoutSettingsSection.DETAIL_PAGE) {
             detailPageHeaderFocus.requestFocus()
+        }
+    }
+    LaunchedEffect(trailerScreensaverExpanded, focusedSection) {
+        if (!trailerScreensaverExpanded && focusedSection == LayoutSettingsSection.TRAILER_SCREENSAVER) {
+            trailerScreensaverHeaderFocus.requestFocus()
         }
     }
     LaunchedEffect(focusedPosterExpanded, focusedSection) {
@@ -442,124 +450,149 @@ fun LayoutSettingsContent(
                 }
             }
 
-            if (uiState.selectedLayout != HomeLayout.GRID) {
-            item(key = "focused_poster_section") {
+            item(key = "trailer_screensaver_section") {
                 CollapsibleSectionCard(
-                    title = stringResource(R.string.layout_section_focused),
-                    description = stringResource(R.string.layout_section_focused_desc),
-                    expanded = focusedPosterExpanded,
-                    onToggle = { focusedPosterExpanded = !focusedPosterExpanded },
-                    focusRequester = focusedPosterHeaderFocus,
-                    onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
+                    title = stringResource(R.string.layout_section_trailer_screensaver),
+                    description = stringResource(R.string.layout_section_trailer_screensaver_desc),
+                    expanded = trailerScreensaverExpanded,
+                    onToggle = { trailerScreensaverExpanded = !trailerScreensaverExpanded },
+                    focusRequester = trailerScreensaverHeaderFocus,
+                    onFocused = { focusedSection = LayoutSettingsSection.TRAILER_SCREENSAVER }
                 ) {
-                    val isModernLandscape =
-                        uiState.selectedLayout == HomeLayout.MODERN &&
-                            uiState.modernLandscapePostersEnabled
-
-                    if (!isModernLandscape) {
-                        CompactToggleRow(
-                            title = stringResource(R.string.layout_expand_poster),
-                            subtitle = stringResource(R.string.layout_expand_poster_sub),
-                            checked = uiState.focusedPosterBackdropExpandEnabled,
-                            onToggle = {
-                                viewModel.onEvent(
-                                    LayoutSettingsEvent.SetFocusedPosterBackdropExpandEnabled(
-                                        !uiState.focusedPosterBackdropExpandEnabled
-                                    )
-                                )
-                            },
-                            onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
-                        )
-                    }
-
-                    if (!isModernLandscape && uiState.focusedPosterBackdropExpandEnabled) {
-                        SliderSettingsItem(
-                            icon = Icons.Default.Timer,
-                            title = stringResource(R.string.layout_expand_delay),
-                            subtitle = stringResource(R.string.layout_expand_delay_sub),
-                            value = uiState.focusedPosterBackdropExpandDelaySeconds,
-                            valueText = "${uiState.focusedPosterBackdropExpandDelaySeconds}s",
-                            minValue = 0,
-                            maxValue = 10,
-                            step = 1,
-                            onValueChange = { seconds ->
-                                viewModel.onEvent(
-                                    LayoutSettingsEvent.SetFocusedPosterBackdropExpandDelaySeconds(seconds)
-                                )
-                            },
-                            onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
-                        )
-                    }
-
                     CompactToggleRow(
-                        title = stringResource(R.string.layout_autoplay_trailer),
-                        subtitle = stringResource(R.string.layout_autoplay_trailer_sub),
-                        checked = uiState.focusedPosterBackdropTrailerEnabled,
+                        title = stringResource(R.string.layout_trailer_screensaver),
+                        subtitle = stringResource(R.string.layout_trailer_screensaver_sub),
+                        checked = uiState.trailerScreensaverEnabled,
                         onToggle = {
                             viewModel.onEvent(
-                                LayoutSettingsEvent.SetFocusedPosterBackdropTrailerEnabled(
-                                    !uiState.focusedPosterBackdropTrailerEnabled
+                                LayoutSettingsEvent.SetTrailerScreensaverEnabled(
+                                    !uiState.trailerScreensaverEnabled
                                 )
                             )
                         },
-                        onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
+                        onFocused = { focusedSection = LayoutSettingsSection.TRAILER_SCREENSAVER }
                     )
-
-                    if (uiState.focusedPosterBackdropTrailerEnabled) {
-                        SettingsActionRow(
-                            title = stringResource(R.string.layout_trailer_location),
-                            subtitle = stringResource(R.string.layout_trailer_location_sub),
-                            value = when (uiState.focusedPosterBackdropTrailerPlaybackTarget) {
-                                FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD ->
-                                    stringResource(R.string.layout_trailer_expanded_card)
-                                FocusedPosterTrailerPlaybackTarget.HERO_MEDIA ->
-                                    stringResource(R.string.layout_trailer_hero_media)
-                            },
-                            onClick = {
-                                val nextTarget =
-                                    if (
-                                        uiState.focusedPosterBackdropTrailerPlaybackTarget ==
-                                        FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
-                                    ) {
-                                        FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD
-                                    } else {
-                                        FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
-                                    }
-                                viewModel.onEvent(
-                                    LayoutSettingsEvent.SetFocusedPosterBackdropTrailerPlaybackTarget(
-                                        nextTarget
-                                    )
-                                )
-                            },
-                            onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER },
-                            trailingIcon = Icons.Default.Tune
-                        )
-
-                        SettingsActionRow(
-                            title = stringResource(R.string.layout_trailer_muted),
-                            subtitle = stringResource(R.string.layout_trailer_muted_sub),
-                            value = if (uiState.focusedPosterBackdropTrailerMuted) {
-                                stringResource(R.string.action_on)
-                            } else {
-                                stringResource(R.string.action_off)
-                            },
-                            onClick = {
-                                viewModel.onEvent(
-                                    LayoutSettingsEvent.SetFocusedPosterBackdropTrailerMuted(
-                                        !uiState.focusedPosterBackdropTrailerMuted
-                                    )
-                                )
-                            },
-                            onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER },
-                            trailingIcon = if (uiState.focusedPosterBackdropTrailerMuted) {
-                                Icons.Default.VolumeUp
-                            } else {
-                                Icons.Default.PlayCircle
-                            }
-                        )
-                    }
                 }
             }
+
+            if (uiState.selectedLayout != HomeLayout.GRID) {
+                item(key = "focused_poster_section") {
+                    CollapsibleSectionCard(
+                        title = stringResource(R.string.layout_section_focused),
+                        description = stringResource(R.string.layout_section_focused_desc),
+                        expanded = focusedPosterExpanded,
+                        onToggle = { focusedPosterExpanded = !focusedPosterExpanded },
+                        focusRequester = focusedPosterHeaderFocus,
+                        onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
+                    ) {
+                        val isModernLandscape =
+                            uiState.selectedLayout == HomeLayout.MODERN &&
+                                uiState.modernLandscapePostersEnabled
+
+                        if (!isModernLandscape) {
+                            CompactToggleRow(
+                                title = stringResource(R.string.layout_expand_poster),
+                                subtitle = stringResource(R.string.layout_expand_poster_sub),
+                                checked = uiState.focusedPosterBackdropExpandEnabled,
+                                onToggle = {
+                                    viewModel.onEvent(
+                                        LayoutSettingsEvent.SetFocusedPosterBackdropExpandEnabled(
+                                            !uiState.focusedPosterBackdropExpandEnabled
+                                        )
+                                    )
+                                },
+                                onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
+                            )
+                        }
+
+                        if (!isModernLandscape && uiState.focusedPosterBackdropExpandEnabled) {
+                            SliderSettingsItem(
+                                icon = Icons.Default.Timer,
+                                title = stringResource(R.string.layout_expand_delay),
+                                subtitle = stringResource(R.string.layout_expand_delay_sub),
+                                value = uiState.focusedPosterBackdropExpandDelaySeconds,
+                                valueText = "${uiState.focusedPosterBackdropExpandDelaySeconds}s",
+                                minValue = 0,
+                                maxValue = 10,
+                                step = 1,
+                                onValueChange = { seconds ->
+                                    viewModel.onEvent(
+                                        LayoutSettingsEvent.SetFocusedPosterBackdropExpandDelaySeconds(seconds)
+                                    )
+                                },
+                                onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
+                            )
+                        }
+
+                        CompactToggleRow(
+                            title = stringResource(R.string.layout_autoplay_trailer),
+                            subtitle = stringResource(R.string.layout_autoplay_trailer_sub),
+                            checked = uiState.focusedPosterBackdropTrailerEnabled,
+                            onToggle = {
+                                viewModel.onEvent(
+                                    LayoutSettingsEvent.SetFocusedPosterBackdropTrailerEnabled(
+                                        !uiState.focusedPosterBackdropTrailerEnabled
+                                    )
+                                )
+                            },
+                            onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER }
+                        )
+
+                        if (uiState.focusedPosterBackdropTrailerEnabled) {
+                            SettingsActionRow(
+                                title = stringResource(R.string.layout_trailer_location),
+                                subtitle = stringResource(R.string.layout_trailer_location_sub),
+                                value = when (uiState.focusedPosterBackdropTrailerPlaybackTarget) {
+                                    FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD ->
+                                        stringResource(R.string.layout_trailer_expanded_card)
+                                    FocusedPosterTrailerPlaybackTarget.HERO_MEDIA ->
+                                        stringResource(R.string.layout_trailer_hero_media)
+                                },
+                                onClick = {
+                                    val nextTarget =
+                                        if (
+                                            uiState.focusedPosterBackdropTrailerPlaybackTarget ==
+                                            FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
+                                        ) {
+                                            FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD
+                                        } else {
+                                            FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
+                                        }
+                                    viewModel.onEvent(
+                                        LayoutSettingsEvent.SetFocusedPosterBackdropTrailerPlaybackTarget(
+                                            nextTarget
+                                        )
+                                    )
+                                },
+                                onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER },
+                                trailingIcon = Icons.Default.Tune
+                            )
+
+                            SettingsActionRow(
+                                title = stringResource(R.string.layout_trailer_muted),
+                                subtitle = stringResource(R.string.layout_trailer_muted_sub),
+                                value = if (uiState.focusedPosterBackdropTrailerMuted) {
+                                    stringResource(R.string.action_on)
+                                } else {
+                                    stringResource(R.string.action_off)
+                                },
+                                onClick = {
+                                    viewModel.onEvent(
+                                        LayoutSettingsEvent.SetFocusedPosterBackdropTrailerMuted(
+                                            !uiState.focusedPosterBackdropTrailerMuted
+                                        )
+                                    )
+                                },
+                                onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER },
+                                trailingIcon = if (uiState.focusedPosterBackdropTrailerMuted) {
+                                    Icons.Default.VolumeUp
+                                } else {
+                                    Icons.Default.PlayCircle
+                                }
+                            )
+                        }
+                    }
+                }
             }
 
             item(key = "poster_style_section") {

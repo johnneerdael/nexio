@@ -136,6 +136,7 @@ import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.ThemeDataStore
 import com.nexio.tv.data.repository.IdleScreensaverRepository
 import com.nexio.tv.data.repository.TraktProgressService
+import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.domain.model.AppFont
 import com.nexio.tv.domain.model.AppTheme
 import com.nexio.tv.domain.model.AuthState
@@ -146,8 +147,14 @@ import com.nexio.tv.ui.components.NexioScrollDefaults
 import com.nexio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nexio.tv.ui.screensaver.IdleScreensaverController
 import com.nexio.tv.ui.screensaver.IdleScreensaverOverlay
+import com.nexio.tv.ui.screensaver.IdleScreensaverPresentationMode
+import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverOverlay
+import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverSessionStart
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateSnapshot
+import com.nexio.tv.ui.screensaver.buildIdleTrailerYouTubeUrl
+import com.nexio.tv.ui.screensaver.chooseIdleTrailerCandidates
+import com.nexio.tv.ui.screensaver.extractIdleTrailerReleaseYear
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
 import com.nexio.tv.updater.UpdateViewModel
@@ -186,7 +193,8 @@ private data class MainUiPrefs(
     val hasChosenLayout: Boolean? = null,
     val sidebarCollapsed: Boolean = false,
     val modernSidebarEnabled: Boolean = false,
-    val modernSidebarBlurPref: Boolean = false
+    val modernSidebarBlurPref: Boolean = false,
+    val trailerScreensaverEnabled: Boolean = false
 )
 
 @AndroidEntryPoint
@@ -237,6 +245,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var idleScreensaverRepository: IdleScreensaverRepository
+
+    @Inject
+    lateinit var trailerService: TrailerService
 
     @Inject
     lateinit var idleScreensaverController: IdleScreensaverController
@@ -360,6 +371,8 @@ class MainActivity : ComponentActivity() {
                     )
                 }.combine(layoutPreferenceDataStore.modernSidebarBlurEnabled) { prefs, modernSidebarBlurPref ->
                     prefs.copy(modernSidebarBlurPref = modernSidebarBlurPref)
+                }.combine(layoutPreferenceDataStore.trailerScreensaverEnabled) { prefs, trailerScreensaverEnabled ->
+                    prefs.copy(trailerScreensaverEnabled = trailerScreensaverEnabled)
                 }
             }
             val mainUiPrefs by mainUiPrefsFlow.collectAsState(initial = MainUiPrefs(hasChosenLayout = null))
@@ -436,12 +449,23 @@ class MainActivity : ComponentActivity() {
                     var startupSplashReadyToPlay by remember { mutableStateOf(false) }
                     val showStartupSplash = !startupSplashDismissed
                     val idleScreensaverSlides by idleScreensaverRepository.slides.collectAsState()
+                    val idleTrailerRepositoryCandidates by idleScreensaverRepository.trailerCandidates.collectAsState()
                     val idleScreensaverVisible by idleScreensaverController.isVisible.collectAsState()
                     val idleScreensaverSessionId by idleScreensaverController.sessionId.collectAsState()
                     val idleLastInteractionAtMs by idleScreensaverController.lastInteractionAtMs.collectAsState()
                     val playbackIdleSnapshot by playbackIdleGateState.snapshot.collectAsState()
+                    val idleTrailerCandidates = remember(
+                        idleTrailerRepositoryCandidates,
+                        idleScreensaverSlides
+                    ) {
+                        chooseIdleTrailerCandidates(
+                            repositoryCandidates = idleTrailerRepositoryCandidates,
+                            slides = idleScreensaverSlides
+                        )
+                    }
                     var inAppTrailerPlaybackActive by remember { mutableStateOf(false) }
                     var previousInAppTrailerPlaybackActive by remember { mutableStateOf(false) }
+                    var idleTrailerSessionStart by remember { mutableStateOf<IdleTrailerScreensaverSessionStart?>(null) }
 
                     LaunchedEffect(pendingRecommendation) {
                         val navigation = pendingRecommendation ?: return@LaunchedEffect
@@ -525,6 +549,12 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    LaunchedEffect(idleScreensaverVisible) {
+                        if (!idleScreensaverVisible) {
+                            idleTrailerSessionStart = null
+                        }
+                    }
+
                     DisposableEffect(idleScreensaverVisible) {
                         if (idleScreensaverVisible) {
                             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -540,15 +570,38 @@ class MainActivity : ComponentActivity() {
                         idleScreensaverEligible,
                         idleScreensaverVisible,
                         idleScreensaverSlides,
+                        idleTrailerCandidates,
+                        mainUiPrefs.trailerScreensaverEnabled,
                         idleLastInteractionAtMs
                     ) {
-                        if (!idleScreensaverEligible || idleScreensaverVisible || idleScreensaverSlides.isEmpty()) {
+                        if (
+                            !idleScreensaverEligible ||
+                            idleScreensaverVisible ||
+                            (idleScreensaverSlides.isEmpty() && idleTrailerCandidates.isEmpty())
+                        ) {
                             return@LaunchedEffect
                         }
                         val elapsed = (SystemClock.elapsedRealtime() - idleLastInteractionAtMs).coerceAtLeast(0L)
                         val remainingDelayMs = (IDLE_SCREENSAVER_TIMEOUT_MS - elapsed).coerceAtLeast(0L)
                         delay(remainingDelayMs)
-                        if (idleScreensaverEligible && !idleScreensaverVisible && idleScreensaverSlides.isNotEmpty()) {
+                        if (!idleScreensaverEligible || idleScreensaverVisible) return@LaunchedEffect
+                        idleTrailerSessionStart = if (mainUiPrefs.trailerScreensaverEnabled) {
+                            com.nexio.tv.ui.screensaver.prepareIdleTrailerScreensaverSession(
+                                candidates = idleTrailerCandidates
+                            ) { candidate, trailerId ->
+                                trailerService.getTrailerPlaybackSourceFromYouTubeUrl(
+                                    youtubeUrl = buildIdleTrailerYouTubeUrl(trailerId),
+                                    title = candidate.title,
+                                    year = extractIdleTrailerReleaseYear(candidate.releaseInfo)
+                                )
+                            }
+                        } else {
+                            null
+                        }
+                        if (
+                            idleScreensaverSlides.isNotEmpty() ||
+                            idleTrailerSessionStart != null
+                        ) {
                             idleScreensaverController.show()
                         }
                     }
@@ -689,22 +742,65 @@ class MainActivity : ComponentActivity() {
                             onOpenUnknownSources = { updateViewModel.openUnknownSourcesSettings() }
                         )
 
-                        if (idleScreensaverVisible && idleScreensaverSlides.isNotEmpty()) {
-                            IdleScreensaverOverlay(
-                                slides = idleScreensaverSlides,
-                                sessionId = idleScreensaverSessionId,
-                                onDismiss = { idleScreensaverController.dismiss() },
-                                onOpenSlide = { slide ->
-                                    idleScreensaverController.dismiss()
-                                    navController.navigate(
-                                        Screen.Detail.createRoute(
-                                            itemId = slide.itemId,
-                                            itemType = slide.itemType,
-                                            addonBaseUrl = slide.addonBaseUrl
+                        if (idleScreensaverVisible && (idleScreensaverSlides.isNotEmpty() || idleTrailerSessionStart != null)) {
+                            when (
+                                chooseIdleScreensaverPresentationMode(
+                                    trailerScreensaverEnabled = mainUiPrefs.trailerScreensaverEnabled,
+                                    trailerSessionStart = idleTrailerSessionStart
+                                )
+                            ) {
+                                IdleScreensaverPresentationMode.TRAILER -> {
+                                    val sessionStart = idleTrailerSessionStart
+                                    if (sessionStart != null) {
+                                        IdleTrailerScreensaverOverlay(
+                                            sessionStart = sessionStart,
+                                            sessionId = idleScreensaverSessionId,
+                                            onDismiss = {
+                                                idleTrailerSessionStart = null
+                                                idleScreensaverController.dismiss()
+                                            },
+                                            onOpenSlide = { candidate ->
+                                                idleTrailerSessionStart = null
+                                                idleScreensaverController.dismiss()
+                                                navController.navigate(
+                                                    Screen.Detail.createRoute(
+                                                        itemId = candidate.itemId,
+                                                        itemType = candidate.itemType,
+                                                        addonBaseUrl = candidate.addonBaseUrl
+                                                    )
+                                                )
+                                            },
+                                            resolvePlaybackSource = { candidate, trailerId ->
+                                                trailerService.getTrailerPlaybackSourceFromYouTubeUrl(
+                                                    youtubeUrl = buildIdleTrailerYouTubeUrl(trailerId),
+                                                    title = candidate.title,
+                                                    year = extractIdleTrailerReleaseYear(candidate.releaseInfo)
+                                                )
+                                            }
                                         )
-                                    )
+                                    }
                                 }
-                            )
+
+                                IdleScreensaverPresentationMode.IMAGE -> {
+                                    if (idleScreensaverSlides.isNotEmpty()) {
+                                        IdleScreensaverOverlay(
+                                            slides = idleScreensaverSlides,
+                                            sessionId = idleScreensaverSessionId,
+                                            onDismiss = { idleScreensaverController.dismiss() },
+                                            onOpenSlide = { slide ->
+                                                idleScreensaverController.dismiss()
+                                                navController.navigate(
+                                                    Screen.Detail.createRoute(
+                                                        itemId = slide.itemId,
+                                                        itemType = slide.itemType,
+                                                        addonBaseUrl = slide.addonBaseUrl
+                                                    )
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                            }
                         }
 
                         if (showStartupSplash) {
@@ -1058,6 +1154,17 @@ internal fun shouldRegisterIdleInteractionForTrailerPlaybackTransition(
     previousActive: Boolean,
     currentActive: Boolean
 ): Boolean = previousActive != currentActive
+
+internal fun chooseIdleScreensaverPresentationMode(
+    trailerScreensaverEnabled: Boolean,
+    trailerSessionStart: IdleTrailerScreensaverSessionStart?
+): IdleScreensaverPresentationMode {
+    return if (trailerScreensaverEnabled && trailerSessionStart != null) {
+        IdleScreensaverPresentationMode.TRAILER
+    } else {
+        IdleScreensaverPresentationMode.IMAGE
+    }
+}
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable

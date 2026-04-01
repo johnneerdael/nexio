@@ -61,6 +61,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val focusedPosterBackdropTrailerMutedKey = booleanPreferencesKey("focused_poster_backdrop_trailer_muted")
     private val focusedPosterBackdropTrailerPlaybackTargetKey =
         stringPreferencesKey("focused_poster_backdrop_trailer_playback_target")
+    private val trailerScreensaverEnabledKey = booleanPreferencesKey("trailer_screensaver_enabled")
     private val posterCardWidthDpKey = intPreferencesKey("poster_card_width_dp")
     private val posterCardHeightDpKey = intPreferencesKey("poster_card_height_dp")
     private val posterCardCornerRadiusDpKey = intPreferencesKey("poster_card_corner_radius_dp")
@@ -176,6 +177,10 @@ class LayoutPreferenceDataStore @Inject constructor(
             runCatching { FocusedPosterTrailerPlaybackTarget.valueOf(stored.orEmpty()) }
                 .getOrDefault(FocusedPosterTrailerPlaybackTarget.HERO_MEDIA)
         }
+
+    val trailerScreensaverEnabled: Flow<Boolean> = profileFlow { prefs ->
+        prefs[trailerScreensaverEnabledKey] ?: false
+    }
 
     val posterCardWidthDp: Flow<Int> = profileFlow { prefs ->
         prefs[posterCardWidthDpKey] ?: DEFAULT_POSTER_CARD_WIDTH_DP
@@ -348,6 +353,12 @@ class LayoutPreferenceDataStore @Inject constructor(
     ) {
         store().edit { prefs ->
             prefs[focusedPosterBackdropTrailerPlaybackTargetKey] = target.name
+        }
+    }
+
+    suspend fun setTrailerScreensaverEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[trailerScreensaverEnabledKey] = enabled
         }
     }
 

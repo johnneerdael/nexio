@@ -10,9 +10,10 @@ import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
-import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
+import com.nexio.tv.domain.repository.MetaRepository
+import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverCandidate
 import com.nexio.tv.ui.screensaver.IdleScreensaverSlide
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -29,8 +30,9 @@ private const val CINEMETA_BASE_URL = "https://v3-cinemeta.strem.io"
 private const val POPULAR_CATALOG_NAME = "Popular"
 private const val POPULAR_MOVIE_CATALOG_NAME = "Popular - Movie"
 private const val POPULAR_SERIES_CATALOG_NAME = "Popular - Series"
-private const val SCREENSAVER_CATALOG_LIMIT = 5
-private const val TRAKT_SCREENSAVER_CATALOG_LIMIT = 10
+internal const val IMAGE_SCREENSAVER_CATALOG_LIMIT = 5
+internal const val TRAKT_IMAGE_SCREENSAVER_CATALOG_LIMIT = 10
+internal const val TRAILER_SCREENSAVER_CATALOG_LIMIT = 20
 private const val TRAKT_RAIL_ADDON_ID = "trakt"
 private const val TRAKT_RAIL_ADDON_NAME = "Trakt"
 private const val TRAKT_RAIL_ADDON_BASE_URL = "https://api.trakt.tv"
@@ -55,6 +57,7 @@ private data class ScreensaverRowSelection(
 class IdleScreensaverRepository @Inject constructor(
     private val addonRepository: AddonRepository,
     private val catalogRepository: CatalogRepository,
+    private val metaRepository: MetaRepository,
     private val mdbListRepository: MDBListRepository,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
@@ -63,19 +66,36 @@ class IdleScreensaverRepository @Inject constructor(
     private val refreshMutex = Mutex()
     private val _slides = MutableStateFlow<List<IdleScreensaverSlide>>(emptyList())
     val slides = _slides.asStateFlow()
+    private val _trailerCandidates = MutableStateFlow<List<IdleTrailerScreensaverCandidate>>(emptyList())
+    val trailerCandidates = _trailerCandidates.asStateFlow()
 
     suspend fun refreshOnColdBoot() {
         refreshMutex.withLock {
             val selection = selectScreensaverRows()
+            val preparedItems = prepareIdleScreensaverItems(
+                rows = selection.rows,
+                itemsPerRowLimit = TRAILER_SCREENSAVER_CATALOG_LIMIT,
+                hydrateMeta = { preview -> fetchIdleScreensaverMeta(preview, metaRepository) },
+                enrichPreview = { preview -> mdbListRepository.enrichPreview(preview) }
+            )
 
             val preparedSlides = buildIdleScreensaverSlides(
                 rows = selection.rows,
-                itemsPerRowLimit = selection.itemsPerRowLimit
-            ) { preview ->
-                mdbListRepository.enrichPreview(preview)
-            }
+                itemsPerRowLimit = selection.itemsPerRowLimit,
+                preparedItemsByKey = preparedItems
+            )
+            val preparedTrailerCandidates = buildIdleTrailerScreensaverCandidates(
+                rows = selection.rows,
+                itemsPerRowLimit = TRAILER_SCREENSAVER_CATALOG_LIMIT,
+                preparedItemsByKey = preparedItems
+            )
             _slides.value = preparedSlides
-            Log.d(TAG, "Prepared ${preparedSlides.size} idle screensaver slides")
+            _trailerCandidates.value = preparedTrailerCandidates
+            Log.d(
+                TAG,
+                "Prepared ${preparedSlides.size} idle screensaver slides and " +
+                    "${preparedTrailerCandidates.size} trailer candidates"
+            )
         }
     }
 
@@ -86,7 +106,7 @@ class IdleScreensaverRepository @Inject constructor(
         if (shouldUseTraktScreensaverSource(traktAuthenticated, traktPrefs, traktSnapshot)) {
             return ScreensaverRowSelection(
                 rows = buildTraktScreensaverRows(requireNotNull(traktSnapshot)),
-                itemsPerRowLimit = TRAKT_SCREENSAVER_CATALOG_LIMIT
+                itemsPerRowLimit = TRAKT_IMAGE_SCREENSAVER_CATALOG_LIMIT
             )
         }
 
@@ -98,7 +118,7 @@ class IdleScreensaverRepository @Inject constructor(
                 .map { request -> async { fetchScreensaverCatalog(request) } }
                 .mapNotNull { deferred -> deferred.await() }
         }
-        return ScreensaverRowSelection(rows = rows, itemsPerRowLimit = SCREENSAVER_CATALOG_LIMIT)
+        return ScreensaverRowSelection(rows = rows, itemsPerRowLimit = IMAGE_SCREENSAVER_CATALOG_LIMIT)
     }
 
     private suspend fun fetchScreensaverCatalog(request: ScreensaverCatalogRequest): CatalogRow? {
@@ -145,24 +165,6 @@ internal fun findStockCinemetaPopularCatalogRequest(
     )
 }
 
-internal suspend fun buildIdleScreensaverSlides(
-    rows: List<CatalogRow>,
-    itemsPerRowLimit: Int = SCREENSAVER_CATALOG_LIMIT,
-    enrichPreview: suspend (MetaPreview) -> MetaPreview = { it }
-): List<IdleScreensaverSlide> {
-    return rows
-        .flatMap { row ->
-            row.items
-                .take(itemsPerRowLimit)
-                .map { item -> item to row.addonBaseUrl }
-        }
-        .map { (item, addonBaseUrl) ->
-            enrichPreview(item).toIdleScreensaverSlide(addonBaseUrl)
-        }
-        .filterNotNull()
-        .distinctBy { "${it.itemType}:${it.itemId}" }
-}
-
 internal fun shouldUseTraktScreensaverSource(
     traktAuthenticated: Boolean,
     prefs: TraktCatalogPreferences,
@@ -186,7 +188,7 @@ internal fun buildTraktScreensaverRows(snapshot: TraktDiscoverySnapshot): List<C
             catalogId = TraktCatalogIds.TRENDING_MOVIES,
             catalogName = TRAKT_ROW_NAME_TRENDING_MOVIES,
             type = ContentType.MOVIE,
-            items = snapshot.trendingMovieItems.take(TRAKT_SCREENSAVER_CATALOG_LIMIT)
+            items = snapshot.trendingMovieItems.take(TRAILER_SCREENSAVER_CATALOG_LIMIT)
         )
     }
     if (snapshot.trendingShowItems.isNotEmpty()) {
@@ -197,7 +199,7 @@ internal fun buildTraktScreensaverRows(snapshot: TraktDiscoverySnapshot): List<C
             catalogId = TraktCatalogIds.TRENDING_SHOWS,
             catalogName = TRAKT_ROW_NAME_TRENDING_SHOWS,
             type = ContentType.SERIES,
-            items = snapshot.trendingShowItems.take(TRAKT_SCREENSAVER_CATALOG_LIMIT)
+            items = snapshot.trendingShowItems.take(TRAILER_SCREENSAVER_CATALOG_LIMIT)
         )
     }
     return rows
@@ -207,24 +209,4 @@ private fun CatalogDescriptor.isScreensaverPopularCatalog(): Boolean {
     return name.equals(POPULAR_CATALOG_NAME, ignoreCase = true) ||
         name.equals(POPULAR_MOVIE_CATALOG_NAME, ignoreCase = true) ||
         name.equals(POPULAR_SERIES_CATALOG_NAME, ignoreCase = true)
-}
-
-private fun MetaPreview.toIdleScreensaverSlide(addonBaseUrl: String): IdleScreensaverSlide? {
-    val backgroundUrl = background?.takeIf { it.isNotBlank() }
-        ?: poster?.takeIf { it.isNotBlank() }
-        ?: return null
-    return IdleScreensaverSlide(
-        itemId = id,
-        itemType = apiType,
-        addonBaseUrl = addonBaseUrl,
-        title = name,
-        backgroundUrl = backgroundUrl,
-        logoUrl = logo?.takeIf { it.isNotBlank() },
-        genres = genres,
-        description = description?.takeIf { it.isNotBlank() },
-        releaseInfo = releaseInfo?.takeIf { it.isNotBlank() },
-        runtime = runtime?.takeIf { it.isNotBlank() },
-        imdbRating = imdbRating,
-        tomatoesRating = tomatoesRating
-    )
 }
