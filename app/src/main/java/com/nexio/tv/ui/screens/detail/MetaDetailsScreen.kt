@@ -2,7 +2,6 @@ package com.nexio.tv.ui.screens.detail
 
 import android.content.Intent
 import android.net.Uri
-import android.util.Log
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
@@ -41,6 +40,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
@@ -61,7 +61,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
-import com.nexio.tv.BuildConfig
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -73,6 +72,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.zIndex
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -108,9 +108,12 @@ import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.components.TrailerPlayer
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.Brush
 
 private enum class RestoreTarget {
     HERO,
@@ -120,8 +123,6 @@ private enum class RestoreTarget {
     MORE_LIKE_THIS,
     COLLECTION
 }
-
-private const val DETAIL_SCREEN_LOG_TAG = "MetaDetailsScreen"
 
 private enum class PeopleSectionTab {
     CAST,
@@ -175,8 +176,9 @@ private const val USER_INTERACTION_DISPATCH_DEBOUNCE_MS = 120L
 
 internal fun shouldShowDetailTrailerTakeover(
     isTrailerPlaying: Boolean,
-    isTrailerLoading: Boolean
-): Boolean = isTrailerPlaying || isTrailerLoading
+    isTrailerLoading: Boolean,
+    isTrailerTakeoverPending: Boolean = false
+): Boolean = isTrailerPlaying || isTrailerLoading || isTrailerTakeoverPending
 
 internal fun shouldRenderDetailTrailerPlayer(
     isTrailerPlaying: Boolean,
@@ -243,6 +245,7 @@ fun MetaDetailsScreen(
         context.findLifecycleOwner() ?: navLifecycleOwner
     }
     var restorePlayFocusAfterTrailerBackToken by rememberSaveable { mutableIntStateOf(0) }
+    var immediateTrailerTakeoverPending by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(activity) {
         if (activity != null) {
@@ -253,8 +256,11 @@ fun MetaDetailsScreen(
 
     BackHandler {
         if (uiState.isTrailerPlaying) {
+            detailFocusDebug("backHandler trailerPlaying=true nextRestorePlayFocusToken=${restorePlayFocusAfterTrailerBackToken + 1}")
             restorePlayFocusAfterTrailerBackToken += 1
             viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded)
+        } else if (immediateTrailerTakeoverPending) {
+            immediateTrailerTakeoverPending = false
         } else {
             onBackPress()
         }
@@ -262,15 +268,21 @@ fun MetaDetailsScreen(
 
     val currentIsTrailerPlaying by rememberUpdatedState(uiState.isTrailerPlaying)
     val currentShowTrailerControls by rememberUpdatedState(uiState.showTrailerControls)
+    val currentImmediateTrailerTakeoverPending by rememberUpdatedState(immediateTrailerTakeoverPending)
     var trailerSeekOverlayVisible by remember { mutableStateOf(false) }
     val trailerSeekOverlayState = remember { TrailerSeekOverlayState() }
     var trailerSeekToken by remember { mutableIntStateOf(0) }
     var trailerSeekDeltaMs by remember { mutableLongStateOf(0L) }
     var lastUserInteractionDispatchMs by remember { mutableLongStateOf(0L) }
-    val detailTrailerPlaybackActive = remember(uiState.isTrailerPlaying, uiState.isTrailerLoading) {
+    val detailTrailerPlaybackActive = remember(
+        uiState.isTrailerPlaying,
+        uiState.isTrailerLoading,
+        immediateTrailerTakeoverPending
+    ) {
         shouldShowDetailTrailerTakeover(
             isTrailerPlaying = uiState.isTrailerPlaying,
-            isTrailerLoading = uiState.isTrailerLoading
+            isTrailerLoading = uiState.isTrailerLoading,
+            isTrailerTakeoverPending = immediateTrailerTakeoverPending
         )
     }
     LaunchedEffect(
@@ -280,12 +292,9 @@ fun MetaDetailsScreen(
         uiState.trailerUrl,
         uiState.trailerExternalUrl
     ) {
-        if (BuildConfig.DEBUG) {
-            Log.d(
-                DETAIL_SCREEN_LOG_TAG,
-                "detailTrailerState loading=${uiState.isTrailerLoading} playing=${uiState.isTrailerPlaying} takeover=$detailTrailerPlaybackActive trailerUrl=${!uiState.trailerUrl.isNullOrBlank()} trailerExternalUrl=${!uiState.trailerExternalUrl.isNullOrBlank()}"
-            )
-        }
+        detailFocusDebug(
+            "detailTrailerState loading=${uiState.isTrailerLoading} playing=${uiState.isTrailerPlaying} takeover=$detailTrailerPlaybackActive trailerUrl=${!uiState.trailerUrl.isNullOrBlank()} trailerExternalUrl=${!uiState.trailerExternalUrl.isNullOrBlank()}"
+        )
     }
     val onTrailerProgressChanged = remember(trailerSeekOverlayState) {
         { position: Long, duration: Long ->
@@ -296,6 +305,12 @@ fun MetaDetailsScreen(
 
     LaunchedEffect(detailTrailerPlaybackActive) {
         onTrailerPlaybackActiveChanged(detailTrailerPlaybackActive)
+    }
+
+    LaunchedEffect(uiState.isTrailerLoading, uiState.isTrailerPlaying) {
+        if (uiState.isTrailerLoading || uiState.isTrailerPlaying) {
+            immediateTrailerTakeoverPending = false
+        }
     }
 
     androidx.compose.runtime.DisposableEffect(Unit) {
@@ -390,6 +405,11 @@ fun MetaDetailsScreen(
                         }
                     }
                     // During auto trailer preview, consume all keys except back/ESC so content doesn't scroll.
+                    val keyCode = keyEvent.nativeKeyEvent.keyCode
+                    return@onPreviewKeyEvent keyCode != KeyEvent.KEYCODE_BACK &&
+                            keyCode != KeyEvent.KEYCODE_ESCAPE
+                }
+                if (currentImmediateTrailerTakeoverPending) {
                     val keyCode = keyEvent.nativeKeyEvent.keyCode
                     return@onPreviewKeyEvent keyCode != KeyEvent.KEYCODE_BACK &&
                             keyCode != KeyEvent.KEYCODE_ESCAPE
@@ -578,7 +598,11 @@ fun MetaDetailsScreen(
                         },
                         onTrailerProgressChanged = onTrailerProgressChanged,
                         onTrailerEnded = { viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded) },
-                        onTrailerButtonClick = { viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick) },
+                        onTrailerButtonClick = {
+                            immediateTrailerTakeoverPending = true
+                            viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
+                        },
+                        immediateTrailerTakeoverPending = immediateTrailerTakeoverPending,
                         restorePlayFocusAfterTrailerBackToken = restorePlayFocusAfterTrailerBackToken,
                         onNavigateToCastDetail = onNavigateToCastDetail,
                         onNavigateToOrganizationDetail = onNavigateToOrganizationDetail,
@@ -635,6 +659,13 @@ fun MetaDetailsScreen(
             overlayState = trailerSeekOverlayState,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+
+        val immediateTakeoverMeta = uiState.meta
+        if (immediateTrailerTakeoverPending && immediateTakeoverMeta != null) {
+            ImmediateDetailTrailerTakeoverOverlay(
+                backdropUrl = immediateTakeoverMeta.background ?: immediateTakeoverMeta.poster
+            )
+        }
     }
 
     LaunchedEffect(trailerSeekOverlayVisible, uiState.isTrailerPlaying, uiState.showTrailerControls, trailerSeekToken) {
@@ -648,6 +679,56 @@ fun MetaDetailsScreen(
         if (!uiState.isTrailerPlaying || !uiState.showTrailerControls) {
             trailerSeekOverlayVisible = false
         }
+    }
+}
+
+@Composable
+private fun ImmediateDetailTrailerTakeoverOverlay(
+    backdropUrl: String?
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(100f)
+            .background(NexioColors.Background)
+    ) {
+        if (!backdropUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(backdropUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            NexioColors.Background.copy(alpha = 0.16f),
+                            NexioColors.Background.copy(alpha = 0.42f),
+                            NexioColors.Background.copy(alpha = 0.86f)
+                        )
+                    )
+                )
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            NexioColors.Background.copy(alpha = 0.72f),
+                            NexioColors.Background.copy(alpha = 0.36f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
     }
 }
 
@@ -715,16 +796,18 @@ private fun MetaDetailsContent(
     onTrailerProgressChanged: (Long, Long) -> Unit,
     onTrailerEnded: () -> Unit,
     onTrailerButtonClick: () -> Unit,
+    immediateTrailerTakeoverPending: Boolean,
     restorePlayFocusAfterTrailerBackToken: Int,
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
     onNavigateToOrganizationDetail: (Int, String, String, String) -> Unit = { _, _, _, _ -> },
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> },
     onReviewFocused: (Int) -> Unit = {}
 ) {
-    val showTrailerTakeover = remember(isTrailerPlaying, isTrailerLoading) {
+    val showTrailerTakeover = remember(isTrailerPlaying, isTrailerLoading, immediateTrailerTakeoverPending) {
         shouldShowDetailTrailerTakeover(
             isTrailerPlaying = isTrailerPlaying,
-            isTrailerLoading = isTrailerLoading
+            isTrailerLoading = isTrailerLoading,
+            isTrailerTakeoverPending = immediateTrailerTakeoverPending
         )
     }
     val isSeries = remember(meta.type, meta.videos) {
@@ -777,7 +860,14 @@ private fun MetaDetailsContent(
     val coroutineScope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 
+    fun logFocusState(message: String) {
+        detailFocusDebug(
+            "meta=${meta.id} $message pendingRestoreType=$pendingRestoreType pendingEpisodeId=$pendingRestoreEpisodeId scrollIndex=${listState.firstVisibleItemIndex} scrollOffset=${listState.firstVisibleItemScrollOffset} initialHeroFocusRequested=$initialHeroFocusRequested trailerPlaying=$isTrailerPlaying trailerLoading=$isTrailerLoading"
+        )
+    }
+
     fun clearPendingRestore() {
+        logFocusState("clearPendingRestore")
         pendingRestoreType = null
         pendingRestoreEpisodeId = null
         pendingRestoreCastPersonId = null
@@ -789,6 +879,7 @@ private fun MetaDetailsContent(
         pendingRestoreEpisodeId = null
         pendingRestoreCastPersonId = null
         pendingRestoreMoreLikeItemId = null
+        logFocusState("markHeroRestore")
     }
 
     fun markEpisodeRestore(episodeId: String) {
@@ -796,6 +887,7 @@ private fun MetaDetailsContent(
         pendingRestoreEpisodeId = episodeId
         pendingRestoreCastPersonId = null
         pendingRestoreMoreLikeItemId = null
+        logFocusState("markEpisodeRestore episodeId=$episodeId")
     }
 
     fun markSeasonEntryRestore(episodeId: String) {
@@ -803,11 +895,13 @@ private fun MetaDetailsContent(
         pendingRestoreEpisodeId = episodeId
         pendingRestoreCastPersonId = null
         pendingRestoreMoreLikeItemId = null
+        logFocusState("markSeasonEntryRestore episodeId=$episodeId")
     }
 
     fun requestSeasonEntryRestore(episodeId: String) {
         markSeasonEntryRestore(episodeId)
         coroutineScope.launch {
+            logFocusState("requestSeasonEntryRestore episodeId=$episodeId")
             if (seasons.isNotEmpty()) {
                 // Keep the episodes row composed before the target item restores focus.
                 listState.scrollToItem(2)
@@ -822,6 +916,7 @@ private fun MetaDetailsContent(
         pendingRestoreEpisodeId = null
         pendingRestoreCastPersonId = personId
         pendingRestoreMoreLikeItemId = null
+        logFocusState("markCastMemberRestore personId=$personId")
     }
 
     fun markMoreLikeThisRestore(itemId: String) {
@@ -829,6 +924,7 @@ private fun MetaDetailsContent(
         pendingRestoreEpisodeId = null
         pendingRestoreCastPersonId = null
         pendingRestoreMoreLikeItemId = itemId
+        logFocusState("markMoreLikeThisRestore itemId=$itemId")
     }
 
     var pendingRestoreCollectionItemId by rememberSaveable(meta.id) { mutableStateOf<String?>(null) }
@@ -838,6 +934,7 @@ private fun MetaDetailsContent(
         pendingRestoreCastPersonId = null
         pendingRestoreMoreLikeItemId = null
         pendingRestoreCollectionItemId = itemId
+        logFocusState("markCollectionRestore itemId=$itemId")
     }
 
     androidx.compose.runtime.DisposableEffect(
@@ -850,6 +947,7 @@ private fun MetaDetailsContent(
     ) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME && pendingRestoreType != null) {
+                logFocusState("lifecycleResume restoreFocusToken=${restoreFocusToken + 1}")
                 restoreFocusToken += 1
             }
         }
@@ -901,6 +999,17 @@ private fun MetaDetailsContent(
             delay(32)
         }
         restoreFocusToken += 1
+        logFocusState("detailReturnEpisode restoreFocusToken=$restoreFocusToken targetEpisode=${targetEpisode.id}")
+    }
+
+    LaunchedEffect(meta.id, listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .distinctUntilChanged()
+            .collect { (index, offset) ->
+                detailFocusDebug(
+                    "meta=${meta.id} listScroll index=$index offset=$offset pendingRestoreType=$pendingRestoreType initialHeroFocusRequested=$initialHeroFocusRequested trailerPlaying=$isTrailerPlaying trailerLoading=$isTrailerLoading"
+                )
+            }
     }
 
     // Track if scrolled past hero (first item)
@@ -1136,6 +1245,25 @@ private fun MetaDetailsContent(
             }
         }
     }
+    val heroDownFocusRequester = if (hasPeopleSection) {
+        activePeopleTabFocusRequester
+    } else {
+        seasonDownFocusRequester
+    }
+    val heroTrailerClick = remember(
+        meta.id,
+        titleHasPlayableTrailerMedia,
+        trailerUrl,
+        trailerExternalUrl,
+        onTrailerButtonClick
+    ) {
+        {
+            detailFocusDebug(
+                "heroTrailerClick meta=${meta.id} titleAvailable=$titleHasPlayableTrailerMedia trailerUrl=${!trailerUrl.isNullOrBlank()} trailerExternalUrl=${!trailerExternalUrl.isNullOrBlank()}"
+            )
+            onTrailerButtonClick()
+        }
+    }
 
     val episodeClick = remember(onEpisodeClick) {
         { video: Video ->
@@ -1149,20 +1277,26 @@ private fun MetaDetailsContent(
         pendingRestoreEpisodeId,
         initialHeroFocusRequested,
         isTrailerPlaying,
+        isTrailerLoading,
         meta.id
     ) {
         if (
-            !initialHeroFocusRequested &&
-            pendingRestoreType == null &&
-            pendingRestoreEpisodeId == null &&
-            !isTrailerPlaying
+            shouldAutoResetFocusToHero(
+                initialHeroFocusRequested = initialHeroFocusRequested,
+                hasPendingRestoreTarget = pendingRestoreType != null,
+                hasPendingRestoreEpisodeId = pendingRestoreEpisodeId != null,
+                isTrailerPlaying = isTrailerPlaying,
+                isTrailerLoading = isTrailerLoading
+            )
         ) {
             repeat(3) {
                 if (initialHeroFocusRequested) return@repeat
+                logFocusState("autoResetFocusToHero attempt=${it + 1}/3")
                 resetFocusToHero(
                     focusManager = focusManager,
                     listState = listState,
-                    heroPlayFocusRequester = heroPlayFocusRequester
+                    heroPlayFocusRequester = heroPlayFocusRequester,
+                    reason = "initial_detail_entry"
                 )
                 delay(80)
             }
@@ -1288,22 +1422,25 @@ private fun MetaDetailsContent(
                     trailerUrl = trailerUrl,
                     trailerExternalUrl = trailerExternalUrl
                 ),
-                onTrailerClick = onTrailerButtonClick,
+                onTrailerClick = heroTrailerClick,
                 hideLogoDuringTrailer = hideLogoDuringTrailer,
                 isTrailerPlaying = isTrailerPlaying,
                 playButtonFocusRequester = heroPlayFocusRequester,
-                onHeroActionFocused = {
+                downFocusRequester = heroDownFocusRequester,
+                onHeroActionFocused = { action ->
+                    logFocusState("heroActionFocused action=$action")
                     initialHeroFocusRequested = true
                     clearPendingRestore()
                 },
                 restorePlayFocusToken = (if (pendingRestoreType == RestoreTarget.HERO) restoreFocusToken else 0) +
                     restorePlayFocusAfterTrailerBackToken,
                 onPlayFocusRestored = {
+                    logFocusState("playFocusRestored restoreFocusToken=$restoreFocusToken trailerBackToken=$restorePlayFocusAfterTrailerBackToken")
                     onPlayButtonFocused()
                     initialHeroFocusRequested = true
                     clearPendingRestore()
                     coroutineScope.launch {
-                        listState.restoreHeroScrollAfterFocus()
+                        listState.restoreHeroScrollAfterFocus(reason = "play_focus_restored")
                     }
                 }
             )

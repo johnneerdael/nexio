@@ -114,6 +114,11 @@ private const val MODERN_HERO_RAPID_NAV_THRESHOLD_MS = 130L
 private const val MODERN_HERO_RAPID_NAV_SETTLE_MS = 170L
 private const val MODERN_HOME_CONTENT_LOG_TAG = "ModernHomeContent"
 
+private fun modernHomeDebugLog(message: String) {
+    if (!com.nexio.tv.BuildConfig.DEBUG) return
+    runCatching { Log.d(MODERN_HOME_CONTENT_LOG_TAG, message) }
+}
+
 internal fun shouldActivateFocusedTrailerPreviewAfterDelay(
     shouldActivateFocusedPosterFlow: Boolean,
     isVerticalRowsScrolling: Boolean,
@@ -146,13 +151,11 @@ internal fun shouldShowModernHomeFullscreenTextOverlay(
 ): Boolean = fullscreenTrailerActive && !overlayTimedOut
 
 internal fun shouldUnlockModernHomeTrailerAutoplay(
-    trailerEnabled: Boolean,
     autoplayEnabled: Boolean,
     screensaverVisible: Boolean,
     selectionStillFocused: Boolean,
     lifecycleResumed: Boolean
-): Boolean = trailerEnabled &&
-    autoplayEnabled &&
+): Boolean = autoplayEnabled &&
     !screensaverVisible &&
     selectionStillFocused &&
     lifecycleResumed
@@ -219,7 +222,7 @@ internal fun ModernHomeContent(
     val showCatalogTypeSuffixInModern = contentState.catalogTypeSuffixEnabled
     val isLandscapeModern = useLandscapePosters
     val expandControlAvailable = !isLandscapeModern
-    val trailerPlaybackTarget = contentState.focusedPosterBackdropTrailerPlaybackTarget
+    val trailerPlaybackTarget = com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
     val landscapeExpandedCardMode = false
     val effectiveExpandEnabled =
         (contentState.focusedPosterBackdropExpandEnabled && expandControlAvailable) ||
@@ -442,30 +445,50 @@ internal fun ModernHomeContent(
     var fullscreenTrailerTextTimedOut by remember { mutableStateOf(false) }
     val fullscreenTrailerFocusRequester = remember { FocusRequester() }
 
+    val focusedTrailerSelection = remember(activeRowKey, activeItemIndex, rowByKey) {
+        resolveFocusedTrailerSelection(
+            rowKey = activeRowKey,
+            item = rowByKey[activeRowKey]
+                ?.items
+                ?.getOrNull(activeItemIndex)
+                ?: rowByKey[activeRowKey]?.items?.firstOrNull()
+        )
+    }
+
     LaunchedEffect(
-        focusedCatalogSelection?.focusKey,
+        focusedTrailerSelection?.focusKey,
         contentState.focusedPosterBackdropTrailerEnabled,
         contentState.homeTrailerAutoplayEnabled,
         contentState.homeTrailerAutoplayDelaySeconds,
         idleScreensaverVisible
     ) {
         unlockedTrailerFocusKey = null
-        val selection = focusedCatalogSelection ?: return@LaunchedEffect
+        val selection = focusedTrailerSelection ?: return@LaunchedEffect
+        modernHomeDebugLog(
+            "heroAutoplayUnlock wait focusKey=${selection.focusKey} itemId=${selection.itemId} type=${selection.itemType} autoplay=${contentState.homeTrailerAutoplayEnabled} delay=${contentState.homeTrailerAutoplayDelaySeconds}"
+        )
         delay(contentState.homeTrailerAutoplayDelaySeconds.coerceAtLeast(0) * 1000L)
-        if (shouldUnlockModernHomeTrailerAutoplay(
-                trailerEnabled = contentState.focusedPosterBackdropTrailerEnabled,
-                autoplayEnabled = contentState.homeTrailerAutoplayEnabled,
-                screensaverVisible = idleScreensaverVisible,
-                selectionStillFocused = focusedCatalogSelection?.focusKey == selection.focusKey,
-                lifecycleResumed = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
-            )
-        ) {
+        val selectionStillFocused = focusedTrailerSelection?.focusKey == selection.focusKey
+        val lifecycleResumed = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        val shouldUnlock = shouldUnlockModernHomeTrailerAutoplay(
+            autoplayEnabled = contentState.homeTrailerAutoplayEnabled,
+            screensaverVisible = idleScreensaverVisible,
+            selectionStillFocused = selectionStillFocused,
+            lifecycleResumed = lifecycleResumed
+        )
+        modernHomeDebugLog(
+            "heroAutoplayUnlock eval focusKey=${selection.focusKey} itemId=${selection.itemId} selectionStillFocused=$selectionStillFocused lifecycleResumed=$lifecycleResumed screensaver=$idleScreensaverVisible shouldUnlock=$shouldUnlock"
+        )
+        if (shouldUnlock) {
             unlockedTrailerFocusKey = selection.focusKey
+            modernHomeDebugLog(
+                "heroAutoplayUnlock success focusKey=${selection.focusKey} itemId=${selection.itemId}"
+            )
         }
     }
 
-    LaunchedEffect(unlockedTrailerFocusKey, focusedCatalogSelection?.focusKey) {
-        if (unlockedTrailerFocusKey != focusedCatalogSelection?.focusKey) {
+    LaunchedEffect(unlockedTrailerFocusKey, focusedTrailerSelection?.focusKey) {
+        if (unlockedTrailerFocusKey != focusedTrailerSelection?.focusKey) {
             autoplayUnlockRetriedFocusKey = null
             pendingHeroTrailerFocusKey = null
             heroTrailerFullscreenMode = false
@@ -572,69 +595,80 @@ internal fun ModernHomeContent(
 
     LaunchedEffect(
         unlockedTrailerFocusKey,
-        focusedCatalogSelection?.focusKey,
-        focusedCatalogSelection?.payload?.itemType,
-        focusedCatalogSelection?.payload?.itemId,
+        focusedTrailerSelection?.focusKey,
+        focusedTrailerSelection?.itemType,
+        focusedTrailerSelection?.itemId,
         contentState.trailerPreviewUrls,
         contentState.trailerPreviewExternalUrls,
         contentState.trailerPreviewLoadingIds,
         contentState.trailerPreviewNegativeCacheIds,
         contentState.trailerMetadataAvailableKeys
     ) {
-        val selection = focusedCatalogSelection ?: return@LaunchedEffect
+        val selection = focusedTrailerSelection ?: return@LaunchedEffect
         val hasTrailerMetadataAvailable = homeTrailerAvailabilityKey(
-            selection.payload.itemId,
-            selection.payload.itemType
+            selection.itemId,
+            selection.itemType
         ) in contentState.trailerMetadataAvailableKeys
-        if (!shouldRequestFocusedTrailerPreviewAfterAutoplayUnlock(
-                trailerPlaybackUnlocked = unlockedTrailerFocusKey == selection.focusKey,
-                hasTrailerMetadataAvailable = hasTrailerMetadataAvailable,
-                hasResolvedPreview = !contentState.trailerPreviewUrls[selection.payload.itemId].isNullOrBlank(),
-                hasResolvedExternalPreview = !contentState.trailerPreviewExternalUrls[selection.payload.itemId].isNullOrBlank(),
-                isCurrentlyLoading = selection.payload.itemId in contentState.trailerPreviewLoadingIds,
-                alreadyRetriedAfterUnlock = autoplayUnlockRetriedFocusKey == selection.focusKey
-            )
-        ) {
+        val hasResolvedPreview = !contentState.trailerPreviewUrls[selection.itemId].isNullOrBlank()
+        val hasResolvedExternalPreview = !contentState.trailerPreviewExternalUrls[selection.itemId].isNullOrBlank()
+        val isCurrentlyLoading = selection.itemId in contentState.trailerPreviewLoadingIds
+        val alreadyRetriedAfterUnlock = autoplayUnlockRetriedFocusKey == selection.focusKey
+        val trailerPlaybackUnlocked = unlockedTrailerFocusKey == selection.focusKey
+        val shouldRequest = shouldRequestFocusedTrailerPreviewAfterAutoplayUnlock(
+            trailerPlaybackUnlocked = trailerPlaybackUnlocked,
+            hasTrailerMetadataAvailable = hasTrailerMetadataAvailable,
+            hasResolvedPreview = hasResolvedPreview,
+            hasResolvedExternalPreview = hasResolvedExternalPreview,
+            isCurrentlyLoading = isCurrentlyLoading,
+            alreadyRetriedAfterUnlock = alreadyRetriedAfterUnlock
+        )
+        modernHomeDebugLog(
+            "heroAutoplayRequest eval focusKey=${selection.focusKey} itemId=${selection.itemId} unlocked=$trailerPlaybackUnlocked metadata=$hasTrailerMetadataAvailable resolved=$hasResolvedPreview external=$hasResolvedExternalPreview loading=$isCurrentlyLoading retried=$alreadyRetriedAfterUnlock shouldRequest=$shouldRequest"
+        )
+        if (!shouldRequest) {
             return@LaunchedEffect
         }
 
         autoplayUnlockRetriedFocusKey = selection.focusKey
         pendingHeroTrailerFocusKey = selection.focusKey
-        if (selection.payload.itemId in contentState.trailerPreviewNegativeCacheIds) {
+        modernHomeDebugLog(
+            "heroAutoplayRequest start focusKey=${selection.focusKey} itemId=${selection.itemId} negativeCache=${selection.itemId in contentState.trailerPreviewNegativeCacheIds}"
+        )
+        if (selection.itemId in contentState.trailerPreviewNegativeCacheIds) {
             onRetryTrailerPreview(
-                selection.payload.itemId,
-                selection.payload.trailerTitle,
-                selection.payload.trailerReleaseInfo,
-                selection.payload.trailerApiType,
-                selection.payload.fallbackTrailerYtId
+                selection.itemId,
+                selection.trailerTitle,
+                selection.trailerReleaseInfo,
+                selection.trailerApiType,
+                selection.fallbackTrailerYtId
             )
         } else {
             onRequestTrailerPreview(
-                selection.payload.itemId,
-                selection.payload.trailerTitle,
-                selection.payload.trailerReleaseInfo,
-                selection.payload.trailerApiType,
-                selection.payload.fallbackTrailerYtId
+                selection.itemId,
+                selection.trailerTitle,
+                selection.trailerReleaseInfo,
+                selection.trailerApiType,
+                selection.fallbackTrailerYtId
             )
         }
     }
 
     LaunchedEffect(
         pendingHeroTrailerFocusKey,
-        focusedCatalogSelection?.focusKey,
-        focusedCatalogSelection?.payload?.itemId,
+        focusedTrailerSelection?.focusKey,
+        focusedTrailerSelection?.itemId,
         contentState.trailerPreviewUrls,
         contentState.trailerPreviewExternalUrls,
         contentState.trailerPreviewLoadingIds,
         contentState.trailerPreviewNegativeCacheIds
     ) {
         val pendingFocusKey = pendingHeroTrailerFocusKey ?: return@LaunchedEffect
-        val selection = focusedCatalogSelection
+        val selection = focusedTrailerSelection
         if (selection?.focusKey != pendingFocusKey) {
             pendingHeroTrailerFocusKey = null
             return@LaunchedEffect
         }
-        val itemId = selection.payload.itemId
+        val itemId = selection.itemId
         if (
             !contentState.trailerPreviewUrls[itemId].isNullOrBlank() ||
             !contentState.trailerPreviewExternalUrls[itemId].isNullOrBlank()
@@ -792,11 +826,10 @@ internal fun ModernHomeContent(
                 if (heroItem == null) activeRowFallbackBackdrop else null
             )
         }
-        val heroTrailerItemId = focusedCatalogSelection?.payload?.itemId
-        val heroTrailerPending = pendingHeroTrailerFocusKey == focusedCatalogSelection?.focusKey
-        val unlockedTrailerForFocusedItem = unlockedTrailerFocusKey == focusedCatalogSelection?.focusKey
+        val heroTrailerItemId = focusedTrailerSelection?.itemId
+        val heroTrailerPending = pendingHeroTrailerFocusKey == focusedTrailerSelection?.focusKey
+        val unlockedTrailerForFocusedItem = unlockedTrailerFocusKey == focusedTrailerSelection?.focusKey
         val heroTrailerPreviewUrl = if (
-            contentState.focusedPosterBackdropTrailerEnabled &&
             effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
             unlockedTrailerForFocusedItem
         ) {
@@ -805,7 +838,6 @@ internal fun ModernHomeContent(
             null
         }
         val heroTrailerPreviewAudioUrl = if (
-            contentState.focusedPosterBackdropTrailerEnabled &&
             effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
             unlockedTrailerForFocusedItem
         ) {
@@ -814,7 +846,6 @@ internal fun ModernHomeContent(
             null
         }
         val heroTrailerExternalUrl = if (
-            contentState.focusedPosterBackdropTrailerEnabled &&
             effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA &&
             unlockedTrailerForFocusedItem
         ) {
@@ -831,7 +862,7 @@ internal fun ModernHomeContent(
             fullscreenTrailerActive = fullscreenTrailerActive,
             overlayTimedOut = fullscreenTrailerTextTimedOut
         )
-        val expandedTrailerItemId = focusedCatalogSelection?.payload?.itemId
+        val expandedTrailerItemId = focusedTrailerSelection?.itemId
         val expandedCardTrailerActive = if (
             effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD &&
             !expandedCatalogFocusKey.isNullOrBlank() &&
@@ -879,7 +910,7 @@ internal fun ModernHomeContent(
                 fullscreenTrailerTextTimedOut = false
                 unlockedTrailerFocusKey = null
                 pendingHeroTrailerFocusKey = null
-                focusedCatalogSelection?.let { selection ->
+                focusedTrailerSelection?.let { selection ->
                     pendingRowFocusKey = selection.rowKey
                     pendingRowFocusIndex = activeItemIndex
                     pendingRowFocusNonce++

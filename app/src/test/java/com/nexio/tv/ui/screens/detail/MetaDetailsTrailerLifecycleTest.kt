@@ -11,7 +11,8 @@ class MetaDetailsTrailerLifecycleTest {
         assertTrue(
             shouldShowDetailTrailerTakeover(
                 isTrailerPlaying = true,
-                isTrailerLoading = false
+                isTrailerLoading = false,
+                isTrailerTakeoverPending = false
             )
         )
     }
@@ -21,7 +22,19 @@ class MetaDetailsTrailerLifecycleTest {
         assertTrue(
             shouldShowDetailTrailerTakeover(
                 isTrailerPlaying = false,
-                isTrailerLoading = true
+                isTrailerLoading = true,
+                isTrailerTakeoverPending = false
+            )
+        )
+    }
+
+    @Test
+    fun `detail screen takes over immediately while local trailer takeover is pending`() {
+        assertTrue(
+            shouldShowDetailTrailerTakeover(
+                isTrailerPlaying = false,
+                isTrailerLoading = false,
+                isTrailerTakeoverPending = true
             )
         )
     }

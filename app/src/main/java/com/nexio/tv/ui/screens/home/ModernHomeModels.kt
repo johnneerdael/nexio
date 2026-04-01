@@ -67,6 +67,18 @@ internal data class FocusedCatalogSelection(
 )
 
 @Immutable
+internal data class FocusedTrailerSelection(
+    val rowKey: String,
+    val focusKey: String,
+    val itemId: String,
+    val itemType: String,
+    val trailerTitle: String,
+    val trailerReleaseInfo: String?,
+    val trailerApiType: String,
+    val fallbackTrailerYtId: String? = null
+)
+
+@Immutable
 internal data class ModernCarouselItem(
     val key: String,
     val title: String,
@@ -212,6 +224,37 @@ internal fun resolveDisplayedHeroPreview(
         liveActiveHeroPreview ?: displayedHeroPreview
     } else {
         displayedHeroPreview ?: liveActiveHeroPreview
+    }
+}
+
+internal fun resolveFocusedTrailerSelection(
+    rowKey: String?,
+    item: ModernCarouselItem?
+): FocusedTrailerSelection? {
+    val resolvedRowKey = rowKey ?: return null
+    val resolvedItem = item ?: return null
+    return when (val payload = resolvedItem.payload) {
+        is ModernPayload.Catalog -> FocusedTrailerSelection(
+            rowKey = resolvedRowKey,
+            focusKey = payload.focusKey,
+            itemId = payload.itemId,
+            itemType = payload.itemType,
+            trailerTitle = payload.trailerTitle,
+            trailerReleaseInfo = payload.trailerReleaseInfo,
+            trailerApiType = payload.trailerApiType,
+            fallbackTrailerYtId = payload.fallbackTrailerYtId
+        )
+
+        is ModernPayload.ContinueWatching -> FocusedTrailerSelection(
+            rowKey = resolvedRowKey,
+            focusKey = resolvedItem.key,
+            itemId = payload.item.contentId(),
+            itemType = payload.item.contentType(),
+            trailerTitle = resolvedItem.heroPreview.title.ifBlank { resolvedItem.title },
+            trailerReleaseInfo = resolvedItem.subtitle,
+            trailerApiType = payload.item.contentType(),
+            fallbackTrailerYtId = null
+        )
     }
 }
 

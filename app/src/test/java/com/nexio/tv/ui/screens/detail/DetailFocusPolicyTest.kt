@@ -1,0 +1,85 @@
+package com.nexio.tv.ui.screens.detail
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class DetailFocusPolicyTest {
+
+    @Test
+    fun autoHeroFocusIsSuppressedWhileTrailerIsResolving() {
+        assertFalse(
+            shouldAutoResetFocusToHero(
+                initialHeroFocusRequested = false,
+                hasPendingRestoreTarget = false,
+                hasPendingRestoreEpisodeId = false,
+                isTrailerPlaying = false,
+                isTrailerLoading = true
+            )
+        )
+    }
+
+    @Test
+    fun autoHeroFocusRunsOnCleanInitialEntry() {
+        assertTrue(
+            shouldAutoResetFocusToHero(
+                initialHeroFocusRequested = false,
+                hasPendingRestoreTarget = false,
+                hasPendingRestoreEpisodeId = false,
+                isTrailerPlaying = false,
+                isTrailerLoading = false
+            )
+        )
+    }
+
+    @Test
+    fun trailerActionTrapsRightNavigationAtTheEndOfTheHeroRow() {
+        val actions = buildHeroActionOrder(
+            isMovie = true,
+            trailerAvailable = true
+        )
+
+        val trailerDirections = resolveHeroActionDirections(
+            action = HeroAction.TRAILER,
+            orderedActions = actions
+        )
+
+        assertEquals(
+            listOf(
+                HeroAction.PLAY,
+                HeroAction.LIBRARY,
+                HeroAction.WATCHED,
+                HeroAction.TRAILER
+            ),
+            actions
+        )
+        assertEquals(HeroAction.WATCHED, trailerDirections.left)
+        assertEquals(null, trailerDirections.right)
+        assertTrue(trailerDirections.trapRight)
+    }
+
+    @Test
+    fun finalHeroActionTrapsRightWhenTrailerIsUnavailable() {
+        val actions = buildHeroActionOrder(
+            isMovie = false,
+            trailerAvailable = false
+        )
+
+        val libraryDirections = resolveHeroActionDirections(
+            action = HeroAction.LIBRARY,
+            orderedActions = actions
+        )
+
+        assertEquals(
+            listOf(
+                HeroAction.PLAY,
+                HeroAction.LIBRARY
+            ),
+            actions
+        )
+        assertEquals(HeroAction.PLAY, libraryDirections.left)
+        assertEquals(null, libraryDirections.right)
+        assertTrue(libraryDirections.trapRight)
+    }
+}
