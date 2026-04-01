@@ -93,6 +93,12 @@ internal fun shouldEnableLowerContentFocus(
     hasActiveRestoreTarget: Boolean
 ): Boolean = hasUserMovedDownFromHero || hasVisitedLowerContent || hasActiveRestoreTarget
 
+internal fun hasVisitedDetailLowerContent(
+    hasVisitedSeasonTabs: Boolean,
+    hasVisitedEpisodes: Boolean,
+    hasVisitedPeopleTabs: Boolean
+): Boolean = hasVisitedSeasonTabs || hasVisitedEpisodes || hasVisitedPeopleTabs
+
 internal fun resolvePeopleSectionUpTarget(
     isSeries: Boolean,
     hasEpisodeEntry: Boolean
