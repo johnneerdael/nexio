@@ -132,4 +132,26 @@ class DetailFocusPolicyTest {
             )
         )
     }
+
+    @Test
+    fun moviePeopleSectionReturnsUpToHeroPlay() {
+        assertEquals(
+            SectionUpTarget.HERO_PLAY,
+            resolvePeopleSectionUpTarget(
+                isSeries = false,
+                hasEpisodeEntry = false
+            )
+        )
+    }
+
+    @Test
+    fun seriesPeopleSectionReturnsUpToEpisodeEntryWhenAvailable() {
+        assertEquals(
+            SectionUpTarget.EPISODE_ENTRY,
+            resolvePeopleSectionUpTarget(
+                isSeries = true,
+                hasEpisodeEntry = true
+            )
+        )
+    }
 }
