@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.HorizontalDivider
@@ -339,6 +340,7 @@ fun HomeScreen(
         val trailerPlayback = playableHomeTrailerFor(
             itemId = item.id,
             title = item.name,
+            item = item,
             previewUrls = viewModel.trailerPreviewUrls,
             previewAudioUrls = viewModel.trailerPreviewAudioUrls
         )
@@ -398,6 +400,7 @@ fun HomeScreen(
     }
 
     val activePosterTrailerPlayback = posterTrailerPlayback
+    var modernPosterTrailerTextTimedOut by remember { mutableStateOf(false) }
     LaunchedEffect(
         pendingPosterTrailerResolution?.item?.id,
         viewModel.trailerPreviewUrls,
@@ -410,6 +413,7 @@ fun HomeScreen(
         val playback = playableHomeTrailerFor(
             itemId = pendingRequest.item.id,
             title = pendingRequest.item.name,
+            item = pendingRequest.item,
             previewUrls = viewModel.trailerPreviewUrls,
             previewAudioUrls = viewModel.trailerPreviewAudioUrls
         )
@@ -445,6 +449,16 @@ fun HomeScreen(
             activePosterTrailerPlayback != null || pendingPosterTrailerResolution != null
         )
     }
+    LaunchedEffect(activePosterTrailerPlayback?.itemId, uiState.homeLayout) {
+        modernPosterTrailerTextTimedOut = false
+        val playback = activePosterTrailerPlayback ?: return@LaunchedEffect
+        if (uiState.homeLayout == HomeLayout.MODERN && playback.heroPreview != null) {
+            delay(10_000L)
+            if (activePosterTrailerPlayback?.itemId == playback.itemId) {
+                modernPosterTrailerTextTimedOut = true
+            }
+        }
+    }
     if (activePosterTrailerPlayback != null) {
         BackHandler {
             posterTrailerPlayback = null
@@ -462,6 +476,22 @@ fun HomeScreen(
                 onEnded = { posterTrailerPlayback = null },
                 modifier = Modifier.fillMaxSize()
             )
+            if (uiState.homeLayout == HomeLayout.MODERN && activePosterTrailerPlayback.heroPreview != null) {
+                ModernHeroGradientLayer(
+                    bgColor = NexioColors.Background,
+                    modifier = Modifier.fillMaxSize()
+                )
+                if (!modernPosterTrailerTextTimedOut) {
+                    HeroTitleBlock(
+                        preview = activePosterTrailerPlayback.heroPreview,
+                        portraitMode = !uiState.modernLandscapePostersEnabled,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 52.dp, end = 48.dp, bottom = 64.dp)
+                            .fillMaxWidth(MODERN_HERO_TEXT_WIDTH_FRACTION)
+                    )
+                }
+            }
         }
     }
     val pendingPosterTrailer = pendingPosterTrailerResolution

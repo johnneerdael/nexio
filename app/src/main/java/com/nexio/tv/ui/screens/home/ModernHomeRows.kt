@@ -162,6 +162,9 @@ private fun ModernCatalogRowItem(
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
     onLongPress: () -> Unit,
+    canPromoteHeroTrailerToFullscreen: Boolean,
+    fullscreenTrailerActive: Boolean,
+    onPromoteHeroTrailerToFullscreen: () -> Unit,
     onBackdropInteraction: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -218,6 +221,9 @@ private fun ModernCatalogRowItem(
             )
         },
         onLongPress = onLongPress,
+        canPromoteHeroTrailerToFullscreen = canPromoteHeroTrailerToFullscreen,
+        fullscreenTrailerActive = fullscreenTrailerActive,
+        onPromoteHeroTrailerToFullscreen = onPromoteHeroTrailerToFullscreen,
         onBackdropInteraction = onBackdropInteraction
     )
 }
@@ -258,6 +264,9 @@ internal fun ModernRowSection(
     onCatalogSelectionFocused: (FocusedCatalogSelection) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
     onLoadMoreCatalog: (String, String, String) -> Unit,
+    canPromoteHeroTrailerToFullscreen: Boolean,
+    fullscreenTrailerActive: Boolean,
+    onPromoteHeroTrailerToFullscreen: () -> Unit,
     onBackdropInteraction: () -> Unit
 ) {
     val focusedItemByRow = uiCaches.focusedItemByRow
@@ -534,6 +543,9 @@ internal fun ModernRowSection(
                                 onLongPress = remember(metaPreview, payload.addonBaseUrl) {
                                     { onCatalogItemLongPress(metaPreview, payload.addonBaseUrl) }
                                 },
+                                canPromoteHeroTrailerToFullscreen = canPromoteHeroTrailerToFullscreen,
+                                fullscreenTrailerActive = fullscreenTrailerActive,
+                                onPromoteHeroTrailerToFullscreen = onPromoteHeroTrailerToFullscreen,
                                 onBackdropInteraction = onBackdropInteraction
                             )
                         }
@@ -567,6 +579,9 @@ private fun ModernCarouselCard(
     onFocusStateChanged: (Boolean) -> Unit = {},
     onClick: () -> Unit,
     onLongPress: () -> Unit,
+    canPromoteHeroTrailerToFullscreen: Boolean,
+    fullscreenTrailerActive: Boolean,
+    onPromoteHeroTrailerToFullscreen: () -> Unit,
     onBackdropInteraction: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -696,6 +711,17 @@ private fun ModernCarouselCard(
                     }
                 }
                 .onPreviewKeyEvent { event ->
+                    if (
+                        shouldPromoteModernHomeHeroTrailerToFullscreen(
+                            key = event.key,
+                            eventType = event.type,
+                            heroTrailerPlaying = canPromoteHeroTrailerToFullscreen,
+                            fullscreenTrailerActive = fullscreenTrailerActive
+                        )
+                    ) {
+                        onPromoteHeroTrailerToFullscreen()
+                        return@onPreviewKeyEvent true
+                    }
                     val native = event.nativeKeyEvent
                     if (native.action == AndroidKeyEvent.ACTION_DOWN) {
                         if (focusedPosterBackdropExpandEnabled && shouldResetBackdropTimer(event.key)) {

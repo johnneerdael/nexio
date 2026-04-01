@@ -1,24 +1,38 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.nexio.tv.ui.screens.detail
 
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListPrefetchStrategy
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.platform.testTag
+import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.nexio.tv.domain.model.ContentType
@@ -26,6 +40,7 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
 import kotlinx.coroutines.launch
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
@@ -156,6 +171,27 @@ class HeroSectionFocusStabilityTest {
             composeRule.mainClock.autoAdvance = true
         }
     }
+
+    @Test
+    fun switching_to_a_new_detail_resets_scroll_to_the_hero() {
+        composeRule.setContent {
+            DetailMetaChangeScrollResetHarness()
+        }
+
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Below item 8 for first").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("switch_meta").performClick()
+        composeRule.waitForIdle()
+
+        val indexText = composeRule.onNodeWithTag("scroll_state").fetchSemanticsNode().config
+            .getOrElse(SemanticsProperties.Text) { emptyList() }
+            .joinToString(separator = "") { it.text }
+
+        assertTrue("Expected reset to index 0, was '$indexText'", indexText.contains("index=0"))
+        composeRule.onNodeWithText("Hero for second").assertIsDisplayed()
+    }
 }
 
 private fun ComposeContentTestRule.directorLineTop(label: String): Float {
@@ -176,6 +212,51 @@ private fun ComposeContentTestRule.nodeHeightByText(label: String): Float {
 
 private fun ComposeContentTestRule.nodeHeightByContentDescription(contentDescription: String): Float {
     return onNodeWithContentDescription(contentDescription).fetchSemanticsNode().boundsInRoot.height
+}
+
+@Composable
+private fun DetailMetaChangeScrollResetHarness() {
+    var metaId by remember { mutableStateOf("first") }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Button(
+            onClick = { metaId = "second" },
+            modifier = Modifier.testTag("switch_meta")
+        ) {
+            Text("Switch meta")
+        }
+
+        key(metaId) {
+            val listState = rememberResettableLazyListState(
+                resetKey = metaId,
+                firstVisibleItemIndex = if (metaId == "first") 8 else 0,
+                prefetchStrategy = LazyListPrefetchStrategy(nestedPrefetchItemCount = 2)
+            )
+            val scrollStateLabel by remember(listState) {
+                derivedStateOf {
+                    "index=${listState.firstVisibleItemIndex}, offset=${listState.firstVisibleItemScrollOffset}"
+                }
+            }
+
+            Text(
+                text = scrollStateLabel,
+                modifier = Modifier.testTag("scroll_state")
+            )
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState
+            ) {
+                item {
+                    Text("Hero for $metaId")
+                }
+
+                items((1..12).toList()) { index ->
+                    Text(text = "Below item $index for $metaId")
+                }
+            }
+        }
+    }
 }
 
 @Composable

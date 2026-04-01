@@ -1,10 +1,11 @@
 package com.nexio.tv.ui.screens.home
 
-data class HomePosterTrailerPlayback(
+internal data class HomePosterTrailerPlayback(
     val itemId: String,
     val title: String,
     val videoUrl: String,
-    val audioUrl: String? = null
+    val audioUrl: String? = null,
+    val heroPreview: HeroPreview? = null
 )
 
 internal fun homeTrailerAvailabilityKey(
@@ -27,6 +28,7 @@ internal fun hasHomeTrailerAction(
 internal fun playableHomeTrailerFor(
     itemId: String,
     title: String,
+    item: com.nexio.tv.domain.model.MetaPreview? = null,
     previewUrls: Map<String, String>,
     previewAudioUrls: Map<String, String>
 ): HomePosterTrailerPlayback? {
@@ -35,6 +37,23 @@ internal fun playableHomeTrailerFor(
         itemId = itemId,
         title = title,
         videoUrl = videoUrl,
-        audioUrl = previewAudioUrls[itemId]?.takeIf { it.isNotBlank() }
+        audioUrl = previewAudioUrls[itemId]?.takeIf { it.isNotBlank() },
+        heroPreview = item?.toHomeHeroPreview()
+    )
+}
+
+internal fun com.nexio.tv.domain.model.MetaPreview.toHomeHeroPreview(): HeroPreview {
+    return HeroPreview(
+        title = name,
+        logo = logo,
+        description = description,
+        contentTypeText = null,
+        yearText = releaseInfo,
+        imdbText = imdbRating?.let { String.format("%.1f", it) },
+        tomatoesText = tomatoesRating?.let { "${it.toInt()}%" },
+        genres = genres,
+        poster = poster,
+        backdrop = background,
+        imageUrl = background ?: poster
     )
 }

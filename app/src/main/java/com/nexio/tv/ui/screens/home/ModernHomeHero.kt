@@ -47,6 +47,7 @@ import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.nexio.tv.ui.components.TrailerPlayer
+import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.theme.NexioColors
 
 private const val MODERN_HOME_HERO_LOG_TAG = "ModernHomeHero"
@@ -56,6 +57,7 @@ internal fun ModernHeroMediaLayer(
     heroBackdrop: String?,
     trailerPreviewUrl: String?,
     trailerPreviewAudioUrl: String?,
+    showLoadingIndicator: Boolean,
     trailerMuted: Boolean,
     enrichmentActive: Boolean,
     modifier: Modifier,
@@ -114,6 +116,16 @@ internal fun ModernHeroMediaLayer(
                     contentScale = ContentScale.Crop,
                     alignment = Alignment.TopEnd
                 )
+            }
+        }
+        if (showLoadingIndicator && !shouldPlayTrailer) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.35f)),
+                contentAlignment = Alignment.Center
+            ) {
+                LoadingIndicator()
             }
         }
     }

@@ -36,15 +36,18 @@ class HomePosterTrailerOptionsTest {
 
     @Test
     fun `returns playable trailer only when internal preview exists`() {
+        val item = buildHomeTrailerMetaPreview()
         val playback = playableHomeTrailerFor(
             itemId = "tt123",
             title = "Example",
+            item = item,
             previewUrls = mapOf("tt123" to "https://video.example"),
             previewAudioUrls = mapOf("tt123" to "https://audio.example")
         )
 
         assertEquals("https://video.example", playback?.videoUrl)
         assertEquals("https://audio.example", playback?.audioUrl)
+        assertEquals("Example", playback?.heroPreview?.title)
     }
 
     @Test
@@ -58,4 +61,19 @@ class HomePosterTrailerOptionsTest {
 
         assertNull(playback)
     }
+
+    private fun buildHomeTrailerMetaPreview() = com.nexio.tv.domain.model.MetaPreview(
+        id = "tt123",
+        type = com.nexio.tv.domain.model.ContentType.MOVIE,
+        name = "Example",
+        poster = "https://poster.example",
+        posterShape = com.nexio.tv.domain.model.PosterShape.POSTER,
+        background = "https://backdrop.example",
+        logo = "https://logo.example",
+        description = "Description",
+        releaseInfo = "2026",
+        imdbRating = 7.5f,
+        tomatoesRating = 88.0,
+        genres = listOf("Action")
+    )
 }

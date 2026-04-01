@@ -1,6 +1,8 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
@@ -60,9 +62,38 @@ class ModernHomeTrailerBehaviorTest {
 
     @Test
     fun `back press dismisses modern home trailer when hero or expanded trailer is active`() {
-        assertTrue(shouldDismissModernHomeTrailerOnBack(heroTrailerActive = true, expandedCardTrailerActive = false))
-        assertTrue(shouldDismissModernHomeTrailerOnBack(heroTrailerActive = false, expandedCardTrailerActive = true))
-        assertFalse(shouldDismissModernHomeTrailerOnBack(heroTrailerActive = false, expandedCardTrailerActive = false))
+        assertTrue(
+            shouldDismissModernHomeTrailerOnBack(
+                heroTrailerActive = true,
+                expandedCardTrailerActive = false,
+                fullscreenTrailerActive = false
+            )
+        )
+        assertTrue(
+            shouldDismissModernHomeTrailerOnBack(
+                heroTrailerActive = false,
+                expandedCardTrailerActive = true,
+                fullscreenTrailerActive = false
+            )
+        )
+        assertFalse(
+            shouldDismissModernHomeTrailerOnBack(
+                heroTrailerActive = false,
+                expandedCardTrailerActive = false,
+                fullscreenTrailerActive = false
+            )
+        )
+    }
+
+    @Test
+    fun `back press dismisses modern home trailer when fullscreen trailer is active`() {
+        assertTrue(
+            shouldDismissModernHomeTrailerOnBack(
+                heroTrailerActive = false,
+                expandedCardTrailerActive = false,
+                fullscreenTrailerActive = true
+            )
+        )
     }
 
     @Test
@@ -139,6 +170,64 @@ class ModernHomeTrailerBehaviorTest {
                 hasResolvedExternalPreview = false,
                 isCurrentlyLoading = false,
                 alreadyRetriedAfterUnlock = true
+            )
+        )
+    }
+
+    @Test
+    fun `up press promotes active hero trailer to fullscreen`() {
+        assertTrue(
+            shouldPromoteModernHomeHeroTrailerToFullscreen(
+                key = Key.DirectionUp,
+                eventType = KeyEventType.KeyDown,
+                heroTrailerPlaying = true,
+                fullscreenTrailerActive = false
+            )
+        )
+    }
+
+    @Test
+    fun `up press does not promote when hero trailer is not playing`() {
+        assertFalse(
+            shouldPromoteModernHomeHeroTrailerToFullscreen(
+                key = Key.DirectionUp,
+                eventType = KeyEventType.KeyDown,
+                heroTrailerPlaying = false,
+                fullscreenTrailerActive = false
+            )
+        )
+    }
+
+    @Test
+    fun `non up keys do not promote hero trailer to fullscreen`() {
+        assertFalse(
+            shouldPromoteModernHomeHeroTrailerToFullscreen(
+                key = Key.DirectionDown,
+                eventType = KeyEventType.KeyDown,
+                heroTrailerPlaying = true,
+                fullscreenTrailerActive = false
+            )
+        )
+    }
+
+    @Test
+    fun `fullscreen overlay text is only shown while timer is active`() {
+        assertTrue(
+            shouldShowModernHomeFullscreenTextOverlay(
+                fullscreenTrailerActive = true,
+                overlayTimedOut = false
+            )
+        )
+        assertFalse(
+            shouldShowModernHomeFullscreenTextOverlay(
+                fullscreenTrailerActive = true,
+                overlayTimedOut = true
+            )
+        )
+        assertFalse(
+            shouldShowModernHomeFullscreenTextOverlay(
+                fullscreenTrailerActive = false,
+                overlayTimedOut = false
             )
         )
     }
