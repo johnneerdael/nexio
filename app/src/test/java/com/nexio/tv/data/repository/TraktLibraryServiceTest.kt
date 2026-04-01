@@ -204,6 +204,50 @@ class TraktLibraryServiceTest {
     }
 
     @Test
+    fun `startup unauthenticated emission does not wipe restored snapshot before auth settles`() = runTest {
+        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktAuthService = mockk<TraktAuthService>()
+        val metaRepository = mockk<MetaRepository>()
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val traktAuthState = MutableStateFlow(false)
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val snapshotStore = mockk<TraktLibrarySnapshotStore>(relaxed = true)
+
+        every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
+        every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
+        every { snapshotStore.read() } returns samplePersistedSnapshot()
+        every { metaRepository.getMetaFromAllAddons(any(), any(), any(), any(), any()) } returns flowOf(NetworkResult.Loading)
+
+        val service = TraktLibraryService(
+            traktApi = traktApi,
+            traktAuthService = traktAuthService,
+            metaRepository = metaRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            traktAuthDataStore = traktAuthDataStore,
+            snapshotStore = snapshotStore
+        )
+
+        advanceUntilIdle()
+
+        assertTrue(service.observeHasCache().first())
+        assertEquals(
+            listOf(TraktLibraryService.WATCHLIST_KEY, "personal:123"),
+            service.observeListTabs().first().map { it.key }
+        )
+        verify(exactly = 0) { snapshotStore.clear() }
+
+        traktAuthState.value = true
+        advanceUntilIdle()
+
+        assertTrue(service.observeHasCache().first())
+        assertEquals(
+            listOf("tt1234567", "tmdb:321"),
+            service.observeAllItems().first().map { it.id }
+        )
+        coVerify(exactly = 0) { traktAuthService.executeAuthorizedRequest<Any?>(any()) }
+    }
+
+    @Test
     fun `refresh keeps custom lists and hydrates artwork for watchlist and custom list items`() = runTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()

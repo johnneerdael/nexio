@@ -24,6 +24,7 @@ import com.nexio.tv.domain.model.ListMembershipSnapshot
 import com.nexio.tv.domain.model.TraktListPrivacy
 import com.nexio.tv.domain.repository.MetaRepository
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
@@ -94,14 +95,21 @@ class TraktLibraryService @Inject constructor(
     private var startupRefreshGateUntilElapsedMs: Long = 0L
     @Volatile
     private var startupGateInitialized: Boolean = false
+    @Volatile
+    private var hasObservedAuthenticatedSession: Boolean = false
 
     init {
         snapshotStore.read()?.let(::restorePersistedState)
-        scope.launch {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            hasObservedAuthenticatedSession =
+                runCatching { traktAuthDataStore.isEffectivelyAuthenticated.first() }.getOrDefault(false)
             traktAuthDataStore.isEffectivelyAuthenticated
                 .distinctUntilChanged()
                 .collectLatest { isAuthenticated ->
-                    if (!isAuthenticated) {
+                    if (isAuthenticated) {
+                        hasObservedAuthenticatedSession = true
+                    } else if (hasObservedAuthenticatedSession) {
+                        hasObservedAuthenticatedSession = false
                         clearCachedState()
                     }
                 }
