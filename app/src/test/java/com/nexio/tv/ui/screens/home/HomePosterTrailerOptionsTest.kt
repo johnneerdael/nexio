@@ -2,9 +2,37 @@ package com.nexio.tv.ui.screens.home
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HomePosterTrailerOptionsTest {
+
+    @Test
+    fun `play trailer action appears when metadata says trailer exists even before preview resolution`() {
+        assertTrue(
+            hasHomeTrailerAction(
+                itemId = "tt123",
+                apiType = "movie",
+                metadataAvailableKeys = setOf(homeTrailerAvailabilityKey("tt123", "movie")),
+                previewUrls = emptyMap(),
+                previewExternalUrls = emptyMap()
+            )
+        )
+    }
+
+    @Test
+    fun `play trailer action stays hidden when neither metadata nor preview exists`() {
+        assertFalse(
+            hasHomeTrailerAction(
+                itemId = "tt123",
+                apiType = "movie",
+                metadataAvailableKeys = emptySet(),
+                previewUrls = emptyMap(),
+                previewExternalUrls = emptyMap()
+            )
+        )
+    }
 
     @Test
     fun `returns playable trailer only when internal preview exists`() {

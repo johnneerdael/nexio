@@ -170,6 +170,11 @@ private const val USER_INTERACTION_DISPATCH_DEBOUNCE_MS = 120L
 
 internal fun shouldShowDetailTrailerTakeover(
     isTrailerPlaying: Boolean,
+    isTrailerLoading: Boolean
+): Boolean = isTrailerPlaying || isTrailerLoading
+
+internal fun shouldRenderDetailTrailerPlayer(
+    isTrailerPlaying: Boolean,
     trailerUrl: String?
 ): Boolean = isTrailerPlaying && !trailerUrl.isNullOrBlank()
 
@@ -247,10 +252,10 @@ fun MetaDetailsScreen(
     var trailerSeekToken by remember { mutableIntStateOf(0) }
     var trailerSeekDeltaMs by remember { mutableLongStateOf(0L) }
     var lastUserInteractionDispatchMs by remember { mutableLongStateOf(0L) }
-    val detailTrailerPlaybackActive = remember(uiState.isTrailerPlaying, uiState.trailerUrl) {
+    val detailTrailerPlaybackActive = remember(uiState.isTrailerPlaying, uiState.isTrailerLoading) {
         shouldShowDetailTrailerTakeover(
             isTrailerPlaying = uiState.isTrailerPlaying,
-            trailerUrl = uiState.trailerUrl
+            isTrailerLoading = uiState.isTrailerLoading
         )
     }
     val onTrailerProgressChanged = remember(trailerSeekOverlayState) {
@@ -494,6 +499,7 @@ fun MetaDetailsScreen(
                     trailerAudioUrl = uiState.trailerAudioUrl,
                     trailerExternalUrl = uiState.trailerExternalUrl,
                     isTrailerPlaying = uiState.isTrailerPlaying,
+                    isTrailerLoading = uiState.isTrailerLoading,
                     showTrailerControls = uiState.showTrailerControls,
                     hideLogoDuringTrailer = uiState.hideLogoDuringTrailer,
                     trailerButtonEnabled = uiState.trailerButtonEnabled,
@@ -666,6 +672,7 @@ private fun MetaDetailsContent(
     trailerAudioUrl: String?,
     trailerExternalUrl: String?,
     isTrailerPlaying: Boolean,
+    isTrailerLoading: Boolean,
     showTrailerControls: Boolean,
     hideLogoDuringTrailer: Boolean,
     trailerButtonEnabled: Boolean,
@@ -681,10 +688,10 @@ private fun MetaDetailsContent(
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> },
     onReviewFocused: (Int) -> Unit = {}
 ) {
-    val showTrailerTakeover = remember(isTrailerPlaying, trailerUrl) {
+    val showTrailerTakeover = remember(isTrailerPlaying, isTrailerLoading) {
         shouldShowDetailTrailerTakeover(
             isTrailerPlaying = isTrailerPlaying,
-            trailerUrl = trailerUrl
+            isTrailerLoading = isTrailerLoading
         )
     }
     val isSeries = remember(meta.type, meta.videos) {
@@ -1260,7 +1267,7 @@ private fun MetaDetailsContent(
     Box(modifier = Modifier.fillMaxSize()) {
         // Sticky background — backdrop or trailer
         Box(modifier = Modifier.fillMaxSize()) {
-            if (showTrailerTakeover) {
+            if (shouldRenderDetailTrailerPlayer(isTrailerPlaying, trailerUrl)) {
                 TrailerPlayer(
                     trailerUrl = trailerUrl,
                     trailerAudioUrl = trailerAudioUrl,

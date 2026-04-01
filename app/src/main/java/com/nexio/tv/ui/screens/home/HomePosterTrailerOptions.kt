@@ -7,6 +7,23 @@ data class HomePosterTrailerPlayback(
     val audioUrl: String? = null
 )
 
+internal fun homeTrailerAvailabilityKey(
+    itemId: String,
+    apiType: String
+): String = "${apiType.trim().lowercase()}:$itemId"
+
+internal fun hasHomeTrailerAction(
+    itemId: String,
+    apiType: String,
+    metadataAvailableKeys: Set<String>,
+    previewUrls: Map<String, String>,
+    previewExternalUrls: Map<String, String>
+): Boolean {
+    return homeTrailerAvailabilityKey(itemId, apiType) in metadataAvailableKeys ||
+        !previewUrls[itemId].isNullOrBlank() ||
+        !previewExternalUrls[itemId].isNullOrBlank()
+}
+
 internal fun playableHomeTrailerFor(
     itemId: String,
     title: String,

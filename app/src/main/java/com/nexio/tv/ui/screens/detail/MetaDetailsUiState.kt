@@ -24,6 +24,8 @@ data class MetaDetailsUiState(
     val trailerAudioUrl: String? = null,
     val trailerExternalUrl: String? = null,
     val pendingExternalTrailerUrl: String? = null,
+    val titleHasPlayableTrailerMedia: Boolean = false,
+    val trailerResolutionStatus: TrailerResolutionStatus = TrailerResolutionStatus.IDLE,
     val isTrailerPlaying: Boolean = false,
     val isTrailerLoading: Boolean = false,
     val showTrailerControls: Boolean = false,
@@ -58,6 +60,13 @@ data class MetaDetailsUiState(
     val userMessage: String? = null,
     val userMessageIsError: Boolean = false
 )
+
+enum class TrailerResolutionStatus {
+    IDLE,
+    RESOLVING,
+    READY,
+    FAILED
+}
 
 data class SeasonMediaActionAvailability(
     val hasTrailerOrTeaser: Boolean = false,
@@ -138,6 +147,7 @@ internal fun MetaDetailsUiState.withFailedSeasonMediaPlaybackAttempt(
         trailerAudioUrl = previousTrailerAudioUrl,
         trailerExternalUrl = previousTrailerExternalUrl,
         pendingExternalTrailerUrl = null,
+        trailerResolutionStatus = TrailerResolutionStatus.FAILED,
         isTrailerLoading = false,
         isTrailerPlaying = false,
         showTrailerControls = false,

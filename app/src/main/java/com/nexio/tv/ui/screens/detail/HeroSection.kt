@@ -357,7 +357,15 @@ private fun PlayButton(
         shape = ButtonDefaults.shape(
             shape = RoundedCornerShape(32.dp)
         ),
+        scale = ButtonDefaults.scale(
+            focusedScale = 1f,
+            pressedScale = 1f
+        ),
         border = ButtonDefaults.border(
+            border = Border(
+                border = BorderStroke(2.dp, Color.Transparent),
+                shape = RoundedCornerShape(32.dp)
+            ),
             focusedBorder = Border(
                 border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = RoundedCornerShape(32.dp)
@@ -406,7 +414,15 @@ private fun ActionIconButtonPainter(
             contentColor = NexioColors.TextPrimary,
             focusedContentColor = NexioColors.OnSecondary
         ),
+        scale = IconButtonDefaults.scale(
+            focusedScale = 1f,
+            pressedScale = 1f
+        ),
         border = IconButtonDefaults.border(
+            border = Border(
+                border = BorderStroke(2.dp, Color.Transparent),
+                shape = CircleShape
+            ),
             focusedBorder = Border(
                 border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = CircleShape
@@ -492,7 +508,15 @@ private fun ActionIconButton(
             contentColor = if (selected) selectedContentColor else NexioColors.TextPrimary,
             focusedContentColor = NexioColors.OnSecondary
         ),
+        scale = IconButtonDefaults.scale(
+            focusedScale = 1f,
+            pressedScale = 1f
+        ),
         border = IconButtonDefaults.border(
+            border = Border(
+                border = BorderStroke(2.dp, Color.Transparent),
+                shape = CircleShape
+            ),
             focusedBorder = Border(
                 border = BorderStroke(2.dp, NexioColors.FocusRing),
                 shape = CircleShape

@@ -600,7 +600,8 @@ class MetaDetailsViewModel @Inject constructor(
     private fun applyMeta(meta: Meta) {
         _uiState.update { state -> state.withRefreshedMeta(meta) }
         trailerHasPlayed = false
-        fetchTrailerUrl()
+        preloadTitleTrailerAvailability(meta)
+        preloadAllSeasonMediaAvailability(meta)
 
         // Calculate next to watch after meta is loaded
         calculateNextToWatch()
@@ -1301,6 +1302,7 @@ class MetaDetailsViewModel @Inject constructor(
                 trailerAudioUrl = null,
                 trailerExternalUrl = null,
                 pendingExternalTrailerUrl = null,
+                trailerResolutionStatus = TrailerResolutionStatus.IDLE,
                 isTrailerLoading = false,
                 isTrailerPlaying = false,
                 showTrailerControls = false,
@@ -1310,19 +1312,76 @@ class MetaDetailsViewModel @Inject constructor(
         trailerHasPlayed = false
         isPlayButtonFocused = false
         preloadSeasonMediaAvailability(season)
-        fetchTrailerUrl(useSelectedSeasonForSeries = false)
     }
 
     private fun playSeasonTrailer(season: Int) {
-        _uiState.update { it.withManualSeasonSelection(season) }
+        _uiState.update {
+            it.withManualSeasonSelection(season).copy(pendingExternalTrailerUrl = null)
+        }
         trailerHasPlayed = false
+        preloadSeasonMediaAvailability(season)
+        if (!_uiState.value.selectedSeasonHasPlayableTrailerMedia) {
+            setTrailerPlaybackState(
+                isPlaying = false,
+                showControls = false,
+                hideLogo = false
+            )
+            return
+        }
         fetchSeasonTrailer(playWhenReady = true)
     }
 
     private fun playSeasonRecap(season: Int) {
-        _uiState.update { it.withManualSeasonSelection(season) }
+        _uiState.update {
+            it.withManualSeasonSelection(season).copy(pendingExternalTrailerUrl = null)
+        }
         trailerHasPlayed = false
+        preloadSeasonMediaAvailability(season)
+        if (!_uiState.value.selectedSeasonHasPlayableRecap) {
+            setTrailerPlaybackState(
+                isPlaying = false,
+                showControls = false,
+                hideLogo = false
+            )
+            return
+        }
         fetchSeasonRecap(playWhenReady = true)
+    }
+
+    private fun preloadTitleTrailerAvailability(meta: Meta) {
+        viewModelScope.launch {
+            val tmdbId = runCatching {
+                tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
+            }.getOrNull()
+            val available = trailerService.getTitleMediaAvailability(
+                tmdbId = tmdbId,
+                type = meta.apiType,
+                contentId = meta.id,
+                fallbackYtIds = meta.trailerYtIds
+            )
+            _uiState.update { state ->
+                state.copy(
+                    titleHasPlayableTrailerMedia = available,
+                    trailerResolutionStatus = when {
+                        state.trailerResolutionStatus == TrailerResolutionStatus.RESOLVING ->
+                            TrailerResolutionStatus.RESOLVING
+                        !state.trailerUrl.isNullOrBlank() || !state.trailerExternalUrl.isNullOrBlank() ->
+                            TrailerResolutionStatus.READY
+                        available -> TrailerResolutionStatus.IDLE
+                        else -> TrailerResolutionStatus.FAILED
+                    }
+                )
+            }
+        }
+    }
+
+    private fun preloadAllSeasonMediaAvailability(meta: Meta) {
+        if (parseApiTypeToContentType(meta.apiType) != ContentType.SERIES) return
+        meta.videos
+            .mapNotNull { it.season }
+            .distinct()
+            .sorted()
+            .forEach(::preloadSeasonMediaAvailability)
     }
 
     private fun preloadSeasonMediaAvailability(season: Int, forceRefresh: Boolean = false) {
@@ -1333,23 +1392,10 @@ class MetaDetailsViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val year = meta.releaseInfo
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { Regex("""\b(19|20)\d{2}\b""").find(it)?.value }
                 val tmdbId = runCatching {
                     tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
                 }.getOrNull()
-                val seasonTrailerSource = trailerService.getSeasonTrailerPlaybackSource(
-                    title = meta.name,
-                    year = year,
-                    tmdbId = tmdbId,
-                    type = meta.apiType,
-                    seasonNumber = season,
-                    contentId = meta.id
-                )
-                val seasonRecapSource = trailerService.getSeasonRecapPlaybackSource(
-                    title = meta.name,
-                    year = year,
+                val seasonAvailability = trailerService.getSeasonMediaAvailability(
                     tmdbId = tmdbId,
                     type = meta.apiType,
                     seasonNumber = season,
@@ -1359,8 +1405,8 @@ class MetaDetailsViewModel @Inject constructor(
                     state.withSeasonMediaAvailability(
                         season,
                         SeasonMediaActionAvailability(
-                            hasTrailerOrTeaser = seasonTrailerSource != null,
-                            hasRecap = seasonRecapSource != null
+                            hasTrailerOrTeaser = seasonAvailability.hasTrailerOrTeaser,
+                            hasRecap = seasonAvailability.hasRecap
                         )
                     )
                 }
@@ -1882,6 +1928,7 @@ class MetaDetailsViewModel @Inject constructor(
             _uiState.update { state ->
                 val cachedSeasonAvailability = state.seasonMediaAvailabilityBySeason[selectedSeason]
                 state.copy(
+                    trailerResolutionStatus = TrailerResolutionStatus.RESOLVING,
                     isTrailerLoading = true,
                     trailerUrl = null,
                     trailerAudioUrl = null,
@@ -1925,11 +1972,12 @@ class MetaDetailsViewModel @Inject constructor(
                         trailerUrl = trailerResult.source.videoUrl,
                         trailerAudioUrl = trailerResult.source.audioUrl,
                         trailerExternalUrl = null,
+                        trailerResolutionStatus = TrailerResolutionStatus.READY,
                         isTrailerLoading = false,
                         selectedSeasonHasPlayableTrailerMedia = if (parseApiTypeToContentType(meta.apiType) == ContentType.SERIES) {
                             state.seasonMediaAvailabilityBySeason[selectedSeason]?.hasTrailerOrTeaser == true
                         } else {
-                            true
+                            baseState.titleHasPlayableTrailerMedia
                         }
                     )
 
@@ -1937,6 +1985,8 @@ class MetaDetailsViewModel @Inject constructor(
                         trailerUrl = null,
                         trailerAudioUrl = null,
                         trailerExternalUrl = trailerResult.url,
+                        pendingExternalTrailerUrl = if (playWhenReady) trailerResult.url else null,
+                        trailerResolutionStatus = TrailerResolutionStatus.READY,
                         isTrailerLoading = false
                     )
 
@@ -1944,6 +1994,7 @@ class MetaDetailsViewModel @Inject constructor(
                         trailerUrl = null,
                         trailerAudioUrl = null,
                         trailerExternalUrl = null,
+                        trailerResolutionStatus = TrailerResolutionStatus.FAILED,
                         isTrailerLoading = false
                     )
                 }
@@ -1955,6 +2006,8 @@ class MetaDetailsViewModel @Inject constructor(
                     showControls = true,
                     hideLogo = true
                 )
+            } else if (playWhenReady && trailerResult is TrailerResolutionResult.External) {
+                trailerHasPlayed = true
             }
 
         }
@@ -1971,6 +2024,7 @@ class MetaDetailsViewModel @Inject constructor(
             _uiState.update { state ->
                 val cachedSeasonAvailability = state.seasonMediaAvailabilityBySeason[selectedSeason]
                 state.copy(
+                    trailerResolutionStatus = TrailerResolutionStatus.RESOLVING,
                     isTrailerLoading = true,
                     trailerUrl = null,
                     trailerAudioUrl = null,
@@ -2017,6 +2071,7 @@ class MetaDetailsViewModel @Inject constructor(
                         trailerUrl = recapSource?.videoUrl,
                         trailerAudioUrl = recapSource?.audioUrl,
                         trailerExternalUrl = null,
+                        trailerResolutionStatus = if (recapSource != null) TrailerResolutionStatus.READY else TrailerResolutionStatus.FAILED,
                         isTrailerLoading = false
                     )
                 }
@@ -2049,6 +2104,7 @@ class MetaDetailsViewModel @Inject constructor(
             _uiState.update { state ->
                 val cachedSeasonAvailability = state.seasonMediaAvailabilityBySeason[selectedSeason]
                 state.copy(
+                    trailerResolutionStatus = TrailerResolutionStatus.RESOLVING,
                     isTrailerLoading = true,
                     trailerUrl = null,
                     trailerAudioUrl = null,
@@ -2095,6 +2151,7 @@ class MetaDetailsViewModel @Inject constructor(
                         trailerUrl = seasonTrailerSource?.videoUrl,
                         trailerAudioUrl = seasonTrailerSource?.audioUrl,
                         trailerExternalUrl = null,
+                        trailerResolutionStatus = if (seasonTrailerSource != null) TrailerResolutionStatus.READY else TrailerResolutionStatus.FAILED,
                         isTrailerLoading = false
                     )
                 }
@@ -2166,6 +2223,10 @@ class MetaDetailsViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(pendingExternalTrailerUrl = state.trailerExternalUrl)
                 }
+            }
+
+            state.titleHasPlayableTrailerMedia && !state.isTrailerLoading -> {
+                fetchTrailerUrl(playWhenReady = true, useSelectedSeasonForSeries = false)
             }
         }
     }

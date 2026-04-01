@@ -12,7 +12,9 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
@@ -24,6 +26,7 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
 import kotlinx.coroutines.launch
 import org.junit.Assert.assertEquals
+import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -65,6 +68,114 @@ class HeroSectionFocusStabilityTest {
         assertEquals(initialTop, afterFirstRightTop, 0f)
         assertEquals(initialTop, afterSecondRightTop, 0f)
     }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun moving_focus_horizontally_between_hero_actions_keeps_detail_content_stable_during_transition() {
+        composeRule.setContent {
+            HeroSectionFocusHarness()
+        }
+        composeRule.waitForIdle()
+        composeRule.mainClock.autoAdvance = false
+        try {
+            composeRule.mainClock.advanceTimeByFrame()
+            composeRule.waitForIdle()
+
+            val directorLabel = "Director: Sam Raimi"
+            composeRule.onNodeWithText(directorLabel).assertIsDisplayed()
+
+            val positions = mutableListOf<Float>()
+            positions += composeRule.directorLineTop(directorLabel)
+
+            composeRule.onRoot().performKeyInput {
+                pressKey(Key.DirectionRight)
+            }
+
+            repeat(12) {
+                composeRule.mainClock.advanceTimeByFrame()
+                composeRule.waitForIdle()
+                positions += composeRule.directorLineTop(directorLabel)
+            }
+
+            positions.forEach { top ->
+                assertEquals(positions.first(), top, 0f)
+            }
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+        }
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun moving_focus_horizontally_between_hero_actions_keeps_action_row_vertically_stable_during_transition() {
+        composeRule.setContent {
+            HeroSectionFocusHarness()
+        }
+        composeRule.waitForIdle()
+        composeRule.mainClock.autoAdvance = false
+        try {
+            composeRule.mainClock.advanceTimeByFrame()
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithText("Play").assertIsDisplayed()
+            composeRule.onNodeWithContentDescription("Add to library").assertIsDisplayed()
+
+            val playTops = mutableListOf<Float>()
+            val addToLibraryTops = mutableListOf<Float>()
+            val playHeights = mutableListOf<Float>()
+            val addToLibraryHeights = mutableListOf<Float>()
+            playTops += composeRule.nodeTopByText("Play")
+            addToLibraryTops += composeRule.nodeTopByContentDescription("Add to library")
+            playHeights += composeRule.nodeHeightByText("Play")
+            addToLibraryHeights += composeRule.nodeHeightByContentDescription("Add to library")
+
+            composeRule.onRoot().performKeyInput {
+                pressKey(Key.DirectionRight)
+            }
+
+            repeat(12) {
+                composeRule.mainClock.advanceTimeByFrame()
+                composeRule.waitForIdle()
+                playTops += composeRule.nodeTopByText("Play")
+                addToLibraryTops += composeRule.nodeTopByContentDescription("Add to library")
+                playHeights += composeRule.nodeHeightByText("Play")
+                addToLibraryHeights += composeRule.nodeHeightByContentDescription("Add to library")
+            }
+
+            if (playTops.distinct().size > 1 ||
+                addToLibraryTops.distinct().size > 1 ||
+                playHeights.distinct().size > 1 ||
+                addToLibraryHeights.distinct().size > 1
+            ) {
+                fail(
+                    "Play tops=$playTops, add tops=$addToLibraryTops, " +
+                        "play heights=$playHeights, add heights=$addToLibraryHeights"
+                )
+            }
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+        }
+    }
+}
+
+private fun ComposeContentTestRule.directorLineTop(label: String): Float {
+    return onNodeWithText(label).fetchSemanticsNode().boundsInRoot.top
+}
+
+private fun ComposeContentTestRule.nodeTopByText(label: String): Float {
+    return onNodeWithText(label).fetchSemanticsNode().boundsInRoot.top
+}
+
+private fun ComposeContentTestRule.nodeTopByContentDescription(contentDescription: String): Float {
+    return onNodeWithContentDescription(contentDescription).fetchSemanticsNode().boundsInRoot.top
+}
+
+private fun ComposeContentTestRule.nodeHeightByText(label: String): Float {
+    return onNodeWithText(label).fetchSemanticsNode().boundsInRoot.height
+}
+
+private fun ComposeContentTestRule.nodeHeightByContentDescription(contentDescription: String): Float {
+    return onNodeWithContentDescription(contentDescription).fetchSemanticsNode().boundsInRoot.height
 }
 
 @Composable

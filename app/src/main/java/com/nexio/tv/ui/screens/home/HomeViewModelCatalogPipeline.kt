@@ -790,6 +790,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             trailerPreviewUrlsState.clear()
             trailerPreviewAudioUrlsState.clear()
             trailerPreviewExternalUrlsState.clear()
+            clearTrailerMetadataAvailabilityPipeline()
             activeTrailerPreviewItemId = null
             trailerPreviewRequestVersion = 0L
             lastCatalogComputationSignature = null
@@ -826,6 +827,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             trailerPreviewUrlsState.clear()
             trailerPreviewAudioUrlsState.clear()
             trailerPreviewExternalUrlsState.clear()
+            clearTrailerMetadataAvailabilityPipeline()
             activeTrailerPreviewItemId = null
             trailerPreviewRequestVersion = 0L
             catalogsLoadInProgress = false
@@ -1399,6 +1401,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         lastHeroEnrichedItems = emptyList()
     }
 
+    refreshTrailerMetadataAvailabilityPipeline(displayRows)
     schedulePosterStatusReconcilePipeline(displayRows)
     }
 }
@@ -1426,6 +1429,7 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
             error = null
         )
     }
+    refreshTrailerMetadataAvailabilityPipeline(snapshot.catalogRows)
 }
 
 internal fun HomeViewModel.applyPendingPersistedHomeSnapshotIfPossiblePipeline(reason: String) {

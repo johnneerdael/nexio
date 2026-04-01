@@ -140,18 +140,18 @@ internal fun shouldUnlockModernHomeTrailerAutoplay(
     selectionStillFocused &&
     lifecycleResumed
 
-internal fun shouldRetryFocusedTrailerPreviewAfterAutoplayUnlock(
+internal fun shouldRequestFocusedTrailerPreviewAfterAutoplayUnlock(
     trailerPlaybackUnlocked: Boolean,
+    hasTrailerMetadataAvailable: Boolean,
     hasResolvedPreview: Boolean,
     hasResolvedExternalPreview: Boolean,
     isCurrentlyLoading: Boolean,
-    hadNegativeCacheMiss: Boolean,
     alreadyRetriedAfterUnlock: Boolean
 ): Boolean = trailerPlaybackUnlocked &&
+    hasTrailerMetadataAvailable &&
     !hasResolvedPreview &&
     !hasResolvedExternalPreview &&
     !isCurrentlyLoading &&
-    hadNegativeCacheMiss &&
     !alreadyRetriedAfterUnlock
 
 internal fun resolveEffectiveModernHomeTrailerPlaybackTarget(
@@ -420,6 +420,7 @@ internal fun ModernHomeContent(
     var lastExternalTrailerLaunchKey by remember { mutableStateOf<String?>(null) }
     var unlockedTrailerFocusKey by remember { mutableStateOf<String?>(null) }
     var autoplayUnlockRetriedFocusKey by remember { mutableStateOf<String?>(null) }
+    var pendingHeroTrailerFocusKey by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(
         focusedCatalogSelection?.focusKey,
@@ -446,6 +447,7 @@ internal fun ModernHomeContent(
     LaunchedEffect(unlockedTrailerFocusKey, focusedCatalogSelection?.focusKey) {
         if (unlockedTrailerFocusKey != focusedCatalogSelection?.focusKey) {
             autoplayUnlockRetriedFocusKey = null
+            pendingHeroTrailerFocusKey = null
         }
     }
 
@@ -547,46 +549,27 @@ internal fun ModernHomeContent(
     }
 
     LaunchedEffect(
-        focusedCatalogSelection?.payload?.itemId,
-        focusedCatalogSelection?.payload?.trailerTitle,
-        focusedCatalogSelection?.payload?.trailerReleaseInfo,
-        focusedCatalogSelection?.payload?.trailerApiType,
-        focusedCatalogSelection?.payload?.fallbackTrailerYtId,
-        contentState.focusedPosterBackdropTrailerEnabled,
-        contentState.homeTrailerAutoplayEnabled,
-        idleScreensaverVisible
-    ) {
-        val selection = focusedCatalogSelection ?: return@LaunchedEffect
-        if (!contentState.focusedPosterBackdropTrailerEnabled) return@LaunchedEffect
-        if (!contentState.homeTrailerAutoplayEnabled) return@LaunchedEffect
-        if (idleScreensaverVisible) return@LaunchedEffect
-        delay(140)
-        if (focusedCatalogSelection?.focusKey != selection.focusKey) return@LaunchedEffect
-        onRequestTrailerPreview(
-            selection.payload.itemId,
-            selection.payload.trailerTitle,
-            selection.payload.trailerReleaseInfo,
-            selection.payload.trailerApiType,
-            selection.payload.fallbackTrailerYtId
-        )
-    }
-
-    LaunchedEffect(
         unlockedTrailerFocusKey,
         focusedCatalogSelection?.focusKey,
+        focusedCatalogSelection?.payload?.itemType,
         focusedCatalogSelection?.payload?.itemId,
         contentState.trailerPreviewUrls,
         contentState.trailerPreviewExternalUrls,
         contentState.trailerPreviewLoadingIds,
-        contentState.trailerPreviewNegativeCacheIds
+        contentState.trailerPreviewNegativeCacheIds,
+        contentState.trailerMetadataAvailableKeys
     ) {
         val selection = focusedCatalogSelection ?: return@LaunchedEffect
-        if (!shouldRetryFocusedTrailerPreviewAfterAutoplayUnlock(
+        val hasTrailerMetadataAvailable = homeTrailerAvailabilityKey(
+            selection.payload.itemId,
+            selection.payload.itemType
+        ) in contentState.trailerMetadataAvailableKeys
+        if (!shouldRequestFocusedTrailerPreviewAfterAutoplayUnlock(
                 trailerPlaybackUnlocked = unlockedTrailerFocusKey == selection.focusKey,
+                hasTrailerMetadataAvailable = hasTrailerMetadataAvailable,
                 hasResolvedPreview = !contentState.trailerPreviewUrls[selection.payload.itemId].isNullOrBlank(),
                 hasResolvedExternalPreview = !contentState.trailerPreviewExternalUrls[selection.payload.itemId].isNullOrBlank(),
                 isCurrentlyLoading = selection.payload.itemId in contentState.trailerPreviewLoadingIds,
-                hadNegativeCacheMiss = selection.payload.itemId in contentState.trailerPreviewNegativeCacheIds,
                 alreadyRetriedAfterUnlock = autoplayUnlockRetriedFocusKey == selection.focusKey
             )
         ) {
@@ -594,13 +577,55 @@ internal fun ModernHomeContent(
         }
 
         autoplayUnlockRetriedFocusKey = selection.focusKey
-        onRetryTrailerPreview(
-            selection.payload.itemId,
-            selection.payload.trailerTitle,
-            selection.payload.trailerReleaseInfo,
-            selection.payload.trailerApiType,
-            selection.payload.fallbackTrailerYtId
-        )
+        pendingHeroTrailerFocusKey = selection.focusKey
+        if (selection.payload.itemId in contentState.trailerPreviewNegativeCacheIds) {
+            onRetryTrailerPreview(
+                selection.payload.itemId,
+                selection.payload.trailerTitle,
+                selection.payload.trailerReleaseInfo,
+                selection.payload.trailerApiType,
+                selection.payload.fallbackTrailerYtId
+            )
+        } else {
+            onRequestTrailerPreview(
+                selection.payload.itemId,
+                selection.payload.trailerTitle,
+                selection.payload.trailerReleaseInfo,
+                selection.payload.trailerApiType,
+                selection.payload.fallbackTrailerYtId
+            )
+        }
+    }
+
+    LaunchedEffect(
+        pendingHeroTrailerFocusKey,
+        focusedCatalogSelection?.focusKey,
+        focusedCatalogSelection?.payload?.itemId,
+        contentState.trailerPreviewUrls,
+        contentState.trailerPreviewExternalUrls,
+        contentState.trailerPreviewLoadingIds,
+        contentState.trailerPreviewNegativeCacheIds
+    ) {
+        val pendingFocusKey = pendingHeroTrailerFocusKey ?: return@LaunchedEffect
+        val selection = focusedCatalogSelection
+        if (selection?.focusKey != pendingFocusKey) {
+            pendingHeroTrailerFocusKey = null
+            return@LaunchedEffect
+        }
+        val itemId = selection.payload.itemId
+        if (
+            !contentState.trailerPreviewUrls[itemId].isNullOrBlank() ||
+            !contentState.trailerPreviewExternalUrls[itemId].isNullOrBlank()
+        ) {
+            pendingHeroTrailerFocusKey = null
+            return@LaunchedEffect
+        }
+        if (
+            itemId in contentState.trailerPreviewNegativeCacheIds &&
+            itemId !in contentState.trailerPreviewLoadingIds
+        ) {
+            pendingHeroTrailerFocusKey = null
+        }
     }
 
     LaunchedEffect(focusState.verticalScrollIndex, focusState.verticalScrollOffset) {
@@ -746,6 +771,7 @@ internal fun ModernHomeContent(
             )
         }
         val heroTrailerItemId = focusedCatalogSelection?.payload?.itemId
+        val heroTrailerPending = pendingHeroTrailerFocusKey == focusedCatalogSelection?.focusKey
         val unlockedTrailerForFocusedItem = unlockedTrailerFocusKey == focusedCatalogSelection?.focusKey
         val heroTrailerPreviewUrl = if (
             contentState.focusedPosterBackdropTrailerEnabled &&
@@ -774,7 +800,9 @@ internal fun ModernHomeContent(
         } else {
             null
         }
-        val heroTrailerActive = !heroTrailerPreviewUrl.isNullOrBlank() || !heroTrailerExternalUrl.isNullOrBlank()
+        val heroTrailerActive = heroTrailerPending ||
+            !heroTrailerPreviewUrl.isNullOrBlank() ||
+            !heroTrailerExternalUrl.isNullOrBlank()
         val expandedTrailerItemId = focusedCatalogSelection?.payload?.itemId
         val expandedCardTrailerActive = if (
             effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.EXPANDED_CARD &&
@@ -799,8 +827,8 @@ internal fun ModernHomeContent(
                 !contentState.trailerPreviewUrls[expandedId].isNullOrBlank()
         }
         var previousHomeTrailerPlaying by remember { mutableStateOf(false) }
-        LaunchedEffect(internalHomeTrailerPlaying) {
-            onModernHomeTrailerPlaybackActiveChanged(internalHomeTrailerPlaying)
+        LaunchedEffect(heroTrailerActive, expandedCardTrailerActive, internalHomeTrailerPlaying) {
+            onModernHomeTrailerPlaybackActiveChanged(heroTrailerActive || expandedCardTrailerActive)
             if (internalHomeTrailerPlaying && !previousHomeTrailerPlaying) {
                 onModernHomeTrailerPlaybackStarted()
             }

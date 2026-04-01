@@ -18,6 +18,7 @@ import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.trailer.TrailerService
+import com.nexio.tv.data.trailer.SeasonMediaAvailability
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.ImdbSettings
 import com.nexio.tv.domain.model.LibrarySourceMode
@@ -30,6 +31,7 @@ import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -66,6 +68,25 @@ class MetaDetailsSeasonMediaViewModelTest {
     fun `season short press stays a playback no-op when no season trailer exists`() = runTest(dispatcher) {
         val trailerService = mockk<TrailerService>()
         coEvery {
+            trailerService.getTitleMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        } returns false
+        coEvery {
+            trailerService.getSeasonMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any()
+            )
+        } returns SeasonMediaAvailability(
+            hasTrailerOrTeaser = false,
+            hasRecap = false
+        )
+        coEvery {
             trailerService.resolveTrailer(
                 title = any(),
                 year = any(),
@@ -95,20 +116,20 @@ class MetaDetailsSeasonMediaViewModelTest {
         val viewModel = buildViewModel(trailerService)
         advanceUntilIdle()
 
-        assertEquals("https://example.com/series.m3u8", viewModel.uiState.value.trailerUrl)
+        assertEquals(null, viewModel.uiState.value.trailerUrl)
 
         viewModel.onEvent(MetaDetailsEvent.OnSeasonShortPress(2))
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertEquals(2, state.selectedSeason)
-        assertEquals("https://example.com/series.m3u8", state.trailerUrl)
-        assertEquals("https://example.com/series-audio.m4a", state.trailerAudioUrl)
+        assertEquals(null, state.trailerUrl)
+        assertEquals(null, state.trailerAudioUrl)
         assertFalse(state.isTrailerPlaying)
         assertFalse(state.showTrailerControls)
         assertFalse(state.hideLogoDuringTrailer)
         assertFalse(state.selectedSeasonHasPlayableTrailerMedia)
-        coVerify(exactly = 1) {
+        coVerify(exactly = 0) {
             trailerService.resolveTrailer(
                 title = any(),
                 year = any(),
@@ -119,10 +140,8 @@ class MetaDetailsSeasonMediaViewModelTest {
                 fallbackYtIds = any()
             )
         }
-        coVerify(exactly = 1) {
-            trailerService.getSeasonTrailerPlaybackSource(
-                title = any(),
-                year = any(),
+        coVerify(atLeast = 1) {
+            trailerService.getSeasonMediaAvailability(
                 tmdbId = any(),
                 type = any(),
                 seasonNumber = 2,
@@ -134,6 +153,25 @@ class MetaDetailsSeasonMediaViewModelTest {
     @Test
     fun `failed season trailer attempt preserves external cta without reviving pending launch`() = runTest(dispatcher) {
         val trailerService = mockk<TrailerService>()
+        coEvery {
+            trailerService.getTitleMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        } returns true
+        coEvery {
+            trailerService.getSeasonMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any()
+            )
+        } returns SeasonMediaAvailability(
+            hasTrailerOrTeaser = false,
+            hasRecap = false
+        )
         coEvery {
             trailerService.resolveTrailer(
                 title = any(),
@@ -160,6 +198,7 @@ class MetaDetailsSeasonMediaViewModelTest {
         advanceUntilIdle()
 
         viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
+        advanceUntilIdle()
         assertEquals(
             "https://youtube.com/watch?v=series",
             viewModel.uiState.value.pendingExternalTrailerUrl
@@ -187,10 +226,8 @@ class MetaDetailsSeasonMediaViewModelTest {
                 fallbackYtIds = any()
             )
         }
-        coVerify(exactly = 1) {
-            trailerService.getSeasonTrailerPlaybackSource(
-                title = any(),
-                year = any(),
+        coVerify(atLeast = 1) {
+            trailerService.getSeasonMediaAvailability(
                 tmdbId = any(),
                 type = any(),
                 seasonNumber = 2,
@@ -202,6 +239,25 @@ class MetaDetailsSeasonMediaViewModelTest {
     @Test
     fun `failed season recap attempt clears active playback chrome through the event flow`() = runTest(dispatcher) {
         val trailerService = mockk<TrailerService>()
+        coEvery {
+            trailerService.getTitleMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        } returns true
+        coEvery {
+            trailerService.getSeasonMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any()
+            )
+        } returns SeasonMediaAvailability(
+            hasTrailerOrTeaser = false,
+            hasRecap = false
+        )
         coEvery {
             trailerService.resolveTrailer(
                 title = any(),
@@ -233,6 +289,7 @@ class MetaDetailsSeasonMediaViewModelTest {
         advanceUntilIdle()
 
         viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
+        advanceUntilIdle()
         assertTrue(viewModel.uiState.value.isTrailerPlaying)
 
         viewModel.onEvent(MetaDetailsEvent.OnPlaySeasonRecap(2))
@@ -251,6 +308,25 @@ class MetaDetailsSeasonMediaViewModelTest {
     fun `failed season recap attempt preserves external cta without reviving pending launch`() = runTest(dispatcher) {
         val trailerService = mockk<TrailerService>()
         coEvery {
+            trailerService.getTitleMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        } returns true
+        coEvery {
+            trailerService.getSeasonMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any()
+            )
+        } returns SeasonMediaAvailability(
+            hasTrailerOrTeaser = false,
+            hasRecap = false
+        )
+        coEvery {
             trailerService.resolveTrailer(
                 title = any(),
                 year = any(),
@@ -276,6 +352,7 @@ class MetaDetailsSeasonMediaViewModelTest {
         advanceUntilIdle()
 
         viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
+        advanceUntilIdle()
         assertEquals(
             "https://youtube.com/watch?v=series",
             viewModel.uiState.value.pendingExternalTrailerUrl
@@ -294,8 +371,153 @@ class MetaDetailsSeasonMediaViewModelTest {
         assertFalse(state.selectedSeasonHasPlayableRecap)
     }
 
-    private fun buildViewModel(trailerService: TrailerService): MetaDetailsViewModel {
-        val meta = buildSeriesMeta()
+    @Test
+    fun `title trailer resolves on demand instead of eager loading when metadata already says trailer exists`() = runTest(dispatcher) {
+        val trailerService = mockk<TrailerService>()
+        coEvery {
+            trailerService.getTitleMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        } returns true
+        coEvery {
+            trailerService.getSeasonMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any()
+            )
+        } returns SeasonMediaAvailability(
+            hasTrailerOrTeaser = false,
+            hasRecap = false
+        )
+        coEvery {
+            trailerService.resolveTrailer(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        } returns TrailerResolutionResult.Playback(
+            TrailerPlaybackSource(
+                videoUrl = "https://example.com/title.m3u8",
+                audioUrl = "https://example.com/title-audio.m4a"
+            )
+        )
+
+        val viewModel = buildViewModel(
+            trailerService = trailerService,
+            meta = buildSeriesMeta(trailerYtIds = listOf("titleTrailerId"))
+        )
+        advanceUntilIdle()
+
+        assertEquals(null, viewModel.uiState.value.trailerUrl)
+        assertTrue(viewModel.uiState.value.titleHasPlayableTrailerMedia)
+        coVerify(exactly = 0) {
+            trailerService.resolveTrailer(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        }
+
+        viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals("https://example.com/title.m3u8", state.trailerUrl)
+        assertEquals("https://example.com/title-audio.m4a", state.trailerAudioUrl)
+        assertTrue(state.isTrailerPlaying)
+        assertTrue(state.showTrailerControls)
+        assertTrue(state.hideLogoDuringTrailer)
+        coVerify(exactly = 1) {
+            trailerService.resolveTrailer(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        }
+    }
+
+    @Test
+    fun `opening season options derives trailer and recap availability from metadata without resolving playback sources`() = runTest(dispatcher) {
+        val trailerService = mockk<TrailerService>()
+        coEvery {
+            trailerService.getTitleMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        } returns false
+        coEvery {
+            trailerService.resolveTrailer(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        } returns null
+        coEvery {
+            trailerService.getSeasonMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any()
+            )
+        } returns SeasonMediaAvailability(
+            hasTrailerOrTeaser = true,
+            hasRecap = true
+        )
+        val viewModel = buildViewModel(trailerService)
+        advanceUntilIdle()
+        viewModel.onEvent(MetaDetailsEvent.OnSeasonOptionsOpened(2))
+        advanceUntilIdle()
+
+        val availability = viewModel.uiState.value.seasonMediaAvailabilityBySeason[2]
+        assertTrue(availability?.hasTrailerOrTeaser == true)
+        assertTrue(availability?.hasRecap == true)
+        coVerify(atLeast = 1) {
+            trailerService.getSeasonMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = 2,
+                contentId = any()
+            )
+        }
+        coVerify(exactly = 0) {
+            trailerService.resolveTrailer(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        }
+    }
+
+    private fun buildViewModel(
+        trailerService: TrailerService,
+        meta: Meta = buildSeriesMeta()
+    ): MetaDetailsViewModel {
         val metaRepository = mockk<MetaRepository>()
         every {
             metaRepository.getMetaFromAllAddons(
@@ -371,7 +593,7 @@ class MetaDetailsSeasonMediaViewModelTest {
         )
     }
 
-    private fun buildSeriesMeta(): Meta {
+    private fun buildSeriesMeta(trailerYtIds: List<String> = emptyList()): Meta {
         return Meta(
             id = "show",
             type = ContentType.SERIES,
@@ -415,6 +637,8 @@ class MetaDetailsSeasonMediaViewModelTest {
             awards = null,
             language = null,
             links = emptyList()
+            ,
+            trailerYtIds = trailerYtIds
         )
     }
 }

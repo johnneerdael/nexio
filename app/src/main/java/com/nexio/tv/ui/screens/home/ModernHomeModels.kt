@@ -122,7 +122,8 @@ internal data class ModernHomeContentState(
     val trailerPreviewAudioUrls: Map<String, String> = emptyMap(),
     val trailerPreviewExternalUrls: Map<String, String> = emptyMap(),
     val trailerPreviewLoadingIds: Set<String> = emptySet(),
-    val trailerPreviewNegativeCacheIds: Set<String> = emptySet()
+    val trailerPreviewNegativeCacheIds: Set<String> = emptySet(),
+    val trailerMetadataAvailableKeys: Set<String> = emptySet()
 )
 
 internal data class ModernCatalogRowBuildCacheEntry(

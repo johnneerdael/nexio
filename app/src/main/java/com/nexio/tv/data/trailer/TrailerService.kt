@@ -228,6 +228,34 @@ class TrailerService(
         )
     }
 
+    internal suspend fun getTitleMediaAvailability(
+        tmdbId: String?,
+        type: String?,
+        contentId: String?,
+        fallbackYtIds: List<String> = emptyList()
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (fallbackYtIds.any { it.isNotBlank() }) return@withContext true
+
+        val numericTmdbId = tmdbId?.toIntOrNull()
+        val mediaType = normalizeTmdbMediaType(type)
+        val apiKey = requireTmdbApiKey()
+        val tmdbLanguage = getPreferredTmdbTrailerLanguage()
+
+        val tmdbTitleVideos = when {
+            numericTmdbId == null || apiKey == null -> emptyList()
+            mediaType == "movie" -> fetchTmdbMovieVideos(numericTmdbId, tmdbLanguage, apiKey)
+            mediaType == "tv" -> fetchTmdbTvVideos(numericTmdbId, tmdbLanguage, apiKey)
+            else -> emptyList()
+        }
+        if (rankTmdbVideoCandidates(tmdbTitleVideos).isNotEmpty()) {
+            return@withContext true
+        }
+
+        val streailerCandidate = fetchStreailerStreams(contentId = contentId, type = type)
+            ?.let(::selectStreailerTrailerCandidate)
+        hasInternalStreailerCandidate(streailerCandidate)
+    }
+
     internal suspend fun getSeasonTrailerPlaybackSource(
         title: String,
         year: String? = null,
@@ -551,7 +579,6 @@ class TrailerService(
 
                         else -> {
                             val youtubeId = extractYouTubeVideoId(streailerCandidate.externalUrl.orEmpty())
-                                ?: null
                             youtubeId?.let {
                                 resolveYouTubeTrailer(
                                     youtubeUrl = "https://www.youtube.com/watch?v=$it",

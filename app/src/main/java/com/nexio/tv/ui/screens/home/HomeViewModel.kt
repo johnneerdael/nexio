@@ -178,8 +178,11 @@ class HomeViewModel @Inject constructor(
     internal val trailerPreviewUrlsState = mutableStateMapOf<String, String>()
     internal val trailerPreviewAudioUrlsState = mutableStateMapOf<String, String>()
     internal val trailerPreviewExternalUrlsState = mutableStateMapOf<String, String>()
+    internal val trailerMetadataAvailableState = mutableStateMapOf<String, Boolean>()
+    internal val trailerMetadataAvailabilityInFlightKeys = Collections.synchronizedSet(mutableSetOf<String>())
     internal var activeTrailerPreviewItemId: String? = null
     internal var trailerPreviewRequestVersion: Long = 0L
+    internal val trailerMetadataAvailabilitySemaphore = Semaphore(4)
     internal val prefetchedExternalMetaIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal val externalMetaPrefetchInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal val prefetchedTomatoesIds = Collections.synchronizedSet(mutableSetOf<String>())
@@ -243,6 +246,11 @@ class HomeViewModel @Inject constructor(
         get() = trailerPreviewLoadingIds.keys.toSet()
     val trailerPreviewNegativeCacheIds: Set<String>
         get() = trailerPreviewNegativeCache.keys.toSet()
+    val trailerMetadataAvailableKeys: Set<String>
+        get() = trailerMetadataAvailableState
+            .filterValues { it }
+            .keys
+            .toSet()
 
     init {
         observeStartupPerfTelemetry()

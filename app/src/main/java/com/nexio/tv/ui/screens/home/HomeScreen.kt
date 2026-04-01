@@ -30,6 +30,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -55,6 +56,8 @@ import com.nexio.tv.ui.components.PosterCardDefaults
 import com.nexio.tv.ui.components.PosterCardStyle
 import com.nexio.tv.ui.components.TrailerPlayer
 import androidx.compose.ui.res.stringResource
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.nexio.tv.R
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
@@ -65,6 +68,10 @@ private data class HomePosterOptionsTarget(
     val addonBaseUrl: String,
     val statusKey: String,
     val recommendationRef: TraktRecommendationRef?
+)
+
+private data class HomePosterTrailerPendingResolution(
+    val item: MetaPreview
 )
 
 private const val HOME_STARTUP_CONTENT_TIMEOUT_MS = 5_000L
@@ -95,7 +102,8 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
-    val activity = LocalContext.current as? android.app.Activity
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
     val hasCatalogContent = uiState.catalogRows.any { it.items.isNotEmpty() }
     val hasRenderableContent = hasCatalogContent ||
         uiState.continueWatchingItems.isNotEmpty() ||
@@ -104,6 +112,7 @@ fun HomeScreen(
     var startupContentGateTimedOut by rememberSaveable { mutableStateOf(false) }
     var posterOptionsTarget by remember { mutableStateOf<HomePosterOptionsTarget?>(null) }
     var posterTrailerPlayback by remember { mutableStateOf<HomePosterTrailerPlayback?>(null) }
+    var pendingPosterTrailerResolution by remember { mutableStateOf<HomePosterTrailerPendingResolution?>(null) }
     val shouldArmStartupTimeout = uiState.isLoading && !hasRenderableContent && uiState.error == null
     val latestMovieWatchedStatus by rememberUpdatedState(uiState.movieWatchedStatus)
     val latestTraktRecommendationRefs by rememberUpdatedState(uiState.traktRecommendationRefs)
@@ -112,7 +121,6 @@ fun HomeScreen(
     }
     val onCatalogItemLongPress: (MetaPreview, String) -> Unit = remember(Unit) {
         { item, addonBaseUrl ->
-            viewModel.requestTrailerPreview(item)
             val statusKey = homeItemStatusKey(item.id, item.apiType)
             posterOptionsTarget = HomePosterOptionsTarget(
                 item = item,
@@ -321,6 +329,13 @@ fun HomeScreen(
         val item = selectedPoster.item
         val statusKey = homeItemStatusKey(item.id, item.apiType)
         val isMovie = item.apiType.equals("movie", ignoreCase = true)
+        val hasTrailerAction = hasHomeTrailerAction(
+            itemId = item.id,
+            apiType = item.apiType,
+            metadataAvailableKeys = viewModel.trailerMetadataAvailableKeys,
+            previewUrls = viewModel.trailerPreviewUrls,
+            previewExternalUrls = viewModel.trailerPreviewExternalUrls
+        )
         val trailerPlayback = playableHomeTrailerFor(
             itemId = item.id,
             title = item.name,
@@ -335,14 +350,29 @@ fun HomeScreen(
             isMovie = isMovie,
             isWatched = uiState.movieWatchedStatus[statusKey] == true,
             isWatchedPending = statusKey in uiState.movieWatchedPending,
-            showPlayTrailer = trailerPlayback != null,
+            showPlayTrailer = hasTrailerAction,
             onDismiss = { posterOptionsTarget = null },
             onDetails = {
                 onNavigateToDetail(item.id, item.apiType, selectedPoster.addonBaseUrl)
                 posterOptionsTarget = null
             },
             onPlayTrailer = {
-                posterTrailerPlayback = trailerPlayback
+                if (trailerPlayback != null) {
+                    posterTrailerPlayback = trailerPlayback
+                } else {
+                    pendingPosterTrailerResolution = HomePosterTrailerPendingResolution(item)
+                    if (item.id in viewModel.trailerPreviewNegativeCacheIds) {
+                        viewModel.retryTrailerPreview(
+                            itemId = item.id,
+                            title = item.name,
+                            releaseInfo = item.releaseInfo,
+                            apiType = item.apiType,
+                            fallbackYtId = item.trailerYtIds.firstOrNull()
+                        )
+                    } else {
+                        viewModel.requestTrailerPreview(item)
+                    }
+                }
                 posterOptionsTarget = null
             },
             onToggleLibrary = {
@@ -368,11 +398,52 @@ fun HomeScreen(
     }
 
     val activePosterTrailerPlayback = posterTrailerPlayback
-    LaunchedEffect(activePosterTrailerPlayback != null) {
+    LaunchedEffect(
+        pendingPosterTrailerResolution?.item?.id,
+        viewModel.trailerPreviewUrls,
+        viewModel.trailerPreviewAudioUrls,
+        viewModel.trailerPreviewExternalUrls,
+        viewModel.trailerPreviewLoadingItemIds,
+        viewModel.trailerPreviewNegativeCacheIds
+    ) {
+        val pendingRequest = pendingPosterTrailerResolution ?: return@LaunchedEffect
+        val playback = playableHomeTrailerFor(
+            itemId = pendingRequest.item.id,
+            title = pendingRequest.item.name,
+            previewUrls = viewModel.trailerPreviewUrls,
+            previewAudioUrls = viewModel.trailerPreviewAudioUrls
+        )
+        if (playback != null) {
+            posterTrailerPlayback = playback
+            pendingPosterTrailerResolution = null
+            return@LaunchedEffect
+        }
+        val externalUrl = viewModel.trailerPreviewExternalUrls[pendingRequest.item.id]
+        if (!externalUrl.isNullOrBlank()) {
+            runCatching {
+                context.startActivity(
+                    android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(externalUrl)).apply {
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                )
+            }
+            pendingPosterTrailerResolution = null
+            return@LaunchedEffect
+        }
+        if (
+            pendingRequest.item.id in viewModel.trailerPreviewNegativeCacheIds &&
+            pendingRequest.item.id !in viewModel.trailerPreviewLoadingItemIds
+        ) {
+            pendingPosterTrailerResolution = null
+        }
+    }
+    LaunchedEffect(activePosterTrailerPlayback != null, pendingPosterTrailerResolution != null) {
         if (activePosterTrailerPlayback != null) {
             onModernHomeTrailerPlaybackStarted()
         }
-        onModernHomeTrailerPlaybackActiveChanged(activePosterTrailerPlayback != null)
+        onModernHomeTrailerPlaybackActiveChanged(
+            activePosterTrailerPlayback != null || pendingPosterTrailerResolution != null
+        )
     }
     if (activePosterTrailerPlayback != null) {
         BackHandler {
@@ -391,6 +462,35 @@ fun HomeScreen(
                 onEnded = { posterTrailerPlayback = null },
                 modifier = Modifier.fillMaxSize()
             )
+        }
+    }
+    val pendingPosterTrailer = pendingPosterTrailerResolution
+    if (pendingPosterTrailer != null && activePosterTrailerPlayback == null) {
+        BackHandler {
+            pendingPosterTrailerResolution = null
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(pendingPosterTrailer.item.background ?: pendingPosterTrailer.item.poster)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.35f)),
+                contentAlignment = Alignment.Center
+            ) {
+                LoadingIndicator()
+            }
         }
     }
 
@@ -542,7 +642,8 @@ private fun ModernHomeRoute(
         viewModel.trailerPreviewAudioUrls,
         viewModel.trailerPreviewExternalUrls,
         viewModel.trailerPreviewLoadingItemIds,
-        viewModel.trailerPreviewNegativeCacheIds
+        viewModel.trailerPreviewNegativeCacheIds,
+        viewModel.trailerMetadataAvailableKeys
     ) {
         ModernHomeContentState(
             catalogRows = uiState.catalogRows,
@@ -564,7 +665,8 @@ private fun ModernHomeRoute(
             trailerPreviewAudioUrls = viewModel.trailerPreviewAudioUrls,
             trailerPreviewExternalUrls = viewModel.trailerPreviewExternalUrls,
             trailerPreviewLoadingIds = viewModel.trailerPreviewLoadingItemIds,
-            trailerPreviewNegativeCacheIds = viewModel.trailerPreviewNegativeCacheIds
+            trailerPreviewNegativeCacheIds = viewModel.trailerPreviewNegativeCacheIds,
+            trailerMetadataAvailableKeys = viewModel.trailerMetadataAvailableKeys
         )
     }
     val preloadAdjacentItem = remember(viewModel) {
