@@ -209,8 +209,12 @@ internal fun shouldShowDetailTrailerButton(
 }
 
 internal fun shouldShowDetailScrollableContent(
-    showTrailerTakeover: Boolean
-): Boolean = !showTrailerTakeover
+    isTrailerPlaying: Boolean,
+    isTrailerLoading: Boolean,
+    isTrailerTakeoverPending: Boolean
+): Boolean {
+    return !isTrailerPlaying && !isTrailerLoading
+}
 
 @Stable
 private class TrailerSeekOverlayState {
@@ -1654,7 +1658,13 @@ private fun MetaDetailsContent(
             )
         }
 
-        if (shouldShowDetailScrollableContent(showTrailerTakeover)) {
+        if (
+            shouldShowDetailScrollableContent(
+                isTrailerPlaying = isTrailerPlaying,
+                isTrailerLoading = isTrailerLoading,
+                isTrailerTakeoverPending = immediateTrailerTakeoverPending
+            )
+        ) {
             // Single scrollable column with hero + content
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),

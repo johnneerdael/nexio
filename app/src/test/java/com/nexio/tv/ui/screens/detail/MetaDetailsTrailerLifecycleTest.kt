@@ -72,10 +72,23 @@ class MetaDetailsTrailerLifecycleTest {
     }
 
     @Test
+    fun `detail content stays visible while local trailer takeover is pending but not yet loading`() {
+        assertTrue(
+            shouldShowDetailScrollableContent(
+                isTrailerPlaying = false,
+                isTrailerLoading = false,
+                isTrailerTakeoverPending = true
+            )
+        )
+    }
+
+    @Test
     fun `detail content hides during internal trailer takeover`() {
         assertFalse(
             shouldShowDetailScrollableContent(
-                showTrailerTakeover = true
+                isTrailerPlaying = false,
+                isTrailerLoading = true,
+                isTrailerTakeoverPending = true
             )
         )
     }
