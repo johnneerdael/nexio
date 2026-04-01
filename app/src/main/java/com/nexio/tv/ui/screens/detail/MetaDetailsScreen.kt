@@ -191,10 +191,7 @@ internal fun shouldDispatchDetailTrailerTakeoverRequest(
     hasPendingRequest: Boolean,
     isTrailerTakeoverPending: Boolean,
     hasClaimedTakeover: Boolean
-): Boolean {
-    if (!hasPendingRequest) return false
-    return !isTrailerTakeoverPending || hasClaimedTakeover
-}
+): Boolean = hasPendingRequest && isTrailerTakeoverPending && hasClaimedTakeover
 
 internal fun shouldShowStandaloneDetailTrailerTakeoverOverlay(
     isTrailerTakeoverPending: Boolean,
@@ -214,17 +211,6 @@ internal fun shouldShowDetailTrailerButton(
 internal fun shouldShowDetailScrollableContent(
     showTrailerTakeover: Boolean
 ): Boolean = !showTrailerTakeover
-
-internal fun shouldDispatchDetailTrailerTakeoverRequest(
-    hasPendingRequest: Boolean,
-    isTrailerTakeoverPending: Boolean,
-    hasClaimedTakeover: Boolean
-): Boolean = hasPendingRequest && isTrailerTakeoverPending && hasClaimedTakeover
-
-internal fun shouldShowStandaloneDetailTrailerTakeoverOverlay(
-    isTrailerTakeoverPending: Boolean,
-    detailBackdropAlreadyVisible: Boolean
-): Boolean = isTrailerTakeoverPending && !detailBackdropAlreadyVisible
 
 @Stable
 private class TrailerSeekOverlayState {
@@ -352,10 +338,12 @@ fun MetaDetailsScreen(
             immediateTrailerTakeoverClaimed = false
             return@LaunchedEffect
         }
+        detailFocusDebug("immediateTrailerTakeover claimStart request=$pendingTrailerTakeoverRequest")
         immediateTrailerTakeoverClaimed = false
         withFrameNanos { }
         withFrameNanos { }
         immediateTrailerTakeoverClaimed = true
+        detailFocusDebug("immediateTrailerTakeover claimed request=$pendingTrailerTakeoverRequest")
     }
 
     LaunchedEffect(
@@ -373,6 +361,7 @@ fun MetaDetailsScreen(
         ) {
             return@LaunchedEffect
         }
+        detailFocusDebug("immediateTrailerTakeover dispatch request=$request")
         when (request) {
             DetailTrailerTakeoverRequest.TitleTrailer -> {
                 viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
@@ -547,6 +536,7 @@ fun MetaDetailsScreen(
 
                 key(meta.id) {
                     fun requestImmediateTrailerTakeover(request: DetailTrailerTakeoverRequest) {
+                        detailFocusDebug("requestImmediateTrailerTakeover meta=${meta.id} request=$request")
                         pendingTrailerTakeoverRequest = request
                         immediateTrailerTakeoverPending = true
                     }
