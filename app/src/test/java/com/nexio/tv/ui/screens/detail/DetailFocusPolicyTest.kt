@@ -163,6 +163,17 @@ class DetailFocusPolicyTest {
     }
 
     @Test
+    fun episodeFocusCountsAsVisitedLowerContent() {
+        assertTrue(
+            hasVisitedDetailLowerContent(
+                hasVisitedSeasonTabs = false,
+                hasVisitedEpisodes = true,
+                hasVisitedPeopleTabs = false
+            )
+        )
+    }
+
+    @Test
     fun moviePeopleSectionReturnsUpToHeroPlay() {
         assertEquals(
             SectionUpTarget.HERO_PLAY,

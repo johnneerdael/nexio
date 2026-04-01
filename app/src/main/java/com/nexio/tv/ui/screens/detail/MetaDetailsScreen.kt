@@ -1177,6 +1177,7 @@ private fun MetaDetailsContent(
     }
     var hasVisitedPeopleTabs by rememberSaveable(meta.id) { mutableStateOf(false) }
     var hasVisitedSeasonTabs by rememberSaveable(meta.id) { mutableStateOf(false) }
+    var hasVisitedEpisodes by rememberSaveable(meta.id) { mutableStateOf(false) }
     var hasUserMovedDownFromHero by rememberSaveable(meta.id) { mutableStateOf(false) }
     var activePeopleTab by rememberSaveable(meta.id) { mutableStateOf(initialPeopleTab) }
     var seasonOptionsDialogSeason by remember { mutableStateOf<Int?>(null) }
@@ -1250,7 +1251,11 @@ private fun MetaDetailsContent(
         pendingRestoreType == RestoreTarget.COLLECTION
     val lowerContentFocusEnabled = shouldEnableLowerContentFocus(
         hasUserMovedDownFromHero = hasUserMovedDownFromHero,
-        hasVisitedLowerContent = hasVisitedPeopleTabs || hasVisitedSeasonTabs,
+        hasVisitedLowerContent = hasVisitedDetailLowerContent(
+            hasVisitedSeasonTabs = hasVisitedSeasonTabs,
+            hasVisitedEpisodes = hasVisitedEpisodes,
+            hasVisitedPeopleTabs = hasVisitedPeopleTabs
+        ),
         hasActiveRestoreTarget = hasActiveLowerContentRestoreTarget
     )
 
@@ -1637,6 +1642,7 @@ private fun MetaDetailsContent(
                                 clearPendingRestore()
                             },
                             onEpisodeFocused = { episodeId ->
+                                hasVisitedEpisodes = true
                                 lastFocusedEpisodeIdBySeason[selectedSeason] = episodeId
                             },
                             scrollToEpisodeId = if (lastFocusedEpisodeIdBySeason[selectedSeason] == null) {
