@@ -164,21 +164,10 @@ class DebridBenchmarkStoreTest {
     }
 
     @Test
-    fun `latest result preserves missing optional numeric fields`() = runTest {
+    fun `latest result ignores completed payloads missing startup or throughput metrics`() = runTest {
         val dataStore = buildDataStore(backgroundScope)
         val store = DebridBenchmarkStore(dataStore)
         val key = stringPreferencesKey("debrid_benchmark_latest_real_debrid")
-        val expected = DebridBenchmarkResult(
-            provider = DebridBenchmarkProvider.REAL_DEBRID,
-            measuredAtMs = 5L,
-            summary = DebridBenchmarkSummary(
-                startupTimeMs = null,
-                sustainedThroughputMbps = null,
-                transferredBytes = 12L,
-                elapsedMs = 34L
-            ),
-            terminationReason = DebridBenchmarkTerminationReason.COMPLETED
-        )
         dataStore.edit { prefs ->
             prefs[key] = """
                 {
@@ -193,7 +182,7 @@ class DebridBenchmarkStoreTest {
             """.trimIndent()
         }
 
-        assertEquals(expected, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
+        assertEquals(null, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
     }
 
     @Test

@@ -99,7 +99,7 @@ class DebridBenchmarkStore internal constructor(
                 measuredAtMs = measuredAtMs,
                 summary = summary,
                 terminationReason = terminationReason
-            ).takeIf { it.isValid() }
+            ).takeIf { it.isCompletedAndValid() }
         } catch (_: InvalidDebridBenchmarkPayload) {
             null
         }
@@ -110,7 +110,9 @@ class DebridBenchmarkStore internal constructor(
     }
 
     private fun DebridBenchmarkResult.isCompletedAndValid(): Boolean {
-        return terminationReason == DebridBenchmarkTerminationReason.COMPLETED && isValid()
+        return terminationReason == DebridBenchmarkTerminationReason.COMPLETED &&
+            measuredAtMs > 0L &&
+            summary.isCompletedValid()
     }
 
     private fun DebridBenchmarkSummary.isValid(): Boolean {
@@ -118,6 +120,12 @@ class DebridBenchmarkStore internal constructor(
             sustainedThroughputMbps?.let { it.isFinite() && it >= 0.0 } != false &&
             transferredBytes >= 0L &&
             elapsedMs >= 0L
+    }
+
+    private fun DebridBenchmarkSummary.isCompletedValid(): Boolean {
+        return startupTimeMs != null &&
+            sustainedThroughputMbps != null &&
+            isValid()
     }
 
     private fun canonicalPayload(result: DebridBenchmarkResult): JsonObject {
