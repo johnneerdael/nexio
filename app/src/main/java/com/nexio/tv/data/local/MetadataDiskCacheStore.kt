@@ -31,6 +31,7 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val TMDB_SEASON_VIDEOS_PREFIX = "tmdb_season_videos::"
         private const val HOME_REF_PREFIX = "home_ref::"
         private const val LANGUAGE_EPOCH_KEY = "metadata_language_epoch"
+        private const val META_CACHE_SCHEMA_VERSION = 2
         private const val TMDB_CACHE_SCHEMA_VERSION = 1
         private const val TMDB_VIDEO_CACHE_SCHEMA_VERSION = 1
         private val TMDB_VIDEO_CACHE_TTL: Duration = Duration.ofHours(12)
@@ -62,6 +63,8 @@ class MetadataDiskCacheStore @Inject constructor(
             val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
             val epoch = root.get("languageEpoch")?.asInt ?: 0
             if (epoch != currentLanguageEpoch()) return null
+            val schemaVersion = root.get("metaSchemaVersion")?.asInt ?: 0
+            if (schemaVersion != META_CACHE_SCHEMA_VERSION) return null
             decodeMetaSafely(root)
         }.onFailure { error ->
             Log.w(TAG, "Failed to read disk metadata entry", error)
@@ -75,6 +78,7 @@ class MetadataDiskCacheStore @Inject constructor(
             val payload = JsonObject().apply {
                 add("value", gson.toJsonTree(meta))
                 addProperty("languageEpoch", currentLanguageEpoch())
+                addProperty("metaSchemaVersion", META_CACHE_SCHEMA_VERSION)
                 addProperty("updatedAtMs", System.currentTimeMillis())
             }
             prefs.edit().putString(key, gson.toJson(payload)).apply()

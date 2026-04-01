@@ -52,6 +52,51 @@ class MetadataDiskCacheStoreTest {
     }
 
     @Test
+    fun `readMeta ignores cached entries from before current schema version`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+        prefs.edit().putString(
+            "meta::movie:tt1::en::native",
+            """
+            {
+              "value": {
+                "id": "tt1",
+                "type": "MOVIE",
+                "rawType": "movie",
+                "name": "Legacy Movie",
+                "poster": null,
+                "posterShape": "POSTER",
+                "background": null,
+                "logo": null,
+                "description": null,
+                "releaseInfo": null,
+                "imdbRating": null,
+                "genres": [],
+                "runtime": null,
+                "director": [],
+                "writer": [],
+                "cast": [],
+                "castMembers": [],
+                "videos": [],
+                "productionCompanies": [],
+                "networks": [],
+                "ageRating": null,
+                "country": null,
+                "awards": null,
+                "language": null,
+                "links": [],
+                "trailerYtIds": ["legacyTrailer1"]
+              },
+              "languageEpoch": 0,
+              "updatedAtMs": 1
+            }
+            """.trimIndent()
+        ).apply()
+
+        assertNull(store.readMeta("movie:tt1", "en", "native"))
+    }
+
+    @Test
     fun `readTmdbEnrichment preserves legacy companies cached before tmdbId and kind fields existed`() {
         val prefs = InMemorySharedPreferences()
         val context = mockContext(prefs)

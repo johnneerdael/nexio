@@ -178,6 +178,53 @@ class TrailerServiceAuthFallbackTest {
     }
 
     @Test
+    fun `non english native trailer is rejected before helper fallback`() = runTest {
+        val trailerApi = mockk<TrailerApi>(relaxed = true)
+        val tmdbApi = mockk<TmdbApi>(relaxed = true)
+        val inAppYouTubeExtractor = mockk<InAppYouTubeExtractor>()
+        val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>(relaxed = true)
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val addonRepository = mockk<AddonRepository>(relaxed = true)
+        val streamRepository = mockk<StreamRepository>(relaxed = true)
+        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
+        every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings())
+
+        val youtubeUrl = "https://www.youtube.com/watch?v=testvideo07"
+        val helperSource = TrailerPlaybackSource(
+            videoUrl = "https://video.example/helper-should-not-run.m3u8",
+            audioUrl = "https://audio.example/helper-should-not-run.m4a"
+        )
+        coEvery { trailerAvailabilityService.isSignedIn() } returns true
+        coEvery {
+            inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl)
+        } throws NonEnglishYouTubeTrailerException(
+            languageCode = "hi",
+            trailerTitle = "Dubbed trailer"
+        )
+        coEvery { trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl) } returns helperSource
+
+        val service = TrailerService(
+            trailerApi = trailerApi,
+            tmdbApi = tmdbApi,
+            inAppYouTubeExtractor = inAppYouTubeExtractor,
+            tmdbSettingsDataStore = tmdbSettingsDataStore,
+            metadataDiskCacheStore = metadataDiskCacheStore,
+            tmdbMetadataService = tmdbMetadataService,
+            addonRepository = addonRepository,
+            streamRepository = streamRepository,
+            trailerAvailabilityService = trailerAvailabilityService,
+            clock = Clock.fixed(Instant.parse("2026-04-01T00:00:00Z"), ZoneOffset.UTC)
+        )
+
+        val resolved = service.getTrailerPlaybackSourceFromYouTubeUrl(youtubeUrl)
+
+        assertNull(resolved)
+        coVerify(exactly = 1) { inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl) }
+        coVerify(exactly = 0) { trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl) }
+    }
+
+    @Test
     fun `cached native playback source is reused while signed in`() = runTest {
         val trailerApi = mockk<TrailerApi>(relaxed = true)
         val tmdbApi = mockk<TmdbApi>(relaxed = true)

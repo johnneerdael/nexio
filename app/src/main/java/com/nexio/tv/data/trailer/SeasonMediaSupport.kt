@@ -21,6 +21,7 @@ internal fun rankTmdbRecapCandidates(results: List<TmdbVideoResult>): List<TmdbV
         .asSequence()
         .filter { (it.site ?: "").equals("YouTube", ignoreCase = true) }
         .filter { !it.key.isNullOrBlank() }
+        .filter { isEnglishTmdbVideoLanguage(it.iso6391) }
         .filter { it.type?.trim()?.lowercase() == "recap" }
         .sortedWith(
             compareBy<TmdbVideoResult> { if (it.official == true) 0 else 1 }

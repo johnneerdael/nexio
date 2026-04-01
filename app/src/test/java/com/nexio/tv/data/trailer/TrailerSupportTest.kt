@@ -12,6 +12,55 @@ import org.junit.Test
 class TrailerSupportTest {
 
     @Test
+    fun `extractDefaultYouTubeAudioLanguageCode reads default audio track language`() {
+        val playerResponse = mapOf(
+            "captions" to mapOf(
+                "playerCaptionsTracklistRenderer" to mapOf(
+                    "captionTracks" to listOf(
+                        mapOf("languageCode" to "hi"),
+                        mapOf("languageCode" to "en-US")
+                    ),
+                    "audioTracks" to listOf(
+                        mapOf("captionTrackIndices" to listOf(0))
+                    ),
+                    "defaultAudioTrackIndex" to 0
+                )
+            )
+        )
+
+        val languageCode = extractDefaultYouTubeAudioLanguageCode(playerResponse)
+
+        assertEquals("hi", languageCode)
+    }
+
+    @Test
+    fun `extractDefaultYouTubeAudioLanguageCode falls back to single caption track`() {
+        val playerResponse = mapOf(
+            "captions" to mapOf(
+                "playerCaptionsTracklistRenderer" to mapOf(
+                    "captionTracks" to listOf(
+                        mapOf("languageCode" to "en-GB")
+                    )
+                )
+            )
+        )
+
+        val languageCode = extractDefaultYouTubeAudioLanguageCode(playerResponse)
+
+        assertEquals("en-GB", languageCode)
+    }
+
+    @Test
+    fun `isEnglishYouTubeLanguageCode only accepts english variants`() {
+        assertTrue(isEnglishYouTubeLanguageCode("en"))
+        assertTrue(isEnglishYouTubeLanguageCode("en-US"))
+        assertTrue(isEnglishYouTubeLanguageCode("en_GB"))
+        assertTrue(!isEnglishYouTubeLanguageCode("hi"))
+        assertTrue(!isEnglishYouTubeLanguageCode("fr"))
+        assertTrue(!isEnglishYouTubeLanguageCode(null))
+    }
+
+    @Test
     fun `selectPreferredCombinedTrailerUrl prefers manifest for playback compatibility`() {
         val selected = selectPreferredCombinedTrailerUrl(
             manifestUrl = "https://example.com/trailer/master.m3u8",
@@ -144,6 +193,33 @@ class TrailerSupportTest {
     }
 
     @Test
+    fun `rankTmdbVideoCandidates excludes non english trailers`() {
+        val ranked = rankTmdbVideoCandidates(
+            listOf(
+                tmdbVideo(
+                    key = "hinditr1111",
+                    type = "Trailer",
+                    official = true,
+                    size = 1080,
+                    publishedAt = "2024-04-02T00:00:00Z",
+                    iso6391 = "hi"
+                ),
+                tmdbVideo(
+                    key = "english1111a",
+                    type = "Trailer",
+                    official = true,
+                    size = 720,
+                    publishedAt = "2024-04-01T00:00:00Z",
+                    iso6391 = "en"
+                )
+            )
+        )
+
+        assertEquals(1, ranked.size)
+        assertEquals("english1111a", ranked.single().key)
+    }
+
+    @Test
     fun `rankTmdbRecapCandidates prefers official recaps over featurettes`() {
         val ranked = rankTmdbRecapCandidates(
             listOf(
@@ -166,6 +242,33 @@ class TrailerSupportTest {
 
         assertEquals(1, ranked.size)
         assertEquals("recap1234567", ranked.single().key)
+    }
+
+    @Test
+    fun `rankTmdbRecapCandidates excludes non english recaps`() {
+        val ranked = rankTmdbRecapCandidates(
+            listOf(
+                tmdbVideo(
+                    key = "hindirecap1a",
+                    type = "Recap",
+                    official = true,
+                    size = 1080,
+                    publishedAt = "2024-04-02T00:00:00Z",
+                    iso6391 = "hi"
+                ),
+                tmdbVideo(
+                    key = "englishrcp1",
+                    type = "Recap",
+                    official = true,
+                    size = 720,
+                    publishedAt = "2024-04-01T00:00:00Z",
+                    iso6391 = "en"
+                )
+            )
+        )
+
+        assertEquals(1, ranked.size)
+        assertEquals("englishrcp1", ranked.single().key)
     }
 
     @Test
@@ -330,9 +433,11 @@ class TrailerSupportTest {
         type: String,
         official: Boolean,
         size: Int,
-        publishedAt: String
+        publishedAt: String,
+        iso6391: String = "en"
     ): TmdbVideoResult {
         return TmdbVideoResult(
+            iso6391 = iso6391,
             key = key,
             site = "YouTube",
             type = type,

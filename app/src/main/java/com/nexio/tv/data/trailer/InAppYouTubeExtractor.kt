@@ -74,6 +74,14 @@ private data class ManifestCandidate(
 
 private val DEFAULT_HEADERS = buildStableYouTubeRequestHeaders()
 
+internal class NonEnglishYouTubeTrailerException(
+    val languageCode: String?,
+    val trailerTitle: String?
+) : IllegalStateException(
+    "Rejected non-English YouTube trailer " +
+        "language=${languageCode.orEmpty()} title=${trailerTitle.orEmpty()}"
+)
+
 internal fun sortTrailerCandidatesForPlayback(items: List<StreamCandidate>): List<StreamCandidate> {
     return items.sortedWith(
         compareBy<StreamCandidate> { trailerContainerPreference(it.ext) }
@@ -180,6 +188,13 @@ class InAppYouTubeExtractor @Inject constructor() {
             withTimeout(EXTRACTOR_TIMEOUT_MS) {
                 extractPlaybackSourceInternal(youtubeUrl)
             }
+        } catch (error: NonEnglishYouTubeTrailerException) {
+            Log.w(
+                TAG,
+                "Rejected non-English trailer for ${summarizeUrl(youtubeUrl)} " +
+                    "language=${error.languageCode.orEmpty()} title=${error.trailerTitle.orEmpty()}"
+            )
+            throw error
         } catch (error: Exception) {
             Log.w(TAG, "Kotlin extractor failed for $youtubeUrl: ${error.message}")
             null
@@ -219,6 +234,7 @@ class InAppYouTubeExtractor @Inject constructor() {
         val adaptiveVideo = mutableListOf<StreamCandidate>()
         val adaptiveAudio = mutableListOf<StreamCandidate>()
         val manifestUrls = mutableListOf<Triple<String, Int, String>>()
+        var resolvedTrailerTitle: String? = null
 
         for (client in CLIENTS) {
             try {
@@ -229,6 +245,18 @@ class InAppYouTubeExtractor @Inject constructor() {
                     visitorData = watchConfig.visitorData,
                     cookieHeader = null
                 )
+
+                if (resolvedTrailerTitle.isNullOrBlank()) {
+                    resolvedTrailerTitle = extractYouTubeTrailerTitle(playerResponse)
+                }
+                extractDefaultYouTubeAudioLanguageCode(playerResponse)
+                    ?.takeIf { !isEnglishYouTubeLanguageCode(it) }
+                    ?.let { languageCode ->
+                        throw NonEnglishYouTubeTrailerException(
+                            languageCode = languageCode,
+                            trailerTitle = resolvedTrailerTitle
+                        )
+                    }
 
                 val streamingData = playerResponse.mapValue("streamingData") ?: continue
                 val hlsManifestUrl = streamingData.stringValue("hlsManifestUrl")
@@ -725,6 +753,55 @@ private data class RequestResponse(
     val body: String
 )
 
+internal fun extractDefaultYouTubeAudioLanguageCode(playerResponse: Map<*, *>): String? {
+    val captions = playerResponse.mapValue("captions")
+        ?.mapValue("playerCaptionsTracklistRenderer")
+        ?: return null
+    val captionTracks = captions.listMapValue("captionTracks")
+    if (captionTracks.isEmpty()) return null
+
+    val preferredIndices = buildList {
+        val audioTracks = captions.listMapValue("audioTracks")
+        val defaultAudioTrackIndex = captions.numberValue("defaultAudioTrackIndex")?.toInt()
+        defaultAudioTrackIndex
+            ?.let { audioTracks.getOrNull(it) }
+            ?.let { audioTrack ->
+                audioTrack.numberValue("defaultCaptionTrackIndex")?.toInt()?.let(::add)
+                audioTrack.intListValue("captionTrackIndices").forEach(::add)
+            }
+        if (captionTracks.size == 1) {
+            add(0)
+        }
+    }
+
+    preferredIndices.forEach { index ->
+        captionTracks.getOrNull(index)
+            ?.stringValue("languageCode")
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { return it }
+    }
+
+    return null
+}
+
+internal fun extractYouTubeTrailerTitle(playerResponse: Map<*, *>): String? {
+    return playerResponse.mapValue("videoDetails")
+        ?.stringValue("title")
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+}
+
+internal fun isEnglishYouTubeLanguageCode(languageCode: String?): Boolean {
+    val normalized = languageCode
+        ?.trim()
+        ?.lowercase()
+        ?.replace('_', '-')
+        ?.takeIf { it.isNotEmpty() }
+        ?: return false
+    return normalized == "en" || normalized.startsWith("en-")
+}
+
 private fun Map<*, *>.mapValue(key: String): Map<*, *>? {
     return this[key] as? Map<*, *>
 }
@@ -737,6 +814,17 @@ private fun Map<*, *>.listMapValue(key: String): List<Map<*, *>> {
 private fun Map<*, *>.stringValue(key: String): String? {
     val value = this[key] ?: return null
     return value.toString()
+}
+
+private fun Map<*, *>.intListValue(key: String): List<Int> {
+    val value = this[key] as? List<*> ?: return emptyList()
+    return value.mapNotNull {
+        when (it) {
+            is Number -> it.toInt()
+            is String -> it.toIntOrNull()
+            else -> null
+        }
+    }
 }
 
 private fun Map<*, *>.numberValue(key: String): Double? {

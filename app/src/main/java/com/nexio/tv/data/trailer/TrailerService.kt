@@ -654,9 +654,22 @@ class TrailerService(
             }
         }
 
-        val localSource = runCatching {
+        val localSource = try {
             inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl)
-        }.getOrNull()
+        } catch (error: NonEnglishYouTubeTrailerException) {
+            trailerDebugLog(
+                "resolveYouTubeTrailer rejected non-english url=$youtubeUrl " +
+                    "language=${error.languageCode.orEmpty()}"
+            )
+            Log.w(
+                TAG,
+                "Rejected non-English YouTube trailer $youtubeUrl " +
+                    "language=${error.languageCode.orEmpty()} title=${error.trailerTitle.orEmpty()}"
+            )
+            return@withContext null
+        } catch (_: Exception) {
+            null
+        }
         if (localSource != null) {
             trailerDebugLog("resolveYouTubeTrailer native success url=$youtubeUrl")
             Log.d(TAG, "Resolved $youtubeUrl via local in-app extractor")
@@ -944,6 +957,7 @@ internal fun rankTmdbVideoCandidates(results: List<TmdbVideoResult>): List<TmdbV
         .asSequence()
         .filter { (it.site ?: "").equals("YouTube", ignoreCase = true) }
         .filter { !it.key.isNullOrBlank() }
+        .filter { isEnglishTmdbVideoLanguage(it.iso6391) }
         .filter {
             when (it.type?.trim()?.lowercase()) {
                 "trailer", "teaser" -> true
@@ -957,6 +971,15 @@ internal fun rankTmdbVideoCandidates(results: List<TmdbVideoResult>): List<TmdbV
                 .thenByDescending { parsePublishedAtEpoch(it.publishedAt) }
         )
         .toList()
+}
+
+internal fun isEnglishTmdbVideoLanguage(languageCode: String?): Boolean {
+    val normalized = languageCode
+        ?.trim()
+        ?.lowercase()
+        ?.takeIf { it.isNotEmpty() }
+        ?: return false
+    return normalized == "en"
 }
 
 internal fun selectStreailerTrailerCandidate(streams: List<Stream>): StreailerTrailerCandidate? {
