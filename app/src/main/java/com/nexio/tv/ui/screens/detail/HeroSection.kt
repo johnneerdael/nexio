@@ -1,13 +1,8 @@
 package com.nexio.tv.ui.screens.detail
 
 import android.view.KeyEvent as AndroidKeyEvent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -113,8 +108,7 @@ internal fun HeroContentSection(
     var logoLoadFailed by remember(meta.logo) { mutableStateOf(false) }
     val shouldShowLogo =
         !meta.logo.isNullOrBlank() &&
-            !logoLoadFailed &&
-            !(isTrailerPlaying && hideLogoDuringTrailer)
+            !logoLoadFailed
     val libraryAddPainter = rememberRawSvgPainter(
         context = context,
         rawRes = com.nexio.tv.R.raw.library_add_plus
@@ -161,22 +155,9 @@ internal fun HeroContentSection(
         }
     }
 
-    // Animate logo properties for trailer mode
-    val logoHeight by animateDpAsState(
-        targetValue = if (isTrailerPlaying) 60.dp else 100.dp,
-        animationSpec = tween(600),
-        label = "logoHeight"
-    )
-    val logoBottomPadding by animateDpAsState(
-        targetValue = if (isTrailerPlaying) 24.dp else 16.dp,
-        animationSpec = tween(600),
-        label = "logoPadding"
-    )
-    val logoMaxWidth by animateFloatAsState(
-        targetValue = if (isTrailerPlaying) 0.25f else 0.4f,
-        animationSpec = tween(600),
-        label = "logoWidth"
-    )
+    val logoHeight = 100.dp
+    val logoBottomPadding = 16.dp
+    val logoMaxWidth = 0.4f
 
     Column(
         modifier = Modifier
@@ -191,7 +172,6 @@ internal fun HeroContentSection(
                 .padding(start = 48.dp, end = 48.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.Bottom
         ) {
-            // Logo/Title — always visible during trailer, animates size
             if (shouldShowLogo) {
                 AsyncImage(
                     model = logoModel,
@@ -205,159 +185,129 @@ internal fun HeroContentSection(
                     alignment = Alignment.CenterStart
                 )
             } else {
-                // Text title hides entirely during trailer
-                AnimatedVisibility(
-                    visible = !isTrailerPlaying,
-                    enter = fadeIn(tween(400)),
-                    exit = fadeOut(tween(400))
-                ) {
-                    Text(
-                        text = meta.name,
-                        style = MaterialTheme.typography.displayMedium,
-                        color = NexioColors.TextPrimary,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                }
-            }
-
-            // Everything below the logo fades out during trailer
-            AnimatedVisibility(
-                visible = isTrailerPlaying && !hideLogoDuringTrailer,
-                enter = fadeIn(tween(600)),
-                exit = fadeOut(tween(300))
-            ) {
                 Text(
-                    text = stringResource(R.string.hero_press_back_trailer),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = NexioColors.TextTertiary,
+                    text = meta.name,
+                    style = MaterialTheme.typography.displayMedium,
+                    color = NexioColors.TextPrimary,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
 
-            // Everything below the logo fades out during trailer
-            AnimatedVisibility(
-                visible = !isTrailerPlaying,
-                enter = fadeIn(tween(400)),
-                exit = fadeOut(tween(400))
-            ) {
-                Column {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        PlayButton(
-                            text = nextToWatch?.displayText ?: when {
-                                nextEpisode != null -> stringResource(R.string.hero_play_episode, nextEpisode.season ?: 0, nextEpisode.episode ?: 0)
-                                else -> stringResource(R.string.hero_play)
-                            },
-                            onClick = onPlayClick,
-                            focusRequester = resolvedPlayFocusRequester,
-                            directions = resolveHeroActionDirections(HeroAction.PLAY, heroActionOrder),
-                            actionRequesters = heroActionRequesters,
-                            downFocusRequester = downFocusRequester,
-                            restoreFocusToken = restorePlayFocusToken,
-                            onMoveDownRequested = onMoveDownRequested,
-                            onFocused = onHeroActionFocused,
-                            onFocusRestored = onPlayFocusRestored
-                        )
+            Column {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    PlayButton(
+                        text = nextToWatch?.displayText ?: when {
+                            nextEpisode != null -> stringResource(R.string.hero_play_episode, nextEpisode.season ?: 0, nextEpisode.episode ?: 0)
+                            else -> stringResource(R.string.hero_play)
+                        },
+                        onClick = onPlayClick,
+                        focusRequester = resolvedPlayFocusRequester,
+                        directions = resolveHeroActionDirections(HeroAction.PLAY, heroActionOrder),
+                        actionRequesters = heroActionRequesters,
+                        downFocusRequester = downFocusRequester,
+                        restoreFocusToken = restorePlayFocusToken,
+                        onMoveDownRequested = onMoveDownRequested,
+                        onFocused = onHeroActionFocused,
+                        onFocusRestored = onPlayFocusRestored
+                    )
 
+                    ActionIconButton(
+                        action = HeroAction.LIBRARY,
+                        icon = if (isInLibrary) Icons.Default.Check else null,
+                        painter = if (!isInLibrary) {
+                            libraryAddPainter
+                        } else {
+                            null
+                        },
+                        contentDescription = if (isInLibrary) stringResource(R.string.hero_remove_from_library) else stringResource(R.string.hero_add_to_library),
+                        onClick = onToggleLibrary,
+                        onLongPress = onLibraryLongPress,
+                        focusRequester = libraryFocusRequester,
+                        directions = resolveHeroActionDirections(HeroAction.LIBRARY, heroActionOrder),
+                        actionRequesters = heroActionRequesters,
+                        downFocusRequester = downFocusRequester,
+                        onMoveDownRequested = onMoveDownRequested,
+                        onFocused = onHeroActionFocused
+                    )
+
+                    if (meta.apiType == "movie") {
                         ActionIconButton(
-                            action = HeroAction.LIBRARY,
-                            icon = if (isInLibrary) Icons.Default.Check else null,
-                            painter = if (!isInLibrary) {
-                                libraryAddPainter
+                            action = HeroAction.WATCHED,
+                            icon = if (isMovieWatched) {
+                                Icons.Default.Visibility
                             } else {
-                                null
+                                Icons.Default.VisibilityOff
                             },
-                            contentDescription = if (isInLibrary) stringResource(R.string.hero_remove_from_library) else stringResource(R.string.hero_add_to_library),
-                            onClick = onToggleLibrary,
-                            onLongPress = onLibraryLongPress,
-                            focusRequester = libraryFocusRequester,
-                            directions = resolveHeroActionDirections(HeroAction.LIBRARY, heroActionOrder),
+                            contentDescription = if (isMovieWatched) {
+                                stringResource(R.string.hero_mark_unwatched)
+                            } else {
+                                stringResource(R.string.hero_mark_watched)
+                            },
+                            onClick = onToggleMovieWatched,
+                            enabled = !isMovieWatchedPending,
+                            selected = isMovieWatched,
+                            selectedContainerColor = Color.White,
+                            selectedContentColor = Color.Black,
+                            focusRequester = watchedFocusRequester,
+                            directions = resolveHeroActionDirections(HeroAction.WATCHED, heroActionOrder),
                             actionRequesters = heroActionRequesters,
                             downFocusRequester = downFocusRequester,
                             onMoveDownRequested = onMoveDownRequested,
                             onFocused = onHeroActionFocused
                         )
-
-                        if (meta.apiType == "movie") {
-                            ActionIconButton(
-                                action = HeroAction.WATCHED,
-                                icon = if (isMovieWatched) {
-                                    Icons.Default.Visibility
-                                } else {
-                                    Icons.Default.VisibilityOff
-                                },
-                                contentDescription = if (isMovieWatched) {
-                                    stringResource(R.string.hero_mark_unwatched)
-                                } else {
-                                    stringResource(R.string.hero_mark_watched)
-                                },
-                                onClick = onToggleMovieWatched,
-                                enabled = !isMovieWatchedPending,
-                                selected = isMovieWatched,
-                                selectedContainerColor = Color.White,
-                                selectedContentColor = Color.Black,
-                                focusRequester = watchedFocusRequester,
-                                directions = resolveHeroActionDirections(HeroAction.WATCHED, heroActionOrder),
-                                actionRequesters = heroActionRequesters,
-                                downFocusRequester = downFocusRequester,
-                                onMoveDownRequested = onMoveDownRequested,
-                                onFocused = onHeroActionFocused
-                            )
-                        }
-
-                        if (trailerAvailable) {
-                            ActionIconButtonPainter(
-                                action = HeroAction.TRAILER,
-                                painter = trailerPainter,
-                                contentDescription = stringResource(R.string.hero_play_trailer),
-                                onClick = onTrailerClick,
-                                focusRequester = trailerFocusRequester,
-                                directions = resolveHeroActionDirections(HeroAction.TRAILER, heroActionOrder),
-                                actionRequesters = heroActionRequesters,
-                                downFocusRequester = downFocusRequester,
-                                onMoveDownRequested = onMoveDownRequested,
-                                onFocused = onHeroActionFocused
-                            )
-                        }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Director/Writer line above description
-                    if (!creditLine.isNullOrBlank()) {
-                        Text(
-                            text = creditLine,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = NexioTheme.extendedColors.textSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth(0.6f)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
-
-                    if (mdbListRatings?.isEmpty() == false) {
-                        MDBListRatingsRow(ratings = mdbListRatings)
-                        Spacer(modifier = Modifier.height(14.dp))
-                    }
-
-                    // Always show series/movie description, not episode description
-                    if (meta.description != null) {
-                        Text(
-                            text = meta.description,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = NexioColors.TextPrimary,
-                            overflow = TextOverflow.Clip,
-                            modifier = Modifier
-                                .fillMaxWidth(0.6f)
-                                .padding(bottom = 12.dp)
+                    if (trailerAvailable) {
+                        ActionIconButtonPainter(
+                            action = HeroAction.TRAILER,
+                            painter = trailerPainter,
+                            contentDescription = stringResource(R.string.hero_play_trailer),
+                            onClick = onTrailerClick,
+                            focusRequester = trailerFocusRequester,
+                            directions = resolveHeroActionDirections(HeroAction.TRAILER, heroActionOrder),
+                            actionRequesters = heroActionRequesters,
+                            downFocusRequester = downFocusRequester,
+                            onMoveDownRequested = onMoveDownRequested,
+                            onFocused = onHeroActionFocused
                         )
                     }
-
-                    MetaInfoRow(meta = meta, hideImdbRating = hideMetaInfoImdb)
                 }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (!creditLine.isNullOrBlank()) {
+                    Text(
+                        text = creditLine,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = NexioTheme.extendedColors.textSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth(0.6f)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                if (mdbListRatings?.isEmpty() == false) {
+                    MDBListRatingsRow(ratings = mdbListRatings)
+                    Spacer(modifier = Modifier.height(14.dp))
+                }
+
+                if (meta.description != null) {
+                    Text(
+                        text = meta.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = NexioColors.TextPrimary,
+                        overflow = TextOverflow.Clip,
+                        modifier = Modifier
+                            .fillMaxWidth(0.6f)
+                            .padding(bottom = 12.dp)
+                    )
+                }
+
+                MetaInfoRow(meta = meta, hideImdbRating = hideMetaInfoImdb)
             }
         }
     }

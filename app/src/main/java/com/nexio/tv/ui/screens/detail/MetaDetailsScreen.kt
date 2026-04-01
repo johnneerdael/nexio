@@ -262,7 +262,6 @@ fun MetaDetailsScreen(
     val trailerLifecycleOwner = remember(context, navLifecycleOwner) {
         context.findLifecycleOwner() ?: navLifecycleOwner
     }
-    var restorePlayFocusAfterTrailerBackToken by rememberSaveable { mutableIntStateOf(0) }
     var immediateTrailerTakeoverPending by rememberSaveable { mutableStateOf(false) }
     var pendingTrailerTakeoverRequest by remember { mutableStateOf<DetailTrailerTakeoverRequest?>(null) }
     var immediateTrailerTakeoverClaimed by remember { mutableStateOf(false) }
@@ -276,8 +275,7 @@ fun MetaDetailsScreen(
 
     BackHandler {
         if (uiState.isTrailerPlaying) {
-            detailFocusDebug("backHandler trailerPlaying=true nextRestorePlayFocusToken=${restorePlayFocusAfterTrailerBackToken + 1}")
-            restorePlayFocusAfterTrailerBackToken += 1
+            detailFocusDebug("backHandler trailerPlaying=true")
             viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded)
         } else if (immediateTrailerTakeoverPending) {
             immediateTrailerTakeoverPending = false
@@ -698,7 +696,6 @@ fun MetaDetailsScreen(
                             requestImmediateTrailerTakeover(DetailTrailerTakeoverRequest.TitleTrailer)
                         },
                         immediateTrailerTakeoverPending = immediateTrailerTakeoverPending,
-                        restorePlayFocusAfterTrailerBackToken = restorePlayFocusAfterTrailerBackToken,
                         onNavigateToCastDetail = onNavigateToCastDetail,
                         onNavigateToOrganizationDetail = onNavigateToOrganizationDetail,
                         onNavigateToDetail = onNavigateToDetail,
@@ -898,7 +895,6 @@ private fun MetaDetailsContent(
     onTrailerEnded: () -> Unit,
     onTrailerButtonClick: () -> Unit,
     immediateTrailerTakeoverPending: Boolean,
-    restorePlayFocusAfterTrailerBackToken: Int,
     onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
     onNavigateToOrganizationDetail: (Int, String, String, String) -> Unit = { _, _, _, _ -> },
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> },
@@ -1585,10 +1581,9 @@ private fun MetaDetailsContent(
                     initialHeroFocusRequested = true
                     clearPendingRestore()
                 },
-                restorePlayFocusToken = (if (pendingRestoreType == RestoreTarget.HERO) restoreFocusToken else 0) +
-                    restorePlayFocusAfterTrailerBackToken,
+                restorePlayFocusToken = if (pendingRestoreType == RestoreTarget.HERO) restoreFocusToken else 0,
                 onPlayFocusRestored = {
-                    logFocusState("playFocusRestored restoreFocusToken=$restoreFocusToken trailerBackToken=$restorePlayFocusAfterTrailerBackToken")
+                    logFocusState("playFocusRestored restoreFocusToken=$restoreFocusToken")
                     onPlayButtonFocused()
                     initialHeroFocusRequested = true
                     clearPendingRestore()

@@ -177,6 +177,20 @@ class HeroSectionFocusStabilityTest {
     }
 
     @Test
+    fun trailer_playback_keeps_hero_actions_and_metadata_visible() {
+        composeRule.setContent {
+            HeroSectionTrailerVisibilityHarness()
+        }
+
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Play").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Add to library").assertIsDisplayed()
+        composeRule.onNodeWithText("Director: Sam Raimi").assertIsDisplayed()
+        composeRule.onNodeWithText("Two colleagues become stranded on a deserted island and must survive.").assertIsDisplayed()
+    }
+
+    @Test
     fun switching_to_a_new_detail_resets_scroll_to_the_hero() {
         composeRule.setContent {
             DetailMetaChangeScrollResetHarness()
@@ -371,6 +385,48 @@ private fun HeroSectionFocusHarness() {
             Text(text = "Below item $index")
         }
     }
+}
+
+@Composable
+private fun HeroSectionTrailerVisibilityHarness() {
+    HeroContentSection(
+        meta = Meta(
+            id = "movie",
+            type = ContentType.MOVIE,
+            rawType = "movie",
+            name = "Send Help",
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = "Two colleagues become stranded on a deserted island and must survive.",
+            releaseInfo = "2026-01-30",
+            imdbRating = 7.1f,
+            genres = listOf("Horror", "Thriller", "Comedy"),
+            runtime = "113",
+            director = listOf("Sam Raimi"),
+            writer = emptyList(),
+            cast = emptyList(),
+            videos = emptyList(),
+            country = "United States of America",
+            awards = null,
+            language = "en",
+            links = emptyList(),
+            ageRating = "R"
+        ),
+        nextEpisode = null,
+        nextToWatch = null,
+        onPlayClick = {},
+        isInLibrary = false,
+        onToggleLibrary = {},
+        onLibraryLongPress = {},
+        isMovieWatched = false,
+        isMovieWatchedPending = false,
+        onToggleMovieWatched = {},
+        trailerAvailable = true,
+        onTrailerClick = {},
+        isTrailerPlaying = true
+    )
 }
 
 @Composable
