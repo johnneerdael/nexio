@@ -11,7 +11,7 @@ import org.junit.Test
 class DebridBenchmarkCandidateResolverTest {
 
     @Test
-    fun `resolver picks the newest playable real debrid item with a direct playback url`() = runTest {
+    fun `resolver returns the first candidate for a provider`() = runTest {
         val resolver = buildResolver(
             realDebridCandidates = listOf(
                 candidate(provider = DebridBenchmarkProvider.REAL_DEBRID, directUrl = "b"),

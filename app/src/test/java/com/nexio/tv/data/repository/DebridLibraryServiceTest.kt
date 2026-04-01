@@ -573,6 +573,47 @@ class DebridLibraryServiceTest {
     }
 
     @Test
+    fun `benchmark lookup skips premiumize library calls when refresh reports disconnected`() = runTest {
+        val realDebridApi = mockk<RealDebridApi>()
+        val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
+        val premiumizeApi = mockk<PremiumizeApi>()
+        val premiumizeService = mockk<PremiumizeService>()
+        val torBoxApi = mockk<TorBoxApi>()
+        val torBoxService = mockk<TorBoxService>()
+
+        stubAuthenticatedRealDebrid(realDebridAuthDataStore)
+        every { premiumizeService.observeAccountState() } returns flowOf(
+            PremiumizeAccountState(
+                apiKey = "pm-key",
+                isConnected = false
+            )
+        )
+        coJustRun { premiumizeService.refreshAccountState() }
+        stubDisconnectedTorBox(torBoxService)
+
+        coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(emptyList())
+        coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(emptyList())
+
+        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
+        val service = DebridLibraryService(
+            realDebridApi = realDebridApi,
+            realDebridAuthDataStore = realDebridAuthDataStore,
+            realDebridAuthService = realDebridAuthService,
+            premiumizeApi = premiumizeApi,
+            premiumizeService = premiumizeService,
+            torBoxApi = torBoxApi,
+            torBoxService = torBoxService
+        )
+
+        val candidates = service.getBenchmarkCandidates(DebridBenchmarkProvider.PREMIUMIZE)
+
+        assertTrue(candidates.isEmpty())
+        coVerify(exactly = 1) { premiumizeService.refreshAccountState() }
+        coVerify(exactly = 0) { premiumizeApi.listAllItems(any()) }
+        coVerify(exactly = 0) { premiumizeApi.getItemDetails(any(), any()) }
+    }
+
+    @Test
     fun `benchmark lookup does not suppress later all provider refreshes`() = runTest {
         val realDebridApi = mockk<RealDebridApi>()
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()

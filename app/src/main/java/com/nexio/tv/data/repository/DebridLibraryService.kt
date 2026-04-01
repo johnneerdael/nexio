@@ -89,7 +89,7 @@ class DebridLibraryService @Inject constructor(
                 premiumizeService.refreshAccountState()
                 val premiumizeState = premiumizeService.observeAccountState().first()
                 val apiKey = premiumizeState.apiKey.trim()
-                if (apiKey.isBlank()) {
+                if (!premiumizeState.isConnected || apiKey.isBlank()) {
                     emptyList()
                 } else {
                     fetchPremiumizeItems(apiKey)
