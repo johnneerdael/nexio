@@ -42,6 +42,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
@@ -137,6 +138,12 @@ private data class PeopleTabItem(
     val label: String,
     val focusRequester: FocusRequester
 )
+
+private sealed class DetailTrailerTakeoverRequest {
+    data object TitleTrailer : DetailTrailerTakeoverRequest()
+    data class SeasonTrailer(val season: Int) : DetailTrailerTakeoverRequest()
+    data class SeasonRecap(val season: Int) : DetailTrailerTakeoverRequest()
+}
 
 private fun resolveDetailReturnEpisodeFocusTarget(
     meta: Meta,
@@ -235,6 +242,7 @@ fun MetaDetailsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val screenFocusManager = LocalFocusManager.current
     val activity = context as? android.app.Activity
     val navLifecycleOwner = LocalLifecycleOwner.current
     val trailerLifecycleOwner = remember(context, navLifecycleOwner) {
@@ -242,6 +250,7 @@ fun MetaDetailsScreen(
     }
     var restorePlayFocusAfterTrailerBackToken by rememberSaveable { mutableIntStateOf(0) }
     var immediateTrailerTakeoverPending by rememberSaveable { mutableStateOf(false) }
+    var pendingTrailerTakeoverRequest by remember { mutableStateOf<DetailTrailerTakeoverRequest?>(null) }
 
     LaunchedEffect(activity) {
         if (activity != null) {
@@ -257,6 +266,7 @@ fun MetaDetailsScreen(
             viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded)
         } else if (immediateTrailerTakeoverPending) {
             immediateTrailerTakeoverPending = false
+            pendingTrailerTakeoverRequest = null
         } else {
             onBackPress()
         }
@@ -306,7 +316,26 @@ fun MetaDetailsScreen(
     LaunchedEffect(uiState.isTrailerLoading, uiState.isTrailerPlaying) {
         if (uiState.isTrailerLoading || uiState.isTrailerPlaying) {
             immediateTrailerTakeoverPending = false
+            pendingTrailerTakeoverRequest = null
         }
+    }
+
+    LaunchedEffect(pendingTrailerTakeoverRequest, immediateTrailerTakeoverPending) {
+        val request = pendingTrailerTakeoverRequest ?: return@LaunchedEffect
+        if (!immediateTrailerTakeoverPending) return@LaunchedEffect
+        withFrameNanos { }
+        when (request) {
+            DetailTrailerTakeoverRequest.TitleTrailer -> {
+                viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
+            }
+            is DetailTrailerTakeoverRequest.SeasonTrailer -> {
+                viewModel.onEvent(MetaDetailsEvent.OnSeasonShortPress(request.season))
+            }
+            is DetailTrailerTakeoverRequest.SeasonRecap -> {
+                viewModel.onEvent(MetaDetailsEvent.OnPlaySeasonRecap(request.season))
+            }
+        }
+        pendingTrailerTakeoverRequest = null
     }
 
     androidx.compose.runtime.DisposableEffect(Unit) {
@@ -467,6 +496,11 @@ fun MetaDetailsScreen(
                 }
 
                 key(meta.id) {
+                    fun requestImmediateTrailerTakeover(request: DetailTrailerTakeoverRequest) {
+                        pendingTrailerTakeoverRequest = request
+                        immediateTrailerTakeoverPending = true
+                    }
+
                     MetaDetailsContent(
                         meta = meta,
                         detailReturnEpisodeFocusRequest = detailReturnFocusResolution.request,
@@ -496,8 +530,8 @@ fun MetaDetailsScreen(
                         showMdbListImdb = uiState.showMdbListImdb,
                         onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
                         onSeasonShortPress = {
-                            immediateTrailerTakeoverPending = true
-                            viewModel.onEvent(MetaDetailsEvent.OnSeasonShortPress(it))
+                            screenFocusManager.clearFocus(force = true)
+                            requestImmediateTrailerTakeover(DetailTrailerTakeoverRequest.SeasonTrailer(it))
                         },
                         onSeasonOptionsOpened = { viewModel.onEvent(MetaDetailsEvent.OnSeasonOptionsOpened(it)) },
                         onProgrammaticSeasonSelected = { viewModel.setSelectedSeasonProgrammatically(it) },
@@ -555,8 +589,8 @@ fun MetaDetailsScreen(
                             viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonUnwatched(season))
                         },
                         onPlaySeasonRecap = { season ->
-                            immediateTrailerTakeoverPending = true
-                            viewModel.onEvent(MetaDetailsEvent.OnPlaySeasonRecap(season))
+                            screenFocusManager.clearFocus(force = true)
+                            requestImmediateTrailerTakeover(DetailTrailerTakeoverRequest.SeasonRecap(season))
                         },
                         onMarkPreviousEpisodesWatched = { video ->
                             viewModel.onEvent(MetaDetailsEvent.OnMarkPreviousEpisodesWatched(video))
@@ -619,8 +653,8 @@ fun MetaDetailsScreen(
                         onTrailerProgressChanged = onTrailerProgressChanged,
                         onTrailerEnded = { viewModel.onEvent(MetaDetailsEvent.OnTrailerEnded) },
                         onTrailerButtonClick = {
-                            immediateTrailerTakeoverPending = true
-                            viewModel.onEvent(MetaDetailsEvent.OnTrailerButtonClick)
+                            screenFocusManager.clearFocus(force = true)
+                            requestImmediateTrailerTakeover(DetailTrailerTakeoverRequest.TitleTrailer)
                         },
                         immediateTrailerTakeoverPending = immediateTrailerTakeoverPending,
                         restorePlayFocusAfterTrailerBackToken = restorePlayFocusAfterTrailerBackToken,
