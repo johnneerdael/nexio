@@ -18,6 +18,20 @@ class ModernHomeTrailerBehaviorTest {
             shouldUnlockModernHomeTrailerAutoplay(
                 autoplayEnabled = true,
                 screensaverVisible = true,
+                startupSplashVisible = false,
+                selectionStillFocused = true,
+                lifecycleResumed = true
+            )
+        )
+    }
+
+    @Test
+    fun `home trailer autoplay remains locked while startup splash is visible`() {
+        assertFalse(
+            shouldUnlockModernHomeTrailerAutoplay(
+                autoplayEnabled = true,
+                screensaverVisible = false,
+                startupSplashVisible = true,
                 selectionStillFocused = true,
                 lifecycleResumed = true
             )
@@ -30,6 +44,7 @@ class ModernHomeTrailerBehaviorTest {
             shouldUnlockModernHomeTrailerAutoplay(
                 autoplayEnabled = true,
                 screensaverVisible = false,
+                startupSplashVisible = false,
                 selectionStillFocused = true,
                 lifecycleResumed = true
             )
