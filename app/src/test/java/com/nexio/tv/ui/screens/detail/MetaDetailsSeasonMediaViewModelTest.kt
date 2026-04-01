@@ -153,6 +153,86 @@ class MetaDetailsSeasonMediaViewModelTest {
     }
 
     @Test
+    fun `season short press plays teaser when season metadata resolves trailer availability on demand`() = runTest(dispatcher) {
+        val trailerService = mockk<TrailerService>()
+        coEvery {
+            trailerService.getTitleMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                contentId = any(),
+                fallbackYtIds = any()
+            )
+        } returns false
+        coEvery {
+            trailerService.getSeasonMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = any(),
+                contentId = any()
+            )
+        } answers {
+            val season = thirdArg<Int?>()
+            if (season == 7) {
+                SeasonMediaAvailability(
+                    hasTrailerOrTeaser = true,
+                    hasRecap = false
+                )
+            } else {
+                SeasonMediaAvailability(
+                    hasTrailerOrTeaser = false,
+                    hasRecap = false
+                )
+            }
+        }
+        coEvery {
+            trailerService.getSeasonTrailerPlaybackSource(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = 7,
+                contentId = any()
+            )
+        } returns TrailerPlaybackSource(
+            videoUrl = "https://example.com/season-teaser.m3u8",
+            audioUrl = "https://example.com/season-teaser-audio.m4a"
+        )
+
+        val viewModel = buildViewModel(trailerService)
+        advanceUntilIdle()
+
+        viewModel.onEvent(MetaDetailsEvent.OnSeasonShortPress(7))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(7, state.selectedSeason)
+        assertTrue(state.selectedSeasonHasPlayableTrailerMedia)
+        assertEquals("https://example.com/season-teaser.m3u8", state.trailerUrl)
+        assertEquals("https://example.com/season-teaser-audio.m4a", state.trailerAudioUrl)
+        assertTrue(state.isTrailerPlaying)
+        assertTrue(state.showTrailerControls)
+        assertTrue(state.hideLogoDuringTrailer)
+        coVerify(atLeast = 1) {
+            trailerService.getSeasonMediaAvailability(
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = 7,
+                contentId = any()
+            )
+        }
+        coVerify(exactly = 1) {
+            trailerService.getSeasonTrailerPlaybackSource(
+                title = any(),
+                year = any(),
+                tmdbId = any(),
+                type = any(),
+                seasonNumber = 7,
+                contentId = any()
+            )
+        }
+    }
+
+    @Test
     fun `failed season trailer attempt preserves external cta without reviving pending launch`() = runTest(dispatcher) {
         val trailerService = mockk<TrailerService>()
         coEvery {

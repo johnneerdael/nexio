@@ -1341,16 +1341,18 @@ class MetaDetailsViewModel @Inject constructor(
             it.withManualSeasonSelection(season).copy(pendingExternalTrailerUrl = null)
         }
         trailerHasPlayed = false
-        preloadSeasonMediaAvailability(season)
-        if (!_uiState.value.selectedSeasonHasPlayableTrailerMedia) {
-            setTrailerPlaybackState(
-                isPlaying = false,
-                showControls = false,
-                hideLogo = false
-            )
-            return
+        viewModelScope.launch {
+            val availability = ensureSeasonMediaAvailability(season)
+            if (!availability.hasTrailerOrTeaser) {
+                setTrailerPlaybackState(
+                    isPlaying = false,
+                    showControls = false,
+                    hideLogo = false
+                )
+                return@launch
+            }
+            fetchSeasonTrailer(playWhenReady = true)
         }
-        fetchSeasonTrailer(playWhenReady = true)
     }
 
     private fun playSeasonRecap(season: Int) {
@@ -1358,16 +1360,18 @@ class MetaDetailsViewModel @Inject constructor(
             it.withManualSeasonSelection(season).copy(pendingExternalTrailerUrl = null)
         }
         trailerHasPlayed = false
-        preloadSeasonMediaAvailability(season)
-        if (!_uiState.value.selectedSeasonHasPlayableRecap) {
-            setTrailerPlaybackState(
-                isPlaying = false,
-                showControls = false,
-                hideLogo = false
-            )
-            return
+        viewModelScope.launch {
+            val availability = ensureSeasonMediaAvailability(season)
+            if (!availability.hasRecap) {
+                setTrailerPlaybackState(
+                    isPlaying = false,
+                    showControls = false,
+                    hideLogo = false
+                )
+                return@launch
+            }
+            fetchSeasonRecap(playWhenReady = true)
         }
-        fetchSeasonRecap(playWhenReady = true)
     }
 
     private fun preloadTitleTrailerAvailability(meta: Meta) {
@@ -1445,6 +1449,39 @@ class MetaDetailsViewModel @Inject constructor(
                 loadingSeasonAvailability.remove(season)
             }
         }
+    }
+
+    private suspend fun ensureSeasonMediaAvailability(
+        season: Int,
+        forceRefresh: Boolean = false
+    ): SeasonMediaActionAvailability {
+        val meta = _uiState.value.meta ?: return SeasonMediaActionAvailability()
+        if (parseApiTypeToContentType(meta.apiType) != ContentType.SERIES) {
+            return SeasonMediaActionAvailability()
+        }
+
+        val cached = _uiState.value.seasonMediaAvailabilityBySeason[season]
+        if (!forceRefresh && cached != null) {
+            return cached
+        }
+
+        val tmdbId = runCatching {
+            tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
+        }.getOrNull()
+        val seasonAvailability = trailerService.getSeasonMediaAvailability(
+            tmdbId = tmdbId,
+            type = meta.apiType,
+            seasonNumber = season,
+            contentId = meta.id
+        )
+        val resolvedAvailability = SeasonMediaActionAvailability(
+            hasTrailerOrTeaser = seasonAvailability.hasTrailerOrTeaser,
+            hasRecap = seasonAvailability.hasRecap
+        )
+        _uiState.update { state ->
+            state.withSeasonMediaAvailability(season, resolvedAvailability)
+        }
+        return resolvedAvailability
     }
 
     internal fun setSelectedSeasonProgrammatically(season: Int) {
