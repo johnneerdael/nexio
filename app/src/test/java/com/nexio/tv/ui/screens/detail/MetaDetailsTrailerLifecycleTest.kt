@@ -83,8 +83,8 @@ class MetaDetailsTrailerLifecycleTest {
     }
 
     @Test
-    fun `detail content hides during internal trailer takeover`() {
-        assertFalse(
+    fun `detail content stays mounted during internal trailer takeover`() {
+        assertTrue(
             shouldShowDetailScrollableContent(
                 isTrailerPlaying = false,
                 isTrailerLoading = true,
