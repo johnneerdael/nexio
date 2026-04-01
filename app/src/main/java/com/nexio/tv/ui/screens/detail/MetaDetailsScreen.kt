@@ -1175,6 +1175,8 @@ private fun MetaDetailsContent(
         availablePeopleTabs.isNotEmpty() -> availablePeopleTabs.first()
         else -> PeopleSectionTab.RATINGS
     }
+    var hasVisitedPeopleTabs by rememberSaveable(meta.id) { mutableStateOf(false) }
+    var hasVisitedSeasonTabs by rememberSaveable(meta.id) { mutableStateOf(false) }
     var activePeopleTab by rememberSaveable(meta.id) { mutableStateOf(initialPeopleTab) }
     var seasonOptionsDialogSeason by remember { mutableStateOf<Int?>(null) }
     val lastFocusedEpisodeIdBySeason = remember(meta.id) { mutableStateMapOf<Int, String>() }
@@ -1261,10 +1263,16 @@ private fun MetaDetailsContent(
             }
         }
     }
-    val heroDownFocusRequester = if (hasPeopleSection) {
-        activePeopleTabFocusRequester
-    } else {
-        seasonDownFocusRequester
+    val heroDownFocusRequester = when (
+        resolveHeroDownTarget(
+            isSeries = isSeries,
+            hasSeasonEntry = seasonDownFocusRequester != null || seasons.isNotEmpty(),
+            hasPeopleSection = hasPeopleSection
+        )
+    ) {
+        HeroDownTarget.SEASONS -> selectedSeasonFocusRequester
+        HeroDownTarget.PEOPLE -> activePeopleTabFocusRequester
+        HeroDownTarget.NONE -> null
     }
     val heroTrailerClick = remember(
         meta.id,
@@ -1550,9 +1558,17 @@ private fun MetaDetailsContent(
                                 seasonOptionsDialogSeason = it
                             },
                             selectedTabFocusRequester = selectedSeasonFocusRequester,
+                            enableFocusRestorer = shouldEnableSectionFocusRestorer(
+                                hasVisitedSection = hasVisitedSeasonTabs,
+                                hasActiveRestoreTarget = pendingRestoreType == RestoreTarget.SEASON_ENTRY ||
+                                    pendingRestoreType == RestoreTarget.EPISODE
+                            ),
                             downFocusRequester = seasonDownFocusRequester,
                             onSelectedSeasonDown = seasonEntryEpisodeId?.let { episodeId ->
                                 { requestSeasonEntryRestore(episodeId) }
+                            },
+                            onSeasonTabFocused = {
+                                hasVisitedSeasonTabs = true
                             }
                         )
                     }
@@ -1600,9 +1616,14 @@ private fun MetaDetailsContent(
                         PeopleSectionTabs(
                             activeTab = activePeopleTab,
                             tabs = peopleTabItems,
+                            enableFocusRestorer = shouldEnableSectionFocusRestorer(
+                                hasVisitedSection = hasVisitedPeopleTabs,
+                                hasActiveRestoreTarget = false
+                            ),
                             upFocusRequester = seasonDownFocusRequester,
                             ratingsDownFocusRequester = ratingsContentFocusRequester,
                             onTabFocused = { tab ->
+                                hasVisitedPeopleTabs = true
                                 activePeopleTab = tab
                             }
                         )
@@ -1832,6 +1853,7 @@ private fun navigateToOrganizationDetail(
 private fun PeopleSectionTabs(
     activeTab: PeopleSectionTab,
     tabs: List<PeopleTabItem>,
+    enableFocusRestorer: Boolean = true,
     upFocusRequester: FocusRequester? = null,
     ratingsDownFocusRequester: FocusRequester? = null,
     onTabFocused: (PeopleSectionTab) -> Unit
@@ -1845,7 +1867,13 @@ private fun PeopleSectionTabs(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 20.dp, start = 48.dp, end = 48.dp)
-            .focusRestorer(restorerRequester),
+            .then(
+                if (enableFocusRestorer) {
+                    Modifier.focusRestorer(restorerRequester)
+                } else {
+                    Modifier
+                }
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         tabs.forEachIndexed { index, item ->

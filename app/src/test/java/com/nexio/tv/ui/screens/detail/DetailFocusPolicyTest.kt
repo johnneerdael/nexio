@@ -82,4 +82,54 @@ class DetailFocusPolicyTest {
         assertEquals(null, libraryDirections.right)
         assertTrue(libraryDirections.trapRight)
     }
+
+    @Test
+    fun seriesHeroDownPrefersSeasonNavigationBeforePeopleTabs() {
+        assertEquals(
+            HeroDownTarget.SEASONS,
+            resolveHeroDownTarget(
+                isSeries = true,
+                hasSeasonEntry = true,
+                hasPeopleSection = true
+            )
+        )
+    }
+
+    @Test
+    fun movieHeroDownFallsBackToPeopleTabsWhenAvailable() {
+        assertEquals(
+            HeroDownTarget.PEOPLE,
+            resolveHeroDownTarget(
+                isSeries = false,
+                hasSeasonEntry = false,
+                hasPeopleSection = true
+            )
+        )
+    }
+
+    @Test
+    fun sectionRestorerStaysDisabledUntilSectionWasVisited() {
+        assertFalse(
+            shouldEnableSectionFocusRestorer(
+                hasVisitedSection = false,
+                hasActiveRestoreTarget = false
+            )
+        )
+    }
+
+    @Test
+    fun sectionRestorerEnablesForExplicitRestoreOrVisitedSection() {
+        assertTrue(
+            shouldEnableSectionFocusRestorer(
+                hasVisitedSection = true,
+                hasActiveRestoreTarget = false
+            )
+        )
+        assertTrue(
+            shouldEnableSectionFocusRestorer(
+                hasVisitedSection = false,
+                hasActiveRestoreTarget = true
+            )
+        )
+    }
 }

@@ -14,6 +14,12 @@ internal data class HeroActionDirections(
     val trapRight: Boolean
 )
 
+internal enum class HeroDownTarget {
+    SEASONS,
+    PEOPLE,
+    NONE
+}
+
 internal fun shouldAutoResetFocusToHero(
     initialHeroFocusRequested: Boolean,
     hasPendingRestoreTarget: Boolean,
@@ -58,3 +64,20 @@ internal fun resolveHeroActionDirections(
         trapRight = right == null
     )
 }
+
+internal fun resolveHeroDownTarget(
+    isSeries: Boolean,
+    hasSeasonEntry: Boolean,
+    hasPeopleSection: Boolean
+): HeroDownTarget {
+    return when {
+        isSeries && hasSeasonEntry -> HeroDownTarget.SEASONS
+        hasPeopleSection -> HeroDownTarget.PEOPLE
+        else -> HeroDownTarget.NONE
+    }
+}
+
+internal fun shouldEnableSectionFocusRestorer(
+    hasVisitedSection: Boolean,
+    hasActiveRestoreTarget: Boolean
+): Boolean = hasVisitedSection || hasActiveRestoreTarget
