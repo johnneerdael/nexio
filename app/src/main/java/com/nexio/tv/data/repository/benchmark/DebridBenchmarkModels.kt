@@ -1,10 +1,19 @@
 package com.nexio.tv.data.repository.benchmark
 
+import com.nexio.tv.data.repository.DebridLibraryService
+
 enum class DebridBenchmarkProvider(
-    val storageKey: String
+    val storageKey: String,
+    val listKey: String
 ) {
-    REAL_DEBRID(storageKey = "real_debrid"),
-    PREMIUMIZE(storageKey = "premiumize");
+    REAL_DEBRID(
+        storageKey = "real_debrid",
+        listKey = DebridLibraryService.REAL_DEBRID_LIST_KEY
+    ),
+    PREMIUMIZE(
+        storageKey = "premiumize",
+        listKey = DebridLibraryService.PREMIUMIZE_LIST_KEY
+    );
 
     companion object {
         private val byStorageKey = entries.associateBy { it.storageKey }
@@ -52,4 +61,12 @@ data class DebridBenchmarkResult(
     val measuredAtMs: Long,
     val summary: DebridBenchmarkSummary,
     val terminationReason: DebridBenchmarkTerminationReason
+)
+
+data class DebridBenchmarkCandidate(
+    val provider: DebridBenchmarkProvider,
+    val directUrl: String,
+    val headers: Map<String, String>,
+    val filename: String?,
+    val sourceSizeBytes: Long?
 )
