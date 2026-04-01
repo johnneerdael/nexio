@@ -102,6 +102,9 @@ private fun ModernContinueWatchingRowItem(
     onFocused: () -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onShowOptions: (ContinueWatchingItem) -> Unit,
+    canPromoteHeroTrailerToFullscreen: Boolean,
+    fullscreenTrailerActive: Boolean,
+    onPromoteHeroTrailerToFullscreen: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val item = payload.item
@@ -123,6 +126,9 @@ private fun ModernContinueWatchingRowItem(
         item = item,
         onClick = onClick,
         onLongPress = onLongPress,
+        canPromoteHeroTrailerToFullscreen = canPromoteHeroTrailerToFullscreen,
+        fullscreenTrailerActive = fullscreenTrailerActive,
+        onPromoteHeroTrailerToFullscreen = onPromoteHeroTrailerToFullscreen,
         cardWidth = cardWidth,
         imageHeight = imageHeight,
         modifier = modifier
@@ -487,6 +493,10 @@ internal fun ModernRowSection(
                                 onFocused = onFocused,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onShowOptions = onContinueWatchingOptions
+                                ,
+                                canPromoteHeroTrailerToFullscreen = canPromoteHeroTrailerToFullscreen,
+                                fullscreenTrailerActive = fullscreenTrailerActive,
+                                onPromoteHeroTrailerToFullscreen = onPromoteHeroTrailerToFullscreen
                             )
                         }
 
