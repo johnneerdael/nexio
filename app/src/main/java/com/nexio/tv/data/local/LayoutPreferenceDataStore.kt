@@ -3,6 +3,7 @@ package com.nexio.tv.data.local
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -13,14 +14,48 @@ import com.google.gson.reflect.TypeToken
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.HomeLayout
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
 private val Context.layoutPreferenceDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "layout_settings"
 )
+
+private val migrationSidebarCollapsedDefaultEnabledKey =
+    booleanPreferencesKey("migration_sidebar_collapsed_default_enabled")
+private val sidebarCollapsedKey = booleanPreferencesKey("sidebar_collapsed_by_default")
+private val modernSidebarEnabledKey = booleanPreferencesKey("modern_sidebar_enabled")
+private val legacyModernSidebarEnabledKey = booleanPreferencesKey("glass_sidepanel_enabled")
+
+internal fun applyLayoutPreferenceMigrations(prefs: MutablePreferences) {
+    val sidebarCollapseDefaultMigrated = prefs[migrationSidebarCollapsedDefaultEnabledKey] ?: false
+    if (!sidebarCollapseDefaultMigrated) {
+        prefs[sidebarCollapsedKey] = true
+        prefs[migrationSidebarCollapsedDefaultEnabledKey] = true
+    }
+}
+
+internal fun modernSidebarEnabledFromPreferences(prefs: Preferences): Boolean =
+    prefs[modernSidebarEnabledKey] ?: prefs[legacyModernSidebarEnabledKey] ?: false
+
+internal fun sidebarCollapsedByDefaultFromPreferences(prefs: Preferences): Boolean {
+    if (modernSidebarEnabledFromPreferences(prefs)) {
+        return false
+    }
+
+    val sidebarCollapseDefaultMigrated = prefs[migrationSidebarCollapsedDefaultEnabledKey] ?: false
+    return if (!sidebarCollapseDefaultMigrated) {
+        true
+    } else {
+        prefs[sidebarCollapsedKey] ?: true
+    }
+}
 
 @Singleton
 class LayoutPreferenceDataStore @Inject constructor(
@@ -37,6 +72,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val dataStore = context.layoutPreferenceDataStore
     private fun store() = dataStore
 
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val gson = Gson()
 
     private val layoutKey = stringPreferencesKey("selected_layout")
@@ -45,9 +81,6 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val heroCatalogKeysKey = stringPreferencesKey("hero_catalog_keys")
     private val homeCatalogOrderKeysKey = stringPreferencesKey("home_catalog_order_keys")
     private val disabledHomeCatalogKeysKey = stringPreferencesKey("disabled_home_catalog_keys")
-    private val sidebarCollapsedKey = booleanPreferencesKey("sidebar_collapsed_by_default")
-    private val modernSidebarEnabledKey = booleanPreferencesKey("modern_sidebar_enabled")
-    private val legacyModernSidebarEnabledKey = booleanPreferencesKey("glass_sidepanel_enabled")
     private val modernSidebarBlurEnabledKey = booleanPreferencesKey("modern_sidebar_blur_enabled")
     private val modernLandscapePostersEnabledKey = booleanPreferencesKey("modern_landscape_posters_enabled")
     private val heroSectionEnabledKey = booleanPreferencesKey("hero_section_enabled")
@@ -69,6 +102,14 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val detailPageTrailerButtonEnabledKey = booleanPreferencesKey("detail_page_trailer_button_enabled")
     private val preferExternalMetaAddonDetailKey = booleanPreferencesKey("prefer_external_meta_addon_detail")
     private val hideUnreleasedContentKey = booleanPreferencesKey("hide_unreleased_content")
+
+    init {
+        ioScope.launch {
+            store().edit { prefs ->
+                applyLayoutPreferenceMigrations(prefs)
+            }
+        }
+    }
 
     private fun <T> profileFlow(extract: (prefs: Preferences) -> T): Flow<T> =
         dataStore.data.map { prefs -> extract(prefs) }
@@ -112,17 +153,11 @@ class LayoutPreferenceDataStore @Inject constructor(
     }
 
     val sidebarCollapsedByDefault: Flow<Boolean> = profileFlow { prefs ->
-        val modernSidebarEnabled =
-            prefs[modernSidebarEnabledKey] ?: prefs[legacyModernSidebarEnabledKey] ?: false
-        if (modernSidebarEnabled) {
-            false
-        } else {
-            prefs[sidebarCollapsedKey] ?: false
-        }
+        sidebarCollapsedByDefaultFromPreferences(prefs)
     }
 
     val modernSidebarEnabled: Flow<Boolean> = profileFlow { prefs ->
-        prefs[modernSidebarEnabledKey] ?: prefs[legacyModernSidebarEnabledKey] ?: false
+        modernSidebarEnabledFromPreferences(prefs)
     }
 
     val modernSidebarBlurEnabled: Flow<Boolean> = profileFlow { prefs ->
@@ -258,9 +293,9 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     suspend fun setSidebarCollapsedByDefault(collapsed: Boolean) {
         store().edit { prefs ->
-            val modernSidebarEnabled =
-                prefs[modernSidebarEnabledKey] ?: prefs[legacyModernSidebarEnabledKey] ?: false
+            val modernSidebarEnabled = modernSidebarEnabledFromPreferences(prefs)
             prefs[sidebarCollapsedKey] = if (modernSidebarEnabled) false else collapsed
+            prefs[migrationSidebarCollapsedDefaultEnabledKey] = true
         }
     }
 
