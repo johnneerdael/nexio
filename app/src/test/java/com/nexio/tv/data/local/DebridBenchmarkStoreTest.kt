@@ -1,10 +1,10 @@
 package com.nexio.tv.data.local
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
-import com.nexio.tv.data.repository.DebridBenchmarkProvider
-import com.nexio.tv.data.repository.DebridBenchmarkResult
-import com.nexio.tv.data.repository.DebridBenchmarkSummary
-import com.nexio.tv.data.repository.DebridBenchmarkTerminationReason
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
