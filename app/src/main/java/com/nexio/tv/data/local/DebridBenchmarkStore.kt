@@ -68,11 +68,17 @@ class DebridBenchmarkStore internal constructor(
 
         val measuredAtMs = root.longOrNull("measuredAtMs")?.takeIf { it > 0L } ?: return null
         val summaryJson = root.get("summary")?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
+        val startupTimeMs = summaryJson.longOrNull("startupTimeMs")?.takeIf { it >= 0L }
+        val sustainedThroughputMbps = summaryJson.doubleOrNull("sustainedThroughputMbps")
+            ?.takeIf { it.isFinite() && it >= 0.0 }
+        val transferredBytes = summaryJson.longOrNull("transferredBytes")?.takeIf { it >= 0L }
+            ?: return null
+        val elapsedMs = summaryJson.longOrNull("elapsedMs")?.takeIf { it >= 0L } ?: return null
         val summary = DebridBenchmarkSummary(
-            startupTimeMs = summaryJson.longOrNull("startupTimeMs"),
-            sustainedThroughputMbps = summaryJson.doubleOrNull("sustainedThroughputMbps"),
-            transferredBytes = summaryJson.longOrNull("transferredBytes") ?: return null,
-            elapsedMs = summaryJson.longOrNull("elapsedMs") ?: return null
+            startupTimeMs = startupTimeMs,
+            sustainedThroughputMbps = sustainedThroughputMbps,
+            transferredBytes = transferredBytes,
+            elapsedMs = elapsedMs
         )
         val terminationReason = root.stringOrNull("terminationReason")?.let { reason ->
             runCatching { DebridBenchmarkTerminationReason.valueOf(reason) }.getOrNull()
