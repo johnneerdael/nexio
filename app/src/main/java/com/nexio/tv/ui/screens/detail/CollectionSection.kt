@@ -96,6 +96,7 @@ fun CollectionSection(
                         focusRequester = focusRequester,
                         upFocusRequester = upFocusRequester,
                         onFocused = {
+                            detailFocusDebug("collectionFocused id=${item.id} name=${item.name}")
                             onItemFocused(item)
                             if (isRestoreTarget && restoreFocusToken > 0) {
                                 onRestoreFocusHandled()

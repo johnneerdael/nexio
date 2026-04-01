@@ -7,9 +7,49 @@ import com.nexio.tv.domain.model.NextToWatch
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MetaDetailsNavigationSupportTest {
+
+    @Test
+    fun returnFocusRequestIsLatchedOnceAndMarkedForConsumption() {
+        val resolved = resolveDetailReturnFocusRequest(
+            returnFocusSeason = 3,
+            returnFocusEpisode = 10,
+            alreadyConsumed = false
+        )
+
+        assertEquals(3, resolved.request?.season)
+        assertEquals(10, resolved.request?.episode)
+        assertTrue(resolved.shouldConsumeSavedState)
+    }
+
+    @Test
+    fun consumedReturnFocusRequestIsIgnored() {
+        val resolved = resolveDetailReturnFocusRequest(
+            returnFocusSeason = 3,
+            returnFocusEpisode = 10,
+            alreadyConsumed = true
+        )
+
+        assertNull(resolved.request)
+        assertFalse(resolved.shouldConsumeSavedState)
+    }
+
+    @Test
+    fun partialReturnFocusRequestIsClearedWithoutBeingUsed() {
+        val resolved = resolveDetailReturnFocusRequest(
+            returnFocusSeason = 3,
+            returnFocusEpisode = null,
+            alreadyConsumed = false
+        )
+
+        assertNull(resolved.request)
+        assertTrue(resolved.shouldConsumeSavedState)
+    }
 
     @Test
     fun userSeasonSelectionMarksManualOverrideAndUpdatesTheSeasonEpisodes() {

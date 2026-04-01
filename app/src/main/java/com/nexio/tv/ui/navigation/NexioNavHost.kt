@@ -266,6 +266,10 @@ fun NexioNavHost(
             MetaDetailsScreen(
                 returnFocusSeason = returnFocusSeason,
                 returnFocusEpisode = returnFocusEpisode,
+                onReturnFocusConsumed = {
+                    savedState["returnFocusSeason"] = null
+                    savedState["returnFocusEpisode"] = null
+                },
                 onTrailerPlaybackActiveChanged = onDetailTrailerPlaybackActiveChanged,
                 onBackPress = { navController.popBackStack() },
                 onNavigateToCastDetail = { personId, personName, preferCrew ->

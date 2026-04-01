@@ -144,6 +144,9 @@ fun ReviewsSection(
                             .onFocusChanged { state ->
                                 isCardFocused = state.isFocused || state.hasFocus
                                 if (state.isFocused) {
+                                    detailFocusDebug(
+                                        "reviewFocused index=$index source=${review.source} author=${review.author}"
+                                    )
                                     onReviewFocused?.invoke(index)
                                 }
                             }

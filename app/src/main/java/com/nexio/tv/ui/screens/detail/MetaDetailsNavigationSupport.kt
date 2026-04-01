@@ -4,6 +4,44 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
 
+internal data class DetailReturnEpisodeFocusRequest(
+    val season: Int?,
+    val episode: Int?
+)
+
+internal data class DetailReturnFocusRequestResolution(
+    val request: DetailReturnEpisodeFocusRequest?,
+    val shouldConsumeSavedState: Boolean
+)
+
+internal fun resolveDetailReturnFocusRequest(
+    returnFocusSeason: Int?,
+    returnFocusEpisode: Int?,
+    alreadyConsumed: Boolean
+): DetailReturnFocusRequestResolution {
+    if (alreadyConsumed) {
+        return DetailReturnFocusRequestResolution(
+            request = null,
+            shouldConsumeSavedState = false
+        )
+    }
+
+    val hasAnySavedState = returnFocusSeason != null || returnFocusEpisode != null
+    val request = if (returnFocusSeason != null && returnFocusEpisode != null) {
+        DetailReturnEpisodeFocusRequest(
+            season = returnFocusSeason,
+            episode = returnFocusEpisode
+        )
+    } else {
+        null
+    }
+
+    return DetailReturnFocusRequestResolution(
+        request = request,
+        shouldConsumeSavedState = hasAnySavedState
+    )
+}
+
 internal data class SeriesNextToWatchCandidate(
     val watchProgress: WatchProgress?,
     val isResume: Boolean,

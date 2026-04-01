@@ -91,5 +91,11 @@ suspend fun resetFocusToHero(
     focusManager.clearFocus(force = true)
     listState.scrollToItem(0)
     heroPlayFocusRequester.requestFocusAfterFrames(reason = "$reason:hero_play")
+    detailFocusDebug(
+        "resetFocusToHero postRequestFocus reason=$reason index=${listState.firstVisibleItemIndex} offset=${listState.firstVisibleItemScrollOffset}"
+    )
     listState.restoreHeroScrollAfterFocus(reason = "$reason:hero_scroll")
+    detailFocusDebug(
+        "resetFocusToHero completed reason=$reason index=${listState.firstVisibleItemIndex} offset=${listState.firstVisibleItemScrollOffset}"
+    )
 }
