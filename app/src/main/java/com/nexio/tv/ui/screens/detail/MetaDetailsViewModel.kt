@@ -63,6 +63,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 
 private const val TAG = "MetaDetailsViewModel"
+
+private fun debugLog(tag: String, message: String) {
+    if (!BuildConfig.DEBUG) return
+    runCatching { Log.d(tag, message) }
+}
 private const val TRAKT_REVIEWS_PAGE_SIZE = 8
 
 internal fun shouldStopAutoTrailerOnLifecyclePause(
@@ -183,6 +188,22 @@ class MetaDetailsViewModel @Inject constructor(
                     hideLogoDuringTrailer = hideLogo
                 )
             }
+        }
+    }
+
+    private fun enterTrailerResolvingState(selectedSeason: Int = _uiState.value.selectedSeason) {
+        _uiState.update { state ->
+            val cachedSeasonAvailability = state.seasonMediaAvailabilityBySeason[selectedSeason]
+            state.copy(
+                trailerResolutionStatus = TrailerResolutionStatus.RESOLVING,
+                isTrailerLoading = true,
+                trailerUrl = null,
+                trailerAudioUrl = null,
+                trailerExternalUrl = null,
+                pendingExternalTrailerUrl = null,
+                selectedSeasonHasPlayableTrailerMedia = cachedSeasonAvailability?.hasTrailerOrTeaser == true,
+                selectedSeasonHasPlayableRecap = cachedSeasonAvailability?.hasRecap == true
+            )
         }
     }
 
@@ -1354,12 +1375,10 @@ class MetaDetailsViewModel @Inject constructor(
             val tmdbId = runCatching {
                 tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
             }.getOrNull()
-            if (BuildConfig.DEBUG) {
-                Log.d(
-                    TAG,
-                    "preloadTitleTrailerAvailability start itemId=${meta.id} type=${meta.apiType} tmdbId=$tmdbId fallbackYtIds=${meta.trailerYtIds.count { it.isNotBlank() }}"
-                )
-            }
+            debugLog(
+                TAG,
+                "preloadTitleTrailerAvailability start itemId=${meta.id} type=${meta.apiType} tmdbId=$tmdbId fallbackYtIds=${meta.trailerYtIds.count { it.isNotBlank() }}"
+            )
             val available = trailerService.getTitleMediaAvailability(
                 tmdbId = tmdbId,
                 type = meta.apiType,
@@ -1379,13 +1398,11 @@ class MetaDetailsViewModel @Inject constructor(
                     }
                 )
             }
-            if (BuildConfig.DEBUG) {
-                val state = _uiState.value
-                Log.d(
-                    TAG,
-                    "preloadTitleTrailerAvailability result itemId=${meta.id} available=$available resolutionStatus=${state.trailerResolutionStatus} trailerUrl=${!state.trailerUrl.isNullOrBlank()} trailerExternalUrl=${!state.trailerExternalUrl.isNullOrBlank()}"
-                )
-            }
+            val state = _uiState.value
+            debugLog(
+                TAG,
+                "preloadTitleTrailerAvailability result itemId=${meta.id} available=$available resolutionStatus=${state.trailerResolutionStatus} trailerUrl=${!state.trailerUrl.isNullOrBlank()} trailerExternalUrl=${!state.trailerExternalUrl.isNullOrBlank()}"
+            )
         }
     }
 
@@ -1939,19 +1956,7 @@ class MetaDetailsViewModel @Inject constructor(
         trailerFetchJob?.cancel()
         trailerFetchJob = viewModelScope.launch {
             val selectedSeason = _uiState.value.selectedSeason
-            _uiState.update { state ->
-                val cachedSeasonAvailability = state.seasonMediaAvailabilityBySeason[selectedSeason]
-                state.copy(
-                    trailerResolutionStatus = TrailerResolutionStatus.RESOLVING,
-                    isTrailerLoading = true,
-                    trailerUrl = null,
-                    trailerAudioUrl = null,
-                    trailerExternalUrl = null,
-                    pendingExternalTrailerUrl = null,
-                    selectedSeasonHasPlayableTrailerMedia = cachedSeasonAvailability?.hasTrailerOrTeaser == true,
-                    selectedSeasonHasPlayableRecap = cachedSeasonAvailability?.hasRecap == true
-                )
-            }
+            enterTrailerResolvingState(selectedSeason)
 
             val year = meta.releaseInfo
                 ?.takeIf { it.isNotBlank() }
@@ -2222,12 +2227,10 @@ class MetaDetailsViewModel @Inject constructor(
         val state = _uiState.value
         idleTimerJob?.cancel()
         isPlayButtonFocused = false
-        if (BuildConfig.DEBUG) {
-            Log.d(
-                TAG,
-                "handleTrailerButtonClick titleAvailable=${state.titleHasPlayableTrailerMedia} loading=${state.isTrailerLoading} trailerUrl=${!state.trailerUrl.isNullOrBlank()} trailerExternalUrl=${!state.trailerExternalUrl.isNullOrBlank()}"
-            )
-        }
+        debugLog(
+            TAG,
+            "handleTrailerButtonClick titleAvailable=${state.titleHasPlayableTrailerMedia} loading=${state.isTrailerLoading} trailerUrl=${!state.trailerUrl.isNullOrBlank()} trailerExternalUrl=${!state.trailerExternalUrl.isNullOrBlank()}"
+        )
 
         when {
             !state.trailerUrl.isNullOrBlank() -> {
@@ -2246,9 +2249,8 @@ class MetaDetailsViewModel @Inject constructor(
             }
 
             state.titleHasPlayableTrailerMedia && !state.isTrailerLoading -> {
-                if (BuildConfig.DEBUG) {
-                    Log.d(TAG, "handleTrailerButtonClick starting trailer resolution")
-                }
+                debugLog(TAG, "handleTrailerButtonClick starting trailer resolution")
+                enterTrailerResolvingState(state.selectedSeason)
                 fetchTrailerUrl(playWhenReady = true, useSelectedSeasonForSeries = false)
             }
         }
