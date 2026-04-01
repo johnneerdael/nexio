@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
@@ -231,9 +232,17 @@ class ModernHomeTrailerBehaviorTest {
     }
 
     @Test
-    fun `modern home hero trailers never inherit muted backdrop preference`() {
-        assertFalse(resolveModernHomeHeroTrailerMuted(configuredMuted = true))
-        assertFalse(resolveModernHomeHeroTrailerMuted(configuredMuted = false))
+    fun `modern home hero trailers are muted until fullscreen is active`() {
+        assertTrue(
+            resolveModernHomeHeroTrailerMuted(
+                fullscreenTrailerActive = false
+            )
+        )
+        assertFalse(
+            resolveModernHomeHeroTrailerMuted(
+                fullscreenTrailerActive = true
+            )
+        )
     }
 
     @Test
@@ -266,5 +275,11 @@ class ModernHomeTrailerBehaviorTest {
                 hintTimedOut = true
             )
         )
+    }
+
+    @Test
+    fun `hero fullscreen hint end padding compensates for hero surface overflow`() {
+        assertEquals(76.dp, resolveModernHomeHeroFullscreenHintEndPadding(fullscreenTrailerActive = false))
+        assertEquals(20.dp, resolveModernHomeHeroFullscreenHintEndPadding(fullscreenTrailerActive = true))
     }
 }
