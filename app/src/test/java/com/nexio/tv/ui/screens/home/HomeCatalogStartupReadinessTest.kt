@@ -197,6 +197,45 @@ class HomeCatalogStartupReadinessTest {
         )
     }
 
+    @Test
+    fun `serialized trakt refresh still checks stale complete discovery rails`() {
+        val prefs = TraktCatalogPreferences(
+            enabledCatalogs = setOf(TraktCatalogIds.TRENDING_SHOWS),
+            catalogOrder = TraktCatalogIds.BUILT_IN_ORDER
+        )
+        val snapshot = TraktDiscoverySnapshot(
+            trendingShowItems = listOf(
+                MetaPreview(
+                    id = "tt1234567",
+                    type = ContentType.SERIES,
+                    name = "Sample Show",
+                    poster = null,
+                    posterShape = PosterShape.POSTER,
+                    background = null,
+                    logo = null,
+                    description = null,
+                    releaseInfo = null,
+                    imdbRating = null,
+                    genres = emptyList()
+                )
+            ),
+            updatedAtMs = 123L
+        )
+
+        assertFalse(shouldRefreshTraktDiscoveryForState(prefs, snapshot))
+        assertTrue(shouldAttemptSerializedTraktDiscoveryRefresh(prefs))
+    }
+
+    @Test
+    fun `serialized trakt refresh skips service when only up next is enabled`() {
+        val prefs = TraktCatalogPreferences(
+            enabledCatalogs = setOf(TraktCatalogIds.UP_NEXT),
+            catalogOrder = TraktCatalogIds.BUILT_IN_ORDER
+        )
+
+        assertFalse(shouldAttemptSerializedTraktDiscoveryRefresh(prefs))
+    }
+
     private fun addonWithCatalog(
         addonId: String,
         type: String,
