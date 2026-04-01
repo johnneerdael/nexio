@@ -336,14 +336,14 @@ class DebridBenchmarkStoreTest {
         scope: CoroutineScope,
         file: File? = null,
         corruptionHandler: ReplaceFileCorruptionHandler<androidx.datastore.preferences.core.Preferences> = replaceCorruptionHandler()
-    ) =
-        PreferenceDataStoreFactory.create(
+    ): androidx.datastore.core.DataStore<Preferences> {
+        val dataStoreFile = (file ?: newTempBenchmarkStoreFile()).also { it.deleteOnExit() }
+        return PreferenceDataStoreFactory.create(
             corruptionHandler = corruptionHandler,
             scope = scope,
-            produceFile = {
-                (file ?: newTempBenchmarkStoreFile()).also { it.deleteOnExit() }
-            }
+            produceFile = { dataStoreFile }
         )
+    }
 
     private fun buildStore(scope: CoroutineScope): DebridBenchmarkStore {
         return buildStore(scope, newTempBenchmarkStoreFile())
