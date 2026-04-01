@@ -10,8 +10,6 @@ def resolve_youtube_playback(
     authorization_header,
     page_id,
     auth_user,
-    js_runtime_name,
-    js_runtime_path,
     user_agent,
     accept_language,
     origin,
@@ -22,6 +20,8 @@ def resolve_youtube_playback(
         "no_warnings": True,
         "skip_download": True,
         "noplaylist": True,
+        "format": "bestvideo+bestaudio/best",
+        "compat_opts": {"prefer-vp9-sort"},
         "remote_components": ["ejs:github"],
     }
 
@@ -36,9 +36,6 @@ def resolve_youtube_playback(
         headers["Referer"] = referer
     if headers:
         ydl_opts["http_headers"] = headers
-
-    if js_runtime_name and js_runtime_path:
-        ydl_opts["js_runtimes"] = {js_runtime_name: {"path": js_runtime_path}}
 
     previous_env = {
         "YTDLP_YT_AUTHORIZATION": os.environ.get("YTDLP_YT_AUTHORIZATION"),

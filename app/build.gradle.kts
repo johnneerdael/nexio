@@ -185,6 +185,10 @@ android {
         buildConfig = true
     }
 
+    androidResources {
+        noCompress += listOf("js", "json")
+    }
+
     sourceSets {
         getByName("main") {
             jniLibs.srcDirs(
@@ -254,6 +258,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.tv:tv-material:1.0.1")
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation("androidx.javascriptengine:javascriptengine:1.0.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation(libs.androidx.tvprovider)
