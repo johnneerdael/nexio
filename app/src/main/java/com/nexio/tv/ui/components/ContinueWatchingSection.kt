@@ -35,6 +35,10 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,6 +58,7 @@ import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Text
 import androidx.compose.ui.window.Dialog
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
+import com.nexio.tv.ui.screens.home.shouldPromoteModernHomeHeroTrailerToFullscreen
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
 import androidx.compose.ui.platform.LocalContext
@@ -236,6 +241,9 @@ fun ContinueWatchingCard(
     item: ContinueWatchingItem,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
+    canPromoteHeroTrailerToFullscreen: Boolean = false,
+    fullscreenTrailerActive: Boolean = false,
+    onPromoteHeroTrailerToFullscreen: () -> Unit = {},
     modifier: Modifier = Modifier,
     cardWidth: Dp = 288.dp,
     imageHeight: Dp = 162.dp
@@ -332,6 +340,17 @@ fun ContinueWatchingCard(
         modifier = modifier
             .width(cardWidth)
             .onPreviewKeyEvent { event ->
+                if (
+                    shouldPromoteModernHomeHeroTrailerToFullscreen(
+                        key = event.key,
+                        eventType = event.type,
+                        heroTrailerPlaying = canPromoteHeroTrailerToFullscreen,
+                        fullscreenTrailerActive = fullscreenTrailerActive
+                    )
+                ) {
+                    onPromoteHeroTrailerToFullscreen()
+                    return@onPreviewKeyEvent true
+                }
                 val native = event.nativeKeyEvent
                 if (native.action == AndroidKeyEvent.ACTION_DOWN) {
                     if (native.keyCode == AndroidKeyEvent.KEYCODE_MENU) {
