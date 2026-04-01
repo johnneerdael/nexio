@@ -12,17 +12,20 @@ import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.StreamRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 
@@ -41,7 +44,7 @@ class TrailerServiceAuthFallbackTest {
     }
 
     @Test
-    fun `signed in helper miss falls back to local extractor`() = runTest {
+    fun `signed out playback uses local extractor without helper`() = runTest {
         val trailerApi = mockk<TrailerApi>(relaxed = true)
         val tmdbApi = mockk<TmdbApi>(relaxed = true)
         val inAppYouTubeExtractor = mockk<InAppYouTubeExtractor>()
@@ -58,7 +61,7 @@ class TrailerServiceAuthFallbackTest {
             videoUrl = "https://video.example/stream.m3u8",
             audioUrl = "https://audio.example/stream.m4a"
         )
-        coEvery { trailerAvailabilityService.isSignedIn() } returns true
+        coEvery { trailerAvailabilityService.isSignedIn() } returns false
         coEvery {
             trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl)
         } returns null
@@ -80,7 +83,243 @@ class TrailerServiceAuthFallbackTest {
         val resolved = service.getTrailerPlaybackSourceFromYouTubeUrl(youtubeUrl)
 
         assertEquals(localSource, resolved)
+        coVerify(exactly = 0) { trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl) }
+        coVerify(exactly = 1) { inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl) }
+    }
+
+    @Test
+    fun `signed in playback prefers native extractor before helper`() = runTest {
+        val trailerApi = mockk<TrailerApi>(relaxed = true)
+        val tmdbApi = mockk<TmdbApi>(relaxed = true)
+        val inAppYouTubeExtractor = mockk<InAppYouTubeExtractor>()
+        val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>(relaxed = true)
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val addonRepository = mockk<AddonRepository>(relaxed = true)
+        val streamRepository = mockk<StreamRepository>(relaxed = true)
+        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
+        every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings())
+
+        val youtubeUrl = "https://www.youtube.com/watch?v=testvideo02"
+        val nativeSource = TrailerPlaybackSource(
+            videoUrl = "https://video.example/native.m3u8",
+            audioUrl = "https://audio.example/native.m4a"
+        )
+        val helperSource = TrailerPlaybackSource(
+            videoUrl = "https://video.example/helper.m3u8",
+            audioUrl = "https://audio.example/helper.m4a"
+        )
+        coEvery { trailerAvailabilityService.isSignedIn() } returns true
+        coEvery { inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl) } returns nativeSource
+        coEvery { trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl) } returns helperSource
+
+        val service = TrailerService(
+            trailerApi = trailerApi,
+            tmdbApi = tmdbApi,
+            inAppYouTubeExtractor = inAppYouTubeExtractor,
+            tmdbSettingsDataStore = tmdbSettingsDataStore,
+            metadataDiskCacheStore = metadataDiskCacheStore,
+            tmdbMetadataService = tmdbMetadataService,
+            addonRepository = addonRepository,
+            streamRepository = streamRepository,
+            trailerAvailabilityService = trailerAvailabilityService,
+            clock = Clock.fixed(Instant.parse("2026-04-01T00:00:00Z"), ZoneOffset.UTC)
+        )
+
+        val resolved = service.getTrailerPlaybackSourceFromYouTubeUrl(youtubeUrl)
+
+        assertEquals(nativeSource, resolved)
+        coVerify(exactly = 1) { inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl) }
+        coVerify(exactly = 0) { trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl) }
+    }
+
+    @Test
+    fun `signed in native miss falls back to helper after native attempt`() = runTest {
+        val trailerApi = mockk<TrailerApi>(relaxed = true)
+        val tmdbApi = mockk<TmdbApi>(relaxed = true)
+        val inAppYouTubeExtractor = mockk<InAppYouTubeExtractor>()
+        val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>(relaxed = true)
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val addonRepository = mockk<AddonRepository>(relaxed = true)
+        val streamRepository = mockk<StreamRepository>(relaxed = true)
+        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
+        every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings())
+
+        val youtubeUrl = "https://www.youtube.com/watch?v=testvideo03"
+        val helperSource = TrailerPlaybackSource(
+            videoUrl = "https://video.example/helper-fallback.m3u8",
+            audioUrl = "https://audio.example/helper-fallback.m4a"
+        )
+        coEvery { trailerAvailabilityService.isSignedIn() } returns true
+        coEvery { inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl) } returns null
+        coEvery { trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl) } returns helperSource
+
+        val service = TrailerService(
+            trailerApi = trailerApi,
+            tmdbApi = tmdbApi,
+            inAppYouTubeExtractor = inAppYouTubeExtractor,
+            tmdbSettingsDataStore = tmdbSettingsDataStore,
+            metadataDiskCacheStore = metadataDiskCacheStore,
+            tmdbMetadataService = tmdbMetadataService,
+            addonRepository = addonRepository,
+            streamRepository = streamRepository,
+            trailerAvailabilityService = trailerAvailabilityService,
+            clock = Clock.fixed(Instant.parse("2026-04-01T00:00:00Z"), ZoneOffset.UTC)
+        )
+
+        val resolved = service.getTrailerPlaybackSourceFromYouTubeUrl(youtubeUrl)
+
+        assertEquals(helperSource, resolved)
+        coVerifyOrder {
+            inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl)
+            trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl)
+        }
+    }
+
+    @Test
+    fun `cached native playback source is reused while signed in`() = runTest {
+        val trailerApi = mockk<TrailerApi>(relaxed = true)
+        val tmdbApi = mockk<TmdbApi>(relaxed = true)
+        val inAppYouTubeExtractor = mockk<InAppYouTubeExtractor>()
+        val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>(relaxed = true)
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val addonRepository = mockk<AddonRepository>(relaxed = true)
+        val streamRepository = mockk<StreamRepository>(relaxed = true)
+        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
+        every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings())
+
+        val youtubeUrl = "https://www.youtube.com/watch?v=testvideo04"
+        val nativeSource = TrailerPlaybackSource(
+            videoUrl = "https://video.example/cached-native.m3u8",
+            audioUrl = "https://audio.example/cached-native.m4a"
+        )
+        coEvery { trailerAvailabilityService.isSignedIn() } returnsMany listOf(false, true)
+        coEvery { inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl) } returns nativeSource
+        coEvery { trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl) } returns null
+
+        val service = TrailerService(
+            trailerApi = trailerApi,
+            tmdbApi = tmdbApi,
+            inAppYouTubeExtractor = inAppYouTubeExtractor,
+            tmdbSettingsDataStore = tmdbSettingsDataStore,
+            metadataDiskCacheStore = metadataDiskCacheStore,
+            tmdbMetadataService = tmdbMetadataService,
+            addonRepository = addonRepository,
+            streamRepository = streamRepository,
+            trailerAvailabilityService = trailerAvailabilityService,
+            clock = Clock.fixed(Instant.parse("2026-04-01T00:00:00Z"), ZoneOffset.UTC)
+        )
+
+        val first = service.getTrailerPlaybackSourceFromYouTubeUrl(youtubeUrl)
+        val second = service.getTrailerPlaybackSourceFromYouTubeUrl(youtubeUrl)
+
+        assertEquals(nativeSource, first)
+        assertEquals(nativeSource, second)
+        coVerify(exactly = 1) { inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl) }
+        coVerify(exactly = 0) { trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl) }
+    }
+
+    @Test
+    fun `cached helper playback source is reused while signed in`() = runTest {
+        val trailerApi = mockk<TrailerApi>(relaxed = true)
+        val tmdbApi = mockk<TmdbApi>(relaxed = true)
+        val inAppYouTubeExtractor = mockk<InAppYouTubeExtractor>()
+        val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>(relaxed = true)
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val addonRepository = mockk<AddonRepository>(relaxed = true)
+        val streamRepository = mockk<StreamRepository>(relaxed = true)
+        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
+        every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings())
+
+        val youtubeUrl = "https://www.youtube.com/watch?v=testvideo05"
+        val helperSource = TrailerPlaybackSource(
+            videoUrl = "https://video.example/cached-helper.m3u8",
+            audioUrl = "https://audio.example/cached-helper.m4a"
+        )
+        coEvery { trailerAvailabilityService.isSignedIn() } returns true
+        coEvery { inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl) } returns null
+        coEvery { trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl) } returns helperSource
+
+        val service = TrailerService(
+            trailerApi = trailerApi,
+            tmdbApi = tmdbApi,
+            inAppYouTubeExtractor = inAppYouTubeExtractor,
+            tmdbSettingsDataStore = tmdbSettingsDataStore,
+            metadataDiskCacheStore = metadataDiskCacheStore,
+            tmdbMetadataService = tmdbMetadataService,
+            addonRepository = addonRepository,
+            streamRepository = streamRepository,
+            trailerAvailabilityService = trailerAvailabilityService,
+            clock = Clock.fixed(Instant.parse("2026-04-01T00:00:00Z"), ZoneOffset.UTC)
+        )
+
+        val first = service.getTrailerPlaybackSourceFromYouTubeUrl(youtubeUrl)
+        val second = service.getTrailerPlaybackSourceFromYouTubeUrl(youtubeUrl)
+
+        assertEquals(helperSource, first)
+        assertEquals(helperSource, second)
         coVerify(exactly = 1) { trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl) }
         coVerify(exactly = 1) { inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl) }
+    }
+
+    @Test
+    fun `expired cached youtube sources are discarded`() = runTest {
+        val trailerApi = mockk<TrailerApi>(relaxed = true)
+        val tmdbApi = mockk<TmdbApi>(relaxed = true)
+        val inAppYouTubeExtractor = mockk<InAppYouTubeExtractor>()
+        val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>(relaxed = true)
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val addonRepository = mockk<AddonRepository>(relaxed = true)
+        val streamRepository = mockk<StreamRepository>(relaxed = true)
+        val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
+        every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings())
+
+        val clock = MutableClock(Instant.parse("2026-04-01T00:00:00Z"))
+        val youtubeUrl = "https://www.youtube.com/watch?v=testvideo06"
+        val firstSource = TrailerPlaybackSource(videoUrl = "https://video.example/first.m3u8")
+        val secondSource = TrailerPlaybackSource(videoUrl = "https://video.example/second.m3u8")
+        coEvery { trailerAvailabilityService.isSignedIn() } returns false
+        coEvery { trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(any()) } returns null
+        coEvery { inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl) } returnsMany listOf(firstSource, secondSource)
+
+        val service = TrailerService(
+            trailerApi = trailerApi,
+            tmdbApi = tmdbApi,
+            inAppYouTubeExtractor = inAppYouTubeExtractor,
+            tmdbSettingsDataStore = tmdbSettingsDataStore,
+            metadataDiskCacheStore = metadataDiskCacheStore,
+            tmdbMetadataService = tmdbMetadataService,
+            addonRepository = addonRepository,
+            streamRepository = streamRepository,
+            trailerAvailabilityService = trailerAvailabilityService,
+            clock = clock
+        )
+
+        val first = service.getTrailerPlaybackSourceFromYouTubeUrl(youtubeUrl)
+        clock.advance(Duration.ofHours(4))
+        val second = service.getTrailerPlaybackSourceFromYouTubeUrl(youtubeUrl)
+
+        assertEquals(firstSource, first)
+        assertEquals(secondSource, second)
+        coVerify(exactly = 2) { inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl) }
+        assertNull(second?.audioUrl)
+    }
+
+    private class MutableClock(initialInstant: Instant) : Clock() {
+        private var currentInstant: Instant = initialInstant
+
+        override fun getZone(): ZoneOffset = ZoneOffset.UTC
+
+        override fun withZone(zone: java.time.ZoneId?): Clock = this
+
+        override fun instant(): Instant = currentInstant
+
+        fun advance(duration: Duration) {
+            currentInstant = currentInstant.plus(duration)
+        }
     }
 }
