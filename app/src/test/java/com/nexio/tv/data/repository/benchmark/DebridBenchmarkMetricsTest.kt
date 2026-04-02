@@ -4,6 +4,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class DebridBenchmarkMetricsTest {
 
@@ -190,6 +193,53 @@ class DebridBenchmarkMetricsTest {
         assertEquals(335.54432, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
         assertEquals(335.54432, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
         assertEquals(335.54432, sustained.peakThroughputMbps ?: 0.0, 0.00001)
+    }
+
+    @Test
+    fun `transport collector remains consistent when samples arrive from parallel threads`() {
+        val collector = DebridBenchmarkMetricsCollector()
+        val executor = Executors.newFixedThreadPool(4)
+        val ready = CountDownLatch(4)
+        val start = CountDownLatch(1)
+        val done = CountDownLatch(4)
+
+        collector.recordStartup(
+            requestStartedAtMs = 0L,
+            firstByteAtMs = 0L
+        )
+
+        repeat(4) {
+            executor.execute {
+                ready.countDown()
+                start.await(5, TimeUnit.SECONDS)
+                repeat(1_000) {
+                    collector.recordTransportBytesRead(
+                        bytesRead = 1.mb,
+                        sampleAtMs = 1.seconds
+                    )
+                }
+                done.countDown()
+            }
+        }
+
+        assertTrue(ready.await(5, TimeUnit.SECONDS))
+        start.countDown()
+        assertTrue(done.await(10, TimeUnit.SECONDS))
+        executor.shutdownNow()
+
+        collector.recordTransportBytesRead(
+            bytesRead = 4.mb,
+            sampleAtMs = 2.seconds
+        )
+
+        val sustained = collector.finishSustained()
+
+        assertEquals(4_004L * 1024L * 1024L, sustained.bytesTransferred ?: 0L)
+        assertEquals(1.seconds, sustained.elapsedMs ?: 0L)
+        assertTrue(sustained.actionable)
+        assertEquals(33_587.986432, sustained.averageThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(33_587.986432, sustained.derivedAverageThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(33_587.986432, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
     }
 
     @Test
