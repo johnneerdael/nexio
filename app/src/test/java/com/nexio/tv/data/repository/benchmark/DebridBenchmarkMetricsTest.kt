@@ -112,13 +112,13 @@ class DebridBenchmarkMetricsTest {
         val sustained = collector.finishSustained()
         val rawSamples = collector.rawSamples()
 
-        assertEquals(listOf(100.663296, 100.663296), rawSamples.throughputWindowsMbps)
-        assertEquals(24.mb, sustained.bytesTransferred ?: 0L)
+        assertEquals(listOf(33.554432, 67.108864), rawSamples.throughputWindowsMbps)
+        assertEquals(12.mb, sustained.bytesTransferred ?: 0L)
         assertEquals(2.seconds, sustained.elapsedMs ?: 0L)
-        assertEquals(100.663296, sustained.averageThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(100.663296, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(100.663296, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(100.663296, sustained.peakThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(50.331648, sustained.averageThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(33.554432, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(33.554432, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(67.108864, sustained.peakThroughputMbps ?: 0.0, 0.00001)
     }
 
     @Test
@@ -186,13 +186,13 @@ class DebridBenchmarkMetricsTest {
         val sustained = collector.finishSustained()
         val rawSamples = collector.rawSamples()
 
-        assertEquals(listOf(335.54432), rawSamples.throughputWindowsMbps)
-        assertEquals(40.mb, sustained.bytesTransferred ?: 0L)
+        assertEquals(listOf(201.326592), rawSamples.throughputWindowsMbps)
+        assertEquals(24.mb, sustained.bytesTransferred ?: 0L)
         assertEquals(1.seconds, sustained.elapsedMs ?: 0L)
-        assertEquals(335.54432, sustained.averageThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(335.54432, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(335.54432, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(335.54432, sustained.peakThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(201.326592, sustained.averageThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(201.326592, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(201.326592, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(201.326592, sustained.peakThroughputMbps ?: 0.0, 0.00001)
     }
 
     @Test
@@ -234,12 +234,12 @@ class DebridBenchmarkMetricsTest {
 
         val sustained = collector.finishSustained()
 
-        assertEquals(4_004L * 1024L * 1024L, sustained.bytesTransferred ?: 0L)
+        assertEquals(4_000L * 1024L * 1024L, sustained.bytesTransferred ?: 0L)
         assertEquals(1.seconds, sustained.elapsedMs ?: 0L)
         assertTrue(sustained.actionable)
-        assertEquals(33_587.986432, sustained.averageThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(33_587.986432, sustained.derivedAverageThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(33_587.986432, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(33_554.432, sustained.averageThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(33_554.432, sustained.derivedAverageThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(33_554.432, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
     }
 
     @Test
