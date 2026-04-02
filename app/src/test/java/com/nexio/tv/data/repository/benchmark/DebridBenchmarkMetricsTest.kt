@@ -109,13 +109,63 @@ class DebridBenchmarkMetricsTest {
         val sustained = collector.finishSustained()
         val rawSamples = collector.rawSamples()
 
-        assertEquals(listOf(67.108864, 100.663296), rawSamples.throughputWindowsMbps)
-        assertEquals(20.mb, sustained.bytesTransferred ?: 0L)
+        assertEquals(listOf(100.663296, 100.663296), rawSamples.throughputWindowsMbps)
+        assertEquals(24.mb, sustained.bytesTransferred ?: 0L)
         assertEquals(2.seconds, sustained.elapsedMs ?: 0L)
-        assertEquals(83.88608, sustained.averageThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(67.108864, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(67.108864, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(100.663296, sustained.averageThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(100.663296, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(100.663296, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
         assertEquals(100.663296, sustained.peakThroughputMbps ?: 0.0, 0.00001)
+    }
+
+    @Test
+    fun `collector preserves bytes across multiple reads in the same millisecond`() {
+        val collector = DebridBenchmarkMetricsCollector()
+
+        collector.recordStartup(
+            requestStartedAtMs = 0L,
+            firstByteAtMs = 0L
+        )
+        collector.recordBytesRead(totalBytesRead = 4.mb, sampleAtMs = 1.seconds)
+        collector.recordBytesRead(totalBytesRead = 8.mb, sampleAtMs = 1.seconds)
+        collector.recordBytesRead(totalBytesRead = 12.mb, sampleAtMs = 1.seconds)
+        collector.recordBytesRead(totalBytesRead = 16.mb, sampleAtMs = 2.seconds)
+
+        val sustained = collector.finishSustained()
+        val rawSamples = collector.rawSamples()
+
+        assertEquals(listOf(33.554432, 100.663296), rawSamples.throughputWindowsMbps)
+        assertEquals(16.mb, sustained.bytesTransferred ?: 0L)
+        assertEquals(2.seconds, sustained.elapsedMs ?: 0L)
+        assertEquals(67.108864, sustained.averageThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(33.554432, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(33.554432, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(100.663296, sustained.peakThroughputMbps ?: 0.0, 0.00001)
+    }
+
+    @Test
+    fun `transport collector preserves bytes across multiple reads in the same millisecond`() {
+        val collector = DebridBenchmarkMetricsCollector()
+
+        collector.recordStartup(
+            requestStartedAtMs = 0L,
+            firstByteAtMs = 0L
+        )
+        collector.recordTransportBytesRead(bytesRead = 4.mb, sampleAtMs = 1.seconds)
+        collector.recordTransportBytesRead(bytesRead = 8.mb, sampleAtMs = 1.seconds)
+        collector.recordTransportBytesRead(bytesRead = 12.mb, sampleAtMs = 1.seconds)
+        collector.recordTransportBytesRead(bytesRead = 16.mb, sampleAtMs = 2.seconds)
+
+        val sustained = collector.finishSustained()
+        val rawSamples = collector.rawSamples()
+
+        assertEquals(listOf(335.54432), rawSamples.throughputWindowsMbps)
+        assertEquals(40.mb, sustained.bytesTransferred ?: 0L)
+        assertEquals(1.seconds, sustained.elapsedMs ?: 0L)
+        assertEquals(335.54432, sustained.averageThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(335.54432, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(335.54432, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(335.54432, sustained.peakThroughputMbps ?: 0.0, 0.00001)
     }
 
     @Test
