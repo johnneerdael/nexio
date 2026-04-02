@@ -45,7 +45,8 @@ class OptimizedBenchmarkTransport internal constructor(
     private val sustainedThresholdElapsedMs: Long,
     private val seekProbeBytes: Long,
     private val readBufferSize: Int,
-    private val maxRecoverableFailures: Int
+    private val maxRecoverableFailures: Int,
+    private val sleepMs: (Long) -> Unit
 ) {
 
     @Inject
@@ -58,7 +59,8 @@ class OptimizedBenchmarkTransport internal constructor(
         sustainedThresholdElapsedMs = 120_000L,
         seekProbeBytes = 256L * 1024L,
         readBufferSize = 256 * 1024,
-        maxRecoverableFailures = 3
+        maxRecoverableFailures = 8,
+        sleepMs = { durationMs -> Thread.sleep(durationMs) }
     )
 
     suspend fun runProfile(
@@ -183,6 +185,7 @@ class OptimizedBenchmarkTransport internal constructor(
                         if (failure.isTimeoutLike()) {
                             recoverableTimeoutCount += 1
                         }
+                        runCatching { sleepMs(recoverableRetryBackoffMs(consecutiveRecoverableFailureCount)) }
                         when (val reopenResult = reopenReadableSource(
                             readableSourceFactory = readableSourceFactory,
                             existingReadableSource = readableSource,
@@ -317,6 +320,7 @@ class OptimizedBenchmarkTransport internal constructor(
                     if (reopenFailure.isTimeoutLike()) {
                         currentTimeoutCount += 1
                     }
+                    runCatching { sleepMs(recoverableRetryBackoffMs(currentConsecutiveFailureCount)) }
                     continue
                 }
                 return ReopenResult.Failed(
@@ -400,6 +404,16 @@ class OptimizedBenchmarkTransport internal constructor(
         return listOf(sizeBytes / 4L, sizeBytes / 2L, (sizeBytes * 3L) / 4L)
             .map { it.coerceAtMost(lastByte) }
             .distinct()
+    }
+
+    private fun recoverableRetryBackoffMs(attemptNumber: Int): Long {
+        return when (attemptNumber) {
+            1 -> 50L
+            2 -> 100L
+            3 -> 200L
+            4 -> 400L
+            else -> 500L
+        }
     }
 
     private fun nanosToMillis(valueNs: Long): Long = valueNs / 1_000_000L
