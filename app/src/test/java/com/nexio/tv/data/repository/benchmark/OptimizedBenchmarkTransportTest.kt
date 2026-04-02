@@ -147,8 +147,7 @@ class OptimizedBenchmarkTransportTest {
         val failedOnce = AtomicBoolean(false)
         val contentBytes = ByteArray(1024 * 1024) { (it % 251).toByte() }
         val failureOffsetBytes = 32 * 1024
-        val transport = buildTransport(
-            builder = object : OptimizedBenchmarkDataSourceFactoryBuilder {
+        val builder = object : OptimizedBenchmarkDataSourceFactoryBuilder {
                 override fun create(
                     candidate: DebridBenchmarkCandidate,
                     configSnapshot: DebridBenchmarkTransportConfigSnapshot,
@@ -191,8 +190,15 @@ class OptimizedBenchmarkTransportTest {
                         }
                     }
                 }
-            },
-            clock = clock
+            }
+        val transport = OptimizedBenchmarkTransport(
+            factoryBuilder = builder,
+            nanoTimeNs = clock::nowNs,
+            sustainedThresholdBytes = 320L * 1024L,
+            sustainedThresholdElapsedMs = 10_000L,
+            seekProbeBytes = 4L * 1024L,
+            readBufferSize = 32 * 1024,
+            maxRecoverableFailures = 3
         )
 
         val result = transport.runProfile(
@@ -348,6 +354,78 @@ class OptimizedBenchmarkTransportTest {
         assertEquals(DebridBenchmarkTerminationReason.COMPLETED, result.terminationReason)
         assertEquals(2, result.profile.sustained.recoverableFailureCount)
         assertEquals(0, result.profile.sustained.recoverableTimeoutCount)
+    }
+
+    @Test
+    fun `optimized transport tolerates more than three recoverable connection resets during sustained run`() = runTest {
+        val clock = FakeBenchmarkClock()
+        val contentBytes = ByteArray(1024 * 1024) { (it % 251).toByte() }
+        val failureOffsetsBytes = ArrayDeque(listOf(32 * 1024, 64 * 1024, 96 * 1024, 128 * 1024))
+        val builder = object : OptimizedBenchmarkDataSourceFactoryBuilder {
+                override fun create(
+                    candidate: DebridBenchmarkCandidate,
+                    configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    allowStartupBootstrapReuse: Boolean,
+                    transportSampleTimeMs: () -> Long,
+                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                ): BenchmarkReadableSourceFactory {
+                    return BenchmarkReadableSourceFactory {
+                        object : BenchmarkReadableSource {
+                            private var position = 0
+                            private var limit = 0
+
+                            override fun open(position: Long, length: Long): Long {
+                                val contentLength = contentBytes.size
+                                this.position = position.toInt().coerceAtMost(contentLength)
+                                limit = when {
+                                    length == C.LENGTH_UNSET.toLong() -> contentLength
+                                    else -> (this.position + length.toInt()).coerceAtMost(contentLength)
+                                }
+                                clock.advanceMs(50L)
+                                return (limit - this.position).coerceAtLeast(0).toLong()
+                            }
+
+                            override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                                if (failureOffsetsBytes.isNotEmpty() && position >= failureOffsetsBytes.first()) {
+                                    failureOffsetsBytes.removeFirst()
+                                    throw SocketException("Connection reset")
+                                }
+                                if (position >= limit) {
+                                    return C.RESULT_END_OF_INPUT
+                                }
+                                val bytesToRead = minOf(length, limit - position, 32 * 1024)
+                                System.arraycopy(contentBytes, position, buffer, offset, bytesToRead)
+                                position += bytesToRead
+                                clock.advanceMs(1_000L)
+                                return bytesToRead
+                            }
+
+                            override fun close() = Unit
+                        }
+                    }
+                }
+            }
+        val transport = OptimizedBenchmarkTransport(
+            factoryBuilder = builder,
+            nanoTimeNs = clock::nowNs,
+            sustainedThresholdBytes = 160L * 1024L,
+            sustainedThresholdElapsedMs = 5_000L,
+            seekProbeBytes = 4L * 1024L,
+            readBufferSize = 32 * 1024,
+            maxRecoverableFailures = 3
+        )
+
+        val result = transport.runProfile(
+            candidate = candidate(),
+            configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                useParallelConnections = true,
+                parallelConnectionCount = 4,
+                parallelChunkSizeMb = 8
+            )
+        )
+
+        assertEquals(DebridBenchmarkTerminationReason.COMPLETED, result.terminationReason)
+        assertEquals(4, result.profile.sustained.recoverableFailureCount)
     }
 
     private fun buildTransport(

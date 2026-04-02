@@ -137,6 +137,7 @@ class OptimizedBenchmarkTransport internal constructor(
         var totalBytesRead = 0L
         var recoverableFailureCount = 0
         var recoverableTimeoutCount = 0
+        var consecutiveRecoverableFailureCount = 0
 
         try {
             when (val openResult = reopenReadableSource(
@@ -144,7 +145,8 @@ class OptimizedBenchmarkTransport internal constructor(
                 existingReadableSource = readableSource,
                 position = 0L,
                 recoverableFailureCount = recoverableFailureCount,
-                recoverableTimeoutCount = recoverableTimeoutCount
+                recoverableTimeoutCount = recoverableTimeoutCount,
+                consecutiveRecoverableFailureCount = consecutiveRecoverableFailureCount
             )) {
                 is ReopenResult.Failed -> {
                     return StartupAndSustainedPhaseResult(
@@ -158,6 +160,7 @@ class OptimizedBenchmarkTransport internal constructor(
                     readableSource = openResult.readableSource
                     recoverableFailureCount = openResult.recoverableFailureCount
                     recoverableTimeoutCount = openResult.recoverableTimeoutCount
+                    consecutiveRecoverableFailureCount = openResult.consecutiveRecoverableFailureCount
                 }
             }
             while (true) {
@@ -174,8 +177,9 @@ class OptimizedBenchmarkTransport internal constructor(
                         recoverableFailureCount = recoverableFailureCount,
                         recoverableTimeoutCount = recoverableTimeoutCount
                     )
-                    if (failure.isRecoverable() && recoverableFailureCount < maxRecoverableFailures) {
+                    if (failure.isRecoverable() && consecutiveRecoverableFailureCount < maxRecoverableFailures) {
                         recoverableFailureCount += 1
+                        consecutiveRecoverableFailureCount += 1
                         if (failure.isTimeoutLike()) {
                             recoverableTimeoutCount += 1
                         }
@@ -184,7 +188,8 @@ class OptimizedBenchmarkTransport internal constructor(
                             existingReadableSource = readableSource,
                             position = totalBytesRead,
                             recoverableFailureCount = recoverableFailureCount,
-                            recoverableTimeoutCount = recoverableTimeoutCount
+                            recoverableTimeoutCount = recoverableTimeoutCount,
+                            consecutiveRecoverableFailureCount = consecutiveRecoverableFailureCount
                         )) {
                             is ReopenResult.Failed -> {
                                 return StartupAndSustainedPhaseResult(
@@ -198,6 +203,7 @@ class OptimizedBenchmarkTransport internal constructor(
                                 readableSource = reopenResult.readableSource
                                 recoverableFailureCount = reopenResult.recoverableFailureCount
                                 recoverableTimeoutCount = reopenResult.recoverableTimeoutCount
+                                consecutiveRecoverableFailureCount = reopenResult.consecutiveRecoverableFailureCount
                             }
                         }
                         continue
@@ -226,6 +232,7 @@ class OptimizedBenchmarkTransport internal constructor(
                 if (read <= 0) {
                     continue
                 }
+                consecutiveRecoverableFailureCount = 0
 
                 val nowNs = nanoTimeNs()
                 if (previousReadAtNs == null) {
@@ -263,13 +270,15 @@ class OptimizedBenchmarkTransport internal constructor(
         data class Opened(
             val readableSource: BenchmarkReadableSource,
             val recoverableFailureCount: Int,
-            val recoverableTimeoutCount: Int
+            val recoverableTimeoutCount: Int,
+            val consecutiveRecoverableFailureCount: Int
         ) : ReopenResult
 
         data class Failed(
             val failure: DebridBenchmarkTransportFailure,
             val recoverableFailureCount: Int,
-            val recoverableTimeoutCount: Int
+            val recoverableTimeoutCount: Int,
+            val consecutiveRecoverableFailureCount: Int
         ) : ReopenResult
     }
 
@@ -278,10 +287,12 @@ class OptimizedBenchmarkTransport internal constructor(
         existingReadableSource: BenchmarkReadableSource,
         position: Long,
         recoverableFailureCount: Int,
-        recoverableTimeoutCount: Int
+        recoverableTimeoutCount: Int,
+        consecutiveRecoverableFailureCount: Int
     ): ReopenResult {
         var currentFailureCount = recoverableFailureCount
         var currentTimeoutCount = recoverableTimeoutCount
+        var currentConsecutiveFailureCount = consecutiveRecoverableFailureCount
         var currentReadableSource = existingReadableSource
 
         while (true) {
@@ -292,15 +303,17 @@ class OptimizedBenchmarkTransport internal constructor(
                 return ReopenResult.Opened(
                     readableSource = currentReadableSource,
                     recoverableFailureCount = currentFailureCount,
-                    recoverableTimeoutCount = currentTimeoutCount
+                    recoverableTimeoutCount = currentTimeoutCount,
+                    consecutiveRecoverableFailureCount = currentConsecutiveFailureCount
                 )
             } catch (reopenError: Exception) {
                 val reopenFailure = reopenError.toTransportFailure(
                     recoverableFailureCount = currentFailureCount,
                     recoverableTimeoutCount = currentTimeoutCount
                 )
-                if (reopenFailure.isRecoverable() && currentFailureCount < maxRecoverableFailures) {
+                if (reopenFailure.isRecoverable() && currentConsecutiveFailureCount < maxRecoverableFailures) {
                     currentFailureCount += 1
+                    currentConsecutiveFailureCount += 1
                     if (reopenFailure.isTimeoutLike()) {
                         currentTimeoutCount += 1
                     }
@@ -312,7 +325,8 @@ class OptimizedBenchmarkTransport internal constructor(
                         recoverableTimeoutCount = currentTimeoutCount
                     ),
                     recoverableFailureCount = currentFailureCount,
-                    recoverableTimeoutCount = currentTimeoutCount
+                    recoverableTimeoutCount = currentTimeoutCount,
+                    consecutiveRecoverableFailureCount = currentConsecutiveFailureCount
                 )
             }
         }

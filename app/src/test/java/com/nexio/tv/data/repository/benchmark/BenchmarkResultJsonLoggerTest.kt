@@ -37,6 +37,26 @@ class BenchmarkResultJsonLoggerTest {
     }
 
     @Test
+    fun `completed benchmark event json includes derived decision metrics separate from sustained evidence`() {
+        val logger = BenchmarkResultJsonLogger { _, _ -> }
+
+        val payload = logger.buildCompletedEventJson(sampleResult())
+        val result = JsonParser.parseString(payload).asJsonObject.getAsJsonObject("result")
+        val optimizedDecision = result.getAsJsonObject("optimized").getAsJsonObject("decision")
+
+        assertEquals(170.0, optimizedDecision.get("safeSustainedBudgetMbps").asDouble, 0.0)
+        assertTrue(optimizedDecision.get("actionable").asBoolean)
+        assertEquals(
+            220.0,
+            result.getAsJsonObject("optimized")
+                .getAsJsonObject("sustained")
+                .get("averageThroughputMbps")
+                .asDouble,
+            0.0
+        )
+    }
+
+    @Test
     fun `failure outcome json includes transport candidate and partial metrics`() {
         val logger = BenchmarkResultJsonLogger { _, _ -> }
 
@@ -177,6 +197,8 @@ class BenchmarkResultJsonLoggerTest {
         p10Mbps: Double,
         averageMbps: Double,
         seekP95Ms: Long,
+        decisionSafeBudgetMbps: Double = p10Mbps * 0.85,
+        decisionActionable: Boolean = true,
         configSnapshot: DebridBenchmarkTransportConfigSnapshot? = null
     ): DebridBenchmarkTransportProfile {
         return DebridBenchmarkTransportProfile(
@@ -207,6 +229,10 @@ class BenchmarkResultJsonLoggerTest {
                 seekTtfbP99Ms = seekP95Ms + 90L,
                 seekTtfbStddevMs = 12.0,
                 seekFailRate = 0.0
+            ),
+            decision = DebridBenchmarkTransportDecisionMetrics(
+                safeSustainedBudgetMbps = decisionSafeBudgetMbps,
+                actionable = decisionActionable
             ),
             configSnapshot = configSnapshot,
             rawSamples = DebridBenchmarkRawSamples(

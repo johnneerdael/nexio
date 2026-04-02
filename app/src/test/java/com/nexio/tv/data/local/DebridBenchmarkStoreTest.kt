@@ -17,6 +17,7 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSeekMetrics
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSeekSample
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSessionMetadata
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportDecisionMetrics
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkStartupMetrics
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSustainedMetrics
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
@@ -104,6 +105,55 @@ class DebridBenchmarkStoreTest {
         val restored = reopenedStore.latestResult(DebridBenchmarkProvider.PREMIUMIZE).first()
 
         assertEquals(expected, restored)
+    }
+
+    @Test
+    fun `saving a completed comparison result persists derived decision metrics across store reopen`() = runTest {
+        val file = File.createTempFile("debrid_benchmark_store_decision", ".preferences_pb")
+        file.deleteOnExit()
+        val storeJob = SupervisorJob()
+        val storeScope = CoroutineScope(backgroundScope.coroutineContext + storeJob)
+        val expected = sampleComparisonResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            measuredAtMs = 37L
+        ).copy(
+            direct = sampleTransportProfile(
+                startupTimeMs = 180L,
+                averageMbps = 170.0,
+                p10Mbps = 150.0,
+                peakMbps = 190.0,
+                seekP95Ms = 330L,
+                seekP99Ms = 420L,
+                decisionSafeBudgetMbps = 127.5,
+                decisionActionable = true
+            ),
+            optimized = sampleTransportProfile(
+                startupTimeMs = 140L,
+                averageMbps = 220.0,
+                p10Mbps = 200.0,
+                peakMbps = 240.0,
+                seekP95Ms = 240L,
+                seekP99Ms = 320L,
+                decisionSafeBudgetMbps = 170.0,
+                decisionActionable = false,
+                configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                    useParallelConnections = true,
+                    parallelConnectionCount = 4,
+                    parallelChunkSizeMb = 8
+                )
+            )
+        )
+        val firstStore = buildStore(storeScope, file)
+
+        firstStore.saveLatest(expected)
+        storeJob.cancelAndJoin()
+
+        val reopenedStore = buildStore(backgroundScope, file)
+        val restored = reopenedStore.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first()
+
+        assertEquals(expected, restored)
+        assertEquals(127.5, restored?.direct?.decision?.safeSustainedBudgetMbps ?: 0.0, 0.0)
+        assertEquals(false, restored?.optimized?.decision?.actionable)
     }
 
     @Test
@@ -581,6 +631,8 @@ class DebridBenchmarkStoreTest {
         peakMbps: Double,
         seekP95Ms: Long,
         seekP99Ms: Long,
+        decisionSafeBudgetMbps: Double = p10Mbps * 0.85,
+        decisionActionable: Boolean = true,
         configSnapshot: DebridBenchmarkTransportConfigSnapshot? = null
     ): DebridBenchmarkTransportProfile {
         return DebridBenchmarkTransportProfile(
@@ -611,6 +663,10 @@ class DebridBenchmarkStoreTest {
                 seekTtfbP99Ms = seekP99Ms,
                 seekTtfbStddevMs = 25.0,
                 seekFailRate = 0.0
+            ),
+            decision = DebridBenchmarkTransportDecisionMetrics(
+                safeSustainedBudgetMbps = decisionSafeBudgetMbps,
+                actionable = decisionActionable
             ),
             configSnapshot = configSnapshot,
             rawSamples = DebridBenchmarkRawSamples(
