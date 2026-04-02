@@ -11,6 +11,8 @@ import com.nexio.tv.data.remote.api.ArmApi
 import com.nexio.tv.data.remote.CustomImdbClient
 import com.nexio.tv.data.remote.api.EasyDebridApi
 import com.nexio.tv.data.remote.api.GitHubReleaseApi
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransport
+import com.nexio.tv.data.repository.benchmark.DirectDiscardBenchmarkTransport
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.api.IntroDbApi
 import com.nexio.tv.data.remote.api.MDBListApi
@@ -182,6 +184,23 @@ object NetworkModule {
             }
         )
         .build()
+
+    @Provides
+    @Singleton
+    @Named("benchmark")
+    fun provideBenchmarkOkHttpClient(
+        okHttpClient: OkHttpClient
+    ): OkHttpClient = okHttpClient.newBuilder()
+        .disableDiskCacheForGetRequests()
+        .callTimeout(4, TimeUnit.MINUTES)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .build()
+
+    @Provides
+    @Singleton
+    fun provideDebridBenchmarkTransport(
+        @Named("benchmark") okHttpClient: OkHttpClient
+    ): DebridBenchmarkTransport = DirectDiscardBenchmarkTransport(okHttpClient)
 
     @Provides
     @Singleton
