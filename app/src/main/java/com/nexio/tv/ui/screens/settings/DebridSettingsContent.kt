@@ -35,6 +35,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -749,14 +750,17 @@ private fun DebridBenchmarkCompactMetricRow(
     ) {
         Text(
             text = label,
+            modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodySmall,
             color = NexioColors.TextSecondary
         )
         Spacer(modifier = Modifier.width(18.dp))
         Text(
             text = value,
+            modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodySmall,
-            color = NexioColors.TextPrimary
+            color = NexioColors.TextPrimary,
+            textAlign = TextAlign.End
         )
     }
 }

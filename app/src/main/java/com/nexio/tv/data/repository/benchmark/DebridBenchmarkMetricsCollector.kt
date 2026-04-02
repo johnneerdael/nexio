@@ -31,14 +31,12 @@ class DebridBenchmarkMetricsCollector(
     private var throughputWindowAccumulatedBytes = 0.0
     private var throughputWindowAccumulatedMs = 0L
     private var transportLastSampleAtMs: Long? = null
-    private var pendingTransportBytes = 0.0
     private var transportStallCount = 0
     private var transportMaxReadGapMs = 0L
     private val transportThroughputBuckets = mutableListOf<DebridBenchmarkThroughputBucketSample>()
     private var transportThroughputStreamStartAtMs: Long? = null
     private var transportThroughputWindowIndex = 0L
     private var transportThroughputWindowAccumulatedBytes = 0.0
-    private var transportThroughputWindowAccumulatedMs = 0L
     private val seekSamples = mutableListOf<DebridBenchmarkSeekSample>()
     private val transportStateLock = Any()
 
@@ -117,16 +115,10 @@ class DebridBenchmarkMetricsCollector(
                     transportStallCount += 1
                 }
             }
-
-            pendingTransportBytes += clampedBytesRead.toDouble()
-            if (previousSampleAtMs != null && sampleTimeMs > previousSampleAtMs) {
-                recordTransportThroughputInterval(
-                    intervalStartMs = previousSampleAtMs,
-                    intervalEndMs = sampleTimeMs,
-                    intervalBytes = pendingTransportBytes
-                )
-                pendingTransportBytes = 0.0
-            }
+            recordTransportSample(
+                bytesRead = clampedBytesRead.toDouble(),
+                sampleAtMs = sampleTimeMs
+            )
             transportLastSampleAtMs = sampleTimeMs
         }
     }
@@ -268,41 +260,21 @@ class DebridBenchmarkMetricsCollector(
         }
     }
 
-    private fun recordTransportThroughputInterval(
-        intervalStartMs: Long,
-        intervalEndMs: Long,
-        intervalBytes: Double
+    private fun recordTransportSample(
+        bytesRead: Double,
+        sampleAtMs: Long
     ) {
-        if (intervalEndMs <= intervalStartMs || intervalBytes <= 0.0) return
+        if (bytesRead <= 0.0) return
+        ensureTransportThroughputWindowStarted(sampleAtMs)
+        val streamStartAtMs = requireNotNull(transportThroughputStreamStartAtMs)
+        val offsetMs = (sampleAtMs - streamStartAtMs).coerceAtLeast(0L)
+        val targetWindowIndex = offsetMs / throughputWindowMs
 
-        var cursorMs = intervalStartMs
-        var remainingBytes = intervalBytes
-        val totalDurationMs = (intervalEndMs - intervalStartMs).toDouble()
-
-        while (cursorMs < intervalEndMs) {
-            ensureTransportThroughputWindowStarted(cursorMs)
-            val currentWindowStart = requireNotNull(currentTransportWindowStartAtMs())
-            val currentWindowEnd = currentWindowStart + throughputWindowMs
-            val segmentEndMs = minOf(intervalEndMs, currentWindowEnd)
-            val segmentDurationMs = segmentEndMs - cursorMs
-            if (segmentDurationMs <= 0L) {
-                cursorMs = segmentEndMs
-                continue
-            }
-            val segmentBytes = if (segmentEndMs == intervalEndMs) {
-                remainingBytes
-            } else {
-                intervalBytes * (segmentDurationMs.toDouble() / totalDurationMs)
-            }
-            transportThroughputWindowAccumulatedBytes += segmentBytes
-            transportThroughputWindowAccumulatedMs += segmentDurationMs
-            remainingBytes -= segmentBytes
-            cursorMs = segmentEndMs
-
-            if (transportThroughputWindowAccumulatedMs >= throughputWindowMs) {
-                flushCurrentTransportThroughputWindow(complete = true)
-            }
+        while (transportThroughputWindowIndex < targetWindowIndex) {
+            flushCurrentTransportThroughputWindow(complete = true)
         }
+
+        transportThroughputWindowAccumulatedBytes += bytesRead
     }
 
     private fun ensureThroughputWindowStarted() {
@@ -346,7 +318,14 @@ class DebridBenchmarkMetricsCollector(
     }
 
     private fun flushCurrentTransportThroughputWindow(complete: Boolean) {
-        val durationMs = transportThroughputWindowAccumulatedMs
+        val durationMs = if (complete) {
+            throughputWindowMs
+        } else {
+            val streamStartAtMs = transportThroughputStreamStartAtMs ?: return
+            val currentWindowStart = streamStartAtMs + (transportThroughputWindowIndex * throughputWindowMs)
+            val lastSampleAtMs = transportLastSampleAtMs ?: return
+            (lastSampleAtMs - currentWindowStart).coerceIn(0L, throughputWindowMs)
+        }
         if (durationMs > 0L) {
             transportThroughputBuckets += DebridBenchmarkThroughputBucketSample(
                 startOffsetMs = transportThroughputWindowIndex * throughputWindowMs,
@@ -358,7 +337,6 @@ class DebridBenchmarkMetricsCollector(
         }
         transportThroughputWindowIndex += 1L
         transportThroughputWindowAccumulatedBytes = 0.0
-        transportThroughputWindowAccumulatedMs = 0L
     }
 
     private fun completedThroughputBuckets(): List<DebridBenchmarkThroughputBucketSample> {
@@ -388,17 +366,22 @@ class DebridBenchmarkMetricsCollector(
     }
 
     private fun effectiveTransportThroughputBuckets(): List<DebridBenchmarkThroughputBucketSample> {
-        if (transportThroughputWindowAccumulatedMs <= 0L || transportThroughputWindowAccumulatedBytes <= 0.0) {
+        if (transportThroughputWindowAccumulatedBytes <= 0.0) {
             return transportThroughputBuckets.toList()
         }
+        val streamStartAtMs = transportThroughputStreamStartAtMs ?: return transportThroughputBuckets.toList()
+        val lastSampleAtMs = transportLastSampleAtMs ?: return transportThroughputBuckets.toList()
+        val currentWindowStart = streamStartAtMs + (transportThroughputWindowIndex * throughputWindowMs)
+        val durationMs = (lastSampleAtMs - currentWindowStart).coerceIn(0L, throughputWindowMs)
+        if (durationMs <= 0L) return transportThroughputBuckets.toList()
         return buildList {
             addAll(transportThroughputBuckets)
             add(
                 DebridBenchmarkThroughputBucketSample(
                     startOffsetMs = transportThroughputWindowIndex * throughputWindowMs,
-                    durationMs = transportThroughputWindowAccumulatedMs,
+                    durationMs = durationMs,
                     bytesTransferred = transportThroughputWindowAccumulatedBytes.toLong(),
-                    throughputMbps = transportThroughputWindowAccumulatedBytes.toMbps(transportThroughputWindowAccumulatedMs),
+                    throughputMbps = transportThroughputWindowAccumulatedBytes.toMbps(durationMs),
                     complete = false
                 )
             )
@@ -406,7 +389,7 @@ class DebridBenchmarkMetricsCollector(
     }
 
     private fun hasTransportSamples(): Boolean {
-        return transportThroughputBuckets.isNotEmpty() || transportThroughputWindowAccumulatedMs > 0L
+        return transportThroughputBuckets.isNotEmpty() || transportThroughputWindowAccumulatedBytes > 0.0
     }
 
     private fun completedSustainedBuckets(): List<DebridBenchmarkThroughputBucketSample> {
