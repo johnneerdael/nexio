@@ -16,7 +16,7 @@ import org.junit.Test
 class DebridBenchmarkSessionRunnerTest {
 
     @Test
-    fun `session preserves actionable direct result when optimized transport fails`() = runTest {
+    fun `session fails instead of returning a skewed completed result when optimized transport fails early`() = runTest {
         val directTransport = mockk<DirectProfileBenchmarkTransport>()
         val optimizedTransport = mockk<OptimizedBenchmarkTransport>()
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
@@ -82,15 +82,13 @@ class DebridBenchmarkSessionRunnerTest {
             observer = DebridBenchmarkObserver {}
         )
 
-        assertEquals(DebridBenchmarkTerminationReason.COMPLETED, result.terminationReason)
-        assertNull(result.failureDetails)
-        assertNotNull(result.result)
-        assertEquals(directResult.summary, result.summary)
-        assertEquals(directProfile, result.result?.direct)
-        assertEquals(false, result.result?.optimized?.sustained?.actionable)
-        assertEquals(DebridBenchmarkTransportMode.DIRECT, result.result?.comparison?.sustainedWinner)
-        assertEquals(DebridBenchmarkTransportMode.DIRECT, result.result?.comparison?.stabilityWinner)
-        assertTrue((result.result?.session?.totalElapsedMs ?: 0L) >= directResult.profile.sustained.elapsedMs ?: 0L)
+        assertEquals(DebridBenchmarkTerminationReason.FAILED, result.terminationReason)
+        assertEquals(optimizedResult.summary, result.summary)
+        assertNull(result.result)
+        assertNotNull(result.failureDetails)
+        assertEquals(DebridBenchmarkTransportMode.OPTIMIZED, result.failureDetails?.failedTransport)
+        assertEquals(directProfile, result.failureDetails?.direct)
+        assertEquals(optimizedProfile, result.failureDetails?.optimized)
     }
 
     private fun candidate(): DebridBenchmarkCandidate {
