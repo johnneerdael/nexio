@@ -7,10 +7,11 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.ui.screens.player.ParallelRangeDataSource
 import java.io.InterruptedIOException
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.TimeoutException
 import javax.inject.Inject
 import javax.inject.Named
 import kotlin.coroutines.cancellation.CancellationException
-import java.util.concurrent.ExecutionException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -39,7 +40,8 @@ class OptimizedBenchmarkTransport internal constructor(
     private val sustainedThresholdBytes: Long,
     private val sustainedThresholdElapsedMs: Long,
     private val seekProbeBytes: Long,
-    private val readBufferSize: Int
+    private val readBufferSize: Int,
+    private val maxRecoverableFailures: Int
 ) {
 
     @Inject
@@ -51,7 +53,8 @@ class OptimizedBenchmarkTransport internal constructor(
         sustainedThresholdBytes = 500L * 1024L * 1024L,
         sustainedThresholdElapsedMs = 120_000L,
         seekProbeBytes = 256L * 1024L,
-        readBufferSize = 256 * 1024
+        readBufferSize = 256 * 1024,
+        maxRecoverableFailures = 3
     )
 
     suspend fun runProfile(
@@ -87,7 +90,10 @@ class OptimizedBenchmarkTransport internal constructor(
             summary = collector.currentSummary(),
             profile = DebridBenchmarkTransportProfile(
                 startup = collector.finishStartup(),
-                sustained = collector.finishSustained(),
+                sustained = collector.finishSustained().copy(
+                    recoverableFailureCount = sustainedPhase.recoverableFailureCount,
+                    recoverableTimeoutCount = sustainedPhase.recoverableTimeoutCount
+                ),
                 seek = collector.finishSeek(),
                 configSnapshot = configSnapshot,
                 rawSamples = collector.rawSamples()
@@ -99,7 +105,9 @@ class OptimizedBenchmarkTransport internal constructor(
 
     private data class StartupAndSustainedPhaseResult(
         val terminationReason: DebridBenchmarkTerminationReason,
-        val failure: DebridBenchmarkTransportFailure? = null
+        val failure: DebridBenchmarkTransportFailure? = null,
+        val recoverableFailureCount: Int = 0,
+        val recoverableTimeoutCount: Int = 0
     )
 
     private fun runStartupAndSustainedPhase(
@@ -107,23 +115,72 @@ class OptimizedBenchmarkTransport internal constructor(
         collector: DebridBenchmarkMetricsCollector,
         observer: DebridBenchmarkObserver
     ): StartupAndSustainedPhaseResult {
-        val readableSource = readableSourceFactory.createSource()
+        var readableSource = readableSourceFactory.createSource()
         val buffer = ByteArray(readBufferSize)
         val requestStartedAtNs = nanoTimeNs()
         var previousReadAtNs: Long? = null
         var totalBytesRead = 0L
+        var recoverableFailureCount = 0
+        var recoverableTimeoutCount = 0
 
         try {
             readableSource.open(position = 0L)
             while (true) {
-                val read = readableSource.read(buffer, 0, buffer.size)
+                val read = try {
+                    readableSource.read(buffer, 0, buffer.size)
+                } catch (_: CancellationException) {
+                    return StartupAndSustainedPhaseResult(
+                        terminationReason = DebridBenchmarkTerminationReason.CANCELED,
+                        recoverableFailureCount = recoverableFailureCount,
+                        recoverableTimeoutCount = recoverableTimeoutCount
+                    )
+                } catch (error: Exception) {
+                    val failure = error.toTransportFailure(
+                        recoverableFailureCount = recoverableFailureCount,
+                        recoverableTimeoutCount = recoverableTimeoutCount
+                    )
+                    if (failure.isRecoverable() && recoverableFailureCount < maxRecoverableFailures) {
+                        recoverableFailureCount += 1
+                        if (failure.isTimeoutLike()) {
+                            recoverableTimeoutCount += 1
+                        }
+                        runCatching { readableSource.close() }
+                        readableSource = readableSourceFactory.createSource()
+                        try {
+                            readableSource.open(position = totalBytesRead.toLong())
+                        } catch (reopenError: Exception) {
+                            val reopenFailure = reopenError.toTransportFailure(
+                                recoverableFailureCount = recoverableFailureCount,
+                                recoverableTimeoutCount = recoverableTimeoutCount
+                            )
+                            return StartupAndSustainedPhaseResult(
+                                terminationReason = reopenFailure.toTerminationReason(),
+                                failure = reopenFailure,
+                                recoverableFailureCount = recoverableFailureCount,
+                                recoverableTimeoutCount = recoverableTimeoutCount
+                            )
+                        }
+                        continue
+                    }
+                    return StartupAndSustainedPhaseResult(
+                        terminationReason = failure.toTerminationReason(),
+                        failure = failure.copy(
+                            recoverableFailureCount = recoverableFailureCount,
+                            recoverableTimeoutCount = recoverableTimeoutCount
+                        ),
+                        recoverableFailureCount = recoverableFailureCount,
+                        recoverableTimeoutCount = recoverableTimeoutCount
+                    )
+                }
                 if (read == C.RESULT_END_OF_INPUT) {
                     return StartupAndSustainedPhaseResult(
                         terminationReason = DebridBenchmarkTerminationReason.FAILED,
                         failure = DebridBenchmarkTransportFailure(
                             exceptionClass = "UnexpectedEndOfInput",
                             message = "Optimized benchmark ended before sustained thresholds were met"
-                        )
+                        ),
+                        recoverableFailureCount = recoverableFailureCount,
+                        recoverableTimeoutCount = recoverableTimeoutCount
                     )
                 }
                 if (read <= 0) {
@@ -151,30 +208,12 @@ class OptimizedBenchmarkTransport internal constructor(
 
                 if (collector.shouldComplete()) {
                     return StartupAndSustainedPhaseResult(
-                        terminationReason = DebridBenchmarkTerminationReason.COMPLETED
+                        terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
+                        recoverableFailureCount = recoverableFailureCount,
+                        recoverableTimeoutCount = recoverableTimeoutCount
                     )
                 }
             }
-        } catch (_: CancellationException) {
-            return StartupAndSustainedPhaseResult(
-                terminationReason = DebridBenchmarkTerminationReason.CANCELED
-            )
-        } catch (error: InterruptedIOException) {
-            return StartupAndSustainedPhaseResult(
-                terminationReason = DebridBenchmarkTerminationReason.TIMEOUT,
-                failure = error.toTransportFailure()
-            )
-        } catch (error: Exception) {
-            val failure = error.toTransportFailure()
-            val terminationReason = if (failure.exceptionClass == "ChunkWaitTimeoutException") {
-                DebridBenchmarkTerminationReason.TIMEOUT
-            } else {
-                DebridBenchmarkTerminationReason.FAILED
-            }
-            return StartupAndSustainedPhaseResult(
-                terminationReason = terminationReason,
-                failure = failure
-            )
         } finally {
             runCatching { readableSource.close() }
         }
@@ -252,16 +291,24 @@ class OptimizedBenchmarkTransport internal constructor(
 
     private fun nanosToMillis(valueNs: Long): Long = valueNs / 1_000_000L
 
-    private fun Throwable.toTransportFailure(): DebridBenchmarkTransportFailure {
-        val root = unwrapTransportCause()
-        val chunkIndex = when (root) {
-            is ParallelRangeDataSource.ChunkTransferException -> root.chunkIndex
-            else -> null
-        }
+    private fun Throwable.toTransportFailure(
+        recoverableFailureCount: Int = 0,
+        recoverableTimeoutCount: Int = 0
+    ): DebridBenchmarkTransportFailure {
+        val wrapper = unwrapTransportCause()
+        val root = deepestCause(wrapper)
+        val chunkIndex = causesIncludingSelf(wrapper)
+            .filterIsInstance<ParallelRangeDataSource.ChunkTransferException>()
+            .firstOrNull()
+            ?.chunkIndex
         return DebridBenchmarkTransportFailure(
-            exceptionClass = root::class.java.simpleName,
-            message = root.message,
-            chunkIndex = chunkIndex
+            exceptionClass = wrapper::class.java.simpleName,
+            message = wrapper.message ?: root.message,
+            chunkIndex = chunkIndex,
+            rootCauseClass = root::class.java.simpleName,
+            rootCauseMessage = root.message,
+            recoverableFailureCount = recoverableFailureCount,
+            recoverableTimeoutCount = recoverableTimeoutCount
         )
     }
 
@@ -276,6 +323,43 @@ class OptimizedBenchmarkTransport internal constructor(
                 else -> null
             } ?: return current
             current = next
+        }
+    }
+
+    private fun DebridBenchmarkTransportFailure.isRecoverable(): Boolean {
+        return chunkIndex != null || isTimeoutLike()
+    }
+
+    private fun DebridBenchmarkTransportFailure.isTimeoutLike(): Boolean {
+        return exceptionClass == "ChunkWaitTimeoutException" ||
+            exceptionClass == "InterruptedIOException" ||
+            rootCauseClass == "TimeoutException" ||
+            rootCauseClass == "SocketTimeoutException" ||
+            rootCauseClass == "InterruptedIOException" ||
+            rootCauseMessage?.contains("timeout", ignoreCase = true) == true
+    }
+
+    private fun DebridBenchmarkTransportFailure.toTerminationReason(): DebridBenchmarkTerminationReason {
+        return if (isTimeoutLike()) {
+            DebridBenchmarkTerminationReason.TIMEOUT
+        } else {
+            DebridBenchmarkTerminationReason.FAILED
+        }
+    }
+
+    private fun deepestCause(error: Throwable): Throwable {
+        var current = error
+        while (current.cause != null && current.cause !== current) {
+            current = current.cause!!
+        }
+        return current
+    }
+
+    private fun causesIncludingSelf(error: Throwable): Sequence<Throwable> = sequence {
+        var current: Throwable? = error
+        while (current != null) {
+            yield(current)
+            current = current.cause?.takeUnless { it === current }
         }
     }
 }

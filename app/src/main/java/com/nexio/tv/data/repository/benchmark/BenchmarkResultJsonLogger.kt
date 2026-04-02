@@ -95,6 +95,10 @@ class BenchmarkResultJsonLogger internal constructor(
                             failure.exceptionClass?.let { addProperty("exceptionClass", it) }
                             failure.message?.let { addProperty("message", it) }
                             failure.chunkIndex?.let { addProperty("chunkIndex", it) }
+                            failure.rootCauseClass?.let { addProperty("rootCauseClass", it) }
+                            failure.rootCauseMessage?.let { addProperty("rootCauseMessage", it) }
+                            failure.recoverableFailureCount?.let { addProperty("recoverableFailureCount", it) }
+                            failure.recoverableTimeoutCount?.let { addProperty("recoverableTimeoutCount", it) }
                         })
                     }
                     details.candidate?.let { add("candidate", it.toJsonObject()) }
@@ -151,6 +155,14 @@ class BenchmarkResultJsonLogger internal constructor(
                 append(" chunk_index=")
                 append(it)
             }
+            failureDetails?.transportFailure?.recoverableFailureCount?.let {
+                append(" recoverable_failures=")
+                append(it)
+            }
+            failureDetails?.transportFailure?.recoverableTimeoutCount?.let {
+                append(" recoverable_timeouts=")
+                append(it)
+            }
             summary.startupTimeMs?.let {
                 append(" startup_ms=")
                 append(it)
@@ -173,6 +185,10 @@ class BenchmarkResultJsonLogger internal constructor(
             }
             failureDetails?.transportFailure?.message?.let {
                 append(" failure_message=")
+                append(it.replace(' ', '_'))
+            }
+            failureDetails?.transportFailure?.rootCauseMessage?.let {
+                append(" root_failure_message=")
                 append(it.replace(' ', '_'))
             }
         }
@@ -271,6 +287,8 @@ private fun DebridBenchmarkTransportProfile.toJsonObject(): JsonObject {
             sustained.averageThroughputMbps?.let { addProperty("averageThroughputMbps", it) }
             sustained.derivedAverageThroughputMbps?.let { addProperty("derivedAverageThroughputMbps", it) }
             addProperty("actionable", sustained.actionable)
+            addProperty("recoverableFailureCount", sustained.recoverableFailureCount)
+            addProperty("recoverableTimeoutCount", sustained.recoverableTimeoutCount)
             sustained.p10ThroughputMbps?.let { addProperty("p10ThroughputMbps", it) }
             sustained.p50ThroughputMbps?.let { addProperty("p50ThroughputMbps", it) }
             sustained.peakThroughputMbps?.let { addProperty("peakThroughputMbps", it) }

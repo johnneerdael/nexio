@@ -34,7 +34,11 @@ data class DebridBenchmarkSummary(
 data class DebridBenchmarkTransportFailure(
     val exceptionClass: String? = null,
     val message: String? = null,
-    val chunkIndex: Long? = null
+    val chunkIndex: Long? = null,
+    val rootCauseClass: String? = null,
+    val rootCauseMessage: String? = null,
+    val recoverableFailureCount: Int? = null,
+    val recoverableTimeoutCount: Int? = null
 )
 
 data class DebridBenchmarkFailureDetails(
@@ -172,6 +176,8 @@ data class DebridBenchmarkSustainedMetrics(
     val averageThroughputMbps: Double? = null,
     val derivedAverageThroughputMbps: Double? = null,
     val actionable: Boolean = true,
+    val recoverableFailureCount: Int = 0,
+    val recoverableTimeoutCount: Int = 0,
     val p10ThroughputMbps: Double? = null,
     val p50ThroughputMbps: Double? = null,
     val peakThroughputMbps: Double? = null,
