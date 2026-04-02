@@ -21,6 +21,12 @@ import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.data.local.DebridBenchmarkStore
+import com.nexio.tv.data.repository.benchmark.BenchmarkAwareStreamScorer
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
+import com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionLogger
+import com.nexio.tv.data.repository.benchmark.ShadowRequestContext
 import com.nexio.tv.domain.model.AddonStreams
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.Stream
@@ -66,6 +72,9 @@ class StreamScreenViewModel @Inject constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
+    private val debridBenchmarkStore: DebridBenchmarkStore,
+    private val benchmarkAwareStreamScorer: BenchmarkAwareStreamScorer,
+    private val shadowAutoPlayDecisionLogger: ShadowAutoPlayDecisionLogger,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var autoPlayHandledForSession = false
@@ -78,6 +87,8 @@ class StreamScreenViewModel @Inject constructor(
     private var streamFeatureFlags: StreamFeatureFlags = StreamFeatureFlags()
     private var streamDiagnosticsEnabled: Boolean = false
     private var streamParserCache = StreamPresentationEngine.ParserCache()
+    private var latestRealDebridBenchmarkResult: DebridBenchmarkResult? = null
+    private var latestPremiumizeBenchmarkResult: DebridBenchmarkResult? = null
     private val noStreamsGateController = NoStreamsGateController(
         scope = viewModelScope,
         delayMs = NO_STREAMS_EMPTY_STATE_DELAY_MS
@@ -145,6 +156,16 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     init {
+        viewModelScope.launch {
+            debridBenchmarkStore.latestResult(DebridBenchmarkProvider.REAL_DEBRID).collectLatest { result ->
+                latestRealDebridBenchmarkResult = result
+            }
+        }
+        viewModelScope.launch {
+            debridBenchmarkStore.latestResult(DebridBenchmarkProvider.PREMIUMIZE).collectLatest { result ->
+                latestPremiumizeBenchmarkResult = result
+            }
+        }
         viewModelScope.launch {
             debugSettingsDataStore.streamDiagnosticsEnabled.collectLatest { enabled ->
                 streamDiagnosticsEnabled = enabled
@@ -358,10 +379,14 @@ class StreamScreenViewModel @Inject constructor(
                     }
                 }
 
-                fun applyOrganizedPayload(organizedResult: OrganizedStreamPayload) {
+                suspend fun applyOrganizedPayload(organizedResult: OrganizedStreamPayload) {
                     logPresentationDiagnostics(
                         origin = "stream_screen",
                         organizedResult = organizedResult.organizedStreams
+                    )
+                    logShadowAutoPlayDecision(
+                        requestId = requestId,
+                        organizedStreams = organizedResult.organizedStreams.items
                     )
 
                     val selectedAutoPlayStream = organizedResult.selectedAutoPlayStream
@@ -831,6 +856,47 @@ class StreamScreenViewModel @Inject constructor(
             episodeTitle = episodeName,
             runtimeMinutes = runtime ?: _uiState.value.runtime
         )
+    }
+
+    private suspend fun logShadowAutoPlayDecision(
+        requestId: String,
+        organizedStreams: List<com.nexio.tv.core.stream.StreamCardModel>
+    ) {
+        val startedAtMs = System.currentTimeMillis()
+        try {
+            val benchmarks = buildMap {
+                latestRealDebridBenchmarkResult?.let {
+                    put(DebridBenchmarkProvider.REAL_DEBRID, it)
+                }
+                latestPremiumizeBenchmarkResult?.let {
+                    put(DebridBenchmarkProvider.PREMIUMIZE, it)
+                }
+            }
+            val event = withContext(Dispatchers.Default) {
+                benchmarkAwareStreamScorer.score(
+                    request = ShadowRequestContext(
+                        requestId = requestId,
+                        videoId = videoId,
+                        contentType = contentType,
+                        title = title,
+                        season = season,
+                        episode = episode,
+                        runtimeMinutes = runtime ?: _uiState.value.runtime
+                    ),
+                    streams = organizedStreams,
+                    benchmarkSessions = benchmarks
+                )
+            }
+            shadowAutoPlayDecisionLogger.log(
+                event.copy(
+                    timingsMs = (System.currentTimeMillis() - startedAtMs).coerceAtLeast(0L)
+                )
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.w(TAG, "Shadow autoplay scoring failed: ${error.message}")
+        }
     }
 
     private fun logPresentationDiagnostics(
