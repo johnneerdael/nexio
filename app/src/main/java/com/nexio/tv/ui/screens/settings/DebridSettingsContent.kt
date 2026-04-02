@@ -4,6 +4,8 @@ package com.nexio.tv.ui.screens.settings
 
 import android.view.KeyEvent
 import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +30,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -62,6 +65,7 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkRuntimeState
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
+import com.nexio.tv.data.repository.benchmark.safeSustainedBudgetMbps
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -564,49 +568,44 @@ private fun DebridBenchmarkResultDialog(
     NexioDialog(
         onDismiss = onDismiss,
         title = stringResource(R.string.debrid_benchmark_results_title, providerName),
-        subtitle = stringResource(R.string.debrid_benchmark_results_subtitle),
-        width = 980.dp
+        subtitle = null,
+        width = 1360.dp
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            result.candidate?.filename?.let {
-                DebridBenchmarkMetricRow(
-                    label = stringResource(R.string.debrid_benchmark_label_file),
-                    value = it
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(28.dp)
+            ) {
+                result.candidate?.host?.let {
+                    DebridBenchmarkHeaderMetric(
+                        modifier = Modifier.weight(1f),
+                        label = stringResource(R.string.debrid_benchmark_label_host),
+                        value = it
+                    )
+                }
+                DebridBenchmarkHeaderMetric(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.debrid_benchmark_label_measured_at),
+                    value = formatBenchmarkMeasuredAt(result.measuredAtMs)
                 )
             }
-            result.candidate?.host?.let {
-                DebridBenchmarkMetricRow(
-                    label = stringResource(R.string.debrid_benchmark_label_host),
-                    value = it
-                )
-            }
-            result.candidate?.sizeBytes?.let {
-                DebridBenchmarkMetricRow(
-                    label = stringResource(R.string.debrid_benchmark_label_file_size),
-                    value = formatBenchmarkBytes(it)
-                )
-            }
-            DebridBenchmarkMetricRow(
-                label = stringResource(R.string.debrid_benchmark_label_measured_at),
-                value = formatBenchmarkMeasuredAt(result.measuredAtMs)
-            )
 
             if (result.direct != null && result.optimized != null) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    horizontalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
-                    DebridBenchmarkProfileCard(
+                    DebridBenchmarkHighlightsCard(
                         modifier = Modifier.weight(1f),
                         title = stringResource(R.string.debrid_benchmark_column_direct),
                         subtitle = null,
                         profile = result.direct,
                         unavailable = unavailable
                     )
-                    DebridBenchmarkProfileCard(
+                    DebridBenchmarkHighlightsCard(
                         modifier = Modifier.weight(1f),
                         title = stringResource(R.string.debrid_benchmark_column_optimized),
                         subtitle = result.optimized.configSnapshot?.let { formatBenchmarkConfigSnapshot(it) },
@@ -614,6 +613,11 @@ private fun DebridBenchmarkResultDialog(
                         unavailable = unavailable
                     )
                 }
+                DebridBenchmarkComparisonHighlights(
+                    comparison = result.comparison,
+                    direct = result.direct,
+                    optimized = result.optimized
+                )
             } else {
                 DebridBenchmarkMetricRow(
                     label = stringResource(R.string.debrid_benchmark_metric_startup),
@@ -655,7 +659,7 @@ private fun DebridBenchmarkResultDialog(
 }
 
 @Composable
-private fun DebridBenchmarkProfileCard(
+private fun DebridBenchmarkHighlightsCard(
     modifier: Modifier,
     title: String,
     subtitle: String?,
@@ -663,12 +667,22 @@ private fun DebridBenchmarkProfileCard(
     unavailable: String
 ) {
     Column(
-        modifier = modifier.padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        modifier = modifier
+            .background(
+                color = NexioColors.BackgroundCard,
+                shape = RoundedCornerShape(14.dp)
+            )
+            .border(
+                width = 1.dp,
+                color = NexioColors.Border,
+                shape = RoundedCornerShape(14.dp)
+            )
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             color = NexioColors.TextPrimary
         )
         subtitle?.let {
@@ -678,53 +692,25 @@ private fun DebridBenchmarkProfileCard(
                 color = NexioColors.TextSecondary
             )
         }
-        DebridBenchmarkMetricRow(
+        DebridBenchmarkCompactMetricRow(
             label = stringResource(R.string.debrid_benchmark_metric_initial_ttfb),
             value = profile.startup.initialTtfbMs?.let(::formatBenchmarkLatency) ?: unavailable
         )
-        DebridBenchmarkMetricRow(
+        DebridBenchmarkCompactMetricRow(
+            label = stringResource(R.string.debrid_benchmark_metric_safe_budget),
+            value = profile.safeSustainedBudgetMbps()?.let(::formatBenchmarkThroughput) ?: unavailable
+        )
+        DebridBenchmarkCompactMetricRow(
             label = stringResource(R.string.debrid_benchmark_metric_average_throughput),
             value = profile.sustained.averageThroughputMbps?.let(::formatBenchmarkThroughput) ?: unavailable
         )
-        DebridBenchmarkMetricRow(
-            label = stringResource(R.string.debrid_benchmark_metric_p10_throughput),
-            value = profile.sustained.p10ThroughputMbps?.let(::formatBenchmarkThroughput) ?: unavailable
-        )
-        DebridBenchmarkMetricRow(
-            label = stringResource(R.string.debrid_benchmark_metric_peak_throughput),
-            value = profile.sustained.peakThroughputMbps?.let(::formatBenchmarkThroughput) ?: unavailable
-        )
-        DebridBenchmarkMetricRow(
-            label = stringResource(R.string.debrid_benchmark_metric_throughput_stddev),
-            value = profile.sustained.throughputStddevMbps?.let(::formatBenchmarkThroughput) ?: unavailable
-        )
-        DebridBenchmarkMetricRow(
-            label = stringResource(R.string.debrid_benchmark_metric_throughput_cv),
-            value = profile.sustained.throughputCv?.let(::formatBenchmarkCv) ?: unavailable
-        )
-        DebridBenchmarkMetricRow(
-            label = stringResource(R.string.debrid_benchmark_metric_stall_count),
-            value = profile.sustained.stallCount?.toString() ?: unavailable
-        )
-        DebridBenchmarkMetricRow(
-            label = stringResource(R.string.debrid_benchmark_metric_max_read_gap),
-            value = profile.sustained.maxReadGapMs?.let(::formatBenchmarkLatency) ?: unavailable
-        )
-        DebridBenchmarkMetricRow(
-            label = stringResource(R.string.debrid_benchmark_metric_seek_p50),
-            value = profile.seek.seekTtfbP50Ms?.let(::formatBenchmarkLatency) ?: unavailable
-        )
-        DebridBenchmarkMetricRow(
+        DebridBenchmarkCompactMetricRow(
             label = stringResource(R.string.debrid_benchmark_metric_seek_p95),
             value = profile.seek.seekTtfbP95Ms?.let(::formatBenchmarkLatency) ?: unavailable
         )
-        DebridBenchmarkMetricRow(
-            label = stringResource(R.string.debrid_benchmark_metric_seek_p99),
-            value = profile.seek.seekTtfbP99Ms?.let(::formatBenchmarkLatency) ?: unavailable
-        )
-        DebridBenchmarkMetricRow(
-            label = stringResource(R.string.debrid_benchmark_metric_seek_fail_rate),
-            value = profile.seek.seekFailRate?.let(::formatBenchmarkPercent) ?: unavailable
+        DebridBenchmarkCompactMetricRow(
+            label = stringResource(R.string.debrid_benchmark_metric_stability),
+            value = formatBenchmarkStability(profile)
         )
     }
 }
@@ -748,6 +734,97 @@ private fun DebridBenchmarkMetricRow(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             color = NexioColors.TextPrimary
+        )
+    }
+}
+
+@Composable
+private fun DebridBenchmarkCompactMetricRow(
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = NexioColors.TextSecondary
+        )
+        Spacer(modifier = Modifier.width(18.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            color = NexioColors.TextPrimary
+        )
+    }
+}
+
+@Composable
+private fun DebridBenchmarkHeaderMetric(
+    modifier: Modifier = Modifier,
+    label: String,
+    value: String
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = NexioColors.TextSecondary
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = NexioColors.TextPrimary
+        )
+    }
+}
+
+@Composable
+private fun DebridBenchmarkComparisonHighlights(
+    comparison: com.nexio.tv.data.repository.benchmark.DebridBenchmarkComparisonSummary?,
+    direct: com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportProfile,
+    optimized: com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportProfile
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = NexioColors.BackgroundCard,
+                shape = RoundedCornerShape(14.dp)
+            )
+            .border(
+                width = 1.dp,
+                color = NexioColors.Border,
+                shape = RoundedCornerShape(14.dp)
+            )
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.debrid_benchmark_comparison_title),
+            style = MaterialTheme.typography.titleSmall,
+            color = NexioColors.TextPrimary
+        )
+        DebridBenchmarkCompactMetricRow(
+            label = stringResource(R.string.debrid_benchmark_metric_sustained_winner),
+            value = formatBenchmarkWinner(comparison?.sustainedWinner)
+        )
+        DebridBenchmarkCompactMetricRow(
+            label = stringResource(R.string.debrid_benchmark_metric_seek_winner),
+            value = formatBenchmarkWinner(comparison?.seekWinner)
+        )
+        DebridBenchmarkCompactMetricRow(
+            label = stringResource(R.string.debrid_benchmark_metric_stability_winner),
+            value = formatBenchmarkWinner(comparison?.stabilityWinner)
+        )
+        DebridBenchmarkCompactMetricRow(
+            label = stringResource(R.string.debrid_benchmark_metric_gain_over_direct),
+            value = formatBenchmarkGainOverDirect(direct, optimized)
         )
     }
 }
@@ -797,6 +874,53 @@ private fun formatBenchmarkLatency(durationMs: Long): String {
         "${String.format(Locale.US, "%.2f", durationMs / 1_000.0)} s"
     } else {
         "${durationMs} ms"
+    }
+}
+
+@Composable
+private fun formatBenchmarkWinner(
+    mode: com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode?
+): String {
+    return stringResource(
+        when (mode) {
+            com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode.OPTIMIZED ->
+                R.string.debrid_benchmark_column_optimized
+            com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode.DIRECT,
+            null -> R.string.debrid_benchmark_column_direct
+        }
+    )
+}
+
+private fun formatBenchmarkStability(
+    profile: com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportProfile
+): String {
+    val cv = profile.sustained.throughputCv
+    val stalls = profile.sustained.stallCount
+    val gap = profile.sustained.maxReadGapMs
+    return when {
+        cv != null && stalls != null && gap != null && cv <= 0.05 && stalls == 0 && gap <= 200L ->
+            "Excellent"
+        cv != null && stalls != null && gap != null && cv <= 0.08 && stalls <= 1 && gap <= 350L ->
+            "Stable"
+        cv != null && cv <= 0.12 -> "Variable"
+        else -> "Unstable"
+    }
+}
+
+private fun formatBenchmarkGainOverDirect(
+    direct: com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportProfile,
+    optimized: com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportProfile
+): String {
+    val directBudget = direct.safeSustainedBudgetMbps()
+    val optimizedBudget = optimized.safeSustainedBudgetMbps()
+    if (directBudget == null || optimizedBudget == null) {
+        return "Not available"
+    }
+    val delta = optimizedBudget - directBudget
+    return if (delta >= 0.0) {
+        "+${String.format(Locale.US, "%.1f", delta)} Mbps"
+    } else {
+        "${String.format(Locale.US, "%.1f", delta)} Mbps"
     }
 }
 

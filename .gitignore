@@ -33,6 +33,10 @@ scripts/live_app_logs.sh
 docs/tv_qr_login.sql
 docss
 benchmark
+!app/src/main/java/com/nexio/tv/data/repository/benchmark/
+!app/src/main/java/com/nexio/tv/data/repository/benchmark/**
+!app/src/test/java/com/nexio/tv/data/repository/benchmark/
+!app/src/test/java/com/nexio/tv/data/repository/benchmark/**
 .mcp.json
 /.codex
 db/

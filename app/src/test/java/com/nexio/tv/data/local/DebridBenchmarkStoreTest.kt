@@ -23,6 +23,12 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportConfigSnapshot
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportProfile
+import com.nexio.tv.data.repository.benchmark.AudioEncodingSupport
+import com.nexio.tv.data.repository.benchmark.CodecSupport
+import com.nexio.tv.data.repository.benchmark.DeviceAudioOutputCapabilities
+import com.nexio.tv.data.repository.benchmark.DeviceCapabilitySnapshot
+import com.nexio.tv.data.repository.benchmark.DeviceHdrType
+import com.nexio.tv.data.repository.benchmark.DeviceVideoDecodeCapabilities
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -74,6 +80,27 @@ class DebridBenchmarkStoreTest {
 
         val reopenedStore = buildStore(backgroundScope, file)
         val restored = reopenedStore.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first()
+
+        assertEquals(expected, restored)
+    }
+
+    @Test
+    fun `saving a completed comparison result persists embedded device capabilities`() = runTest {
+        val file = File.createTempFile("debrid_benchmark_store_device", ".preferences_pb")
+        file.deleteOnExit()
+        val storeJob = SupervisorJob()
+        val storeScope = CoroutineScope(backgroundScope.coroutineContext + storeJob)
+        val expected = sampleComparisonResult(
+            provider = DebridBenchmarkProvider.PREMIUMIZE,
+            measuredAtMs = 27L
+        ).copy(device = sampleDeviceSnapshot())
+        val firstStore = buildStore(storeScope, file)
+
+        firstStore.saveLatest(expected)
+        storeJob.cancelAndJoin()
+
+        val reopenedStore = buildStore(backgroundScope, file)
+        val restored = reopenedStore.latestResult(DebridBenchmarkProvider.PREMIUMIZE).first()
 
         assertEquals(expected, restored)
     }
@@ -483,8 +510,9 @@ class DebridBenchmarkStoreTest {
                 host = "cdn.example.com",
                 directUrlFingerprint = "abc123"
             ),
+            device = sampleDeviceSnapshot(),
             session = DebridBenchmarkSessionMetadata(
-                benchmarkVersion = 2,
+                benchmarkVersion = 3,
                 executionOrder = listOf(
                     DebridBenchmarkPhaseExecution(
                         phase = DebridBenchmarkPhase.STARTUP,
@@ -503,6 +531,45 @@ class DebridBenchmarkStoreTest {
                 seekWinner = DebridBenchmarkTransportMode.OPTIMIZED,
                 stabilityWinner = DebridBenchmarkTransportMode.OPTIMIZED
             )
+        )
+    }
+
+    private fun sampleDeviceSnapshot(): DeviceCapabilitySnapshot {
+        return DeviceCapabilitySnapshot(
+            model = "Shield",
+            manufacturer = "NVIDIA",
+            sdkInt = 35,
+            displayHdrTypes = setOf(DeviceHdrType.DOLBY_VISION, DeviceHdrType.HDR10),
+            videoDecode = DeviceVideoDecodeCapabilities(
+                h264 = CodecSupport(
+                    hardwareAccelerated = true,
+                    softwareOnlyAvailable = false,
+                    secureSupported = true
+                ),
+                hevc = CodecSupport(
+                    hardwareAccelerated = true,
+                    softwareOnlyAvailable = false,
+                    secureSupported = true
+                ),
+                av1 = CodecSupport(
+                    hardwareAccelerated = false,
+                    softwareOnlyAvailable = true,
+                    secureSupported = false
+                ),
+                dolbyVision = CodecSupport(
+                    hardwareAccelerated = true,
+                    softwareOnlyAvailable = false,
+                    secureSupported = true
+                )
+            ),
+            audioOutput = DeviceAudioOutputCapabilities(
+                ac3 = AudioEncodingSupport(supported = true, passthroughLikely = true),
+                eac3 = AudioEncodingSupport(supported = true, passthroughLikely = true),
+                truehd = AudioEncodingSupport(supported = true, passthroughLikely = true),
+                dts = AudioEncodingSupport(supported = true, passthroughLikely = true),
+                dtshd = AudioEncodingSupport(supported = false, passthroughLikely = false)
+            ),
+            capturedAtMs = 123_456L
         )
     }
 

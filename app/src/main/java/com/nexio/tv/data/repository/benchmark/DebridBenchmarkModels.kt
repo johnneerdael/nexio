@@ -83,6 +83,63 @@ data class DebridBenchmarkCandidateMetadata(
     val directUrlFingerprint: String? = null
 )
 
+enum class DeviceHdrType {
+    DOLBY_VISION,
+    HDR10,
+    HDR10_PLUS,
+    HLG;
+
+    val wireKey: String
+        get() = when (this) {
+            DOLBY_VISION -> "dolby_vision"
+            HDR10 -> "hdr10"
+            HDR10_PLUS -> "hdr10_plus"
+            HLG -> "hlg"
+        }
+
+    companion object {
+        private val byWireKey = entries.associateBy { it.wireKey }
+
+        fun fromWireKey(wireKey: String): DeviceHdrType? = byWireKey[wireKey]
+    }
+}
+
+data class CodecSupport(
+    val hardwareAccelerated: Boolean,
+    val softwareOnlyAvailable: Boolean,
+    val secureSupported: Boolean
+)
+
+data class DeviceVideoDecodeCapabilities(
+    val h264: CodecSupport? = null,
+    val hevc: CodecSupport? = null,
+    val av1: CodecSupport? = null,
+    val dolbyVision: CodecSupport? = null
+)
+
+data class AudioEncodingSupport(
+    val supported: Boolean,
+    val passthroughLikely: Boolean
+)
+
+data class DeviceAudioOutputCapabilities(
+    val ac3: AudioEncodingSupport = AudioEncodingSupport(false, false),
+    val eac3: AudioEncodingSupport = AudioEncodingSupport(false, false),
+    val truehd: AudioEncodingSupport = AudioEncodingSupport(false, false),
+    val dts: AudioEncodingSupport = AudioEncodingSupport(false, false),
+    val dtshd: AudioEncodingSupport = AudioEncodingSupport(false, false)
+)
+
+data class DeviceCapabilitySnapshot(
+    val model: String? = null,
+    val manufacturer: String? = null,
+    val sdkInt: Int,
+    val displayHdrTypes: Set<DeviceHdrType> = emptySet(),
+    val videoDecode: DeviceVideoDecodeCapabilities = DeviceVideoDecodeCapabilities(),
+    val audioOutput: DeviceAudioOutputCapabilities = DeviceAudioOutputCapabilities(),
+    val capturedAtMs: Long
+)
+
 data class DebridBenchmarkSessionMetadata(
     val benchmarkVersion: Int,
     val executionOrder: List<DebridBenchmarkPhaseExecution> = emptyList(),
@@ -179,6 +236,7 @@ data class DebridBenchmarkResult(
     val summary: DebridBenchmarkSummary,
     val terminationReason: DebridBenchmarkTerminationReason,
     val candidate: DebridBenchmarkCandidateMetadata? = null,
+    val device: DeviceCapabilitySnapshot? = null,
     val session: DebridBenchmarkSessionMetadata? = null,
     val direct: DebridBenchmarkTransportProfile? = null,
     val optimized: DebridBenchmarkTransportProfile? = null,
