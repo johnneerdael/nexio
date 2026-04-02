@@ -7,6 +7,7 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.ui.screens.player.ParallelRangeDataSource
 import java.io.InterruptedIOException
+import java.net.SocketException
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeoutException
 import javax.inject.Inject
@@ -30,7 +31,9 @@ internal fun interface OptimizedBenchmarkDataSourceFactoryBuilder {
     fun create(
         candidate: DebridBenchmarkCandidate,
         configSnapshot: DebridBenchmarkTransportConfigSnapshot,
-        allowStartupBootstrapReuse: Boolean
+        allowStartupBootstrapReuse: Boolean,
+        transportSampleTimeMs: () -> Long,
+        onTransportBytesDownloaded: (Long, Long) -> Unit
     ): BenchmarkReadableSourceFactory
 }
 
@@ -67,19 +70,30 @@ class OptimizedBenchmarkTransport internal constructor(
             requiredTransferredBytes = sustainedThresholdBytes,
             requiredElapsedMs = sustainedThresholdElapsedMs
         )
-        val readableSourceFactory = factoryBuilder.create(
+        val sustainedReadableSourceFactory = factoryBuilder.create(
             candidate = candidate,
             configSnapshot = configSnapshot,
-            allowStartupBootstrapReuse = false
+            allowStartupBootstrapReuse = false,
+            transportSampleTimeMs = { nanosToMillis(nanoTimeNs()) },
+            onTransportBytesDownloaded = { bytesRead, sampleAtMs ->
+                collector.recordTransportBytesRead(bytesRead = bytesRead, sampleAtMs = sampleAtMs)
+            }
+        )
+        val seekReadableSourceFactory = factoryBuilder.create(
+            candidate = candidate,
+            configSnapshot = configSnapshot,
+            allowStartupBootstrapReuse = false,
+            transportSampleTimeMs = { nanosToMillis(nanoTimeNs()) },
+            onTransportBytesDownloaded = { _, _ -> }
         )
         val sustainedPhase = runStartupAndSustainedPhase(
-            readableSourceFactory = readableSourceFactory,
+            readableSourceFactory = sustainedReadableSourceFactory,
             collector = collector,
             observer = observer
         )
         if (sustainedPhase.terminationReason == DebridBenchmarkTerminationReason.COMPLETED) {
             runSeekPhase(
-                readableSourceFactory = readableSourceFactory,
+                readableSourceFactory = seekReadableSourceFactory,
                 collector = collector,
                 seekTargets = seekTargets,
                 sourceSizeBytes = candidate.sourceSizeBytes
@@ -327,7 +341,7 @@ class OptimizedBenchmarkTransport internal constructor(
     }
 
     private fun DebridBenchmarkTransportFailure.isRecoverable(): Boolean {
-        return chunkIndex != null || isTimeoutLike()
+        return chunkIndex != null || isTimeoutLike() || isConnectionResetLike()
     }
 
     private fun DebridBenchmarkTransportFailure.isTimeoutLike(): Boolean {
@@ -337,6 +351,15 @@ class OptimizedBenchmarkTransport internal constructor(
             rootCauseClass == "SocketTimeoutException" ||
             rootCauseClass == "InterruptedIOException" ||
             rootCauseMessage?.contains("timeout", ignoreCase = true) == true
+    }
+
+    private fun DebridBenchmarkTransportFailure.isConnectionResetLike(): Boolean {
+        return exceptionClass == SocketException::class.java.simpleName ||
+            rootCauseClass == SocketException::class.java.simpleName ||
+            message?.contains("connection reset", ignoreCase = true) == true ||
+            rootCauseMessage?.contains("connection reset", ignoreCase = true) == true ||
+            message?.contains("broken pipe", ignoreCase = true) == true ||
+            rootCauseMessage?.contains("broken pipe", ignoreCase = true) == true
     }
 
     private fun DebridBenchmarkTransportFailure.toTerminationReason(): DebridBenchmarkTerminationReason {
@@ -371,7 +394,9 @@ private class DefaultOptimizedBenchmarkDataSourceFactoryBuilder(
     override fun create(
         candidate: DebridBenchmarkCandidate,
         configSnapshot: DebridBenchmarkTransportConfigSnapshot,
-        allowStartupBootstrapReuse: Boolean
+        allowStartupBootstrapReuse: Boolean,
+        transportSampleTimeMs: () -> Long,
+        onTransportBytesDownloaded: (Long, Long) -> Unit
     ): BenchmarkReadableSourceFactory {
         val upstreamFactory = OkHttpDataSource.Factory(okHttpClient).apply {
             setDefaultRequestProperties(candidate.headers)
@@ -385,6 +410,8 @@ private class DefaultOptimizedBenchmarkDataSourceFactoryBuilder(
                     ?: PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT).coerceAtLeast(2),
                 chunkSize = (configSnapshot.parallelChunkSizeMb
                     ?: PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB).toLong() * 1024L * 1024L,
+                transportSampleTimeMs = transportSampleTimeMs,
+                onTransportBytesDownloaded = onTransportBytesDownloaded,
                 allowStartupBootstrapReuse = allowStartupBootstrapReuse
             )
         }

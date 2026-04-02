@@ -37,6 +37,8 @@ internal class ParallelRangeDataSource(
     private val parallelConnections: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
     private val chunkSize: Long = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB.toLong() * 1024 * 1024,
     private val shouldAllowBackgroundPrefetch: () -> Boolean = { true },
+    private val transportSampleTimeMs: () -> Long = { SystemClock.elapsedRealtime() },
+    private val onTransportBytesDownloaded: (Long, Long) -> Unit = { _, _ -> },
     private val onResolvedUri: (Uri?) -> Unit = {},
     private val onReadPositionAdvanced: (Long) -> Unit = {},
     private val consumeBootstrapCache: (DataSpec) -> BootstrapCacheEntry? = { null },
@@ -434,6 +436,7 @@ internal class ParallelRangeDataSource(
                 val read = ds.read(buffer, totalRead, maxRead)
                 if (read == C.RESULT_END_OF_INPUT) break
                 totalRead += read
+                onTransportBytesDownloaded(read.toLong(), transportSampleTimeMs())
             }
         } catch (e: Exception) {
             releaseBuffer(buffer)
@@ -553,6 +556,8 @@ internal class ParallelRangeDataSource(
         private val parallelConnections: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
         private val chunkSize: Long = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB.toLong() * 1024 * 1024,
         private val shouldAllowBackgroundPrefetch: () -> Boolean = { true },
+        private val transportSampleTimeMs: () -> Long = { SystemClock.elapsedRealtime() },
+        private val onTransportBytesDownloaded: (Long, Long) -> Unit = { _, _ -> },
         private val onResolvedUri: (Uri?) -> Unit = {},
         private val onReadPositionAdvanced: (Long) -> Unit = {},
         private val allowStartupBootstrapReuse: Boolean = true
@@ -566,6 +571,8 @@ internal class ParallelRangeDataSource(
                 parallelConnections = parallelConnections,
                 chunkSize = chunkSize,
                 shouldAllowBackgroundPrefetch = shouldAllowBackgroundPrefetch,
+                transportSampleTimeMs = transportSampleTimeMs,
+                onTransportBytesDownloaded = onTransportBytesDownloaded,
                 onResolvedUri = onResolvedUri,
                 onReadPositionAdvanced = onReadPositionAdvanced,
                 consumeBootstrapCache = { dataSpec ->
