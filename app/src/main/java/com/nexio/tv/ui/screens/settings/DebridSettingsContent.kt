@@ -61,6 +61,7 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkRuntimeState
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -643,6 +644,25 @@ class DebridSettingsViewModel @Inject constructor(
             torBoxService.refreshAccountState()
             easyDebridService.refreshAccountState()
         }
+
+        viewModelScope.launch {
+            debridBenchmarkService.outcomes.collect { outcome ->
+                messages.tryEmit(
+                    when (outcome.terminationReason) {
+                        DebridBenchmarkTerminationReason.COMPLETED ->
+                            "${outcome.provider.displayName()} benchmark saved"
+                        DebridBenchmarkTerminationReason.NO_PLAYABLE_LIBRARY_ITEM ->
+                            "No playable ${outcome.provider.displayName()} library item available for benchmarking"
+                        DebridBenchmarkTerminationReason.CANCELED ->
+                            "${outcome.provider.displayName()} benchmark canceled"
+                        DebridBenchmarkTerminationReason.TIMEOUT ->
+                            "${outcome.provider.displayName()} benchmark timed out"
+                        DebridBenchmarkTerminationReason.FAILED ->
+                            "${outcome.provider.displayName()} benchmark failed"
+                    }
+                )
+            }
+        }
     }
 
     fun startRealDebrid() {
@@ -766,5 +786,12 @@ class DebridSettingsViewModel @Inject constructor(
             latestResult = latestResult,
             activeSummary = if (isRunning) activeRun.summary else null
         )
+    }
+
+    private fun DebridBenchmarkProvider.displayName(): String {
+        return when (this) {
+            DebridBenchmarkProvider.REAL_DEBRID -> "Real-Debrid"
+            DebridBenchmarkProvider.PREMIUMIZE -> "Premiumize"
+        }
     }
 }

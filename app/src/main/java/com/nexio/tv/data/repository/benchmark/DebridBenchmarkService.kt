@@ -11,7 +11,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -38,6 +41,7 @@ class DebridBenchmarkService internal constructor(
     private val _activeState = MutableStateFlow<DebridBenchmarkRuntimeState>(
         DebridBenchmarkRuntimeState.Idle
     )
+    private val _outcomes = MutableSharedFlow<DebridBenchmarkOutcome>(extraBufferCapacity = 4)
     private var activeJob: Job? = null
 
     @Inject
@@ -54,6 +58,7 @@ class DebridBenchmarkService internal constructor(
     )
 
     val activeState: StateFlow<DebridBenchmarkRuntimeState> = _activeState.asStateFlow()
+    val outcomes: SharedFlow<DebridBenchmarkOutcome> = _outcomes.asSharedFlow()
 
     fun latestResult(provider: DebridBenchmarkProvider): Flow<DebridBenchmarkResult?> {
         return store.latestResult(provider)
@@ -94,6 +99,11 @@ class DebridBenchmarkService internal constructor(
         try {
             val candidate = resolver.resolve(provider)
             if (candidate == null) {
+                emitOutcome(
+                    provider = provider,
+                    summary = DebridBenchmarkSummary(),
+                    terminationReason = DebridBenchmarkTerminationReason.NO_PLAYABLE_LIBRARY_ITEM
+                )
                 return
             }
 
@@ -114,14 +124,37 @@ class DebridBenchmarkService internal constructor(
                         measuredAtMs = nowMs(),
                         summary = transportResult.summary,
                         terminationReason = transportResult.terminationReason
-                    )
+                        )
                 )
             }
+            emitOutcome(
+                provider = provider,
+                summary = transportResult.summary,
+                terminationReason = transportResult.terminationReason
+            )
         } catch (_: CancellationException) {
-            // Cancellation is reflected through active state reset and transport cancellation.
+            emitOutcome(
+                provider = provider,
+                summary = DebridBenchmarkSummary(),
+                terminationReason = DebridBenchmarkTerminationReason.CANCELED
+            )
         } finally {
             clearActiveState()
         }
+    }
+
+    private suspend fun emitOutcome(
+        provider: DebridBenchmarkProvider,
+        summary: DebridBenchmarkSummary,
+        terminationReason: DebridBenchmarkTerminationReason
+    ) {
+        _outcomes.emit(
+            DebridBenchmarkOutcome(
+                provider = provider,
+                summary = summary,
+                terminationReason = terminationReason
+            )
+        )
     }
 
     private suspend fun clearActiveState() {

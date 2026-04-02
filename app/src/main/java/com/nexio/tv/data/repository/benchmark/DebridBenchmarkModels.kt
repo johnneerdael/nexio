@@ -63,6 +63,12 @@ data class DebridBenchmarkResult(
     val terminationReason: DebridBenchmarkTerminationReason
 )
 
+data class DebridBenchmarkOutcome(
+    val provider: DebridBenchmarkProvider,
+    val summary: DebridBenchmarkSummary,
+    val terminationReason: DebridBenchmarkTerminationReason
+)
+
 data class DebridBenchmarkCandidate(
     val provider: DebridBenchmarkProvider,
     val directUrl: String,
