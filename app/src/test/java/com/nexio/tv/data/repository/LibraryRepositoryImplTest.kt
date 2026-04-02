@@ -7,10 +7,13 @@ import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.PosterShape
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -68,5 +71,58 @@ class LibraryRepositoryImplTest {
         assertEquals(LibrarySourceMode.TRAKT, repository.sourceMode.first())
         assertEquals(traktTabs, repository.listTabs.first())
         assertEquals(traktItems, repository.libraryItems.first())
+    }
+
+    @Test
+    fun `debrid startup refresh cannot block restored trakt cache emission`() = runTest {
+        val traktAuthState = MutableStateFlow(false)
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val traktLibraryService = mockk<TraktLibraryService>()
+        val debridLibraryService = mockk<DebridLibraryService>()
+        val traktTabs = listOf(
+            LibraryListTab(
+                key = TraktLibraryService.WATCHLIST_KEY,
+                title = "Watchlist",
+                type = LibraryListTab.Type.WATCHLIST
+            )
+        )
+        val traktItems = listOf(
+            LibraryEntry(
+                id = "tt7654321",
+                type = "movie",
+                name = "Warm Cache Movie",
+                poster = null,
+                posterShape = PosterShape.POSTER,
+                background = null,
+                logo = null,
+                description = null,
+                releaseInfo = null,
+                imdbRating = null,
+                genres = emptyList(),
+                addonBaseUrl = null,
+                listKeys = setOf(TraktLibraryService.WATCHLIST_KEY)
+            )
+        )
+        val blockedListTabs = flow<List<LibraryListTab>> { awaitCancellation() }
+        val blockedItems = flow<List<LibraryEntry>> { awaitCancellation() }
+
+        every { traktAuthDataStore.isEffectivelyAuthenticated } returns traktAuthState
+        every { traktLibraryService.observeHasCache() } returns flowOf(true)
+        every { traktLibraryService.observeAllItems() } returns flowOf(traktItems)
+        every { traktLibraryService.observeListTabs() } returns flowOf(traktTabs)
+        every { traktLibraryService.observeIsRefreshing() } returns flowOf(false)
+        every { debridLibraryService.observeIsConnected() } returns flowOf(false)
+        every { debridLibraryService.observeIsRefreshing() } returns flowOf(false)
+        every { debridLibraryService.observeItems() } returns blockedItems
+        every { debridLibraryService.observeListTabs() } returns blockedListTabs
+
+        val repository = LibraryRepositoryImpl(
+            traktAuthDataStore = traktAuthDataStore,
+            traktLibraryService = traktLibraryService,
+            debridLibraryService = debridLibraryService
+        )
+
+        assertEquals(traktTabs, withTimeout(100) { repository.listTabs.first() })
+        assertEquals(traktItems, withTimeout(100) { repository.libraryItems.first() })
     }
 }
