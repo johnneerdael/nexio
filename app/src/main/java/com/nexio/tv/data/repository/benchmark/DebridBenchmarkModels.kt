@@ -31,9 +31,16 @@ data class DebridBenchmarkSummary(
     val elapsedMs: Long = 0L
 )
 
+data class DebridBenchmarkTransportFailure(
+    val exceptionClass: String? = null,
+    val message: String? = null,
+    val chunkIndex: Long? = null
+)
+
 data class DebridBenchmarkFailureDetails(
     val candidate: DebridBenchmarkCandidateMetadata? = null,
     val failedTransport: DebridBenchmarkTransportMode? = null,
+    val transportFailure: DebridBenchmarkTransportFailure? = null,
     val direct: DebridBenchmarkTransportProfile? = null,
     val optimized: DebridBenchmarkTransportProfile? = null
 )
@@ -159,7 +166,12 @@ data class DebridBenchmarkStartupMetrics(
 )
 
 data class DebridBenchmarkSustainedMetrics(
+    val collectorVersion: Int = 1,
+    val samplingMode: String? = null,
+    val bucketMs: Long? = null,
     val averageThroughputMbps: Double? = null,
+    val derivedAverageThroughputMbps: Double? = null,
+    val actionable: Boolean = true,
     val p10ThroughputMbps: Double? = null,
     val p50ThroughputMbps: Double? = null,
     val peakThroughputMbps: Double? = null,
@@ -179,6 +191,14 @@ data class DebridBenchmarkSeekMetrics(
     val seekFailRate: Double? = null
 )
 
+data class DebridBenchmarkThroughputBucketSample(
+    val startOffsetMs: Long,
+    val durationMs: Long,
+    val bytesTransferred: Long,
+    val throughputMbps: Double,
+    val complete: Boolean
+)
+
 data class DebridBenchmarkTransportConfigSnapshot(
     val useParallelConnections: Boolean? = null,
     val parallelConnectionCount: Int? = null,
@@ -193,6 +213,7 @@ data class DebridBenchmarkSeekSample(
 
 data class DebridBenchmarkRawSamples(
     val throughputWindowsMbps: List<Double> = emptyList(),
+    val throughputBuckets: List<DebridBenchmarkThroughputBucketSample> = emptyList(),
     val seekSamples: List<DebridBenchmarkSeekSample> = emptyList()
 )
 

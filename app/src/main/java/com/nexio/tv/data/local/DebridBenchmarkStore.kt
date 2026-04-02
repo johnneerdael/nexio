@@ -29,6 +29,7 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportConfigSnapshot
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportProfile
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkThroughputBucketSample
 import com.nexio.tv.data.repository.benchmark.DeviceAudioOutputCapabilities
 import com.nexio.tv.data.repository.benchmark.DeviceCapabilitySnapshot
 import com.nexio.tv.data.repository.benchmark.DeviceHdrType
@@ -243,7 +244,11 @@ class DebridBenchmarkStore internal constructor(
     }
 
     private fun DebridBenchmarkSustainedMetrics.isValid(): Boolean {
-        return averageThroughputMbps.isNonNegativeFiniteOrNull() &&
+        return collectorVersion > 0 &&
+            samplingMode?.isNotBlank() != false &&
+            bucketMs?.let { it > 0L } != false &&
+            averageThroughputMbps.isNonNegativeFiniteOrNull() &&
+            derivedAverageThroughputMbps.isNonNegativeFiniteOrNull() &&
             p10ThroughputMbps.isNonNegativeFiniteOrNull() &&
             p50ThroughputMbps.isNonNegativeFiniteOrNull() &&
             peakThroughputMbps.isNonNegativeFiniteOrNull() &&
@@ -298,8 +303,17 @@ class DebridBenchmarkStore internal constructor(
             (!succeeded || ttfbMs != null)
     }
 
+    private fun DebridBenchmarkThroughputBucketSample.isValid(): Boolean {
+        return startOffsetMs >= 0L &&
+            durationMs > 0L &&
+            bytesTransferred >= 0L &&
+            throughputMbps.isFinite() &&
+            throughputMbps >= 0.0
+    }
+
     private fun DebridBenchmarkRawSamples.isValid(): Boolean {
         return throughputWindowsMbps.all { it.isFinite() && it >= 0.0 } &&
+            throughputBuckets.all { it.isValid() } &&
             seekSamples.all { it.isValid() }
     }
 
@@ -424,7 +438,12 @@ class DebridBenchmarkStore internal constructor(
                 startupFailureRate = startupJson.optionalStrictDoubleOrNull("startupFailureRate")
             ),
             sustained = DebridBenchmarkSustainedMetrics(
+                collectorVersion = sustainedJson.optionalStrictIntegralIntOrNull("collectorVersion") ?: 1,
+                samplingMode = sustainedJson.stringOrNull("samplingMode"),
+                bucketMs = sustainedJson.optionalStrictIntegralLongOrNull("bucketMs"),
                 averageThroughputMbps = sustainedJson.optionalStrictDoubleOrNull("averageThroughputMbps"),
+                derivedAverageThroughputMbps = sustainedJson.optionalStrictDoubleOrNull("derivedAverageThroughputMbps"),
+                actionable = sustainedJson.optionalStrictBooleanOrNull("actionable") ?: true,
                 p10ThroughputMbps = sustainedJson.optionalStrictDoubleOrNull("p10ThroughputMbps"),
                 p50ThroughputMbps = sustainedJson.optionalStrictDoubleOrNull("p50ThroughputMbps"),
                 peakThroughputMbps = sustainedJson.optionalStrictDoubleOrNull("peakThroughputMbps"),
@@ -452,6 +471,27 @@ class DebridBenchmarkStore internal constructor(
             rawSamples = DebridBenchmarkRawSamples(
                 throughputWindowsMbps = rawSamplesJson?.arrayOrEmpty("throughputWindowsMbps")?.map { sample ->
                     sample.asStrictNonNegativeDouble()
+                } ?: emptyList(),
+                throughputBuckets = rawSamplesJson?.arrayOrEmpty("throughputBuckets")?.map { sample ->
+                    val bucketJson = sample.asJsonObjectOrThrow()
+                    DebridBenchmarkThroughputBucketSample(
+                        startOffsetMs = bucketJson.strictIntegralLongOrNull("startOffsetMs")
+                            ?.takeIf { it >= 0L }
+                            ?: throw InvalidDebridBenchmarkPayload(),
+                        durationMs = bucketJson.strictIntegralLongOrNull("durationMs")
+                            ?.takeIf { it > 0L }
+                            ?: throw InvalidDebridBenchmarkPayload(),
+                        throughputMbps = bucketJson.optionalStrictDoubleOrNull("throughputMbps")
+                            ?.takeIf { it.isFinite() && it >= 0.0 }
+                            ?: throw InvalidDebridBenchmarkPayload(),
+                        bytesTransferred = bucketJson.strictIntegralLongOrNull("bytesTransferred")
+                            ?.takeIf { it >= 0L }
+                            ?: (((bucketJson.optionalStrictDoubleOrNull("throughputMbps")
+                            ?: throw InvalidDebridBenchmarkPayload()) * requireNotNull(bucketJson.strictIntegralLongOrNull("durationMs")) * 1_000.0) / 8.0)
+                                .toLong(),
+                        complete = bucketJson.strictBooleanOrNull("complete")
+                            ?: throw InvalidDebridBenchmarkPayload()
+                    )
                 } ?: emptyList(),
                 seekSamples = rawSamplesJson?.arrayOrEmpty("seekSamples")?.map { sample ->
                     val seekSampleJson = sample.asJsonObjectOrThrow()

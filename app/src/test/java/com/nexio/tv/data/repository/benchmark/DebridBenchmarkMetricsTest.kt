@@ -66,6 +66,60 @@ class DebridBenchmarkMetricsTest {
     }
 
     @Test
+    fun `collector aggregates sub-second reads into fixed throughput windows`() {
+        val collector = DebridBenchmarkMetricsCollector()
+
+        collector.recordStartup(
+            requestStartedAtMs = 0L,
+            firstByteAtMs = 0L
+        )
+        collector.recordBytesRead(totalBytesRead = 4.mb, sampleAtMs = 250L)
+        collector.recordBytesRead(totalBytesRead = 8.mb, sampleAtMs = 500L)
+        collector.recordBytesRead(totalBytesRead = 12.mb, sampleAtMs = 750L)
+        collector.recordBytesRead(totalBytesRead = 16.mb, sampleAtMs = 1.seconds)
+
+        val sustained = collector.finishSustained()
+        val rawSamples = collector.rawSamples()
+
+        assertEquals(listOf(134.217728), rawSamples.throughputWindowsMbps)
+        assertEquals(16.mb, rawSamples.throughputBuckets.single().bytesTransferred)
+        assertEquals(134.217728, sustained.averageThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(134.217728, sustained.derivedAverageThroughputMbps ?: 0.0, 0.00001)
+        assertTrue(sustained.actionable)
+        assertEquals(134.217728, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(134.217728, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(134.217728, sustained.peakThroughputMbps ?: 0.0, 0.00001)
+    }
+
+    @Test
+    fun `safe sustained budget is disabled when sustained profile is marked non actionable`() {
+        val profile = DebridBenchmarkTransportProfile(
+            startup = DebridBenchmarkStartupMetrics(
+                initialTtfbMs = 100L,
+                startupFailureRate = 0.0
+            ),
+            sustained = DebridBenchmarkSustainedMetrics(
+                averageThroughputMbps = 64.0,
+                derivedAverageThroughputMbps = 540.0,
+                actionable = false,
+                p10ThroughputMbps = 60.0,
+                p50ThroughputMbps = 64.0,
+                peakThroughputMbps = 66.0,
+                throughputStddevMbps = 1.0,
+                throughputCv = 0.01,
+                stallCount = 0,
+                maxReadGapMs = 100L,
+                bytesTransferred = 8_000_000_000L,
+                elapsedMs = 120_000L
+            ),
+            seek = DebridBenchmarkSeekMetrics(),
+            rawSamples = DebridBenchmarkRawSamples()
+        )
+
+        assertEquals(null, profile.safeSustainedBudgetMbps())
+    }
+
+    @Test
     fun `collector reports seek p50 p95 and p99 from seek samples`() {
         val collector = DebridBenchmarkMetricsCollector()
 

@@ -20,6 +20,7 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkStartupMetrics
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSustainedMetrics
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkThroughputBucketSample
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportConfigSnapshot
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportProfile
@@ -588,7 +589,12 @@ class DebridBenchmarkStoreTest {
                 startupFailureRate = 0.0
             ),
             sustained = DebridBenchmarkSustainedMetrics(
+                collectorVersion = 2,
+                samplingMode = "fixed_time_bucket",
+                bucketMs = 1_000L,
                 averageThroughputMbps = averageMbps,
+                derivedAverageThroughputMbps = averageMbps,
+                actionable = true,
                 p10ThroughputMbps = p10Mbps,
                 p50ThroughputMbps = averageMbps,
                 peakThroughputMbps = peakMbps,
@@ -609,6 +615,15 @@ class DebridBenchmarkStoreTest {
             configSnapshot = configSnapshot,
             rawSamples = DebridBenchmarkRawSamples(
                 throughputWindowsMbps = listOf(averageMbps, p10Mbps, peakMbps),
+                throughputBuckets = listOf(
+                    DebridBenchmarkThroughputBucketSample(
+                        startOffsetMs = 0L,
+                        durationMs = 1_000L,
+                        bytesTransferred = ((averageMbps * 1_000_000.0 / 8.0) / 1_000.0).toLong(),
+                        throughputMbps = averageMbps,
+                        complete = true
+                    )
+                ),
                 seekSamples = listOf(
                     DebridBenchmarkSeekSample(
                         targetOffsetBytes = 10_000_000L,

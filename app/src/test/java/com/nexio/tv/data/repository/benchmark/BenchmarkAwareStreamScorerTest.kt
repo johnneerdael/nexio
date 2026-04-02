@@ -295,6 +295,8 @@ class BenchmarkAwareStreamScorerTest {
             ),
             sustained = DebridBenchmarkSustainedMetrics(
                 averageThroughputMbps = averageMbps,
+                derivedAverageThroughputMbps = averageMbps,
+                actionable = true,
                 p10ThroughputMbps = p10Mbps,
                 p50ThroughputMbps = averageMbps,
                 peakThroughputMbps = averageMbps + 25.0,

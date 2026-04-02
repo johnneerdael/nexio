@@ -7,8 +7,15 @@ import kotlin.math.sqrt
 class DebridBenchmarkMetricsCollector(
     private val requiredTransferredBytes: Long = 500L * 1024L * 1024L,
     private val requiredElapsedMs: Long = 120_000L,
-    private val stallThresholdMs: Long = 2_000L
+    private val stallThresholdMs: Long = 2_000L,
+    private val throughputWindowMs: Long = 1_000L
 ) {
+    companion object {
+        private const val COLLECTOR_VERSION = 2
+        private const val SAMPLING_MODE_FIXED_TIME_BUCKET = "fixed_time_bucket"
+        private const val CONSISTENCY_TOLERANCE_RATIO = 0.10
+    }
+
     private var requestStartedAtMs: Long? = null
     private var firstByteAtMs: Long? = null
     private var totalBytesRead = 0L
@@ -16,7 +23,11 @@ class DebridBenchmarkMetricsCollector(
     private var lastSampleBytesRead = 0L
     private var stallCount = 0
     private var maxReadGapMs = 0L
-    private val throughputWindowsMbps = mutableListOf<Double>()
+    private val throughputBuckets = mutableListOf<DebridBenchmarkThroughputBucketSample>()
+    private var throughputStreamStartAtMs: Long? = null
+    private var throughputWindowIndex = 0L
+    private var throughputWindowAccumulatedBytes = 0.0
+    private var throughputWindowAccumulatedMs = 0L
     private val seekSamples = mutableListOf<DebridBenchmarkSeekSample>()
 
     fun recordStartup(
@@ -26,6 +37,7 @@ class DebridBenchmarkMetricsCollector(
         this.requestStartedAtMs = requestStartedAtMs.coerceAtLeast(0L)
         if (this.firstByteAtMs == null) {
             this.firstByteAtMs = firstByteAtMs.coerceAtLeast(this.requestStartedAtMs ?: 0L)
+            throughputStreamStartAtMs = this.firstByteAtMs
         }
     }
 
@@ -41,13 +53,21 @@ class DebridBenchmarkMetricsCollector(
             val deltaMs = (sampleTimeMs - previousSampleAtMs).coerceAtLeast(0L)
             val deltaBytes = (clampedBytesRead - lastSampleBytesRead).coerceAtLeast(0L)
             if (deltaMs > 0L) {
-                throughputWindowsMbps += deltaBytes.toMbps(deltaMs)
+                recordThroughputInterval(
+                    intervalStartMs = previousSampleAtMs,
+                    intervalEndMs = sampleTimeMs,
+                    intervalBytes = deltaBytes.toDouble()
+                )
             }
         } else {
             val windowStartMs = firstByteAtMs ?: requestStartedAtMs
             val deltaMs = windowStartMs?.let { sampleTimeMs - it }?.coerceAtLeast(0L) ?: 0L
             if (deltaMs > 0L) {
-                throughputWindowsMbps += clampedBytesRead.toMbps(deltaMs)
+                recordThroughputInterval(
+                    intervalStartMs = requireNotNull(windowStartMs),
+                    intervalEndMs = sampleTimeMs,
+                    intervalBytes = clampedBytesRead.toDouble()
+                )
             }
         }
 
@@ -94,11 +114,28 @@ class DebridBenchmarkMetricsCollector(
     }
 
     fun finishSustained(): DebridBenchmarkSustainedMetrics {
-        val sortedWindows = throughputWindowsMbps.sorted()
+        val completedBuckets = completedThroughputBuckets()
+        val sortedWindows = completedBuckets.map { it.throughputMbps }.sorted()
         val average = sortedWindows.takeIf { it.isNotEmpty() }?.average()
+        val completedBytesTransferred = completedBuckets.sumOf { it.bytesTransferred }
+        val completedElapsedMs = completedBuckets.sumOf { it.durationMs }
+        val derivedAverage = completedBytesTransferred
+            .takeIf { completedElapsedMs > 0L }
+            ?.toMbps(completedElapsedMs)
         val stddev = sortedWindows.standardDeviation(average)
+        val actionable = average != null &&
+            derivedAverage != null &&
+            average.isWithinRatio(
+                other = derivedAverage,
+                toleranceRatio = CONSISTENCY_TOLERANCE_RATIO
+            )
         return DebridBenchmarkSustainedMetrics(
+            collectorVersion = COLLECTOR_VERSION,
+            samplingMode = SAMPLING_MODE_FIXED_TIME_BUCKET,
+            bucketMs = throughputWindowMs,
             averageThroughputMbps = average,
+            derivedAverageThroughputMbps = derivedAverage,
+            actionable = actionable,
             p10ThroughputMbps = sortedWindows.percentileNearestRank(0.10),
             p50ThroughputMbps = sortedWindows.percentileNearestRank(0.50),
             peakThroughputMbps = sortedWindows.maxOrNull(),
@@ -112,8 +149,8 @@ class DebridBenchmarkMetricsCollector(
             },
             stallCount = stallCount,
             maxReadGapMs = maxReadGapMs,
-            bytesTransferred = totalBytesRead,
-            elapsedMs = currentSummary().elapsedMs
+            bytesTransferred = completedBytesTransferred,
+            elapsedMs = completedElapsedMs
         )
     }
 
@@ -137,13 +174,112 @@ class DebridBenchmarkMetricsCollector(
 
     fun rawSamples(): DebridBenchmarkRawSamples {
         return DebridBenchmarkRawSamples(
-            throughputWindowsMbps = throughputWindowsMbps.toList(),
+            throughputWindowsMbps = effectiveThroughputBuckets().map { it.throughputMbps },
+            throughputBuckets = effectiveThroughputBuckets(),
             seekSamples = seekSamples.toList()
         )
     }
 
+    private fun recordThroughputInterval(
+        intervalStartMs: Long,
+        intervalEndMs: Long,
+        intervalBytes: Double
+    ) {
+        if (intervalEndMs <= intervalStartMs || intervalBytes <= 0.0) return
+
+        var cursorMs = intervalStartMs
+        var remainingBytes = intervalBytes
+        val totalDurationMs = (intervalEndMs - intervalStartMs).toDouble()
+
+        while (cursorMs < intervalEndMs) {
+            ensureThroughputWindowStarted()
+            val currentWindowStart = requireNotNull(currentWindowStartAtMs())
+            val currentWindowEnd = currentWindowStart + throughputWindowMs
+            val segmentEndMs = minOf(intervalEndMs, currentWindowEnd)
+            val segmentDurationMs = segmentEndMs - cursorMs
+            if (segmentDurationMs <= 0L) {
+                cursorMs = segmentEndMs
+                continue
+            }
+            val segmentBytes = if (segmentEndMs == intervalEndMs) {
+                remainingBytes
+            } else {
+                intervalBytes * (segmentDurationMs.toDouble() / totalDurationMs)
+            }
+            throughputWindowAccumulatedBytes += segmentBytes
+            throughputWindowAccumulatedMs += segmentDurationMs
+            remainingBytes -= segmentBytes
+            cursorMs = segmentEndMs
+
+            if (throughputWindowAccumulatedMs >= throughputWindowMs) {
+                flushCurrentThroughputWindow(complete = true)
+            }
+        }
+    }
+
+    private fun ensureThroughputWindowStarted() {
+        if (throughputStreamStartAtMs == null) {
+            throughputStreamStartAtMs = firstByteAtMs ?: requestStartedAtMs
+        }
+    }
+
+    private fun currentWindowStartAtMs(): Long? {
+        val streamStartAtMs = throughputStreamStartAtMs ?: return null
+        return streamStartAtMs + (throughputWindowIndex * throughputWindowMs)
+    }
+
+    private fun flushCurrentThroughputWindow(complete: Boolean) {
+        val durationMs = throughputWindowAccumulatedMs
+        if (durationMs > 0L) {
+            throughputBuckets += DebridBenchmarkThroughputBucketSample(
+                startOffsetMs = throughputWindowIndex * throughputWindowMs,
+                durationMs = durationMs,
+                bytesTransferred = throughputWindowAccumulatedBytes.toLong(),
+                throughputMbps = throughputWindowAccumulatedBytes.toMbps(durationMs),
+                complete = complete
+            )
+        }
+        throughputWindowIndex += 1L
+        throughputWindowAccumulatedBytes = 0.0
+        throughputWindowAccumulatedMs = 0L
+    }
+
+    private fun completedThroughputBuckets(): List<DebridBenchmarkThroughputBucketSample> {
+        return throughputBuckets.filter { it.complete }
+    }
+
+    private fun effectiveThroughputBuckets(): List<DebridBenchmarkThroughputBucketSample> {
+        if (throughputWindowAccumulatedMs <= 0L || throughputWindowAccumulatedBytes <= 0.0) {
+            return throughputBuckets.toList()
+        }
+        return buildList {
+            addAll(throughputBuckets)
+            add(
+                DebridBenchmarkThroughputBucketSample(
+                    startOffsetMs = throughputWindowIndex * throughputWindowMs,
+                    durationMs = throughputWindowAccumulatedMs,
+                    bytesTransferred = throughputWindowAccumulatedBytes.toLong(),
+                    throughputMbps = throughputWindowAccumulatedBytes.toMbps(throughputWindowAccumulatedMs),
+                    complete = false
+                )
+            )
+        }
+    }
+
     private fun Long.toMbps(durationMs: Long): Double {
         return toDouble() * 8.0 / durationMs.toDouble() / 1_000.0
+    }
+
+    private fun Double.toMbps(durationMs: Long): Double {
+        return this * 8.0 / durationMs.toDouble() / 1_000.0
+    }
+
+    private fun Double.isWithinRatio(other: Double, toleranceRatio: Double): Boolean {
+        if (!isFinite() || !other.isFinite()) return false
+        if (this == 0.0 && other == 0.0) return true
+        val baseline = maxOf(kotlin.math.abs(this), kotlin.math.abs(other))
+        if (baseline == 0.0) return true
+        return kotlin.math.abs(this - other) / baseline <= toleranceRatio
     }
 
     private fun List<Double>.percentileNearestRank(percentile: Double): Double? {

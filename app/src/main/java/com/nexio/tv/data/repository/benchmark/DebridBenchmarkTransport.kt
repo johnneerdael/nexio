@@ -31,7 +31,8 @@ data class DebridBenchmarkTransportResult(
 data class DebridBenchmarkTransportProfileResult(
     val summary: DebridBenchmarkSummary,
     val profile: DebridBenchmarkTransportProfile,
-    val terminationReason: DebridBenchmarkTerminationReason
+    val terminationReason: DebridBenchmarkTerminationReason,
+    val failure: DebridBenchmarkTransportFailure? = null
 )
 
 class DirectDiscardBenchmarkTransport @Inject constructor(
