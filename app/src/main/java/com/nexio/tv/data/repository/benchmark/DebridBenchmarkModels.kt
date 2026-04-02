@@ -31,6 +31,13 @@ data class DebridBenchmarkSummary(
     val elapsedMs: Long = 0L
 )
 
+data class DebridBenchmarkFailureDetails(
+    val candidate: DebridBenchmarkCandidateMetadata? = null,
+    val failedTransport: DebridBenchmarkTransportMode? = null,
+    val direct: DebridBenchmarkTransportProfile? = null,
+    val optimized: DebridBenchmarkTransportProfile? = null
+)
+
 enum class DebridBenchmarkTransportMode {
     DIRECT,
     OPTIMIZED;
@@ -247,7 +254,8 @@ data class DebridBenchmarkOutcome(
     val provider: DebridBenchmarkProvider,
     val summary: DebridBenchmarkSummary,
     val terminationReason: DebridBenchmarkTerminationReason,
-    val result: DebridBenchmarkResult? = null
+    val result: DebridBenchmarkResult? = null,
+    val failureDetails: DebridBenchmarkFailureDetails? = null
 )
 
 data class DebridBenchmarkCandidate(

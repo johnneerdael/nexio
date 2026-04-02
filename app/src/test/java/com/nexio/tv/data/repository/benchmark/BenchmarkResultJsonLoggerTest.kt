@@ -35,6 +35,54 @@ class BenchmarkResultJsonLoggerTest {
         assertTrue(summary.contains("optimized_safe_budget=170.0"))
     }
 
+    @Test
+    fun `failure outcome json includes transport candidate and partial metrics`() {
+        val logger = BenchmarkResultJsonLogger { _, _ -> }
+
+        val payload = logger.buildOutcomeEventJson(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            terminationReason = DebridBenchmarkTerminationReason.FAILED,
+            summary = DebridBenchmarkSummary(
+                startupTimeMs = 310L,
+                sustainedThroughputMbps = 88.5,
+                transferredBytes = 345_678_901L,
+                elapsedMs = 42_000L
+            ),
+            failureDetails = DebridBenchmarkFailureDetails(
+                candidate = DebridBenchmarkCandidateMetadata(
+                    filename = "Example.mkv",
+                    sizeBytes = 50L * 1024L * 1024L * 1024L,
+                    host = "cdn.example.net",
+                    directUrlFingerprint = "abc123def456"
+                ),
+                failedTransport = DebridBenchmarkTransportMode.DIRECT,
+                direct = sampleProfile(
+                    startupMs = 310L,
+                    p10Mbps = 104.0,
+                    averageMbps = 112.0,
+                    seekP95Ms = 0L
+                )
+            )
+        )
+        val root = JsonParser.parseString(payload).asJsonObject
+
+        assertFalse(payload.contains('\n'))
+        assertEquals("benchmark_session_outcome", root.get("event_type").asString)
+        assertEquals("real_debrid", root.get("provider").asString)
+        assertEquals("failed", root.get("terminationReason").asString)
+        val failure = root.getAsJsonObject("failure")
+        assertEquals("direct", failure.get("failedTransport").asString)
+        assertEquals("cdn.example.net", failure.getAsJsonObject("candidate").get("host").asString)
+        assertEquals(
+            104.0,
+            failure.getAsJsonObject("direct")
+                .getAsJsonObject("sustained")
+                .get("p10ThroughputMbps")
+                .asDouble,
+            0.0
+        )
+    }
+
     private fun sampleResult(): DebridBenchmarkResult {
         return DebridBenchmarkResult(
             provider = DebridBenchmarkProvider.REAL_DEBRID,

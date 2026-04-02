@@ -99,10 +99,16 @@ class DebridBenchmarkService internal constructor(
     }
 
     private suspend fun runBenchmark(provider: DebridBenchmarkProvider) {
+        var candidateFailureDetails: DebridBenchmarkFailureDetails? = null
         try {
             val candidate = when (val resolution = resolver.resolve(provider)) {
                 is DebridBenchmarkCandidateResolution.Candidate -> resolution.value
                 DebridBenchmarkCandidateResolution.NoLargeDownload -> {
+                    benchmarkResultJsonLogger.logOutcome(
+                        provider = provider,
+                        terminationReason = DebridBenchmarkTerminationReason.NO_LARGE_DOWNLOAD,
+                        summary = DebridBenchmarkSummary()
+                    )
                     emitOutcome(
                         provider = provider,
                         summary = DebridBenchmarkSummary(),
@@ -111,6 +117,11 @@ class DebridBenchmarkService internal constructor(
                     return
                 }
                 DebridBenchmarkCandidateResolution.NoPlayableLibraryItem -> {
+                    benchmarkResultJsonLogger.logOutcome(
+                        provider = provider,
+                        terminationReason = DebridBenchmarkTerminationReason.NO_PLAYABLE_LIBRARY_ITEM,
+                        summary = DebridBenchmarkSummary()
+                    )
                     emitOutcome(
                         provider = provider,
                         summary = DebridBenchmarkSummary(),
@@ -119,6 +130,15 @@ class DebridBenchmarkService internal constructor(
                     return
                 }
             }
+
+            candidateFailureDetails = DebridBenchmarkFailureDetails(
+                candidate = DebridBenchmarkCandidateMetadata(
+                    filename = candidate.filename,
+                    sizeBytes = candidate.sourceSizeBytes,
+                    host = runCatching { java.net.URI(candidate.directUrl).host }.getOrNull(),
+                    directUrlFingerprint = null
+                )
+            )
 
             val transportResult = sessionRunner.run(
                 provider = provider,
@@ -134,19 +154,32 @@ class DebridBenchmarkService internal constructor(
             transportResult.result?.let {
                 store.saveLatest(it)
                 benchmarkResultJsonLogger.logCompleted(it)
-            }
+            } ?: benchmarkResultJsonLogger.logOutcome(
+                provider = provider,
+                terminationReason = transportResult.terminationReason,
+                summary = transportResult.summary,
+                failureDetails = transportResult.failureDetails ?: candidateFailureDetails
+            )
             emitOutcome(
                 provider = provider,
                 summary = transportResult.summary,
                 terminationReason = transportResult.terminationReason,
-                result = transportResult.result
+                result = transportResult.result,
+                failureDetails = transportResult.failureDetails
             )
         } catch (_: CancellationException) {
+            benchmarkResultJsonLogger.logOutcome(
+                provider = provider,
+                terminationReason = DebridBenchmarkTerminationReason.CANCELED,
+                summary = DebridBenchmarkSummary(),
+                failureDetails = candidateFailureDetails
+            )
             emitOutcome(
                 provider = provider,
                 summary = DebridBenchmarkSummary(),
                 terminationReason = DebridBenchmarkTerminationReason.CANCELED,
-                result = null
+                result = null,
+                failureDetails = candidateFailureDetails
             )
         } finally {
             clearActiveState()
@@ -157,14 +190,16 @@ class DebridBenchmarkService internal constructor(
         provider: DebridBenchmarkProvider,
         summary: DebridBenchmarkSummary,
         terminationReason: DebridBenchmarkTerminationReason,
-        result: DebridBenchmarkResult? = null
+        result: DebridBenchmarkResult? = null,
+        failureDetails: DebridBenchmarkFailureDetails? = null
     ) {
         _outcomes.emit(
             DebridBenchmarkOutcome(
                 provider = provider,
                 summary = summary,
                 terminationReason = terminationReason,
-                result = result
+                result = result,
+                failureDetails = failureDetails
             )
         )
     }

@@ -11,7 +11,8 @@ import kotlinx.coroutines.flow.first
 data class DebridBenchmarkSessionResult(
     val summary: DebridBenchmarkSummary,
     val terminationReason: DebridBenchmarkTerminationReason,
-    val result: DebridBenchmarkResult? = null
+    val result: DebridBenchmarkResult? = null,
+    val failureDetails: DebridBenchmarkFailureDetails? = null
 )
 
 @Singleton
@@ -42,6 +43,12 @@ class DebridBenchmarkSessionRunner internal constructor(
         candidate: DebridBenchmarkCandidate,
         observer: DebridBenchmarkObserver
     ): DebridBenchmarkSessionResult {
+        val candidateMetadata = DebridBenchmarkCandidateMetadata(
+            filename = candidate.filename,
+            sizeBytes = candidate.sourceSizeBytes,
+            host = runCatching { URI(candidate.directUrl).host }.getOrNull(),
+            directUrlFingerprint = sha256(candidate.directUrl)
+        )
         val seekTargets = defaultSeekTargets(candidate.sourceSizeBytes)
         val directResult = directTransport.runProfile(
             candidate = candidate,
@@ -51,7 +58,12 @@ class DebridBenchmarkSessionRunner internal constructor(
         if (directResult.terminationReason != DebridBenchmarkTerminationReason.COMPLETED) {
             return DebridBenchmarkSessionResult(
                 summary = directResult.summary,
-                terminationReason = directResult.terminationReason
+                terminationReason = directResult.terminationReason,
+                failureDetails = DebridBenchmarkFailureDetails(
+                    candidate = candidateMetadata,
+                    failedTransport = DebridBenchmarkTransportMode.DIRECT,
+                    direct = directResult.profile
+                )
             )
         }
 
@@ -66,7 +78,13 @@ class DebridBenchmarkSessionRunner internal constructor(
         if (optimizedResult.terminationReason != DebridBenchmarkTerminationReason.COMPLETED) {
             return DebridBenchmarkSessionResult(
                 summary = optimizedResult.summary,
-                terminationReason = optimizedResult.terminationReason
+                terminationReason = optimizedResult.terminationReason,
+                failureDetails = DebridBenchmarkFailureDetails(
+                    candidate = candidateMetadata,
+                    failedTransport = DebridBenchmarkTransportMode.OPTIMIZED,
+                    direct = directResult.profile,
+                    optimized = optimizedResult.profile
+                )
             )
         }
 
@@ -76,12 +94,7 @@ class DebridBenchmarkSessionRunner internal constructor(
             measuredAtMs = nowMs(),
             summary = optimizedResult.summary,
             terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
-            candidate = DebridBenchmarkCandidateMetadata(
-                filename = candidate.filename,
-                sizeBytes = candidate.sourceSizeBytes,
-                host = runCatching { URI(candidate.directUrl).host }.getOrNull(),
-                directUrlFingerprint = sha256(candidate.directUrl)
-            ),
+            candidate = candidateMetadata,
             device = deviceSnapshot,
             session = DebridBenchmarkSessionMetadata(
                 benchmarkVersion = 3,

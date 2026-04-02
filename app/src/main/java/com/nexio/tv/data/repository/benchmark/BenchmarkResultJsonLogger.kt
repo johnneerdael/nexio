@@ -28,11 +28,73 @@ class BenchmarkResultJsonLogger internal constructor(
         }
     }
 
+    fun logOutcome(
+        provider: DebridBenchmarkProvider,
+        terminationReason: DebridBenchmarkTerminationReason,
+        summary: DebridBenchmarkSummary,
+        failureDetails: DebridBenchmarkFailureDetails? = null
+    ) {
+        runCatching {
+            logger(
+                BENCHMARK_JSON_TAG,
+                buildOutcomeEventJson(
+                    provider = provider,
+                    terminationReason = terminationReason,
+                    summary = summary,
+                    failureDetails = failureDetails
+                )
+            )
+        }.onFailure {
+            logger(
+                BENCHMARK_SUMMARY_TAG,
+                buildOutcomeSummaryLine(
+                    provider = provider,
+                    terminationReason = terminationReason,
+                    summary = summary,
+                    failureDetails = failureDetails
+                ) + " serialization=failed"
+            )
+        }.onSuccess {
+            logger(
+                BENCHMARK_SUMMARY_TAG,
+                buildOutcomeSummaryLine(
+                    provider = provider,
+                    terminationReason = terminationReason,
+                    summary = summary,
+                    failureDetails = failureDetails
+                )
+            )
+        }
+    }
+
     internal fun buildCompletedEventJson(result: DebridBenchmarkResult): String {
         return JsonObject().apply {
             addProperty("event_version", 1)
             addProperty("event_type", "benchmark_session_completed")
             add("result", result.toJsonObject())
+        }.toString()
+    }
+
+    internal fun buildOutcomeEventJson(
+        provider: DebridBenchmarkProvider,
+        terminationReason: DebridBenchmarkTerminationReason,
+        summary: DebridBenchmarkSummary,
+        failureDetails: DebridBenchmarkFailureDetails? = null
+    ): String {
+        return JsonObject().apply {
+            addProperty("event_version", 1)
+            addProperty("event_type", "benchmark_session_outcome")
+            addProperty("provider", provider.storageKey)
+            addProperty("terminationReason", terminationReason.wireKey)
+            add("summary", summary.toJsonObject())
+            failureDetails?.let { details ->
+                add("failure", JsonObject().apply {
+                    details.failedTransport?.let { addProperty("failedTransport", it.wireKey) }
+                    details.candidate?.let { add("candidate", it.toJsonObject()) }
+                    details.direct?.let { add("direct", it.toJsonObject()) }
+                    details.optimized?.let { add("optimized", it.toJsonObject()) }
+                })
+            }
         }.toString()
     }
 
@@ -58,27 +120,53 @@ class BenchmarkResultJsonLogger internal constructor(
             }
         }
     }
+
+    internal fun buildOutcomeSummaryLine(
+        provider: DebridBenchmarkProvider,
+        terminationReason: DebridBenchmarkTerminationReason,
+        summary: DebridBenchmarkSummary,
+        failureDetails: DebridBenchmarkFailureDetails? = null
+    ): String {
+        return buildString {
+            append("provider=")
+            append(provider.storageKey)
+            append(" termination_reason=")
+            append(terminationReason.wireKey)
+            failureDetails?.failedTransport?.let {
+                append(" failed_transport=")
+                append(it.wireKey)
+            }
+            summary.startupTimeMs?.let {
+                append(" startup_ms=")
+                append(it)
+            }
+            summary.sustainedThroughputMbps?.let {
+                append(" sustained_mbps=")
+                append(String.format(Locale.US, "%.1f", it))
+            }
+            append(" transferred_bytes=")
+            append(summary.transferredBytes)
+            append(" elapsed_ms=")
+            append(summary.elapsedMs)
+            failureDetails?.candidate?.host?.let {
+                append(" host=")
+                append(it)
+            }
+            failureDetails?.candidate?.filename?.let {
+                append(" filename=")
+                append(it)
+            }
+        }
+    }
 }
 
 internal fun DebridBenchmarkResult.toJsonObject(): JsonObject {
     return JsonObject().apply {
         addProperty("provider", provider.storageKey)
         addProperty("measuredAtMs", measuredAtMs)
-        add("summary", JsonObject().apply {
-            summary.startupTimeMs?.let { addProperty("startupTimeMs", it) }
-            summary.sustainedThroughputMbps?.let { addProperty("sustainedThroughputMbps", it) }
-            addProperty("transferredBytes", summary.transferredBytes)
-            addProperty("elapsedMs", summary.elapsedMs)
-        })
+        add("summary", summary.toJsonObject())
         addProperty("terminationReason", terminationReason.wireKey)
-        candidate?.let { candidate ->
-            add("candidate", JsonObject().apply {
-                candidate.filename?.let { addProperty("filename", it) }
-                candidate.sizeBytes?.let { addProperty("sizeBytes", it) }
-                candidate.host?.let { addProperty("host", it) }
-                candidate.directUrlFingerprint?.let { addProperty("directUrlFingerprint", it) }
-            })
-        }
+        candidate?.let { candidate -> add("candidate", candidate.toJsonObject()) }
         device?.let { add("device", it.toJsonObject()) }
         session?.let { session ->
             add("session", JsonObject().apply {
@@ -105,6 +193,24 @@ internal fun DebridBenchmarkResult.toJsonObject(): JsonObject {
                 comparison.stabilityWinner?.let { addProperty("stabilityWinner", it.wireKey) }
             })
         }
+    }
+}
+
+internal fun DebridBenchmarkSummary.toJsonObject(): JsonObject {
+    return JsonObject().apply {
+        startupTimeMs?.let { addProperty("startupTimeMs", it) }
+        sustainedThroughputMbps?.let { addProperty("sustainedThroughputMbps", it) }
+        addProperty("transferredBytes", transferredBytes)
+        addProperty("elapsedMs", elapsedMs)
+    }
+}
+
+internal fun DebridBenchmarkCandidateMetadata.toJsonObject(): JsonObject {
+    return JsonObject().apply {
+        filename?.let { addProperty("filename", it) }
+        sizeBytes?.let { addProperty("sizeBytes", it) }
+        host?.let { addProperty("host", it) }
+        directUrlFingerprint?.let { addProperty("directUrlFingerprint", it) }
     }
 }
 
