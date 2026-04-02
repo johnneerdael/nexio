@@ -121,6 +121,14 @@ class DebridBenchmarkServiceTest {
             ),
             reported.await()
         )
+        verify(exactly = 1) {
+            logger().logOutcome(
+                DebridBenchmarkProvider.REAL_DEBRID,
+                DebridBenchmarkTerminationReason.NO_PLAYABLE_LIBRARY_ITEM,
+                DebridBenchmarkSummary(),
+                null
+            )
+        }
     }
 
     @Test
@@ -151,6 +159,69 @@ class DebridBenchmarkServiceTest {
             ),
             reported.await()
         )
+        verify(exactly = 1) {
+            logger().logOutcome(
+                DebridBenchmarkProvider.PREMIUMIZE,
+                DebridBenchmarkTerminationReason.NO_LARGE_DOWNLOAD,
+                DebridBenchmarkSummary(),
+                null
+            )
+        }
+    }
+
+    @Test
+    fun `service logs failed benchmark outcomes without persisting a result`() = runTest {
+        val summary = DebridBenchmarkSummary(
+            startupTimeMs = 400L,
+            sustainedThroughputMbps = 88.0,
+            transferredBytes = 128.mb,
+            elapsedMs = 12.seconds
+        )
+        val failureDetails = DebridBenchmarkFailureDetails(
+            candidate = DebridBenchmarkCandidateMetadata(
+                filename = "Example.mkv",
+                sizeBytes = 20L * 1024L * 1024L * 1024L,
+                host = "rd.example.net",
+                directUrlFingerprint = "abc123"
+            ),
+            failedTransport = DebridBenchmarkTransportMode.DIRECT
+        )
+        val service = buildService(
+            runSession = { _, _, _ ->
+                DebridBenchmarkSessionResult(
+                    summary = summary,
+                    terminationReason = DebridBenchmarkTerminationReason.FAILED,
+                    failureDetails = failureDetails
+                )
+            },
+            scope = backgroundScope
+        )
+        val reported = CompletableDeferred<DebridBenchmarkOutcome>()
+
+        backgroundScope.launch {
+            reported.complete(service.outcomes.first())
+        }
+
+        assertTrue(service.start(DebridBenchmarkProvider.REAL_DEBRID))
+
+        assertEquals(
+            DebridBenchmarkOutcome(
+                provider = DebridBenchmarkProvider.REAL_DEBRID,
+                summary = summary,
+                terminationReason = DebridBenchmarkTerminationReason.FAILED,
+                failureDetails = failureDetails
+            ),
+            reported.await()
+        )
+        coVerify(exactly = 0) { store().saveLatest(any()) }
+        verify(exactly = 1) {
+            logger().logOutcome(
+                DebridBenchmarkProvider.REAL_DEBRID,
+                DebridBenchmarkTerminationReason.FAILED,
+                summary,
+                failureDetails
+            )
+        }
     }
 
     private lateinit var benchmarkStore: DebridBenchmarkStore
