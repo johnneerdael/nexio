@@ -4,14 +4,14 @@
 The Debrid integration settings surface SHALL expose a manual benchmark action for connected
 Real-Debrid and Premiumize providers.
 
-#### Scenario: Connected provider row exposes benchmark action
+#### Scenario: Connected provider entry exposes benchmark action
 - **WHEN** the user opens the Debrid integration settings screen and Real-Debrid or Premiumize is connected
-- **THEN** the corresponding provider row exposes a manual benchmark action
+- **THEN** the corresponding provider entry surfaces a manual benchmark action on the Debrid settings screen
 - **AND** the action starts provider-specific benchmark collection without navigating away from the screen
 
-#### Scenario: Disconnected provider row does not start a benchmark
+#### Scenario: Disconnected provider entry does not start a benchmark
 - **WHEN** the provider is not connected
-- **THEN** the provider row does not allow benchmark execution
+- **THEN** the provider entry does not allow benchmark execution
 - **AND** the UI keeps the existing provider connection affordance instead
 
 ### Requirement: Manual benchmark uses a real provider library item
@@ -68,9 +68,9 @@ The system SHALL persist only the latest local benchmark result for each support
 - **THEN** the runtime stores that provider's latest result locally
 - **AND** any previous latest result for the same provider is replaced
 
-#### Scenario: Provider rows surface the latest stored result
+#### Scenario: Provider benchmark controls surface the latest stored result
 - **WHEN** the Debrid settings screen is opened after a prior successful benchmark
-- **THEN** the corresponding provider row surfaces the latest stored benchmark summary
+- **THEN** the corresponding provider benchmark control surfaces the latest stored benchmark summary
 - **AND** the summary is available without rerunning the benchmark
 
 ### Requirement: Benchmark transport stays isolated from playback optimizations
