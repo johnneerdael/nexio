@@ -27,17 +27,31 @@ sealed interface DebridBenchmarkRuntimeState {
 }
 
 @Singleton
-class DebridBenchmarkService @Inject constructor(
+class DebridBenchmarkService internal constructor(
     private val resolver: DebridBenchmarkCandidateResolver,
     private val store: DebridBenchmarkStore,
-    private val transport: DebridBenchmarkTransport
+    private val transport: DebridBenchmarkTransport,
+    private val scope: CoroutineScope,
+    private val nowMs: () -> Long
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val runMutex = Mutex()
     private val _activeState = MutableStateFlow<DebridBenchmarkRuntimeState>(
         DebridBenchmarkRuntimeState.Idle
     )
     private var activeJob: Job? = null
+
+    @Inject
+    constructor(
+        resolver: DebridBenchmarkCandidateResolver,
+        store: DebridBenchmarkStore,
+        transport: DebridBenchmarkTransport
+    ) : this(
+        resolver = resolver,
+        store = store,
+        transport = transport,
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        nowMs = System::currentTimeMillis
+    )
 
     val activeState: StateFlow<DebridBenchmarkRuntimeState> = _activeState.asStateFlow()
 
@@ -70,6 +84,12 @@ class DebridBenchmarkService @Inject constructor(
         job?.cancelAndJoin()
     }
 
+    fun onAppBackgrounded() {
+        scope.launch {
+            cancel()
+        }
+    }
+
     private suspend fun runBenchmark(provider: DebridBenchmarkProvider) {
         try {
             val candidate = resolver.resolve(provider)
@@ -91,7 +111,7 @@ class DebridBenchmarkService @Inject constructor(
                 store.saveLatest(
                     DebridBenchmarkResult(
                         provider = provider,
-                        measuredAtMs = System.currentTimeMillis(),
+                        measuredAtMs = nowMs(),
                         summary = transportResult.summary,
                         terminationReason = transportResult.terminationReason
                     )

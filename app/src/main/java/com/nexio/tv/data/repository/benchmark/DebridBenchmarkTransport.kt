@@ -36,6 +36,7 @@ class DirectDiscardBenchmarkTransport @Inject constructor(
         candidate: DebridBenchmarkCandidate,
         observer: DebridBenchmarkObserver
     ): DebridBenchmarkTransportResult = withContext(Dispatchers.IO) {
+        val requestStartedAtNs = System.nanoTime()
         val request = Request.Builder()
             .url(candidate.directUrl)
             .get()
@@ -55,7 +56,11 @@ class DirectDiscardBenchmarkTransport @Inject constructor(
         try {
             val response = call.execute()
             response.use {
-                streamResponse(response, observer)
+                streamResponse(
+                    response = response,
+                    observer = observer,
+                    requestStartedAtNs = requestStartedAtNs
+                )
             }
         } catch (error: InterruptedIOException) {
             val terminationReason = if (call.isCanceled()) {
@@ -88,7 +93,8 @@ class DirectDiscardBenchmarkTransport @Inject constructor(
 
     private fun streamResponse(
         response: Response,
-        observer: DebridBenchmarkObserver
+        observer: DebridBenchmarkObserver,
+        requestStartedAtNs: Long
     ): DebridBenchmarkTransportResult {
         if (!response.isSuccessful) {
             return DebridBenchmarkTransportResult(
@@ -103,7 +109,6 @@ class DirectDiscardBenchmarkTransport @Inject constructor(
         )
         val source = body.source()
         val discardBuffer = Buffer()
-        val startedAtNs = System.nanoTime()
         var firstByteAtNs: Long? = null
         var totalBytesRead = 0L
         val aggregator = DebridBenchmarkAggregator()
@@ -125,16 +130,17 @@ class DirectDiscardBenchmarkTransport @Inject constructor(
                 firstByteAtNs = nowNs
             }
 
-            val summary = aggregator.recordSample(
+            val requestSummary = aggregator.recordTransferSample(
                 bytesRead = totalBytesRead,
-                elapsedMs = nanosToMillis(nowNs - startedAtNs),
-                startupTimeMs = nanosToMillis(firstByteAtNs - startedAtNs)
+                requestStartedAtMs = nanosToMillis(requestStartedAtNs),
+                firstByteAtMs = nanosToMillis(firstByteAtNs),
+                sampleAtMs = nanosToMillis(nowNs)
             )
-            observer.onSummaryUpdated(summary)
+            observer.onSummaryUpdated(requestSummary)
 
             if (aggregator.shouldComplete()) {
                 return DebridBenchmarkTransportResult(
-                    summary = summary,
+                    summary = requestSummary,
                     terminationReason = DebridBenchmarkTerminationReason.COMPLETED
                 )
             }
@@ -165,6 +171,19 @@ internal class DebridBenchmarkAggregator(
             this.startupTimeMs = startupTimeMs.coerceAtLeast(0L)
         }
         return summary()
+    }
+
+    fun recordTransferSample(
+        bytesRead: Long,
+        requestStartedAtMs: Long,
+        firstByteAtMs: Long,
+        sampleAtMs: Long
+    ): DebridBenchmarkSummary {
+        return recordSample(
+            bytesRead = bytesRead,
+            elapsedMs = (sampleAtMs - requestStartedAtMs).coerceAtLeast(0L),
+            startupTimeMs = (firstByteAtMs - requestStartedAtMs).coerceAtLeast(0L)
+        )
     }
 
     fun shouldComplete(): Boolean {
