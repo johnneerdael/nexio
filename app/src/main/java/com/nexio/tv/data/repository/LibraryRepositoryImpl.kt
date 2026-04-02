@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -48,12 +49,18 @@ class LibraryRepositoryImpl @Inject constructor(
         traktLibraryService.observeHasCache().distinctUntilChanged()
 
     override val libraryItems: Flow<List<LibraryEntry>> =
-        combine(traktLibraryService.observeAllItems(), debridLibraryService.observeItems()) { traktItems, debridItems ->
+        combine(
+            traktLibraryService.observeAllItems(),
+            debridLibraryService.observeItems().onStart { emit(emptyList()) }
+        ) { traktItems, debridItems ->
             traktItems + debridItems
         }.distinctUntilChanged()
 
     override val listTabs: Flow<List<LibraryListTab>> =
-        combine(traktLibraryService.observeListTabs(), debridLibraryService.observeListTabs()) { traktTabs, debridTabs ->
+        combine(
+            traktLibraryService.observeListTabs(),
+            debridLibraryService.observeListTabs().onStart { emit(emptyList()) }
+        ) { traktTabs, debridTabs ->
             traktTabs + debridTabs
         }.distinctUntilChanged()
 
