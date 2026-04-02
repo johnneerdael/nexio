@@ -116,6 +116,31 @@ class DebridSettingsViewModelTest {
     }
 
     @Test
+    fun `running benchmark without a summary does not expose zeroed progress`() = runTest(dispatcher) {
+        val benchmarkState = MutableStateFlow<DebridBenchmarkRuntimeState>(
+            DebridBenchmarkRuntimeState.Running(
+                provider = DebridBenchmarkProvider.REAL_DEBRID,
+                summary = null
+            )
+        )
+        val benchmarkService = mockk<DebridBenchmarkService>(relaxed = true)
+        every { benchmarkService.activeState } returns benchmarkState
+        every { benchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns flowOf(null)
+        every { benchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns flowOf(null)
+        every { benchmarkService.outcomes } returns MutableSharedFlow()
+
+        val viewModel = buildViewModel(
+            realDebridConnected = true,
+            benchmarkService = benchmarkService
+        )
+
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.realDebridBenchmark.isRunning)
+        assertEquals(null, viewModel.uiState.value.realDebridBenchmark.activeSummary)
+    }
+
+    @Test
     fun `no playable benchmark outcomes surface a user message`() = runTest(dispatcher) {
         val outcomes = MutableSharedFlow<DebridBenchmarkOutcome>()
         val benchmarkService = mockk<DebridBenchmarkService>(relaxed = true)
@@ -145,9 +170,103 @@ class DebridSettingsViewModelTest {
         )
     }
 
+    @Test
+    fun `no large download benchmark outcomes surface a user message`() = runTest(dispatcher) {
+        val outcomes = MutableSharedFlow<DebridBenchmarkOutcome>()
+        val benchmarkService = mockk<DebridBenchmarkService>(relaxed = true)
+        every { benchmarkService.activeState } returns MutableStateFlow(DebridBenchmarkRuntimeState.Idle)
+        every { benchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns flowOf(null)
+        every { benchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns flowOf(null)
+        every { benchmarkService.outcomes } returns outcomes
+
+        val viewModel = buildViewModel(
+            premiumizeConnected = true,
+            benchmarkService = benchmarkService
+        )
+        advanceUntilIdle()
+
+        val emittedMessage = async { viewModel.messages.first() }
+        outcomes.emit(
+            DebridBenchmarkOutcome(
+                provider = DebridBenchmarkProvider.PREMIUMIZE,
+                summary = DebridBenchmarkSummary(),
+                terminationReason = DebridBenchmarkTerminationReason.NO_LARGE_DOWNLOAD
+            )
+        )
+
+        assertEquals(
+            "No large Premiumize download found for benchmarking",
+            emittedMessage.await()
+        )
+    }
+
+    @Test
+    fun `completed benchmark outcomes surface a result dialog`() = runTest(dispatcher) {
+        val outcomes = MutableSharedFlow<DebridBenchmarkOutcome>()
+        val benchmarkService = mockk<DebridBenchmarkService>(relaxed = true)
+        every { benchmarkService.activeState } returns MutableStateFlow(DebridBenchmarkRuntimeState.Idle)
+        every { benchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns flowOf(null)
+        every { benchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns flowOf(null)
+        every { benchmarkService.outcomes } returns outcomes
+        val result = sampleResult(DebridBenchmarkProvider.REAL_DEBRID)
+
+        val viewModel = buildViewModel(
+            realDebridConnected = true,
+            benchmarkService = benchmarkService
+        )
+        advanceUntilIdle()
+
+        outcomes.emit(
+            DebridBenchmarkOutcome(
+                provider = DebridBenchmarkProvider.REAL_DEBRID,
+                summary = result.summary,
+                terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
+                result = result
+            )
+        )
+        advanceUntilIdle()
+
+        assertEquals(
+            DebridBenchmarkResultDialogUi(result = result),
+            viewModel.uiState.value.benchmarkResultDialog
+        )
+    }
+
+    @Test
+    fun `open latest benchmark result exposes the saved dialog state`() = runTest(dispatcher) {
+        val latestPremiumizeResult = sampleResult(DebridBenchmarkProvider.PREMIUMIZE)
+        val viewModel = buildViewModel(
+            premiumizeConnected = true,
+            latestPremiumizeResult = latestPremiumizeResult
+        )
+
+        advanceUntilIdle()
+        viewModel.openLatestBenchmarkResult(DebridBenchmarkProvider.PREMIUMIZE)
+
+        assertEquals(
+            DebridBenchmarkResultDialogUi(result = latestPremiumizeResult),
+            viewModel.uiState.value.benchmarkResultDialog
+        )
+    }
+
+    @Test
+    fun `dismiss benchmark result clears the dialog state`() = runTest(dispatcher) {
+        val viewModel = buildViewModel(
+            premiumizeConnected = true,
+            latestPremiumizeResult = sampleResult(DebridBenchmarkProvider.PREMIUMIZE)
+        )
+
+        advanceUntilIdle()
+        viewModel.openLatestBenchmarkResult(DebridBenchmarkProvider.PREMIUMIZE)
+        viewModel.dismissBenchmarkResultDialog()
+
+        assertEquals(null, viewModel.uiState.value.benchmarkResultDialog)
+    }
+
     private fun buildViewModel(
         realDebridConnected: Boolean = false,
         premiumizeConnected: Boolean = false,
+        latestRealDebridResult: DebridBenchmarkResult? = null,
         latestPremiumizeResult: DebridBenchmarkResult? = null,
         benchmarkService: DebridBenchmarkService? = null
     ): DebridSettingsViewModel {
@@ -191,7 +310,8 @@ class DebridSettingsViewModelTest {
 
         val resolvedBenchmarkService = benchmarkService ?: mockk<DebridBenchmarkService>(relaxed = true).also { service ->
             every { service.activeState } returns MutableStateFlow(DebridBenchmarkRuntimeState.Idle)
-            every { service.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns flowOf(null)
+            every { service.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns
+                flowOf(latestRealDebridResult)
             every { service.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns
                 flowOf(latestPremiumizeResult)
             every { service.outcomes } returns MutableSharedFlow()

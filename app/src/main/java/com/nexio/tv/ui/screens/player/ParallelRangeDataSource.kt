@@ -511,7 +511,8 @@ internal class ParallelRangeDataSource(
         private val chunkSize: Long = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB.toLong() * 1024 * 1024,
         private val shouldAllowBackgroundPrefetch: () -> Boolean = { true },
         private val onResolvedUri: (Uri?) -> Unit = {},
-        private val onReadPositionAdvanced: (Long) -> Unit = {}
+        private val onReadPositionAdvanced: (Long) -> Unit = {},
+        private val allowStartupBootstrapReuse: Boolean = true
     ) : DataSource.Factory {
         @Volatile
         private var startupBootstrapCache: BootstrapCacheEntry? = null
@@ -525,6 +526,9 @@ internal class ParallelRangeDataSource(
                 onResolvedUri = onResolvedUri,
                 onReadPositionAdvanced = onReadPositionAdvanced,
                 consumeBootstrapCache = { dataSpec ->
+                    if (!allowStartupBootstrapReuse) {
+                        return@ParallelRangeDataSource null
+                    }
                     val cached = startupBootstrapCache ?: return@ParallelRangeDataSource null
                     val isFresh = SystemClock.uptimeMillis() - cached.createdAtUptimeMs <= 15_000L
                     if (!isFresh) {

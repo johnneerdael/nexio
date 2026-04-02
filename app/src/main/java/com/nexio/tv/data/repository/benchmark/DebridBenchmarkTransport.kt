@@ -28,6 +28,12 @@ data class DebridBenchmarkTransportResult(
     val terminationReason: DebridBenchmarkTerminationReason
 )
 
+data class DebridBenchmarkTransportProfileResult(
+    val summary: DebridBenchmarkSummary,
+    val profile: DebridBenchmarkTransportProfile,
+    val terminationReason: DebridBenchmarkTerminationReason
+)
+
 class DirectDiscardBenchmarkTransport @Inject constructor(
     @Named("benchmark") private val okHttpClient: OkHttpClient
 ) : DebridBenchmarkTransport {
@@ -110,14 +116,15 @@ class DirectDiscardBenchmarkTransport @Inject constructor(
         val source = body.source()
         val discardBuffer = Buffer()
         var firstByteAtNs: Long? = null
+        var previousReadAtNs: Long? = null
         var totalBytesRead = 0L
-        val aggregator = DebridBenchmarkAggregator()
+        val collector = DebridBenchmarkMetricsCollector()
 
         while (true) {
             val read = source.read(discardBuffer, DISCARD_BUFFER_BYTES)
             if (read == -1L) {
                 return DebridBenchmarkTransportResult(
-                    summary = aggregator.summary(),
+                    summary = collector.currentSummary(),
                     terminationReason = DebridBenchmarkTerminationReason.FAILED
                 )
             }
@@ -128,17 +135,24 @@ class DirectDiscardBenchmarkTransport @Inject constructor(
             val nowNs = System.nanoTime()
             if (firstByteAtNs == null) {
                 firstByteAtNs = nowNs
+                collector.recordStartup(
+                    requestStartedAtMs = nanosToMillis(requestStartedAtNs),
+                    firstByteAtMs = nanosToMillis(nowNs)
+                )
             }
+            previousReadAtNs?.let { previous ->
+                collector.recordReadGap(nanosToMillis(nowNs - previous))
+            }
+            previousReadAtNs = nowNs
 
-            val requestSummary = aggregator.recordTransferSample(
-                bytesRead = totalBytesRead,
-                requestStartedAtMs = nanosToMillis(requestStartedAtNs),
-                firstByteAtMs = nanosToMillis(firstByteAtNs),
+            collector.recordBytesRead(
+                totalBytesRead = totalBytesRead,
                 sampleAtMs = nanosToMillis(nowNs)
             )
+            val requestSummary = collector.currentSummary()
             observer.onSummaryUpdated(requestSummary)
 
-            if (aggregator.shouldComplete()) {
+            if (collector.shouldComplete()) {
                 return DebridBenchmarkTransportResult(
                     summary = requestSummary,
                     terminationReason = DebridBenchmarkTerminationReason.COMPLETED
@@ -149,57 +163,5 @@ class DirectDiscardBenchmarkTransport @Inject constructor(
 
     companion object {
         private const val DISCARD_BUFFER_BYTES = 8_192L
-    }
-}
-
-internal class DebridBenchmarkAggregator(
-    private val requiredTransferredBytes: Long = 500L * 1024L * 1024L,
-    private val requiredElapsedMs: Long = 120_000L
-) {
-    private var transferredBytes = 0L
-    private var elapsedMs = 0L
-    private var startupTimeMs: Long? = null
-
-    fun recordSample(
-        bytesRead: Long,
-        elapsedMs: Long,
-        startupTimeMs: Long? = this.startupTimeMs
-    ): DebridBenchmarkSummary {
-        this.transferredBytes = bytesRead.coerceAtLeast(0L)
-        this.elapsedMs = elapsedMs.coerceAtLeast(0L)
-        if (startupTimeMs != null) {
-            this.startupTimeMs = startupTimeMs.coerceAtLeast(0L)
-        }
-        return summary()
-    }
-
-    fun recordTransferSample(
-        bytesRead: Long,
-        requestStartedAtMs: Long,
-        firstByteAtMs: Long,
-        sampleAtMs: Long
-    ): DebridBenchmarkSummary {
-        return recordSample(
-            bytesRead = bytesRead,
-            elapsedMs = (sampleAtMs - requestStartedAtMs).coerceAtLeast(0L),
-            startupTimeMs = (firstByteAtMs - requestStartedAtMs).coerceAtLeast(0L)
-        )
-    }
-
-    fun shouldComplete(): Boolean {
-        return transferredBytes >= requiredTransferredBytes &&
-            elapsedMs >= requiredElapsedMs
-    }
-
-    fun summary(): DebridBenchmarkSummary {
-        val streamingDurationMs = startupTimeMs?.let { elapsedMs - it }?.takeIf { it > 0L }
-        return DebridBenchmarkSummary(
-            startupTimeMs = startupTimeMs,
-            sustainedThroughputMbps = streamingDurationMs?.let {
-                transferredBytes.toDouble() * 8.0 / it.toDouble() / 1_000.0
-            },
-            transferredBytes = transferredBytes,
-            elapsedMs = elapsedMs
-        )
     }
 }

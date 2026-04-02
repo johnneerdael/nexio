@@ -16,6 +16,7 @@ import com.nexio.tv.data.remote.dto.debrid.RealDebridUnrestrictLinkDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxEnvelopeDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxFileDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxTorrentListItemDto
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkCandidateLookupResult
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import io.mockk.coEvery
 import io.mockk.coJustRun
@@ -477,7 +478,7 @@ class DebridLibraryServiceTest {
     }
 
     @Test
-    fun `get benchmark candidates uses provider-specific freshness and excludes items without direct playback urls`() = runTest {
+    fun `premiumize benchmark lookup keeps to the preferred large file band and carries source size metadata`() = runTest {
         val realDebridApi = mockk<RealDebridApi>()
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
         val premiumizeApi = mockk<PremiumizeApi>()
@@ -506,6 +507,7 @@ class DebridLibraryServiceTest {
                         id = "old",
                         name = "Old.Movie.2024.mkv",
                         createdAt = 100L,
+                        size = 12L * 1024L * 1024L * 1024L,
                         mimeType = "video/x-matroska",
                         path = "/Old.Movie.2024.mkv"
                     ),
@@ -513,6 +515,7 @@ class DebridLibraryServiceTest {
                         id = "skip",
                         name = "Skip.Movie.2024.mkv",
                         createdAt = 200L,
+                        size = 6L * 1024L * 1024L * 1024L,
                         mimeType = "video/x-matroska",
                         path = "/Skip.Movie.2024.mkv"
                     ),
@@ -520,6 +523,7 @@ class DebridLibraryServiceTest {
                         id = "new",
                         name = "New.Movie.2024.mkv",
                         createdAt = 300L,
+                        size = 800L * 1024L * 1024L,
                         mimeType = "video/x-matroska",
                         path = "/New.Movie.2024.mkv"
                     )
@@ -531,25 +535,9 @@ class DebridLibraryServiceTest {
                 id = "old",
                 name = "Old.Movie.2024.mkv",
                 streamLink = "https://pm.test/direct/old",
+                size = 12L * 1024L * 1024L * 1024L,
                 mimeType = "video/x-matroska",
                 createdAt = 100L
-            )
-        )
-        coEvery { premiumizeApi.getItemDetails("pm-key", "skip") } returns Response.success(
-            PremiumizeItemDetailsDto(
-                id = "skip",
-                name = "Skip.Movie.2024.mkv",
-                mimeType = "video/x-matroska",
-                createdAt = 200L
-            )
-        )
-        coEvery { premiumizeApi.getItemDetails("pm-key", "new") } returns Response.success(
-            PremiumizeItemDetailsDto(
-                id = "new",
-                name = "New.Movie.2024.mkv",
-                streamLink = "https://pm.test/direct/new",
-                mimeType = "video/x-matroska",
-                createdAt = 300L
             )
         )
 
@@ -566,10 +554,149 @@ class DebridLibraryServiceTest {
 
         service.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
 
-        val candidates = service.getBenchmarkCandidates(DebridBenchmarkProvider.PREMIUMIZE)
+        val result = service.getBenchmarkCandidates(DebridBenchmarkProvider.PREMIUMIZE)
 
+        assertTrue(result is DebridBenchmarkCandidateLookupResult.Candidates)
+        val candidates = (result as DebridBenchmarkCandidateLookupResult.Candidates).items
+        assertEquals(1, candidates.size)
+        assertEquals(listOf("https://pm.test/direct/old"), candidates.map { it.directUrl })
+        assertEquals(listOf(12L * 1024L * 1024L * 1024L), candidates.map { it.sourceSizeBytes })
+        coVerify(exactly = 1) { premiumizeApi.getItemDetails("pm-key", "old") }
+        coVerify(exactly = 0) { premiumizeApi.getItemDetails("pm-key", "skip") }
+        coVerify(exactly = 0) { premiumizeApi.getItemDetails("pm-key", "new") }
+    }
+
+    @Test
+    fun `real debrid benchmark lookup uses torrent sizes to limit candidate resolution to two items`() = runTest {
+        val realDebridApi = mockk<RealDebridApi>()
+        val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
+        val premiumizeApi = mockk<PremiumizeApi>()
+        val premiumizeService = mockk<PremiumizeService>()
+        val torBoxApi = mockk<TorBoxApi>()
+        val torBoxService = mockk<TorBoxService>()
+
+        stubAuthenticatedRealDebrid(realDebridAuthDataStore)
+        every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
+        coJustRun { premiumizeService.refreshAccountState() }
+        stubDisconnectedTorBox(torBoxService)
+
+        coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
+            listOf(
+                RealDebridTorrentDto(
+                    id = "rd-largest",
+                    filename = "Largest.Movie.2024.mkv",
+                    status = "downloaded",
+                    bytes = 14L * 1024L * 1024L * 1024L,
+                    links = listOf("https://rd.test/link/rd-largest"),
+                    ended = "2026-03-30T12:00:00Z"
+                ),
+                RealDebridTorrentDto(
+                    id = "rd-large",
+                    filename = "Large.Movie.2024.mkv",
+                    status = "downloaded",
+                    bytes = 12L * 1024L * 1024L * 1024L,
+                    links = listOf("https://rd.test/link/rd-large"),
+                    ended = "2026-03-30T11:00:00Z"
+                ),
+                RealDebridTorrentDto(
+                    id = "rd-fallback",
+                    filename = "Fallback.Movie.2024.mkv",
+                    status = "downloaded",
+                    bytes = 6L * 1024L * 1024L * 1024L,
+                    links = listOf("https://rd.test/link/rd-fallback"),
+                    ended = "2026-03-30T10:00:00Z"
+                )
+            )
+        )
+        coEvery { realDebridApi.getTorrentInfo(any(), "rd-largest") } returns Response.success(
+            RealDebridTorrentInfoDto(
+                id = "rd-largest",
+                filename = "Largest.Movie.2024.mkv",
+                status = "downloaded",
+                links = listOf("https://rd.test/link/rd-largest"),
+                files = listOf(
+                    RealDebridTorrentFileDto(
+                        id = 91,
+                        path = "/Largest.Movie.2024.mkv",
+                        bytes = 14L * 1024L * 1024L * 1024L,
+                        selected = 1
+                    )
+                ),
+                ended = "2026-03-30T12:00:00Z"
+            )
+        )
+        coEvery { realDebridApi.getTorrentInfo(any(), "rd-large") } returns Response.success(
+            RealDebridTorrentInfoDto(
+                id = "rd-large",
+                filename = "Large.Movie.2024.mkv",
+                status = "downloaded",
+                links = listOf("https://rd.test/link/rd-large"),
+                files = listOf(
+                    RealDebridTorrentFileDto(
+                        id = 92,
+                        path = "/Large.Movie.2024.mkv",
+                        bytes = 12L * 1024L * 1024L * 1024L,
+                        selected = 1
+                    )
+                ),
+                ended = "2026-03-30T11:00:00Z"
+            )
+        )
+        coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(
+            listOf(
+                RealDebridDownloadDto(
+                    id = "rd-download-largest",
+                    filename = "Largest.Movie.2024.mkv",
+                    mimeType = "video/x-matroska",
+                    fileSize = 14L * 1024L * 1024L * 1024L,
+                    link = "https://rd.test/link/rd-largest",
+                    download = "https://rd.test/download/rd-largest.mkv"
+                ),
+                RealDebridDownloadDto(
+                    id = "rd-download-large",
+                    filename = "Large.Movie.2024.mkv",
+                    mimeType = "video/x-matroska",
+                    fileSize = 12L * 1024L * 1024L * 1024L,
+                    link = "https://rd.test/link/rd-large",
+                    download = "https://rd.test/download/rd-large.mkv"
+                )
+            )
+        )
+        coEvery { realDebridApi.unrestrictLink(any(), any(), any()) } returns Response.error(503, mockk(relaxed = true))
+
+        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
+        val service = DebridLibraryService(
+            realDebridApi = realDebridApi,
+            realDebridAuthDataStore = realDebridAuthDataStore,
+            realDebridAuthService = realDebridAuthService,
+            premiumizeApi = premiumizeApi,
+            premiumizeService = premiumizeService,
+            torBoxApi = torBoxApi,
+            torBoxService = torBoxService
+        )
+
+        val result = service.getBenchmarkCandidates(DebridBenchmarkProvider.REAL_DEBRID)
+
+        assertTrue(result is DebridBenchmarkCandidateLookupResult.Candidates)
+        val candidates = (result as DebridBenchmarkCandidateLookupResult.Candidates).items
         assertEquals(2, candidates.size)
-        assertEquals(listOf("https://pm.test/direct/new", "https://pm.test/direct/old"), candidates.map { it.directUrl })
+        assertEquals(
+            listOf(
+                "https://rd.test/download/rd-largest.mkv",
+                "https://rd.test/download/rd-large.mkv"
+            ),
+            candidates.map { it.directUrl }
+        )
+        assertEquals(
+            listOf(
+                14L * 1024L * 1024L * 1024L,
+                12L * 1024L * 1024L * 1024L
+            ),
+            candidates.map { it.sourceSizeBytes }
+        )
+        coVerify(exactly = 1) { realDebridApi.getTorrentInfo(any(), "rd-largest") }
+        coVerify(exactly = 1) { realDebridApi.getTorrentInfo(any(), "rd-large") }
+        coVerify(exactly = 0) { realDebridApi.getTorrentInfo(any(), "rd-fallback") }
     }
 
     @Test
@@ -605,9 +732,9 @@ class DebridLibraryServiceTest {
             torBoxService = torBoxService
         )
 
-        val candidates = service.getBenchmarkCandidates(DebridBenchmarkProvider.PREMIUMIZE)
+        val result = service.getBenchmarkCandidates(DebridBenchmarkProvider.PREMIUMIZE)
 
-        assertTrue(candidates.isEmpty())
+        assertEquals(DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem, result)
         coVerify(exactly = 1) { premiumizeService.refreshAccountState() }
         coVerify(exactly = 0) { premiumizeApi.listAllItems(any()) }
         coVerify(exactly = 0) { premiumizeApi.getItemDetails(any(), any()) }

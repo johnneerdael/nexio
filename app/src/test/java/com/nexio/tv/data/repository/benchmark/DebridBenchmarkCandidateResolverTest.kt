@@ -5,33 +5,63 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DebridBenchmarkCandidateResolverTest {
 
     @Test
-    fun `resolver returns the first candidate for a provider`() = runTest {
+    fun `resolver chooses one prepared candidate for a provider`() = runTest {
         val resolver = buildResolver(
-            realDebridCandidates = listOf(
-                candidate(provider = DebridBenchmarkProvider.REAL_DEBRID, directUrl = "b"),
-                candidate(provider = DebridBenchmarkProvider.REAL_DEBRID, directUrl = "a")
-            )
+            realDebridCandidates = DebridBenchmarkCandidateLookupResult.Candidates(
+                listOf(
+                    candidate(provider = DebridBenchmarkProvider.REAL_DEBRID, directUrl = "first"),
+                    candidate(provider = DebridBenchmarkProvider.REAL_DEBRID, directUrl = "second")
+                )
+            ),
+            chooseIndex = { size ->
+                assertEquals(2, size)
+                1
+            }
         )
 
-        assertEquals("b", resolver.resolve(DebridBenchmarkProvider.REAL_DEBRID)?.directUrl)
+        val result = resolver.resolve(DebridBenchmarkProvider.REAL_DEBRID)
+
+        assertTrue(result is DebridBenchmarkCandidateResolution.Candidate)
+        assertEquals(
+            "second",
+            (result as DebridBenchmarkCandidateResolution.Candidate).value.directUrl
+        )
     }
 
     @Test
-    fun `resolver reports no candidate when provider library is empty`() = runTest {
+    fun `resolver reports no large download when provider lookup has no large candidates`() = runTest {
+        val resolver = buildResolver(
+            premiumizeCandidates = DebridBenchmarkCandidateLookupResult.NoLargeDownload
+        )
+
+        assertEquals(
+            DebridBenchmarkCandidateResolution.NoLargeDownload,
+            resolver.resolve(DebridBenchmarkProvider.PREMIUMIZE)
+        )
+    }
+
+    @Test
+    fun `resolver reports no playable item when provider library is empty`() = runTest {
         val resolver = buildResolver()
 
-        assertNull(resolver.resolve(DebridBenchmarkProvider.PREMIUMIZE))
+        assertEquals(
+            DebridBenchmarkCandidateResolution.NoPlayableLibraryItem,
+            resolver.resolve(DebridBenchmarkProvider.PREMIUMIZE)
+        )
     }
 
     private fun buildResolver(
-        realDebridCandidates: List<DebridBenchmarkCandidate> = emptyList(),
-        premiumizeCandidates: List<DebridBenchmarkCandidate> = emptyList()
+        realDebridCandidates: DebridBenchmarkCandidateLookupResult =
+            DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem,
+        premiumizeCandidates: DebridBenchmarkCandidateLookupResult =
+            DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem,
+        chooseIndex: (Int) -> Int = { 0 }
     ): DebridBenchmarkCandidateResolver {
         val debridLibraryService = mockk<DebridLibraryService>()
 
@@ -43,19 +73,23 @@ class DebridBenchmarkCandidateResolverTest {
             debridLibraryService.getBenchmarkCandidates(DebridBenchmarkProvider.PREMIUMIZE)
         } returns premiumizeCandidates
 
-        return DebridBenchmarkCandidateResolver(debridLibraryService)
+        return DebridBenchmarkCandidateResolver(
+            debridLibraryService = debridLibraryService,
+            chooseIndex = chooseIndex
+        )
     }
 
     private fun candidate(
         provider: DebridBenchmarkProvider,
-        directUrl: String
+        directUrl: String,
+        sourceSizeBytes: Long? = null
     ): DebridBenchmarkCandidate {
         return DebridBenchmarkCandidate(
             provider = provider,
             directUrl = directUrl,
             headers = emptyMap(),
             filename = null,
-            sourceSizeBytes = null
+            sourceSizeBytes = sourceSizeBytes
         )
     }
 }

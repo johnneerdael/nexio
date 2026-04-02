@@ -14,6 +14,7 @@ import com.nexio.tv.data.remote.dto.debrid.RealDebridUnrestrictLinkDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxFileDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxTorrentListItemDto
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkCandidate
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkCandidateLookupResult
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryListTab
@@ -76,13 +77,13 @@ class DebridLibraryService @Inject constructor(
             .onStart { ensureFresh(force = false) }
     }
 
-    suspend fun getBenchmarkCandidates(provider: DebridBenchmarkProvider): List<DebridBenchmarkCandidate> {
-        val items = when (provider) {
+    suspend fun getBenchmarkCandidates(provider: DebridBenchmarkProvider): DebridBenchmarkCandidateLookupResult {
+        return when (provider) {
             DebridBenchmarkProvider.REAL_DEBRID -> {
                 if (!realDebridAuthDataStore.isAuthenticated.first()) {
-                    emptyList()
+                    DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
                 } else {
-                    fetchRealDebridTorrents()
+                    fetchRealDebridBenchmarkCandidates()
                 }
             }
             DebridBenchmarkProvider.PREMIUMIZE -> {
@@ -90,28 +91,83 @@ class DebridLibraryService @Inject constructor(
                 val premiumizeState = premiumizeService.observeAccountState().first()
                 val apiKey = premiumizeState.apiKey.trim()
                 if (!premiumizeState.isConnected || apiKey.isBlank()) {
-                    emptyList()
+                    DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
                 } else {
-                    fetchPremiumizeItems(apiKey)
+                    fetchPremiumizeBenchmarkCandidates(apiKey)
                 }
             }
         }
+    }
 
-        return items.asSequence()
-            .filter { entry -> entry.listKeys.contains(provider.listKey) }
-            .filter { entry -> entry.directPlaybackUrl.isNullOrBlank().not() }
-            .sortedByDescending { it.listedAt }
-            .mapNotNull { entry ->
-                val directUrl = entry.directPlaybackUrl?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                DebridBenchmarkCandidate(
-                    provider = provider,
-                    directUrl = directUrl,
-                    headers = entry.playbackHeaders.orEmpty(),
-                    filename = entry.playbackFilename?.takeIf { it.isNotBlank() },
-                    sourceSizeBytes = null
-                )
-            }
-            .toList()
+    private suspend fun fetchRealDebridBenchmarkCandidates(): DebridBenchmarkCandidateLookupResult = withContext(Dispatchers.IO) {
+        val playbackHeaders = buildRealDebridPlaybackHeaders()
+        val torrentsResponse = realDebridAuthService.executeAuthorizedRequest { authHeader ->
+            realDebridApi.getTorrents(authorization = authHeader)
+        } ?: return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
+        val downloadsResponse = realDebridAuthService.executeAuthorizedRequest { authHeader ->
+            realDebridApi.getDownloads(authorization = authHeader)
+        } ?: return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
+
+        if (!torrentsResponse.isSuccessful || !downloadsResponse.isSuccessful) {
+            return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
+        }
+
+        val torrents = torrentsResponse.body().orEmpty()
+            .filter { it.status.equals("downloaded", ignoreCase = true) }
+        val shortlistedTorrents = selectBenchmarkResolutionShortlist(
+            items = torrents,
+            sizeOf = { torrent: RealDebridTorrentDto -> torrent.bytes },
+            timestampOf = { torrent: RealDebridTorrentDto -> parseIsoToMillis(torrent.ended ?: torrent.added) }
+        )
+        if (shortlistedTorrents.isEmpty()) {
+            return@withContext DebridBenchmarkCandidateLookupResult.NoLargeDownload
+        }
+
+        val resolvedDownloadsByLink = downloadsResponse.body().orEmpty()
+            .mapNotNull(::toResolvedDownload)
+            .associateBy { it.link }
+
+        val candidates = shortlistedTorrents.mapNotNull { torrent ->
+            resolveRealDebridBenchmarkCandidate(
+                torrent = torrent,
+                resolvedDownloadsByLink = resolvedDownloadsByLink,
+                playbackHeaders = playbackHeaders
+            )
+        }
+        if (candidates.isEmpty()) {
+            DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
+        } else {
+            DebridBenchmarkCandidateLookupResult.Candidates(candidates)
+        }
+    }
+
+    private suspend fun fetchPremiumizeBenchmarkCandidates(apiKey: String): DebridBenchmarkCandidateLookupResult = withContext(Dispatchers.IO) {
+        val response = runCatching { premiumizeApi.listAllItems(apiKey) }.getOrNull()
+            ?: return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
+        if (!response.isSuccessful) return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
+
+        val shortlistedFiles = selectBenchmarkResolutionShortlist(
+            items = response.body()?.files.orEmpty()
+                .filter(::isLikelyPlayable),
+            sizeOf = { file: PremiumizeListAllFileDto -> file.size },
+            timestampOf = { file: PremiumizeListAllFileDto -> (file.createdAt ?: 0L) * 1000L }
+        )
+        if (shortlistedFiles.isEmpty()) {
+            return@withContext DebridBenchmarkCandidateLookupResult.NoLargeDownload
+        }
+
+        val candidates = shortlistedFiles.mapNotNull { file ->
+            val detailsResponse = runCatching {
+                premiumizeApi.getItemDetails(apiKey = apiKey, id = file.id)
+            }.getOrNull() ?: return@mapNotNull null
+            val details = detailsResponse.body() ?: return@mapNotNull null
+            mapPremiumizeItem(file, details)?.toBenchmarkCandidate(DebridBenchmarkProvider.PREMIUMIZE)
+        }
+        if (candidates.isEmpty()) {
+            DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
+        } else {
+            DebridBenchmarkCandidateLookupResult.Candidates(candidates)
+        }
     }
 
     fun observeIsRefreshing(): Flow<Boolean> = refreshingState
@@ -299,6 +355,39 @@ class DebridLibraryService @Inject constructor(
         return items
     }
 
+    private suspend fun resolveRealDebridBenchmarkCandidate(
+        torrent: RealDebridTorrentDto,
+        resolvedDownloadsByLink: Map<String, RealDebridResolvedDownload>,
+        playbackHeaders: Map<String, String>?
+    ): DebridBenchmarkCandidate? {
+        val infoResponse = realDebridAuthService.executeAuthorizedRequest { authHeader ->
+            realDebridApi.getTorrentInfo(authorization = authHeader, id = torrent.id)
+        } ?: return null
+        if (!infoResponse.isSuccessful) return null
+
+        val info = infoResponse.body() ?: return null
+        val fileLinkPair = info.files.orEmpty()
+            .filter { it.selected == 1 }
+            .zip(info.links.orEmpty())
+            .filter { (file, _) -> !isLikelySampleFile(file) && isLikelyPlayable(file) }
+            .maxByOrNull { (file, _) -> file.bytes ?: 0L }
+            ?: return null
+
+        val (file, link) = fileLinkPair
+        val resolvedDownload = resolvedDownloadsByLink[link]
+            ?.takeIf(::isLikelyPlayable)
+            ?: unrestrictRealDebridLink(link)?.takeIf(::isLikelyPlayable)
+            ?: return null
+
+        return mapRealDebridTorrentFile(
+            torrent = torrent,
+            info = info,
+            file = file,
+            resolvedDownload = resolvedDownload,
+            playbackHeaders = playbackHeaders
+        ).toBenchmarkCandidate(DebridBenchmarkProvider.REAL_DEBRID)
+    }
+
     private suspend fun fetchPremiumizeItems(apiKey: String): List<LibraryEntry> = withContext(Dispatchers.IO) {
         val response = runCatching { premiumizeApi.listAllItems(apiKey) }.getOrNull() ?: return@withContext emptyList()
         if (!response.isSuccessful) return@withContext emptyList()
@@ -391,7 +480,8 @@ class DebridLibraryService @Inject constructor(
             directPlaybackUrl = resolvedDownload.downloadUrl,
             playbackHeaders = playbackHeaders,
             playbackStreamName = filename,
-            playbackFilename = filename
+            playbackFilename = filename,
+            playbackSizeBytes = resolvedDownload.fileSize ?: file.bytes
         )
     }
 
@@ -422,7 +512,8 @@ class DebridLibraryService @Inject constructor(
             listedAt = (file.createdAt ?: details.createdAt ?: 0L) * 1000L,
             directPlaybackUrl = streamUrl,
             playbackStreamName = filename,
-            playbackFilename = filename
+            playbackFilename = filename,
+            playbackSizeBytes = details.size ?: file.size
         )
     }
 
@@ -452,7 +543,19 @@ class DebridLibraryService @Inject constructor(
             listedAt = parseIsoToMillis(torrent.createdAt ?: torrent.legacyCreatedAt),
             directPlaybackUrl = directUrl,
             playbackStreamName = filename,
-            playbackFilename = filename
+            playbackFilename = filename,
+            playbackSizeBytes = file.size
+        )
+    }
+
+    private fun LibraryEntry.toBenchmarkCandidate(provider: DebridBenchmarkProvider): DebridBenchmarkCandidate? {
+        val directUrl = directPlaybackUrl?.takeIf { it.isNotBlank() } ?: return null
+        return DebridBenchmarkCandidate(
+            provider = provider,
+            directUrl = directUrl,
+            headers = playbackHeaders.orEmpty(),
+            filename = playbackFilename?.takeIf { it.isNotBlank() },
+            sourceSizeBytes = playbackSizeBytes
         )
     }
 
@@ -526,7 +629,8 @@ class DebridLibraryService @Inject constructor(
             link = link,
             downloadUrl = downloadUrl,
             filename = download.filename,
-            mimeType = download.mimeType
+            mimeType = download.mimeType,
+            fileSize = download.fileSize
         )
     }
 
@@ -537,7 +641,8 @@ class DebridLibraryService @Inject constructor(
             link = link,
             downloadUrl = downloadUrl,
             filename = download.filename,
-            mimeType = download.mimeType
+            mimeType = download.mimeType,
+            fileSize = download.fileSize
         )
     }
 
@@ -599,6 +704,9 @@ class DebridLibraryService @Inject constructor(
         const val REAL_DEBRID_LIST_KEY = "service:realdebrid"
         const val PREMIUMIZE_LIST_KEY = "service:premiumize"
         const val TORBOX_LIST_KEY = "service:torbox"
+        private const val BENCHMARK_PREFERRED_TARGET_SIZE_BYTES = 10L * 1024L * 1024L * 1024L
+        private const val BENCHMARK_FALLBACK_MIN_SIZE_BYTES = 5L * 1024L * 1024L * 1024L
+        private const val BENCHMARK_MAX_RESOLUTION_COUNT = 2
 
         private val VIDEO_EXTENSIONS = listOf(
             ".mkv", ".mp4", ".avi", ".mov", ".wmv", ".ts", ".m2ts", ".webm", ".mpg", ".mpeg"
@@ -614,6 +722,25 @@ class DebridLibraryService @Inject constructor(
         val link: String,
         val downloadUrl: String,
         val filename: String?,
-        val mimeType: String?
+        val mimeType: String?,
+        val fileSize: Long?
     )
+
+    private fun <T> selectBenchmarkResolutionShortlist(
+        items: List<T>,
+        sizeOf: (T) -> Long?,
+        timestampOf: (T) -> Long
+    ): List<T> {
+        val preferred = items.filter { item ->
+            (sizeOf(item) ?: 0L) >= BENCHMARK_PREFERRED_TARGET_SIZE_BYTES
+        }
+        val fallback = items.filter { item ->
+            (sizeOf(item) ?: 0L) >= BENCHMARK_FALLBACK_MIN_SIZE_BYTES
+        }
+        val activeBand = if (preferred.isNotEmpty()) preferred else fallback
+        return activeBand.sortedWith(
+            compareByDescending<T> { item -> sizeOf(item) ?: -1L }
+                .thenByDescending { item -> timestampOf(item) }
+        ).take(BENCHMARK_MAX_RESOLUTION_COUNT)
+    }
 }
