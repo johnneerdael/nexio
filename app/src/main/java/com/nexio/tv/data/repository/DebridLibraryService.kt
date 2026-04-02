@@ -704,9 +704,14 @@ class DebridLibraryService @Inject constructor(
         const val REAL_DEBRID_LIST_KEY = "service:realdebrid"
         const val PREMIUMIZE_LIST_KEY = "service:premiumize"
         const val TORBOX_LIST_KEY = "service:torbox"
-        private const val BENCHMARK_PREFERRED_TARGET_SIZE_BYTES = 10L * 1024L * 1024L * 1024L
-        private const val BENCHMARK_FALLBACK_MIN_SIZE_BYTES = 5L * 1024L * 1024L * 1024L
+        private const val BENCHMARK_SIZE_GIB = 1024L * 1024L * 1024L
         private const val BENCHMARK_MAX_RESOLUTION_COUNT = 2
+        private val BENCHMARK_SIZE_THRESHOLDS_BYTES = listOf(
+            20L * BENCHMARK_SIZE_GIB,
+            15L * BENCHMARK_SIZE_GIB,
+            10L * BENCHMARK_SIZE_GIB,
+            5L * BENCHMARK_SIZE_GIB
+        )
 
         private val VIDEO_EXTENSIONS = listOf(
             ".mkv", ".mp4", ".avi", ".mov", ".wmv", ".ts", ".m2ts", ".webm", ".mpg", ".mpeg"
@@ -731,13 +736,13 @@ class DebridLibraryService @Inject constructor(
         sizeOf: (T) -> Long?,
         timestampOf: (T) -> Long
     ): List<T> {
-        val preferred = items.filter { item ->
-            (sizeOf(item) ?: 0L) >= BENCHMARK_PREFERRED_TARGET_SIZE_BYTES
-        }
-        val fallback = items.filter { item ->
-            (sizeOf(item) ?: 0L) >= BENCHMARK_FALLBACK_MIN_SIZE_BYTES
-        }
-        val activeBand = if (preferred.isNotEmpty()) preferred else fallback
+        val activeBand = BENCHMARK_SIZE_THRESHOLDS_BYTES
+            .asSequence()
+            .map { threshold ->
+                items.filter { item -> (sizeOf(item) ?: 0L) >= threshold }
+            }
+            .firstOrNull { band -> band.isNotEmpty() }
+            .orEmpty()
         return activeBand.sortedWith(
             compareByDescending<T> { item -> sizeOf(item) ?: -1L }
                 .thenByDescending { item -> timestampOf(item) }
