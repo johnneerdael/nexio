@@ -7,7 +7,9 @@ import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
@@ -108,18 +110,44 @@ class DebridBenchmarkServiceTest {
         assertEquals(DebridBenchmarkRuntimeState.Idle, service.activeState.value)
     }
 
+    @Test
+    fun `service reports no playable library item outcomes`() = runTest {
+        val service = buildService(
+            activeTransport = CompletedTransport(DebridBenchmarkSummary()),
+            scope = backgroundScope,
+            resolveCandidate = { null }
+        )
+        val reported = CompletableDeferred<DebridBenchmarkOutcome>()
+
+        backgroundScope.launch {
+            reported.complete(service.outcomes.first())
+        }
+
+        assertTrue(service.start(DebridBenchmarkProvider.REAL_DEBRID))
+
+        assertEquals(
+            DebridBenchmarkOutcome(
+                provider = DebridBenchmarkProvider.REAL_DEBRID,
+                summary = DebridBenchmarkSummary(),
+                terminationReason = DebridBenchmarkTerminationReason.NO_PLAYABLE_LIBRARY_ITEM
+            ),
+            reported.await()
+        )
+    }
+
     private lateinit var benchmarkStore: DebridBenchmarkStore
 
     private fun buildService(
         activeTransport: DebridBenchmarkTransport,
         scope: kotlinx.coroutines.CoroutineScope,
+        resolveCandidate: (DebridBenchmarkProvider) -> DebridBenchmarkCandidate? = ::candidate,
         nowMs: () -> Long = { System.currentTimeMillis() }
     ): DebridBenchmarkService {
         val resolver = mockk<DebridBenchmarkCandidateResolver>()
         benchmarkStore = mockk(relaxed = true)
 
         coEvery { resolver.resolve(any()) } answers {
-            candidate(firstArg())
+            resolveCandidate(firstArg())
         }
         coEvery { benchmarkStore.latestResult(any()) } returns emptyFlow()
 

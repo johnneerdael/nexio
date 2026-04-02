@@ -17,6 +17,7 @@ import com.nexio.tv.data.repository.TorBoxAccountState
 import com.nexio.tv.data.repository.TorBoxService
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkOutcome
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkRuntimeState
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
@@ -24,9 +25,12 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -80,6 +84,7 @@ class DebridSettingsViewModelTest {
         every { benchmarkService.activeState } returns benchmarkState
         every { benchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns flowOf(null)
         every { benchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns flowOf(null)
+        every { benchmarkService.outcomes } returns MutableSharedFlow()
         coEvery { benchmarkService.start(DebridBenchmarkProvider.REAL_DEBRID) } answers {
             benchmarkState.value = DebridBenchmarkRuntimeState.Running(
                 provider = DebridBenchmarkProvider.REAL_DEBRID,
@@ -107,6 +112,36 @@ class DebridSettingsViewModelTest {
         assertEquals(
             640L * 1024L * 1024L,
             viewModel.uiState.value.realDebridBenchmark.activeSummary?.transferredBytes
+        )
+    }
+
+    @Test
+    fun `no playable benchmark outcomes surface a user message`() = runTest(dispatcher) {
+        val outcomes = MutableSharedFlow<DebridBenchmarkOutcome>()
+        val benchmarkService = mockk<DebridBenchmarkService>(relaxed = true)
+        every { benchmarkService.activeState } returns MutableStateFlow(DebridBenchmarkRuntimeState.Idle)
+        every { benchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns flowOf(null)
+        every { benchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns flowOf(null)
+        every { benchmarkService.outcomes } returns outcomes
+
+        val viewModel = buildViewModel(
+            realDebridConnected = true,
+            benchmarkService = benchmarkService
+        )
+        advanceUntilIdle()
+
+        val emittedMessage = async { viewModel.messages.first() }
+        outcomes.emit(
+            DebridBenchmarkOutcome(
+                provider = DebridBenchmarkProvider.REAL_DEBRID,
+                summary = DebridBenchmarkSummary(),
+                terminationReason = DebridBenchmarkTerminationReason.NO_PLAYABLE_LIBRARY_ITEM
+            )
+        )
+
+        assertEquals(
+            "No playable Real-Debrid library item available for benchmarking",
+            emittedMessage.await()
         )
     }
 
@@ -159,6 +194,7 @@ class DebridSettingsViewModelTest {
             every { service.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns flowOf(null)
             every { service.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns
                 flowOf(latestPremiumizeResult)
+            every { service.outcomes } returns MutableSharedFlow()
         }
 
         return DebridSettingsViewModel(
