@@ -95,7 +95,7 @@ class DebridBenchmarkMetricsTest {
     }
 
     @Test
-    fun `collector prefers transport side throughput samples when present`() {
+    fun `collector keeps sustained autoplay metrics on outer read samples even when transport samples exist`() {
         val collector = DebridBenchmarkMetricsCollector()
 
         collector.recordStartup(
@@ -112,17 +112,17 @@ class DebridBenchmarkMetricsTest {
         val sustained = collector.finishSustained()
         val rawSamples = collector.rawSamples()
 
-        assertEquals(listOf(33.554432, 67.108864), rawSamples.throughputWindowsMbps)
-        assertEquals(12.mb, sustained.bytesTransferred ?: 0L)
+        assertEquals(listOf(536.870912, 536.870912), rawSamples.throughputWindowsMbps)
+        assertEquals(128.mb, sustained.bytesTransferred ?: 0L)
         assertEquals(2.seconds, sustained.elapsedMs ?: 0L)
-        assertEquals(50.331648, sustained.averageThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(33.554432, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(33.554432, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(67.108864, sustained.peakThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(536.870912, sustained.averageThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(536.870912, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(536.870912, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(536.870912, sustained.peakThroughputMbps ?: 0.0, 0.00001)
     }
 
     @Test
-    fun `collector derives conservative floor from steady state buckets after warm up`() {
+    fun `collector derives conservative floor from steady state outer buckets after warm up`() {
         val collector = DebridBenchmarkMetricsCollector()
 
         collector.recordStartup(
@@ -131,10 +131,16 @@ class DebridBenchmarkMetricsTest {
         )
 
         repeat(10) { index ->
-            collector.recordTransportBytesRead(bytesRead = 50_000_000L, sampleAtMs = (index + 1).seconds)
+            collector.recordBytesRead(
+                totalBytesRead = (index + 1) * 50_000_000L,
+                sampleAtMs = (index + 1).seconds
+            )
         }
         repeat(10) { index ->
-            collector.recordTransportBytesRead(bytesRead = 100_000_000L, sampleAtMs = (index + 11).seconds)
+            collector.recordBytesRead(
+                totalBytesRead = 500_000_000L + ((index + 1) * 100_000_000L),
+                sampleAtMs = (index + 11).seconds
+            )
         }
 
         val sustained = collector.finishSustained()
@@ -143,6 +149,35 @@ class DebridBenchmarkMetricsTest {
         assertEquals(800.0, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
         assertEquals(800.0, sustained.peakThroughputMbps ?: 0.0, 0.00001)
         assertEquals(0.0, sustained.throughputCv ?: 0.0, 0.00001)
+    }
+
+    @Test
+    fun `bursty transport prefetch does not collapse consumer side sustained floor`() {
+        val collector = DebridBenchmarkMetricsCollector()
+
+        collector.recordStartup(
+            requestStartedAtMs = 0L,
+            firstByteAtMs = 0L
+        )
+
+        repeat(20) { index ->
+            collector.recordBytesRead(
+                totalBytesRead = ((index + 1) * 100_000_000L),
+                sampleAtMs = (index + 1).seconds
+            )
+        }
+
+        collector.recordTransportBytesRead(bytesRead = 400_000_000L, sampleAtMs = 1.seconds)
+        collector.recordTransportBytesRead(bytesRead = 400_000_000L, sampleAtMs = 2.seconds)
+        collector.recordTransportBytesRead(bytesRead = 400_000_000L, sampleAtMs = 11.seconds)
+        collector.recordTransportBytesRead(bytesRead = 400_000_000L, sampleAtMs = 12.seconds)
+
+        val sustained = collector.finishSustained()
+
+        assertEquals(800.0, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(800.0, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(800.0, sustained.peakThroughputMbps ?: 0.0, 0.00001)
+        assertTrue(sustained.actionable)
     }
 
     @Test
@@ -171,7 +206,7 @@ class DebridBenchmarkMetricsTest {
     }
 
     @Test
-    fun `transport collector preserves bytes across multiple reads in the same millisecond`() {
+    fun `transport collector is diagnostic only when no outer read samples exist`() {
         val collector = DebridBenchmarkMetricsCollector()
 
         collector.recordStartup(
@@ -186,17 +221,17 @@ class DebridBenchmarkMetricsTest {
         val sustained = collector.finishSustained()
         val rawSamples = collector.rawSamples()
 
-        assertEquals(listOf(201.326592), rawSamples.throughputWindowsMbps)
-        assertEquals(24.mb, sustained.bytesTransferred ?: 0L)
-        assertEquals(1.seconds, sustained.elapsedMs ?: 0L)
-        assertEquals(201.326592, sustained.averageThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(201.326592, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(201.326592, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(201.326592, sustained.peakThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(emptyList<Double>(), rawSamples.throughputWindowsMbps)
+        assertEquals(0L, sustained.bytesTransferred ?: 0L)
+        assertEquals(0L, sustained.elapsedMs ?: 0L)
+        assertEquals(null, sustained.averageThroughputMbps)
+        assertEquals(null, sustained.p10ThroughputMbps)
+        assertEquals(null, sustained.p50ThroughputMbps)
+        assertEquals(null, sustained.peakThroughputMbps)
     }
 
     @Test
-    fun `transport collector remains consistent when samples arrive from parallel threads`() {
+    fun `parallel transport diagnostics do not create autoplay throughput metrics without outer reads`() {
         val collector = DebridBenchmarkMetricsCollector()
         val executor = Executors.newFixedThreadPool(4)
         val ready = CountDownLatch(4)
@@ -234,12 +269,12 @@ class DebridBenchmarkMetricsTest {
 
         val sustained = collector.finishSustained()
 
-        assertEquals(4_000L * 1024L * 1024L, sustained.bytesTransferred ?: 0L)
-        assertEquals(1.seconds, sustained.elapsedMs ?: 0L)
-        assertTrue(sustained.actionable)
-        assertEquals(33_554.432, sustained.averageThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(33_554.432, sustained.derivedAverageThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(33_554.432, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(0L, sustained.bytesTransferred ?: 0L)
+        assertEquals(0L, sustained.elapsedMs ?: 0L)
+        assertEquals(false, sustained.actionable)
+        assertEquals(null, sustained.averageThroughputMbps)
+        assertEquals(null, sustained.derivedAverageThroughputMbps)
+        assertEquals(null, sustained.p10ThroughputMbps)
     }
 
     @Test

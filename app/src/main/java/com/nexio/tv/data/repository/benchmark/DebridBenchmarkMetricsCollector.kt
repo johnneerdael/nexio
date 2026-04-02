@@ -393,19 +393,11 @@ class DebridBenchmarkMetricsCollector(
     }
 
     private fun completedSustainedBuckets(): List<DebridBenchmarkThroughputBucketSample> {
-        return if (hasTransportSamples()) {
-            completedTransportThroughputBuckets()
-        } else {
-            completedThroughputBuckets()
-        }
+        return completedThroughputBuckets()
     }
 
     private fun effectiveSustainedBuckets(): List<DebridBenchmarkThroughputBucketSample> {
-        return if (hasTransportSamples()) {
-            effectiveTransportThroughputBuckets()
-        } else {
-            effectiveThroughputBuckets()
-        }
+        return effectiveThroughputBuckets()
     }
 
     private fun steadyStateCompletedSustainedBuckets(
@@ -415,9 +407,9 @@ class DebridBenchmarkMetricsCollector(
         return if (steadyStateBuckets.isNotEmpty()) steadyStateBuckets else completedBuckets
     }
 
-    private fun activeStallCount(): Int = if (hasTransportSamples()) transportStallCount else stallCount
+    private fun activeStallCount(): Int = stallCount
 
-    private fun activeMaxReadGapMs(): Long = if (hasTransportSamples()) transportMaxReadGapMs else maxReadGapMs
+    private fun activeMaxReadGapMs(): Long = maxReadGapMs
 
     private fun Long.toMbps(durationMs: Long): Double {
         return toDouble() * 8.0 / durationMs.toDouble() / 1_000.0

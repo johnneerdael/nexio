@@ -157,6 +157,81 @@ class DebridBenchmarkStoreTest {
     }
 
     @Test
+    fun `saving a completed fallback result allows non actionable optimized profile with incomplete seek metrics`() = runTest {
+        val store = buildStore(backgroundScope)
+        val result = sampleComparisonResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            measuredAtMs = 47L
+        ).copy(
+            summary = DebridBenchmarkSummary(
+                startupTimeMs = 180L,
+                sustainedThroughputMbps = 220.0,
+                transferredBytes = 4_000_000_000L,
+                elapsedMs = 120_000L
+            ),
+            direct = sampleTransportProfile(
+                startupTimeMs = 180L,
+                averageMbps = 220.0,
+                p10Mbps = 180.0,
+                peakMbps = 240.0,
+                seekP95Ms = 240L,
+                seekP99Ms = 320L,
+                decisionSafeBudgetMbps = 153.0,
+                decisionActionable = true
+            ),
+            optimized = DebridBenchmarkTransportProfile(
+                startup = DebridBenchmarkStartupMetrics(
+                    initialTtfbMs = 320L,
+                    startupFailureRate = 0.0
+                ),
+                sustained = DebridBenchmarkSustainedMetrics(
+                    collectorVersion = 2,
+                    samplingMode = "fixed_time_bucket",
+                    bucketMs = 1_000L,
+                    averageThroughputMbps = 260.0,
+                    derivedAverageThroughputMbps = 260.0,
+                    actionable = false,
+                    recoverableFailureCount = 3,
+                    recoverableTimeoutCount = 0,
+                    p10ThroughputMbps = 210.0,
+                    p50ThroughputMbps = 260.0,
+                    peakThroughputMbps = 280.0,
+                    throughputStddevMbps = 8.0,
+                    throughputCv = 0.05,
+                    stallCount = 0,
+                    maxReadGapMs = 140L,
+                    bytesTransferred = 2_000_000_000L,
+                    elapsedMs = 60_000L
+                ),
+                seek = DebridBenchmarkSeekMetrics(),
+                decision = DebridBenchmarkTransportDecisionMetrics(
+                    safeSustainedBudgetMbps = null,
+                    actionable = false
+                ),
+                configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                    useParallelConnections = true,
+                    parallelConnectionCount = 4,
+                    parallelChunkSizeMb = 8
+                ),
+                rawSamples = DebridBenchmarkRawSamples()
+            ),
+            comparison = DebridBenchmarkComparisonSummary(
+                sustainedWinner = DebridBenchmarkTransportMode.DIRECT,
+                seekWinner = DebridBenchmarkTransportMode.DIRECT,
+                stabilityWinner = DebridBenchmarkTransportMode.DIRECT
+            )
+        )
+
+        store.saveLatest(result)
+
+        val restored = store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first()
+
+        assertEquals(result, restored)
+        assertEquals(false, restored?.optimized?.decision?.actionable)
+        assertEquals(null, restored?.optimized?.seek?.seekTtfbP95Ms)
+    }
+
+    @Test
     fun `saving a completed provider result overwrites the previous result for that provider`() = runTest {
         val store = buildStore(backgroundScope)
         store.saveLatest(sampleResult(provider = DebridBenchmarkProvider.REAL_DEBRID, measuredAtMs = 1L))
