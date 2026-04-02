@@ -21,6 +21,7 @@ class DebridBenchmarkMetricsCollector(
     private var totalBytesRead = 0L
     private var lastSampleAtMs: Long? = null
     private var lastSampleBytesRead = 0L
+    private var pendingOuterDeltaBytes = 0.0
     private var stallCount = 0
     private var maxReadGapMs = 0L
     private val throughputBuckets = mutableListOf<DebridBenchmarkThroughputBucketSample>()
@@ -29,6 +30,7 @@ class DebridBenchmarkMetricsCollector(
     private var throughputWindowAccumulatedBytes = 0.0
     private var throughputWindowAccumulatedMs = 0L
     private var transportLastSampleAtMs: Long? = null
+    private var pendingTransportBytes = 0.0
     private var transportStallCount = 0
     private var transportMaxReadGapMs = 0L
     private val transportThroughputBuckets = mutableListOf<DebridBenchmarkThroughputBucketSample>()
@@ -60,22 +62,26 @@ class DebridBenchmarkMetricsCollector(
         if (previousSampleAtMs != null) {
             val deltaMs = (sampleTimeMs - previousSampleAtMs).coerceAtLeast(0L)
             val deltaBytes = (clampedBytesRead - lastSampleBytesRead).coerceAtLeast(0L)
+            pendingOuterDeltaBytes += deltaBytes.toDouble()
             if (deltaMs > 0L) {
                 recordThroughputInterval(
                     intervalStartMs = previousSampleAtMs,
                     intervalEndMs = sampleTimeMs,
-                    intervalBytes = deltaBytes.toDouble()
+                    intervalBytes = pendingOuterDeltaBytes
                 )
+                pendingOuterDeltaBytes = 0.0
             }
         } else {
             val windowStartMs = firstByteAtMs ?: requestStartedAtMs
             val deltaMs = windowStartMs?.let { sampleTimeMs - it }?.coerceAtLeast(0L) ?: 0L
+            pendingOuterDeltaBytes += clampedBytesRead.toDouble()
             if (deltaMs > 0L) {
                 recordThroughputInterval(
                     intervalStartMs = requireNotNull(windowStartMs),
                     intervalEndMs = sampleTimeMs,
-                    intervalBytes = clampedBytesRead.toDouble()
+                    intervalBytes = pendingOuterDeltaBytes
                 )
+                pendingOuterDeltaBytes = 0.0
             }
         }
 
@@ -109,11 +115,15 @@ class DebridBenchmarkMetricsCollector(
             }
         }
 
-        recordTransportThroughputInterval(
-            intervalStartMs = previousSampleAtMs ?: sampleTimeMs,
-            intervalEndMs = sampleTimeMs,
-            intervalBytes = clampedBytesRead.toDouble()
-        )
+        pendingTransportBytes += clampedBytesRead.toDouble()
+        if (previousSampleAtMs != null && sampleTimeMs > previousSampleAtMs) {
+            recordTransportThroughputInterval(
+                intervalStartMs = previousSampleAtMs,
+                intervalEndMs = sampleTimeMs,
+                intervalBytes = pendingTransportBytes
+            )
+            pendingTransportBytes = 0.0
+        }
         transportLastSampleAtMs = sampleTimeMs
     }
 
