@@ -79,33 +79,6 @@ class DebridBenchmarkSessionRunner internal constructor(
         val directProfile = directResult.profile.withDerivedDecisionMetrics()
         val optimizedProfile = optimizedResult.profile.withDerivedDecisionMetrics()
         if (optimizedResult.terminationReason != DebridBenchmarkTerminationReason.COMPLETED) {
-            if (directProfile.isActionableForAutoplay()) {
-                val deviceSnapshot = deviceCapabilitySnapshotProvider.capture()
-                val completedResult = DebridBenchmarkResult(
-                    provider = provider,
-                    measuredAtMs = nowMs(),
-                    summary = directResult.summary,
-                    terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
-                    candidate = candidateMetadata,
-                    device = deviceSnapshot,
-                    session = benchmarkSessionMetadata(
-                        directElapsedMs = directResult.profile.sustained.elapsedMs ?: 0L,
-                        optimizedElapsedMs = optimizedResult.summary.elapsedMs
-                    ),
-                    direct = directProfile,
-                    optimized = optimizedProfile.markNonActionable(),
-                    comparison = DebridBenchmarkComparisonSummary(
-                        sustainedWinner = DebridBenchmarkTransportMode.DIRECT,
-                        seekWinner = DebridBenchmarkTransportMode.DIRECT,
-                        stabilityWinner = DebridBenchmarkTransportMode.DIRECT
-                    )
-                )
-                return DebridBenchmarkSessionResult(
-                    summary = completedResult.summary,
-                    terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
-                    result = completedResult
-                )
-            }
             return DebridBenchmarkSessionResult(
                 summary = optimizedResult.summary,
                 terminationReason = optimizedResult.terminationReason,
@@ -308,16 +281,6 @@ private fun DebridBenchmarkTransportProfile.withDerivedDecisionMetrics(): Debrid
         decision = DebridBenchmarkTransportDecisionMetrics(
             safeSustainedBudgetMbps = safeBudgetMbps,
             actionable = sustained.actionable
-        )
-    )
-}
-
-private fun DebridBenchmarkTransportProfile.markNonActionable(): DebridBenchmarkTransportProfile {
-    return copy(
-        sustained = sustained.copy(actionable = false),
-        decision = DebridBenchmarkTransportDecisionMetrics(
-            safeSustainedBudgetMbps = null,
-            actionable = false
         )
     )
 }
