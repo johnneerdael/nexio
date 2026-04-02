@@ -86,8 +86,8 @@ class TraktLibrarySnapshotStore @Inject constructor(
         val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
         if (schemaVersion != SCHEMA_VERSION) return null
 
-        val languageEpoch = root.get("languageEpoch")?.asInt ?: metadataDiskCacheStore.currentLanguageEpoch()
-        if (languageEpoch != metadataDiskCacheStore.currentLanguageEpoch()) return null
+        val currentLanguageEpoch = metadataDiskCacheStore.currentLanguageEpoch()
+        val languageEpoch = root.get("languageEpoch")?.asInt ?: currentLanguageEpoch
 
         val listTabsType = object : TypeToken<List<LibraryListTab>>() {}.type
         val entriesByListType = object : TypeToken<Map<String, List<LibraryEntry>>>() {}.type
@@ -97,8 +97,11 @@ class TraktLibrarySnapshotStore @Inject constructor(
         return Snapshot(
             listTabs = gson.fromJson(root.get("listTabs"), listTabsType) ?: emptyList(),
             entriesByList = gson.fromJson(root.get("entriesByList"), entriesByListType) ?: emptyMap(),
-            metadataByContentKey = gson.fromJson(root.get("metadataByContentKey"), metadataByContentKeyType)
-                ?: emptyMap(),
+            metadataByContentKey = if (languageEpoch == currentLanguageEpoch) {
+                gson.fromJson(root.get("metadataByContentKey"), metadataByContentKeyType) ?: emptyMap()
+            } else {
+                emptyMap()
+            },
             updatedAtMs = root.get("updatedAtMs")?.asLong ?: 0L
         )
     }

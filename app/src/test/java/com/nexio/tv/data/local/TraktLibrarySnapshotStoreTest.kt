@@ -29,7 +29,10 @@ class TraktLibrarySnapshotStoreTest {
         assertEquals(snapshot, store.read())
 
         epoch = 5
-        assertNull(store.read())
+        assertEquals(
+            snapshot.copy(metadataByContentKey = emptyMap()),
+            store.read()
+        )
     }
 
     @Test
