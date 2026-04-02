@@ -10,6 +10,7 @@ import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TraktLibrarySnapshotStoreTest {
@@ -64,6 +65,64 @@ class TraktLibrarySnapshotStoreTest {
         org.junit.Assert.assertTrue(raw.contains("\"listTabs\""))
         org.junit.Assert.assertTrue(raw.contains("\"entriesByList\""))
         org.junit.Assert.assertTrue(raw.contains("\"metadataByContentKey\""))
+    }
+
+    @Test
+    fun `read restores valid cached entries even when one entry is malformed`() {
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(prefs, "trakt_library_snapshot")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 1
+        val store = TraktLibrarySnapshotStore(context, metadataStore)
+
+        prefs.edit().putString(
+            "snapshot",
+            """
+            {
+              "schemaVersion": 1,
+              "languageEpoch": 1,
+              "listTabs": [
+                {
+                  "key": "watchlist",
+                  "title": "Watchlist",
+                  "type": "WATCHLIST",
+                  "sortBy": "rank",
+                  "sortHow": "asc"
+                }
+              ],
+              "entriesByList": {
+                "watchlist": [
+                  {
+                    "id": "tt1234567",
+                    "type": "movie",
+                    "name": "Valid Movie",
+                    "posterShape": "POSTER",
+                    "genres": [],
+                    "listKeys": ["watchlist"],
+                    "listedAt": 100,
+                    "traktId": 10
+                  },
+                  "totally-invalid-entry"
+                ]
+              },
+              "metadataByContentKey": {
+                "movie:tt1234567": {
+                  "name": "Hydrated Valid Movie",
+                  "poster": "https://image.test/poster.jpg",
+                  "genres": ["Drama"]
+                }
+              },
+              "updatedAtMs": 1234
+            }
+            """.trimIndent()
+        ).apply()
+
+        val restored = store.read()
+
+        assertTrue(restored != null)
+        assertEquals(listOf("watchlist"), restored!!.listTabs.map { it.key })
+        assertEquals(listOf("tt1234567"), restored.entriesByList["watchlist"].orEmpty().map { it.id })
+        assertEquals(1234L, restored.updatedAtMs)
     }
 
     private fun sampleSnapshot(): TraktLibrarySnapshotStore.Snapshot {
