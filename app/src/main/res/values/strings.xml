@@ -610,6 +610,12 @@
     <string name="debrid_easydebrid_connected_user">User %1$s</string>
     <string name="debrid_easydebrid_key_title">EasyDebrid API Key</string>
     <string name="debrid_easydebrid_key_subtitle">Enter your EasyDebrid API key</string>
+    <string name="debrid_real_debrid_benchmark_title">Real-Debrid Benchmark</string>
+    <string name="debrid_premiumize_benchmark_title">Premiumize Benchmark</string>
+    <string name="debrid_benchmark_description">Measure startup and sustained throughput against this provider</string>
+    <string name="debrid_benchmark_run_action">Run benchmark</string>
+    <string name="debrid_benchmark_cancel_action">Cancel benchmark</string>
+    <string name="debrid_benchmark_busy">Another benchmark is running</string>
     <string name="debrid_api_key_placeholder">Enter API key</string>
     <string name="debrid_unavailable">Unavailable</string>
     <string name="debrid_connected">Connected</string>

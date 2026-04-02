@@ -56,9 +56,16 @@ import com.nexio.tv.data.repository.PremiumizeService
 import com.nexio.tv.data.repository.RealDebridAuthService
 import com.nexio.tv.data.repository.RealDebridTokenPollResult
 import com.nexio.tv.data.repository.TorBoxService
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkRuntimeState
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.Locale
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -80,14 +87,46 @@ internal data class DebridUiState(
     val realDebridUsername: String? = null,
     val realDebridUserCode: String? = null,
     val realDebridVerificationUrl: String? = null,
+    val realDebridBenchmark: DebridProviderBenchmarkUi = DebridProviderBenchmarkUi(),
     val premiumizeConnected: Boolean = false,
     val premiumizeCustomerId: Int? = null,
+    val premiumizeBenchmark: DebridProviderBenchmarkUi = DebridProviderBenchmarkUi(),
     val torBoxConnected: Boolean = false,
     val torBoxEmail: String? = null,
     val torBoxPlan: String? = null,
     val easyDebridConnected: Boolean = false,
     val easyDebridUserId: String? = null,
     val easyDebridPaidUntil: String? = null
+)
+
+internal data class DebridProviderBenchmarkUi(
+    val isVisible: Boolean = false,
+    val canRun: Boolean = false,
+    val isRunning: Boolean = false,
+    val blockedByActiveRun: Boolean = false,
+    val latestResult: DebridBenchmarkResult? = null,
+    val activeSummary: DebridBenchmarkSummary? = null
+)
+
+private data class DebridConnectionSnapshot(
+    val realDebridMode: DebridConnectionMode,
+    val realDebridUsername: String?,
+    val realDebridUserCode: String?,
+    val realDebridVerificationUrl: String?,
+    val premiumizeConnected: Boolean,
+    val premiumizeCustomerId: Int?,
+    val torBoxConnected: Boolean,
+    val torBoxEmail: String?,
+    val torBoxPlan: String?,
+    val easyDebridConnected: Boolean,
+    val easyDebridUserId: String?,
+    val easyDebridPaidUntil: String?
+)
+
+private data class DebridBenchmarkSnapshot(
+    val latestRealDebridResult: DebridBenchmarkResult?,
+    val latestPremiumizeResult: DebridBenchmarkResult?,
+    val activeState: DebridBenchmarkRuntimeState
 )
 
 @Composable
@@ -178,6 +217,17 @@ fun DebridSettingsContent(
                     }
                 }
 
+                if (uiState.realDebridBenchmark.isVisible) {
+                    item(key = "debrid_rd_benchmark") {
+                        DebridBenchmarkRow(
+                            provider = DebridBenchmarkProvider.REAL_DEBRID,
+                            benchmark = uiState.realDebridBenchmark,
+                            onStart = { viewModel.startBenchmark(DebridBenchmarkProvider.REAL_DEBRID) },
+                            onCancel = { viewModel.cancelBenchmark() }
+                        )
+                    }
+                }
+
                 item(key = "debrid_pm") {
                     SettingsActionRow(
                         title = stringResource(R.string.debrid_premiumize_title),
@@ -190,6 +240,17 @@ fun DebridSettingsContent(
                         },
                         onClick = { showPremiumizeDialog = true }
                     )
+                }
+
+                if (uiState.premiumizeBenchmark.isVisible) {
+                    item(key = "debrid_pm_benchmark") {
+                        DebridBenchmarkRow(
+                            provider = DebridBenchmarkProvider.PREMIUMIZE,
+                            benchmark = uiState.premiumizeBenchmark,
+                            onStart = { viewModel.startBenchmark(DebridBenchmarkProvider.PREMIUMIZE) },
+                            onCancel = { viewModel.cancelBenchmark() }
+                        )
+                    }
                 }
 
                 item(key = "debrid_tb") {
@@ -391,6 +452,97 @@ private fun maskApiKey(key: String, notSetLabel: String): String {
     return if (trimmed.length <= 4) "••••" else "••••••${trimmed.takeLast(4)}"
 }
 
+@Composable
+private fun DebridBenchmarkRow(
+    provider: DebridBenchmarkProvider,
+    benchmark: DebridProviderBenchmarkUi,
+    onStart: () -> Unit,
+    onCancel: () -> Unit
+) {
+    SettingsActionRow(
+        title = stringResource(
+            when (provider) {
+                DebridBenchmarkProvider.REAL_DEBRID -> R.string.debrid_real_debrid_benchmark_title
+                DebridBenchmarkProvider.PREMIUMIZE -> R.string.debrid_premiumize_benchmark_title
+            }
+        ),
+        subtitle = benchmarkRowSubtitle(benchmark),
+        value = stringResource(
+            if (benchmark.isRunning) {
+                R.string.debrid_benchmark_cancel_action
+            } else {
+                R.string.debrid_benchmark_run_action
+            }
+        ),
+        enabled = benchmark.isRunning || benchmark.canRun,
+        onClick = {
+            if (benchmark.isRunning) {
+                onCancel()
+            } else {
+                onStart()
+            }
+        }
+    )
+}
+
+@Composable
+private fun benchmarkRowSubtitle(benchmark: DebridProviderBenchmarkUi): String {
+    return when {
+        benchmark.isRunning -> formatRunningBenchmarkSummary(benchmark.activeSummary)
+        benchmark.latestResult != null -> formatLatestBenchmarkSummary(benchmark.latestResult)
+        benchmark.blockedByActiveRun -> stringResource(R.string.debrid_benchmark_busy)
+        else -> stringResource(R.string.debrid_benchmark_description)
+    }
+}
+
+private fun formatRunningBenchmarkSummary(summary: DebridBenchmarkSummary?): String {
+    if (summary == null) {
+        return "Measuring"
+    }
+
+    val bytes = formatBenchmarkBytes(summary.transferredBytes)
+    val elapsed = formatBenchmarkElapsed(summary.elapsedMs)
+    val throughput = summary.sustainedThroughputMbps?.let { formatBenchmarkThroughput(it) }
+
+    return listOfNotNull("Measuring", bytes, elapsed, throughput).joinToString(" | ")
+}
+
+private fun formatLatestBenchmarkSummary(result: DebridBenchmarkResult): String {
+    val throughput = result.summary.sustainedThroughputMbps?.let { formatBenchmarkThroughput(it) }
+    val startup = result.summary.startupTimeMs?.let { formatBenchmarkStartup(it) }
+    return listOfNotNull("Latest", throughput?.plus(" sustained"), startup).joinToString(" | ")
+}
+
+private fun formatBenchmarkThroughput(mbps: Double): String {
+    return "${String.format(Locale.US, "%.1f", mbps)} Mbps"
+}
+
+private fun formatBenchmarkStartup(startupTimeMs: Long): String {
+    return if (startupTimeMs >= 1_000L) {
+        "${String.format(Locale.US, "%.1f", startupTimeMs / 1_000.0)}s startup"
+    } else {
+        "${startupTimeMs}ms startup"
+    }
+}
+
+private fun formatBenchmarkElapsed(elapsedMs: Long): String {
+    val totalSeconds = (elapsedMs / 1_000L).coerceAtLeast(0L)
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return String.format(Locale.US, "%02d:%02d", minutes, seconds)
+}
+
+private fun formatBenchmarkBytes(bytes: Long): String {
+    val absoluteBytes = bytes.coerceAtLeast(0L)
+    val gibibyte = 1024.0 * 1024.0 * 1024.0
+    val mebibyte = 1024.0 * 1024.0
+    return if (absoluteBytes >= gibibyte.toLong()) {
+        "${String.format(Locale.US, "%.1f", absoluteBytes / gibibyte)} GB"
+    } else {
+        "${String.format(Locale.US, "%.0f", absoluteBytes / mebibyte)} MB"
+    }
+}
+
 @HiltViewModel
 class DebridSettingsViewModel @Inject constructor(
     private val realDebridAuthService: RealDebridAuthService,
@@ -400,7 +552,8 @@ class DebridSettingsViewModel @Inject constructor(
     private val torBoxService: TorBoxService,
     torBoxSettingsDataStore: TorBoxSettingsDataStore,
     private val easyDebridService: EasyDebridService,
-    easyDebridSettingsDataStore: EasyDebridSettingsDataStore
+    easyDebridSettingsDataStore: EasyDebridSettingsDataStore,
+    private val debridBenchmarkService: DebridBenchmarkService
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(DebridUiState())
     internal val uiState: StateFlow<DebridUiState> = _uiState.asStateFlow()
@@ -413,31 +566,75 @@ class DebridSettingsViewModel @Inject constructor(
     internal val easyDebridApiKey = easyDebridSettingsDataStore.settings.map { it.apiKey }
 
     init {
+        val connectionState = combine(
+            realDebridAuthDataStore.state,
+            premiumizeService.observeAccountState(),
+            torBoxService.observeAccountState(),
+            easyDebridService.observeAccountState()
+        ) { realDebridState, premiumizeState, torBoxState, easyDebridState ->
+            DebridConnectionSnapshot(
+                realDebridMode = when {
+                    realDebridState.isAuthenticated -> DebridConnectionMode.CONNECTED
+                    !realDebridState.deviceCode.isNullOrBlank() -> DebridConnectionMode.AWAITING_APPROVAL
+                    BuildConfig.REAL_DEBRID_CLIENT_ID.isBlank() -> DebridConnectionMode.UNAVAILABLE
+                    else -> DebridConnectionMode.DISCONNECTED
+                },
+                realDebridUsername = realDebridState.username,
+                realDebridUserCode = realDebridState.userCode,
+                realDebridVerificationUrl = realDebridState.verificationUrl,
+                premiumizeConnected = premiumizeState.isConnected,
+                premiumizeCustomerId = premiumizeState.customerId,
+                torBoxConnected = torBoxState.isConnected,
+                torBoxEmail = torBoxState.email,
+                torBoxPlan = torBoxState.plan,
+                easyDebridConnected = easyDebridState.isConnected,
+                easyDebridUserId = easyDebridState.userId,
+                easyDebridPaidUntil = easyDebridState.paidUntil
+            )
+        }
+
+        val benchmarkState = combine(
+            debridBenchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID),
+            debridBenchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE),
+            debridBenchmarkService.activeState
+        ) { latestRealDebridResult, latestPremiumizeResult, activeState ->
+            DebridBenchmarkSnapshot(
+                latestRealDebridResult = latestRealDebridResult,
+                latestPremiumizeResult = latestPremiumizeResult,
+                activeState = activeState
+            )
+        }
+
         viewModelScope.launch {
             combine(
-                realDebridAuthDataStore.state,
-                premiumizeService.observeAccountState(),
-                torBoxService.observeAccountState(),
-                easyDebridService.observeAccountState()
-            ) { realDebridState, premiumizeState, torBoxState, easyDebridState ->
+                connectionState,
+                benchmarkState
+            ) { connection, benchmark ->
                 DebridUiState(
-                    realDebridMode = when {
-                        realDebridState.isAuthenticated -> DebridConnectionMode.CONNECTED
-                        !realDebridState.deviceCode.isNullOrBlank() -> DebridConnectionMode.AWAITING_APPROVAL
-                        BuildConfig.REAL_DEBRID_CLIENT_ID.isBlank() -> DebridConnectionMode.UNAVAILABLE
-                        else -> DebridConnectionMode.DISCONNECTED
-                    },
-                    realDebridUsername = realDebridState.username,
-                    realDebridUserCode = realDebridState.userCode,
-                    realDebridVerificationUrl = realDebridState.verificationUrl,
-                    premiumizeConnected = premiumizeState.isConnected,
-                    premiumizeCustomerId = premiumizeState.customerId,
-                    torBoxConnected = torBoxState.isConnected,
-                    torBoxEmail = torBoxState.email,
-                    torBoxPlan = torBoxState.plan,
-                    easyDebridConnected = easyDebridState.isConnected,
-                    easyDebridUserId = easyDebridState.userId,
-                    easyDebridPaidUntil = easyDebridState.paidUntil
+                    realDebridMode = connection.realDebridMode,
+                    realDebridUsername = connection.realDebridUsername,
+                    realDebridUserCode = connection.realDebridUserCode,
+                    realDebridVerificationUrl = connection.realDebridVerificationUrl,
+                    realDebridBenchmark = buildDebridBenchmarkUi(
+                        provider = DebridBenchmarkProvider.REAL_DEBRID,
+                        isVisible = connection.realDebridMode == DebridConnectionMode.CONNECTED,
+                        latestResult = benchmark.latestRealDebridResult,
+                        activeState = benchmark.activeState
+                    ),
+                    premiumizeConnected = connection.premiumizeConnected,
+                    premiumizeCustomerId = connection.premiumizeCustomerId,
+                    premiumizeBenchmark = buildDebridBenchmarkUi(
+                        provider = DebridBenchmarkProvider.PREMIUMIZE,
+                        isVisible = connection.premiumizeConnected,
+                        latestResult = benchmark.latestPremiumizeResult,
+                        activeState = benchmark.activeState
+                    ),
+                    torBoxConnected = connection.torBoxConnected,
+                    torBoxEmail = connection.torBoxEmail,
+                    torBoxPlan = connection.torBoxPlan,
+                    easyDebridConnected = connection.easyDebridConnected,
+                    easyDebridUserId = connection.easyDebridUserId,
+                    easyDebridPaidUntil = connection.easyDebridPaidUntil
                 )
             }.collect { _uiState.value = it }
         }
@@ -446,6 +643,25 @@ class DebridSettingsViewModel @Inject constructor(
             premiumizeService.refreshAccountState()
             torBoxService.refreshAccountState()
             easyDebridService.refreshAccountState()
+        }
+
+        viewModelScope.launch {
+            debridBenchmarkService.outcomes.collect { outcome ->
+                messages.tryEmit(
+                    when (outcome.terminationReason) {
+                        DebridBenchmarkTerminationReason.COMPLETED ->
+                            "${outcome.provider.displayName()} benchmark saved"
+                        DebridBenchmarkTerminationReason.NO_PLAYABLE_LIBRARY_ITEM ->
+                            "No playable ${outcome.provider.displayName()} library item available for benchmarking"
+                        DebridBenchmarkTerminationReason.CANCELED ->
+                            "${outcome.provider.displayName()} benchmark canceled"
+                        DebridBenchmarkTerminationReason.TIMEOUT ->
+                            "${outcome.provider.displayName()} benchmark timed out"
+                        DebridBenchmarkTerminationReason.FAILED ->
+                            "${outcome.provider.displayName()} benchmark failed"
+                    }
+                )
+            }
         }
     }
 
@@ -476,6 +692,29 @@ class DebridSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             realDebridAuthService.revokeAndLogout()
             messages.tryEmit("Disconnected from Real-Debrid")
+        }
+    }
+
+    fun startBenchmark(provider: DebridBenchmarkProvider) {
+        viewModelScope.launch {
+            val providerUi = when (provider) {
+                DebridBenchmarkProvider.REAL_DEBRID -> uiState.value.realDebridBenchmark
+                DebridBenchmarkProvider.PREMIUMIZE -> uiState.value.premiumizeBenchmark
+            }
+            if (!providerUi.canRun) {
+                return@launch
+            }
+
+            val started = debridBenchmarkService.start(provider)
+            if (!started) {
+                messages.tryEmit("A provider benchmark is already running")
+            }
+        }
+    }
+
+    fun cancelBenchmark() {
+        viewModelScope.launch {
+            debridBenchmarkService.cancel()
         }
     }
 
@@ -525,8 +764,34 @@ class DebridSettingsViewModel @Inject constructor(
                 }
                 .onFailure { error ->
                     messages.tryEmit(error.message ?: "Failed to save EasyDebrid API key")
-                }
+            }
             savingEasyDebrid.value = false
+        }
+    }
+
+    private fun buildDebridBenchmarkUi(
+        provider: DebridBenchmarkProvider,
+        isVisible: Boolean,
+        latestResult: DebridBenchmarkResult?,
+        activeState: DebridBenchmarkRuntimeState
+    ): DebridProviderBenchmarkUi {
+        val activeRun = activeState as? DebridBenchmarkRuntimeState.Running
+        val isRunning = activeRun?.provider == provider
+        val blockedByActiveRun = activeRun != null && activeRun.provider != provider
+        return DebridProviderBenchmarkUi(
+            isVisible = isVisible,
+            canRun = isVisible && !isRunning && !blockedByActiveRun,
+            isRunning = isRunning,
+            blockedByActiveRun = blockedByActiveRun,
+            latestResult = latestResult,
+            activeSummary = if (isRunning) activeRun.summary else null
+        )
+    }
+
+    private fun DebridBenchmarkProvider.displayName(): String {
+        return when (this) {
+            DebridBenchmarkProvider.REAL_DEBRID -> "Real-Debrid"
+            DebridBenchmarkProvider.PREMIUMIZE -> "Premiumize"
         }
     }
 }
