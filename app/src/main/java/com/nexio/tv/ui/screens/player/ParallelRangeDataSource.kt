@@ -10,6 +10,7 @@ import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import java.io.InterruptedIOException
 import java.io.IOException
+import java.net.ProtocolException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.CompletableFuture
@@ -19,6 +20,8 @@ import java.util.concurrent.TimeUnit
 import com.nexio.tv.data.local.PlayerSettings
 import java.util.concurrent.atomic.AtomicBoolean
 import android.os.SystemClock
+import java.io.EOFException
+import java.net.SocketException
 
 /**
  * A DataSource that downloads progressive files using multiple parallel HTTP range requests.
@@ -76,6 +79,8 @@ internal class ParallelRangeDataSource(
         private const val READ_BUFFER_SIZE = 512 * 1024 // 512KB read buffer for chunk downloads
         private const val BOOTSTRAP_READ_BYTES = 1L * 1024L * 1024L
         private const val CHUNK_WAIT_TIMEOUT_MS = 60_000L
+        private const val MAX_TRANSIENT_CHUNK_ATTEMPTS = 4
+        private const val MAX_NON_TRANSIENT_CHUNK_ATTEMPTS = 2
     }
 
     /**
@@ -371,28 +376,40 @@ internal class ParallelRangeDataSource(
 
     private fun downloadChunk(chunkIndex: Long): DownloadedChunk {
         var lastException: Exception? = null
-        for (attempt in 0..1) {
+        val maxAttempts = MAX_TRANSIENT_CHUNK_ATTEMPTS
+        for (attempt in 0 until maxAttempts) {
             try {
                 return downloadChunkOnce(chunkIndex)
             } catch (e: Exception) {
                 if (closed.get()) throw IOException("DataSource closed")
                 lastException = e
-                if (attempt == 0) {
-                    if (e.isTransientInterruption()) {
-                        Log.d(TAG, "Chunk $chunkIndex interrupted during prefetch (attempt 1), retrying")
-                        try {
-                            Thread.sleep(50)
-                        } catch (_: InterruptedException) {
-                        }
-                    } else {
-                        Log.w(TAG, "Chunk $chunkIndex download failed (attempt 1), retrying: ${e.message}")
-                    }
+                val recoverable = e.isRecoverableChunkFailure()
+                val attemptNumber = attempt + 1
+                val allowedAttempts = if (recoverable) {
+                    MAX_TRANSIENT_CHUNK_ATTEMPTS
+                } else {
+                    MAX_NON_TRANSIENT_CHUNK_ATTEMPTS
+                }
+                if (attemptNumber >= allowedAttempts) {
+                    break
+                }
+                if (e.isTransientInterruption()) {
+                    Log.d(TAG, "Chunk $chunkIndex interrupted during prefetch (attempt $attemptNumber), retrying")
+                } else {
+                    Log.w(
+                        TAG,
+                        "Chunk $chunkIndex download failed (attempt $attemptNumber/$allowedAttempts), retrying: ${e.message}"
+                    )
+                }
+                try {
+                    Thread.sleep(retryBackoffMs(attemptNumber))
+                } catch (_: InterruptedException) {
                 }
             }
         }
         throw ChunkDownloadException(
             chunkIndex = chunkIndex,
-            message = "Failed to download chunk $chunkIndex after 2 attempts",
+            message = "Failed to download chunk $chunkIndex after retries",
             cause = lastException
         )
     }
@@ -423,6 +440,30 @@ internal class ParallelRangeDataSource(
         if (this is InterruptedIOException || this is InterruptedException) return true
         val cause = cause
         return cause is InterruptedIOException || cause is InterruptedException
+    }
+
+    private fun Exception.isRecoverableChunkFailure(): Boolean {
+        if (isTransientInterruption()) return true
+        if (this is SocketException || this is EOFException || this is ProtocolException) return true
+        val messageText = message.orEmpty()
+        if (messageText.contains("connection reset", ignoreCase = true) ||
+            messageText.contains("connection closed", ignoreCase = true) ||
+            messageText.contains("unexpected end of stream", ignoreCase = true) ||
+            messageText.contains("broken pipe", ignoreCase = true)
+        ) {
+            return true
+        }
+        val cause = cause as? Exception ?: return false
+        return cause.isRecoverableChunkFailure()
+    }
+
+    private fun retryBackoffMs(attemptNumber: Int): Long {
+        return when (attemptNumber) {
+            1 -> 50L
+            2 -> 100L
+            3 -> 200L
+            else -> 250L
+        }
     }
 
     /** Read from an already-opened DataSource into a pooled chunk buffer. */
