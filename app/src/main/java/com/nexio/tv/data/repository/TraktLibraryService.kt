@@ -6,6 +6,11 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktLibrarySnapshotStore
+import com.nexio.tv.data.repository.hasAnyId
+import com.nexio.tv.data.repository.normalizeContentId
+import com.nexio.tv.data.repository.parseContentIds
+import com.nexio.tv.data.repository.parseIsoToMillis
+import com.nexio.tv.data.repository.toTraktIds
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktCreateOrUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
@@ -95,7 +100,18 @@ class TraktLibraryService @Inject constructor(
     private var startupGateInitialized: Boolean = false
 
     init {
-        snapshotStore.read()?.let(::restorePersistedState)
+        val persistedSnapshot = snapshotStore.read()
+        if (persistedSnapshot != null) {
+            logDebug(
+                "init found persisted snapshot updatedAtMs=${persistedSnapshot.updatedAtMs} " +
+                    "listTabs=${persistedSnapshot.listTabs.size} " +
+                    "listsWithEntries=${persistedSnapshot.entriesByList.count { it.value.isNotEmpty() }} " +
+                    "metadata=${persistedSnapshot.metadataByContentKey.size}"
+            )
+            restorePersistedState(persistedSnapshot)
+        } else {
+            logDebug("init found no persisted snapshot")
+        }
         scope.launch {
             val enabled = runCatching { debugSettingsDataStore.diskFirstHomeStartupEnabled.first() }.getOrDefault(false)
             applyStartupRefreshGate(enabled, "init")
@@ -1049,6 +1065,12 @@ class TraktLibraryService @Inject constructor(
     }
 
     private fun restorePersistedState(persisted: TraktLibrarySnapshotStore.Snapshot) {
+        logDebug(
+            "restore persisted updatedAtMs=${persisted.updatedAtMs} " +
+                "listTabs=${persisted.listTabs.size} " +
+                "listsWithEntries=${persisted.entriesByList.count { it.value.isNotEmpty() }} " +
+                "metadata=${persisted.metadataByContentKey.size}"
+        )
         metadataState.value = persisted.metadataByContentKey.mapValues { (_, metadata) ->
             LibraryMetadata(
                 name = metadata.name,
@@ -1067,12 +1089,24 @@ class TraktLibraryService @Inject constructor(
         ).copy(updatedAtMs = persisted.updatedAtMs)
         lastRefreshMs = persisted.updatedAtMs
         hasCacheState.value = hasCache(persisted)
+        logDebug(
+            "restore applied updatedAtMs=${snapshotState.value.updatedAtMs} " +
+                "listTabs=${snapshotState.value.listTabs.size} " +
+                "allEntries=${snapshotState.value.allEntries.size} " +
+                "hasCache=${hasCacheState.value}"
+        )
     }
 
     private fun persistAndRestoreSnapshot(
         snapshot: Snapshot,
         metadata: Map<String, LibraryMetadata>
     ) {
+        logDebug(
+            "persist start updatedAtMs=${snapshot.updatedAtMs} " +
+                "listTabs=${snapshot.listTabs.size} " +
+                "listsWithEntries=${snapshot.entriesByList.count { it.value.isNotEmpty() }} " +
+                "metadata=${metadata.size}"
+        )
         val persisted = TraktLibrarySnapshotStore.Snapshot(
             listTabs = snapshot.listTabs,
             entriesByList = snapshot.entriesByList,
@@ -1091,21 +1125,32 @@ class TraktLibraryService @Inject constructor(
             updatedAtMs = snapshot.updatedAtMs
         )
         if (!hasCache(persisted)) {
+            logDebug("persist aborted no cacheable content; clearing snapshot store")
             snapshotStore.clear()
             clearInMemorySnapshot()
             return
         }
         snapshotStore.write(persisted)
-        restorePersistedState(snapshotStore.read() ?: persisted)
+        val restored = snapshotStore.read()
+        if (restored == null) {
+            logDebug("persist readback returned null; falling back to in-memory persisted snapshot")
+        }
+        restorePersistedState(restored ?: persisted)
     }
 
     private fun clearCachedState() {
+        logDebug("clear cached state")
         clearInMemorySnapshot()
         refreshingState.value = false
         snapshotStore.clear()
     }
 
     private fun clearInMemorySnapshot() {
+        logDebug(
+            "clear in-memory snapshot previousUpdatedAtMs=${snapshotState.value.updatedAtMs} " +
+                "previousTabs=${snapshotState.value.listTabs.size} " +
+                "previousEntries=${snapshotState.value.allEntries.size}"
+        )
         snapshotState.value = Snapshot()
         metadataState.value = emptyMap()
         lastRefreshMs = 0L

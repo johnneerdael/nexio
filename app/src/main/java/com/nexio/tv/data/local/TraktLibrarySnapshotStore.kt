@@ -51,7 +51,14 @@ class TraktLibrarySnapshotStore @Inject constructor(
         return runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
-            decodeSnapshot(raw)
+            decodeSnapshot(raw)?.also { snapshot ->
+                logDebug(
+                    "read success updatedAtMs=${snapshot.updatedAtMs} " +
+                        "listTabs=${snapshot.listTabs.size} " +
+                        "listsWithEntries=${snapshot.entriesByList.count { it.value.isNotEmpty() }} " +
+                        "metadata=${snapshot.metadataByContentKey.size}"
+                )
+            }
         }.onFailure { error ->
             logWarning("Failed to restore Trakt library snapshot", error)
             clear()
@@ -70,6 +77,13 @@ class TraktLibrarySnapshotStore @Inject constructor(
                 addProperty("updatedAtMs", snapshot.updatedAtMs)
             }
             prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).commit()
+            logDebug(
+                "write success updatedAtMs=${snapshot.updatedAtMs} " +
+                    "listTabs=${snapshot.listTabs.size} " +
+                    "listsWithEntries=${snapshot.entriesByList.count { it.value.isNotEmpty() }} " +
+                    "metadata=${snapshot.metadataByContentKey.size} " +
+                    "languageEpoch=${metadataDiskCacheStore.currentLanguageEpoch()}"
+            )
         }.onFailure { error ->
             logWarning("Failed to persist Trakt library snapshot", error)
         }
@@ -79,6 +93,7 @@ class TraktLibrarySnapshotStore @Inject constructor(
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             prefs.edit().remove(SNAPSHOT_KEY).commit()
+            logDebug("clear success")
         }.onFailure { error ->
             logWarning("Failed to clear Trakt library snapshot", error)
         }
@@ -88,15 +103,22 @@ class TraktLibrarySnapshotStore @Inject constructor(
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
         val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
         if (schemaVersion > SCHEMA_VERSION) {
+            logDebug("decode ignored future schemaVersion=$schemaVersion current=$SCHEMA_VERSION")
             return null
         }
 
         val currentLanguageEpoch = metadataDiskCacheStore.currentLanguageEpoch()
         val languageEpoch = root.get("languageEpoch")?.asInt ?: currentLanguageEpoch
+        val metadataRetained = languageEpoch == currentLanguageEpoch
+        if (!metadataRetained) {
+            logDebug(
+                "decode language epoch mismatch stored=$languageEpoch current=$currentLanguageEpoch metadataDropped=true"
+            )
+        }
         return Snapshot(
             listTabs = decodeListTabs(root.get("listTabs")),
             entriesByList = decodeEntriesByList(root.get("entriesByList")),
-            metadataByContentKey = if (languageEpoch == currentLanguageEpoch) {
+            metadataByContentKey = if (metadataRetained) {
                 decodeMetadata(root.get("metadataByContentKey"))
             } else {
                 emptyMap()
@@ -347,5 +369,9 @@ class TraktLibrarySnapshotStore @Inject constructor(
 
     private fun logWarning(message: String, error: Throwable) {
         runCatching { Log.w(TAG, message, error) }
+    }
+
+    private fun logDebug(message: String) {
+        runCatching { Log.d(TAG, message) }
     }
 }
