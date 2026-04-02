@@ -27,6 +27,7 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSustainedMetrics
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportConfigSnapshot
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportDecisionMetrics
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportProfile
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkThroughputBucketSample
@@ -299,6 +300,10 @@ class DebridBenchmarkStore internal constructor(
             parallelChunkSizeMb?.let { it > 0 } != false
     }
 
+    private fun DebridBenchmarkTransportDecisionMetrics.isValid(): Boolean {
+        return safeSustainedBudgetMbps.isNonNegativeFiniteOrNull()
+    }
+
     private fun DebridBenchmarkSeekSample.isValid(): Boolean {
         return targetOffsetBytes >= 0L &&
             ttfbMs?.let { it >= 0L } != false &&
@@ -323,6 +328,7 @@ class DebridBenchmarkStore internal constructor(
         return startup.isValid() &&
             sustained.isValid() &&
             seek.isValid() &&
+            decision?.isValid() != false &&
             configSnapshot?.isValid() != false &&
             rawSamples.isValid()
     }
@@ -465,6 +471,13 @@ class DebridBenchmarkStore internal constructor(
                 seekTtfbStddevMs = seekJson.optionalStrictDoubleOrNull("seekTtfbStddevMs"),
                 seekFailRate = seekJson.optionalStrictDoubleOrNull("seekFailRate")
             ),
+            decision = profileJson.optionalObject("decision")?.let { decisionJson ->
+                DebridBenchmarkTransportDecisionMetrics(
+                    safeSustainedBudgetMbps = decisionJson.optionalStrictDoubleOrNull("safeSustainedBudgetMbps"),
+                    actionable = decisionJson.optionalStrictBooleanOrNull("actionable")
+                        ?: throw InvalidDebridBenchmarkPayload()
+                )
+            },
             configSnapshot = profileJson.optionalObject("configSnapshot")?.let { configJson ->
                 DebridBenchmarkTransportConfigSnapshot(
                     useParallelConnections = configJson.optionalStrictBooleanOrNull("useParallelConnections"),

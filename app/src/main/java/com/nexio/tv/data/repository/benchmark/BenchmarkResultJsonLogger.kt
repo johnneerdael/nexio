@@ -306,6 +306,12 @@ private fun DebridBenchmarkTransportProfile.toJsonObject(): JsonObject {
             seek.seekTtfbStddevMs?.let { addProperty("seekTtfbStddevMs", it) }
             seek.seekFailRate?.let { addProperty("seekFailRate", it) }
         })
+        decision?.let { decision ->
+            add("decision", JsonObject().apply {
+                decision.safeSustainedBudgetMbps?.let { addProperty("safeSustainedBudgetMbps", it) }
+                addProperty("actionable", decision.actionable)
+            })
+        }
         configSnapshot?.let { config ->
             add("configSnapshot", JsonObject().apply {
                 config.useParallelConnections?.let { addProperty("useParallelConnections", it) }
@@ -357,7 +363,12 @@ private fun AudioEncodingSupport.toJsonObject(): JsonObject {
 }
 
 internal fun DebridBenchmarkTransportProfile?.safeSustainedBudgetMbps(): Double? {
-    val sustained = this?.sustained ?: return null
+    val profile = this ?: return null
+    profile.decision?.let { decision ->
+        if (!decision.actionable) return null
+        decision.safeSustainedBudgetMbps?.let { return it }
+    }
+    val sustained = profile.sustained
     if (!sustained.actionable) return null
     return sustained.p10ThroughputMbps?.times(0.85)
 }

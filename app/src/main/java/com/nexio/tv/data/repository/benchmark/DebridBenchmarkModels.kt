@@ -211,6 +211,11 @@ data class DebridBenchmarkTransportConfigSnapshot(
     val parallelChunkSizeMb: Int? = null
 )
 
+data class DebridBenchmarkTransportDecisionMetrics(
+    val safeSustainedBudgetMbps: Double? = null,
+    val actionable: Boolean = true
+)
+
 data class DebridBenchmarkSeekSample(
     val targetOffsetBytes: Long,
     val ttfbMs: Long? = null,
@@ -227,6 +232,7 @@ data class DebridBenchmarkTransportProfile(
     val startup: DebridBenchmarkStartupMetrics,
     val sustained: DebridBenchmarkSustainedMetrics,
     val seek: DebridBenchmarkSeekMetrics,
+    val decision: DebridBenchmarkTransportDecisionMetrics? = null,
     val configSnapshot: DebridBenchmarkTransportConfigSnapshot? = null,
     val rawSamples: DebridBenchmarkRawSamples = DebridBenchmarkRawSamples()
 )

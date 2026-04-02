@@ -138,6 +138,26 @@ class BenchmarkAwareStreamScorerTest {
         assertEquals(DebridBenchmarkTransportMode.OPTIMIZED, selected?.transport)
     }
 
+    @Test
+    fun `scorer uses derived decision metrics as autoplay truth over raw sustained p10`() {
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(streamCard(streamKey = "rd_stream", providerId = "RD")),
+            benchmarkSessions = mapOf(
+                DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(
+                    provider = DebridBenchmarkProvider.REAL_DEBRID,
+                    directP10Mbps = 150.0,
+                    optimizedP10Mbps = 200.0,
+                    directDecisionSafeBudgetMbps = 127.5,
+                    optimizedDecisionSafeBudgetMbps = 60.0
+                )
+            )
+        )
+
+        assertEquals(DebridBenchmarkTransportMode.DIRECT, event.selected?.transport)
+        assertEquals(127.5, event.selected?.safeBudgetMbps ?: 0.0, 0.0)
+    }
+
     private fun request(runtimeMinutes: Int = 120): ShadowRequestContext {
         return ShadowRequestContext(
             requestId = "req-1",
@@ -218,6 +238,8 @@ class BenchmarkAwareStreamScorerTest {
         provider: DebridBenchmarkProvider,
         directP10Mbps: Double = 150.0,
         optimizedP10Mbps: Double = 180.0,
+        directDecisionSafeBudgetMbps: Double = directP10Mbps * 0.85,
+        optimizedDecisionSafeBudgetMbps: Double = optimizedP10Mbps * 0.85,
         directSeekP95Ms: Long = 340L,
         optimizedSeekP95Ms: Long = 240L
     ): DebridBenchmarkResult {
@@ -255,13 +277,15 @@ class BenchmarkAwareStreamScorerTest {
                 p10Mbps = directP10Mbps,
                 averageMbps = directP10Mbps + 10.0,
                 startupMs = 180L,
-                seekP95Ms = directSeekP95Ms
+                seekP95Ms = directSeekP95Ms,
+                decisionSafeBudgetMbps = directDecisionSafeBudgetMbps
             ),
             optimized = transportProfile(
                 p10Mbps = optimizedP10Mbps,
                 averageMbps = optimizedP10Mbps + 15.0,
                 startupMs = 140L,
                 seekP95Ms = optimizedSeekP95Ms,
+                decisionSafeBudgetMbps = optimizedDecisionSafeBudgetMbps,
                 configSnapshot = DebridBenchmarkTransportConfigSnapshot(
                     useParallelConnections = true,
                     parallelConnectionCount = 4,
@@ -286,6 +310,7 @@ class BenchmarkAwareStreamScorerTest {
         averageMbps: Double,
         startupMs: Long,
         seekP95Ms: Long,
+        decisionSafeBudgetMbps: Double = p10Mbps * 0.85,
         configSnapshot: DebridBenchmarkTransportConfigSnapshot? = null
     ): DebridBenchmarkTransportProfile {
         return DebridBenchmarkTransportProfile(
@@ -313,6 +338,10 @@ class BenchmarkAwareStreamScorerTest {
                 seekTtfbP99Ms = seekP95Ms + 80L,
                 seekTtfbStddevMs = 20.0,
                 seekFailRate = 0.0
+            ),
+            decision = DebridBenchmarkTransportDecisionMetrics(
+                safeSustainedBudgetMbps = decisionSafeBudgetMbps,
+                actionable = true
             ),
             configSnapshot = configSnapshot,
             rawSamples = DebridBenchmarkRawSamples()

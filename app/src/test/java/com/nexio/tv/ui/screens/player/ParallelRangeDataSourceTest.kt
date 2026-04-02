@@ -82,6 +82,34 @@ class ParallelRangeDataSourceTest {
         }
     }
 
+    @Test(timeout = 5_000L)
+    fun `parallel range datasource reports transport bytes for bootstrap reads`() {
+        val content = ByteArray(512 * 1024) { (it % 251).toByte() }
+        val fixture = RangeServerFixture(
+            content = content,
+            chunkSize = 64 * 1024L,
+            transientFailuresByChunkIndex = mutableMapOf()
+        )
+        val transportBytes = mutableListOf<Long>()
+
+        fixture.use { server ->
+            val dataSource = server.createDataSource(
+                onTransportBytesDownloaded = { bytesRead, _ ->
+                    transportBytes += bytesRead
+                }
+            )
+
+            val bytes = readAll(dataSource, server.dataSpec())
+
+            assertArrayEquals(content, bytes)
+            assertEquals(
+                "Bootstrap reads should contribute transport bytes",
+                content.size.toLong(),
+                transportBytes.sum()
+            )
+        }
+    }
+
     private fun readAll(
         dataSource: ParallelRangeDataSource,
         dataSpec: DataSpec
@@ -125,7 +153,9 @@ class ParallelRangeDataSourceTest {
             server.start()
         }
 
-        fun createDataSource(): ParallelRangeDataSource {
+        fun createDataSource(
+            onTransportBytesDownloaded: (Long, Long) -> Unit = { _, _ -> }
+        ): ParallelRangeDataSource {
             val upstreamFactory = OkHttpDataSource.Factory(
                 OkHttpClient.Builder()
                     .connectTimeout(1, TimeUnit.SECONDS)
@@ -136,7 +166,8 @@ class ParallelRangeDataSourceTest {
             return ParallelRangeDataSource(
                 upstreamFactory = upstreamFactory,
                 parallelConnections = 4,
-                chunkSize = chunkSize
+                chunkSize = chunkSize,
+                onTransportBytesDownloaded = onTransportBytesDownloaded
             )
         }
 

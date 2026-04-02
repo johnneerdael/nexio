@@ -237,6 +237,7 @@ internal class ParallelRangeDataSource(
         fallbackSource?.let {
             val read = it.read(buffer, offset, length)
             if (read > 0) {
+                onTransportBytesDownloaded(read.toLong(), transportSampleTimeMs())
                 position += read
                 bytesRemaining = if (bytesRemaining == C.LENGTH_UNSET.toLong()) {
                     C.LENGTH_UNSET.toLong()
@@ -276,6 +277,7 @@ internal class ParallelRangeDataSource(
             ) {
                 val read = source.read(buffer, offset, toRead)
                 if (read > 0) {
+                    onTransportBytesDownloaded(read.toLong(), transportSampleTimeMs())
                     position += read
                     bytesRemaining -= read
                     onReadPositionAdvanced(position)
@@ -502,6 +504,7 @@ internal class ParallelRangeDataSource(
                 val read = ds.read(buffer, totalRead, maxRead)
                 if (read == C.RESULT_END_OF_INPUT) break
                 totalRead += read
+                onTransportBytesDownloaded(read.toLong(), transportSampleTimeMs())
             }
         } catch (e: Exception) {
             if (closed.get()) throw IOException("DataSource closed")
