@@ -8,9 +8,10 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.nexio.tv.data.repository.benchmark.AudioEncodingSupport
+import com.nexio.tv.data.repository.benchmark.CodecSupport
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkCandidateMetadata
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkComparisonSummary
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkPhase
@@ -28,6 +29,11 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportConfigSnapshot
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportProfile
+import com.nexio.tv.data.repository.benchmark.DeviceAudioOutputCapabilities
+import com.nexio.tv.data.repository.benchmark.DeviceCapabilitySnapshot
+import com.nexio.tv.data.repository.benchmark.DeviceHdrType
+import com.nexio.tv.data.repository.benchmark.DeviceVideoDecodeCapabilities
+import com.nexio.tv.data.repository.benchmark.toJsonObject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
 import javax.inject.Inject
@@ -70,7 +76,7 @@ class DebridBenchmarkStore internal constructor(
     suspend fun saveLatest(result: DebridBenchmarkResult) {
         require(result.isCompletedAndValid()) { "Invalid DebridBenchmarkResult" }
         dataStore.edit { preferences ->
-            preferences[latestResultKey(result.provider)] = canonicalPayload(result).toString()
+            preferences[latestResultKey(result.provider)] = result.toJsonObject().toString()
         }
     }
 
@@ -109,6 +115,7 @@ class DebridBenchmarkStore internal constructor(
             if (terminationReason != DebridBenchmarkTerminationReason.COMPLETED) return null
             val comparisonPayloadPresent = COMPARISON_PAYLOAD_KEYS.any(root::has)
             val candidate = root.optionalObject("candidate")?.let(::parseCandidate)
+            val device = root.optionalObject("device")?.let(::parseDeviceSnapshot)
             val session = root.optionalObject("session")?.let(::parseSession)
             val direct = root.optionalObject("direct")?.let(::parseTransportProfile)
             val optimized = root.optionalObject("optimized")?.let(::parseTransportProfile)
@@ -126,6 +133,7 @@ class DebridBenchmarkStore internal constructor(
                 summary = summary,
                 terminationReason = terminationReason,
                 candidate = candidate,
+                device = device,
                 session = session,
                 direct = direct,
                 optimized = optimized,
@@ -148,12 +156,18 @@ class DebridBenchmarkStore internal constructor(
     }
 
     private fun DebridBenchmarkResult.hasComparisonPayload(): Boolean {
-        return candidate != null || session != null || direct != null || optimized != null || comparison != null
+        return candidate != null ||
+            device != null ||
+            session != null ||
+            direct != null ||
+            optimized != null ||
+            comparison != null
     }
 
     private fun DebridBenchmarkResult.comparisonPayloadIsValid(): Boolean {
         if (!hasComparisonPayload()) return true
         return candidate?.isValid() == true &&
+            device?.isValid() != false &&
             session?.isValid() == true &&
             direct?.isValid() == true &&
             optimized?.isValid() == true &&
@@ -182,6 +196,29 @@ class DebridBenchmarkStore internal constructor(
 
     private fun DebridBenchmarkCandidateMetadata.isValid(): Boolean {
         return sizeBytes?.let { it >= 0L } != false
+    }
+
+    private fun DeviceCapabilitySnapshot.isValid(): Boolean {
+        return sdkInt > 0 &&
+            capturedAtMs > 0L &&
+            videoDecode.isValid() &&
+            audioOutput.isValid()
+    }
+
+    private fun DeviceVideoDecodeCapabilities.isValid(): Boolean {
+        return listOf(h264, hevc, av1, dolbyVision).all { it?.isValid() != false }
+    }
+
+    private fun CodecSupport.isValid(): Boolean {
+        return true
+    }
+
+    private fun DeviceAudioOutputCapabilities.isValid(): Boolean {
+        return listOf(ac3, eac3, truehd, dts, dtshd).all { it.isValid() }
+    }
+
+    private fun AudioEncodingSupport.isValid(): Boolean {
+        return !passthroughLikely || supported
     }
 
     private fun DebridBenchmarkSessionMetadata.isValid(): Boolean {
@@ -287,110 +324,68 @@ class DebridBenchmarkStore internal constructor(
             stabilityWinner != null
     }
 
-    private fun canonicalPayload(result: DebridBenchmarkResult): JsonObject {
-        return JsonObject().apply {
-            addProperty("provider", result.provider.storageKey)
-            addProperty("measuredAtMs", result.measuredAtMs)
-            add("summary", JsonObject().apply {
-                result.summary.startupTimeMs?.let { addProperty("startupTimeMs", it) }
-                result.summary.sustainedThroughputMbps?.let { addProperty("sustainedThroughputMbps", it) }
-                addProperty("transferredBytes", result.summary.transferredBytes)
-                addProperty("elapsedMs", result.summary.elapsedMs)
-            })
-            addProperty("terminationReason", result.terminationReason.wireKey)
-            result.candidate?.let { candidate ->
-                add("candidate", JsonObject().apply {
-                    candidate.filename?.let { addProperty("filename", it) }
-                    candidate.sizeBytes?.let { addProperty("sizeBytes", it) }
-                    candidate.host?.let { addProperty("host", it) }
-                    candidate.directUrlFingerprint?.let { addProperty("directUrlFingerprint", it) }
-                })
-            }
-            result.session?.let { session ->
-                add("session", JsonObject().apply {
-                    addProperty("benchmarkVersion", session.benchmarkVersion)
-                    add("executionOrder", JsonArray().apply {
-                        session.executionOrder.forEach { phase ->
-                            add(JsonObject().apply {
-                                addProperty("phase", phase.phase.wireKey)
-                                add("order", JsonArray().apply {
-                                    phase.order.forEach { mode ->
-                                        add(mode.wireKey)
-                                    }
-                                })
-                            })
-                        }
-                    })
-                    session.totalElapsedMs?.let { addProperty("totalElapsedMs", it) }
-                })
-            }
-            result.direct?.let { add("direct", canonicalTransportProfile(it)) }
-            result.optimized?.let { add("optimized", canonicalTransportProfile(it)) }
-            result.comparison?.let { comparison ->
-                add("comparison", JsonObject().apply {
-                    comparison.sustainedWinner?.let { addProperty("sustainedWinner", it.wireKey) }
-                    comparison.seekWinner?.let { addProperty("seekWinner", it.wireKey) }
-                    comparison.stabilityWinner?.let { addProperty("stabilityWinner", it.wireKey) }
-                })
-            }
-        }
-    }
-
-    private fun canonicalTransportProfile(profile: DebridBenchmarkTransportProfile): JsonObject {
-        return JsonObject().apply {
-            add("startup", JsonObject().apply {
-                profile.startup.initialTtfbMs?.let { addProperty("initialTtfbMs", it) }
-                profile.startup.startupFailureRate?.let { addProperty("startupFailureRate", it) }
-            })
-            add("sustained", JsonObject().apply {
-                profile.sustained.averageThroughputMbps?.let { addProperty("averageThroughputMbps", it) }
-                profile.sustained.p10ThroughputMbps?.let { addProperty("p10ThroughputMbps", it) }
-                profile.sustained.p50ThroughputMbps?.let { addProperty("p50ThroughputMbps", it) }
-                profile.sustained.peakThroughputMbps?.let { addProperty("peakThroughputMbps", it) }
-                profile.sustained.throughputStddevMbps?.let { addProperty("throughputStddevMbps", it) }
-                profile.sustained.throughputCv?.let { addProperty("throughputCv", it) }
-                profile.sustained.stallCount?.let { addProperty("stallCount", it) }
-                profile.sustained.maxReadGapMs?.let { addProperty("maxReadGapMs", it) }
-                profile.sustained.bytesTransferred?.let { addProperty("bytesTransferred", it) }
-                profile.sustained.elapsedMs?.let { addProperty("elapsedMs", it) }
-            })
-            add("seek", JsonObject().apply {
-                profile.seek.seekTtfbP50Ms?.let { addProperty("seekTtfbP50Ms", it) }
-                profile.seek.seekTtfbP95Ms?.let { addProperty("seekTtfbP95Ms", it) }
-                profile.seek.seekTtfbP99Ms?.let { addProperty("seekTtfbP99Ms", it) }
-                profile.seek.seekTtfbStddevMs?.let { addProperty("seekTtfbStddevMs", it) }
-                profile.seek.seekFailRate?.let { addProperty("seekFailRate", it) }
-            })
-            profile.configSnapshot?.let { config ->
-                add("configSnapshot", JsonObject().apply {
-                    config.useParallelConnections?.let { addProperty("useParallelConnections", it) }
-                    config.parallelConnectionCount?.let { addProperty("parallelConnectionCount", it) }
-                    config.parallelChunkSizeMb?.let { addProperty("parallelChunkSizeMb", it) }
-                })
-            }
-            add("rawSamples", JsonObject().apply {
-                add("throughputWindowsMbps", JsonArray().apply {
-                    profile.rawSamples.throughputWindowsMbps.forEach { add(it) }
-                })
-                add("seekSamples", JsonArray().apply {
-                    profile.rawSamples.seekSamples.forEach { sample ->
-                        add(JsonObject().apply {
-                            addProperty("targetOffsetBytes", sample.targetOffsetBytes)
-                            sample.ttfbMs?.let { addProperty("ttfbMs", it) }
-                            addProperty("succeeded", sample.succeeded)
-                        })
-                    }
-                })
-            })
-        }
-    }
-
     private fun parseCandidate(candidateJson: JsonObject): DebridBenchmarkCandidateMetadata {
         return DebridBenchmarkCandidateMetadata(
             filename = candidateJson.stringOrNull("filename"),
             sizeBytes = candidateJson.optionalStrictIntegralLongOrNull("sizeBytes"),
             host = candidateJson.stringOrNull("host"),
             directUrlFingerprint = candidateJson.stringOrNull("directUrlFingerprint")
+        )
+    }
+
+    private fun parseDeviceSnapshot(deviceJson: JsonObject): DeviceCapabilitySnapshot {
+        return DeviceCapabilitySnapshot(
+            model = deviceJson.stringOrNull("model"),
+            manufacturer = deviceJson.stringOrNull("manufacturer"),
+            sdkInt = deviceJson.strictIntegralIntOrNull("sdkInt")?.takeIf { it > 0 }
+                ?: throw InvalidDebridBenchmarkPayload(),
+            displayHdrTypes = deviceJson.arrayOrEmpty("displayHdrTypes").map { hdrType ->
+                hdrType.asStringOrThrow().let(DeviceHdrType::fromWireKey)
+                    ?: throw InvalidDebridBenchmarkPayload()
+            }.toSet(),
+            videoDecode = deviceJson.requiredObject("videoDecode").let(::parseVideoDecode),
+            audioOutput = deviceJson.requiredObject("audioOutput").let(::parseAudioOutput),
+            capturedAtMs = deviceJson.strictIntegralLongOrNull("capturedAtMs")?.takeIf { it > 0L }
+                ?: throw InvalidDebridBenchmarkPayload()
+        )
+    }
+
+    private fun parseVideoDecode(videoDecodeJson: JsonObject): DeviceVideoDecodeCapabilities {
+        return DeviceVideoDecodeCapabilities(
+            h264 = videoDecodeJson.optionalObject("h264")?.let(::parseCodecSupport),
+            hevc = videoDecodeJson.optionalObject("hevc")?.let(::parseCodecSupport),
+            av1 = videoDecodeJson.optionalObject("av1")?.let(::parseCodecSupport),
+            dolbyVision = videoDecodeJson.optionalObject("dolbyVision")?.let(::parseCodecSupport)
+        )
+    }
+
+    private fun parseCodecSupport(codecJson: JsonObject): CodecSupport {
+        return CodecSupport(
+            hardwareAccelerated = codecJson.strictBooleanOrNull("hardwareAccelerated")
+                ?: throw InvalidDebridBenchmarkPayload(),
+            softwareOnlyAvailable = codecJson.strictBooleanOrNull("softwareOnlyAvailable")
+                ?: throw InvalidDebridBenchmarkPayload(),
+            secureSupported = codecJson.strictBooleanOrNull("secureSupported")
+                ?: throw InvalidDebridBenchmarkPayload()
+        )
+    }
+
+    private fun parseAudioOutput(audioOutputJson: JsonObject): DeviceAudioOutputCapabilities {
+        return DeviceAudioOutputCapabilities(
+            ac3 = audioOutputJson.requiredObject("ac3").let(::parseAudioEncodingSupport),
+            eac3 = audioOutputJson.requiredObject("eac3").let(::parseAudioEncodingSupport),
+            truehd = audioOutputJson.requiredObject("truehd").let(::parseAudioEncodingSupport),
+            dts = audioOutputJson.requiredObject("dts").let(::parseAudioEncodingSupport),
+            dtshd = audioOutputJson.requiredObject("dtshd").let(::parseAudioEncodingSupport)
+        )
+    }
+
+    private fun parseAudioEncodingSupport(audioEncodingJson: JsonObject): AudioEncodingSupport {
+        return AudioEncodingSupport(
+            supported = audioEncodingJson.strictBooleanOrNull("supported")
+                ?: throw InvalidDebridBenchmarkPayload(),
+            passthroughLikely = audioEncodingJson.strictBooleanOrNull("passthroughLikely")
+                ?: throw InvalidDebridBenchmarkPayload()
         )
     }
 
@@ -571,6 +566,7 @@ class DebridBenchmarkStore internal constructor(
         private val INTEGRAL_NUMBER_REGEX = Regex("^-?\\d+$")
         private val COMPARISON_PAYLOAD_KEYS = setOf(
             "candidate",
+            "device",
             "session",
             "direct",
             "optimized",

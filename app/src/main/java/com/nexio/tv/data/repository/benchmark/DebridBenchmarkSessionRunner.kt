@@ -19,6 +19,7 @@ class DebridBenchmarkSessionRunner internal constructor(
     private val directTransport: DirectProfileBenchmarkTransport,
     private val optimizedTransport: OptimizedBenchmarkTransport,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val deviceCapabilitySnapshotProvider: DeviceCapabilitySnapshotProvider,
     private val nowMs: () -> Long
 ) {
 
@@ -26,11 +27,13 @@ class DebridBenchmarkSessionRunner internal constructor(
     constructor(
         directTransport: DirectProfileBenchmarkTransport,
         optimizedTransport: OptimizedBenchmarkTransport,
-        playerSettingsDataStore: PlayerSettingsDataStore
+        playerSettingsDataStore: PlayerSettingsDataStore,
+        deviceCapabilitySnapshotProvider: DeviceCapabilitySnapshotProvider
     ) : this(
         directTransport = directTransport,
         optimizedTransport = optimizedTransport,
         playerSettingsDataStore = playerSettingsDataStore,
+        deviceCapabilitySnapshotProvider = deviceCapabilitySnapshotProvider,
         nowMs = System::currentTimeMillis
     )
 
@@ -67,6 +70,7 @@ class DebridBenchmarkSessionRunner internal constructor(
             )
         }
 
+        val deviceSnapshot = deviceCapabilitySnapshotProvider.capture()
         val completedResult = DebridBenchmarkResult(
             provider = provider,
             measuredAtMs = nowMs(),
@@ -78,8 +82,9 @@ class DebridBenchmarkSessionRunner internal constructor(
                 host = runCatching { URI(candidate.directUrl).host }.getOrNull(),
                 directUrlFingerprint = sha256(candidate.directUrl)
             ),
+            device = deviceSnapshot,
             session = DebridBenchmarkSessionMetadata(
-                benchmarkVersion = 2,
+                benchmarkVersion = 3,
                 executionOrder = listOf(
                     DebridBenchmarkPhaseExecution(
                         phase = DebridBenchmarkPhase.STARTUP,
