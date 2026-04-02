@@ -46,6 +46,14 @@ class DebridLibraryService @Inject constructor(
     private val torBoxApi: TorBoxApi,
     private val torBoxService: TorBoxService
 ) {
+    private data class RealDebridBenchmarkPreview(
+        val torrent: RealDebridTorrentDto,
+        val info: RealDebridTorrentInfoDto,
+        val file: RealDebridTorrentFileDto,
+        val link: String,
+        val listedAtMs: Long
+    )
+
     enum class RefreshTarget {
         ALL,
         REAL_DEBRID,
@@ -114,12 +122,13 @@ class DebridLibraryService @Inject constructor(
 
         val torrents = torrentsResponse.body().orEmpty()
             .filter { it.status.equals("downloaded", ignoreCase = true) }
-        val shortlistedTorrents = selectBenchmarkResolutionShortlist(
-            items = torrents,
-            sizeOf = { torrent: RealDebridTorrentDto -> torrent.bytes },
-            timestampOf = { torrent: RealDebridTorrentDto -> parseIsoToMillis(torrent.ended ?: torrent.added) }
+        val previews = resolveRealDebridBenchmarkPreviews(torrents)
+        val shortlistedPreviews = selectBenchmarkResolutionShortlist(
+            items = previews,
+            sizeOf = { preview: RealDebridBenchmarkPreview -> preview.file.bytes },
+            timestampOf = { preview: RealDebridBenchmarkPreview -> preview.listedAtMs }
         )
-        if (shortlistedTorrents.isEmpty()) {
+        if (shortlistedPreviews.isEmpty()) {
             return@withContext DebridBenchmarkCandidateLookupResult.NoLargeDownload
         }
 
@@ -127,9 +136,9 @@ class DebridLibraryService @Inject constructor(
             .mapNotNull(::toResolvedDownload)
             .associateBy { it.link }
 
-        val candidates = shortlistedTorrents.mapNotNull { torrent ->
+        val candidates = shortlistedPreviews.mapNotNull { preview ->
             resolveRealDebridBenchmarkCandidate(
-                torrent = torrent,
+                preview = preview,
                 resolvedDownloadsByLink = resolvedDownloadsByLink,
                 playbackHeaders = playbackHeaders
             )
@@ -355,34 +364,53 @@ class DebridLibraryService @Inject constructor(
         return items
     }
 
+    private suspend fun resolveRealDebridBenchmarkPreviews(
+        torrents: List<RealDebridTorrentDto>
+    ): List<RealDebridBenchmarkPreview> = coroutineScope {
+        val infoSemaphore = Semaphore(6)
+        torrents.map { torrent ->
+            async {
+                infoSemaphore.withPermit {
+                    val infoResponse = realDebridAuthService.executeAuthorizedRequest { authHeader ->
+                        realDebridApi.getTorrentInfo(authorization = authHeader, id = torrent.id)
+                    } ?: return@withPermit null
+                    if (!infoResponse.isSuccessful) return@withPermit null
+
+                    val info = infoResponse.body() ?: return@withPermit null
+                    val fileLinkPair = info.files.orEmpty()
+                        .filter { it.selected == 1 }
+                        .zip(info.links.orEmpty())
+                        .filter { (file, _) -> !isLikelySampleFile(file) && isLikelyPlayable(file) }
+                        .maxByOrNull { (file, _) -> file.bytes ?: 0L }
+                        ?: return@withPermit null
+
+                    val (file, link) = fileLinkPair
+                    RealDebridBenchmarkPreview(
+                        torrent = torrent,
+                        info = info,
+                        file = file,
+                        link = link,
+                        listedAtMs = parseIsoToMillis(torrent.ended ?: torrent.added)
+                    )
+                }
+            }
+        }.awaitAll().filterNotNull()
+    }
+
     private suspend fun resolveRealDebridBenchmarkCandidate(
-        torrent: RealDebridTorrentDto,
+        preview: RealDebridBenchmarkPreview,
         resolvedDownloadsByLink: Map<String, RealDebridResolvedDownload>,
         playbackHeaders: Map<String, String>?
     ): DebridBenchmarkCandidate? {
-        val infoResponse = realDebridAuthService.executeAuthorizedRequest { authHeader ->
-            realDebridApi.getTorrentInfo(authorization = authHeader, id = torrent.id)
-        } ?: return null
-        if (!infoResponse.isSuccessful) return null
-
-        val info = infoResponse.body() ?: return null
-        val fileLinkPair = info.files.orEmpty()
-            .filter { it.selected == 1 }
-            .zip(info.links.orEmpty())
-            .filter { (file, _) -> !isLikelySampleFile(file) && isLikelyPlayable(file) }
-            .maxByOrNull { (file, _) -> file.bytes ?: 0L }
-            ?: return null
-
-        val (file, link) = fileLinkPair
-        val resolvedDownload = resolvedDownloadsByLink[link]
+        val resolvedDownload = resolvedDownloadsByLink[preview.link]
             ?.takeIf(::isLikelyPlayable)
-            ?: unrestrictRealDebridLink(link)?.takeIf(::isLikelyPlayable)
+            ?: unrestrictRealDebridLink(preview.link)?.takeIf(::isLikelyPlayable)
             ?: return null
 
         return mapRealDebridTorrentFile(
-            torrent = torrent,
-            info = info,
-            file = file,
+            torrent = preview.torrent,
+            info = preview.info,
+            file = preview.file,
             resolvedDownload = resolvedDownload,
             playbackHeaders = playbackHeaders
         ).toBenchmarkCandidate(DebridBenchmarkProvider.REAL_DEBRID)

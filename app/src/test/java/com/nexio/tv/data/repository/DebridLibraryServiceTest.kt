@@ -576,7 +576,7 @@ class DebridLibraryServiceTest {
     }
 
     @Test
-    fun `real debrid benchmark lookup falls back to the 15gb tier and limits candidate resolution to two items`() = runTest {
+    fun `real debrid benchmark lookup falls back to the 15gb tier using resolved file size`() = runTest {
         val realDebridApi = mockk<RealDebridApi>()
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
         val premiumizeApi = mockk<PremiumizeApi>()
@@ -659,6 +659,40 @@ class DebridLibraryServiceTest {
                 ended = "2026-03-30T11:00:00Z"
             )
         )
+        coEvery { realDebridApi.getTorrentInfo(any(), "rd-mid") } returns Response.success(
+            RealDebridTorrentInfoDto(
+                id = "rd-mid",
+                filename = "Mid.Movie.2024.mkv",
+                status = "downloaded",
+                links = listOf("https://rd.test/link/rd-mid"),
+                files = listOf(
+                    RealDebridTorrentFileDto(
+                        id = 93,
+                        path = "/Mid.Movie.2024.mkv",
+                        bytes = 11L * 1024L * 1024L * 1024L,
+                        selected = 1
+                    )
+                ),
+                ended = "2026-03-30T10:30:00Z"
+            )
+        )
+        coEvery { realDebridApi.getTorrentInfo(any(), "rd-fallback") } returns Response.success(
+            RealDebridTorrentInfoDto(
+                id = "rd-fallback",
+                filename = "Fallback.Movie.2024.mkv",
+                status = "downloaded",
+                links = listOf("https://rd.test/link/rd-fallback"),
+                files = listOf(
+                    RealDebridTorrentFileDto(
+                        id = 94,
+                        path = "/Fallback.Movie.2024.mkv",
+                        bytes = 6L * 1024L * 1024L * 1024L,
+                        selected = 1
+                    )
+                ),
+                ended = "2026-03-30T10:00:00Z"
+            )
+        )
         coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(
             listOf(
                 RealDebridDownloadDto(
@@ -710,9 +744,113 @@ class DebridLibraryServiceTest {
             candidates.map { it.sourceSizeBytes }
         )
         coVerify(exactly = 1) { realDebridApi.getTorrentInfo(any(), "rd-largest") }
-        coVerify(exactly = 0) { realDebridApi.getTorrentInfo(any(), "rd-large") }
-        coVerify(exactly = 0) { realDebridApi.getTorrentInfo(any(), "rd-mid") }
-        coVerify(exactly = 0) { realDebridApi.getTorrentInfo(any(), "rd-fallback") }
+        coVerify(exactly = 1) { realDebridApi.getTorrentInfo(any(), "rd-large") }
+        coVerify(exactly = 1) { realDebridApi.getTorrentInfo(any(), "rd-mid") }
+        coVerify(exactly = 1) { realDebridApi.getTorrentInfo(any(), "rd-fallback") }
+    }
+
+    @Test
+    fun `real debrid benchmark lookup ignores pack size when selected playable file is smaller than the threshold tier`() = runTest {
+        val realDebridApi = mockk<RealDebridApi>()
+        val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
+        val premiumizeApi = mockk<PremiumizeApi>()
+        val premiumizeService = mockk<PremiumizeService>()
+        val torBoxApi = mockk<TorBoxApi>()
+        val torBoxService = mockk<TorBoxService>()
+
+        stubAuthenticatedRealDebrid(realDebridAuthDataStore)
+        every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
+        coJustRun { premiumizeService.refreshAccountState() }
+        stubDisconnectedTorBox(torBoxService)
+
+        coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
+            listOf(
+                RealDebridTorrentDto(
+                    id = "season-pack",
+                    filename = "The Sopranos S01-S06 1080p BluRay REMUX AVC DTS-HD MA 5.1 [RiCK]",
+                    status = "downloaded",
+                    bytes = 967_342_670_000L,
+                    links = listOf("https://rd.test/link/season-pack"),
+                    ended = "2026-03-30T12:00:00Z"
+                ),
+                RealDebridTorrentDto(
+                    id = "standalone-remux",
+                    filename = "Standalone.Movie.2024.1080p.BluRay.REMUX.mkv",
+                    status = "downloaded",
+                    bytes = 26L * 1024L * 1024L * 1024L,
+                    links = listOf("https://rd.test/link/standalone-remux"),
+                    ended = "2026-03-30T11:00:00Z"
+                )
+            )
+        )
+        coEvery { realDebridApi.getTorrentInfo(any(), "season-pack") } returns Response.success(
+            RealDebridTorrentInfoDto(
+                id = "season-pack",
+                filename = "The Sopranos S01-S06 1080p BluRay REMUX AVC DTS-HD MA 5.1 [RiCK]",
+                status = "downloaded",
+                links = listOf("https://rd.test/link/season-pack"),
+                files = listOf(
+                    RealDebridTorrentFileDto(
+                        id = 101,
+                        path = "/The Sopranos S04E13 1080p Blu-ray Remux AVC DTS-HD MA 5.1.mkv",
+                        bytes = 16_590_716_963L,
+                        selected = 1
+                    )
+                ),
+                ended = "2026-03-30T12:00:00Z"
+            )
+        )
+        coEvery { realDebridApi.getTorrentInfo(any(), "standalone-remux") } returns Response.success(
+            RealDebridTorrentInfoDto(
+                id = "standalone-remux",
+                filename = "Standalone.Movie.2024.1080p.BluRay.REMUX.mkv",
+                status = "downloaded",
+                links = listOf("https://rd.test/link/standalone-remux"),
+                files = listOf(
+                    RealDebridTorrentFileDto(
+                        id = 102,
+                        path = "/Standalone.Movie.2024.1080p.BluRay.REMUX.mkv",
+                        bytes = 26L * 1024L * 1024L * 1024L,
+                        selected = 1
+                    )
+                ),
+                ended = "2026-03-30T11:00:00Z"
+            )
+        )
+        coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(
+            listOf(
+                RealDebridDownloadDto(
+                    id = "rd-download-standalone",
+                    filename = "Standalone.Movie.2024.1080p.BluRay.REMUX.mkv",
+                    mimeType = "video/x-matroska",
+                    fileSize = 26L * 1024L * 1024L * 1024L,
+                    link = "https://rd.test/link/standalone-remux",
+                    download = "https://rd.test/download/standalone-remux.mkv"
+                )
+            )
+        )
+        coEvery { realDebridApi.unrestrictLink(any(), any(), any()) } returns Response.error(503, mockk(relaxed = true))
+
+        val realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore)
+        val service = DebridLibraryService(
+            realDebridApi = realDebridApi,
+            realDebridAuthDataStore = realDebridAuthDataStore,
+            realDebridAuthService = realDebridAuthService,
+            premiumizeApi = premiumizeApi,
+            premiumizeService = premiumizeService,
+            torBoxApi = torBoxApi,
+            torBoxService = torBoxService
+        )
+
+        val result = service.getBenchmarkCandidates(DebridBenchmarkProvider.REAL_DEBRID)
+
+        assertTrue(result is DebridBenchmarkCandidateLookupResult.Candidates)
+        val candidates = (result as DebridBenchmarkCandidateLookupResult.Candidates).items
+        assertEquals(1, candidates.size)
+        assertEquals("https://rd.test/download/standalone-remux.mkv", candidates.single().directUrl)
+        assertEquals(26L * 1024L * 1024L * 1024L, candidates.single().sourceSizeBytes)
+        coVerify(exactly = 1) { realDebridApi.getTorrentInfo(any(), "season-pack") }
+        coVerify(exactly = 1) { realDebridApi.getTorrentInfo(any(), "standalone-remux") }
     }
 
     @Test
