@@ -13,6 +13,8 @@ import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridUnrestrictLinkDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxFileDto
 import com.nexio.tv.data.remote.dto.debrid.TorBoxTorrentListItemDto
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkCandidate
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryListTab
 import kotlinx.coroutines.Dispatchers
@@ -72,6 +74,44 @@ class DebridLibraryService @Inject constructor(
             .map { it.items }
             .distinctUntilChanged()
             .onStart { ensureFresh(force = false) }
+    }
+
+    suspend fun getBenchmarkCandidates(provider: DebridBenchmarkProvider): List<DebridBenchmarkCandidate> {
+        val items = when (provider) {
+            DebridBenchmarkProvider.REAL_DEBRID -> {
+                if (!realDebridAuthDataStore.isAuthenticated.first()) {
+                    emptyList()
+                } else {
+                    fetchRealDebridTorrents()
+                }
+            }
+            DebridBenchmarkProvider.PREMIUMIZE -> {
+                premiumizeService.refreshAccountState()
+                val premiumizeState = premiumizeService.observeAccountState().first()
+                val apiKey = premiumizeState.apiKey.trim()
+                if (!premiumizeState.isConnected || apiKey.isBlank()) {
+                    emptyList()
+                } else {
+                    fetchPremiumizeItems(apiKey)
+                }
+            }
+        }
+
+        return items.asSequence()
+            .filter { entry -> entry.listKeys.contains(provider.listKey) }
+            .filter { entry -> entry.directPlaybackUrl.isNullOrBlank().not() }
+            .sortedByDescending { it.listedAt }
+            .mapNotNull { entry ->
+                val directUrl = entry.directPlaybackUrl?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                DebridBenchmarkCandidate(
+                    provider = provider,
+                    directUrl = directUrl,
+                    headers = entry.playbackHeaders.orEmpty(),
+                    filename = entry.playbackFilename?.takeIf { it.isNotBlank() },
+                    sourceSizeBytes = null
+                )
+            }
+            .toList()
     }
 
     fun observeIsRefreshing(): Flow<Boolean> = refreshingState
