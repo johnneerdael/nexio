@@ -92,6 +92,33 @@ class DebridBenchmarkMetricsTest {
     }
 
     @Test
+    fun `collector prefers transport side throughput samples when present`() {
+        val collector = DebridBenchmarkMetricsCollector()
+
+        collector.recordStartup(
+            requestStartedAtMs = 0L,
+            firstByteAtMs = 0L
+        )
+        collector.recordBytesRead(totalBytesRead = 64.mb, sampleAtMs = 1.seconds)
+        collector.recordBytesRead(totalBytesRead = 128.mb, sampleAtMs = 2.seconds)
+
+        collector.recordTransportBytesRead(bytesRead = 4.mb, sampleAtMs = 1.seconds)
+        collector.recordTransportBytesRead(bytesRead = 8.mb, sampleAtMs = 2.seconds)
+        collector.recordTransportBytesRead(bytesRead = 12.mb, sampleAtMs = 3.seconds)
+
+        val sustained = collector.finishSustained()
+        val rawSamples = collector.rawSamples()
+
+        assertEquals(listOf(67.108864, 100.663296), rawSamples.throughputWindowsMbps)
+        assertEquals(20.mb, sustained.bytesTransferred ?: 0L)
+        assertEquals(2.seconds, sustained.elapsedMs ?: 0L)
+        assertEquals(83.88608, sustained.averageThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(67.108864, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(67.108864, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(100.663296, sustained.peakThroughputMbps ?: 0.0, 0.00001)
+    }
+
+    @Test
     fun `safe sustained budget is disabled when sustained profile is marked non actionable`() {
         val profile = DebridBenchmarkTransportProfile(
             startup = DebridBenchmarkStartupMetrics(

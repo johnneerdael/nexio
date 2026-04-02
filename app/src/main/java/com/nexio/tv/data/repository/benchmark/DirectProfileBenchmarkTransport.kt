@@ -19,7 +19,8 @@ class DirectProfileBenchmarkTransport internal constructor(
             sustainedThresholdBytes = 500L * 1024L * 1024L,
             sustainedThresholdElapsedMs = 120_000L,
             seekProbeBytes = 256L * 1024L,
-            readBufferSize = 256 * 1024
+            readBufferSize = 256 * 1024,
+            maxRecoverableFailures = 3
         )
     )
 
@@ -53,7 +54,9 @@ private class DefaultDirectBenchmarkReadableSourceFactoryBuilder(
     override fun create(
         candidate: DebridBenchmarkCandidate,
         configSnapshot: DebridBenchmarkTransportConfigSnapshot,
-        allowStartupBootstrapReuse: Boolean
+        allowStartupBootstrapReuse: Boolean,
+        transportSampleTimeMs: () -> Long,
+        onTransportBytesDownloaded: (Long, Long) -> Unit
     ): BenchmarkReadableSourceFactory {
         val upstreamFactory = OkHttpDataSource.Factory(okHttpClient).apply {
             setDefaultRequestProperties(candidate.headers)
