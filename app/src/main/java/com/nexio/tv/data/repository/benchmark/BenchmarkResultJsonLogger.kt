@@ -90,6 +90,13 @@ class BenchmarkResultJsonLogger internal constructor(
             failureDetails?.let { details ->
                 add("failure", JsonObject().apply {
                     details.failedTransport?.let { addProperty("failedTransport", it.wireKey) }
+                    details.transportFailure?.let { failure ->
+                        add("transportFailure", JsonObject().apply {
+                            failure.exceptionClass?.let { addProperty("exceptionClass", it) }
+                            failure.message?.let { addProperty("message", it) }
+                            failure.chunkIndex?.let { addProperty("chunkIndex", it) }
+                        })
+                    }
                     details.candidate?.let { add("candidate", it.toJsonObject()) }
                     details.direct?.let { add("direct", it.toJsonObject()) }
                     details.optimized?.let { add("optimized", it.toJsonObject()) }
@@ -136,6 +143,14 @@ class BenchmarkResultJsonLogger internal constructor(
                 append(" failed_transport=")
                 append(it.wireKey)
             }
+            failureDetails?.transportFailure?.exceptionClass?.let {
+                append(" failure_class=")
+                append(it)
+            }
+            failureDetails?.transportFailure?.chunkIndex?.let {
+                append(" chunk_index=")
+                append(it)
+            }
             summary.startupTimeMs?.let {
                 append(" startup_ms=")
                 append(it)
@@ -155,6 +170,10 @@ class BenchmarkResultJsonLogger internal constructor(
             failureDetails?.candidate?.filename?.let {
                 append(" filename=")
                 append(it)
+            }
+            failureDetails?.transportFailure?.message?.let {
+                append(" failure_message=")
+                append(it.replace(' ', '_'))
             }
         }
     }
@@ -246,7 +265,12 @@ private fun DebridBenchmarkTransportProfile.toJsonObject(): JsonObject {
             startup.startupFailureRate?.let { addProperty("startupFailureRate", it) }
         })
         add("sustained", JsonObject().apply {
+            addProperty("collectorVersion", sustained.collectorVersion)
+            sustained.samplingMode?.let { addProperty("samplingMode", it) }
+            sustained.bucketMs?.let { addProperty("bucketMs", it) }
             sustained.averageThroughputMbps?.let { addProperty("averageThroughputMbps", it) }
+            sustained.derivedAverageThroughputMbps?.let { addProperty("derivedAverageThroughputMbps", it) }
+            addProperty("actionable", sustained.actionable)
             sustained.p10ThroughputMbps?.let { addProperty("p10ThroughputMbps", it) }
             sustained.p50ThroughputMbps?.let { addProperty("p50ThroughputMbps", it) }
             sustained.peakThroughputMbps?.let { addProperty("peakThroughputMbps", it) }
@@ -274,6 +298,17 @@ private fun DebridBenchmarkTransportProfile.toJsonObject(): JsonObject {
         add("rawSamples", JsonObject().apply {
             add("throughputWindowsMbps", JsonArray().apply {
                 rawSamples.throughputWindowsMbps.forEach { add(it) }
+            })
+            add("throughputBuckets", JsonArray().apply {
+                rawSamples.throughputBuckets.forEach { bucket ->
+                    add(JsonObject().apply {
+                        addProperty("startOffsetMs", bucket.startOffsetMs)
+                        addProperty("durationMs", bucket.durationMs)
+                        addProperty("bytesTransferred", bucket.bytesTransferred)
+                        addProperty("throughputMbps", bucket.throughputMbps)
+                        addProperty("complete", bucket.complete)
+                    })
+                }
             })
             add("seekSamples", JsonArray().apply {
                 rawSamples.seekSamples.forEach { sample ->
@@ -304,5 +339,7 @@ private fun AudioEncodingSupport.toJsonObject(): JsonObject {
 }
 
 internal fun DebridBenchmarkTransportProfile?.safeSustainedBudgetMbps(): Double? {
-    return this?.sustained?.p10ThroughputMbps?.times(0.85)
+    val sustained = this?.sustained ?: return null
+    if (!sustained.actionable) return null
+    return sustained.p10ThroughputMbps?.times(0.85)
 }

@@ -62,6 +62,7 @@ class DebridBenchmarkSessionRunner internal constructor(
                 failureDetails = DebridBenchmarkFailureDetails(
                     candidate = candidateMetadata,
                     failedTransport = DebridBenchmarkTransportMode.DIRECT,
+                    transportFailure = directResult.failure,
                     direct = directResult.profile
                 )
             )
@@ -82,6 +83,7 @@ class DebridBenchmarkSessionRunner internal constructor(
                 failureDetails = DebridBenchmarkFailureDetails(
                     candidate = candidateMetadata,
                     failedTransport = DebridBenchmarkTransportMode.OPTIMIZED,
+                    transportFailure = optimizedResult.failure,
                     direct = directResult.profile,
                     optimized = optimizedResult.profile
                 )

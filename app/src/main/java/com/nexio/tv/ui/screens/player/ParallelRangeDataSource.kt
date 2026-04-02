@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.TimeUnit
 import com.nexio.tv.data.local.PlayerSettings
 import java.util.concurrent.atomic.AtomicBoolean
@@ -42,10 +43,37 @@ internal class ParallelRangeDataSource(
     private val updateBootstrapCache: (BootstrapCacheEntry?) -> Unit = {}
 ) : DataSource {
 
+    internal open class ChunkTransferException(
+        val chunkIndex: Long,
+        message: String,
+        cause: Throwable? = null
+    ) : IOException(message, cause)
+
+    internal class ChunkWaitTimeoutException(
+        chunkIndex: Long,
+        timeoutMs: Long,
+        cause: Throwable? = null
+    ) : ChunkTransferException(
+        chunkIndex = chunkIndex,
+        message = "Timed out waiting ${timeoutMs}ms for chunk $chunkIndex",
+        cause = cause
+    )
+
+    internal class ChunkDownloadException(
+        chunkIndex: Long,
+        message: String,
+        cause: Throwable? = null
+    ) : ChunkTransferException(
+        chunkIndex = chunkIndex,
+        message = message,
+        cause = cause
+    )
+
     companion object {
         private const val TAG = "ParallelRangeDS"
         private const val READ_BUFFER_SIZE = 512 * 1024 // 512KB read buffer for chunk downloads
         private const val BOOTSTRAP_READ_BYTES = 1L * 1024L * 1024L
+        private const val CHUNK_WAIT_TIMEOUT_MS = 60_000L
     }
 
     /**
@@ -270,10 +298,21 @@ internal class ParallelRangeDataSource(
             ensureChunkScheduled(chunkIndex)
             val future = chunks[chunkIndex] ?: return C.RESULT_END_OF_INPUT
             try {
-                currentChunk = future.get(60, TimeUnit.SECONDS)
+                currentChunk = future.get(CHUNK_WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            } catch (e: TimeoutException) {
+                if (closed.get()) return C.RESULT_END_OF_INPUT
+                throw ChunkWaitTimeoutException(
+                    chunkIndex = chunkIndex,
+                    timeoutMs = CHUNK_WAIT_TIMEOUT_MS,
+                    cause = e
+                )
             } catch (e: Exception) {
                 if (closed.get()) return C.RESULT_END_OF_INPUT
-                throw IOException("Failed to download chunk $chunkIndex", e)
+                throw ChunkDownloadException(
+                    chunkIndex = chunkIndex,
+                    message = "Failed to download chunk $chunkIndex",
+                    cause = e
+                )
             }
             currentChunkIndex = chunkIndex
             currentChunkReadOffset = (position % chunkSize).toInt()
@@ -349,7 +388,11 @@ internal class ParallelRangeDataSource(
                 }
             }
         }
-        throw IOException("Failed to download chunk $chunkIndex after 2 attempts", lastException)
+        throw ChunkDownloadException(
+            chunkIndex = chunkIndex,
+            message = "Failed to download chunk $chunkIndex after 2 attempts",
+            cause = lastException
+        )
     }
 
     private fun downloadChunkOnce(chunkIndex: Long): DownloadedChunk {

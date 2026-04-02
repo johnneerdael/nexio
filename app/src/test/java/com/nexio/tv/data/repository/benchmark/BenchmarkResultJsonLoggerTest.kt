@@ -20,6 +20,7 @@ class BenchmarkResultJsonLoggerTest {
         val result = root.getAsJsonObject("result")
         assertEquals("real_debrid", result.get("provider").asString)
         assertTrue(result.getAsJsonObject("device").getAsJsonArray("displayHdrTypes").containsString("dolby_vision"))
+        assertEquals(1_000L, result.getAsJsonObject("optimized").getAsJsonObject("sustained").get("bucketMs").asLong)
         assertEquals(4, result.getAsJsonObject("optimized").getAsJsonObject("configSnapshot").get("parallelConnectionCount").asInt)
     }
 
@@ -56,6 +57,11 @@ class BenchmarkResultJsonLoggerTest {
                     directUrlFingerprint = "abc123def456"
                 ),
                 failedTransport = DebridBenchmarkTransportMode.DIRECT,
+                transportFailure = DebridBenchmarkTransportFailure(
+                    exceptionClass = "ChunkWaitTimeoutException",
+                    message = "Timed out waiting 60000ms for chunk 8",
+                    chunkIndex = 8L
+                ),
                 direct = sampleProfile(
                     startupMs = 310L,
                     p10Mbps = 104.0,
@@ -72,6 +78,8 @@ class BenchmarkResultJsonLoggerTest {
         assertEquals("failed", root.get("terminationReason").asString)
         val failure = root.getAsJsonObject("failure")
         assertEquals("direct", failure.get("failedTransport").asString)
+        assertEquals("ChunkWaitTimeoutException", failure.getAsJsonObject("transportFailure").get("exceptionClass").asString)
+        assertEquals(8L, failure.getAsJsonObject("transportFailure").get("chunkIndex").asLong)
         assertEquals("cdn.example.net", failure.getAsJsonObject("candidate").get("host").asString)
         assertEquals(
             104.0,
@@ -171,7 +179,12 @@ class BenchmarkResultJsonLoggerTest {
                 startupFailureRate = 0.0
             ),
             sustained = DebridBenchmarkSustainedMetrics(
+                collectorVersion = 2,
+                samplingMode = "fixed_time_bucket",
+                bucketMs = 1_000L,
                 averageThroughputMbps = averageMbps,
+                derivedAverageThroughputMbps = averageMbps,
+                actionable = true,
                 p10ThroughputMbps = p10Mbps,
                 p50ThroughputMbps = averageMbps,
                 peakThroughputMbps = averageMbps + 20.0,
@@ -192,6 +205,15 @@ class BenchmarkResultJsonLoggerTest {
             configSnapshot = configSnapshot,
             rawSamples = DebridBenchmarkRawSamples(
                 throughputWindowsMbps = listOf(p10Mbps, averageMbps),
+                throughputBuckets = listOf(
+                    DebridBenchmarkThroughputBucketSample(
+                        startOffsetMs = 0L,
+                        durationMs = 1_000L,
+                        bytesTransferred = ((p10Mbps * 1_000_000.0 / 8.0) / 1_000.0).toLong(),
+                        throughputMbps = p10Mbps,
+                        complete = true
+                    )
+                ),
                 seekSamples = listOf(
                     DebridBenchmarkSeekSample(
                         targetOffsetBytes = 1_024L,

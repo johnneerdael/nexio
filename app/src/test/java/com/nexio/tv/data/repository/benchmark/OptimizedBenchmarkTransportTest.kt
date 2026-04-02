@@ -1,9 +1,12 @@
 package com.nexio.tv.data.repository.benchmark
 
 import androidx.media3.common.C
+import com.nexio.tv.ui.screens.player.ParallelRangeDataSource
+import java.util.concurrent.TimeoutException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -52,8 +55,54 @@ class OptimizedBenchmarkTransportTest {
         assertEquals(listOf(10L, 20L, 30L), result.profile.rawSamples.seekSamples.map { it.targetOffsetBytes })
     }
 
+    @Test
+    fun `optimized transport reports chunk timeout details`() = runTest {
+        val clock = FakeBenchmarkClock()
+        val builder = object : OptimizedBenchmarkDataSourceFactoryBuilder {
+            override fun create(
+                candidate: DebridBenchmarkCandidate,
+                configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                allowStartupBootstrapReuse: Boolean
+            ): BenchmarkReadableSourceFactory {
+                return BenchmarkReadableSourceFactory {
+                    object : BenchmarkReadableSource {
+                        override fun open(position: Long, length: Long): Long {
+                            clock.advanceMs(50L)
+                            return 1024L * 1024L
+                        }
+
+                        override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                            throw ParallelRangeDataSource.ChunkWaitTimeoutException(
+                                chunkIndex = 8L,
+                                timeoutMs = 60_000L,
+                                cause = TimeoutException()
+                            )
+                        }
+
+                        override fun close() = Unit
+                    }
+                }
+            }
+        }
+        val transport = buildTransport(builder, clock)
+
+        val result = transport.runProfile(
+            candidate = candidate(),
+            configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                useParallelConnections = true,
+                parallelConnectionCount = 4,
+                parallelChunkSizeMb = 8
+            )
+        )
+
+        assertEquals(DebridBenchmarkTerminationReason.TIMEOUT, result.terminationReason)
+        assertNotNull(result.failure)
+        assertEquals("ChunkWaitTimeoutException", result.failure?.exceptionClass)
+        assertEquals(8L, result.failure?.chunkIndex)
+    }
+
     private fun buildTransport(
-        builder: RecordingFactoryBuilder,
+        builder: OptimizedBenchmarkDataSourceFactoryBuilder,
         clock: FakeBenchmarkClock
     ): OptimizedBenchmarkTransport {
         return OptimizedBenchmarkTransport(
