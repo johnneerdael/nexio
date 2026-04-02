@@ -53,6 +53,12 @@ val doviPrebuiltRootPath = resolveProperty(devProperties, localProperties, "DOVI
 val useMedia3Source = parseBooleanProperty(
     resolveProperty(devProperties, localProperties, "USE_MEDIA3_SOURCE")
 )
+val filteredMainAssetsDir = layout.buildDirectory.dir("filtered-assets/main")
+val syncFilteredMainAssets by tasks.registering(Sync::class) {
+    from("src/main/assets")
+    into(filteredMainAssetsDir)
+    exclude("trailer-helper/runtime/**")
+}
 
 android {
     namespace = "com.nexio.tv"
@@ -62,12 +68,9 @@ android {
         applicationId = "com.nexio.tv"
         minSdk = 26
         targetSdk = 36
-        versionCode = 51
-        versionName = "0.33"
+        versionCode = 52
+        versionName = "0.34"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-        }
 
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
         buildConfigField("String", "TRAILER_API_URL", "\"${localProperties.getProperty("TRAILER_API_URL", "")}\"")
@@ -124,11 +127,6 @@ android {
             isDebuggable = true
             isMinifyEnabled = false
 
-            // Keep debug native builds single-ABI for faster and more stable local iteration.
-            ndk {
-                abiFilters += listOf("arm64-v8a")
-            }
-
             buildConfigField("boolean", "IS_DEBUG_BUILD", "true")
 
             // Dev environment (from local.dev.properties)
@@ -161,12 +159,25 @@ android {
         }
     }
 
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-            isUniversalApk = true
+    flavorDimensions += "abiPackaging"
+    productFlavors {
+        create("arm64") {
+            dimension = "abiPackaging"
+            ndk {
+                abiFilters += listOf("arm64-v8a")
+            }
+        }
+        create("armv7") {
+            dimension = "abiPackaging"
+            ndk {
+                abiFilters += listOf("armeabi-v7a")
+            }
+        }
+        create("universal") {
+            dimension = "abiPackaging"
+            ndk {
+                abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+            }
         }
     }
 
@@ -194,7 +205,9 @@ android {
             jniLibs.srcDirs(
                 "src/main/_jni_disabled"
             )
-            assets.srcDirs("src/main/assets")
+            // Package a filtered copy of the main assets tree so legacy staged
+            // trailer-helper runtimes don't bloat every split APK.
+            assets.setSrcDirs(listOf(syncFilteredMainAssets))
         }
     }
 

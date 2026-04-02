@@ -119,6 +119,30 @@ class DebridBenchmarkMetricsTest {
     }
 
     @Test
+    fun `collector derives conservative floor from steady state buckets after warm up`() {
+        val collector = DebridBenchmarkMetricsCollector()
+
+        collector.recordStartup(
+            requestStartedAtMs = 0L,
+            firstByteAtMs = 0L
+        )
+
+        repeat(10) { index ->
+            collector.recordTransportBytesRead(bytesRead = 50_000_000L, sampleAtMs = (index + 1).seconds)
+        }
+        repeat(10) { index ->
+            collector.recordTransportBytesRead(bytesRead = 100_000_000L, sampleAtMs = (index + 11).seconds)
+        }
+
+        val sustained = collector.finishSustained()
+
+        assertEquals(800.0, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(800.0, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(800.0, sustained.peakThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(0.0, sustained.throughputCv ?: 0.0, 0.00001)
+    }
+
+    @Test
     fun `collector preserves bytes across multiple reads in the same millisecond`() {
         val collector = DebridBenchmarkMetricsCollector()
 

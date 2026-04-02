@@ -14,6 +14,7 @@ class DebridBenchmarkMetricsCollector(
         private const val COLLECTOR_VERSION = 2
         private const val SAMPLING_MODE_FIXED_TIME_BUCKET = "fixed_time_bucket"
         private const val CONSISTENCY_TOLERANCE_RATIO = 0.10
+        private const val STEADY_STATE_WARMUP_MS = 10_000L
     }
 
     private var requestStartedAtMs: Long? = null
@@ -158,14 +159,17 @@ class DebridBenchmarkMetricsCollector(
 
     fun finishSustained(): DebridBenchmarkSustainedMetrics {
         val completedBuckets = completedSustainedBuckets()
+        val steadyStateBuckets = steadyStateCompletedSustainedBuckets(completedBuckets)
         val sortedWindows = completedBuckets.map { it.throughputMbps }.sorted()
+        val steadyStateWindows = steadyStateBuckets.map { it.throughputMbps }.sorted()
         val average = sortedWindows.takeIf { it.isNotEmpty() }?.average()
+        val steadyStateAverage = steadyStateWindows.takeIf { it.isNotEmpty() }?.average()
         val completedBytesTransferred = completedBuckets.sumOf { it.bytesTransferred }
         val completedElapsedMs = completedBuckets.sumOf { it.durationMs }
         val derivedAverage = completedBytesTransferred
             .takeIf { completedElapsedMs > 0L }
             ?.toMbps(completedElapsedMs)
-        val stddev = sortedWindows.standardDeviation(average)
+        val stddev = steadyStateWindows.standardDeviation(steadyStateAverage)
         val actionable = average != null &&
             derivedAverage != null &&
             average.isWithinRatio(
@@ -179,13 +183,13 @@ class DebridBenchmarkMetricsCollector(
             averageThroughputMbps = average,
             derivedAverageThroughputMbps = derivedAverage,
             actionable = actionable,
-            p10ThroughputMbps = sortedWindows.percentileNearestRank(0.10),
-            p50ThroughputMbps = sortedWindows.percentileNearestRank(0.50),
-            peakThroughputMbps = sortedWindows.maxOrNull(),
+            p10ThroughputMbps = steadyStateWindows.percentileNearestRank(0.10),
+            p50ThroughputMbps = steadyStateWindows.percentileNearestRank(0.50),
+            peakThroughputMbps = steadyStateWindows.maxOrNull(),
             throughputStddevMbps = stddev,
-            throughputCv = if (average != null && average > 0.0 && stddev != null) {
-                stddev / average
-            } else if (average == 0.0 && stddev == 0.0) {
+            throughputCv = if (steadyStateAverage != null && steadyStateAverage > 0.0 && stddev != null) {
+                stddev / steadyStateAverage
+            } else if (steadyStateAverage == 0.0 && stddev == 0.0) {
                 0.0
             } else {
                 null
@@ -416,6 +420,13 @@ class DebridBenchmarkMetricsCollector(
         } else {
             effectiveThroughputBuckets()
         }
+    }
+
+    private fun steadyStateCompletedSustainedBuckets(
+        completedBuckets: List<DebridBenchmarkThroughputBucketSample>
+    ): List<DebridBenchmarkThroughputBucketSample> {
+        val steadyStateBuckets = completedBuckets.filter { it.startOffsetMs >= STEADY_STATE_WARMUP_MS }
+        return if (steadyStateBuckets.isNotEmpty()) steadyStateBuckets else completedBuckets
     }
 
     private fun activeStallCount(): Int = if (hasTransportSamples()) transportStallCount else stallCount
