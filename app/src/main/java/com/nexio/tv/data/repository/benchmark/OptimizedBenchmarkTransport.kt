@@ -6,6 +6,7 @@ import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.ui.screens.player.ParallelRangeDataSource
+import java.io.EOFException
 import java.io.InterruptedIOException
 import java.net.SocketException
 import java.util.concurrent.ExecutionException
@@ -138,7 +139,27 @@ class OptimizedBenchmarkTransport internal constructor(
         var recoverableTimeoutCount = 0
 
         try {
-            readableSource.open(position = 0L)
+            when (val openResult = reopenReadableSource(
+                readableSourceFactory = readableSourceFactory,
+                existingReadableSource = readableSource,
+                position = 0L,
+                recoverableFailureCount = recoverableFailureCount,
+                recoverableTimeoutCount = recoverableTimeoutCount
+            )) {
+                is ReopenResult.Failed -> {
+                    return StartupAndSustainedPhaseResult(
+                        terminationReason = openResult.failure.toTerminationReason(),
+                        failure = openResult.failure,
+                        recoverableFailureCount = openResult.recoverableFailureCount,
+                        recoverableTimeoutCount = openResult.recoverableTimeoutCount
+                    )
+                }
+                is ReopenResult.Opened -> {
+                    readableSource = openResult.readableSource
+                    recoverableFailureCount = openResult.recoverableFailureCount
+                    recoverableTimeoutCount = openResult.recoverableTimeoutCount
+                }
+            }
             while (true) {
                 val read = try {
                     readableSource.read(buffer, 0, buffer.size)
@@ -158,21 +179,26 @@ class OptimizedBenchmarkTransport internal constructor(
                         if (failure.isTimeoutLike()) {
                             recoverableTimeoutCount += 1
                         }
-                        runCatching { readableSource.close() }
-                        readableSource = readableSourceFactory.createSource()
-                        try {
-                            readableSource.open(position = totalBytesRead.toLong())
-                        } catch (reopenError: Exception) {
-                            val reopenFailure = reopenError.toTransportFailure(
-                                recoverableFailureCount = recoverableFailureCount,
-                                recoverableTimeoutCount = recoverableTimeoutCount
-                            )
-                            return StartupAndSustainedPhaseResult(
-                                terminationReason = reopenFailure.toTerminationReason(),
-                                failure = reopenFailure,
-                                recoverableFailureCount = recoverableFailureCount,
-                                recoverableTimeoutCount = recoverableTimeoutCount
-                            )
+                        when (val reopenResult = reopenReadableSource(
+                            readableSourceFactory = readableSourceFactory,
+                            existingReadableSource = readableSource,
+                            position = totalBytesRead,
+                            recoverableFailureCount = recoverableFailureCount,
+                            recoverableTimeoutCount = recoverableTimeoutCount
+                        )) {
+                            is ReopenResult.Failed -> {
+                                return StartupAndSustainedPhaseResult(
+                                    terminationReason = reopenResult.failure.toTerminationReason(),
+                                    failure = reopenResult.failure,
+                                    recoverableFailureCount = reopenResult.recoverableFailureCount,
+                                    recoverableTimeoutCount = reopenResult.recoverableTimeoutCount
+                                )
+                            }
+                            is ReopenResult.Opened -> {
+                                readableSource = reopenResult.readableSource
+                                recoverableFailureCount = reopenResult.recoverableFailureCount
+                                recoverableTimeoutCount = reopenResult.recoverableTimeoutCount
+                            }
                         }
                         continue
                     }
@@ -230,6 +256,65 @@ class OptimizedBenchmarkTransport internal constructor(
             }
         } finally {
             runCatching { readableSource.close() }
+        }
+    }
+
+    private sealed interface ReopenResult {
+        data class Opened(
+            val readableSource: BenchmarkReadableSource,
+            val recoverableFailureCount: Int,
+            val recoverableTimeoutCount: Int
+        ) : ReopenResult
+
+        data class Failed(
+            val failure: DebridBenchmarkTransportFailure,
+            val recoverableFailureCount: Int,
+            val recoverableTimeoutCount: Int
+        ) : ReopenResult
+    }
+
+    private fun reopenReadableSource(
+        readableSourceFactory: BenchmarkReadableSourceFactory,
+        existingReadableSource: BenchmarkReadableSource,
+        position: Long,
+        recoverableFailureCount: Int,
+        recoverableTimeoutCount: Int
+    ): ReopenResult {
+        var currentFailureCount = recoverableFailureCount
+        var currentTimeoutCount = recoverableTimeoutCount
+        var currentReadableSource = existingReadableSource
+
+        while (true) {
+            runCatching { currentReadableSource.close() }
+            currentReadableSource = readableSourceFactory.createSource()
+            try {
+                currentReadableSource.open(position = position)
+                return ReopenResult.Opened(
+                    readableSource = currentReadableSource,
+                    recoverableFailureCount = currentFailureCount,
+                    recoverableTimeoutCount = currentTimeoutCount
+                )
+            } catch (reopenError: Exception) {
+                val reopenFailure = reopenError.toTransportFailure(
+                    recoverableFailureCount = currentFailureCount,
+                    recoverableTimeoutCount = currentTimeoutCount
+                )
+                if (reopenFailure.isRecoverable() && currentFailureCount < maxRecoverableFailures) {
+                    currentFailureCount += 1
+                    if (reopenFailure.isTimeoutLike()) {
+                        currentTimeoutCount += 1
+                    }
+                    continue
+                }
+                return ReopenResult.Failed(
+                    failure = reopenFailure.copy(
+                        recoverableFailureCount = currentFailureCount,
+                        recoverableTimeoutCount = currentTimeoutCount
+                    ),
+                    recoverableFailureCount = currentFailureCount,
+                    recoverableTimeoutCount = currentTimeoutCount
+                )
+            }
         }
     }
 
@@ -355,9 +440,13 @@ class OptimizedBenchmarkTransport internal constructor(
 
     private fun DebridBenchmarkTransportFailure.isConnectionResetLike(): Boolean {
         return exceptionClass == SocketException::class.java.simpleName ||
+            exceptionClass == EOFException::class.java.simpleName ||
             rootCauseClass == SocketException::class.java.simpleName ||
+            rootCauseClass == EOFException::class.java.simpleName ||
             message?.contains("connection reset", ignoreCase = true) == true ||
             rootCauseMessage?.contains("connection reset", ignoreCase = true) == true ||
+            message?.contains("connection closed", ignoreCase = true) == true ||
+            rootCauseMessage?.contains("connection closed", ignoreCase = true) == true ||
             message?.contains("broken pipe", ignoreCase = true) == true ||
             rootCauseMessage?.contains("broken pipe", ignoreCase = true) == true
     }
