@@ -1,9 +1,10 @@
 This directory is reserved for the bundled YouTube trailer helper runtime.
 
 `yt_dlp` is embedded through Chaquopy Python sources in `app/src/main/python`.
-This assets directory only carries a JS runtime executable for yt-dlp's challenge solver.
+The packaged Android app uses Chaquopy plus the Android JavaScript sandbox and
+only ships `yt.solver.android.min.js` from the main assets tree.
 
-Expected staged payload per ABI:
+Legacy Node/QuickJS helper binaries may still be staged here for local tooling:
 - `runtime/arm64-v8a/node/bin/node`
 - `runtime/arm64-v8a/node/lib/libnode.so`
 - `runtime/arm64-v8a/node/lib/libc++_shared.so`
@@ -18,8 +19,5 @@ Expected staged payload per ABI:
 - `runtime/x86_64/quickjs/qjs`
 - `runtime/x86/quickjs/qjs`
 
-The Android app selects the first matching ABI from `Build.SUPPORTED_ABIS`, copies that
-runtime tree into app-private storage, then runs embedded `yt_dlp` against the live
-YouTube bearer authorization header, optional `X-Goog-PageId` and `X-Goog-AuthUser`
-values, plus the staged JS runtime executable to resolve authenticated trailer
-playback URLs.
+These staged binaries are excluded from packaged APKs in `app/build.gradle.kts`
+to avoid shipping all ABI copies inside every split APK.
