@@ -76,8 +76,10 @@ class DebridBenchmarkSessionRunner internal constructor(
             observer = observer,
             seekTargets = seekTargets
         )
+        val directProfile = directResult.profile.withDerivedDecisionMetrics()
+        val optimizedProfile = optimizedResult.profile.withDerivedDecisionMetrics()
         if (optimizedResult.terminationReason != DebridBenchmarkTerminationReason.COMPLETED) {
-            if (directResult.profile.isActionableForAutoplay()) {
+            if (directProfile.isActionableForAutoplay()) {
                 val deviceSnapshot = deviceCapabilitySnapshotProvider.capture()
                 val completedResult = DebridBenchmarkResult(
                     provider = provider,
@@ -86,38 +88,12 @@ class DebridBenchmarkSessionRunner internal constructor(
                     terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
                     candidate = candidateMetadata,
                     device = deviceSnapshot,
-                    session = DebridBenchmarkSessionMetadata(
-                        benchmarkVersion = 3,
-                        executionOrder = listOf(
-                            DebridBenchmarkPhaseExecution(
-                                phase = DebridBenchmarkPhase.STARTUP,
-                                order = listOf(
-                                    DebridBenchmarkTransportMode.DIRECT,
-                                    DebridBenchmarkTransportMode.OPTIMIZED
-                                )
-                            ),
-                            DebridBenchmarkPhaseExecution(
-                                phase = DebridBenchmarkPhase.SUSTAINED,
-                                order = listOf(
-                                    DebridBenchmarkTransportMode.DIRECT,
-                                    DebridBenchmarkTransportMode.OPTIMIZED
-                                )
-                            ),
-                            DebridBenchmarkPhaseExecution(
-                                phase = DebridBenchmarkPhase.SEEK,
-                                order = listOf(
-                                    DebridBenchmarkTransportMode.DIRECT,
-                                    DebridBenchmarkTransportMode.OPTIMIZED
-                                )
-                            )
-                        ),
-                        totalElapsedMs = (directResult.profile.sustained.elapsedMs ?: 0L) +
-                            optimizedResult.summary.elapsedMs
+                    session = benchmarkSessionMetadata(
+                        directElapsedMs = directResult.profile.sustained.elapsedMs ?: 0L,
+                        optimizedElapsedMs = optimizedResult.summary.elapsedMs
                     ),
-                    direct = directResult.profile.withDerivedDecisionMetrics(),
-                    optimized = optimizedResult.profile
-                        .markNonActionable()
-                        .withDerivedDecisionMetrics(),
+                    direct = directProfile,
+                    optimized = optimizedProfile.markNonActionable(),
                     comparison = DebridBenchmarkComparisonSummary(
                         sustainedWinner = DebridBenchmarkTransportMode.DIRECT,
                         seekWinner = DebridBenchmarkTransportMode.DIRECT,
@@ -151,48 +127,24 @@ class DebridBenchmarkSessionRunner internal constructor(
             terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
             candidate = candidateMetadata,
             device = deviceSnapshot,
-            session = DebridBenchmarkSessionMetadata(
-                benchmarkVersion = 3,
-                executionOrder = listOf(
-                    DebridBenchmarkPhaseExecution(
-                        phase = DebridBenchmarkPhase.STARTUP,
-                        order = listOf(
-                            DebridBenchmarkTransportMode.DIRECT,
-                            DebridBenchmarkTransportMode.OPTIMIZED
-                        )
-                    ),
-                    DebridBenchmarkPhaseExecution(
-                        phase = DebridBenchmarkPhase.SUSTAINED,
-                        order = listOf(
-                            DebridBenchmarkTransportMode.DIRECT,
-                            DebridBenchmarkTransportMode.OPTIMIZED
-                        )
-                    ),
-                    DebridBenchmarkPhaseExecution(
-                        phase = DebridBenchmarkPhase.SEEK,
-                        order = listOf(
-                            DebridBenchmarkTransportMode.DIRECT,
-                            DebridBenchmarkTransportMode.OPTIMIZED
-                        )
-                    )
-                ),
-                totalElapsedMs = (directResult.profile.sustained.elapsedMs ?: 0L) +
-                    (optimizedResult.profile.sustained.elapsedMs ?: 0L)
+            session = benchmarkSessionMetadata(
+                directElapsedMs = directResult.profile.sustained.elapsedMs ?: 0L,
+                optimizedElapsedMs = optimizedResult.profile.sustained.elapsedMs ?: 0L
             ),
-            direct = directResult.profile.withDerivedDecisionMetrics(),
-            optimized = optimizedResult.profile.withDerivedDecisionMetrics(),
+            direct = directProfile,
+            optimized = optimizedProfile,
             comparison = DebridBenchmarkComparisonSummary(
                 sustainedWinner = compareSustainedWinner(
-                    direct = directResult.profile.withDerivedDecisionMetrics(),
-                    optimized = optimizedResult.profile.withDerivedDecisionMetrics()
+                    direct = directProfile,
+                    optimized = optimizedProfile
                 ),
                 seekWinner = compareSeekWinner(
-                    direct = directResult.profile.withDerivedDecisionMetrics(),
-                    optimized = optimizedResult.profile.withDerivedDecisionMetrics()
+                    direct = directProfile,
+                    optimized = optimizedProfile
                 ),
                 stabilityWinner = compareStabilityWinner(
-                    direct = directResult.profile.withDerivedDecisionMetrics(),
-                    optimized = optimizedResult.profile.withDerivedDecisionMetrics()
+                    direct = directProfile,
+                    optimized = optimizedProfile
                 )
             )
         )
@@ -217,6 +169,17 @@ class DebridBenchmarkSessionRunner internal constructor(
             useParallelConnections = useParallelConnections,
             parallelConnectionCount = parallelConnectionCount,
             parallelChunkSizeMb = parallelChunkSizeMb
+        )
+    }
+
+    private fun benchmarkSessionMetadata(
+        directElapsedMs: Long,
+        optimizedElapsedMs: Long
+    ): DebridBenchmarkSessionMetadata {
+        return DebridBenchmarkSessionMetadata(
+            benchmarkVersion = 3,
+            executionOrder = DEFAULT_EXECUTION_ORDER,
+            totalElapsedMs = directElapsedMs + optimizedElapsedMs
         )
     }
 
@@ -306,6 +269,32 @@ class DebridBenchmarkSessionRunner internal constructor(
     private fun sha256(value: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
         return digest.joinToString(separator = "") { "%02x".format(it) }.take(16)
+    }
+
+    private companion object {
+        private val DEFAULT_EXECUTION_ORDER = listOf(
+            DebridBenchmarkPhaseExecution(
+                phase = DebridBenchmarkPhase.STARTUP,
+                order = listOf(
+                    DebridBenchmarkTransportMode.DIRECT,
+                    DebridBenchmarkTransportMode.OPTIMIZED
+                )
+            ),
+            DebridBenchmarkPhaseExecution(
+                phase = DebridBenchmarkPhase.SUSTAINED,
+                order = listOf(
+                    DebridBenchmarkTransportMode.DIRECT,
+                    DebridBenchmarkTransportMode.OPTIMIZED
+                )
+            ),
+            DebridBenchmarkPhaseExecution(
+                phase = DebridBenchmarkPhase.SEEK,
+                order = listOf(
+                    DebridBenchmarkTransportMode.DIRECT,
+                    DebridBenchmarkTransportMode.OPTIMIZED
+                )
+            )
+        )
     }
 }
 
