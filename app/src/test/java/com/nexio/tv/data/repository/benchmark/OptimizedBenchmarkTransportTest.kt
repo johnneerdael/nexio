@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository.benchmark
 
 import androidx.media3.common.C
 import com.nexio.tv.ui.screens.player.ParallelRangeDataSource
+import java.io.EOFException
 import java.net.SocketException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.TimeoutException
@@ -205,6 +206,147 @@ class OptimizedBenchmarkTransportTest {
 
         assertEquals(DebridBenchmarkTerminationReason.COMPLETED, result.terminationReason)
         assertEquals(1, result.profile.sustained.recoverableFailureCount)
+        assertEquals(0, result.profile.sustained.recoverableTimeoutCount)
+    }
+
+    @Test
+    fun `optimized transport recovers from a single connection closed eof and completes`() = runTest {
+        val clock = FakeBenchmarkClock()
+        val failedOnce = AtomicBoolean(false)
+        val contentBytes = ByteArray(1024 * 1024) { (it % 251).toByte() }
+        val failureOffsetBytes = 32 * 1024
+        val transport = buildTransport(
+            builder = object : OptimizedBenchmarkDataSourceFactoryBuilder {
+                override fun create(
+                    candidate: DebridBenchmarkCandidate,
+                    configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    allowStartupBootstrapReuse: Boolean,
+                    transportSampleTimeMs: () -> Long,
+                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                ): BenchmarkReadableSourceFactory {
+                    return BenchmarkReadableSourceFactory {
+                        object : BenchmarkReadableSource {
+                            private var position = 0
+                            private var limit = 0
+
+                            override fun open(position: Long, length: Long): Long {
+                                val contentLength = contentBytes.size
+                                this.position = position.toInt().coerceAtMost(contentLength)
+                                limit = when {
+                                    length == C.LENGTH_UNSET.toLong() -> contentLength
+                                    else -> (this.position + length.toInt()).coerceAtMost(contentLength)
+                                }
+                                clock.advanceMs(50L)
+                                return (limit - this.position).coerceAtLeast(0).toLong()
+                            }
+
+                            override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                                if (!failedOnce.get() && position >= failureOffsetBytes) {
+                                    failedOnce.set(true)
+                                    throw EOFException("connection closed")
+                                }
+                                if (position >= limit) {
+                                    return C.RESULT_END_OF_INPUT
+                                }
+                                val bytesToRead = minOf(length, limit - position, 32 * 1024)
+                                System.arraycopy(contentBytes, position, buffer, offset, bytesToRead)
+                                position += bytesToRead
+                                clock.advanceMs(1_000L)
+                                return bytesToRead
+                            }
+
+                            override fun close() = Unit
+                        }
+                    }
+                }
+            },
+            clock = clock
+        )
+
+        val result = transport.runProfile(
+            candidate = candidate(),
+            configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                useParallelConnections = true,
+                parallelConnectionCount = 4,
+                parallelChunkSizeMb = 8
+            )
+        )
+
+        assertEquals(DebridBenchmarkTerminationReason.COMPLETED, result.terminationReason)
+        assertEquals(1, result.profile.sustained.recoverableFailureCount)
+        assertEquals(0, result.profile.sustained.recoverableTimeoutCount)
+    }
+
+    @Test
+    fun `optimized transport retries recoverable reopen failures and completes`() = runTest {
+        val clock = FakeBenchmarkClock()
+        val readFailedOnce = AtomicBoolean(false)
+        val reopenFailedOnce = AtomicBoolean(false)
+        val contentBytes = ByteArray(1024 * 1024) { (it % 251).toByte() }
+        val failureOffsetBytes = 32 * 1024
+        val transport = buildTransport(
+            builder = object : OptimizedBenchmarkDataSourceFactoryBuilder {
+                override fun create(
+                    candidate: DebridBenchmarkCandidate,
+                    configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    allowStartupBootstrapReuse: Boolean,
+                    transportSampleTimeMs: () -> Long,
+                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                ): BenchmarkReadableSourceFactory {
+                    return BenchmarkReadableSourceFactory {
+                        object : BenchmarkReadableSource {
+                            private var position = 0
+                            private var limit = 0
+
+                            override fun open(position: Long, length: Long): Long {
+                                if (position > 0L && !reopenFailedOnce.get()) {
+                                    reopenFailedOnce.set(true)
+                                    throw SocketException("Connection reset")
+                                }
+                                val contentLength = contentBytes.size
+                                this.position = position.toInt().coerceAtMost(contentLength)
+                                limit = when {
+                                    length == C.LENGTH_UNSET.toLong() -> contentLength
+                                    else -> (this.position + length.toInt()).coerceAtMost(contentLength)
+                                }
+                                clock.advanceMs(50L)
+                                return (limit - this.position).coerceAtLeast(0).toLong()
+                            }
+
+                            override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                                if (!readFailedOnce.get() && position >= failureOffsetBytes) {
+                                    readFailedOnce.set(true)
+                                    throw SocketException("Connection reset")
+                                }
+                                if (position >= limit) {
+                                    return C.RESULT_END_OF_INPUT
+                                }
+                                val bytesToRead = minOf(length, limit - position, 32 * 1024)
+                                System.arraycopy(contentBytes, position, buffer, offset, bytesToRead)
+                                position += bytesToRead
+                                clock.advanceMs(1_000L)
+                                return bytesToRead
+                            }
+
+                            override fun close() = Unit
+                        }
+                    }
+                }
+            },
+            clock = clock
+        )
+
+        val result = transport.runProfile(
+            candidate = candidate(),
+            configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                useParallelConnections = true,
+                parallelConnectionCount = 4,
+                parallelChunkSizeMb = 8
+            )
+        )
+
+        assertEquals(DebridBenchmarkTerminationReason.COMPLETED, result.terminationReason)
+        assertEquals(2, result.profile.sustained.recoverableFailureCount)
         assertEquals(0, result.profile.sustained.recoverableTimeoutCount)
     }
 
