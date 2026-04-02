@@ -20,7 +20,8 @@ class DirectProfileBenchmarkTransport internal constructor(
             sustainedThresholdElapsedMs = 120_000L,
             seekProbeBytes = 256L * 1024L,
             readBufferSize = 256 * 1024,
-            maxRecoverableFailures = 3
+            maxRecoverableFailures = 8,
+            sleepMs = { durationMs -> Thread.sleep(durationMs) }
         )
     )
 

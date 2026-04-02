@@ -284,7 +284,7 @@ class OptimizedBenchmarkTransportTest {
     fun `optimized transport retries recoverable reopen failures and completes`() = runTest {
         val clock = FakeBenchmarkClock()
         val readFailedOnce = AtomicBoolean(false)
-        val reopenFailedOnce = AtomicBoolean(false)
+        var remainingReopenFailures = 4
         val contentBytes = ByteArray(1024 * 1024) { (it % 251).toByte() }
         val failureOffsetBytes = 32 * 1024
         val transport = buildTransport(
@@ -302,8 +302,8 @@ class OptimizedBenchmarkTransportTest {
                             private var limit = 0
 
                             override fun open(position: Long, length: Long): Long {
-                                if (position > 0L && !reopenFailedOnce.get()) {
-                                    reopenFailedOnce.set(true)
+                                if (position > 0L && remainingReopenFailures > 0) {
+                                    remainingReopenFailures -= 1
                                     throw SocketException("Connection reset")
                                 }
                                 val contentLength = contentBytes.size
@@ -336,7 +336,9 @@ class OptimizedBenchmarkTransportTest {
                     }
                 }
             },
-            clock = clock
+            clock = clock,
+            sustainedThresholdBytes = 320L * 1024L,
+            sustainedThresholdElapsedMs = 10_000L
         )
 
         val result = transport.runProfile(
@@ -349,7 +351,7 @@ class OptimizedBenchmarkTransportTest {
         )
 
         assertEquals(DebridBenchmarkTerminationReason.COMPLETED, result.terminationReason)
-        assertEquals(2, result.profile.sustained.recoverableFailureCount)
+        assertEquals(5, result.profile.sustained.recoverableFailureCount)
         assertEquals(0, result.profile.sustained.recoverableTimeoutCount)
     }
 
@@ -435,7 +437,8 @@ class OptimizedBenchmarkTransportTest {
             sustainedThresholdElapsedMs = sustainedThresholdElapsedMs,
             seekProbeBytes = 4L * 1024L,
             readBufferSize = 32 * 1024,
-            maxRecoverableFailures = 3
+            maxRecoverableFailures = 8,
+            sleepMs = clock::advanceMs
         )
     }
 
