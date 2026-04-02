@@ -134,6 +134,7 @@ import com.nexio.tv.data.local.AndroidTvRecommendationsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.ThemeDataStore
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
 import com.nexio.tv.data.repository.IdleScreensaverRepository
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.trailer.TrailerService
@@ -256,6 +257,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var playbackIdleGateState: PlaybackIdleGateState
+
+    @Inject
+    lateinit var debridBenchmarkService: DebridBenchmarkService
 
     private lateinit var jankStats: JankStats
     private val pendingRecommendationNavigation = mutableStateOf<RecommendationNavigation?>(null)
@@ -1033,6 +1037,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
+        debridBenchmarkService.onAppBackgrounded()
         startupPerfWindowOpen = false
         deferredStartupWorkJob?.cancel()
         deferredBrowsableRequestJob?.cancel()
