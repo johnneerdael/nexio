@@ -60,7 +60,11 @@ class BenchmarkResultJsonLoggerTest {
                 transportFailure = DebridBenchmarkTransportFailure(
                     exceptionClass = "ChunkWaitTimeoutException",
                     message = "Timed out waiting 60000ms for chunk 8",
-                    chunkIndex = 8L
+                    chunkIndex = 8L,
+                    rootCauseClass = "SocketTimeoutException",
+                    rootCauseMessage = "Read timed out",
+                    recoverableFailureCount = 2,
+                    recoverableTimeoutCount = 1
                 ),
                 direct = sampleProfile(
                     startupMs = 310L,
@@ -80,6 +84,8 @@ class BenchmarkResultJsonLoggerTest {
         assertEquals("direct", failure.get("failedTransport").asString)
         assertEquals("ChunkWaitTimeoutException", failure.getAsJsonObject("transportFailure").get("exceptionClass").asString)
         assertEquals(8L, failure.getAsJsonObject("transportFailure").get("chunkIndex").asLong)
+        assertEquals("SocketTimeoutException", failure.getAsJsonObject("transportFailure").get("rootCauseClass").asString)
+        assertEquals(2, failure.getAsJsonObject("transportFailure").get("recoverableFailureCount").asInt)
         assertEquals("cdn.example.net", failure.getAsJsonObject("candidate").get("host").asString)
         assertEquals(
             104.0,

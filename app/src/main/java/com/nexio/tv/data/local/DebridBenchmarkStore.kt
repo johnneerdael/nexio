@@ -249,6 +249,8 @@ class DebridBenchmarkStore internal constructor(
             bucketMs?.let { it > 0L } != false &&
             averageThroughputMbps.isNonNegativeFiniteOrNull() &&
             derivedAverageThroughputMbps.isNonNegativeFiniteOrNull() &&
+            recoverableFailureCount >= 0 &&
+            recoverableTimeoutCount >= 0 &&
             p10ThroughputMbps.isNonNegativeFiniteOrNull() &&
             p50ThroughputMbps.isNonNegativeFiniteOrNull() &&
             peakThroughputMbps.isNonNegativeFiniteOrNull() &&
@@ -444,6 +446,8 @@ class DebridBenchmarkStore internal constructor(
                 averageThroughputMbps = sustainedJson.optionalStrictDoubleOrNull("averageThroughputMbps"),
                 derivedAverageThroughputMbps = sustainedJson.optionalStrictDoubleOrNull("derivedAverageThroughputMbps"),
                 actionable = sustainedJson.optionalStrictBooleanOrNull("actionable") ?: true,
+                recoverableFailureCount = sustainedJson.optionalStrictIntegralIntOrNull("recoverableFailureCount") ?: 0,
+                recoverableTimeoutCount = sustainedJson.optionalStrictIntegralIntOrNull("recoverableTimeoutCount") ?: 0,
                 p10ThroughputMbps = sustainedJson.optionalStrictDoubleOrNull("p10ThroughputMbps"),
                 p50ThroughputMbps = sustainedJson.optionalStrictDoubleOrNull("p50ThroughputMbps"),
                 peakThroughputMbps = sustainedJson.optionalStrictDoubleOrNull("peakThroughputMbps"),

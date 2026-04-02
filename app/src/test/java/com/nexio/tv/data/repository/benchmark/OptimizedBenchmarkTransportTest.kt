@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository.benchmark
 
 import androidx.media3.common.C
 import com.nexio.tv.ui.screens.player.ParallelRangeDataSource
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.TimeoutException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -101,6 +102,39 @@ class OptimizedBenchmarkTransportTest {
         assertEquals(8L, result.failure?.chunkIndex)
     }
 
+    @Test
+    fun `optimized transport recovers from a single chunk failure and completes`() = runTest {
+        val clock = FakeBenchmarkClock()
+        val failedOnce = AtomicBoolean(false)
+        val transport = buildTransport(
+            builder = object : OptimizedBenchmarkDataSourceFactoryBuilder {
+                override fun create(
+                    candidate: DebridBenchmarkCandidate,
+                    configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    allowStartupBootstrapReuse: Boolean
+                ): BenchmarkReadableSourceFactory {
+                    return BenchmarkReadableSourceFactory {
+                        RecoveringBenchmarkDataSource(clock, failedOnce)
+                    }
+                }
+            },
+            clock = clock
+        )
+
+        val result = transport.runProfile(
+            candidate = candidate(),
+            configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                useParallelConnections = true,
+                parallelConnectionCount = 4,
+                parallelChunkSizeMb = 8
+            )
+        )
+
+        assertEquals(DebridBenchmarkTerminationReason.COMPLETED, result.terminationReason)
+        assertEquals(1, result.profile.sustained.recoverableFailureCount)
+        assertEquals(0, result.profile.sustained.recoverableTimeoutCount)
+    }
+
     private fun buildTransport(
         builder: OptimizedBenchmarkDataSourceFactoryBuilder,
         clock: FakeBenchmarkClock
@@ -111,7 +145,8 @@ class OptimizedBenchmarkTransportTest {
             sustainedThresholdBytes = 64L * 1024L,
             sustainedThresholdElapsedMs = 2_000L,
             seekProbeBytes = 4L * 1024L,
-            readBufferSize = 32 * 1024
+            readBufferSize = 32 * 1024,
+            maxRecoverableFailures = 3
         )
     }
 
@@ -185,6 +220,51 @@ class OptimizedBenchmarkTransportTest {
         override fun close() = Unit
 
         companion object {
+            private val CONTENT_BYTES = ByteArray(1024 * 1024) { (it % 251).toByte() }
+        }
+    }
+
+    private class RecoveringBenchmarkDataSource(
+        private val clock: FakeBenchmarkClock,
+        private val failedOnce: AtomicBoolean
+    ) : BenchmarkReadableSource {
+        private var position = 0
+        private var limit = 0
+
+        override fun open(position: Long, length: Long): Long {
+            val contentLength = CONTENT_BYTES.size
+            this.position = position.toInt().coerceAtMost(contentLength)
+            limit = when {
+                length == C.LENGTH_UNSET.toLong() -> contentLength
+                else -> (this.position + length.toInt()).coerceAtMost(contentLength)
+            }
+            clock.advanceMs(50L)
+            return (limit - this.position).coerceAtLeast(0).toLong()
+        }
+
+        override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            if (!failedOnce.get() && position >= FAILURE_OFFSET_BYTES) {
+                failedOnce.set(true)
+                throw ParallelRangeDataSource.ChunkDownloadException(
+                    chunkIndex = 2L,
+                    message = "Failed to download chunk 2",
+                    cause = IllegalStateException("connection reset")
+                )
+            }
+            if (position >= limit) {
+                return C.RESULT_END_OF_INPUT
+            }
+            val bytesToRead = minOf(length, limit - position, 32 * 1024)
+            System.arraycopy(CONTENT_BYTES, position, buffer, offset, bytesToRead)
+            position += bytesToRead
+            clock.advanceMs(1_000L)
+            return bytesToRead
+        }
+
+        override fun close() = Unit
+
+        companion object {
+            private const val FAILURE_OFFSET_BYTES = 32 * 1024
             private val CONTENT_BYTES = ByteArray(1024 * 1024) { (it % 251).toByte() }
         }
     }
