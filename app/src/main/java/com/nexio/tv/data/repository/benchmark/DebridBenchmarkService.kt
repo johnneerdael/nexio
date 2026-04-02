@@ -25,7 +25,7 @@ sealed interface DebridBenchmarkRuntimeState {
 
     data class Running(
         val provider: DebridBenchmarkProvider,
-        val summary: DebridBenchmarkSummary = DebridBenchmarkSummary()
+        val summary: DebridBenchmarkSummary? = null
     ) : DebridBenchmarkRuntimeState
 }
 
@@ -33,7 +33,7 @@ sealed interface DebridBenchmarkRuntimeState {
 class DebridBenchmarkService internal constructor(
     private val resolver: DebridBenchmarkCandidateResolver,
     private val store: DebridBenchmarkStore,
-    private val transport: DebridBenchmarkTransport,
+    private val sessionRunner: DebridBenchmarkSessionRunner,
     private val scope: CoroutineScope,
     private val nowMs: () -> Long
 ) {
@@ -48,11 +48,11 @@ class DebridBenchmarkService internal constructor(
     constructor(
         resolver: DebridBenchmarkCandidateResolver,
         store: DebridBenchmarkStore,
-        transport: DebridBenchmarkTransport
+        sessionRunner: DebridBenchmarkSessionRunner
     ) : this(
         resolver = resolver,
         store = store,
-        transport = transport,
+        sessionRunner = sessionRunner,
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
         nowMs = System::currentTimeMillis
     )
@@ -70,7 +70,7 @@ class DebridBenchmarkService internal constructor(
                 return false
             }
 
-            _activeState.value = DebridBenchmarkRuntimeState.Running(provider)
+            _activeState.value = DebridBenchmarkRuntimeState.Running(provider, summary = null)
             activeJob = scope.launch {
                 runBenchmark(provider)
             }
@@ -97,17 +97,28 @@ class DebridBenchmarkService internal constructor(
 
     private suspend fun runBenchmark(provider: DebridBenchmarkProvider) {
         try {
-            val candidate = resolver.resolve(provider)
-            if (candidate == null) {
-                emitOutcome(
-                    provider = provider,
-                    summary = DebridBenchmarkSummary(),
-                    terminationReason = DebridBenchmarkTerminationReason.NO_PLAYABLE_LIBRARY_ITEM
-                )
-                return
+            val candidate = when (val resolution = resolver.resolve(provider)) {
+                is DebridBenchmarkCandidateResolution.Candidate -> resolution.value
+                DebridBenchmarkCandidateResolution.NoLargeDownload -> {
+                    emitOutcome(
+                        provider = provider,
+                        summary = DebridBenchmarkSummary(),
+                        terminationReason = DebridBenchmarkTerminationReason.NO_LARGE_DOWNLOAD
+                    )
+                    return
+                }
+                DebridBenchmarkCandidateResolution.NoPlayableLibraryItem -> {
+                    emitOutcome(
+                        provider = provider,
+                        summary = DebridBenchmarkSummary(),
+                        terminationReason = DebridBenchmarkTerminationReason.NO_PLAYABLE_LIBRARY_ITEM
+                    )
+                    return
+                }
             }
 
-            val transportResult = transport.run(
+            val transportResult = sessionRunner.run(
+                provider = provider,
                 candidate = candidate,
                 observer = DebridBenchmarkObserver { summary ->
                     _activeState.value = DebridBenchmarkRuntimeState.Running(
@@ -117,26 +128,19 @@ class DebridBenchmarkService internal constructor(
                 }
             )
 
-            if (transportResult.terminationReason == DebridBenchmarkTerminationReason.COMPLETED) {
-                store.saveLatest(
-                    DebridBenchmarkResult(
-                        provider = provider,
-                        measuredAtMs = nowMs(),
-                        summary = transportResult.summary,
-                        terminationReason = transportResult.terminationReason
-                        )
-                )
-            }
+            transportResult.result?.let { store.saveLatest(it) }
             emitOutcome(
                 provider = provider,
                 summary = transportResult.summary,
-                terminationReason = transportResult.terminationReason
+                terminationReason = transportResult.terminationReason,
+                result = transportResult.result
             )
         } catch (_: CancellationException) {
             emitOutcome(
                 provider = provider,
                 summary = DebridBenchmarkSummary(),
-                terminationReason = DebridBenchmarkTerminationReason.CANCELED
+                terminationReason = DebridBenchmarkTerminationReason.CANCELED,
+                result = null
             )
         } finally {
             clearActiveState()
@@ -146,13 +150,15 @@ class DebridBenchmarkService internal constructor(
     private suspend fun emitOutcome(
         provider: DebridBenchmarkProvider,
         summary: DebridBenchmarkSummary,
-        terminationReason: DebridBenchmarkTerminationReason
+        terminationReason: DebridBenchmarkTerminationReason,
+        result: DebridBenchmarkResult? = null
     ) {
         _outcomes.emit(
             DebridBenchmarkOutcome(
                 provider = provider,
                 summary = summary,
-                terminationReason = terminationReason
+                terminationReason = terminationReason,
+                result = result
             )
         )
     }

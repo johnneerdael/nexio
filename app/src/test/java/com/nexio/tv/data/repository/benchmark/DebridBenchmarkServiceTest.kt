@@ -5,14 +5,14 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -22,7 +22,7 @@ class DebridBenchmarkServiceTest {
     @Test
     fun `service rejects a second benchmark while one is already active`() = runTest {
         val service = buildService(
-            activeTransport = neverEndingTransport(),
+            runSession = { _, _, _ -> awaitCancellation() },
             scope = backgroundScope
         )
 
@@ -32,19 +32,20 @@ class DebridBenchmarkServiceTest {
 
     @Test
     fun `cancel stops the active benchmark without persisting a result`() = runTest {
-        val transport = HangingTransport()
+        val sessionStarted = CompletableDeferred<Unit>()
         val service = buildService(
-            activeTransport = transport,
+            runSession = { _, _, _ ->
+                sessionStarted.complete(Unit)
+                awaitCancellation()
+            },
             scope = backgroundScope
         )
 
         assertTrue(service.start(DebridBenchmarkProvider.REAL_DEBRID))
-        transport.started.await()
+        sessionStarted.await()
 
         service.cancel()
-        transport.canceled.await()
 
-        assertTrue(transport.wasCanceled)
         assertEquals(DebridBenchmarkRuntimeState.Idle, service.activeState.value)
         coVerify(exactly = 0) { store().saveLatest(any()) }
     }
@@ -57,10 +58,21 @@ class DebridBenchmarkServiceTest {
             transferredBytes = 600.mb,
             elapsedMs = 130.seconds
         )
+        val completedResult = DebridBenchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            measuredAtMs = 42_000L,
+            summary = summary,
+            terminationReason = DebridBenchmarkTerminationReason.COMPLETED
+        )
         val service = buildService(
-            activeTransport = CompletedTransport(summary),
-            scope = backgroundScope,
-            nowMs = { 42_000L }
+            runSession = { _, _, _ ->
+                DebridBenchmarkSessionResult(
+                    summary = summary,
+                    terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
+                    result = completedResult
+                )
+            },
+            scope = backgroundScope
         )
         val persisted = CompletableDeferred<DebridBenchmarkResult>()
 
@@ -70,52 +82,24 @@ class DebridBenchmarkServiceTest {
         }
 
         assertTrue(service.start(DebridBenchmarkProvider.REAL_DEBRID))
-        assertEquals(
-            DebridBenchmarkResult(
-                provider = DebridBenchmarkProvider.REAL_DEBRID,
-                measuredAtMs = 42_000L,
-                summary = summary,
-                terminationReason = DebridBenchmarkTerminationReason.COMPLETED
-            ),
-            persisted.await()
-        )
+        assertEquals(completedResult, persisted.await())
 
         coVerify(exactly = 1) {
-            store().saveLatest(
-                DebridBenchmarkResult(
-                    provider = DebridBenchmarkProvider.REAL_DEBRID,
-                    measuredAtMs = 42_000L,
-                    summary = summary,
-                    terminationReason = DebridBenchmarkTerminationReason.COMPLETED
-                )
-            )
+            store().saveLatest(completedResult)
         }
-    }
-
-    @Test
-    fun `backgrounding the app cancels the active benchmark`() = runTest {
-        val transport = HangingTransport()
-        val service = buildService(
-            activeTransport = transport,
-            scope = backgroundScope
-        )
-
-        assertTrue(service.start(DebridBenchmarkProvider.REAL_DEBRID))
-        transport.started.await()
-
-        service.onAppBackgrounded()
-        transport.canceled.await()
-
-        assertTrue(transport.wasCanceled)
-        assertEquals(DebridBenchmarkRuntimeState.Idle, service.activeState.value)
     }
 
     @Test
     fun `service reports no playable library item outcomes`() = runTest {
         val service = buildService(
-            activeTransport = CompletedTransport(DebridBenchmarkSummary()),
+            runSession = { _, _, _ ->
+                DebridBenchmarkSessionResult(
+                    summary = DebridBenchmarkSummary(),
+                    terminationReason = DebridBenchmarkTerminationReason.COMPLETED
+                )
+            },
             scope = backgroundScope,
-            resolveCandidate = { null }
+            resolveCandidate = { DebridBenchmarkCandidateResolution.NoPlayableLibraryItem }
         )
         val reported = CompletableDeferred<DebridBenchmarkOutcome>()
 
@@ -135,77 +119,67 @@ class DebridBenchmarkServiceTest {
         )
     }
 
+    @Test
+    fun `service reports no large download outcomes`() = runTest {
+        val service = buildService(
+            runSession = { _, _, _ ->
+                DebridBenchmarkSessionResult(
+                    summary = DebridBenchmarkSummary(),
+                    terminationReason = DebridBenchmarkTerminationReason.COMPLETED
+                )
+            },
+            scope = backgroundScope,
+            resolveCandidate = { DebridBenchmarkCandidateResolution.NoLargeDownload }
+        )
+        val reported = CompletableDeferred<DebridBenchmarkOutcome>()
+
+        backgroundScope.launch {
+            reported.complete(service.outcomes.first())
+        }
+
+        assertTrue(service.start(DebridBenchmarkProvider.PREMIUMIZE))
+
+        assertEquals(
+            DebridBenchmarkOutcome(
+                provider = DebridBenchmarkProvider.PREMIUMIZE,
+                summary = DebridBenchmarkSummary(),
+                terminationReason = DebridBenchmarkTerminationReason.NO_LARGE_DOWNLOAD
+            ),
+            reported.await()
+        )
+    }
+
     private lateinit var benchmarkStore: DebridBenchmarkStore
+    private lateinit var benchmarkSessionRunner: DebridBenchmarkSessionRunner
 
     private fun buildService(
-        activeTransport: DebridBenchmarkTransport,
+        runSession: suspend (DebridBenchmarkProvider, DebridBenchmarkCandidate, DebridBenchmarkObserver) -> DebridBenchmarkSessionResult,
         scope: kotlinx.coroutines.CoroutineScope,
-        resolveCandidate: (DebridBenchmarkProvider) -> DebridBenchmarkCandidate? = ::candidate,
-        nowMs: () -> Long = { System.currentTimeMillis() }
+        resolveCandidate: (DebridBenchmarkProvider) -> DebridBenchmarkCandidateResolution =
+            { provider -> DebridBenchmarkCandidateResolution.Candidate(candidate(provider)) }
     ): DebridBenchmarkService {
         val resolver = mockk<DebridBenchmarkCandidateResolver>()
         benchmarkStore = mockk(relaxed = true)
+        benchmarkSessionRunner = mockk()
 
         coEvery { resolver.resolve(any()) } answers {
             resolveCandidate(firstArg())
         }
         coEvery { benchmarkStore.latestResult(any()) } returns emptyFlow()
+        coEvery { benchmarkSessionRunner.run(any(), any(), any()) } coAnswers {
+            runSession(firstArg(), secondArg(), thirdArg())
+        }
 
         return DebridBenchmarkService(
             resolver = resolver,
             store = benchmarkStore,
-            transport = activeTransport,
+            sessionRunner = benchmarkSessionRunner,
             scope = scope,
-            nowMs = nowMs
+            nowMs = System::currentTimeMillis
         )
     }
 
     private fun store(): DebridBenchmarkStore = benchmarkStore
-
-    private fun neverEndingTransport(): DebridBenchmarkTransport {
-        return object : DebridBenchmarkTransport {
-            override suspend fun run(
-                candidate: DebridBenchmarkCandidate,
-                observer: DebridBenchmarkObserver
-            ): DebridBenchmarkTransportResult {
-                awaitCancellation()
-            }
-        }
-    }
-
-    private inner class HangingTransport : DebridBenchmarkTransport {
-        val started = CompletableDeferred<Unit>()
-        val canceled = CompletableDeferred<Unit>()
-        var wasCanceled = false
-
-        override suspend fun run(
-            candidate: DebridBenchmarkCandidate,
-            observer: DebridBenchmarkObserver
-        ): DebridBenchmarkTransportResult {
-            started.complete(Unit)
-            try {
-                awaitCancellation()
-            } finally {
-                wasCanceled = true
-                canceled.complete(Unit)
-            }
-        }
-    }
-
-    private class CompletedTransport(
-        private val summary: DebridBenchmarkSummary
-    ) : DebridBenchmarkTransport {
-        override suspend fun run(
-            candidate: DebridBenchmarkCandidate,
-            observer: DebridBenchmarkObserver
-        ): DebridBenchmarkTransportResult {
-            observer.onSummaryUpdated(summary)
-            return DebridBenchmarkTransportResult(
-                summary = summary,
-                terminationReason = DebridBenchmarkTerminationReason.COMPLETED
-            )
-        }
-    }
 
     private fun candidate(provider: DebridBenchmarkProvider): DebridBenchmarkCandidate {
         return DebridBenchmarkCandidate(

@@ -7,9 +7,22 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkCandidateMetadata
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkComparisonSummary
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkPhase
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkPhaseExecution
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkRawSamples
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSeekMetrics
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSeekSample
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSessionMetadata
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkStartupMetrics
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSustainedMetrics
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportConfigSnapshot
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportProfile
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -35,6 +48,27 @@ class DebridBenchmarkStoreTest {
         val storeScope = CoroutineScope(backgroundScope.coroutineContext + storeJob)
         val expected = sampleResult(provider = DebridBenchmarkProvider.REAL_DEBRID, measuredAtMs = 7L)
         val firstStore = buildStore(storeScope, file)
+        firstStore.saveLatest(expected)
+        storeJob.cancelAndJoin()
+
+        val reopenedStore = buildStore(backgroundScope, file)
+        val restored = reopenedStore.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first()
+
+        assertEquals(expected, restored)
+    }
+
+    @Test
+    fun `saving a completed comparison result persists both transport profiles across store reopen`() = runTest {
+        val file = File.createTempFile("debrid_benchmark_store_comparison", ".preferences_pb")
+        file.deleteOnExit()
+        val storeJob = SupervisorJob()
+        val storeScope = CoroutineScope(backgroundScope.coroutineContext + storeJob)
+        val expected = sampleComparisonResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            measuredAtMs = 17L
+        )
+        val firstStore = buildStore(storeScope, file)
+
         firstStore.saveLatest(expected)
         storeJob.cancelAndJoin()
 
@@ -215,6 +249,32 @@ class DebridBenchmarkStoreTest {
     }
 
     @Test
+    fun `saving an incomplete comparison result does not replace a previously valid session`() = runTest {
+        val store = buildStore(backgroundScope)
+        val valid = sampleComparisonResult(
+            provider = DebridBenchmarkProvider.PREMIUMIZE,
+            measuredAtMs = 21L
+        )
+        store.saveLatest(valid)
+
+        val invalid = valid.copy(
+            optimized = valid.optimized?.copy(
+                seek = valid.optimized.seek.copy(seekTtfbP95Ms = null)
+            )
+        )
+
+        val failure = try {
+            store.saveLatest(invalid)
+            null
+        } catch (t: Throwable) {
+            t
+        }
+
+        assertTrue(failure is IllegalArgumentException)
+        assertEquals(valid, store.latestResult(DebridBenchmarkProvider.PREMIUMIZE).first())
+    }
+
+    @Test
     fun `saving a non completed result does not replace a previously valid completed result`() = runTest {
         val store = buildStore(backgroundScope)
         val valid = sampleResult(provider = DebridBenchmarkProvider.REAL_DEBRID, measuredAtMs = 10L)
@@ -379,6 +439,117 @@ class DebridBenchmarkStoreTest {
                 elapsedMs = elapsedMs
             ),
             terminationReason = DebridBenchmarkTerminationReason.COMPLETED
+        )
+    }
+
+    private fun sampleComparisonResult(
+        provider: DebridBenchmarkProvider,
+        measuredAtMs: Long = 100L
+    ): DebridBenchmarkResult {
+        val direct = sampleTransportProfile(
+            startupTimeMs = 110L,
+            averageMbps = 180.0,
+            p10Mbps = 150.0,
+            peakMbps = 220.0,
+            seekP95Ms = 330L,
+            seekP99Ms = 440L
+        )
+        val optimized = sampleTransportProfile(
+            startupTimeMs = 85L,
+            averageMbps = 260.0,
+            p10Mbps = 210.0,
+            peakMbps = 310.0,
+            seekP95Ms = 200L,
+            seekP99Ms = 260L,
+            configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                useParallelConnections = true,
+                parallelConnectionCount = 4,
+                parallelChunkSizeMb = 8
+            )
+        )
+        return DebridBenchmarkResult(
+            provider = provider,
+            measuredAtMs = measuredAtMs,
+            summary = DebridBenchmarkSummary(
+                startupTimeMs = optimized.startup.initialTtfbMs,
+                sustainedThroughputMbps = optimized.sustained.averageThroughputMbps,
+                transferredBytes = requireNotNull(optimized.sustained.bytesTransferred),
+                elapsedMs = requireNotNull(optimized.sustained.elapsedMs)
+            ),
+            terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
+            candidate = DebridBenchmarkCandidateMetadata(
+                filename = "Example.mkv",
+                sizeBytes = 20L * 1024L * 1024L * 1024L,
+                host = "cdn.example.com",
+                directUrlFingerprint = "abc123"
+            ),
+            session = DebridBenchmarkSessionMetadata(
+                benchmarkVersion = 2,
+                executionOrder = listOf(
+                    DebridBenchmarkPhaseExecution(
+                        phase = DebridBenchmarkPhase.STARTUP,
+                        order = listOf(
+                            DebridBenchmarkTransportMode.DIRECT,
+                            DebridBenchmarkTransportMode.OPTIMIZED
+                        )
+                    )
+                ),
+                totalElapsedMs = 185_000L
+            ),
+            direct = direct,
+            optimized = optimized,
+            comparison = DebridBenchmarkComparisonSummary(
+                sustainedWinner = DebridBenchmarkTransportMode.OPTIMIZED,
+                seekWinner = DebridBenchmarkTransportMode.OPTIMIZED,
+                stabilityWinner = DebridBenchmarkTransportMode.OPTIMIZED
+            )
+        )
+    }
+
+    private fun sampleTransportProfile(
+        startupTimeMs: Long,
+        averageMbps: Double,
+        p10Mbps: Double,
+        peakMbps: Double,
+        seekP95Ms: Long,
+        seekP99Ms: Long,
+        configSnapshot: DebridBenchmarkTransportConfigSnapshot? = null
+    ): DebridBenchmarkTransportProfile {
+        return DebridBenchmarkTransportProfile(
+            startup = DebridBenchmarkStartupMetrics(
+                initialTtfbMs = startupTimeMs,
+                startupFailureRate = 0.0
+            ),
+            sustained = DebridBenchmarkSustainedMetrics(
+                averageThroughputMbps = averageMbps,
+                p10ThroughputMbps = p10Mbps,
+                p50ThroughputMbps = averageMbps,
+                peakThroughputMbps = peakMbps,
+                throughputStddevMbps = 12.0,
+                throughputCv = 0.08,
+                stallCount = 0,
+                maxReadGapMs = 40L,
+                bytesTransferred = 900L * 1024L * 1024L,
+                elapsedMs = 180_000L
+            ),
+            seek = DebridBenchmarkSeekMetrics(
+                seekTtfbP50Ms = 140L,
+                seekTtfbP95Ms = seekP95Ms,
+                seekTtfbP99Ms = seekP99Ms,
+                seekTtfbStddevMs = 25.0,
+                seekFailRate = 0.0
+            ),
+            configSnapshot = configSnapshot,
+            rawSamples = DebridBenchmarkRawSamples(
+                throughputWindowsMbps = listOf(averageMbps, p10Mbps, peakMbps),
+                seekSamples = listOf(
+                    DebridBenchmarkSeekSample(
+                        targetOffsetBytes = 10_000_000L,
+                        ttfbMs = 140L,
+                        succeeded = true
+                    )
+                )
+            )
         )
     }
 

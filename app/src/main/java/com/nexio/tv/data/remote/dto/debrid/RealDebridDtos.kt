@@ -43,6 +43,7 @@ data class RealDebridDownloadDto(
 data class RealDebridTorrentDto(
     @Json(name = "id") val id: String,
     @Json(name = "filename") val filename: String? = null,
+    @Json(name = "bytes") val bytes: Long? = null,
     @Json(name = "status") val status: String? = null,
     @Json(name = "links") val links: List<String>? = null,
     @Json(name = "added") val added: String? = null,

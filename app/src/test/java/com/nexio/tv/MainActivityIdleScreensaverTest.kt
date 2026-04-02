@@ -40,7 +40,8 @@ class MainActivityIdleScreensaverTest {
             isIdleScreensaverEligibleRoute(
                 currentRoute = Screen.Home.route,
                 playbackIdleSnapshot = PlaybackIdleGateSnapshot(),
-                inAppTrailerPlaybackActive = true
+                inAppTrailerPlaybackActive = true,
+                benchmarkActive = false
             )
         )
     }
@@ -51,7 +52,8 @@ class MainActivityIdleScreensaverTest {
             isIdleScreensaverEligibleRoute(
                 currentRoute = Screen.Detail.route,
                 playbackIdleSnapshot = PlaybackIdleGateSnapshot(),
-                inAppTrailerPlaybackActive = true
+                inAppTrailerPlaybackActive = true,
+                benchmarkActive = false
             )
         )
     }
@@ -62,7 +64,40 @@ class MainActivityIdleScreensaverTest {
             isIdleScreensaverEligibleRoute(
                 currentRoute = Screen.Home.route,
                 playbackIdleSnapshot = PlaybackIdleGateSnapshot(),
-                inAppTrailerPlaybackActive = false
+                inAppTrailerPlaybackActive = false,
+                benchmarkActive = false
+            )
+        )
+    }
+
+    @Test
+    fun `home route is not eligible while provider benchmark is active`() {
+        assertFalse(
+            isIdleScreensaverEligibleRoute(
+                currentRoute = Screen.Home.route,
+                playbackIdleSnapshot = PlaybackIdleGateSnapshot(),
+                inAppTrailerPlaybackActive = false,
+                benchmarkActive = true
+            )
+        )
+    }
+
+    @Test
+    fun `idle timer resets when provider benchmark starts`() {
+        assertTrue(
+            shouldRegisterIdleInteractionForBenchmarkTransition(
+                previousActive = false,
+                currentActive = true
+            )
+        )
+    }
+
+    @Test
+    fun `idle timer resets when provider benchmark ends`() {
+        assertTrue(
+            shouldRegisterIdleInteractionForBenchmarkTransition(
+                previousActive = true,
+                currentActive = false
             )
         )
     }

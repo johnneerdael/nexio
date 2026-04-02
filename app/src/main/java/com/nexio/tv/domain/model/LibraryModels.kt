@@ -25,7 +25,8 @@ data class LibraryEntry(
     val directPlaybackUrl: String? = null,
     val playbackHeaders: Map<String, String>? = null,
     val playbackStreamName: String? = null,
-    val playbackFilename: String? = null
+    val playbackFilename: String? = null,
+    val playbackSizeBytes: Long? = null
 ) {
     fun toMetaPreview(): MetaPreview {
         return MetaPreview(
