@@ -4,6 +4,7 @@ import com.nexio.tv.data.local.DebridBenchmarkStore
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -87,6 +88,9 @@ class DebridBenchmarkServiceTest {
         coVerify(exactly = 1) {
             store().saveLatest(completedResult)
         }
+        verify(exactly = 1) {
+            logger().logCompleted(completedResult)
+        }
     }
 
     @Test
@@ -151,6 +155,7 @@ class DebridBenchmarkServiceTest {
 
     private lateinit var benchmarkStore: DebridBenchmarkStore
     private lateinit var benchmarkSessionRunner: DebridBenchmarkSessionRunner
+    private lateinit var benchmarkResultJsonLogger: BenchmarkResultJsonLogger
 
     private fun buildService(
         runSession: suspend (DebridBenchmarkProvider, DebridBenchmarkCandidate, DebridBenchmarkObserver) -> DebridBenchmarkSessionResult,
@@ -161,6 +166,7 @@ class DebridBenchmarkServiceTest {
         val resolver = mockk<DebridBenchmarkCandidateResolver>()
         benchmarkStore = mockk(relaxed = true)
         benchmarkSessionRunner = mockk()
+        benchmarkResultJsonLogger = mockk(relaxed = true)
 
         coEvery { resolver.resolve(any()) } answers {
             resolveCandidate(firstArg())
@@ -174,12 +180,14 @@ class DebridBenchmarkServiceTest {
             resolver = resolver,
             store = benchmarkStore,
             sessionRunner = benchmarkSessionRunner,
+            benchmarkResultJsonLogger = benchmarkResultJsonLogger,
             scope = scope,
             nowMs = System::currentTimeMillis
         )
     }
 
     private fun store(): DebridBenchmarkStore = benchmarkStore
+    private fun logger(): BenchmarkResultJsonLogger = benchmarkResultJsonLogger
 
     private fun candidate(provider: DebridBenchmarkProvider): DebridBenchmarkCandidate {
         return DebridBenchmarkCandidate(
