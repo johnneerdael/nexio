@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository.benchmark
 
 import com.google.gson.JsonParser
+import kotlin.math.max
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -117,7 +118,88 @@ class BenchmarkResultJsonLoggerTest {
         )
     }
 
-    private fun sampleResult(): DebridBenchmarkResult {
+    @Test
+    fun `logCompleted chunks oversized benchmark json into reconstructable parts`() {
+        val entries = mutableListOf<Pair<String, String>>()
+        val logger = BenchmarkResultJsonLogger { tag, message -> entries += tag to message }
+        val result = sampleResult(
+            rawWindowCount = 600,
+            rawBucketCount = 300,
+            rawSeekSampleCount = 100
+        )
+
+        logger.logCompleted(result)
+
+        val jsonEntries = entries.filter { it.first == "BenchmarkJson" }
+        val summaryEntries = entries.filter { it.first == "BenchmarkSummary" }
+
+        assertTrue(jsonEntries.size > 1)
+        assertEquals(1, summaryEntries.size)
+        jsonEntries.forEach { (_, message) ->
+            assertFalse(message.contains('\n'))
+            assertTrue(message.length <= 3600)
+        }
+
+        val chunkRoots = jsonEntries.map { JsonParser.parseString(it.second).asJsonObject }
+        assertTrue(chunkRoots.all { it.get("event_type").asString == "benchmark_session_completed_chunk" })
+        assertTrue(chunkRoots.all { it.get("original_event_type").asString == "benchmark_session_completed" })
+        val chunkCount = chunkRoots.first().get("chunk_count").asInt
+        assertEquals(chunkCount, chunkRoots.size)
+
+        val reassembled = chunkRoots
+            .sortedBy { it.get("chunk_index").asInt }
+            .joinToString(separator = "") { it.get("payload").asString }
+
+        assertEquals(logger.buildCompletedEventJson(result), reassembled)
+    }
+
+    @Test
+    fun `logOutcome chunks oversized benchmark outcome json into reconstructable parts`() {
+        val entries = mutableListOf<Pair<String, String>>()
+        val logger = BenchmarkResultJsonLogger { tag, message -> entries += tag to message }
+        val largeProfile = sampleProfile(
+            startupMs = 310L,
+            p10Mbps = 104.0,
+            averageMbps = 112.0,
+            seekP95Ms = 280L,
+            rawWindowCount = 500,
+            rawBucketCount = 250,
+            rawSeekSampleCount = 80
+        )
+
+        logger.logOutcome(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            terminationReason = DebridBenchmarkTerminationReason.FAILED,
+            summary = DebridBenchmarkSummary(
+                startupTimeMs = 310L,
+                sustainedThroughputMbps = 88.5,
+                transferredBytes = 345_678_901L,
+                elapsedMs = 42_000L
+            ),
+            failureDetails = DebridBenchmarkFailureDetails(
+                candidate = DebridBenchmarkCandidateMetadata(
+                    filename = "Example.mkv",
+                    sizeBytes = 50L * 1024L * 1024L * 1024L,
+                    host = "cdn.example.net",
+                    directUrlFingerprint = "abc123def456"
+                ),
+                failedTransport = DebridBenchmarkTransportMode.DIRECT,
+                direct = largeProfile
+            )
+        )
+
+        val jsonEntries = entries.filter { it.first == "BenchmarkJson" }
+        assertTrue(jsonEntries.size > 1)
+        val chunkRoots = jsonEntries.map { JsonParser.parseString(it.second).asJsonObject }
+        assertTrue(chunkRoots.all { it.get("event_type").asString == "benchmark_session_outcome_chunk" })
+        assertTrue(chunkRoots.all { it.get("original_event_type").asString == "benchmark_session_outcome" })
+    }
+
+    private fun sampleResult(
+        rawWindowCount: Int = 2,
+        rawBucketCount: Int = 1,
+        rawSeekSampleCount: Int = 1
+    ): DebridBenchmarkResult {
         return DebridBenchmarkResult(
             provider = DebridBenchmarkProvider.REAL_DEBRID,
             measuredAtMs = 42L,
@@ -171,13 +253,19 @@ class BenchmarkResultJsonLoggerTest {
                 startupMs = 180L,
                 p10Mbps = 150.0,
                 averageMbps = 170.0,
-                seekP95Ms = 330L
+                seekP95Ms = 330L,
+                rawWindowCount = rawWindowCount,
+                rawBucketCount = rawBucketCount,
+                rawSeekSampleCount = rawSeekSampleCount
             ),
             optimized = sampleProfile(
                 startupMs = 140L,
                 p10Mbps = 200.0,
                 averageMbps = 220.0,
                 seekP95Ms = 240L,
+                rawWindowCount = rawWindowCount,
+                rawBucketCount = rawBucketCount,
+                rawSeekSampleCount = rawSeekSampleCount,
                 configSnapshot = DebridBenchmarkTransportConfigSnapshot(
                     useParallelConnections = true,
                     parallelConnectionCount = 4,
@@ -199,8 +287,31 @@ class BenchmarkResultJsonLoggerTest {
         seekP95Ms: Long,
         decisionSafeBudgetMbps: Double = p10Mbps * 0.85,
         decisionActionable: Boolean = true,
+        rawWindowCount: Int = 2,
+        rawBucketCount: Int = 1,
+        rawSeekSampleCount: Int = 1,
         configSnapshot: DebridBenchmarkTransportConfigSnapshot? = null
     ): DebridBenchmarkTransportProfile {
+        val throughputWindows = List(max(rawWindowCount, 1)) { index ->
+            if (index % 2 == 0) p10Mbps else averageMbps
+        }
+        val throughputBuckets = List(max(rawBucketCount, 1)) { index ->
+            val throughput = throughputWindows[index % throughputWindows.size]
+            DebridBenchmarkThroughputBucketSample(
+                startOffsetMs = index * 1_000L,
+                durationMs = 1_000L,
+                bytesTransferred = ((throughput * 1_000_000.0 / 8.0) / 1_000.0).toLong(),
+                throughputMbps = throughput,
+                complete = true
+            )
+        }
+        val seekSamples = List(max(rawSeekSampleCount, 1)) { index ->
+            DebridBenchmarkSeekSample(
+                targetOffsetBytes = (index + 1) * 1_024L,
+                ttfbMs = seekP95Ms + (index % 5).toLong(),
+                succeeded = true
+            )
+        }
         return DebridBenchmarkTransportProfile(
             startup = DebridBenchmarkStartupMetrics(
                 initialTtfbMs = startupMs,
@@ -236,23 +347,9 @@ class BenchmarkResultJsonLoggerTest {
             ),
             configSnapshot = configSnapshot,
             rawSamples = DebridBenchmarkRawSamples(
-                throughputWindowsMbps = listOf(p10Mbps, averageMbps),
-                throughputBuckets = listOf(
-                    DebridBenchmarkThroughputBucketSample(
-                        startOffsetMs = 0L,
-                        durationMs = 1_000L,
-                        bytesTransferred = ((p10Mbps * 1_000_000.0 / 8.0) / 1_000.0).toLong(),
-                        throughputMbps = p10Mbps,
-                        complete = true
-                    )
-                ),
-                seekSamples = listOf(
-                    DebridBenchmarkSeekSample(
-                        targetOffsetBytes = 1_024L,
-                        ttfbMs = seekP95Ms,
-                        succeeded = true
-                    )
-                )
+                throughputWindowsMbps = throughputWindows,
+                throughputBuckets = throughputBuckets,
+                seekSamples = seekSamples
             )
         )
     }

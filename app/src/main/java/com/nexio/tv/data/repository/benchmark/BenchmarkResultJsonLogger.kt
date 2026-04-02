@@ -9,6 +9,8 @@ import javax.inject.Singleton
 
 private const val BENCHMARK_JSON_TAG = "BenchmarkJson"
 private const val BENCHMARK_SUMMARY_TAG = "BenchmarkSummary"
+private const val MAX_BENCHMARK_JSON_LOG_CHARS = 3_500
+private const val BENCHMARK_JSON_CHUNK_PAYLOAD_CHARS = 2_500
 
 @Singleton
 class BenchmarkResultJsonLogger internal constructor(
@@ -20,7 +22,10 @@ class BenchmarkResultJsonLogger internal constructor(
 
     fun logCompleted(result: DebridBenchmarkResult) {
         runCatching {
-            logger(BENCHMARK_JSON_TAG, buildCompletedEventJson(result))
+            emitBenchmarkJson(
+                baseEventType = "benchmark_session_completed",
+                payload = buildCompletedEventJson(result)
+            )
         }.onFailure {
             logger(BENCHMARK_SUMMARY_TAG, buildSummaryLine(result) + " serialization=failed")
         }.onSuccess {
@@ -35,9 +40,9 @@ class BenchmarkResultJsonLogger internal constructor(
         failureDetails: DebridBenchmarkFailureDetails? = null
     ) {
         runCatching {
-            logger(
-                BENCHMARK_JSON_TAG,
-                buildOutcomeEventJson(
+            emitBenchmarkJson(
+                baseEventType = "benchmark_session_outcome",
+                payload = buildOutcomeEventJson(
                     provider = provider,
                     terminationReason = terminationReason,
                     summary = summary,
@@ -63,6 +68,31 @@ class BenchmarkResultJsonLogger internal constructor(
                     summary = summary,
                     failureDetails = failureDetails
                 )
+            )
+        }
+    }
+
+    private fun emitBenchmarkJson(
+        baseEventType: String,
+        payload: String
+    ) {
+        if (payload.length <= MAX_BENCHMARK_JSON_LOG_CHARS) {
+            logger(BENCHMARK_JSON_TAG, payload)
+            return
+        }
+
+        val chunks = payload.chunked(BENCHMARK_JSON_CHUNK_PAYLOAD_CHARS)
+        chunks.forEachIndexed { index, chunk ->
+            logger(
+                BENCHMARK_JSON_TAG,
+                JsonObject().apply {
+                    addProperty("event_version", 1)
+                    addProperty("event_type", "${baseEventType}_chunk")
+                    addProperty("original_event_type", baseEventType)
+                    addProperty("chunk_index", index + 1)
+                    addProperty("chunk_count", chunks.size)
+                    addProperty("payload", chunk)
+                }.toString()
             )
         }
     }
