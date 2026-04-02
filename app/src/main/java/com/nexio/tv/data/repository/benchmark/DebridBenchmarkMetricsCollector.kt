@@ -40,6 +40,7 @@ class DebridBenchmarkMetricsCollector(
     private var transportThroughputWindowAccumulatedBytes = 0.0
     private var transportThroughputWindowAccumulatedMs = 0L
     private val seekSamples = mutableListOf<DebridBenchmarkSeekSample>()
+    private val transportStateLock = Any()
 
     fun recordStartup(
         requestStartedAtMs: Long,
@@ -106,26 +107,28 @@ class DebridBenchmarkMetricsCollector(
         val clampedBytesRead = bytesRead.coerceAtLeast(0L)
         if (clampedBytesRead <= 0L) return
 
-        val sampleTimeMs = sampleAtMs.coerceAtLeast(0L)
-        val previousSampleAtMs = transportLastSampleAtMs
-        if (previousSampleAtMs != null) {
-            val gapMs = (sampleTimeMs - previousSampleAtMs).coerceAtLeast(0L)
-            transportMaxReadGapMs = maxOf(transportMaxReadGapMs, gapMs)
-            if (gapMs >= stallThresholdMs) {
-                transportStallCount += 1
+        synchronized(transportStateLock) {
+            val sampleTimeMs = sampleAtMs.coerceAtLeast(0L)
+            val previousSampleAtMs = transportLastSampleAtMs
+            if (previousSampleAtMs != null) {
+                val gapMs = (sampleTimeMs - previousSampleAtMs).coerceAtLeast(0L)
+                transportMaxReadGapMs = maxOf(transportMaxReadGapMs, gapMs)
+                if (gapMs >= stallThresholdMs) {
+                    transportStallCount += 1
+                }
             }
-        }
 
-        pendingTransportBytes += clampedBytesRead.toDouble()
-        if (previousSampleAtMs != null && sampleTimeMs > previousSampleAtMs) {
-            recordTransportThroughputInterval(
-                intervalStartMs = previousSampleAtMs,
-                intervalEndMs = sampleTimeMs,
-                intervalBytes = pendingTransportBytes
-            )
-            pendingTransportBytes = 0.0
+            pendingTransportBytes += clampedBytesRead.toDouble()
+            if (previousSampleAtMs != null && sampleTimeMs > previousSampleAtMs) {
+                recordTransportThroughputInterval(
+                    intervalStartMs = previousSampleAtMs,
+                    intervalEndMs = sampleTimeMs,
+                    intervalBytes = pendingTransportBytes
+                )
+                pendingTransportBytes = 0.0
+            }
+            transportLastSampleAtMs = sampleTimeMs
         }
-        transportLastSampleAtMs = sampleTimeMs
     }
 
     fun recordSeekSample(sample: DebridBenchmarkSeekSample) {
