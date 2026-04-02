@@ -291,7 +291,7 @@ class TraktLibraryServiceTest {
     }
 
     @Test
-    fun `auth loss clears restored snapshot and persisted cache`() = runTest {
+    fun `auth loss preserves restored snapshot and persisted cache`() = runTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
         val metaRepository = mockk<MetaRepository>()
@@ -318,16 +318,18 @@ class TraktLibraryServiceTest {
         assertTrue(service.observeHasCache().first())
 
         traktAuthState.value = false
-        waitUntil {
-            service.observeListTabs().first().isEmpty() &&
-                service.observeAllItems().first().isEmpty() &&
-                !service.observeHasCache().first()
-        }
+        advanceUntilIdle()
 
-        assertTrue(service.observeListTabs().first().isEmpty())
-        assertTrue(service.observeAllItems().first().isEmpty())
-        assertTrue(service.observeHasCache().first().not())
-        verify(atLeast = 1) { snapshotStore.clear() }
+        assertEquals(
+            listOf(TraktLibraryService.WATCHLIST_KEY, "personal:123"),
+            service.observeListTabs().first().map { it.key }
+        )
+        assertEquals(
+            listOf("tt1234567", "tmdb:321"),
+            service.observeAllItems().first().map { it.id }
+        )
+        assertTrue(service.observeHasCache().first())
+        verify(exactly = 0) { snapshotStore.clear() }
     }
 
     @Test
