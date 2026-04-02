@@ -180,7 +180,7 @@ class DebridBenchmarkStore internal constructor(
         if (!hasComparisonPayload()) return true
         return comparisonPayloadIsValid() &&
             direct?.isCompletedValid() == true &&
-            optimized?.isCompletedValid() == true
+            optimized?.isCompletedValidForStoredCompletedResult() == true
     }
 
     private fun DebridBenchmarkSummary.isValid(): Boolean {
@@ -338,6 +338,15 @@ class DebridBenchmarkStore internal constructor(
             sustained.isCompletedValid() &&
             seek.isCompletedValid() &&
             isValid()
+    }
+
+    private fun DebridBenchmarkTransportProfile.isCompletedValidForStoredCompletedResult(): Boolean {
+        val actionableForAutoplay = decision?.actionable ?: sustained.actionable
+        return if (actionableForAutoplay) {
+            isCompletedValid()
+        } else {
+            isValid()
+        }
     }
 
     private fun DebridBenchmarkComparisonSummary.isValid(): Boolean {
