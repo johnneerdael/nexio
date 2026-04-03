@@ -21,14 +21,14 @@ def build_default_policies(parallel: int) -> list[ProbePolicy]:
             name="fresh-session-blocked-retry",
             blocked_priority_retry=True,
             force_fresh_connection_on_retry=True,
-            max_blocked_chunk_retries=1,
+            max_blocked_chunk_retries=10,
         ),
         ProbePolicy(
             name="fresh-session-blocked-retry-with-backoff",
             blocked_priority_retry=True,
             force_fresh_connection_on_retry=True,
             retry_backoff_ms=250,
-            max_blocked_chunk_retries=1,
+            max_blocked_chunk_retries=10,
         ),
     ]
 
