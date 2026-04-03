@@ -616,14 +616,21 @@ private fun stabilityScore(
     stallCount: Int?,
     maxReadGapMs: Long?
 ): Int {
-    val cv = throughputCv ?: return 0
-    val stalls = stallCount ?: return 0
-    val gap = maxReadGapMs ?: return 0
-    return when {
-        cv <= 0.05 && stalls == 0 && gap <= 200L -> 6
-        cv <= 0.08 && stalls <= 1 && gap <= 350L -> 4
-        cv <= 0.12 -> 2
-        else -> 0
+    val profile = DebridBenchmarkTransportProfile(
+        startup = DebridBenchmarkStartupMetrics(),
+        sustained = DebridBenchmarkSustainedMetrics(
+            actionable = true,
+            throughputCv = throughputCv,
+            stallCount = stallCount,
+            maxReadGapMs = maxReadGapMs
+        ),
+        seek = DebridBenchmarkSeekMetrics()
+    )
+    return when (profile.playbackStability()) {
+        DebridBenchmarkPlaybackStability.EXCELLENT -> 6
+        DebridBenchmarkPlaybackStability.STABLE -> 4
+        DebridBenchmarkPlaybackStability.VARIABLE -> 2
+        DebridBenchmarkPlaybackStability.UNSTABLE -> 0
     }
 }
 

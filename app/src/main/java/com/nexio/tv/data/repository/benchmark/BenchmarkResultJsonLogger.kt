@@ -392,6 +392,13 @@ private fun AudioEncodingSupport.toJsonObject(): JsonObject {
     }
 }
 
+internal enum class DebridBenchmarkPlaybackStability {
+    EXCELLENT,
+    STABLE,
+    VARIABLE,
+    UNSTABLE
+}
+
 internal fun DebridBenchmarkTransportProfile?.safeSustainedBudgetMbps(): Double? {
     val profile = this ?: return null
     profile.decision?.let { decision ->
@@ -401,4 +408,36 @@ internal fun DebridBenchmarkTransportProfile?.safeSustainedBudgetMbps(): Double?
     val sustained = profile.sustained
     if (!sustained.actionable) return null
     return sustained.p10ThroughputMbps?.times(0.85)
+}
+
+internal fun DebridBenchmarkTransportProfile.playbackStability(): DebridBenchmarkPlaybackStability {
+    val actionableForAutoplay = decision?.actionable ?: sustained.actionable
+    if (!actionableForAutoplay) return DebridBenchmarkPlaybackStability.UNSTABLE
+
+    val stalls = sustained.stallCount ?: return DebridBenchmarkPlaybackStability.UNSTABLE
+    val gap = sustained.maxReadGapMs ?: return DebridBenchmarkPlaybackStability.UNSTABLE
+    val cv = sustained.throughputCv
+
+    return when {
+        stalls >= 3 || gap > 8_000L -> DebridBenchmarkPlaybackStability.UNSTABLE
+        stalls >= 2 || gap > 3_000L -> DebridBenchmarkPlaybackStability.VARIABLE
+        stalls == 0 && gap <= 250L && (cv == null || cv <= 0.12) ->
+            DebridBenchmarkPlaybackStability.EXCELLENT
+        else -> DebridBenchmarkPlaybackStability.STABLE
+    }
+}
+
+internal fun DebridBenchmarkTransportProfile.playbackStabilityVector(): List<Double> {
+    val categoryRank = when (playbackStability()) {
+        DebridBenchmarkPlaybackStability.EXCELLENT -> 0.0
+        DebridBenchmarkPlaybackStability.STABLE -> 1.0
+        DebridBenchmarkPlaybackStability.VARIABLE -> 2.0
+        DebridBenchmarkPlaybackStability.UNSTABLE -> 3.0
+    }
+    return listOf(
+        categoryRank,
+        (sustained.stallCount ?: Int.MAX_VALUE).toDouble(),
+        (sustained.maxReadGapMs ?: Long.MAX_VALUE).toDouble(),
+        sustained.throughputCv ?: Double.POSITIVE_INFINITY
+    )
 }
