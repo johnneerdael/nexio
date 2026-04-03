@@ -21,7 +21,8 @@ class DirectProfileBenchmarkTransport internal constructor(
             seekProbeBytes = 256L * 1024L,
             readBufferSize = 256 * 1024,
             maxRecoverableFailures = 8,
-            sleepMs = { durationMs -> Thread.sleep(durationMs) }
+            sleepMs = { durationMs -> Thread.sleep(durationMs) },
+            noProgressFailureTimeoutMs = 20_000L
         )
     )
 
