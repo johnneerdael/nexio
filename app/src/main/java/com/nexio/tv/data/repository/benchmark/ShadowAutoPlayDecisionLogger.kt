@@ -59,6 +59,7 @@ class ShadowAutoPlayDecisionLogger internal constructor(
                 event.rejected.forEach { rejection ->
                     add(JsonObject().apply {
                         addProperty("streamKey", rejection.streamKey)
+                        add("parsed", rejection.parsed.toJsonObject())
                         rejection.provider?.let { addProperty("provider", it.storageKey) }
                         add("reasons", JsonArray().apply {
                             rejection.reasons.forEach { add(it.name.lowercase(Locale.US)) }
@@ -109,6 +110,7 @@ class ShadowAutoPlayDecisionLogger internal constructor(
 private fun ShadowStreamDecision.toJsonObject(): JsonObject {
     return JsonObject().apply {
         addProperty("streamKey", streamKey)
+        add("parsed", parsed.toJsonObject())
         addProperty("provider", provider.storageKey)
         addProperty("transport", transport.wireKey)
         addProperty("finalScore", finalScore)
@@ -158,5 +160,24 @@ private fun ShadowStreamDecision.toJsonObject(): JsonObject {
                 breakdown.transport.seekFailRate?.let { addProperty("seekFailRate", it) }
             })
         })
+    }
+}
+
+private fun ShadowParsedStreamFacts.toJsonObject(): JsonObject {
+    return JsonObject().apply {
+        serviceId?.let { addProperty("serviceId", it) }
+        filename?.let { addProperty("filename", it) }
+        sizeBytes?.let { addProperty("sizeBytes", it) }
+        durationMs?.let { addProperty("durationMs", it) }
+        runtimeSource?.let { addProperty("runtimeSource", it) }
+        resolution?.let { addProperty("resolution", it) }
+        quality?.let { addProperty("quality", it) }
+        videoCodec?.let { addProperty("videoCodec", it) }
+        releaseGroup?.let { addProperty("releaseGroup", it) }
+        cached?.let { addProperty("cached", it) }
+        add("audioTags", JsonArray().apply { audioTags.forEach(::add) })
+        add("audioChannels", JsonArray().apply { audioChannels.forEach(::add) })
+        add("visualTags", JsonArray().apply { visualTags.forEach(::add) })
+        add("languages", JsonArray().apply { languages.forEach(::add) })
     }
 }

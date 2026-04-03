@@ -71,8 +71,26 @@ data class ShadowDecisionBreakdown(
     val transport: ShadowTransportScoreBreakdown
 )
 
+data class ShadowParsedStreamFacts(
+    val serviceId: String? = null,
+    val filename: String? = null,
+    val sizeBytes: Long? = null,
+    val durationMs: Long? = null,
+    val runtimeSource: String? = null,
+    val resolution: String? = null,
+    val quality: String? = null,
+    val videoCodec: String? = null,
+    val audioTags: List<String> = emptyList(),
+    val audioChannels: List<String> = emptyList(),
+    val visualTags: List<String> = emptyList(),
+    val languages: List<String> = emptyList(),
+    val releaseGroup: String? = null,
+    val cached: Boolean? = null
+)
+
 data class ShadowStreamDecision(
     val streamKey: String,
+    val parsed: ShadowParsedStreamFacts = ShadowParsedStreamFacts(),
     val provider: DebridBenchmarkProvider,
     val transport: DebridBenchmarkTransportMode,
     val finalScore: Int,
@@ -89,6 +107,7 @@ data class ShadowStreamDecision(
 
 data class ShadowRejectedStream(
     val streamKey: String,
+    val parsed: ShadowParsedStreamFacts = ShadowParsedStreamFacts(),
     val provider: DebridBenchmarkProvider? = null,
     val reasons: List<ShadowRejectReason>
 )
@@ -145,9 +164,11 @@ class BenchmarkAwareStreamScorer internal constructor(
         streams.forEach { item ->
             val provider = item.toBenchmarkProvider()
             val streamKey = item.shadowStreamKey()
+            val parsedFacts = item.shadowParsedFacts(request)
             if (provider == null) {
                 rejected += ShadowRejectedStream(
                     streamKey = streamKey,
+                    parsed = parsedFacts,
                     reasons = listOf(ShadowRejectReason.NOT_DEBRID_WRAPPED)
                 )
                 return@forEach
@@ -156,6 +177,7 @@ class BenchmarkAwareStreamScorer internal constructor(
             if (benchmarkSession == null) {
                 rejected += ShadowRejectedStream(
                     streamKey = streamKey,
+                    parsed = parsedFacts,
                     provider = provider,
                     reasons = listOf(ShadowRejectReason.MISSING_BENCHMARK)
                 )
@@ -172,6 +194,7 @@ class BenchmarkAwareStreamScorer internal constructor(
                 onFailure = { reasons ->
                     rejected += ShadowRejectedStream(
                         streamKey = streamKey,
+                        parsed = parsedFacts,
                         provider = provider,
                         reasons = reasons
                     )
@@ -223,7 +246,7 @@ class BenchmarkAwareStreamScorer internal constructor(
         if (sizeBytes == null || sizeBytes <= 0L) {
             return EitherSuccessOrReject.reject(ShadowRejectReason.MISSING_SIZE)
         }
-        val runtimeMs = parsed.durationMs ?: request.runtimeMinutes?.times(60_000L)
+        val runtimeMs = item.shadowRuntimeMs(request)
         if (runtimeMs == null || runtimeMs <= 0L) {
             return EitherSuccessOrReject.reject(ShadowRejectReason.MISSING_RUNTIME)
         }
@@ -261,6 +284,7 @@ class BenchmarkAwareStreamScorer internal constructor(
         return EitherSuccessOrReject.success(
             ShadowStreamDecision(
                 streamKey = item.shadowStreamKey(),
+                parsed = item.shadowParsedFacts(request),
                 provider = provider,
                 transport = transportOption.transport,
                 finalScore = finalScore,
@@ -659,11 +683,65 @@ private fun ShadowContentScoreBreakdown.total(): Int {
 }
 
 private fun StreamCardModel.toBenchmarkProvider(): DebridBenchmarkProvider? {
-    return when (stream.wrappedProviderId?.uppercase(Locale.US)) {
+    return when (shadowServiceId()) {
         "RD" -> DebridBenchmarkProvider.REAL_DEBRID
         "PM" -> DebridBenchmarkProvider.PREMIUMIZE
         else -> null
     }
+}
+
+private fun StreamCardModel.shadowServiceId(): String? {
+    return parsed.serviceId
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?.uppercase(Locale.US)
+        ?: stream.wrappedProviderId
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.uppercase(Locale.US)
+}
+
+private fun StreamCardModel.shadowRuntimeMs(request: ShadowRequestContext): Long? {
+    return parsed.durationMs ?: request.runtimeMinutes?.times(60_000L)
+}
+
+private fun StreamCardModel.shadowRuntimeSource(request: ShadowRequestContext): String? {
+    return when {
+        parsed.durationMs != null -> "parser"
+        request.runtimeMinutes != null -> "metadata"
+        else -> null
+    }
+}
+
+private fun StreamCardModel.shadowFilename(): String? {
+    return parsed.preservedMetadata.filename
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?: parsed.filename
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        ?: stream.behaviorHints?.filename
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+}
+
+private fun StreamCardModel.shadowParsedFacts(request: ShadowRequestContext): ShadowParsedStreamFacts {
+    return ShadowParsedStreamFacts(
+        serviceId = shadowServiceId(),
+        filename = shadowFilename(),
+        sizeBytes = parsed.sizeBytes,
+        durationMs = shadowRuntimeMs(request),
+        runtimeSource = shadowRuntimeSource(request),
+        resolution = parsed.resolution,
+        quality = parsed.quality,
+        videoCodec = parsed.encode,
+        audioTags = parsed.audioTags,
+        audioChannels = parsed.audioChannels,
+        visualTags = parsed.visualTags,
+        languages = parsed.languages,
+        releaseGroup = parsed.releaseGroup,
+        cached = parsed.isCached
+    )
 }
 
 private fun StreamCardModel.shadowStreamKey(): String {
