@@ -310,6 +310,50 @@ class DebridBenchmarkStoreTest {
     }
 
     @Test
+    fun `latest result best effort restores legacy payloads without evidence`() = runTest {
+        val dataStore = buildDataStore(backgroundScope)
+        val store = DebridBenchmarkStore(dataStore)
+        val key = stringPreferencesKey("debrid_benchmark_latest_real_debrid")
+        dataStore.edit { prefs ->
+            prefs[key] = """
+                {
+                  "provider":"real_debrid",
+                  "measuredAtMs":5,
+                  "summary":{
+                    "startupTimeMs":1,
+                    "sustainedThroughputMbps":2.5,
+                    "transferredBytes":12,
+                    "elapsedMs":34
+                  },
+                  "terminationReason":"completed",
+                  "device":{
+                    "model":"Legacy Box",
+                    "manufacturer":"Example",
+                    "sdkInt":34,
+                    "displayHdrTypes":["hdr10"],
+                    "videoDecode":{
+                      "h264":{"hardwareAccelerated":true,"softwareOnlyAvailable":false,"secureSupported":true}
+                    },
+                    "audioOutput":{
+                      "ac3":{"supported":true,"passthroughLikely":true},
+                      "eac3":{"supported":true,"passthroughLikely":true},
+                      "truehd":{"supported":false,"passthroughLikely":false},
+                      "dts":{"supported":false,"passthroughLikely":false},
+                      "dtshd":{"supported":false,"passthroughLikely":false}
+                    },
+                    "capturedAtMs":99
+                  }
+                }
+            """.trimIndent()
+        }
+
+        val restored = store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first()
+        assertNotNull(restored)
+        assertEquals(null, restored?.device?.evidence)
+        assertEquals("Legacy Box", restored?.device?.model)
+    }
+
+    @Test
     fun `latest result ignores payloads with invalid numeric fields`() = runTest {
         val dataStore = buildDataStore(backgroundScope)
         val store = DebridBenchmarkStore(dataStore)
@@ -406,6 +450,23 @@ class DebridBenchmarkStoreTest {
 
         assertTrue(failure is IllegalArgumentException)
         assertEquals(valid, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
+    }
+
+    @Test
+    fun `invalid stored payload does not erase a later valid overwrite`() = runTest {
+        val dataStore = buildDataStore(backgroundScope)
+        val store = DebridBenchmarkStore(dataStore)
+        val key = stringPreferencesKey("debrid_benchmark_latest_real_debrid")
+        dataStore.edit { prefs ->
+            prefs[key] = """{"provider":"real_debrid","measuredAtMs":"oops"}"""
+        }
+
+        assertEquals(null, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
+
+        val expected = sampleResult(provider = DebridBenchmarkProvider.REAL_DEBRID, measuredAtMs = 88L)
+        store.saveLatest(expected)
+
+        assertEquals(expected, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
     }
 
     @Test

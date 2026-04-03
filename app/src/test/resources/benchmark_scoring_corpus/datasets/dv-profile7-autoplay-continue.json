@@ -109,7 +109,7 @@
         {
           "streamKey": "dv_primary",
           "providerId": "RD",
-          "resolution": "1080p",
+          "resolution": "2160p",
           "quality": "BluRay Remux",
           "encode": "HEVC",
           "sizeBytes": 45097156608,
@@ -120,7 +120,7 @@
         {
           "streamKey": "hdr10_fallback",
           "providerId": "RD",
-          "resolution": "2160p",
+          "resolution": "1080p",
           "quality": "WEB-DL",
           "encode": "HEVC",
           "sizeBytes": 20000000000,
