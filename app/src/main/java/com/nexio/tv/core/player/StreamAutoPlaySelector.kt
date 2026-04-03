@@ -67,7 +67,7 @@ object StreamAutoPlaySelector {
 
 
 
-    fun selectAutoPlayStream(
+    fun candidateAutoPlayStreams(
         streams: List<Stream>,
         mode: StreamAutoPlayMode,
         regexPattern: String,
@@ -75,8 +75,8 @@ object StreamAutoPlaySelector {
         installedAddonNames: Set<String>,
         selectedAddons: Set<String>,
         preferredBingeGroup: String? = null
-    ): Stream? {
-        if (streams.isEmpty()) return null
+    ): List<Stream> {
+        if (streams.isEmpty()) return emptyList()
 
         val sourceScopedStreams = when (source) {
             StreamAutoPlaySource.ALL_SOURCES -> streams
@@ -85,8 +85,8 @@ object StreamAutoPlaySelector {
         val candidateStreams = sourceScopedStreams.filter { stream ->
             selectedAddons.isEmpty() || stream.addonName in selectedAddons
         }
-        if (candidateStreams.isEmpty()) return null
-        if (mode == StreamAutoPlayMode.MANUAL) return null
+        if (candidateStreams.isEmpty()) return emptyList()
+        if (mode == StreamAutoPlayMode.MANUAL) return emptyList()
 
         val targetBingeGroup = normalizeBingeGroup(preferredBingeGroup)
         if (targetBingeGroup.isNotEmpty()) {
@@ -94,17 +94,17 @@ object StreamAutoPlaySelector {
                 normalizeBingeGroup(StreamBingeGroupResolver.resolve(stream)) == targetBingeGroup &&
                     stream.getStreamUrl() != null
             }
-            if (bingeGroupMatch != null) return bingeGroupMatch
+            if (bingeGroupMatch != null) return listOf(bingeGroupMatch)
         }
 
         return when (mode) {
-            StreamAutoPlayMode.MANUAL -> null
-            StreamAutoPlayMode.FIRST_STREAM -> candidateStreams.firstOrNull { it.getStreamUrl() != null }
+            StreamAutoPlayMode.MANUAL -> emptyList()
+            StreamAutoPlayMode.FIRST_STREAM -> candidateStreams.filter { it.getStreamUrl() != null }
             StreamAutoPlayMode.REGEX_MATCH -> {
                 val pattern = regexPattern.trim()
  
                 // Try to compile the user regex
-                val userRegex = runCatching { Regex(pattern, RegexOption.IGNORE_CASE) }.getOrNull() ?: return null
+                val userRegex = runCatching { Regex(pattern, RegexOption.IGNORE_CASE) }.getOrNull() ?: return emptyList()
 
                 // Auto-extract exclusion patterns from negative lookaheads
                 val exclusionMatches = Regex("\\(\\?![^)]*?\\(([^)]+)\\)").findAll(pattern)
@@ -142,19 +142,40 @@ object StreamAutoPlaySelector {
                     true
                 }
 
-                if (matchingStreams.isEmpty()) return null
-
-                // 2. Try each matching stream until one works
-                for (stream in matchingStreams) {
-                    val resolved = resolvePlayableUrl(stream) ?: continue
-                    runCatching { Log.d(TAG, "Trying resolved stream ${sanitizeUrlForLogs(resolved)}") }
-                    if (urlWorks(resolved)) return stream
-
-                }
-                // None worked
-                null
+                matchingStreams
             }
 
         }
+    }
+
+    fun selectAutoPlayStream(
+        streams: List<Stream>,
+        mode: StreamAutoPlayMode,
+        regexPattern: String,
+        source: StreamAutoPlaySource,
+        installedAddonNames: Set<String>,
+        selectedAddons: Set<String>,
+        preferredBingeGroup: String? = null
+    ): Stream? {
+        val candidates = candidateAutoPlayStreams(
+            streams = streams,
+            mode = mode,
+            regexPattern = regexPattern,
+            source = source,
+            installedAddonNames = installedAddonNames,
+            selectedAddons = selectedAddons,
+            preferredBingeGroup = preferredBingeGroup
+        )
+        if (candidates.isEmpty()) return null
+        if (mode != StreamAutoPlayMode.REGEX_MATCH) {
+            return candidates.firstOrNull()
+        }
+
+        for (stream in candidates) {
+            val resolved = resolvePlayableUrl(stream) ?: continue
+            runCatching { Log.d(TAG, "Trying resolved stream ${sanitizeUrlForLogs(resolved)}") }
+            if (urlWorks(resolved)) return stream
+        }
+        return null
     }
 }

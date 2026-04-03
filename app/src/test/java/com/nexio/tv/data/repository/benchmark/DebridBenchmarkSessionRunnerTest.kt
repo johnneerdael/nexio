@@ -5,6 +5,7 @@ import com.nexio.tv.data.local.PlayerSettingsDataStore
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -63,10 +64,11 @@ class DebridBenchmarkSessionRunnerTest {
             failure = optimizedFailure
         )
 
+        val playerSettings = PlayerSettings()
         coEvery { directTransport.runProfile(any(), any(), any()) } returns directResult
         coEvery { optimizedTransport.runProfile(any(), any(), any(), any()) } returns optimizedResult
-        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
-        every { deviceCapabilitySnapshotProvider.capture() } returns sampleDeviceSnapshot()
+        every { playerSettingsDataStore.playerSettings } returns flowOf(playerSettings)
+        every { deviceCapabilitySnapshotProvider.capture(playerSettings) } returns sampleDeviceSnapshot()
 
         val runner = DebridBenchmarkSessionRunner(
             directTransport = directTransport,
@@ -97,6 +99,10 @@ class DebridBenchmarkSessionRunnerTest {
         val optimizedTransport = mockk<OptimizedBenchmarkTransport>()
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
         val deviceCapabilitySnapshotProvider = mockk<DeviceCapabilitySnapshotProvider>()
+        val playerSettings = PlayerSettings(
+            iecPackerTruehdPassthroughEnabled = false,
+            iecPackerDtshdCoreFallbackEnabled = true
+        )
 
         val directResult = DebridBenchmarkTransportProfileResult(
             summary = DebridBenchmarkSummary(
@@ -137,8 +143,8 @@ class DebridBenchmarkSessionRunnerTest {
 
         coEvery { directTransport.runProfile(any(), any(), any()) } returns directResult
         coEvery { optimizedTransport.runProfile(any(), any(), any(), any()) } returns optimizedResult
-        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
-        every { deviceCapabilitySnapshotProvider.capture() } returns sampleDeviceSnapshot()
+        every { playerSettingsDataStore.playerSettings } returns flowOf(playerSettings)
+        every { deviceCapabilitySnapshotProvider.capture(playerSettings) } returns sampleDeviceSnapshot()
 
         val runner = DebridBenchmarkSessionRunner(
             directTransport = directTransport,
@@ -156,6 +162,7 @@ class DebridBenchmarkSessionRunnerTest {
 
         assertEquals(DebridBenchmarkTerminationReason.COMPLETED, result.terminationReason)
         assertEquals(DebridBenchmarkTransportMode.OPTIMIZED, result.result?.comparison?.stabilityWinner)
+        verify(exactly = 1) { deviceCapabilitySnapshotProvider.capture(playerSettings) }
     }
 
     private fun candidate(): DebridBenchmarkCandidate {

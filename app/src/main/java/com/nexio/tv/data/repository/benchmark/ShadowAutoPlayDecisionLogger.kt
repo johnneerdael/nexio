@@ -67,6 +67,9 @@ class ShadowAutoPlayDecisionLogger internal constructor(
                 }
             })
             event.selected?.let { add("selected", it.toJsonObject()) }
+            event.selectedNonDolbyVisionFallback?.let {
+                add("selectedNonDolbyVisionFallback", it.toJsonObject())
+            }
             event.timingsMs?.let { addProperty("timingsMs", it) }
         }.toString()
     }
@@ -95,6 +98,10 @@ class ShadowAutoPlayDecisionLogger internal constructor(
             append(hdr)
             append(" audio=")
             append(audio)
+            event.selectedNonDolbyVisionFallback?.let { fallback ->
+                append(" fallback=")
+                append(fallback.streamKey)
+            }
         }
     }
 }
@@ -124,7 +131,17 @@ private fun ShadowStreamDecision.toJsonObject(): JsonObject {
                 addProperty("codecPoints", breakdown.content.codecPoints)
                 addProperty("releaseTypePoints", breakdown.content.releaseTypePoints)
                 addProperty("bitrateQualityPoints", breakdown.content.bitrateQualityPoints)
+                addProperty("synergyPoints", breakdown.content.synergyPoints)
+                addProperty("penaltyPoints", breakdown.content.penaltyPoints)
                 addProperty("lowQuality4kPenalty", breakdown.content.lowQuality4kPenalty)
+                addProperty("resolutionTier", breakdown.content.resolutionTier)
+                addProperty("releaseTypeTier", breakdown.content.releaseTypeTier)
+                addProperty("codecTier", breakdown.content.codecTier)
+                addProperty("hdrTier", breakdown.content.hdrTier)
+                addProperty("audioTier", breakdown.content.audioTier)
+                addProperty("audioSupportTier", breakdown.content.audioSupportTier)
+                addProperty("hdrSupportTier", breakdown.content.hdrSupportTier)
+                addProperty("realismRatio", breakdown.content.realismRatio)
             })
             add("transport", JsonObject().apply {
                 addProperty("provider", breakdown.transport.provider.storageKey)

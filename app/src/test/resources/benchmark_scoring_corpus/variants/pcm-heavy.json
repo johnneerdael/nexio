@@ -1,0 +1,243 @@
+{
+  "viability": {
+    "safeBudgetMultiplier": 0.85,
+    "minimumRatio": 1.0,
+    "comfortableRatio": 1.25,
+    "preferStartupRatio": 1.4
+  },
+  "burstMargins": {
+    "SMALL_ENCODE": 1.2,
+    "NORMAL_ENCODE": 1.35,
+    "HIGH_BITRATE_ENCODE": 1.45,
+    "WEBDL": 1.35,
+    "WEBRIP": 1.35,
+    "BLURAY_ENCODE": 1.35,
+    "REMUX": 1.6,
+    "UNKNOWN": 1.35
+  },
+  "contentRewards": {
+    "resolution": {
+      "UHD_2160": 30,
+      "FHD_1080": 16,
+      "HD_720": 6,
+      "OTHER": 0
+    },
+    "source": {
+      "SMALL_ENCODE": 0,
+      "NORMAL_ENCODE": 8,
+      "HIGH_BITRATE_ENCODE": 16,
+      "WEBDL": 12,
+      "WEBRIP": 6,
+      "BLURAY_ENCODE": 18,
+      "REMUX": 28,
+      "UNKNOWN": 0
+    },
+    "codec": {
+      "AV1_HW": 14,
+      "HEVC_HW": 10,
+      "H264_HW": 4,
+      "AV1_SW": -18,
+      "HEVC_SW": -10,
+      "VC1": -16,
+      "MPEG2": -16,
+      "OTHER": 0,
+      "UNSUPPORTED": -24
+    },
+    "hdr": {
+      "DOLBY_VISION": 16,
+      "HDR10_PLUS": 12,
+      "HDR10": 7,
+      "SDR": 0
+    },
+    "audio": {
+      "TRUEHD_ATMOS": 20,
+      "DTSX": 18,
+      "TRUEHD": 16,
+      "DTSHD": 15,
+      "DDP_ATMOS": 13,
+      "DDP": 10,
+      "AC3": 7,
+      "DTS": 7,
+      "OTHER": 0
+    }
+  },
+  "supportMultipliers": {
+    "full": 1.0,
+    "fallback": 0.6,
+    "partial": 0.5,
+    "unsupported": 0.0
+  },
+  "bitrateRealism": {
+    "curve": {
+      "scale": 24.0,
+      "slope": 1.35,
+      "min": -28.0,
+      "max": 28.0
+    },
+    "targetsMbps": {
+      "HD_720": {
+        "SMALL_ENCODE": 2.5,
+        "NORMAL_ENCODE": 4.0,
+        "HIGH_BITRATE_ENCODE": 6.0,
+        "WEBDL": 5.0,
+        "WEBRIP": 4.0,
+        "BLURAY_ENCODE": 8.0,
+        "REMUX": 12.0,
+        "UNKNOWN": 4.0
+      },
+      "FHD_1080": {
+        "SMALL_ENCODE": 5.0,
+        "NORMAL_ENCODE": 8.0,
+        "HIGH_BITRATE_ENCODE": 12.0,
+        "WEBDL": 10.0,
+        "WEBRIP": 8.0,
+        "BLURAY_ENCODE": 18.0,
+        "REMUX": 28.0,
+        "UNKNOWN": 8.0
+      },
+      "UHD_2160": {
+        "SMALL_ENCODE": 10.0,
+        "NORMAL_ENCODE": 18.0,
+        "HIGH_BITRATE_ENCODE": 28.0,
+        "WEBDL": 24.0,
+        "WEBRIP": 18.0,
+        "BLURAY_ENCODE": 45.0,
+        "REMUX": 70.0,
+        "UNKNOWN": 18.0
+      },
+      "OTHER": {
+        "UNKNOWN": 6.0
+      }
+    }
+  },
+  "transportRewards": {
+    "ratioBands": [
+      {
+        "min": 1.0,
+        "max": 1.25,
+        "base": 8,
+        "gain": 10
+      },
+      {
+        "min": 1.25,
+        "max": 1.6,
+        "base": 18,
+        "gain": 8
+      },
+      {
+        "min": 1.6,
+        "max": 999.0,
+        "base": 26,
+        "gain": 0
+      }
+    ],
+    "startupBands": [
+      {
+        "maxMs": 150,
+        "reward": 6
+      },
+      {
+        "maxMs": 300,
+        "reward": 4
+      },
+      {
+        "maxMs": 600,
+        "reward": 2
+      }
+    ],
+    "seekBands": [
+      {
+        "maxP95Ms": 250,
+        "maxFailRate": 0.005,
+        "reward": 8
+      },
+      {
+        "maxP95Ms": 350,
+        "maxFailRate": 0.01,
+        "reward": 6
+      },
+      {
+        "maxP95Ms": 500,
+        "maxFailRate": 0.02,
+        "reward": 3
+      }
+    ],
+    "stabilityBands": [
+      {
+        "maxCv": 0.05,
+        "maxStalls": 0,
+        "maxGapMs": 200,
+        "reward": 6
+      },
+      {
+        "maxCv": 0.08,
+        "maxStalls": 1,
+        "maxGapMs": 350,
+        "reward": 4
+      },
+      {
+        "maxCv": 0.12,
+        "reward": 2
+      }
+    ]
+  },
+  "audioScoring": {
+    "baseRewards": {
+      "TRUEHD_ATMOS": 20,
+      "DTSX": 18,
+      "TRUEHD": 16,
+      "DTSHD": 15,
+      "DDP_ATMOS": 13,
+      "DDP": 10,
+      "AC3": 7,
+      "DTS": 7,
+      "OTHER": 0
+    },
+    "supportMultipliers": {
+      "FULL_IMMERSIVE_PASSTHROUGH": 1.0,
+      "FULL_PASSTHROUGH": 1.0,
+      "DECODED_MULTICHANNEL_PCM": 0.95,
+      "CORE_FALLBACK": 0.4,
+      "UNSUPPORTED": 0.0
+    },
+    "immersiveLossPenalty": {
+      "TRUEHD_ATMOS": {
+        "DECODED_MULTICHANNEL_PCM": 4,
+        "CORE_FALLBACK": 8,
+        "UNSUPPORTED": 12
+      },
+      "DTSX": {
+        "DECODED_MULTICHANNEL_PCM": 5,
+        "CORE_FALLBACK": 8,
+        "UNSUPPORTED": 12
+      },
+      "DDP_ATMOS": {
+        "DECODED_MULTICHANNEL_PCM": 3,
+        "CORE_FALLBACK": 6,
+        "UNSUPPORTED": 10
+      }
+    },
+    "downgradePenalty": {
+      "FULL_IMMERSIVE_PASSTHROUGH": 0,
+      "FULL_PASSTHROUGH": 0,
+      "DECODED_MULTICHANNEL_PCM": 0,
+      "CORE_FALLBACK": 6,
+      "UNSUPPORTED": 10
+    }
+  },
+  "synergy": {
+    "healthyRemux": 10,
+    "dvHevcSupported": 8,
+    "atmosSupportedAndHealthy": 7,
+    "premiumFeatureStack": 10
+  },
+  "penalties": {
+    "tinyFake4k": 35,
+    "tinyFake4kThresholdMbps": 8.0,
+    "premiumTagImplausible": 20,
+    "premiumTagImplausibleMaxRealismRatio": 0.45,
+    "softwareDecode4k": 8,
+    "atmosTooLowBitrate": 10,
+    "atmosTooLowBitrateMaxRealismRatio": 0.55
+  }
+}

@@ -1,0 +1,188 @@
+{
+  "datasetVersion": 1,
+  "scenarios": [
+    {
+      "id": "tv-hevc-ddp-vs-av1-webdl",
+      "name": "TV episode parser-backed HEVC DDP Atmos vs AV1 WEB-DL",
+      "request": {
+        "videoId": "tt4574334:2:1",
+        "contentType": "series",
+        "title": "Stranger Things",
+        "season": 2,
+        "episode": 1,
+        "runtimeMinutes": 58
+      },
+      "benchmarks": [
+        {
+          "provider": "REAL_DEBRID",
+          "measuredAtMs": 42,
+          "summary": {
+            "startupTimeMs": 120,
+            "sustainedThroughputMbps": 210.0,
+            "transferredBytes": 2048,
+            "elapsedMs": 120000
+          },
+          "terminationReason": "COMPLETED",
+          "device": {
+            "model": "Google TV Streamer",
+            "manufacturer": "Google",
+            "sdkInt": 34,
+            "displayHdrTypes": [
+              "HDR10",
+              "HDR10_PLUS"
+            ],
+            "videoDecode": {
+              "h264": {
+                "hardwareAccelerated": true,
+                "softwareOnlyAvailable": false,
+                "secureSupported": true
+              },
+              "hevc": {
+                "hardwareAccelerated": true,
+                "softwareOnlyAvailable": false,
+                "secureSupported": true
+              },
+              "av1": {
+                "hardwareAccelerated": true,
+                "softwareOnlyAvailable": true,
+                "secureSupported": false
+              },
+              "dolbyVision": {
+                "hardwareAccelerated": false,
+                "softwareOnlyAvailable": false,
+                "secureSupported": false
+              }
+            },
+            "audioOutput": {
+              "ac3": {
+                "supported": true,
+                "passthroughLikely": true
+              },
+              "eac3": {
+                "supported": true,
+                "passthroughLikely": true
+              },
+              "truehd": {
+                "supported": false,
+                "passthroughLikely": false
+              },
+              "dts": {
+                "supported": false,
+                "passthroughLikely": false
+              },
+              "dtshd": {
+                "supported": false,
+                "passthroughLikely": false
+              }
+            },
+            "capturedAtMs": 40
+          },
+          "direct": {
+            "startup": {
+              "initialTtfbMs": 200,
+              "startupFailureRate": 0.0
+            },
+            "sustained": {
+              "averageThroughputMbps": 170.0,
+              "derivedAverageThroughputMbps": 170.0,
+              "actionable": true,
+              "p10ThroughputMbps": 150.0,
+              "p50ThroughputMbps": 170.0,
+              "peakThroughputMbps": 190.0,
+              "throughputStddevMbps": 6.0,
+              "throughputCv": 0.05,
+              "stallCount": 0,
+              "maxReadGapMs": 150,
+              "bytesTransferred": 2048,
+              "elapsedMs": 120000
+            },
+            "seek": {
+              "seekTtfbP50Ms": 220,
+              "seekTtfbP95Ms": 300,
+              "seekTtfbP99Ms": 380,
+              "seekTtfbStddevMs": 20.0,
+              "seekFailRate": 0.0
+            },
+            "decision": {
+              "safeSustainedBudgetMbps": 127.5,
+              "actionable": true
+            },
+            "rawSamples": {}
+          },
+          "optimized": {
+            "startup": {
+              "initialTtfbMs": 110,
+              "startupFailureRate": 0.0
+            },
+            "sustained": {
+              "averageThroughputMbps": 210.0,
+              "derivedAverageThroughputMbps": 210.0,
+              "actionable": true,
+              "p10ThroughputMbps": 190.0,
+              "p50ThroughputMbps": 210.0,
+              "peakThroughputMbps": 225.0,
+              "throughputStddevMbps": 6.0,
+              "throughputCv": 0.05,
+              "stallCount": 0,
+              "maxReadGapMs": 150,
+              "bytesTransferred": 2048,
+              "elapsedMs": 120000
+            },
+            "seek": {
+              "seekTtfbP50Ms": 170,
+              "seekTtfbP95Ms": 220,
+              "seekTtfbP99Ms": 290,
+              "seekTtfbStddevMs": 20.0,
+              "seekFailRate": 0.0
+            },
+            "decision": {
+              "safeSustainedBudgetMbps": 161.5,
+              "actionable": true
+            },
+            "rawSamples": {}
+          },
+          "comparison": {
+            "sustainedWinner": "OPTIMIZED",
+            "seekWinner": "OPTIMIZED",
+            "stabilityWinner": "OPTIMIZED"
+          },
+          "session": {
+            "benchmarkVersion": 3,
+            "executionOrder": [],
+            "totalElapsedMs": 240000
+          }
+        }
+      ],
+      "streams": [
+        {
+          "streamKey": "hevc_ddp_atmos",
+          "providerId": "RD",
+          "sizeBytes": 18500000000,
+          "durationMs": 3480000,
+          "filename": "Stranger.Things.S02E01.2160p.WEB-DL.HEVC.HDR10.DDP5.1.Atmos-GROUP.mkv",
+          "useRealParser": true
+        },
+        {
+          "streamKey": "av1_hdr10plus",
+          "providerId": "RD",
+          "sizeBytes": 16000000000,
+          "durationMs": 3480000,
+          "filename": "Stranger.Things.S02E01.2160p.WEB-DL.AV1.HDR10+.DDP5.1-GROUP.mkv",
+          "useRealParser": true
+        }
+      ],
+      "expectedWinnerStreamKey": "hevc_ddp_atmos",
+      "acceptableWinnerKeys": [
+        "hevc_ddp_atmos",
+        "av1_hdr10plus"
+      ],
+      "preferredPairs": [
+        {
+          "preferredStreamKey": "hevc_ddp_atmos",
+          "otherStreamKey": "av1_hdr10plus",
+          "reason": "Atmos HEVC should edge AV1 HDR10+ here pending real tuning"
+        }
+      ]
+    }
+  ]
+}

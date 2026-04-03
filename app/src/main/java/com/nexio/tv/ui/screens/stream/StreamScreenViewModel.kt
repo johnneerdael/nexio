@@ -10,9 +10,13 @@ import com.nexio.tv.core.stream.AioCustomTemplateSelection
 import com.nexio.tv.core.stream.AioFormatterSelection
 import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.core.stream.StreamBingeGroupResolver
+import com.nexio.tv.core.stream.StreamCardModel
 import com.nexio.tv.core.stream.StreamPresentationEngine
 import com.nexio.tv.core.stream.StreamRequestContext
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.player.DolbyVisionAutoPlayGate
+import com.nexio.tv.core.player.DolbyVisionAutoPlayGateResult
+import com.nexio.tv.core.player.supportsDolbyVisionDisplay
 import com.nexio.tv.core.player.StreamAutoPlaySelector
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
@@ -89,6 +93,9 @@ class StreamScreenViewModel @Inject constructor(
     private var streamParserCache = StreamPresentationEngine.ParserCache()
     private var latestRealDebridBenchmarkResult: DebridBenchmarkResult? = null
     private var latestPremiumizeBenchmarkResult: DebridBenchmarkResult? = null
+    private val shadowAutoPlayReplayCoordinator =
+        ShadowAutoPlayReplayCoordinator(benchmarkAwareStreamScorer)
+    private val dolbyVisionAutoPlayGate = DolbyVisionAutoPlayGate()
     private val noStreamsGateController = NoStreamsGateController(
         scope = viewModelScope,
         delayMs = NO_STREAMS_EMPTY_STATE_DELAY_MS
@@ -159,11 +166,13 @@ class StreamScreenViewModel @Inject constructor(
         viewModelScope.launch {
             debridBenchmarkStore.latestResult(DebridBenchmarkProvider.REAL_DEBRID).collectLatest { result ->
                 latestRealDebridBenchmarkResult = result
+                replayShadowAutoPlayDecisionIfReady()
             }
         }
         viewModelScope.launch {
             debridBenchmarkStore.latestResult(DebridBenchmarkProvider.PREMIUMIZE).collectLatest { result ->
                 latestPremiumizeBenchmarkResult = result
+                replayShadowAutoPlayDecisionIfReady()
             }
         }
         viewModelScope.launch {
@@ -227,6 +236,7 @@ class StreamScreenViewModel @Inject constructor(
         noStreamsGateController.cancel()
         sourceChipErrorDismissJob?.cancel()
         sourceChipErrorDismissJob = null
+        shadowAutoPlayReplayCoordinator.clear()
     }
 
     private fun shouldUseDirectAutoPlayFlow(
@@ -329,6 +339,7 @@ class StreamScreenViewModel @Inject constructor(
                         showDirectAutoPlayOverlay = if (directFlowActive) true else it.showDirectAutoPlayOverlay
                     )
                 }
+                shadowAutoPlayReplayCoordinator.clear()
                 pendingNoStreamsRequestId = requestId
                 noStreamsGateController.restart()
 
@@ -349,10 +360,10 @@ class StreamScreenViewModel @Inject constructor(
                         val availableAddons = orderedAddonStreams
                             .filter { it.streams.isNotEmpty() }
                             .map { it.addonName }
-                        val selectedAutoPlayStream = if (autoPlayHandledForSession) {
-                            null
+                        val autoPlayCandidates = if (autoPlayHandledForSession) {
+                            emptyList()
                         } else {
-                            StreamAutoPlaySelector.selectAutoPlayStream(
+                            StreamAutoPlaySelector.candidateAutoPlayStreams(
                                 streams = allStreams,
                                 mode = playerSettings.streamAutoPlayMode,
                                 regexPattern = playerSettings.streamAutoPlayRegex,
@@ -369,12 +380,30 @@ class StreamScreenViewModel @Inject constructor(
                             requestContext = buildStreamRequestContext(),
                             parserCache = streamParserCache
                         )
+                        val autoPlayPlaybackInfo = buildBenchmarkAwareAutoPlayPlaybackInfo(
+                            request = buildShadowRequestContext(requestId),
+                            organizedStreams = organizedStreams.items,
+                            autoPlayCandidates = autoPlayCandidates
+                        )
+                        val selectedAutoPlayStream = if (autoPlayPlaybackInfo == null && !autoPlayHandledForSession) {
+                            StreamAutoPlaySelector.selectAutoPlayStream(
+                                streams = autoPlayCandidates,
+                                mode = playerSettings.streamAutoPlayMode,
+                                regexPattern = playerSettings.streamAutoPlayRegex,
+                                source = playerSettings.streamAutoPlaySource,
+                                installedAddonNames = installedAddonOrder.toSet(),
+                                selectedAddons = playerSettings.streamAutoPlaySelectedAddons
+                            )
+                        } else {
+                            null
+                        }
                         OrganizedStreamPayload(
                             orderedAddonStreams = orderedAddonStreams,
                             allStreams = allStreams,
                             availableAddons = availableAddons,
                             organizedStreams = organizedStreams,
-                            selectedAutoPlayStream = selectedAutoPlayStream
+                            selectedAutoPlayStream = selectedAutoPlayStream,
+                            autoPlayPlaybackInfo = autoPlayPlaybackInfo
                         )
                     }
                 }
@@ -385,12 +414,15 @@ class StreamScreenViewModel @Inject constructor(
                         organizedResult = organizedResult.organizedStreams
                     )
                     logShadowAutoPlayDecision(
-                        requestId = requestId,
+                        request = buildShadowRequestContext(requestId),
                         organizedStreams = organizedResult.organizedStreams.items
                     )
 
                     val selectedAutoPlayStream = organizedResult.selectedAutoPlayStream
                     if (selectedAutoPlayStream != null) {
+                        resolvedAutoPlayTarget = true
+                    }
+                    if (organizedResult.autoPlayPlaybackInfo != null) {
                         resolvedAutoPlayTarget = true
                     }
                     if (organizedResult.organizedStreams.items.isNotEmpty()) {
@@ -418,6 +450,7 @@ class StreamScreenViewModel @Inject constructor(
                                 succeededNames = organizedResult.orderedAddonStreams.map { it.addonName }
                             ),
                             autoPlayStream = selectedAutoPlayStream,
+                            autoPlayPlaybackInfo = organizedResult.autoPlayPlaybackInfo,
                             error = null,
                             showDirectAutoPlayOverlay = if (directAutoPlayFlowEnabledForSession) {
                                 true
@@ -450,6 +483,7 @@ class StreamScreenViewModel @Inject constructor(
                                     directAutoPlayMessage = null
                                 )
                             }
+                            shadowAutoPlayReplayCoordinator.clear()
                         }
                         return@launch
                     }
@@ -793,6 +827,10 @@ class StreamScreenViewModel @Inject constructor(
     /**
      * Gets the selected stream for playback
      */
+    fun getStreamForPlayback(item: StreamCardModel): StreamPlaybackInfo {
+        return buildStreamPlaybackInfo(item)
+    }
+
     fun getStreamForPlayback(stream: Stream): StreamPlaybackInfo {
         val playbackInfo = StreamPlaybackInfo(
             url = stream.getStreamUrl(),
@@ -819,7 +857,145 @@ class StreamScreenViewModel @Inject constructor(
             rememberedAudioName = null,
             filename = stream.behaviorHints?.filename,
             videoHash = stream.behaviorHints?.videoHash,
-            videoSize = stream.behaviorHints?.videoSize
+            videoSize = stream.behaviorHints?.videoSize,
+            streamKey = stream.wrappedOriginalStreamKey
+        )
+
+        val url = playbackInfo.url
+        if (!url.isNullOrBlank()) {
+            viewModelScope.launch {
+                streamLinkCacheDataStore.save(
+                    contentKey = streamCacheKey,
+                    url = url,
+                    streamName = playbackInfo.streamName,
+                    headers = playbackInfo.headers,
+                    bingeGroup = playbackInfo.bingeGroup,
+                    filename = playbackInfo.filename,
+                    videoHash = playbackInfo.videoHash,
+                    videoSize = playbackInfo.videoSize
+                )
+            }
+        }
+
+        return playbackInfo
+    }
+
+    suspend fun resolveAutoPlayPlaybackInfo(playbackInfo: StreamPlaybackInfo): StreamPlaybackInfo {
+        val result: DolbyVisionAutoPlayGateResult = dolbyVisionAutoPlayGate.resolve(
+            context = context,
+            playbackInfo = playbackInfo,
+            autoPlay = true,
+            displaySupportsDolbyVision = supportsDolbyVisionDisplay(context)
+        )
+        result.playbackInfo.url?.let { resolvedUrl ->
+            streamLinkCacheDataStore.save(
+                contentKey = streamCacheKey,
+                url = resolvedUrl,
+                streamName = result.playbackInfo.streamName,
+                headers = result.playbackInfo.headers,
+                bingeGroup = result.playbackInfo.bingeGroup,
+                filename = result.playbackInfo.filename,
+                videoHash = result.playbackInfo.videoHash,
+                videoSize = result.playbackInfo.videoSize
+            )
+        }
+        Log.i(
+            TAG,
+            "AUTOPLAY_DV_PROBE stream=${playbackInfo.streamKey ?: "unknown"} " +
+                "selected=${result.playbackInfo.streamKey ?: "unknown"} " +
+                "fallback=${result.fallbackApplied} reason=${result.reason} " +
+                "profile=${result.probeResult?.profileLabel ?: "none"}"
+        )
+        return result.playbackInfo
+    }
+
+    private fun buildBenchmarkAwareAutoPlayPlaybackInfo(
+        request: ShadowRequestContext,
+        organizedStreams: List<StreamCardModel>,
+        autoPlayCandidates: List<Stream>
+    ): StreamPlaybackInfo? {
+        if (autoPlayCandidates.isEmpty()) return null
+        val benchmarkSessions = latestBenchmarkSessions()
+        if (benchmarkSessions.isEmpty()) return null
+        val candidateItems = organizedStreams.filter { item -> item.stream in autoPlayCandidates }
+        if (candidateItems.isEmpty()) return null
+
+        val event = benchmarkAwareStreamScorer.score(
+            request = request,
+            streams = candidateItems,
+            benchmarkSessions = benchmarkSessions
+        )
+        val selectedKey = event.selected?.streamKey ?: return null
+        val selectedItem = candidateItems.firstOrNull { item ->
+            item.stream.wrappedOriginalStreamKey == selectedKey ||
+                item.parsed.exactDuplicateKey == selectedKey
+        } ?: return null
+        val fallbackItem = event.selectedNonDolbyVisionFallback
+            ?.streamKey
+            ?.let { fallbackKey ->
+                candidateItems.firstOrNull { item ->
+                    item.stream.wrappedOriginalStreamKey == fallbackKey ||
+                        item.parsed.exactDuplicateKey == fallbackKey
+                }
+            }
+
+        return buildStreamPlaybackInfo(
+            item = selectedItem,
+            nonDolbyVisionFallback = fallbackItem
+        )
+    }
+
+    private fun buildStreamPlaybackInfo(
+        item: StreamCardModel,
+        nonDolbyVisionFallback: StreamCardModel? = null
+    ): StreamPlaybackInfo {
+        val stream = item.stream
+        val playbackInfo = StreamPlaybackInfo(
+            url = stream.getStreamUrl(),
+            title = _uiState.value.title,
+            streamName = stream.name ?: stream.addonName,
+            year = year,
+            isExternal = stream.isExternal(),
+            isTorrent = stream.isTorrent(),
+            infoHash = stream.infoHash,
+            ytId = stream.ytId,
+            headers = stream.behaviorHints?.proxyHeaders?.request,
+            contentId = contentId ?: videoId.substringBefore(":"),
+            contentType = contentType,
+            contentName = contentName ?: title,
+            poster = poster,
+            backdrop = backdrop,
+            logo = logo,
+            videoId = videoId,
+            season = season,
+            episode = episode,
+            episodeTitle = episodeName,
+            bingeGroup = StreamBingeGroupResolver.resolve(stream),
+            rememberedAudioLanguage = null,
+            rememberedAudioName = null,
+            filename = stream.behaviorHints?.filename,
+            videoHash = stream.behaviorHints?.videoHash,
+            videoSize = stream.behaviorHints?.videoSize,
+            streamKey = stream.wrappedOriginalStreamKey,
+            isDolbyVisionCandidate = item.parsed.visualTags.any { tag ->
+                val normalized = tag.lowercase()
+                normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
+            },
+            autoPlayNonDolbyVisionFallback = nonDolbyVisionFallback?.let { fallback ->
+                AutoPlayStreamAlternative(
+                    streamKey = fallback.stream.wrappedOriginalStreamKey,
+                    url = fallback.stream.getStreamUrl(),
+                    streamName = fallback.stream.name ?: fallback.stream.addonName ?: "Fallback",
+                    headers = fallback.stream.behaviorHints?.proxyHeaders?.request,
+                    filename = fallback.stream.behaviorHints?.filename,
+                    videoHash = fallback.stream.behaviorHints?.videoHash,
+                    videoSize = fallback.stream.behaviorHints?.videoSize,
+                    isDolbyVisionCandidate = fallback.parsed.visualTags.any { tag ->
+                        val normalized = tag.lowercase()
+                        normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
+                    }
+                )
+            }
         )
 
         val url = playbackInfo.url
@@ -858,44 +1034,62 @@ class StreamScreenViewModel @Inject constructor(
         )
     }
 
+    private fun buildShadowRequestContext(requestId: String): ShadowRequestContext {
+        return ShadowRequestContext(
+            requestId = requestId,
+            videoId = videoId,
+            contentType = contentType,
+            title = title,
+            season = season,
+            episode = episode,
+            runtimeMinutes = runtime ?: _uiState.value.runtime
+        )
+    }
+
     private suspend fun logShadowAutoPlayDecision(
-        requestId: String,
+        request: ShadowRequestContext,
         organizedStreams: List<com.nexio.tv.core.stream.StreamCardModel>
     ) {
         val startedAtMs = System.currentTimeMillis()
         try {
-            val benchmarks = buildMap {
-                latestRealDebridBenchmarkResult?.let {
-                    put(DebridBenchmarkProvider.REAL_DEBRID, it)
-                }
-                latestPremiumizeBenchmarkResult?.let {
-                    put(DebridBenchmarkProvider.PREMIUMIZE, it)
-                }
-            }
+            shadowAutoPlayReplayCoordinator.updateCandidates(request, organizedStreams)
             val event = withContext(Dispatchers.Default) {
-                benchmarkAwareStreamScorer.score(
-                    request = ShadowRequestContext(
-                        requestId = requestId,
-                        videoId = videoId,
-                        contentType = contentType,
-                        title = title,
-                        season = season,
-                        episode = episode,
-                        runtimeMinutes = runtime ?: _uiState.value.runtime
-                    ),
-                    streams = organizedStreams,
-                    benchmarkSessions = benchmarks
-                )
-            }
-            shadowAutoPlayDecisionLogger.log(
-                event.copy(
+                shadowAutoPlayReplayCoordinator.buildEvent(
+                    benchmarkSessions = latestBenchmarkSessions(),
                     timingsMs = (System.currentTimeMillis() - startedAtMs).coerceAtLeast(0L)
                 )
-            )
+            } ?: return
+            shadowAutoPlayDecisionLogger.log(event)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
             Log.w(TAG, "Shadow autoplay scoring failed: ${error.message}")
+        }
+    }
+
+    private suspend fun replayShadowAutoPlayDecisionIfReady() {
+        try {
+            val event = withContext(Dispatchers.Default) {
+                shadowAutoPlayReplayCoordinator.buildEvent(
+                    benchmarkSessions = latestBenchmarkSessions()
+                )
+            } ?: return
+            shadowAutoPlayDecisionLogger.log(event)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.w(TAG, "Shadow autoplay replay failed: ${error.message}")
+        }
+    }
+
+    private fun latestBenchmarkSessions(): Map<DebridBenchmarkProvider, DebridBenchmarkResult> {
+        return buildMap {
+            latestRealDebridBenchmarkResult?.let {
+                put(DebridBenchmarkProvider.REAL_DEBRID, it)
+            }
+            latestPremiumizeBenchmarkResult?.let {
+                put(DebridBenchmarkProvider.PREMIUMIZE, it)
+            }
         }
     }
 
@@ -922,13 +1116,64 @@ private data class OrganizedStreamPayload(
     val allStreams: List<Stream>,
     val availableAddons: List<String>,
     val organizedStreams: com.nexio.tv.core.stream.OrganizedStreams,
-    val selectedAutoPlayStream: Stream?
+    val selectedAutoPlayStream: Stream?,
+    val autoPlayPlaybackInfo: StreamPlaybackInfo?
 )
 
 private data class PendingOrganizeRequest(
     val version: Long,
     val addonStreamGroups: List<AddonStreams>
 )
+
+internal class ShadowAutoPlayReplayCoordinator(
+    private val scorer: BenchmarkAwareStreamScorer
+) {
+    private var latestRequest: ShadowRequestContext? = null
+    private var latestStreams: List<StreamCardModel> = emptyList()
+
+    fun updateCandidates(
+        request: ShadowRequestContext,
+        organizedStreams: List<StreamCardModel>
+    ) {
+        latestRequest = request
+        latestStreams = organizedStreams
+    }
+
+    fun buildEvent(
+        benchmarkSessions: Map<DebridBenchmarkProvider, DebridBenchmarkResult>,
+        timingsMs: Long? = null
+    ): com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionEvent? {
+        val request = latestRequest ?: return null
+        if (latestStreams.isEmpty()) return null
+        return buildShadowAutoPlayDecisionEvent(
+            scorer = scorer,
+            request = request,
+            organizedStreams = latestStreams,
+            benchmarkSessions = benchmarkSessions,
+            timingsMs = timingsMs
+        )
+    }
+
+    fun clear() {
+        latestRequest = null
+        latestStreams = emptyList()
+    }
+}
+
+internal fun buildShadowAutoPlayDecisionEvent(
+    scorer: BenchmarkAwareStreamScorer,
+    request: ShadowRequestContext,
+    organizedStreams: List<StreamCardModel>,
+    benchmarkSessions: Map<DebridBenchmarkProvider, DebridBenchmarkResult>,
+    timingsMs: Long? = null
+): com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionEvent {
+    return scorer.score(
+        request = request,
+        streams = organizedStreams,
+        benchmarkSessions = benchmarkSessions,
+        elapsedMs = timingsMs
+    )
+}
 
 private fun PlayerSettings.toStreamFeatureFlags(): StreamFeatureFlags {
     return StreamFeatureFlags(
@@ -985,5 +1230,19 @@ data class StreamPlaybackInfo(
     val rememberedAudioName: String?,
     val filename: String? = null,
     val videoHash: String? = null,
-    val videoSize: Long? = null
+    val videoSize: Long? = null,
+    val streamKey: String? = null,
+    val isDolbyVisionCandidate: Boolean = false,
+    val autoPlayNonDolbyVisionFallback: AutoPlayStreamAlternative? = null
+)
+
+data class AutoPlayStreamAlternative(
+    val streamKey: String?,
+    val url: String?,
+    val streamName: String,
+    val headers: Map<String, String>?,
+    val filename: String? = null,
+    val videoHash: String? = null,
+    val videoSize: Long? = null,
+    val isDolbyVisionCandidate: Boolean = false
 )

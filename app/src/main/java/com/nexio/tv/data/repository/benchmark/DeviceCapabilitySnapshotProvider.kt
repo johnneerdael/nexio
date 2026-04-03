@@ -10,6 +10,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.audio.AudioCapabilities
+import com.nexio.tv.data.local.PlayerSettings
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.Locale
 import javax.inject.Inject
@@ -34,7 +35,7 @@ class DeviceCapabilitySnapshotProvider internal constructor(
         nowMs = System::currentTimeMillis
     )
 
-    fun capture(): DeviceCapabilitySnapshot? {
+    fun capture(playerSettings: PlayerSettings = PlayerSettings()): DeviceCapabilitySnapshot? {
         return runCatching {
             DeviceCapabilitySnapshot(
                 model = Build.MODEL?.takeIf { it.isNotBlank() },
@@ -42,7 +43,7 @@ class DeviceCapabilitySnapshotProvider internal constructor(
                 sdkInt = Build.VERSION.SDK_INT,
                 displayHdrTypes = captureDisplayHdrTypes(context),
                 videoDecode = captureVideoDecodeCapabilities(),
-                audioOutput = captureAudioOutputCapabilities(context),
+                audioOutput = captureAudioOutputCapabilities(context, playerSettings),
                 capturedAtMs = nowMs()
             )
         }.getOrNull()
@@ -99,8 +100,14 @@ internal fun normalizeHdrTypes(supportedHdrTypes: IntArray): Set<DeviceHdrType> 
     }
 }
 
-internal fun captureAudioOutputCapabilities(context: Context): DeviceAudioOutputCapabilities {
-    val detected = AudioCapabilities.getCapabilities(context, AudioAttributes.DEFAULT, null)
+internal fun captureAudioOutputCapabilities(
+    context: Context,
+    playerSettings: PlayerSettings = PlayerSettings()
+): DeviceAudioOutputCapabilities {
+    val detected = buildBenchmarkAudioCapabilities(
+        context = context,
+        playerSettings = playerSettings
+    )
     return DeviceAudioOutputCapabilities(
         ac3 = buildAudioEncodingSupport(detected, C.ENCODING_AC3),
         eac3 = buildAudioEncodingSupport(
@@ -123,6 +130,88 @@ internal fun captureAudioOutputCapabilities(context: Context): DeviceAudioOutput
             C.ENCODING_DTS_HD,
             passthroughEncodings = intArrayOf(C.ENCODING_DTS_HD, C.ENCODING_DTS_UHD_P2)
         )
+    )
+}
+
+@Suppress("DEPRECATION")
+internal fun buildBenchmarkAudioCapabilities(
+    context: Context,
+    playerSettings: PlayerSettings = PlayerSettings()
+): AudioCapabilities {
+    applyBenchmarkAudioCapabilitySettings(playerSettings)
+    val detected = AudioCapabilities.getCapabilities(context, AudioAttributes.DEFAULT, null)
+    return AudioCapabilities(
+        buildBenchmarkSupportedEncodings(detected::supportsEncoding),
+        detected.maxChannelCount
+    )
+}
+
+internal fun buildBenchmarkSupportedEncodings(
+    supportsEncoding: (Int) -> Boolean
+): IntArray {
+    val supportedEncodings = mutableListOf<Int>()
+    BENCHMARK_AUDIO_ENCODINGS.forEach { encoding ->
+        if (supportsEncoding(encoding)) {
+            supportedEncodings += encoding
+        }
+    }
+    if (supportsEncoding(C.ENCODING_E_AC3_JOC) &&
+        C.ENCODING_E_AC3 !in supportedEncodings
+    ) {
+        supportedEncodings += C.ENCODING_E_AC3
+    }
+    if ((supportsEncoding(C.ENCODING_DTS_HD) ||
+            supportsEncoding(C.ENCODING_DTS_UHD_P2)) &&
+        C.ENCODING_DTS !in supportedEncodings
+    ) {
+        supportedEncodings += C.ENCODING_DTS
+    }
+    return supportedEncodings.toIntArray()
+}
+
+internal fun applyBenchmarkAudioCapabilitySettings(playerSettings: PlayerSettings) {
+    AudioCapabilities.setExperimentalFireOsIecPassthroughEnabled(
+        playerSettings.experimentalDtsIecPassthroughEnabled
+    )
+    AudioCapabilities.setFireOsCompatibilityFallbackEnabled(false)
+    AudioCapabilities.setIecPackerAc3PassthroughEnabled(
+        playerSettings.iecPackerAc3PassthroughEnabled
+    )
+    AudioCapabilities.setIecPackerAc3TranscodeEnabled(
+        playerSettings.iecPackerAc3TranscodeEnabled
+    )
+    AudioCapabilities.setIecPackerEac3PassthroughEnabled(
+        playerSettings.iecPackerEac3PassthroughEnabled
+    )
+    AudioCapabilities.setIecPackerDtsPassthroughEnabled(
+        playerSettings.iecPackerDtsPassthroughEnabled
+    )
+    AudioCapabilities.setIecPackerTruehdPassthroughEnabled(
+        playerSettings.iecPackerTruehdPassthroughEnabled
+    )
+    AudioCapabilities.setIecPackerDtshdPassthroughEnabled(
+        playerSettings.iecPackerDtshdPassthroughEnabled
+    )
+    AudioCapabilities.setIecPackerDtshdCoreFallbackEnabled(
+        playerSettings.iecPackerDtshdCoreFallbackEnabled
+    )
+    AudioCapabilities.setIecPackerAudioConfig(
+        playerSettings.iecPackerAudioConfig
+    )
+    AudioCapabilities.setIecPackerAudioDevice(
+        playerSettings.iecPackerAudioDevice
+    )
+    AudioCapabilities.setIecPackerPassthroughDevice(
+        playerSettings.iecPackerPassthroughDevice
+    )
+    AudioCapabilities.setIecPackerMaxPcmChannelLayout(
+        playerSettings.iecPackerMaxPcmChannelLayout.kodiChannelLayoutValue
+    )
+    AudioCapabilities.setFireOsIecSuperviseAudioDelayEnabled(
+        playerSettings.fireOsIecSuperviseAudioDelayEnabled
+    )
+    AudioCapabilities.setFireOsIecVerboseLoggingEnabled(
+        playerSettings.fireOsIecVerboseLoggingEnabled
     )
 }
 
@@ -191,4 +280,14 @@ private val SOFTWARE_CODEC_NAME_PREFIXES = listOf(
     "OMX.ffmpeg.",
     "c2.android.",
     "c2.google."
+)
+
+private val BENCHMARK_AUDIO_ENCODINGS = intArrayOf(
+    C.ENCODING_PCM_16BIT,
+    C.ENCODING_AC3,
+    C.ENCODING_AC4,
+    C.ENCODING_DTS,
+    C.ENCODING_E_AC3_JOC,
+    C.ENCODING_E_AC3,
+    C.ENCODING_DOLBY_TRUEHD
 )

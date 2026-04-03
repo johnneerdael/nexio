@@ -18,6 +18,10 @@ class ShadowAutoPlayDecisionLoggerTest {
         assertEquals(1, root.get("event_version").asInt)
         assertEquals("shadow_autoplay_decision", root.get("event_type").asString)
         assertEquals("rd_stream", root.getAsJsonObject("selected").get("streamKey").asString)
+        assertEquals(
+            "pm_hdr",
+            root.getAsJsonObject("selectedNonDolbyVisionFallback").get("streamKey").asString
+        )
         assertEquals(1, root.getAsJsonArray("winners").size())
         assertEquals(1, root.getAsJsonArray("rejected").size())
     }
@@ -51,6 +55,7 @@ class ShadowAutoPlayDecisionLoggerTest {
                 averageBitrateMbps = 45.0,
                 releaseType = "remux",
                 lowQuality4k = false,
+                realismRatio = 1.12,
                 content = ShadowContentScoreBreakdown(
                     resolutionPoints = 28,
                     audioPoints = 24,
@@ -58,7 +63,17 @@ class ShadowAutoPlayDecisionLoggerTest {
                     codecPoints = 6,
                     releaseTypePoints = 10,
                     bitrateQualityPoints = 24,
-                    lowQuality4kPenalty = 0
+                    synergyPoints = 10,
+                    penaltyPoints = 0,
+                    lowQuality4kPenalty = 0,
+                    resolutionTier = "uhd_2160",
+                    releaseTypeTier = "remux",
+                    codecTier = "hevc_hw",
+                    hdrTier = "dolby_vision",
+                    audioTier = "truehd_atmos",
+                    audioSupportTier = "full_immersive_passthrough",
+                    hdrSupportTier = "full",
+                    realismRatio = 1.12
                 ),
                 transport = ShadowTransportScoreBreakdown(
                     provider = DebridBenchmarkProvider.REAL_DEBRID,
@@ -109,6 +124,12 @@ class ShadowAutoPlayDecisionLoggerTest {
                 )
             ),
             selected = selected,
+            selectedNonDolbyVisionFallback = selected.copy(
+                streamKey = "pm_hdr",
+                provider = DebridBenchmarkProvider.PREMIUMIZE,
+                hdrTags = listOf("HDR10"),
+                audioTags = listOf("TrueHD")
+            ),
             timingsMs = 18L
         )
     }

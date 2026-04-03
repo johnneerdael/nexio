@@ -1,0 +1,215 @@
+{
+  "datasetVersion": 1,
+  "scenarios": [
+    {
+      "id": "dtshd-core-vs-pcm-vs-passthrough",
+      "name": "DTS-HD passthrough beats PCM fallback and DTS core",
+      "request": {
+        "videoId": "tt123",
+        "contentType": "movie",
+        "title": "Example",
+        "runtimeMinutes": 120
+      },
+      "benchmarks": [
+        {
+          "provider": "REAL_DEBRID",
+          "measuredAtMs": 42,
+          "summary": {
+            "startupTimeMs": 140,
+            "sustainedThroughputMbps": 200.0,
+            "transferredBytes": 2048,
+            "elapsedMs": 120000
+          },
+          "terminationReason": "COMPLETED",
+          "device": {
+            "model": "Device",
+            "manufacturer": "NVIDIA",
+            "sdkInt": 35,
+            "displayHdrTypes": [
+              "DOLBY_VISION",
+              "HDR10",
+              "HDR10_PLUS"
+            ],
+            "videoDecode": {
+              "h264": {
+                "hardwareAccelerated": true,
+                "softwareOnlyAvailable": false,
+                "secureSupported": true
+              },
+              "hevc": {
+                "hardwareAccelerated": true,
+                "softwareOnlyAvailable": false,
+                "secureSupported": true
+              },
+              "av1": {
+                "hardwareAccelerated": false,
+                "softwareOnlyAvailable": true,
+                "secureSupported": false
+              },
+              "dolbyVision": {
+                "hardwareAccelerated": true,
+                "softwareOnlyAvailable": false,
+                "secureSupported": true
+              }
+            },
+            "audioOutput": {
+              "ac3": {
+                "supported": true,
+                "passthroughLikely": true
+              },
+              "eac3": {
+                "supported": false,
+                "passthroughLikely": false
+              },
+              "truehd": {
+                "supported": true,
+                "passthroughLikely": false
+              },
+              "dts": {
+                "supported": true,
+                "passthroughLikely": true
+              },
+              "dtshd": {
+                "supported": true,
+                "passthroughLikely": true
+              }
+            },
+            "capturedAtMs": 40
+          },
+          "direct": {
+            "startup": {
+              "initialTtfbMs": 180,
+              "startupFailureRate": 0.0
+            },
+            "sustained": {
+              "averageThroughputMbps": 160.0,
+              "derivedAverageThroughputMbps": 160.0,
+              "actionable": true,
+              "p10ThroughputMbps": 150.0,
+              "p50ThroughputMbps": 160.0,
+              "peakThroughputMbps": 175.0,
+              "throughputStddevMbps": 6.0,
+              "throughputCv": 0.05,
+              "stallCount": 0,
+              "maxReadGapMs": 150,
+              "bytesTransferred": 2048,
+              "elapsedMs": 120000
+            },
+            "seek": {
+              "seekTtfbP50Ms": 280,
+              "seekTtfbP95Ms": 340,
+              "seekTtfbP99Ms": 420,
+              "seekTtfbStddevMs": 20.0,
+              "seekFailRate": 0.0
+            },
+            "decision": {
+              "safeSustainedBudgetMbps": 127.5,
+              "actionable": true
+            },
+            "rawSamples": {}
+          },
+          "optimized": {
+            "startup": {
+              "initialTtfbMs": 140,
+              "startupFailureRate": 0.0
+            },
+            "sustained": {
+              "averageThroughputMbps": 195.0,
+              "derivedAverageThroughputMbps": 195.0,
+              "actionable": true,
+              "p10ThroughputMbps": 180.0,
+              "p50ThroughputMbps": 195.0,
+              "peakThroughputMbps": 210.0,
+              "throughputStddevMbps": 6.0,
+              "throughputCv": 0.05,
+              "stallCount": 0,
+              "maxReadGapMs": 150,
+              "bytesTransferred": 2048,
+              "elapsedMs": 120000
+            },
+            "seek": {
+              "seekTtfbP50Ms": 180,
+              "seekTtfbP95Ms": 240,
+              "seekTtfbP99Ms": 320,
+              "seekTtfbStddevMs": 20.0,
+              "seekFailRate": 0.0
+            },
+            "decision": {
+              "safeSustainedBudgetMbps": 153.0,
+              "actionable": true
+            },
+            "rawSamples": {}
+          },
+          "comparison": {
+            "sustainedWinner": "OPTIMIZED",
+            "seekWinner": "OPTIMIZED",
+            "stabilityWinner": "OPTIMIZED"
+          },
+          "session": {
+            "benchmarkVersion": 3,
+            "executionOrder": [],
+            "totalElapsedMs": 240000
+          }
+        }
+      ],
+      "streams": [
+        {
+          "streamKey": "dtshd_passthrough",
+          "providerId": "RD",
+          "resolution": "2160p",
+          "quality": "BluRay Remux",
+          "encode": "HEVC",
+          "sizeBytes": 45097156608,
+          "durationMs": 7200000,
+          "visualTags": [],
+          "audioTags": [
+            "DTS-HD"
+          ]
+        },
+        {
+          "streamKey": "truehd_pcm",
+          "providerId": "RD",
+          "resolution": "2160p",
+          "quality": "BluRay Remux",
+          "encode": "HEVC",
+          "sizeBytes": 45097156608,
+          "durationMs": 7200000,
+          "visualTags": [],
+          "audioTags": [
+            "Atmos",
+            "TrueHD"
+          ]
+        },
+        {
+          "streamKey": "dts_core",
+          "providerId": "RD",
+          "resolution": "2160p",
+          "quality": "BluRay Remux",
+          "encode": "HEVC",
+          "sizeBytes": 45097156608,
+          "durationMs": 7200000,
+          "visualTags": [],
+          "audioTags": [
+            "DTS"
+          ]
+        }
+      ],
+      "expectedWinnerStreamKey": "dtshd_passthrough",
+      "acceptableWinnerKeys": [
+        "dtshd_passthrough"
+      ],
+      "preferredPairs": [
+        {
+          "preferredStreamKey": "dtshd_passthrough",
+          "otherStreamKey": "truehd_pcm",
+          "reason": "full HD passthrough beats PCM fallback here"
+        },
+        {
+          "preferredStreamKey": "truehd_pcm",
+          "otherStreamKey": "dts_core",
+          "reason": "PCM multichannel beats DTS core"
+        }
+      ]
+    }
+  ]
+}
