@@ -42,9 +42,9 @@ class DebridConfigBenchmarkServiceTest {
         assertTrue(service.start(DebridBenchmarkProvider.REAL_DEBRID))
         val result = persisted.await()
 
-        assertEquals(9, executedCandidates.size)
+        assertEquals(12, executedCandidates.size)
         assertTrue(executedCandidates.all { it.directUrl == candidate.directUrl })
-        assertEquals(9, result.profiles.size)
+        assertEquals(12, result.profiles.size)
     }
 
     @Test
@@ -97,7 +97,7 @@ class DebridConfigBenchmarkServiceTest {
 
         assertNull(result.summary.bestProfile)
         assertEquals(0, result.summary.successfulProfileCount)
-        assertEquals(9, result.profiles.size)
+        assertEquals(12, result.profiles.size)
     }
 
     @Test
@@ -126,8 +126,8 @@ class DebridConfigBenchmarkServiceTest {
         assertTrue(service.start(DebridBenchmarkProvider.REAL_DEBRID))
         val result = persisted.await()
 
-        assertEquals(9, executedSnapshots.size)
-        assertEquals(9, result.profiles.size)
+        assertEquals(12, executedSnapshots.size)
+        assertEquals(12, result.profiles.size)
         assertEquals(
             DebridConfigBenchmarkStatus.FAILED,
             result.profiles.first { it.parallelConnectionCount == 4 && it.chunkSizeMb == 8 }.status

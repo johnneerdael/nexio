@@ -104,7 +104,8 @@ sealed interface DebridConfigBenchmarkRuntimeState {
         val provider: DebridBenchmarkProvider,
         val currentProfile: DebridConfigBenchmarkProfileMetadata? = null,
         val completedProfiles: Int = 0,
-        val totalProfiles: Int = 0
+        val totalProfiles: Int = 0,
+        val summary: DebridBenchmarkSummary? = null
     ) : DebridConfigBenchmarkRuntimeState
 }
 
