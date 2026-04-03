@@ -212,16 +212,8 @@ class DebridBenchmarkSessionRunner internal constructor(
         if (optimized.isActionableForAutoplay() && !direct.isActionableForAutoplay()) {
             return DebridBenchmarkTransportMode.OPTIMIZED
         }
-        val directScore = listOf(
-            direct.sustained.throughputCv ?: Double.POSITIVE_INFINITY,
-            (direct.sustained.stallCount ?: Int.MAX_VALUE).toDouble(),
-            (direct.sustained.maxReadGapMs ?: Long.MAX_VALUE).toDouble()
-        )
-        val optimizedScore = listOf(
-            optimized.sustained.throughputCv ?: Double.POSITIVE_INFINITY,
-            (optimized.sustained.stallCount ?: Int.MAX_VALUE).toDouble(),
-            (optimized.sustained.maxReadGapMs ?: Long.MAX_VALUE).toDouble()
-        )
+        val directScore = direct.playbackStabilityVector()
+        val optimizedScore = optimized.playbackStabilityVector()
         return if (compareScoreVectors(optimizedScore, directScore) < 0) {
             DebridBenchmarkTransportMode.OPTIMIZED
         } else {

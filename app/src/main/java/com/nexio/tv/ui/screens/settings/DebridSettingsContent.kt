@@ -67,6 +67,7 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
 import com.nexio.tv.data.repository.benchmark.safeSustainedBudgetMbps
+import com.nexio.tv.data.repository.benchmark.playbackStability
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -898,16 +899,11 @@ private fun formatBenchmarkWinner(
 private fun formatBenchmarkStability(
     profile: com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportProfile
 ): String {
-    val cv = profile.sustained.throughputCv
-    val stalls = profile.sustained.stallCount
-    val gap = profile.sustained.maxReadGapMs
-    return when {
-        cv != null && stalls != null && gap != null && cv <= 0.05 && stalls == 0 && gap <= 200L ->
-            "Excellent"
-        cv != null && stalls != null && gap != null && cv <= 0.08 && stalls <= 1 && gap <= 350L ->
-            "Stable"
-        cv != null && cv <= 0.12 -> "Variable"
-        else -> "Unstable"
+    return when (profile.playbackStability()) {
+        com.nexio.tv.data.repository.benchmark.DebridBenchmarkPlaybackStability.EXCELLENT -> "Excellent"
+        com.nexio.tv.data.repository.benchmark.DebridBenchmarkPlaybackStability.STABLE -> "Stable"
+        com.nexio.tv.data.repository.benchmark.DebridBenchmarkPlaybackStability.VARIABLE -> "Variable"
+        com.nexio.tv.data.repository.benchmark.DebridBenchmarkPlaybackStability.UNSTABLE -> "Unstable"
     }
 }
 
