@@ -8,7 +8,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.google.gson.Gson
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkCandidateMetadata
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportConfigSnapshot
@@ -16,6 +17,7 @@ import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkProfileResult
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkResult
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkSessionSummary
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkStatus
+import com.nexio.tv.data.repository.benchmark.toJsonObject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
 import javax.inject.Inject
@@ -32,8 +34,7 @@ private val Context.debridConfigBenchmarkDataStore: DataStore<Preferences> by pr
 
 @Singleton
 class DebridConfigBenchmarkStore internal constructor(
-    private val dataStore: DataStore<Preferences>,
-    private val gson: Gson = Gson()
+    private val dataStore: DataStore<Preferences>
 ) {
     @Inject
     constructor(@ApplicationContext context: Context) : this(context.debridConfigBenchmarkDataStore)
@@ -57,7 +58,7 @@ class DebridConfigBenchmarkStore internal constructor(
     suspend fun saveLatest(result: DebridConfigBenchmarkResult) {
         require(result.isValid()) { "Invalid DebridConfigBenchmarkResult" }
         dataStore.edit { preferences ->
-            preferences[latestResultKey(result.provider)] = gson.toJson(result)
+            preferences[latestResultKey(result.provider)] = result.toJsonObject().toString()
         }
     }
 
@@ -74,12 +75,76 @@ class DebridConfigBenchmarkStore internal constructor(
         raw: String,
         expectedProvider: DebridBenchmarkProvider
     ): DebridConfigBenchmarkResult? {
-        val parsed = runCatching {
-            gson.fromJson(raw, DebridConfigBenchmarkResult::class.java)
-        }.getOrNull() ?: return null
-        if (parsed.provider != expectedProvider) return null
-        return parsed.takeIf { it.isValid() }
+        val root = runCatching { JsonParser.parseString(raw).asJsonObject }.getOrNull() ?: return null
+        return try {
+            val provider = root.stringOrNull("provider")
+                ?.let(DebridBenchmarkProvider::fromStorageKey)
+                ?: return null
+            if (provider != expectedProvider) return null
+
+            val measuredAtMs = root.strictIntegralLongOrNull("measuredAtMs")?.takeIf { it > 0L } ?: return null
+            val candidate = root.optionalObject("candidate")?.let(::parseCandidate)
+                ?: DebridBenchmarkCandidateMetadata()
+            val summary = root.requiredObject("summary").let(::parseSummary)
+            val profiles = root.requiredArray("orderedProfileResults").map { element ->
+                parseProfileResult(element.asJsonObject)
+            }
+
+            DebridConfigBenchmarkResult(
+                provider = provider,
+                measuredAtMs = measuredAtMs,
+                candidate = candidate,
+                summary = summary,
+                profiles = profiles
+            ).takeIf { it.isValid() }
+        } catch (_: InvalidDebridConfigBenchmarkPayload) {
+            null
+        }
     }
+}
+
+private fun parseCandidate(candidateJson: JsonObject): DebridBenchmarkCandidateMetadata {
+    return DebridBenchmarkCandidateMetadata(
+        filename = candidateJson.stringOrNull("filename"),
+        sizeBytes = candidateJson.optionalStrictIntegralLongOrNull("sizeBytes"),
+        host = candidateJson.stringOrNull("host"),
+        directUrlFingerprint = candidateJson.stringOrNull("directUrlFingerprint")
+    )
+}
+
+private fun parseSummary(summaryJson: JsonObject): DebridConfigBenchmarkSessionSummary {
+    return DebridConfigBenchmarkSessionSummary(
+        totalProfileCount = summaryJson.strictIntegralIntOrThrow("totalProfiles"),
+        successfulProfileCount = summaryJson.strictIntegralIntOrThrow("successfulProfiles"),
+        failedProfileCount = summaryJson.strictIntegralIntOrThrow("failedProfiles"),
+        unsupportedProfileCount = summaryJson.strictIntegralIntOrThrow("unsupportedProfiles"),
+        totalElapsedMs = summaryJson.optionalStrictIntegralLongOrNull("totalElapsedMs"),
+        bestProfile = summaryJson.optionalObject("bestProfile")?.let(::parseProfileResult)
+    )
+}
+
+private fun parseProfileResult(profileJson: JsonObject): DebridConfigBenchmarkProfileResult {
+    val profileMetadata = profileJson.requiredObject("profile")
+    val configSnapshot = profileJson.optionalObject("configSnapshot")?.let { snapshotJson ->
+        DebridBenchmarkTransportConfigSnapshot(
+            useParallelConnections = snapshotJson.optionalStrictBooleanOrNull("useParallelConnections"),
+            parallelConnectionCount = snapshotJson.optionalStrictIntegralIntOrNull("parallelConnectionCount"),
+            parallelChunkSizeMb = snapshotJson.optionalStrictIntegralIntOrNull("parallelChunkSizeMb")
+        )
+    }
+    return DebridConfigBenchmarkProfileResult(
+        parallelConnectionCount = profileMetadata.strictIntegralIntOrThrow("parallelConnectionCount"),
+        chunkSizeMb = profileMetadata.strictIntegralIntOrThrow("chunkSizeMb"),
+        status = profileJson.stringOrNull("status")
+            ?.let(DebridConfigBenchmarkStatus::fromWireKey)
+            ?: throw InvalidDebridConfigBenchmarkPayload(),
+        averageThroughputMbps = profileJson.optionalStrictDoubleOrNull("averageThroughputMbps"),
+        transferredBytes = profileJson.optionalStrictIntegralLongOrNull("transferredBytes"),
+        elapsedMs = profileJson.optionalStrictIntegralLongOrNull("elapsedMs"),
+        failureReason = profileJson.stringOrNull("failureReason"),
+        unsupportedReason = profileJson.stringOrNull("unsupportedReason"),
+        configSnapshot = configSnapshot
+    )
 }
 
 private fun DebridConfigBenchmarkResult.isValid(): Boolean {
@@ -141,3 +206,74 @@ private fun DebridBenchmarkTransportConfigSnapshot.isValid(): Boolean {
     return parallelConnectionCount?.let { it > 0 } != false &&
         parallelChunkSizeMb?.let { it > 0 } != false
 }
+
+private fun JsonObject.stringOrNull(key: String): String? {
+    return runCatching {
+        get(key)?.takeIf { !it.isJsonNull }?.asString
+    }.getOrNull()
+}
+
+private fun JsonObject.optionalObject(key: String): JsonObject? {
+    val value = get(key) ?: return null
+    if (value.isJsonNull) return null
+    return value.takeIf { it.isJsonObject }?.asJsonObject ?: throw InvalidDebridConfigBenchmarkPayload()
+}
+
+private fun JsonObject.requiredObject(key: String): JsonObject {
+    return optionalObject(key) ?: throw InvalidDebridConfigBenchmarkPayload()
+}
+
+private fun JsonObject.requiredArray(key: String) =
+    get(key)?.takeIf { it.isJsonArray }?.asJsonArray
+        ?: throw InvalidDebridConfigBenchmarkPayload()
+
+private fun JsonObject.strictIntegralLongOrNull(key: String): Long? {
+    val primitive = get(key)?.takeIf { it.isJsonPrimitive }?.asJsonPrimitive ?: return null
+    if (!primitive.isNumber) return null
+    val text = primitive.asString.trim()
+    if (!text.matches(INTEGRAL_NUMBER_REGEX)) return null
+    return text.toLongOrNull()
+}
+
+private fun JsonObject.optionalStrictIntegralLongOrNull(key: String): Long? {
+    if (!has(key) || get(key)?.isJsonNull == true) return null
+    return strictIntegralLongOrNull(key)?.takeIf { it >= 0L } ?: throw InvalidDebridConfigBenchmarkPayload()
+}
+
+private fun JsonObject.strictIntegralIntOrThrow(key: String): Int {
+    return strictIntegralLongOrNull(key)
+        ?.takeIf { it in 0..Int.MAX_VALUE.toLong() }
+        ?.toInt()
+        ?: throw InvalidDebridConfigBenchmarkPayload()
+}
+
+private fun JsonObject.optionalStrictIntegralIntOrNull(key: String): Int? {
+    if (!has(key) || get(key)?.isJsonNull == true) return null
+    return strictIntegralLongOrNull(key)
+        ?.takeIf { it in 0..Int.MAX_VALUE.toLong() }
+        ?.toInt()
+        ?: throw InvalidDebridConfigBenchmarkPayload()
+}
+
+private fun JsonObject.optionalStrictDoubleOrNull(key: String): Double? {
+    if (!has(key) || get(key)?.isJsonNull == true) return null
+    val primitive = get(key)?.takeIf { it.isJsonPrimitive }?.asJsonPrimitive
+        ?: throw InvalidDebridConfigBenchmarkPayload()
+    if (!primitive.isNumber) throw InvalidDebridConfigBenchmarkPayload()
+    val value = runCatching { primitive.asDouble }.getOrNull()
+        ?: throw InvalidDebridConfigBenchmarkPayload()
+    return value.takeIf { it.isFinite() && it >= 0.0 }
+        ?: throw InvalidDebridConfigBenchmarkPayload()
+}
+
+private fun JsonObject.optionalStrictBooleanOrNull(key: String): Boolean? {
+    if (!has(key) || get(key)?.isJsonNull == true) return null
+    val primitive = get(key)?.takeIf { it.isJsonPrimitive }?.asJsonPrimitive
+        ?: throw InvalidDebridConfigBenchmarkPayload()
+    if (!primitive.isBoolean) throw InvalidDebridConfigBenchmarkPayload()
+    return primitive.asBoolean
+}
+
+private val INTEGRAL_NUMBER_REGEX = Regex("^-?\\d+$")
+
+private class InvalidDebridConfigBenchmarkPayload : IllegalArgumentException()
