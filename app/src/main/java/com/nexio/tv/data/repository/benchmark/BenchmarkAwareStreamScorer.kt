@@ -351,8 +351,13 @@ class BenchmarkAwareStreamScorer internal constructor(
         codecTier: ShadowVideoCodecTier,
         device: DeviceCapabilitySnapshot?
     ): ShadowContentScoreBreakdown {
-        val hdrTier = resolveHdrTier(parsed.visualTags)
-        val hdrSupportTier = resolveHdrSupportLevel(hdrTier, device)
+        val hdrPolicy = resolveHdrScoringPolicy(
+            parsed = parsed,
+            releaseType = releaseType,
+            device = device
+        )
+        val hdrTier = hdrPolicy.effectiveHdrTier
+        val hdrSupportTier = hdrPolicy.hdrSupportTier
         val audioTier = resolveAudioTier(parsed.audioTags)
         val audioSupportTier = resolveAudioSupportTier(audioTier, device)
         val realismRatio = bitrateRealismRatio(
@@ -391,7 +396,7 @@ class BenchmarkAwareStreamScorer internal constructor(
             audioSupportTier = audioSupportTier,
             realismRatio = realismRatio
         )
-        val penaltyPoints = lowQuality4kPenalty + additionalPenaltyPoints(
+        val penaltyPoints = lowQuality4kPenalty + hdrPolicy.additionalPenalty + additionalPenaltyPoints(
             resolutionTier = resolutionTier,
             releaseType = releaseType,
             codecTier = codecTier,
@@ -538,6 +543,36 @@ class BenchmarkAwareStreamScorer internal constructor(
         }
     }
 
+    private fun resolveHdrScoringPolicy(
+        parsed: ParsedStreamInfo,
+        releaseType: ShadowReleaseType,
+        device: DeviceCapabilitySnapshot?
+    ): ShadowHdrScoringPolicy {
+        val originalHdrTier = resolveHdrTier(parsed.visualTags)
+        val originalSupport = resolveHdrSupportLevel(originalHdrTier, device)
+        if (originalHdrTier != ShadowHdrTier.DOLBY_VISION ||
+            originalSupport != ShadowSupportLevel.UNSUPPORTED
+        ) {
+            return ShadowHdrScoringPolicy(
+                effectiveHdrTier = originalHdrTier,
+                hdrSupportTier = originalSupport
+            )
+        }
+
+        return if (releaseType == ShadowReleaseType.WEBDL) {
+            ShadowHdrScoringPolicy(
+                effectiveHdrTier = ShadowHdrTier.SDR,
+                hdrSupportTier = ShadowSupportLevel.FULL,
+                additionalPenalty = 12
+            )
+        } else {
+            ShadowHdrScoringPolicy(
+                effectiveHdrTier = ShadowHdrTier.HDR10,
+                hdrSupportTier = resolveHdrSupportLevel(ShadowHdrTier.HDR10, device)
+            )
+        }
+    }
+
     private fun resolveAudioSupportTier(
         audioTier: ShadowAudioTier,
         device: DeviceCapabilitySnapshot?
@@ -658,6 +693,12 @@ private data class ShadowTransportOption(
         }
     }
 }
+
+private data class ShadowHdrScoringPolicy(
+    val effectiveHdrTier: ShadowHdrTier,
+    val hdrSupportTier: ShadowSupportLevel,
+    val additionalPenalty: Int = 0
+)
 
 private data class EitherSuccessOrReject<T>(
     val success: T? = null,

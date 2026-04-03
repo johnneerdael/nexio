@@ -453,6 +453,114 @@ class BenchmarkAwareStreamScorerTest {
         assertNull(event.selectedNonDolbyVisionFallback)
     }
 
+    @Test
+    fun `webdl dolby vision scores below sdr when display does not advertise dv`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            device = deviceSnapshot(
+                displayHdrTypes = setOf(DeviceHdrType.HDR10, DeviceHdrType.HDR10_PLUS, DeviceHdrType.HLG)
+            )
+        )
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "webdl_dv",
+                    providerId = "RD",
+                    quality = "WEB-DL",
+                    sizeBytes = gib(20.0),
+                    visualTags = listOf("DV"),
+                    audioTags = listOf("DD+")
+                ),
+                streamCard(
+                    streamKey = "sdr_webdl",
+                    providerId = "RD",
+                    quality = "WEB-DL",
+                    sizeBytes = gib(20.0),
+                    visualTags = emptyList(),
+                    audioTags = listOf("DD+")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark)
+        )
+
+        val webdlDv = event.winners.single { it.streamKey == "webdl_dv" }
+        val sdr = event.winners.single { it.streamKey == "sdr_webdl" }
+        assertTrue(webdlDv.finalScore < sdr.finalScore)
+        assertEquals("sdr_webdl", event.selected?.streamKey)
+    }
+
+    @Test
+    fun `non webdl dolby vision falls back to hdr10 equivalent when display lacks dv`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            device = deviceSnapshot(
+                displayHdrTypes = setOf(DeviceHdrType.HDR10, DeviceHdrType.HDR10_PLUS, DeviceHdrType.HLG)
+            )
+        )
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "remux_dv",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    sizeBytes = gib(42.0),
+                    visualTags = listOf("DV"),
+                    audioTags = listOf("Atmos", "TrueHD")
+                ),
+                streamCard(
+                    streamKey = "remux_hdr10",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    sizeBytes = gib(42.0),
+                    visualTags = listOf("HDR10"),
+                    audioTags = listOf("Atmos", "TrueHD")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark)
+        )
+
+        val remuxDv = event.winners.single { it.streamKey == "remux_dv" }
+        val remuxHdr10 = event.winners.single { it.streamKey == "remux_hdr10" }
+        assertEquals(remuxHdr10.finalScore, remuxDv.finalScore)
+        assertEquals(remuxHdr10.contentQualityScore, remuxDv.contentQualityScore)
+    }
+
+    @Test
+    fun `dolby vision still scores above hdr10 when display advertises dv`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            device = deviceSnapshot(
+                displayHdrTypes = setOf(DeviceHdrType.DOLBY_VISION, DeviceHdrType.HDR10)
+            )
+        )
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "remux_dv",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    sizeBytes = gib(42.0),
+                    visualTags = listOf("DV"),
+                    audioTags = listOf("Atmos", "TrueHD")
+                ),
+                streamCard(
+                    streamKey = "remux_hdr10",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    sizeBytes = gib(42.0),
+                    visualTags = listOf("HDR10"),
+                    audioTags = listOf("Atmos", "TrueHD")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark)
+        )
+
+        assertEquals("remux_dv", event.selected?.streamKey)
+    }
+
     private fun request(runtimeMinutes: Int = 120): ShadowRequestContext {
         return ShadowRequestContext(
             requestId = "req-1",
@@ -632,6 +740,7 @@ class BenchmarkAwareStreamScorerTest {
     }
 
     private fun deviceSnapshot(
+        displayHdrTypes: Set<DeviceHdrType> = setOf(DeviceHdrType.DOLBY_VISION, DeviceHdrType.HDR10),
         truehdSupported: Boolean = true,
         truehdPassthrough: Boolean = true,
         eac3Supported: Boolean = true,
@@ -647,7 +756,7 @@ class BenchmarkAwareStreamScorerTest {
             model = "Shield",
             manufacturer = "NVIDIA",
             sdkInt = 35,
-            displayHdrTypes = setOf(DeviceHdrType.DOLBY_VISION, DeviceHdrType.HDR10),
+            displayHdrTypes = displayHdrTypes,
             videoDecode = DeviceVideoDecodeCapabilities(
                 h264 = CodecSupport(true, false, true),
                 hevc = CodecSupport(true, false, true),
