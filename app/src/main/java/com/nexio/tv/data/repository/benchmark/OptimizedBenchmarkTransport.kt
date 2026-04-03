@@ -46,7 +46,8 @@ class OptimizedBenchmarkTransport internal constructor(
     private val seekProbeBytes: Long,
     private val readBufferSize: Int,
     private val maxRecoverableFailures: Int,
-    private val sleepMs: (Long) -> Unit
+    private val sleepMs: (Long) -> Unit,
+    private val noProgressFailureTimeoutMs: Long
 ) {
 
     @Inject
@@ -60,7 +61,8 @@ class OptimizedBenchmarkTransport internal constructor(
         seekProbeBytes = 256L * 1024L,
         readBufferSize = 256 * 1024,
         maxRecoverableFailures = 8,
-        sleepMs = { durationMs -> Thread.sleep(durationMs) }
+        sleepMs = { durationMs -> Thread.sleep(durationMs) },
+        noProgressFailureTimeoutMs = 20_000L
     )
 
     suspend fun runProfile(
@@ -76,7 +78,7 @@ class OptimizedBenchmarkTransport internal constructor(
         val sustainedReadableSourceFactory = factoryBuilder.create(
             candidate = candidate,
             configSnapshot = configSnapshot,
-            allowStartupBootstrapReuse = false,
+            allowStartupBootstrapReuse = true,
             transportSampleTimeMs = { nanosToMillis(nanoTimeNs()) },
             onTransportBytesDownloaded = { bytesRead, sampleAtMs ->
                 collector.recordTransportBytesRead(bytesRead = bytesRead, sampleAtMs = sampleAtMs)
@@ -140,6 +142,7 @@ class OptimizedBenchmarkTransport internal constructor(
         var recoverableFailureCount = 0
         var recoverableTimeoutCount = 0
         var consecutiveRecoverableFailureCount = 0
+        var lastProgressAtNs = requestStartedAtNs
 
         try {
             when (val openResult = reopenReadableSource(
@@ -148,7 +151,8 @@ class OptimizedBenchmarkTransport internal constructor(
                 position = 0L,
                 recoverableFailureCount = recoverableFailureCount,
                 recoverableTimeoutCount = recoverableTimeoutCount,
-                consecutiveRecoverableFailureCount = consecutiveRecoverableFailureCount
+                consecutiveRecoverableFailureCount = consecutiveRecoverableFailureCount,
+                lastProgressAtNs = lastProgressAtNs
             )) {
                 is ReopenResult.Failed -> {
                     return StartupAndSustainedPhaseResult(
@@ -179,7 +183,10 @@ class OptimizedBenchmarkTransport internal constructor(
                         recoverableFailureCount = recoverableFailureCount,
                         recoverableTimeoutCount = recoverableTimeoutCount
                     )
-                    if (failure.isRecoverable() && consecutiveRecoverableFailureCount < maxRecoverableFailures) {
+                    if (failure.isRecoverable() && shouldContinueRecovering(
+                            lastProgressAtNs = lastProgressAtNs,
+                            consecutiveRecoverableFailureCount = consecutiveRecoverableFailureCount
+                        )) {
                         recoverableFailureCount += 1
                         consecutiveRecoverableFailureCount += 1
                         if (failure.isTimeoutLike()) {
@@ -192,7 +199,8 @@ class OptimizedBenchmarkTransport internal constructor(
                             position = totalBytesRead,
                             recoverableFailureCount = recoverableFailureCount,
                             recoverableTimeoutCount = recoverableTimeoutCount,
-                            consecutiveRecoverableFailureCount = consecutiveRecoverableFailureCount
+                            consecutiveRecoverableFailureCount = consecutiveRecoverableFailureCount,
+                            lastProgressAtNs = lastProgressAtNs
                         )) {
                             is ReopenResult.Failed -> {
                                 return StartupAndSustainedPhaseResult(
@@ -238,6 +246,7 @@ class OptimizedBenchmarkTransport internal constructor(
                 consecutiveRecoverableFailureCount = 0
 
                 val nowNs = nanoTimeNs()
+                lastProgressAtNs = nowNs
                 if (previousReadAtNs == null) {
                     collector.recordStartup(
                         requestStartedAtMs = nanosToMillis(requestStartedAtNs),
@@ -291,7 +300,8 @@ class OptimizedBenchmarkTransport internal constructor(
         position: Long,
         recoverableFailureCount: Int,
         recoverableTimeoutCount: Int,
-        consecutiveRecoverableFailureCount: Int
+        consecutiveRecoverableFailureCount: Int,
+        lastProgressAtNs: Long
     ): ReopenResult {
         var currentFailureCount = recoverableFailureCount
         var currentTimeoutCount = recoverableTimeoutCount
@@ -314,7 +324,10 @@ class OptimizedBenchmarkTransport internal constructor(
                     recoverableFailureCount = currentFailureCount,
                     recoverableTimeoutCount = currentTimeoutCount
                 )
-                if (reopenFailure.isRecoverable() && currentConsecutiveFailureCount < maxRecoverableFailures) {
+                if (reopenFailure.isRecoverable() && shouldContinueRecovering(
+                        lastProgressAtNs = lastProgressAtNs,
+                        consecutiveRecoverableFailureCount = currentConsecutiveFailureCount
+                    )) {
                     currentFailureCount += 1
                     currentConsecutiveFailureCount += 1
                     if (reopenFailure.isTimeoutLike()) {
@@ -414,6 +427,15 @@ class OptimizedBenchmarkTransport internal constructor(
             4 -> 400L
             else -> 500L
         }
+    }
+
+    private fun shouldContinueRecovering(
+        lastProgressAtNs: Long,
+        consecutiveRecoverableFailureCount: Int
+    ): Boolean {
+        val elapsedSinceProgressMs = nanosToMillis(nanoTimeNs() - lastProgressAtNs)
+        return consecutiveRecoverableFailureCount < maxRecoverableFailures ||
+            elapsedSinceProgressMs <= noProgressFailureTimeoutMs
     }
 
     private fun nanosToMillis(valueNs: Long): Long = valueNs / 1_000_000L
