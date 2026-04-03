@@ -30,6 +30,34 @@ def test_summary_classifies_multi_worker_global_stall():
     assert summary["likely_mode"] == "multi_worker_global_stall"
 
 
+def test_summary_classifies_blocked_chunk_timed_out():
+    summary = classify_session(
+        blocked_chunk=10,
+        blocked_chunk_state="failed",
+        blocked_chunk_error_kind="inactivity_timeout",
+        completed_ahead_chunks=[11, 12],
+        worker_overlap_count=2,
+        longest_consumer_gap_ms=7000,
+        blocked_worker_id=0,
+        stalled_worker_ids=[0],
+    )
+    assert summary["likely_mode"] == "blocked_chunk_timed_out"
+
+
+def test_summary_classifies_blocked_chunk_retried_while_later_chunks_completed():
+    summary = classify_session(
+        blocked_chunk=10,
+        blocked_chunk_state="retried",
+        blocked_chunk_error_kind=None,
+        completed_ahead_chunks=[11, 12],
+        worker_overlap_count=2,
+        longest_consumer_gap_ms=7000,
+        blocked_worker_id=0,
+        stalled_worker_ids=[],
+    )
+    assert summary["likely_mode"] == "blocked_chunk_retried_while_later_chunks_completed"
+
+
 def test_telemetry_writer_serializes_datetime_and_path_in_session(tmp_path: Path):
     writer = TelemetryWriter(tmp_path)
 
