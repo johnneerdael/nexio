@@ -45,6 +45,7 @@ import com.nexio.tv.data.repository.benchmark.VideoDecoderEvidence
 import com.nexio.tv.data.repository.benchmark.toJsonObject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
+import android.util.Log
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -124,7 +125,7 @@ class DebridBenchmarkStore internal constructor(
             if (terminationReason != DebridBenchmarkTerminationReason.COMPLETED) return null
             val comparisonPayloadPresent = COMPARISON_PAYLOAD_KEYS.any(root::has)
             val candidate = root.optionalObject("candidate")?.let(::parseCandidate)
-            val device = root.optionalObject("device")?.let(::parseDeviceSnapshot)
+            val device = root.optionalObject("device")?.let(::parseDeviceSnapshotBestEffort)
             val session = root.optionalObject("session")?.let(::parseSession)
             val direct = root.optionalObject("direct")?.let(::parseTransportProfile)
             val optimized = root.optionalObject("optimized")?.let(::parseTransportProfile)
@@ -148,7 +149,11 @@ class DebridBenchmarkStore internal constructor(
                 optimized = optimized,
                 comparison = comparison
             ).takeIf { it.isCompletedAndValid() }
-        } catch (_: InvalidDebridBenchmarkPayload) {
+        } catch (error: InvalidDebridBenchmarkPayload) {
+            Log.w(
+                TAG,
+                "Failed to restore stored benchmark provider=${expectedProvider.storageKey} reason=${error.reason ?: "invalid_payload"}"
+            )
             null
         }
     }
@@ -166,7 +171,6 @@ class DebridBenchmarkStore internal constructor(
 
     private fun DebridBenchmarkResult.hasComparisonPayload(): Boolean {
         return candidate != null ||
-            device != null ||
             session != null ||
             direct != null ||
             optimized != null ||
@@ -174,7 +178,7 @@ class DebridBenchmarkStore internal constructor(
     }
 
     private fun DebridBenchmarkResult.comparisonPayloadIsValid(): Boolean {
-        if (!hasComparisonPayload()) return true
+        if (!hasComparisonPayload()) return device?.isValid() != false
         return candidate?.isValid() == true &&
             device?.isValid() != false &&
             session?.isValid() == true &&
@@ -405,6 +409,14 @@ class DebridBenchmarkStore internal constructor(
         )
     }
 
+    private fun parseDeviceSnapshotBestEffort(deviceJson: JsonObject): DeviceCapabilitySnapshot {
+        return try {
+            parseDeviceSnapshot(deviceJson)
+        } catch (_: InvalidDebridBenchmarkPayload) {
+            parseLegacyDeviceSnapshot(deviceJson)
+        }
+    }
+
     private fun parseDeviceSnapshot(deviceJson: JsonObject): DeviceCapabilitySnapshot {
         return DeviceCapabilitySnapshot(
             model = deviceJson.stringOrNull("model"),
@@ -420,6 +432,24 @@ class DebridBenchmarkStore internal constructor(
             evidence = deviceJson.optionalObject("evidence")?.let(::parseDeviceCapabilityEvidence),
             capturedAtMs = deviceJson.strictIntegralLongOrNull("capturedAtMs")?.takeIf { it > 0L }
                 ?: throw InvalidDebridBenchmarkPayload()
+        )
+    }
+
+    private fun parseLegacyDeviceSnapshot(deviceJson: JsonObject): DeviceCapabilitySnapshot {
+        return DeviceCapabilitySnapshot(
+            model = deviceJson.stringOrNull("model"),
+            manufacturer = deviceJson.stringOrNull("manufacturer"),
+            sdkInt = deviceJson.strictIntegralIntOrNull("sdkInt")?.takeIf { it > 0 }
+                ?: throw InvalidDebridBenchmarkPayload("legacy_device_sdk_missing"),
+            displayHdrTypes = deviceJson.arrayOrEmpty("displayHdrTypes").map { hdrType ->
+                hdrType.asStringOrThrow().let(DeviceHdrType::fromWireKey)
+                    ?: throw InvalidDebridBenchmarkPayload("legacy_device_hdr_invalid")
+            }.toSet(),
+            videoDecode = deviceJson.requiredObject("videoDecode").let(::parseVideoDecode),
+            audioOutput = deviceJson.requiredObject("audioOutput").let(::parseAudioOutput),
+            evidence = null,
+            capturedAtMs = deviceJson.strictIntegralLongOrNull("capturedAtMs")?.takeIf { it > 0L }
+                ?: throw InvalidDebridBenchmarkPayload("legacy_device_timestamp_missing")
         )
     }
 
@@ -750,10 +780,10 @@ class DebridBenchmarkStore internal constructor(
     }
 
     companion object {
+        private const val TAG = "DebridBenchmarkStore"
         private val INTEGRAL_NUMBER_REGEX = Regex("^-?\\d+$")
         private val COMPARISON_PAYLOAD_KEYS = setOf(
             "candidate",
-            "device",
             "session",
             "direct",
             "optimized",
@@ -761,5 +791,7 @@ class DebridBenchmarkStore internal constructor(
         )
     }
 
-    private class InvalidDebridBenchmarkPayload : IllegalArgumentException()
+    private class InvalidDebridBenchmarkPayload(
+        val reason: String? = null
+    ) : IllegalArgumentException()
 }

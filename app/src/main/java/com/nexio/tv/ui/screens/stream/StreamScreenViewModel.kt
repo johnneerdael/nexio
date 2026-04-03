@@ -1089,7 +1089,7 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     private fun latestBenchmarkSessions(): Map<DebridBenchmarkProvider, DebridBenchmarkResult> {
-        return buildMap {
+        val sessions = buildMap {
             latestRealDebridBenchmarkResult?.let {
                 put(DebridBenchmarkProvider.REAL_DEBRID, it)
             }
@@ -1097,6 +1097,25 @@ class StreamScreenViewModel @Inject constructor(
                 put(DebridBenchmarkProvider.PREMIUMIZE, it)
             }
         }
+        logShadowAutoPlayReadiness(sessions)
+        return sessions
+    }
+
+    private fun logShadowAutoPlayReadiness(
+        sessions: Map<DebridBenchmarkProvider, DebridBenchmarkResult>
+    ) {
+        val replayHasCandidates = shadowAutoPlayReplayCoordinator.hasCandidates()
+        val rdPresent = DebridBenchmarkProvider.REAL_DEBRID in sessions
+        val pmPresent = DebridBenchmarkProvider.PREMIUMIZE in sessions
+        val reason = when {
+            !replayHasCandidates -> "no_candidates"
+            !rdPresent && !pmPresent -> "no_benchmarks"
+            else -> "ready"
+        }
+        Log.i(
+            TAG,
+            "SHADOW_AUTOPLAY_READY rd=$rdPresent pm=$pmPresent hasCandidates=$replayHasCandidates reason=$reason"
+        )
     }
 
     private fun logPresentationDiagnostics(
@@ -1169,6 +1188,8 @@ internal class ShadowAutoPlayReplayCoordinator(
         latestStreams = emptyList()
         latestActiveTransportMode = null
     }
+
+    fun hasCandidates(): Boolean = latestRequest != null && latestStreams.isNotEmpty()
 }
 
 internal fun buildShadowAutoPlayDecisionEvent(
