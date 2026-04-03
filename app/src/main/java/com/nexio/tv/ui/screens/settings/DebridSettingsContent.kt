@@ -180,6 +180,12 @@ private data class DebridDialogSnapshot(
     val configBenchmarkResultDialog: DebridConfigBenchmarkResultDialogUi?
 )
 
+private data class DebridUiBaseSnapshot(
+    val connection: DebridConnectionSnapshot,
+    val benchmark: DebridBenchmarkSnapshot,
+    val configBenchmark: DebridConfigBenchmarkSnapshot
+)
+
 @Composable
 fun DebridSettingsContent(
     viewModel: DebridSettingsViewModel = hiltViewModel(),
@@ -1324,55 +1330,63 @@ class DebridSettingsViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            combine(
+            val baseState = combine(
                 connectionState,
-                benchmarkState,
-                configBenchmarkState,
-                dialogState
-            ) { connection, benchmark, configBenchmark, dialogs ->
+                benchmarkState
+            ) { connection, benchmark ->
+                connection to benchmark
+            }.combine(configBenchmarkState) { (connection, benchmark), configBenchmark ->
+                DebridUiBaseSnapshot(
+                    connection = connection,
+                    benchmark = benchmark,
+                    configBenchmark = configBenchmark
+                )
+            }
+
+            combine(baseState, dialogState) { base, dialogs ->
                 DebridUiState(
-                    realDebridMode = connection.realDebridMode,
-                    realDebridUsername = connection.realDebridUsername,
-                    realDebridUserCode = connection.realDebridUserCode,
-                    realDebridVerificationUrl = connection.realDebridVerificationUrl,
+                    realDebridMode = base.connection.realDebridMode,
+                    realDebridUsername = base.connection.realDebridUsername,
+                    realDebridUserCode = base.connection.realDebridUserCode,
+                    realDebridVerificationUrl = base.connection.realDebridVerificationUrl,
                     realDebridBenchmark = buildDebridBenchmarkUi(
                         provider = DebridBenchmarkProvider.REAL_DEBRID,
-                        isVisible = connection.realDebridMode == DebridConnectionMode.CONNECTED,
-                        latestResult = benchmark.latestRealDebridResult,
-                        activeState = benchmark.activeState,
-                        configBenchmarkActive = configBenchmark.activeState
+                        isVisible = base.connection.realDebridMode == DebridConnectionMode.CONNECTED,
+                        latestResult = base.benchmark.latestRealDebridResult,
+                        activeState = base.benchmark.activeState,
+                        configBenchmarkActive = base.configBenchmark.activeState
                     ),
                     realDebridConfigBenchmark = buildConfigBenchmarkUi(
                         provider = DebridBenchmarkProvider.REAL_DEBRID,
-                        isVisible = connection.realDebridMode == DebridConnectionMode.CONNECTED,
-                        latestResult = configBenchmark.latestRealDebridResult,
-                        activeState = configBenchmark.activeState,
-                        benchmarkActive = benchmark.activeState
+                        isVisible = base.connection.realDebridMode == DebridConnectionMode.CONNECTED,
+                        latestResult = base.configBenchmark.latestRealDebridResult,
+                        activeState = base.configBenchmark.activeState,
+                        benchmarkActive = base.benchmark.activeState
                     ),
-                    premiumizeConnected = connection.premiumizeConnected,
-                    premiumizeCustomerId = connection.premiumizeCustomerId,
+                    premiumizeConnected = base.connection.premiumizeConnected,
+                    premiumizeCustomerId = base.connection.premiumizeCustomerId,
                     premiumizeBenchmark = buildDebridBenchmarkUi(
                         provider = DebridBenchmarkProvider.PREMIUMIZE,
-                        isVisible = connection.premiumizeConnected,
-                        latestResult = benchmark.latestPremiumizeResult,
-                        activeState = benchmark.activeState,
-                        configBenchmarkActive = configBenchmark.activeState
+                        isVisible = base.connection.premiumizeConnected,
+                        latestResult = base.benchmark.latestPremiumizeResult,
+                        activeState = base.benchmark.activeState,
+                        configBenchmarkActive = base.configBenchmark.activeState
                     ),
                     premiumizeConfigBenchmark = buildConfigBenchmarkUi(
                         provider = DebridBenchmarkProvider.PREMIUMIZE,
-                        isVisible = connection.premiumizeConnected,
-                        latestResult = configBenchmark.latestPremiumizeResult,
-                        activeState = configBenchmark.activeState,
-                        benchmarkActive = benchmark.activeState
+                        isVisible = base.connection.premiumizeConnected,
+                        latestResult = base.configBenchmark.latestPremiumizeResult,
+                        activeState = base.configBenchmark.activeState,
+                        benchmarkActive = base.benchmark.activeState
                     ),
                     benchmarkResultDialog = dialogs.benchmarkResultDialog,
                     configBenchmarkResultDialog = dialogs.configBenchmarkResultDialog,
-                    torBoxConnected = connection.torBoxConnected,
-                    torBoxEmail = connection.torBoxEmail,
-                    torBoxPlan = connection.torBoxPlan,
-                    easyDebridConnected = connection.easyDebridConnected,
-                    easyDebridUserId = connection.easyDebridUserId,
-                    easyDebridPaidUntil = connection.easyDebridPaidUntil
+                    torBoxConnected = base.connection.torBoxConnected,
+                    torBoxEmail = base.connection.torBoxEmail,
+                    torBoxPlan = base.connection.torBoxPlan,
+                    easyDebridConnected = base.connection.easyDebridConnected,
+                    easyDebridUserId = base.connection.easyDebridUserId,
+                    easyDebridPaidUntil = base.connection.easyDebridPaidUntil
                 )
             }.collect { _uiState.value = it }
         }
