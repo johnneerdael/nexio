@@ -19,6 +19,7 @@ class ModernHomeTrailerBehaviorTest {
                 autoplayEnabled = true,
                 screensaverVisible = true,
                 startupSplashVisible = false,
+                externalTrailerTakeoverActive = false,
                 selectionStillFocused = true,
                 lifecycleResumed = true
             )
@@ -32,6 +33,7 @@ class ModernHomeTrailerBehaviorTest {
                 autoplayEnabled = true,
                 screensaverVisible = false,
                 startupSplashVisible = true,
+                externalTrailerTakeoverActive = false,
                 selectionStillFocused = true,
                 lifecycleResumed = true
             )
@@ -45,6 +47,21 @@ class ModernHomeTrailerBehaviorTest {
                 autoplayEnabled = true,
                 screensaverVisible = false,
                 startupSplashVisible = false,
+                externalTrailerTakeoverActive = false,
+                selectionStillFocused = true,
+                lifecycleResumed = true
+            )
+        )
+    }
+
+    @Test
+    fun `home trailer autoplay remains locked while external manual trailer takeover is active`() {
+        assertFalse(
+            shouldUnlockModernHomeTrailerAutoplay(
+                autoplayEnabled = true,
+                screensaverVisible = false,
+                startupSplashVisible = false,
+                externalTrailerTakeoverActive = true,
                 selectionStillFocused = true,
                 lifecycleResumed = true
             )
@@ -142,6 +159,7 @@ class ModernHomeTrailerBehaviorTest {
                 hasResolvedPreview = false,
                 hasResolvedExternalPreview = false,
                 isCurrentlyLoading = false,
+                externalTrailerTakeoverActive = false,
                 alreadyRetriedAfterUnlock = false
             )
         )
@@ -156,6 +174,7 @@ class ModernHomeTrailerBehaviorTest {
                 hasResolvedPreview = false,
                 hasResolvedExternalPreview = false,
                 isCurrentlyLoading = false,
+                externalTrailerTakeoverActive = false,
                 alreadyRetriedAfterUnlock = false
             )
         )
@@ -170,6 +189,7 @@ class ModernHomeTrailerBehaviorTest {
                 hasResolvedPreview = true,
                 hasResolvedExternalPreview = false,
                 isCurrentlyLoading = false,
+                externalTrailerTakeoverActive = false,
                 alreadyRetriedAfterUnlock = false
             )
         )
@@ -184,7 +204,23 @@ class ModernHomeTrailerBehaviorTest {
                 hasResolvedPreview = false,
                 hasResolvedExternalPreview = false,
                 isCurrentlyLoading = false,
+                externalTrailerTakeoverActive = false,
                 alreadyRetriedAfterUnlock = true
+            )
+        )
+    }
+
+    @Test
+    fun `focused trailer preview does not request while external manual trailer takeover is active`() {
+        assertFalse(
+            shouldRequestFocusedTrailerPreviewAfterAutoplayUnlock(
+                trailerPlaybackUnlocked = true,
+                hasTrailerMetadataAvailable = true,
+                hasResolvedPreview = false,
+                hasResolvedExternalPreview = false,
+                isCurrentlyLoading = false,
+                externalTrailerTakeoverActive = true,
+                alreadyRetriedAfterUnlock = false
             )
         )
     }
@@ -283,6 +319,25 @@ class ModernHomeTrailerBehaviorTest {
         assertFalse(endedState.heroFullscreenHintTimedOut)
         assertEquals("row-1", focusRestore?.first)
         assertEquals(2, focusRestore?.second)
+    }
+
+    @Test
+    fun `external manual trailer takeover clears active modern home trailer session`() {
+        val clearedState = handleModernHomeTrailerInterruptedByExternalTakeover(
+            ModernHomeTrailerEndedState(
+                unlockedTrailerFocusKey = "row-1:item-2",
+                pendingHeroTrailerFocusKey = "row-1:item-2",
+                heroTrailerFullscreenMode = true,
+                fullscreenTrailerTextTimedOut = true,
+                heroFullscreenHintTimedOut = true
+            )
+        )
+
+        assertNull(clearedState.unlockedTrailerFocusKey)
+        assertNull(clearedState.pendingHeroTrailerFocusKey)
+        assertFalse(clearedState.heroTrailerFullscreenMode)
+        assertFalse(clearedState.fullscreenTrailerTextTimedOut)
+        assertFalse(clearedState.heroFullscreenHintTimedOut)
     }
 
     @Test

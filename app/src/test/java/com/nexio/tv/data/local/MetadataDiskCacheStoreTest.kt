@@ -293,6 +293,43 @@ class MetadataDiskCacheStoreTest {
     }
 
     @Test
+    fun `writeTmdbTitleVideos only persists english trailer teaser and recap entries`() {
+        val store = MetadataDiskCacheStore(
+            context = mockContext(InMemorySharedPreferences())
+        )
+        val videos = listOf(
+            tmdbVideo(key = "hindi-trailer", type = "Trailer", iso6391 = "hi"),
+            tmdbVideo(key = "english-trailer", type = "Trailer", iso6391 = "en"),
+            tmdbVideo(key = "english-featurette", type = "Featurette", iso6391 = "en"),
+            tmdbVideo(key = "empty-language-recap", type = "Recap", iso6391 = ""),
+            tmdbVideo(key = "english-teaser", type = "Teaser", iso6391 = "en"),
+            tmdbVideo(key = "english-recap", type = "Recap", iso6391 = "en")
+        )
+
+        store.writeTmdbTitleVideos(
+            tmdbId = 123,
+            mediaType = "movie",
+            languageTag = "nl-NL",
+            providerToken = "trailer",
+            videos = videos
+        )
+
+        assertEquals(
+            listOf(
+                tmdbVideo(key = "english-trailer", type = "Trailer", iso6391 = "en"),
+                tmdbVideo(key = "english-teaser", type = "Teaser", iso6391 = "en"),
+                tmdbVideo(key = "english-recap", type = "Recap", iso6391 = "en")
+            ),
+            store.readTmdbTitleVideos(
+                tmdbId = 123,
+                mediaType = "movie",
+                languageTag = "nl-NL",
+                providerToken = "trailer"
+            )
+        )
+    }
+
+    @Test
     fun `readTmdbTitleVideos ignores expired cache entries`() {
         val prefs = InMemorySharedPreferences()
         val store = MetadataDiskCacheStore(context = mockContext(prefs))
@@ -380,6 +417,40 @@ class MetadataDiskCacheStoreTest {
     }
 
     @Test
+    fun `writeTmdbSeasonVideos only persists english trailer teaser and recap entries`() {
+        val store = MetadataDiskCacheStore(
+            context = mockContext(InMemorySharedPreferences())
+        )
+        val videos = listOf(
+            tmdbVideo(key = "season-hi-recap", type = "Recap", iso6391 = "hi"),
+            tmdbVideo(key = "season-en-recap", type = "Recap", iso6391 = "en"),
+            tmdbVideo(key = "season-en-trailer", type = "Trailer", iso6391 = "en"),
+            tmdbVideo(key = "season-en-clip", type = "Clip", iso6391 = "en")
+        )
+
+        store.writeTmdbSeasonVideos(
+            tmdbId = 456,
+            seasonNumber = 2,
+            languageTag = "de-DE",
+            providerToken = "trailer",
+            videos = videos
+        )
+
+        assertEquals(
+            listOf(
+                tmdbVideo(key = "season-en-recap", type = "Recap", iso6391 = "en"),
+                tmdbVideo(key = "season-en-trailer", type = "Trailer", iso6391 = "en")
+            ),
+            store.readTmdbSeasonVideos(
+                tmdbId = 456,
+                seasonNumber = 2,
+                languageTag = "de-DE",
+                providerToken = "trailer"
+            )
+        )
+    }
+
+    @Test
     fun `readTmdbSeasonVideos ignores expired cache entries`() {
         val prefs = InMemorySharedPreferences()
         val store = MetadataDiskCacheStore(context = mockContext(prefs))
@@ -440,9 +511,10 @@ class MetadataDiskCacheStoreTest {
         )
     }
 
-    private fun tmdbVideo(key: String, type: String): TmdbVideoResult {
+    private fun tmdbVideo(key: String, type: String, iso6391: String? = "en"): TmdbVideoResult {
         return TmdbVideoResult(
             key = key,
+            iso6391 = iso6391,
             site = "YouTube",
             type = type,
             official = true,

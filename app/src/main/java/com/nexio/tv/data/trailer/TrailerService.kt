@@ -800,7 +800,7 @@ class TrailerService(
                 trailerDebugLog("TMDB movie videos fetch failed tmdbId=$tmdbId language=$language http=${response.code()}")
                 emptyList()
             } else {
-                val results = response.body()?.results.orEmpty()
+                val results = filterCacheableTmdbTrailerVideos(response.body()?.results.orEmpty())
                 trailerDebugLog("TMDB movie videos fetch tmdbId=$tmdbId language=$language count=${results.size}")
                 metadataDiskCacheStore.writeTmdbTitleVideos(
                     tmdbId = tmdbId,
@@ -842,7 +842,7 @@ class TrailerService(
                 trailerDebugLog("TMDB tv videos fetch failed tmdbId=$tmdbId language=$language http=${response.code()}")
                 emptyList()
             } else {
-                val results = response.body()?.results.orEmpty()
+                val results = filterCacheableTmdbTrailerVideos(response.body()?.results.orEmpty())
                 trailerDebugLog("TMDB tv videos fetch tmdbId=$tmdbId language=$language count=${results.size}")
                 metadataDiskCacheStore.writeTmdbTitleVideos(
                     tmdbId = tmdbId,
@@ -882,7 +882,7 @@ class TrailerService(
             if (!response.isSuccessful) {
                 emptyList()
             } else {
-                val results = response.body()?.results.orEmpty()
+                val results = filterCacheableTmdbTrailerVideos(response.body()?.results.orEmpty())
                 metadataDiskCacheStore.writeTmdbSeasonVideos(
                     tmdbId = tmdbId,
                     seasonNumber = seasonNumber,

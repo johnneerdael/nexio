@@ -321,6 +321,7 @@ fun HomeScreen(
                                 uiState = uiState,
                                 idleScreensaverVisible = idleScreensaverVisible,
                                 startupSplashVisible = startupSplashVisible,
+                                externalTrailerTakeoverActive = posterTrailerPlayback != null || pendingPosterTrailerResolution != null,
                                 onModernHomeTrailerPlaybackStarted = onModernHomeTrailerPlaybackStarted,
                                 onModernHomeTrailerPlaybackActiveChanged = onModernHomeTrailerPlaybackActiveChanged,
                                 onNavigateToDetail = onNavigateToDetail,
@@ -660,6 +661,7 @@ private fun ModernHomeRoute(
     uiState: HomeUiState,
     idleScreensaverVisible: Boolean,
     startupSplashVisible: Boolean,
+    externalTrailerTakeoverActive: Boolean,
     onModernHomeTrailerPlaybackStarted: () -> Unit,
     onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
@@ -784,6 +786,7 @@ private fun ModernHomeRoute(
         onPreloadAdjacentItem = preloadAdjacentItem,
         onRequestTrailerPreview = requestTrailerPreview,
         onRetryTrailerPreview = retryTrailerPreview,
+        externalTrailerTakeoverActive = externalTrailerTakeoverActive,
         onModernHomeTrailerPlaybackStarted = onModernHomeTrailerPlaybackStarted,
         onModernHomeTrailerPlaybackActiveChanged = onModernHomeTrailerPlaybackActiveChanged,
         onSaveFocusState = saveModernFocusState

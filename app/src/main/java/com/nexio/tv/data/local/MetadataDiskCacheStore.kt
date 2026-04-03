@@ -8,6 +8,7 @@ import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.data.remote.api.TmdbVideoResult
+import com.nexio.tv.data.trailer.filterCacheableTmdbTrailerVideos
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
@@ -408,8 +409,9 @@ class MetadataDiskCacheStore @Inject constructor(
     private fun writeTmdbVideosEntry(key: String, videos: List<TmdbVideoResult>) {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val filteredVideos = filterCacheableTmdbTrailerVideos(videos)
             val payload = JsonObject().apply {
-                add("value", gson.toJsonTree(videos))
+                add("value", gson.toJsonTree(filteredVideos))
                 addProperty("languageEpoch", currentLanguageEpoch())
                 addProperty("tmdbVideoSchemaVersion", TMDB_VIDEO_CACHE_SCHEMA_VERSION)
                 addProperty("updatedAtMs", System.currentTimeMillis())

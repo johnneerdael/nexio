@@ -193,15 +193,29 @@ internal fun handleModernHomeTrailerEnded(
     return clearedState to focusRestore
 }
 
+internal fun handleModernHomeTrailerInterruptedByExternalTakeover(
+    state: ModernHomeTrailerEndedState
+): ModernHomeTrailerEndedState {
+    return state.copy(
+        unlockedTrailerFocusKey = null,
+        pendingHeroTrailerFocusKey = null,
+        heroTrailerFullscreenMode = false,
+        fullscreenTrailerTextTimedOut = false,
+        heroFullscreenHintTimedOut = false
+    )
+}
+
 internal fun shouldUnlockModernHomeTrailerAutoplay(
     autoplayEnabled: Boolean,
     screensaverVisible: Boolean,
     startupSplashVisible: Boolean,
+    externalTrailerTakeoverActive: Boolean,
     selectionStillFocused: Boolean,
     lifecycleResumed: Boolean
 ): Boolean = autoplayEnabled &&
     !screensaverVisible &&
     !startupSplashVisible &&
+    !externalTrailerTakeoverActive &&
     selectionStillFocused &&
     lifecycleResumed
 
@@ -211,12 +225,14 @@ internal fun shouldRequestFocusedTrailerPreviewAfterAutoplayUnlock(
     hasResolvedPreview: Boolean,
     hasResolvedExternalPreview: Boolean,
     isCurrentlyLoading: Boolean,
+    externalTrailerTakeoverActive: Boolean,
     alreadyRetriedAfterUnlock: Boolean
 ): Boolean = trailerPlaybackUnlocked &&
     hasTrailerMetadataAvailable &&
     !hasResolvedPreview &&
     !hasResolvedExternalPreview &&
     !isCurrentlyLoading &&
+    !externalTrailerTakeoverActive &&
     !alreadyRetriedAfterUnlock
 
 internal fun resolveEffectiveModernHomeTrailerPlaybackTarget(
@@ -254,6 +270,7 @@ internal fun ModernHomeContent(
     onPreloadAdjacentItem: (MetaPreview) -> Unit = {},
     onRequestTrailerPreview: (String, String, String?, String, String?) -> Unit,
     onRetryTrailerPreview: (String, String, String?, String, String?) -> Unit,
+    externalTrailerTakeoverActive: Boolean = false,
     onModernHomeTrailerPlaybackStarted: () -> Unit,
     onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onSaveFocusState: (Int, Int, Int, Int, Map<String, Int>) -> Unit
@@ -510,7 +527,8 @@ internal fun ModernHomeContent(
         contentState.homeTrailerAutoplayEnabled,
         contentState.homeTrailerAutoplayDelaySeconds,
         idleScreensaverVisible,
-        startupSplashVisible
+        startupSplashVisible,
+        externalTrailerTakeoverActive
     ) {
         unlockedTrailerFocusKey = null
         val selection = focusedTrailerSelection ?: return@LaunchedEffect
@@ -524,6 +542,7 @@ internal fun ModernHomeContent(
             autoplayEnabled = contentState.homeTrailerAutoplayEnabled,
             screensaverVisible = idleScreensaverVisible,
             startupSplashVisible = startupSplashVisible,
+            externalTrailerTakeoverActive = externalTrailerTakeoverActive,
             selectionStillFocused = selectionStillFocused,
             lifecycleResumed = lifecycleResumed
         )
@@ -536,6 +555,25 @@ internal fun ModernHomeContent(
                 "heroAutoplayUnlock success focusKey=${selection.focusKey} itemId=${selection.itemId}"
             )
         }
+    }
+
+    LaunchedEffect(externalTrailerTakeoverActive) {
+        if (!externalTrailerTakeoverActive) return@LaunchedEffect
+        val clearedState = handleModernHomeTrailerInterruptedByExternalTakeover(
+            ModernHomeTrailerEndedState(
+                unlockedTrailerFocusKey = unlockedTrailerFocusKey,
+                pendingHeroTrailerFocusKey = pendingHeroTrailerFocusKey,
+                heroTrailerFullscreenMode = heroTrailerFullscreenMode,
+                fullscreenTrailerTextTimedOut = fullscreenTrailerTextTimedOut,
+                heroFullscreenHintTimedOut = heroFullscreenHintTimedOut
+            )
+        )
+        unlockedTrailerFocusKey = clearedState.unlockedTrailerFocusKey
+        pendingHeroTrailerFocusKey = clearedState.pendingHeroTrailerFocusKey
+        heroTrailerFullscreenMode = clearedState.heroTrailerFullscreenMode
+        fullscreenTrailerTextTimedOut = clearedState.fullscreenTrailerTextTimedOut
+        heroFullscreenHintTimedOut = clearedState.heroFullscreenHintTimedOut
+        heroFullscreenHintSessionNonce = 0
     }
 
     LaunchedEffect(unlockedTrailerFocusKey, focusedTrailerSelection?.focusKey) {
@@ -673,6 +711,7 @@ internal fun ModernHomeContent(
             hasResolvedPreview = hasResolvedPreview,
             hasResolvedExternalPreview = hasResolvedExternalPreview,
             isCurrentlyLoading = isCurrentlyLoading,
+            externalTrailerTakeoverActive = externalTrailerTakeoverActive,
             alreadyRetriedAfterUnlock = alreadyRetriedAfterUnlock
         )
         modernHomeDebugLog(
