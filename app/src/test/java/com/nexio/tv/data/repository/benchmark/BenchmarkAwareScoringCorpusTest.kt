@@ -15,9 +15,12 @@ class BenchmarkAwareScoringCorpusTest {
         val corpus = BenchmarkAwareScoringCorpusLoader.load(corpusDir)
 
         assertEquals("sample-benchmark-scoring-corpus", corpus.manifest.name)
-        assertEquals(9, corpus.dataset.scenarios.size)
+        assertEquals(12, corpus.dataset.scenarios.size)
         assertTrue(corpus.dataset.scenarios.any { it.id == "audio-fallback-1" })
         assertTrue(corpus.dataset.scenarios.any { it.id == "dv-vs-hdr10plus" })
+        assertTrue(corpus.dataset.scenarios.any { it.id == "dv-profile5-autoplay-fallback" })
+        assertTrue(corpus.dataset.scenarios.any { it.id == "dv-profile7-autoplay-continue" })
+        assertTrue(corpus.dataset.scenarios.any { it.id == "dv-probe-unknown-autoplay-fallback" })
         assertTrue(corpus.dataset.scenarios.any { it.id == "lotr-return-of-the-king-movie" })
         assertTrue(corpus.dataset.scenarios.any { it.id == "tv-hevc-ddp-vs-av1-webdl" })
         assertTrue(corpus.dataset.scenarios.any { it.id == "movie-webdl-non-remux-quality-pack" })
@@ -213,6 +216,28 @@ class BenchmarkAwareScoringCorpusTest {
         }
     }
 
+    @Test
+    fun `autoplay DV probe corpus scenarios resolve to expected post probe winners`() {
+        val corpusDir = copySampleCorpusToTempDir()
+        val corpus = BenchmarkAwareScoringCorpusLoader.load(corpusDir)
+        val selectedScenarios = corpus.dataset.scenarios.filter {
+            it.id == "dv-profile5-autoplay-fallback" ||
+                it.id == "dv-profile7-autoplay-continue" ||
+                it.id == "dv-probe-unknown-autoplay-fallback"
+        }
+
+        val summary = BenchmarkAwareScoringEvaluator().evaluate(
+            BenchmarkAwareScoringDataset(scenarios = selectedScenarios),
+            BenchmarkAwareStreamScorer()
+        )
+
+        summary.scenarios.forEach { result ->
+            val scenario = selectedScenarios.first { it.id == result.scenarioId }
+            assertEquals(scenario.expectedResolvedWinnerStreamKey(), result.selectedStreamKey)
+            assertTrue(result.acceptableMatch)
+        }
+    }
+
     private fun copySampleCorpusToTempDir() = Files.createTempDirectory("benchmark_scoring_corpus").also { tempDir ->
         val classLoader = javaClass.classLoader!!
         val root = classLoader.getResourceAsStream("benchmark_scoring_corpus/manifest.json")!!.readBytes()
@@ -235,6 +260,9 @@ class BenchmarkAwareScoringCorpusTest {
             "fake-4k-penalty.json",
             "av1-vs-hevc.json",
             "dtshd-core-vs-pcm-vs-passthrough.json",
+            "dv-profile5-autoplay-fallback.json",
+            "dv-profile7-autoplay-continue.json",
+            "dv-probe-unknown-autoplay-fallback.json",
             "lotr-return-of-the-king-movie.json",
             "tv-hevc-ddp-vs-av1-webdl.json",
             "movie-webdl-non-remux-quality-pack.json"

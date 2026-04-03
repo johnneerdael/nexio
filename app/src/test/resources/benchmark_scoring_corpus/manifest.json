@@ -8,6 +8,9 @@
     "datasets/fake-4k-penalty.json",
     "datasets/av1-vs-hevc.json",
     "datasets/dtshd-core-vs-pcm-vs-passthrough.json",
+    "datasets/dv-profile5-autoplay-fallback.json",
+    "datasets/dv-profile7-autoplay-continue.json",
+    "datasets/dv-probe-unknown-autoplay-fallback.json",
     "datasets/lotr-return-of-the-king-movie.json",
     "datasets/tv-hevc-ddp-vs-av1-webdl.json",
     "datasets/movie-webdl-non-remux-quality-pack.json"

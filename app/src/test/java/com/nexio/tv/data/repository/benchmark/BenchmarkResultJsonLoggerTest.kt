@@ -21,6 +21,15 @@ class BenchmarkResultJsonLoggerTest {
         val result = root.getAsJsonObject("result")
         assertEquals("real_debrid", result.get("provider").asString)
         assertTrue(result.getAsJsonObject("device").getAsJsonArray("displayHdrTypes").containsString("dolby_vision"))
+        val evidence = result.getAsJsonObject("device").getAsJsonObject("evidence")
+        assertEquals(
+            "direct_profiles",
+            evidence.getAsJsonObject("audio").get("discoveryMode").asString
+        )
+        assertEquals(
+            "c2.qti.av1.decoder",
+            evidence.getAsJsonObject("video").getAsJsonArray("decoders").first().asJsonObject.get("codecName").asString
+        )
         assertEquals(1_000L, result.getAsJsonObject("optimized").getAsJsonObject("sustained").get("bucketMs").asLong)
         assertEquals(4, result.getAsJsonObject("optimized").getAsJsonObject("configSnapshot").get("parallelConnectionCount").asInt)
     }
@@ -233,6 +242,43 @@ class BenchmarkResultJsonLoggerTest {
                     truehd = AudioEncodingSupport(true, true),
                     dts = AudioEncodingSupport(true, true),
                     dtshd = AudioEncodingSupport(false, false)
+                ),
+                evidence = DeviceCapabilityEvidence(
+                    hdr = DeviceHdrCapabilityEvidence(
+                        displayId = 0,
+                        rawSupportedHdrTypes = listOf("dolby_vision", "hdr10")
+                    ),
+                    audio = DeviceAudioCapabilityEvidence(
+                        discoveryMode = "direct_profiles",
+                        routedDeviceTypes = listOf("hdmi"),
+                        outputDevices = listOf(
+                            AudioOutputDeviceEvidence(
+                                id = 2,
+                                type = "hdmi",
+                                productName = "Receiver",
+                                encodings = listOf("ac3", "truehd")
+                            )
+                        ),
+                        directProfiles = listOf(
+                            AudioDirectProfileEvidence(
+                                format = "truehd",
+                                channelMasks = listOf(12),
+                                sampleRates = listOf(48000)
+                            )
+                        )
+                    ),
+                    video = DeviceVideoDecoderEvidence(
+                        scannedDecoderCount = 4,
+                        decoders = listOf(
+                            VideoDecoderEvidence(
+                                codecName = "c2.qti.av1.decoder",
+                                mimeType = "video/av01",
+                                hardwareAccelerated = true,
+                                softwareOnly = false,
+                                secureSupported = false
+                            )
+                        )
+                    )
                 ),
                 capturedAtMs = 99L
             ),

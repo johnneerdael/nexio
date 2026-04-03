@@ -187,6 +187,44 @@ class BenchmarkAwareStreamScorerTest {
     }
 
     @Test
+    fun `active transport mode filters out direct path when parallel playback is enabled`() {
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(streamCard(streamKey = "rd_stream", providerId = "RD")),
+            benchmarkSessions = mapOf(
+                DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(
+                    provider = DebridBenchmarkProvider.REAL_DEBRID,
+                    directP10Mbps = 240.0,
+                    optimizedP10Mbps = 180.0,
+                    directSeekP95Ms = 120L,
+                    optimizedSeekP95Ms = 220L
+                )
+            ),
+            activeTransportMode = DebridBenchmarkTransportMode.OPTIMIZED
+        )
+
+        assertEquals(DebridBenchmarkTransportMode.OPTIMIZED, event.selected?.transport)
+    }
+
+    @Test
+    fun `active transport mode filters out optimized path when parallel playback is disabled`() {
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(streamCard(streamKey = "rd_stream", providerId = "RD")),
+            benchmarkSessions = mapOf(
+                DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(
+                    provider = DebridBenchmarkProvider.REAL_DEBRID,
+                    directP10Mbps = 140.0,
+                    optimizedP10Mbps = 220.0
+                )
+            ),
+            activeTransportMode = DebridBenchmarkTransportMode.DIRECT
+        )
+
+        assertEquals(DebridBenchmarkTransportMode.DIRECT, event.selected?.transport)
+    }
+
+    @Test
     fun `scorer uses derived decision metrics as autoplay truth over raw sustained p10`() {
         val event = scorer.score(
             request = request(runtimeMinutes = 120),

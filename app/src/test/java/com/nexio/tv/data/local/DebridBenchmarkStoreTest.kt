@@ -26,11 +26,18 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportConfigSnap
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportProfile
 import com.nexio.tv.data.repository.benchmark.AudioEncodingSupport
+import com.nexio.tv.data.repository.benchmark.AudioDirectProfileEvidence
+import com.nexio.tv.data.repository.benchmark.AudioOutputDeviceEvidence
 import com.nexio.tv.data.repository.benchmark.CodecSupport
+import com.nexio.tv.data.repository.benchmark.DeviceAudioCapabilityEvidence
+import com.nexio.tv.data.repository.benchmark.DeviceCapabilityEvidence
 import com.nexio.tv.data.repository.benchmark.DeviceAudioOutputCapabilities
 import com.nexio.tv.data.repository.benchmark.DeviceCapabilitySnapshot
+import com.nexio.tv.data.repository.benchmark.DeviceHdrCapabilityEvidence
 import com.nexio.tv.data.repository.benchmark.DeviceHdrType
+import com.nexio.tv.data.repository.benchmark.DeviceVideoDecoderEvidence
 import com.nexio.tv.data.repository.benchmark.DeviceVideoDecodeCapabilities
+import com.nexio.tv.data.repository.benchmark.VideoDecoderEvidence
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -694,6 +701,43 @@ class DebridBenchmarkStoreTest {
                 truehd = AudioEncodingSupport(supported = true, passthroughLikely = true),
                 dts = AudioEncodingSupport(supported = true, passthroughLikely = true),
                 dtshd = AudioEncodingSupport(supported = false, passthroughLikely = false)
+            ),
+            evidence = DeviceCapabilityEvidence(
+                hdr = DeviceHdrCapabilityEvidence(
+                    displayId = 0,
+                    rawSupportedHdrTypes = listOf("dolby_vision", "hdr10")
+                ),
+                audio = DeviceAudioCapabilityEvidence(
+                    discoveryMode = "direct_profiles",
+                    routedDeviceTypes = listOf("hdmi_earc"),
+                    outputDevices = listOf(
+                        AudioOutputDeviceEvidence(
+                            id = 3,
+                            type = "hdmi_earc",
+                            productName = "AVR",
+                            encodings = listOf("ac3", "eac3", "truehd")
+                        )
+                    ),
+                    directProfiles = listOf(
+                        AudioDirectProfileEvidence(
+                            format = "truehd",
+                            channelMasks = listOf(12),
+                            sampleRates = listOf(48000)
+                        )
+                    )
+                ),
+                video = DeviceVideoDecoderEvidence(
+                    scannedDecoderCount = 4,
+                    decoders = listOf(
+                        VideoDecoderEvidence(
+                            codecName = "c2.qti.hevc.decoder",
+                            mimeType = "video/hevc",
+                            hardwareAccelerated = true,
+                            softwareOnly = false,
+                            secureSupported = true
+                        )
+                    )
+                )
             ),
             capturedAtMs = 123_456L
         )

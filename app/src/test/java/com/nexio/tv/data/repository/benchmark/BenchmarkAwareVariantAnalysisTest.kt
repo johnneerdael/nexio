@@ -21,6 +21,9 @@ class BenchmarkAwareVariantAnalysisTest {
             "fake-4k-penalty.json",
             "av1-vs-hevc.json",
             "dtshd-core-vs-pcm-vs-passthrough.json",
+            "dv-profile5-autoplay-fallback.json",
+            "dv-profile7-autoplay-continue.json",
+            "dv-probe-unknown-autoplay-fallback.json",
             "lotr-return-of-the-king-movie.json",
             "tv-hevc-ddp-vs-av1-webdl.json",
             "movie-webdl-non-remux-quality-pack.json"

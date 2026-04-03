@@ -29,6 +29,7 @@ import com.nexio.tv.data.local.DebridBenchmarkStore
 import com.nexio.tv.data.repository.benchmark.BenchmarkAwareStreamScorer
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode
 import com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionLogger
 import com.nexio.tv.data.repository.benchmark.ShadowRequestContext
 import com.nexio.tv.domain.model.AddonStreams
@@ -383,7 +384,8 @@ class StreamScreenViewModel @Inject constructor(
                         val autoPlayPlaybackInfo = buildBenchmarkAwareAutoPlayPlaybackInfo(
                             request = buildShadowRequestContext(requestId),
                             organizedStreams = organizedStreams.items,
-                            autoPlayCandidates = autoPlayCandidates
+                            autoPlayCandidates = autoPlayCandidates,
+                            activeTransportMode = playerSettings.toShadowActiveTransportMode()
                         )
                         val selectedAutoPlayStream = if (autoPlayPlaybackInfo == null && !autoPlayHandledForSession) {
                             StreamAutoPlaySelector.selectAutoPlayStream(
@@ -415,7 +417,8 @@ class StreamScreenViewModel @Inject constructor(
                     )
                     logShadowAutoPlayDecision(
                         request = buildShadowRequestContext(requestId),
-                        organizedStreams = organizedResult.organizedStreams.items
+                        organizedStreams = organizedResult.organizedStreams.items,
+                        activeTransportMode = playerSettings.toShadowActiveTransportMode()
                     )
 
                     val selectedAutoPlayStream = organizedResult.selectedAutoPlayStream
@@ -912,7 +915,8 @@ class StreamScreenViewModel @Inject constructor(
     private fun buildBenchmarkAwareAutoPlayPlaybackInfo(
         request: ShadowRequestContext,
         organizedStreams: List<StreamCardModel>,
-        autoPlayCandidates: List<Stream>
+        autoPlayCandidates: List<Stream>,
+        activeTransportMode: DebridBenchmarkTransportMode
     ): StreamPlaybackInfo? {
         if (autoPlayCandidates.isEmpty()) return null
         val benchmarkSessions = latestBenchmarkSessions()
@@ -923,7 +927,8 @@ class StreamScreenViewModel @Inject constructor(
         val event = benchmarkAwareStreamScorer.score(
             request = request,
             streams = candidateItems,
-            benchmarkSessions = benchmarkSessions
+            benchmarkSessions = benchmarkSessions,
+            activeTransportMode = activeTransportMode
         )
         val selectedKey = event.selected?.streamKey ?: return null
         val selectedItem = candidateItems.firstOrNull { item ->
@@ -1048,11 +1053,12 @@ class StreamScreenViewModel @Inject constructor(
 
     private suspend fun logShadowAutoPlayDecision(
         request: ShadowRequestContext,
-        organizedStreams: List<com.nexio.tv.core.stream.StreamCardModel>
+        organizedStreams: List<com.nexio.tv.core.stream.StreamCardModel>,
+        activeTransportMode: DebridBenchmarkTransportMode
     ) {
         val startedAtMs = System.currentTimeMillis()
         try {
-            shadowAutoPlayReplayCoordinator.updateCandidates(request, organizedStreams)
+            shadowAutoPlayReplayCoordinator.updateCandidates(request, organizedStreams, activeTransportMode)
             val event = withContext(Dispatchers.Default) {
                 shadowAutoPlayReplayCoordinator.buildEvent(
                     benchmarkSessions = latestBenchmarkSessions(),
@@ -1130,13 +1136,16 @@ internal class ShadowAutoPlayReplayCoordinator(
 ) {
     private var latestRequest: ShadowRequestContext? = null
     private var latestStreams: List<StreamCardModel> = emptyList()
+    private var latestActiveTransportMode: DebridBenchmarkTransportMode? = null
 
     fun updateCandidates(
         request: ShadowRequestContext,
-        organizedStreams: List<StreamCardModel>
+        organizedStreams: List<StreamCardModel>,
+        activeTransportMode: DebridBenchmarkTransportMode
     ) {
         latestRequest = request
         latestStreams = organizedStreams
+        latestActiveTransportMode = activeTransportMode
     }
 
     fun buildEvent(
@@ -1150,6 +1159,7 @@ internal class ShadowAutoPlayReplayCoordinator(
             request = request,
             organizedStreams = latestStreams,
             benchmarkSessions = benchmarkSessions,
+            activeTransportMode = latestActiveTransportMode,
             timingsMs = timingsMs
         )
     }
@@ -1157,6 +1167,7 @@ internal class ShadowAutoPlayReplayCoordinator(
     fun clear() {
         latestRequest = null
         latestStreams = emptyList()
+        latestActiveTransportMode = null
     }
 }
 
@@ -1165,12 +1176,14 @@ internal fun buildShadowAutoPlayDecisionEvent(
     request: ShadowRequestContext,
     organizedStreams: List<StreamCardModel>,
     benchmarkSessions: Map<DebridBenchmarkProvider, DebridBenchmarkResult>,
+    activeTransportMode: DebridBenchmarkTransportMode? = null,
     timingsMs: Long? = null
 ): com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionEvent {
     return scorer.score(
         request = request,
         streams = organizedStreams,
         benchmarkSessions = benchmarkSessions,
+        activeTransportMode = activeTransportMode,
         elapsedMs = timingsMs
     )
 }
@@ -1185,6 +1198,14 @@ private fun PlayerSettings.toStreamFeatureFlags(): StreamFeatureFlags {
         filterEpisodeMismatchStreamsEnabled = filterEpisodeMismatchStreamsEnabled,
         filterMovieYearMismatchStreamsEnabled = filterMovieYearMismatchStreamsEnabled
     )
+}
+
+private fun PlayerSettings.toShadowActiveTransportMode(): DebridBenchmarkTransportMode {
+    return if (useParallelConnections) {
+        DebridBenchmarkTransportMode.OPTIMIZED
+    } else {
+        DebridBenchmarkTransportMode.DIRECT
+    }
 }
 
 private fun SyncedFormatterTemplateSettings.toAioFormatterSelection(): AioFormatterSelection {
