@@ -18,12 +18,22 @@ class ShadowAutoPlayDecisionLoggerTest {
         assertEquals(1, root.get("event_version").asInt)
         assertEquals("shadow_autoplay_decision", root.get("event_type").asString)
         assertEquals("rd_stream", root.getAsJsonObject("selected").get("streamKey").asString)
+        val selectedParsed = root.getAsJsonObject("selected").getAsJsonObject("parsed")
+        assertEquals("RD", selectedParsed.get("serviceId").asString)
+        assertEquals("rd_stream.mkv", selectedParsed.get("filename").asString)
+        assertEquals(42_000_000_000L, selectedParsed.get("sizeBytes").asLong)
+        assertEquals(7_200_000L, selectedParsed.get("durationMs").asLong)
+        assertEquals("parser", selectedParsed.get("runtimeSource").asString)
+        assertEquals("HEVC", selectedParsed.get("videoCodec").asString)
         assertEquals(
             "pm_hdr",
             root.getAsJsonObject("selectedNonDolbyVisionFallback").get("streamKey").asString
         )
         assertEquals(1, root.getAsJsonArray("winners").size())
         assertEquals(1, root.getAsJsonArray("rejected").size())
+        val rejectedParsed = root.getAsJsonArray("rejected").first().asJsonObject.getAsJsonObject("parsed")
+        assertEquals("PM", rejectedParsed.get("serviceId").asString)
+        assertEquals("pm_stream.mkv", rejectedParsed.get("filename").asString)
     }
 
     @Test
@@ -40,6 +50,22 @@ class ShadowAutoPlayDecisionLoggerTest {
     private fun sampleEvent(): ShadowAutoPlayDecisionEvent {
         val selected = ShadowStreamDecision(
             streamKey = "rd_stream",
+            parsed = ShadowParsedStreamFacts(
+                serviceId = "RD",
+                filename = "rd_stream.mkv",
+                sizeBytes = 42_000_000_000L,
+                durationMs = 7_200_000L,
+                runtimeSource = "parser",
+                resolution = "2160p",
+                quality = "BluRay Remux",
+                videoCodec = "HEVC",
+                audioTags = listOf("Atmos", "TrueHD"),
+                audioChannels = listOf("7.1"),
+                visualTags = listOf("DV"),
+                languages = listOf("English"),
+                releaseGroup = "GROUP",
+                cached = true
+            ),
             provider = DebridBenchmarkProvider.REAL_DEBRID,
             transport = DebridBenchmarkTransportMode.OPTIMIZED,
             finalScore = 90,
@@ -116,6 +142,10 @@ class ShadowAutoPlayDecisionLoggerTest {
             rejected = listOf(
                 ShadowRejectedStream(
                     streamKey = "pm_stream",
+                    parsed = ShadowParsedStreamFacts(
+                        serviceId = "PM",
+                        filename = "pm_stream.mkv"
+                    ),
                     provider = DebridBenchmarkProvider.PREMIUMIZE,
                     reasons = listOf(
                         ShadowRejectReason.INSUFFICIENT_TRANSPORT_BUDGET,
@@ -126,6 +156,12 @@ class ShadowAutoPlayDecisionLoggerTest {
             selected = selected,
             selectedNonDolbyVisionFallback = selected.copy(
                 streamKey = "pm_hdr",
+                parsed = selected.parsed.copy(
+                    serviceId = "PM",
+                    filename = "pm_hdr.mkv",
+                    visualTags = listOf("HDR10"),
+                    audioTags = listOf("TrueHD")
+                ),
                 provider = DebridBenchmarkProvider.PREMIUMIZE,
                 hdrTags = listOf("HDR10"),
                 audioTags = listOf("TrueHD")

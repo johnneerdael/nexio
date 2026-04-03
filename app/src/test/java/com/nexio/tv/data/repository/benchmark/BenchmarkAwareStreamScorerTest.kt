@@ -28,6 +28,53 @@ class BenchmarkAwareStreamScorerTest {
     }
 
     @Test
+    fun `parser service id is used when wrapped provider id is missing`() {
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "rd_parser_only",
+                    providerId = "RD",
+                    wrappedProviderId = null,
+                    filename = "Parser.Only.Release.mkv"
+                )
+            ),
+            benchmarkSessions = mapOf(
+                DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(
+                    provider = DebridBenchmarkProvider.REAL_DEBRID
+                )
+            )
+        )
+
+        assertEquals("rd_parser_only", event.selected?.streamKey)
+        assertEquals("RD", event.selected?.parsed?.serviceId)
+        assertEquals("Parser.Only.Release.mkv", event.selected?.parsed?.filename)
+    }
+
+    @Test
+    fun `runtime falls back to metadata when parser duration is missing`() {
+        val event = scorer.score(
+            request = request(runtimeMinutes = 46),
+            streams = listOf(
+                streamCard(
+                    streamKey = "rd_metadata_runtime",
+                    providerId = "RD",
+                    sizeBytes = gib(8.0),
+                    durationMs = 0L
+                )
+            ),
+            benchmarkSessions = mapOf(
+                DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(
+                    provider = DebridBenchmarkProvider.REAL_DEBRID
+                )
+            )
+        )
+
+        assertEquals(46L * 60_000L, event.selected?.parsed?.durationMs)
+        assertEquals("metadata", event.selected?.parsed?.runtimeSource)
+    }
+
+    @Test
     fun `suspicious tiny 4k loses to healthier remux on the same provider`() {
         val benchmark = benchmarkResult(
             provider = DebridBenchmarkProvider.REAL_DEBRID,
@@ -383,6 +430,8 @@ class BenchmarkAwareStreamScorerTest {
     private fun streamCard(
         streamKey: String,
         providerId: String,
+        wrappedProviderId: String? = providerId,
+        filename: String = "$streamKey.mkv",
         resolution: String = "2160p",
         quality: String = "BluRay Remux",
         encode: String = "HEVC",
@@ -407,17 +456,17 @@ class BenchmarkAwareStreamScorerTest {
                 proxyHeaders = null,
                 videoHash = null,
                 videoSize = sizeBytes,
-                filename = "$streamKey.mkv"
+                filename = filename
             ),
             addonName = "Addon",
             addonLogo = null,
-            wrappedProviderId = providerId,
+            wrappedProviderId = wrappedProviderId,
             wrappedOriginalStreamKey = streamKey
         )
         val parsed = ParsedStreamInfo(
             stream = stream,
             title = "Example",
-            filename = "$streamKey.mkv",
+            filename = filename,
             sizeBytes = sizeBytes,
             resolution = resolution,
             quality = quality,
@@ -432,7 +481,7 @@ class BenchmarkAwareStreamScorerTest {
             releaseGroup = "GROUP",
             serviceId = providerId,
             isCached = true,
-            durationMs = durationMs,
+            durationMs = durationMs.takeIf { it > 0L },
             transportKind = StreamTransportKind.CACHED
         )
         return StreamCardModel(
