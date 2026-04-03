@@ -68,7 +68,8 @@ class DebridConfigBenchmarkService internal constructor(
             _activeState.value = DebridConfigBenchmarkRuntimeState.Running(
                 provider = provider,
                 completedProfiles = 0,
-                totalProfiles = DEFAULT_MATRIX.size
+                totalProfiles = DEFAULT_MATRIX.size,
+                summary = null
             )
             activeJob = scope.launch {
                 runSession(provider)
@@ -153,7 +154,8 @@ class DebridConfigBenchmarkService internal constructor(
                 provider = provider,
                 currentProfile = profile,
                 completedProfiles = index,
-                totalProfiles = DEFAULT_MATRIX.size
+                totalProfiles = DEFAULT_MATRIX.size,
+                summary = null
             )
             when (val gateDecision = memoryGate.evaluate(profile.parallelConnectionCount, profile.chunkSizeMb)) {
                 ProfileRunDecision.Run -> {
@@ -165,7 +167,16 @@ class DebridConfigBenchmarkService internal constructor(
                     val transportResult = transport.runConfigProfile(
                         candidate = candidate,
                         configSnapshot = snapshot,
-                        measurementDurationMs = CONFIG_MEASUREMENT_DURATION_MS
+                        measurementDurationMs = CONFIG_MEASUREMENT_DURATION_MS,
+                        observer = DebridBenchmarkObserver { summary ->
+                            _activeState.value = DebridConfigBenchmarkRuntimeState.Running(
+                                provider = provider,
+                                currentProfile = profile,
+                                completedProfiles = index,
+                                totalProfiles = DEFAULT_MATRIX.size,
+                                summary = summary
+                            )
+                        }
                     )
                     if (transportResult.terminationReason == DebridBenchmarkTerminationReason.COMPLETED) {
                         profileResults += DebridConfigBenchmarkProfileResult(
@@ -253,7 +264,10 @@ class DebridConfigBenchmarkService internal constructor(
             DebridConfigBenchmarkProfileMetadata(4, 16),
             DebridConfigBenchmarkProfileMetadata(2, 24),
             DebridConfigBenchmarkProfileMetadata(3, 24),
-            DebridConfigBenchmarkProfileMetadata(4, 24)
+            DebridConfigBenchmarkProfileMetadata(4, 24),
+            DebridConfigBenchmarkProfileMetadata(2, 32),
+            DebridConfigBenchmarkProfileMetadata(3, 32),
+            DebridConfigBenchmarkProfileMetadata(4, 32)
         )
     }
 }

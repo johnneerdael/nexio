@@ -853,35 +853,19 @@ private fun DebridConfigBenchmarkResultDialog(
                     label = stringResource(R.string.debrid_config_benchmark_best_profile_label),
                     value = formatConfigBenchmarkBestProfile(result)
                 )
-                dialog.chunkGroups.forEach { group ->
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                color = NexioColors.BackgroundCard,
-                                shape = RoundedCornerShape(14.dp)
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = NexioColors.Border,
-                                shape = RoundedCornerShape(14.dp)
-                            )
-                            .padding(horizontal = 18.dp, vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                dialog.chunkGroups.chunked(2).forEach { rowGroups ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(18.dp)
                     ) {
-                        Text(
-                            text = stringResource(R.string.debrid_config_benchmark_chunk_group_title, group.chunkSizeMb),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = NexioColors.TextPrimary
-                        )
-                        group.rows.sortedBy { it.parallelConnectionCount }.forEach { row ->
-                            DebridBenchmarkCompactMetricRow(
-                                label = stringResource(
-                                    R.string.debrid_config_benchmark_profile_label,
-                                    row.parallelConnectionCount
-                                ),
-                                value = formatConfigBenchmarkProfileValue(row)
+                        rowGroups.forEach { group ->
+                            DebridConfigBenchmarkChunkCard(
+                                modifier = Modifier.weight(1f),
+                                group = group
                             )
+                        }
+                        if (rowGroups.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
                         }
                     }
                 }
@@ -903,6 +887,42 @@ private fun DebridConfigBenchmarkResultDialog(
                     Text(stringResource(R.string.action_close))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DebridConfigBenchmarkChunkCard(
+    modifier: Modifier,
+    group: DebridConfigBenchmarkChunkGroupUi
+) {
+    Column(
+        modifier = modifier
+            .background(
+                color = NexioColors.BackgroundCard,
+                shape = RoundedCornerShape(14.dp)
+            )
+            .border(
+                width = 1.dp,
+                color = NexioColors.Border,
+                shape = RoundedCornerShape(14.dp)
+            )
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.debrid_config_benchmark_chunk_group_title, group.chunkSizeMb),
+            style = MaterialTheme.typography.titleSmall,
+            color = NexioColors.TextPrimary
+        )
+        group.rows.sortedBy { it.parallelConnectionCount }.forEach { row ->
+            DebridBenchmarkCompactMetricRow(
+                label = stringResource(
+                    R.string.debrid_config_benchmark_profile_label,
+                    row.parallelConnectionCount
+                ),
+                value = formatConfigBenchmarkProfileValue(row)
+            )
         }
     }
 }
@@ -1154,9 +1174,17 @@ private fun formatConfigBenchmarkProfileValue(
         DebridConfigBenchmarkStatus.SUCCESS ->
             result.averageThroughputMbps?.let(::formatBenchmarkThroughput) ?: "Unknown"
         DebridConfigBenchmarkStatus.FAILED ->
-            result.failureReason ?: "Failed"
+            truncateConfigBenchmarkFailureReason(result.failureReason ?: "Failed")
         DebridConfigBenchmarkStatus.UNSUPPORTED ->
-            result.unsupportedReason ?: "Unsupported"
+            truncateConfigBenchmarkFailureReason(result.unsupportedReason ?: "Unsupported")
+    }
+}
+
+private fun truncateConfigBenchmarkFailureReason(value: String, maxLength: Int = 32): String {
+    return if (value.length <= maxLength) {
+        value
+    } else {
+        value.take(maxLength - 1).trimEnd() + "…"
     }
 }
 

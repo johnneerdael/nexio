@@ -298,7 +298,7 @@ class DebridSettingsViewModelTest {
         advanceUntilIdle()
         viewModel.openLatestConfigBenchmarkResult(DebridBenchmarkProvider.REAL_DEBRID)
 
-        assertEquals(3, viewModel.uiState.value.configBenchmarkResultDialog?.chunkGroups?.size)
+        assertEquals(4, viewModel.uiState.value.configBenchmarkResultDialog?.chunkGroups?.size)
     }
 
     @Test
@@ -327,6 +327,51 @@ class DebridSettingsViewModelTest {
         assertEquals(
             "Real-Debrid config benchmark failed",
             emittedMessage.await()
+        )
+    }
+
+    @Test
+    fun `running config benchmark exposes live summary and profile label`() = runTest(dispatcher) {
+        val configBenchmarkState = MutableStateFlow<DebridConfigBenchmarkRuntimeState>(
+            DebridConfigBenchmarkRuntimeState.Running(
+                provider = DebridBenchmarkProvider.REAL_DEBRID,
+                currentProfile = com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkProfileMetadata(
+                    parallelConnectionCount = 4,
+                    chunkSizeMb = 16
+                ),
+                completedProfiles = 4,
+                totalProfiles = 9,
+                summary = DebridBenchmarkSummary(
+                    startupTimeMs = 200L,
+                    sustainedThroughputMbps = 612.4,
+                    transferredBytes = 640L * 1024L * 1024L,
+                    elapsedMs = 42_000L
+                )
+            )
+        )
+        val configBenchmarkService = mockk<DebridConfigBenchmarkService>(relaxed = true)
+        every { configBenchmarkService.activeState } returns configBenchmarkState
+        every { configBenchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns flowOf(null)
+        every { configBenchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns flowOf(null)
+        every { configBenchmarkService.outcomes } returns MutableSharedFlow<DebridConfigBenchmarkOutcome>()
+
+        val viewModel = buildViewModel(
+            realDebridConnected = true,
+            configBenchmarkService = configBenchmarkService
+        )
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.realDebridConfigBenchmark.isRunning)
+        assertTrue(
+            viewModel.uiState.value.realDebridConfigBenchmark.activeProfileLabel?.contains("4x / 16 MB") == true
+        )
+        assertEquals(
+            42_000L,
+            viewModel.uiState.value.realDebridConfigBenchmark.activeSummary?.elapsedMs
+        )
+        assertEquals(
+            612.4,
+            viewModel.uiState.value.realDebridConfigBenchmark.activeSummary?.sustainedThroughputMbps
         )
     }
 
@@ -436,6 +481,28 @@ class DebridSettingsViewModelTest {
             ),
             DebridConfigBenchmarkProfileResult(
                 parallelConnectionCount = 3,
+                chunkSizeMb = 8,
+                status = DebridConfigBenchmarkStatus.FAILED,
+                failureReason = "Connection reset"
+            ),
+            DebridConfigBenchmarkProfileResult(
+                parallelConnectionCount = 4,
+                chunkSizeMb = 8,
+                status = DebridConfigBenchmarkStatus.SUCCESS,
+                averageThroughputMbps = 595.4,
+                transferredBytes = 1_000L,
+                elapsedMs = 30_000L
+            ),
+            DebridConfigBenchmarkProfileResult(
+                parallelConnectionCount = 2,
+                chunkSizeMb = 16,
+                status = DebridConfigBenchmarkStatus.SUCCESS,
+                averageThroughputMbps = 463.6,
+                transferredBytes = 1_000L,
+                elapsedMs = 30_000L
+            ),
+            DebridConfigBenchmarkProfileResult(
+                parallelConnectionCount = 3,
                 chunkSizeMb = 16,
                 status = DebridConfigBenchmarkStatus.SUCCESS,
                 averageThroughputMbps = 620.0,
@@ -444,9 +511,55 @@ class DebridSettingsViewModelTest {
             ),
             DebridConfigBenchmarkProfileResult(
                 parallelConnectionCount = 4,
+                chunkSizeMb = 16,
+                status = DebridConfigBenchmarkStatus.SUCCESS,
+                averageThroughputMbps = 633.9,
+                transferredBytes = 1_000L,
+                elapsedMs = 30_000L
+            ),
+            DebridConfigBenchmarkProfileResult(
+                parallelConnectionCount = 2,
+                chunkSizeMb = 24,
+                status = DebridConfigBenchmarkStatus.SUCCESS,
+                averageThroughputMbps = 562.2,
+                transferredBytes = 1_000L,
+                elapsedMs = 30_000L
+            ),
+            DebridConfigBenchmarkProfileResult(
+                parallelConnectionCount = 3,
+                chunkSizeMb = 24,
+                status = DebridConfigBenchmarkStatus.SUCCESS,
+                averageThroughputMbps = 756.6,
+                transferredBytes = 1_000L,
+                elapsedMs = 30_000L
+            ),
+            DebridConfigBenchmarkProfileResult(
+                parallelConnectionCount = 4,
                 chunkSizeMb = 24,
                 status = DebridConfigBenchmarkStatus.UNSUPPORTED,
                 unsupportedReason = "Exceeds safe memory budget"
+            ),
+            DebridConfigBenchmarkProfileResult(
+                parallelConnectionCount = 2,
+                chunkSizeMb = 32,
+                status = DebridConfigBenchmarkStatus.SUCCESS,
+                averageThroughputMbps = 610.0,
+                transferredBytes = 1_000L,
+                elapsedMs = 30_000L
+            ),
+            DebridConfigBenchmarkProfileResult(
+                parallelConnectionCount = 3,
+                chunkSizeMb = 32,
+                status = DebridConfigBenchmarkStatus.SUCCESS,
+                averageThroughputMbps = 701.2,
+                transferredBytes = 1_000L,
+                elapsedMs = 30_000L
+            ),
+            DebridConfigBenchmarkProfileResult(
+                parallelConnectionCount = 4,
+                chunkSizeMb = 32,
+                status = DebridConfigBenchmarkStatus.FAILED,
+                failureReason = "Failed to download chunk 173"
             )
         )
         return DebridConfigBenchmarkResult(
@@ -454,10 +567,10 @@ class DebridSettingsViewModelTest {
             measuredAtMs = 9_999L,
             summary = DebridConfigBenchmarkSessionSummary(
                 totalProfileCount = profiles.size,
-                successfulProfileCount = 2,
-                failedProfileCount = 0,
-                unsupportedProfileCount = 1,
-                bestProfile = profiles[1]
+                successfulProfileCount = profiles.count { it.status == DebridConfigBenchmarkStatus.SUCCESS },
+                failedProfileCount = profiles.count { it.status == DebridConfigBenchmarkStatus.FAILED },
+                unsupportedProfileCount = profiles.count { it.status == DebridConfigBenchmarkStatus.UNSUPPORTED },
+                bestProfile = profiles.first { it.averageThroughputMbps == 756.6 }
             ),
             profiles = profiles
         )
