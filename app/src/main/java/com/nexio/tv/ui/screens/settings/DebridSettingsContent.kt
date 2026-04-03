@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,7 +18,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -135,7 +138,8 @@ internal data class DebridProviderConfigBenchmarkUi(
     val isRunning: Boolean = false,
     val blockedByActiveRun: Boolean = false,
     val latestResult: DebridConfigBenchmarkResult? = null,
-    val activeProfileLabel: String? = null
+    val activeProfileLabel: String? = null,
+    val activeSummary: DebridBenchmarkSummary? = null
 )
 
 internal data class DebridConfigBenchmarkChunkGroupUi(
@@ -832,65 +836,72 @@ private fun DebridConfigBenchmarkResultDialog(
         subtitle = null,
         width = 1360.dp
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
-        ) {
-            DebridBenchmarkHeaderMetric(
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(R.string.debrid_benchmark_label_measured_at),
-                value = formatBenchmarkMeasuredAt(result.measuredAtMs)
-            )
-            DebridBenchmarkCompactMetricRow(
-                label = stringResource(R.string.debrid_config_benchmark_best_profile_label),
-                value = formatConfigBenchmarkBestProfile(result)
-            )
-            dialog.chunkGroups.forEach { group ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            color = NexioColors.BackgroundCard,
-                            shape = RoundedCornerShape(14.dp)
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 620.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                DebridBenchmarkHeaderMetric(
+                    modifier = Modifier.fillMaxWidth(),
+                    label = stringResource(R.string.debrid_benchmark_label_measured_at),
+                    value = formatBenchmarkMeasuredAt(result.measuredAtMs)
+                )
+                DebridBenchmarkCompactMetricRow(
+                    label = stringResource(R.string.debrid_config_benchmark_best_profile_label),
+                    value = formatConfigBenchmarkBestProfile(result)
+                )
+                dialog.chunkGroups.forEach { group ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                color = NexioColors.BackgroundCard,
+                                shape = RoundedCornerShape(14.dp)
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = NexioColors.Border,
+                                shape = RoundedCornerShape(14.dp)
+                            )
+                            .padding(horizontal = 18.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.debrid_config_benchmark_chunk_group_title, group.chunkSizeMb),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = NexioColors.TextPrimary
                         )
-                        .border(
-                            width = 1.dp,
-                            color = NexioColors.Border,
-                            shape = RoundedCornerShape(14.dp)
-                        )
-                        .padding(horizontal = 18.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.debrid_config_benchmark_chunk_group_title, group.chunkSizeMb),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = NexioColors.TextPrimary
-                    )
-                    group.rows.sortedBy { it.parallelConnectionCount }.forEach { row ->
-                        DebridBenchmarkCompactMetricRow(
-                            label = stringResource(
-                                R.string.debrid_config_benchmark_profile_label,
-                                row.parallelConnectionCount
-                            ),
-                            value = formatConfigBenchmarkProfileValue(row)
-                        )
+                        group.rows.sortedBy { it.parallelConnectionCount }.forEach { row ->
+                            DebridBenchmarkCompactMetricRow(
+                                label = stringResource(
+                                    R.string.debrid_config_benchmark_profile_label,
+                                    row.parallelConnectionCount
+                                ),
+                                value = formatConfigBenchmarkProfileValue(row)
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            Button(
-                onClick = onDismiss,
-                colors = ButtonDefaults.colors(
-                    containerColor = NexioColors.BackgroundCard,
-                    contentColor = NexioColors.TextPrimary
-                )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 18.dp),
+                horizontalArrangement = Arrangement.End
             ) {
-                Text(stringResource(R.string.action_close))
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.colors(
+                        containerColor = NexioColors.BackgroundCard,
+                        contentColor = NexioColors.TextPrimary
+                    )
+                ) {
+                    Text(stringResource(R.string.action_close))
+                }
             }
         }
     }
@@ -1083,8 +1094,10 @@ private fun benchmarkRowSubtitle(benchmark: DebridProviderBenchmarkUi): String {
 @Composable
 private fun configBenchmarkRowSubtitle(benchmark: DebridProviderConfigBenchmarkUi): String {
     return when {
-        benchmark.isRunning -> benchmark.activeProfileLabel
-            ?: stringResource(R.string.debrid_config_benchmark_running)
+        benchmark.isRunning -> formatRunningConfigBenchmarkSummary(
+            profileLabel = benchmark.activeProfileLabel,
+            summary = benchmark.activeSummary
+        )
         benchmark.latestResult != null -> formatLatestConfigBenchmarkSummary(benchmark.latestResult)
         benchmark.blockedByActiveRun -> stringResource(R.string.debrid_benchmark_busy)
         else -> stringResource(R.string.debrid_config_benchmark_description)
@@ -1113,6 +1126,19 @@ private fun formatLatestConfigBenchmarkSummary(result: DebridConfigBenchmarkResu
     val bestProfile = result.summary.bestProfile ?: return "Latest | No successful profile"
     val throughput = bestProfile.averageThroughputMbps?.let(::formatBenchmarkThroughput) ?: "Unknown"
     return "Latest | ${bestProfile.parallelConnectionCount}x / ${bestProfile.chunkSizeMb} MB | $throughput"
+}
+
+private fun formatRunningConfigBenchmarkSummary(
+    profileLabel: String?,
+    summary: DebridBenchmarkSummary?
+): String {
+    val prefix = profileLabel ?: "Testing profile"
+    if (summary == null) {
+        return prefix
+    }
+    val elapsed = formatBenchmarkElapsed(summary.elapsedMs)
+    val throughput = summary.sustainedThroughputMbps?.let(::formatBenchmarkThroughput)
+    return listOfNotNull(prefix, elapsed, throughput).joinToString(" | ")
 }
 
 private fun formatConfigBenchmarkBestProfile(result: DebridConfigBenchmarkResult): String {
@@ -1659,7 +1685,8 @@ class DebridSettingsViewModel @Inject constructor(
             latestResult = latestResult,
             activeProfileLabel = activeRun?.currentProfile?.let { profile ->
                 "Testing ${profile.parallelConnectionCount}x / ${profile.chunkSizeMb} MB (${activeRun.completedProfiles + 1} of ${activeRun.totalProfiles})"
-            }
+            },
+            activeSummary = activeRun?.summary
         )
     }
 
