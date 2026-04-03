@@ -43,6 +43,9 @@ class ShadowAutoPlayDecisionLoggerTest {
         val summary = logger.buildSummaryLine(sampleEvent())
 
         assertTrue(summary.contains("winner=real_debrid optimized"))
+        assertTrue(summary.contains("service=RD"))
+        assertTrue(summary.contains("file=rd_stream.mkv"))
+        assertTrue(summary.contains("size=39 GB"))
         assertTrue(summary.contains("ratio=1.44"))
         assertTrue(summary.contains("resolution=2160p"))
     }

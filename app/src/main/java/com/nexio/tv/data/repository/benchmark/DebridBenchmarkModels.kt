@@ -148,6 +148,50 @@ data class DeviceAudioOutputCapabilities(
     val dtshd: AudioEncodingSupport = AudioEncodingSupport(false, false)
 )
 
+data class DeviceHdrCapabilityEvidence(
+    val displayId: Int? = null,
+    val rawSupportedHdrTypes: List<String> = emptyList()
+)
+
+data class AudioDirectProfileEvidence(
+    val format: String,
+    val channelMasks: List<Int> = emptyList(),
+    val sampleRates: List<Int> = emptyList()
+)
+
+data class AudioOutputDeviceEvidence(
+    val id: Int? = null,
+    val type: String,
+    val productName: String? = null,
+    val encodings: List<String> = emptyList()
+)
+
+data class DeviceAudioCapabilityEvidence(
+    val discoveryMode: String? = null,
+    val routedDeviceTypes: List<String> = emptyList(),
+    val outputDevices: List<AudioOutputDeviceEvidence> = emptyList(),
+    val directProfiles: List<AudioDirectProfileEvidence> = emptyList()
+)
+
+data class VideoDecoderEvidence(
+    val codecName: String,
+    val mimeType: String,
+    val hardwareAccelerated: Boolean,
+    val softwareOnly: Boolean,
+    val secureSupported: Boolean
+)
+
+data class DeviceVideoDecoderEvidence(
+    val scannedDecoderCount: Int = 0,
+    val decoders: List<VideoDecoderEvidence> = emptyList()
+)
+
+data class DeviceCapabilityEvidence(
+    val hdr: DeviceHdrCapabilityEvidence? = null,
+    val audio: DeviceAudioCapabilityEvidence? = null,
+    val video: DeviceVideoDecoderEvidence? = null
+)
+
 data class DeviceCapabilitySnapshot(
     val model: String? = null,
     val manufacturer: String? = null,
@@ -155,6 +199,7 @@ data class DeviceCapabilitySnapshot(
     val displayHdrTypes: Set<DeviceHdrType> = emptySet(),
     val videoDecode: DeviceVideoDecodeCapabilities = DeviceVideoDecodeCapabilities(),
     val audioOutput: DeviceAudioOutputCapabilities = DeviceAudioOutputCapabilities(),
+    val evidence: DeviceCapabilityEvidence? = null,
     val capturedAtMs: Long
 )
 

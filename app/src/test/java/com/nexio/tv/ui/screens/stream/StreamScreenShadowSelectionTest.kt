@@ -39,7 +39,11 @@ class StreamScreenShadowSelectionTest {
     @Test
     fun `coordinator replays a shadow decision when benchmark data arrives after streams`() {
         val coordinator = ShadowAutoPlayReplayCoordinator(scorer)
-        coordinator.updateCandidates(request(), listOf(streamCard(streamKey = "rd_stream", providerId = "RD")))
+        coordinator.updateCandidates(
+            request(),
+            listOf(streamCard(streamKey = "rd_stream", providerId = "RD")),
+            DebridBenchmarkTransportMode.OPTIMIZED
+        )
 
         val beforeBenchmark = coordinator.buildEvent(emptyMap())
         assertNull(beforeBenchmark?.selected)
@@ -53,6 +57,7 @@ class StreamScreenShadowSelectionTest {
         )
 
         assertEquals("rd_stream", afterBenchmark?.selected?.streamKey)
+        assertEquals(DebridBenchmarkTransportMode.OPTIMIZED, afterBenchmark?.selected?.transport)
     }
 
     @Test
@@ -79,7 +84,8 @@ class StreamScreenShadowSelectionTest {
                     quality = "WEBRip",
                     sizeBytes = gib(12.0)
                 )
-            )
+            ),
+            DebridBenchmarkTransportMode.OPTIMIZED
         )
         val earlyEvent = coordinator.buildEvent(benchmarks)
         assertEquals("pm_ok", earlyEvent?.selected?.streamKey)
@@ -101,16 +107,22 @@ class StreamScreenShadowSelectionTest {
                     quality = "BluRay Remux",
                     sizeBytes = gib(82.0)
                 )
-            )
+            ),
+            DebridBenchmarkTransportMode.OPTIMIZED
         )
         val laterEvent = coordinator.buildEvent(benchmarks)
         assertEquals("rd_remux", laterEvent?.selected?.streamKey)
+        assertEquals(DebridBenchmarkTransportMode.OPTIMIZED, laterEvent?.selected?.transport)
     }
 
     @Test
     fun `coordinator clear drops stale candidates`() {
         val coordinator = ShadowAutoPlayReplayCoordinator(scorer)
-        coordinator.updateCandidates(request(), listOf(streamCard(streamKey = "rd_stream", providerId = "RD")))
+        coordinator.updateCandidates(
+            request(),
+            listOf(streamCard(streamKey = "rd_stream", providerId = "RD")),
+            DebridBenchmarkTransportMode.OPTIMIZED
+        )
 
         coordinator.clear()
 
@@ -119,6 +131,22 @@ class StreamScreenShadowSelectionTest {
                 mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(DebridBenchmarkProvider.REAL_DEBRID))
             )
         )
+    }
+
+    @Test
+    fun `coordinator can replay direct only path when parallel playback is disabled`() {
+        val coordinator = ShadowAutoPlayReplayCoordinator(scorer)
+        coordinator.updateCandidates(
+            request(),
+            listOf(streamCard(streamKey = "rd_stream", providerId = "RD")),
+            DebridBenchmarkTransportMode.DIRECT
+        )
+
+        val event = coordinator.buildEvent(
+            mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(DebridBenchmarkProvider.REAL_DEBRID))
+        )
+
+        assertEquals(DebridBenchmarkTransportMode.DIRECT, event?.selected?.transport)
     }
 
     private fun request(): ShadowRequestContext {

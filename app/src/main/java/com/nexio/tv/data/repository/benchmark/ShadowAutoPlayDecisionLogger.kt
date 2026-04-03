@@ -82,11 +82,20 @@ class ShadowAutoPlayDecisionLogger internal constructor(
         }
         val hdr = winner.hdrTags.firstOrNull() ?: "none"
         val audio = winner.audioTags.firstOrNull() ?: "none"
+        val filename = winner.parsed.filename ?: winner.streamKey
+        val serviceId = winner.parsed.serviceId ?: "unknown"
+        val size = winner.parsed.sizeBytes?.let(::formatShadowSize) ?: "unknown"
         return buildString {
             append("winner=")
             append(winner.provider.storageKey)
             append(' ')
             append(winner.transport.wireKey)
+            append(" service=")
+            append(serviceId)
+            append(" file=")
+            append(filename)
+            append(" size=")
+            append(size)
             append(" score=")
             append(winner.finalScore)
             append(" ratio=")
@@ -105,6 +114,23 @@ class ShadowAutoPlayDecisionLogger internal constructor(
             }
         }
     }
+}
+
+private fun formatShadowSize(sizeBytes: Long): String {
+    if (sizeBytes <= 0L) return "0 B"
+    val units = listOf("B", "KB", "MB", "GB", "TB")
+    var value = sizeBytes.toDouble()
+    var unitIndex = 0
+    while (value >= 1024.0 && unitIndex < units.lastIndex) {
+        value /= 1024.0
+        unitIndex += 1
+    }
+    val formatted = if (value >= 10 || unitIndex == 0) {
+        value.toLong().toString()
+    } else {
+        String.format(Locale.US, "%.1f", value)
+    }
+    return "$formatted ${units[unitIndex]}"
 }
 
 private fun ShadowStreamDecision.toJsonObject(): JsonObject {

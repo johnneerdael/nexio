@@ -300,7 +300,70 @@ internal fun DeviceCapabilitySnapshot.toJsonObject(): JsonObject {
             add("dts", audioOutput.dts.toJsonObject())
             add("dtshd", audioOutput.dtshd.toJsonObject())
         })
+        evidence?.let { add("evidence", it.toJsonObject()) }
         addProperty("capturedAtMs", capturedAtMs)
+    }
+}
+
+private fun DeviceCapabilityEvidence.toJsonObject(): JsonObject {
+    return JsonObject().apply {
+        hdr?.let { hdr ->
+            add("hdr", JsonObject().apply {
+                hdr.displayId?.let { addProperty("displayId", it) }
+                add("rawSupportedHdrTypes", JsonArray().apply {
+                    hdr.rawSupportedHdrTypes.forEach(::add)
+                })
+            })
+        }
+        audio?.let { audio ->
+            add("audio", JsonObject().apply {
+                audio.discoveryMode?.let { addProperty("discoveryMode", it) }
+                add("routedDeviceTypes", JsonArray().apply {
+                    audio.routedDeviceTypes.forEach(::add)
+                })
+                add("outputDevices", JsonArray().apply {
+                    audio.outputDevices.forEach { device ->
+                        add(JsonObject().apply {
+                            device.id?.let { addProperty("id", it) }
+                            addProperty("type", device.type)
+                            device.productName?.let { addProperty("productName", it) }
+                            add("encodings", JsonArray().apply {
+                                device.encodings.forEach(::add)
+                            })
+                        })
+                    }
+                })
+                add("directProfiles", JsonArray().apply {
+                    audio.directProfiles.forEach { profile ->
+                        add(JsonObject().apply {
+                            addProperty("format", profile.format)
+                            add("channelMasks", JsonArray().apply {
+                                profile.channelMasks.forEach(::add)
+                            })
+                            add("sampleRates", JsonArray().apply {
+                                profile.sampleRates.forEach(::add)
+                            })
+                        })
+                    }
+                })
+            })
+        }
+        video?.let { video ->
+            add("video", JsonObject().apply {
+                addProperty("scannedDecoderCount", video.scannedDecoderCount)
+                add("decoders", JsonArray().apply {
+                    video.decoders.forEach { decoder ->
+                        add(JsonObject().apply {
+                            addProperty("codecName", decoder.codecName)
+                            addProperty("mimeType", decoder.mimeType)
+                            addProperty("hardwareAccelerated", decoder.hardwareAccelerated)
+                            addProperty("softwareOnly", decoder.softwareOnly)
+                            addProperty("secureSupported", decoder.secureSupported)
+                        })
+                    }
+                })
+            })
+        }
     }
 }
 

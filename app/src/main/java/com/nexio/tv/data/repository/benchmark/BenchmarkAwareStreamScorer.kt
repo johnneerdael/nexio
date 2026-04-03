@@ -146,6 +146,7 @@ class BenchmarkAwareStreamScorer internal constructor(
         request: ShadowRequestContext,
         streams: List<StreamCardModel>,
         benchmarkSessions: Map<DebridBenchmarkProvider, DebridBenchmarkResult>,
+        activeTransportMode: DebridBenchmarkTransportMode? = null,
         elapsedMs: Long? = null
     ): ShadowAutoPlayDecisionEvent {
         val benchmarkReferences = benchmarkSessions.values.map { session ->
@@ -188,7 +189,8 @@ class BenchmarkAwareStreamScorer internal constructor(
                 item = item,
                 provider = provider,
                 benchmarkSession = benchmarkSession,
-                request = request
+                request = request,
+                activeTransportMode = activeTransportMode
             ).fold(
                 onSuccess = { winners += it },
                 onFailure = { reasons ->
@@ -239,7 +241,8 @@ class BenchmarkAwareStreamScorer internal constructor(
         item: StreamCardModel,
         provider: DebridBenchmarkProvider,
         benchmarkSession: DebridBenchmarkResult,
-        request: ShadowRequestContext
+        request: ShadowRequestContext,
+        activeTransportMode: DebridBenchmarkTransportMode?
     ): EitherSuccessOrReject<ShadowStreamDecision> {
         val parsed = item.parsed
         val sizeBytes = parsed.sizeBytes
@@ -258,7 +261,8 @@ class BenchmarkAwareStreamScorer internal constructor(
         val transportOption = bestTransportOption(
             provider = provider,
             benchmarkSession = benchmarkSession,
-            requiredMbps = requiredMbps
+            requiredMbps = requiredMbps,
+            activeTransportMode = activeTransportMode
         ) ?: return EitherSuccessOrReject.reject(
             ShadowRejectReason.INSUFFICIENT_TRANSPORT_BUDGET,
             ShadowRejectReason.NO_ELIGIBLE_TRANSPORT
@@ -311,7 +315,8 @@ class BenchmarkAwareStreamScorer internal constructor(
     private fun bestTransportOption(
         provider: DebridBenchmarkProvider,
         benchmarkSession: DebridBenchmarkResult,
-        requiredMbps: Double
+        requiredMbps: Double,
+        activeTransportMode: DebridBenchmarkTransportMode?
     ): ShadowTransportOption? {
         val options = listOfNotNull(
             benchmarkSession.direct?.let {
@@ -330,7 +335,10 @@ class BenchmarkAwareStreamScorer internal constructor(
                     requiredMbps = requiredMbps
                 )
             }
-        ).filter { it.suitabilityRatio >= config.viability.minimumRatio }
+        ).filter { option ->
+            option.suitabilityRatio >= config.viability.minimumRatio &&
+                (activeTransportMode == null || option.transport == activeTransportMode)
+        }
 
         return options.sortedWith(shadowTransportOptionComparator(config)).firstOrNull()
     }

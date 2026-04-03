@@ -11,6 +11,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.nexio.tv.data.repository.benchmark.AudioEncodingSupport
+import com.nexio.tv.data.repository.benchmark.AudioDirectProfileEvidence
+import com.nexio.tv.data.repository.benchmark.AudioOutputDeviceEvidence
 import com.nexio.tv.data.repository.benchmark.CodecSupport
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkCandidateMetadata
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkComparisonSummary
@@ -31,10 +33,15 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportDecisionMe
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportProfile
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkThroughputBucketSample
+import com.nexio.tv.data.repository.benchmark.DeviceAudioCapabilityEvidence
 import com.nexio.tv.data.repository.benchmark.DeviceAudioOutputCapabilities
+import com.nexio.tv.data.repository.benchmark.DeviceCapabilityEvidence
 import com.nexio.tv.data.repository.benchmark.DeviceCapabilitySnapshot
+import com.nexio.tv.data.repository.benchmark.DeviceHdrCapabilityEvidence
 import com.nexio.tv.data.repository.benchmark.DeviceHdrType
+import com.nexio.tv.data.repository.benchmark.DeviceVideoDecoderEvidence
 import com.nexio.tv.data.repository.benchmark.DeviceVideoDecodeCapabilities
+import com.nexio.tv.data.repository.benchmark.VideoDecoderEvidence
 import com.nexio.tv.data.repository.benchmark.toJsonObject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
@@ -204,7 +211,8 @@ class DebridBenchmarkStore internal constructor(
         return sdkInt > 0 &&
             capturedAtMs > 0L &&
             videoDecode.isValid() &&
-            audioOutput.isValid()
+            audioOutput.isValid() &&
+            (evidence?.isValid() != false)
     }
 
     private fun DeviceVideoDecodeCapabilities.isValid(): Boolean {
@@ -221,6 +229,39 @@ class DebridBenchmarkStore internal constructor(
 
     private fun AudioEncodingSupport.isValid(): Boolean {
         return !passthroughLikely || supported
+    }
+
+    private fun DeviceCapabilityEvidence.isValid(): Boolean {
+        return hdr?.isValid() != false &&
+            audio?.isValid() != false &&
+            video?.isValid() != false
+    }
+
+    private fun DeviceHdrCapabilityEvidence.isValid(): Boolean {
+        return rawSupportedHdrTypes.all { it.isNotBlank() }
+    }
+
+    private fun DeviceAudioCapabilityEvidence.isValid(): Boolean {
+        return discoveryMode?.isNotBlank() != false &&
+            routedDeviceTypes.all { it.isNotBlank() } &&
+            outputDevices.all { it.isValid() } &&
+            directProfiles.all { it.isValid() }
+    }
+
+    private fun AudioOutputDeviceEvidence.isValid(): Boolean {
+        return type.isNotBlank() && encodings.all { it.isNotBlank() }
+    }
+
+    private fun AudioDirectProfileEvidence.isValid(): Boolean {
+        return format.isNotBlank()
+    }
+
+    private fun DeviceVideoDecoderEvidence.isValid(): Boolean {
+        return scannedDecoderCount >= 0 && decoders.all { it.isValid() }
+    }
+
+    private fun VideoDecoderEvidence.isValid(): Boolean {
+        return codecName.isNotBlank() && mimeType.isNotBlank()
     }
 
     private fun DebridBenchmarkSessionMetadata.isValid(): Boolean {
@@ -376,7 +417,79 @@ class DebridBenchmarkStore internal constructor(
             }.toSet(),
             videoDecode = deviceJson.requiredObject("videoDecode").let(::parseVideoDecode),
             audioOutput = deviceJson.requiredObject("audioOutput").let(::parseAudioOutput),
+            evidence = deviceJson.optionalObject("evidence")?.let(::parseDeviceCapabilityEvidence),
             capturedAtMs = deviceJson.strictIntegralLongOrNull("capturedAtMs")?.takeIf { it > 0L }
+                ?: throw InvalidDebridBenchmarkPayload()
+        )
+    }
+
+    private fun parseDeviceCapabilityEvidence(evidenceJson: JsonObject): DeviceCapabilityEvidence {
+        return DeviceCapabilityEvidence(
+            hdr = evidenceJson.optionalObject("hdr")?.let(::parseHdrEvidence),
+            audio = evidenceJson.optionalObject("audio")?.let(::parseAudioEvidence),
+            video = evidenceJson.optionalObject("video")?.let(::parseVideoEvidence)
+        )
+    }
+
+    private fun parseHdrEvidence(hdrJson: JsonObject): DeviceHdrCapabilityEvidence {
+        return DeviceHdrCapabilityEvidence(
+            displayId = hdrJson.optionalStrictIntegralIntOrNull("displayId"),
+            rawSupportedHdrTypes = hdrJson.arrayOrEmpty("rawSupportedHdrTypes").map { it.asStringOrThrow() }
+        )
+    }
+
+    private fun parseAudioEvidence(audioJson: JsonObject): DeviceAudioCapabilityEvidence {
+        return DeviceAudioCapabilityEvidence(
+            discoveryMode = audioJson.stringOrNull("discoveryMode"),
+            routedDeviceTypes = audioJson.arrayOrEmpty("routedDeviceTypes").map { it.asStringOrThrow() },
+            outputDevices = audioJson.arrayOrEmpty("outputDevices").map { device ->
+                parseAudioOutputDeviceEvidence(device.asJsonObjectOrThrow())
+            },
+            directProfiles = audioJson.arrayOrEmpty("directProfiles").map { profile ->
+                parseAudioDirectProfileEvidence(profile.asJsonObjectOrThrow())
+            }
+        )
+    }
+
+    private fun parseAudioOutputDeviceEvidence(deviceJson: JsonObject): AudioOutputDeviceEvidence {
+        return AudioOutputDeviceEvidence(
+            id = deviceJson.optionalStrictIntegralIntOrNull("id"),
+            type = deviceJson.stringOrNull("type") ?: throw InvalidDebridBenchmarkPayload(),
+            productName = deviceJson.stringOrNull("productName"),
+            encodings = deviceJson.arrayOrEmpty("encodings").map { it.asStringOrThrow() }
+        )
+    }
+
+    private fun parseAudioDirectProfileEvidence(profileJson: JsonObject): AudioDirectProfileEvidence {
+        return AudioDirectProfileEvidence(
+            format = profileJson.stringOrNull("format") ?: throw InvalidDebridBenchmarkPayload(),
+            channelMasks = profileJson.arrayOrEmpty("channelMasks").map {
+                it.asIntegralIntOrThrow()
+            },
+            sampleRates = profileJson.arrayOrEmpty("sampleRates").map {
+                it.asIntegralIntOrThrow()
+            }
+        )
+    }
+
+    private fun parseVideoEvidence(videoJson: JsonObject): DeviceVideoDecoderEvidence {
+        return DeviceVideoDecoderEvidence(
+            scannedDecoderCount = videoJson.optionalStrictIntegralIntOrNull("scannedDecoderCount") ?: 0,
+            decoders = videoJson.arrayOrEmpty("decoders").map { decoder ->
+                parseVideoDecoderEvidence(decoder.asJsonObjectOrThrow())
+            }
+        )
+    }
+
+    private fun parseVideoDecoderEvidence(decoderJson: JsonObject): VideoDecoderEvidence {
+        return VideoDecoderEvidence(
+            codecName = decoderJson.stringOrNull("codecName") ?: throw InvalidDebridBenchmarkPayload(),
+            mimeType = decoderJson.stringOrNull("mimeType") ?: throw InvalidDebridBenchmarkPayload(),
+            hardwareAccelerated = decoderJson.strictBooleanOrNull("hardwareAccelerated")
+                ?: throw InvalidDebridBenchmarkPayload(),
+            softwareOnly = decoderJson.strictBooleanOrNull("softwareOnly")
+                ?: throw InvalidDebridBenchmarkPayload(),
+            secureSupported = decoderJson.strictBooleanOrNull("secureSupported")
                 ?: throw InvalidDebridBenchmarkPayload()
         )
     }
@@ -615,6 +728,14 @@ class DebridBenchmarkStore internal constructor(
     private fun com.google.gson.JsonElement.asStringOrThrow(): String {
         return takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
             ?: throw InvalidDebridBenchmarkPayload()
+    }
+
+    private fun com.google.gson.JsonElement.asIntegralIntOrThrow(): Int {
+        val primitive = takeIf { it.isJsonPrimitive }?.asJsonPrimitive ?: throw InvalidDebridBenchmarkPayload()
+        if (!primitive.isNumber) throw InvalidDebridBenchmarkPayload()
+        val text = primitive.asString.trim()
+        if (!text.matches(INTEGRAL_NUMBER_REGEX)) throw InvalidDebridBenchmarkPayload()
+        return text.toIntOrNull() ?: throw InvalidDebridBenchmarkPayload()
     }
 
     private fun com.google.gson.JsonElement.asStrictNonNegativeDouble(): Double {

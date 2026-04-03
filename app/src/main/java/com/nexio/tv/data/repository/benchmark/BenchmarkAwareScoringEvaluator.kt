@@ -73,13 +73,17 @@ class BenchmarkAwareScoringEvaluator {
                 streams = scenario.toStreamCards(),
                 benchmarkSessions = scenario.toBenchmarkSessionMap()
             )
-            val selectedKey = event.selected?.streamKey
-            val acceptableWinnerKeys = scenario.acceptableWinnerKeys.ifEmpty {
-                scenario.expectedWinnerStreamKey?.let(::listOf).orEmpty()
+            val selectedKey = scenario.resolveAutoPlayWinnerStreamKey(
+                selected = event.selected,
+                selectedNonDolbyVisionFallback = event.selectedNonDolbyVisionFallback
+            )
+            val expectedWinnerStreamKey = scenario.expectedResolvedWinnerStreamKey()
+            val acceptableWinnerKeys = scenario.acceptableResolvedWinnerKeys().ifEmpty {
+                expectedWinnerStreamKey?.let(::listOf).orEmpty()
             }
             val exactTopMatch =
-                scenario.expectedWinnerStreamKey != null &&
-                    selectedKey == scenario.expectedWinnerStreamKey
+                expectedWinnerStreamKey != null &&
+                    selectedKey == expectedWinnerStreamKey
             val acceptableMatch =
                 selectedKey != null && acceptableWinnerKeys.contains(selectedKey)
             val pairwiseSatisfied = scenario.preferredPairs.count { pair ->
@@ -97,7 +101,7 @@ class BenchmarkAwareScoringEvaluator {
             BenchmarkAwareScenarioEvaluation(
                 scenarioId = scenario.id,
                 selectedStreamKey = selectedKey,
-                expectedWinnerStreamKey = scenario.expectedWinnerStreamKey,
+                expectedWinnerStreamKey = expectedWinnerStreamKey,
                 topMatch = exactTopMatch,
                 acceptableMatch = acceptableMatch,
                 pairwiseSatisfied = pairwiseSatisfied,
