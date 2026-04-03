@@ -181,6 +181,34 @@ class DebridBenchmarkMetricsTest {
     }
 
     @Test
+    fun `collector uses smoothed 5 second decision windows for autoplay floor`() {
+        val collector = DebridBenchmarkMetricsCollector()
+
+        collector.recordStartup(
+            requestStartedAtMs = 0L,
+            firstByteAtMs = 0L
+        )
+
+        repeat(10) { index ->
+            collector.recordBytesRead(
+                totalBytesRead = (index + 1) * 100_000_000L,
+                sampleAtMs = (index + 1).seconds
+            )
+        }
+        collector.recordBytesRead(totalBytesRead = 1_000_400_000L, sampleAtMs = 11.seconds)
+        collector.recordBytesRead(totalBytesRead = 1_000_800_000L, sampleAtMs = 12.seconds)
+        collector.recordBytesRead(totalBytesRead = 1_100_800_000L, sampleAtMs = 13.seconds)
+        collector.recordBytesRead(totalBytesRead = 1_200_800_000L, sampleAtMs = 14.seconds)
+        collector.recordBytesRead(totalBytesRead = 1_300_800_000L, sampleAtMs = 15.seconds)
+
+        val sustained = collector.finishSustained()
+
+        assertEquals(693.76, sustained.averageThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(481.28, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(481.28, sustained.peakThroughputMbps ?: 0.0, 0.00001)
+    }
+
+    @Test
     fun `collector preserves bytes across multiple reads in the same millisecond`() {
         val collector = DebridBenchmarkMetricsCollector()
 
