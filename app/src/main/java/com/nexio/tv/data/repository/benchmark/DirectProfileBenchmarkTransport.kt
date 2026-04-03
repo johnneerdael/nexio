@@ -22,7 +22,8 @@ class DirectProfileBenchmarkTransport internal constructor(
             readBufferSize = 256 * 1024,
             maxRecoverableFailures = 8,
             sleepMs = { durationMs -> Thread.sleep(durationMs) },
-            noProgressFailureTimeoutMs = 20_000L
+            noProgressFailureTimeoutMs = 20_000L,
+            completionGuardBandMs = 10_000L
         )
     )
 
