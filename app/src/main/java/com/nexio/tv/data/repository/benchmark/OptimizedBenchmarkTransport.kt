@@ -162,7 +162,8 @@ class OptimizedBenchmarkTransport internal constructor(
         val sustainedPhase = runStartupAndSustainedPhase(
             readableSourceFactory = sustainedReadableSourceFactory,
             collector = collector,
-            observer = observer
+            observer = observer,
+            allowRecoverableRetries = false
         )
         DebridConfigBenchmarkTransportResult(
             summary = collector.currentSummary(),
@@ -187,7 +188,8 @@ class OptimizedBenchmarkTransport internal constructor(
         readableSourceFactory: BenchmarkReadableSourceFactory,
         collector: DebridBenchmarkMetricsCollector,
         observer: DebridBenchmarkObserver,
-        completionGuardBandMsOverride: Long = completionGuardBandMs
+        completionGuardBandMsOverride: Long = completionGuardBandMs,
+        allowRecoverableRetries: Boolean = true
     ): StartupAndSustainedPhaseResult {
         var readableSource = readableSourceFactory.createSource()
         val buffer = ByteArray(readBufferSize)
@@ -239,7 +241,7 @@ class OptimizedBenchmarkTransport internal constructor(
                         recoverableFailureCount = recoverableFailureCount,
                         recoverableTimeoutCount = recoverableTimeoutCount
                     )
-                    if (failure.isRecoverable() && shouldContinueRecovering(
+                    if (allowRecoverableRetries && failure.isRecoverable() && shouldContinueRecovering(
                             lastProgressAtNs = lastProgressAtNs,
                             consecutiveRecoverableFailureCount = consecutiveRecoverableFailureCount
                         )) {

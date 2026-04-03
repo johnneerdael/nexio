@@ -103,6 +103,56 @@ class OptimizedBenchmarkTransportTest {
     }
 
     @Test
+    fun `config benchmark fails fast on connection reset without recovery averaging`() = runTest {
+        val clock = FakeBenchmarkClock()
+        val failedOnce = AtomicBoolean(false)
+        val transport = buildTransport(
+            builder = object : OptimizedBenchmarkDataSourceFactoryBuilder {
+                override fun create(
+                    candidate: DebridBenchmarkCandidate,
+                    configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    allowStartupBootstrapReuse: Boolean,
+                    transportSampleTimeMs: () -> Long,
+                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                ): BenchmarkReadableSourceFactory {
+                    return BenchmarkReadableSourceFactory {
+                        object : BenchmarkReadableSource {
+                            override fun open(position: Long, length: Long): Long {
+                                clock.advanceMs(50L)
+                                return 1024L * 1024L
+                            }
+
+                            override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                                if (!failedOnce.getAndSet(true)) {
+                                    throw SocketException("Connection reset")
+                                }
+                                return C.RESULT_END_OF_INPUT
+                            }
+
+                            override fun close() = Unit
+                        }
+                    }
+                }
+            },
+            clock = clock
+        )
+
+        val result = transport.runConfigProfile(
+            candidate = candidate(),
+            configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                useParallelConnections = true,
+                parallelConnectionCount = 4,
+                parallelChunkSizeMb = 16
+            ),
+            measurementDurationMs = 30_000L
+        )
+
+        assertEquals(DebridBenchmarkTerminationReason.FAILED, result.terminationReason)
+        assertEquals("SocketException", result.failure?.exceptionClass)
+        assertEquals(null, result.averageThroughputMbps)
+    }
+
+    @Test
     fun `optimized transport reports chunk timeout details`() = runTest {
         val clock = FakeBenchmarkClock()
         val builder = object : OptimizedBenchmarkDataSourceFactoryBuilder {
