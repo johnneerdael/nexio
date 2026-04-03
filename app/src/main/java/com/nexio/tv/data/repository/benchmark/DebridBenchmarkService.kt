@@ -36,7 +36,8 @@ class DebridBenchmarkService internal constructor(
     private val sessionRunner: DebridBenchmarkSessionRunner,
     private val benchmarkResultJsonLogger: BenchmarkResultJsonLogger,
     private val scope: CoroutineScope,
-    private val nowMs: () -> Long
+    private val nowMs: () -> Long,
+    private val executionGate: DebridBenchmarkExecutionGate
 ) {
     private val runMutex = Mutex()
     private val _activeState = MutableStateFlow<DebridBenchmarkRuntimeState>(
@@ -50,14 +51,16 @@ class DebridBenchmarkService internal constructor(
         resolver: DebridBenchmarkCandidateResolver,
         store: DebridBenchmarkStore,
         sessionRunner: DebridBenchmarkSessionRunner,
-        benchmarkResultJsonLogger: BenchmarkResultJsonLogger
+        benchmarkResultJsonLogger: BenchmarkResultJsonLogger,
+        executionGate: DebridBenchmarkExecutionGate
     ) : this(
         resolver = resolver,
         store = store,
         sessionRunner = sessionRunner,
         benchmarkResultJsonLogger = benchmarkResultJsonLogger,
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-        nowMs = System::currentTimeMillis
+        nowMs = System::currentTimeMillis,
+        executionGate = executionGate
     )
 
     val activeState: StateFlow<DebridBenchmarkRuntimeState> = _activeState.asStateFlow()
@@ -70,6 +73,9 @@ class DebridBenchmarkService internal constructor(
     suspend fun start(provider: DebridBenchmarkProvider): Boolean {
         return runMutex.withLock {
             if (activeJob?.isActive == true) {
+                return false
+            }
+            if (!executionGate.tryAcquire()) {
                 return false
             }
 
@@ -90,6 +96,7 @@ class DebridBenchmarkService internal constructor(
         }
 
         job?.cancelAndJoin()
+        executionGate.release()
     }
 
     fun onAppBackgrounded() {
@@ -183,6 +190,7 @@ class DebridBenchmarkService internal constructor(
             )
         } finally {
             clearActiveState()
+            executionGate.release()
         }
     }
 

@@ -1,0 +1,199 @@
+{
+  "datasetVersion": 1,
+  "scenarios": [
+    {
+      "id": "movie-webdl-non-remux-quality-pack",
+      "name": "Movie WEB-DL/non-remux quality comparison",
+      "request": {
+        "videoId": "tt0468569",
+        "contentType": "movie",
+        "title": "The Dark Knight",
+        "runtimeMinutes": 152
+      },
+      "benchmarks": [
+        {
+          "provider": "PREMIUMIZE",
+          "measuredAtMs": 42,
+          "summary": {
+            "startupTimeMs": 110,
+            "sustainedThroughputMbps": 190.0,
+            "transferredBytes": 2048,
+            "elapsedMs": 120000
+          },
+          "terminationReason": "COMPLETED",
+          "device": {
+            "model": "Shield",
+            "manufacturer": "NVIDIA",
+            "sdkInt": 35,
+            "displayHdrTypes": [
+              "DOLBY_VISION",
+              "HDR10",
+              "HDR10_PLUS"
+            ],
+            "videoDecode": {
+              "h264": {
+                "hardwareAccelerated": true,
+                "softwareOnlyAvailable": false,
+                "secureSupported": true
+              },
+              "hevc": {
+                "hardwareAccelerated": true,
+                "softwareOnlyAvailable": false,
+                "secureSupported": true
+              },
+              "av1": {
+                "hardwareAccelerated": false,
+                "softwareOnlyAvailable": true,
+                "secureSupported": false
+              },
+              "dolbyVision": {
+                "hardwareAccelerated": true,
+                "softwareOnlyAvailable": false,
+                "secureSupported": true
+              }
+            },
+            "audioOutput": {
+              "ac3": {
+                "supported": true,
+                "passthroughLikely": true
+              },
+              "eac3": {
+                "supported": true,
+                "passthroughLikely": true
+              },
+              "truehd": {
+                "supported": true,
+                "passthroughLikely": false
+              },
+              "dts": {
+                "supported": true,
+                "passthroughLikely": true
+              },
+              "dtshd": {
+                "supported": false,
+                "passthroughLikely": false
+              }
+            },
+            "capturedAtMs": 40
+          },
+          "direct": {
+            "startup": {
+              "initialTtfbMs": 170,
+              "startupFailureRate": 0.0
+            },
+            "sustained": {
+              "averageThroughputMbps": 175.0,
+              "derivedAverageThroughputMbps": 175.0,
+              "actionable": true,
+              "p10ThroughputMbps": 160.0,
+              "p50ThroughputMbps": 175.0,
+              "peakThroughputMbps": 190.0,
+              "throughputStddevMbps": 6.0,
+              "throughputCv": 0.05,
+              "stallCount": 0,
+              "maxReadGapMs": 150,
+              "bytesTransferred": 2048,
+              "elapsedMs": 120000
+            },
+            "seek": {
+              "seekTtfbP50Ms": 180,
+              "seekTtfbP95Ms": 260,
+              "seekTtfbP99Ms": 340,
+              "seekTtfbStddevMs": 20.0,
+              "seekFailRate": 0.0
+            },
+            "decision": {
+              "safeSustainedBudgetMbps": 136.0,
+              "actionable": true
+            },
+            "rawSamples": {}
+          },
+          "optimized": {
+            "startup": {
+              "initialTtfbMs": 95,
+              "startupFailureRate": 0.0
+            },
+            "sustained": {
+              "averageThroughputMbps": 190.0,
+              "derivedAverageThroughputMbps": 190.0,
+              "actionable": true,
+              "p10ThroughputMbps": 175.0,
+              "p50ThroughputMbps": 190.0,
+              "peakThroughputMbps": 210.0,
+              "throughputStddevMbps": 6.0,
+              "throughputCv": 0.05,
+              "stallCount": 0,
+              "maxReadGapMs": 150,
+              "bytesTransferred": 2048,
+              "elapsedMs": 120000
+            },
+            "seek": {
+              "seekTtfbP50Ms": 150,
+              "seekTtfbP95Ms": 220,
+              "seekTtfbP99Ms": 280,
+              "seekTtfbStddevMs": 20.0,
+              "seekFailRate": 0.0
+            },
+            "decision": {
+              "safeSustainedBudgetMbps": 148.75,
+              "actionable": true
+            },
+            "rawSamples": {}
+          },
+          "comparison": {
+            "sustainedWinner": "OPTIMIZED",
+            "seekWinner": "OPTIMIZED",
+            "stabilityWinner": "OPTIMIZED"
+          },
+          "session": {
+            "benchmarkVersion": 3,
+            "executionOrder": [],
+            "totalElapsedMs": 240000
+          }
+        }
+      ],
+      "streams": [
+        {
+          "streamKey": "healthy_webdl",
+          "providerId": "PM",
+          "sizeBytes": 32000000000,
+          "durationMs": 9120000,
+          "filename": "The.Dark.Knight.2008.2160p.WEB-DL.HEVC.DV.DDP5.1.Atmos-GROUP.mkv",
+          "useRealParser": true
+        },
+        {
+          "streamKey": "cheap_4k",
+          "providerId": "PM",
+          "sizeBytes": 8000000000,
+          "durationMs": 9120000,
+          "filename": "The.Dark.Knight.2008.2160p.WEBRip.HEVC.HDR10.DDP5.1-GROUP.mkv",
+          "useRealParser": true
+        },
+        {
+          "streamKey": "strong_1080p",
+          "providerId": "PM",
+          "sizeBytes": 24000000000,
+          "durationMs": 9120000,
+          "filename": "The.Dark.Knight.2008.1080p.BluRay.DTS.x264-GROUP.mkv",
+          "useRealParser": true
+        }
+      ],
+      "expectedWinnerStreamKey": "healthy_webdl",
+      "acceptableWinnerKeys": [
+        "healthy_webdl"
+      ],
+      "preferredPairs": [
+        {
+          "preferredStreamKey": "healthy_webdl",
+          "otherStreamKey": "cheap_4k",
+          "reason": "healthy WEB-DL beats fake low bitrate 4K"
+        },
+        {
+          "preferredStreamKey": "healthy_webdl",
+          "otherStreamKey": "strong_1080p",
+          "reason": "viable premium 4K WEB-DL should beat 1080p in this scenario"
+        }
+      ]
+    }
+  ]
+}

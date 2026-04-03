@@ -1,0 +1,19 @@
+{
+  "corpusVersion": 1,
+  "name": "sample-benchmark-scoring-corpus",
+  "datasets": [
+    "datasets/audio-fallback.json",
+    "datasets/dv-vs-hdr10plus.json",
+    "datasets/remux-vs-webdl.json",
+    "datasets/fake-4k-penalty.json",
+    "datasets/av1-vs-hevc.json",
+    "datasets/dtshd-core-vs-pcm-vs-passthrough.json",
+    "datasets/lotr-return-of-the-king-movie.json",
+    "datasets/tv-hevc-ddp-vs-av1-webdl.json",
+    "datasets/movie-webdl-non-remux-quality-pack.json"
+  ],
+  "variants": [
+    "variants/default.json",
+    "variants/pcm-heavy.json"
+  ]
+}

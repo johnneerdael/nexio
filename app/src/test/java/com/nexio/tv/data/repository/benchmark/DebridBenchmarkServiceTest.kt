@@ -253,7 +253,8 @@ class DebridBenchmarkServiceTest {
             sessionRunner = benchmarkSessionRunner,
             benchmarkResultJsonLogger = benchmarkResultJsonLogger,
             scope = scope,
-            nowMs = System::currentTimeMillis
+            nowMs = System::currentTimeMillis,
+            executionGate = DebridBenchmarkExecutionGate()
         )
     }
 

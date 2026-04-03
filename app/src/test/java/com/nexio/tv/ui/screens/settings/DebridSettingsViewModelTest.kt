@@ -22,6 +22,13 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkRuntimeState
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
+import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkOutcome
+import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkProfileResult
+import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkResult
+import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkRuntimeState
+import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkService
+import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkSessionSummary
+import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkStatus
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -263,12 +270,46 @@ class DebridSettingsViewModelTest {
         assertEquals(null, viewModel.uiState.value.benchmarkResultDialog)
     }
 
+    @Test
+    fun `connected provider row shows config benchmark action and latest best profile summary`() = runTest(dispatcher) {
+        val latestConfigResult = sampleConfigResult(DebridBenchmarkProvider.REAL_DEBRID)
+        val viewModel = buildViewModel(
+            realDebridConnected = true,
+            latestRealDebridConfigResult = latestConfigResult
+        )
+
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.realDebridConfigBenchmark.canRun)
+        assertEquals(
+            latestConfigResult,
+            viewModel.uiState.value.realDebridConfigBenchmark.latestResult
+        )
+    }
+
+    @Test
+    fun `config benchmark completion dialog groups rows by chunk size`() = runTest(dispatcher) {
+        val latestConfigResult = sampleConfigResult(DebridBenchmarkProvider.REAL_DEBRID)
+        val viewModel = buildViewModel(
+            realDebridConnected = true,
+            latestRealDebridConfigResult = latestConfigResult
+        )
+
+        advanceUntilIdle()
+        viewModel.openLatestConfigBenchmarkResult(DebridBenchmarkProvider.REAL_DEBRID)
+
+        assertEquals(3, viewModel.uiState.value.configBenchmarkResultDialog?.chunkGroups?.size)
+    }
+
     private fun buildViewModel(
         realDebridConnected: Boolean = false,
         premiumizeConnected: Boolean = false,
         latestRealDebridResult: DebridBenchmarkResult? = null,
         latestPremiumizeResult: DebridBenchmarkResult? = null,
-        benchmarkService: DebridBenchmarkService? = null
+        latestRealDebridConfigResult: DebridConfigBenchmarkResult? = null,
+        latestPremiumizeConfigResult: DebridConfigBenchmarkResult? = null,
+        benchmarkService: DebridBenchmarkService? = null,
+        configBenchmarkService: DebridConfigBenchmarkService? = null
     ): DebridSettingsViewModel {
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
         every { realDebridAuthDataStore.state } returns flowOf(
@@ -317,6 +358,15 @@ class DebridSettingsViewModelTest {
             every { service.outcomes } returns MutableSharedFlow()
         }
 
+        val resolvedConfigBenchmarkService = configBenchmarkService ?: mockk<DebridConfigBenchmarkService>(relaxed = true).also { service ->
+            every { service.activeState } returns MutableStateFlow(DebridConfigBenchmarkRuntimeState.Idle)
+            every { service.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns
+                flowOf(latestRealDebridConfigResult)
+            every { service.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns
+                flowOf(latestPremiumizeConfigResult)
+            every { service.outcomes } returns MutableSharedFlow<DebridConfigBenchmarkOutcome>()
+        }
+
         return DebridSettingsViewModel(
             realDebridAuthService = mockk<RealDebridAuthService>(relaxed = true),
             realDebridAuthDataStore = realDebridAuthDataStore,
@@ -326,7 +376,8 @@ class DebridSettingsViewModelTest {
             torBoxSettingsDataStore = torBoxSettingsDataStore,
             easyDebridService = easyDebridService,
             easyDebridSettingsDataStore = easyDebridSettingsDataStore,
-            debridBenchmarkService = resolvedBenchmarkService
+            debridBenchmarkService = resolvedBenchmarkService,
+            debridConfigBenchmarkService = resolvedConfigBenchmarkService
         )
     }
 
@@ -341,6 +392,45 @@ class DebridSettingsViewModelTest {
                 elapsedMs = 130_000L
             ),
             terminationReason = DebridBenchmarkTerminationReason.COMPLETED
+        )
+    }
+
+    private fun sampleConfigResult(provider: DebridBenchmarkProvider): DebridConfigBenchmarkResult {
+        val profiles = listOf(
+            DebridConfigBenchmarkProfileResult(
+                parallelConnectionCount = 2,
+                chunkSizeMb = 8,
+                status = DebridConfigBenchmarkStatus.SUCCESS,
+                averageThroughputMbps = 410.0,
+                transferredBytes = 1_000L,
+                elapsedMs = 30_000L
+            ),
+            DebridConfigBenchmarkProfileResult(
+                parallelConnectionCount = 3,
+                chunkSizeMb = 16,
+                status = DebridConfigBenchmarkStatus.SUCCESS,
+                averageThroughputMbps = 620.0,
+                transferredBytes = 1_000L,
+                elapsedMs = 30_000L
+            ),
+            DebridConfigBenchmarkProfileResult(
+                parallelConnectionCount = 4,
+                chunkSizeMb = 24,
+                status = DebridConfigBenchmarkStatus.UNSUPPORTED,
+                unsupportedReason = "Exceeds safe memory budget"
+            )
+        )
+        return DebridConfigBenchmarkResult(
+            provider = provider,
+            measuredAtMs = 9_999L,
+            summary = DebridConfigBenchmarkSessionSummary(
+                totalProfileCount = profiles.size,
+                successfulProfileCount = 2,
+                failedProfileCount = 0,
+                unsupportedProfileCount = 1,
+                bestProfile = profiles[1]
+            ),
+            profiles = profiles
         )
     }
 }

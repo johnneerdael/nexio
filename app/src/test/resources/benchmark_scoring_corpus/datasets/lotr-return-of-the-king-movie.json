@@ -1,0 +1,257 @@
+{
+  "datasetVersion": 1,
+  "scenarios": [
+    {
+      "id": "lotr-return-of-the-king-movie",
+      "name": "LOTR Return of the King real filename ranking corpus",
+      "request": {
+        "videoId": "tt0167260",
+        "contentType": "movie",
+        "title": "The Lord of the Rings: The Return of the King",
+        "runtimeMinutes": 201
+      },
+      "benchmarks": [
+        {
+          "provider": "REAL_DEBRID",
+          "measuredAtMs": 42,
+          "summary": {
+            "startupTimeMs": 140,
+            "sustainedThroughputMbps": 220.0,
+            "transferredBytes": 2048,
+            "elapsedMs": 120000
+          },
+          "terminationReason": "COMPLETED",
+          "device": {
+            "model": "Shield",
+            "manufacturer": "NVIDIA",
+            "sdkInt": 35,
+            "displayHdrTypes": [
+              "DOLBY_VISION",
+              "HDR10",
+              "HDR10_PLUS"
+            ],
+            "videoDecode": {
+              "h264": {
+                "hardwareAccelerated": true,
+                "softwareOnlyAvailable": false,
+                "secureSupported": true
+              },
+              "hevc": {
+                "hardwareAccelerated": true,
+                "softwareOnlyAvailable": false,
+                "secureSupported": true
+              },
+              "av1": {
+                "hardwareAccelerated": false,
+                "softwareOnlyAvailable": true,
+                "secureSupported": false
+              },
+              "dolbyVision": {
+                "hardwareAccelerated": true,
+                "softwareOnlyAvailable": false,
+                "secureSupported": true
+              }
+            },
+            "audioOutput": {
+              "ac3": {
+                "supported": true,
+                "passthroughLikely": true
+              },
+              "eac3": {
+                "supported": true,
+                "passthroughLikely": true
+              },
+              "truehd": {
+                "supported": true,
+                "passthroughLikely": true
+              },
+              "dts": {
+                "supported": true,
+                "passthroughLikely": true
+              },
+              "dtshd": {
+                "supported": true,
+                "passthroughLikely": true
+              }
+            },
+            "capturedAtMs": 40
+          },
+          "direct": {
+            "startup": {
+              "initialTtfbMs": 333,
+              "startupFailureRate": 0.0
+            },
+            "sustained": {
+              "averageThroughputMbps": 192.8,
+              "derivedAverageThroughputMbps": 192.8,
+              "actionable": true,
+              "p10ThroughputMbps": 168.4,
+              "p50ThroughputMbps": 194.1,
+              "peakThroughputMbps": 227.6,
+              "throughputStddevMbps": 16.0,
+              "throughputCv": 0.083,
+              "stallCount": 1,
+              "maxReadGapMs": 410,
+              "bytesTransferred": 2899102924,
+              "elapsedMs": 120000
+            },
+            "seek": {
+              "seekTtfbP50Ms": 191,
+              "seekTtfbP95Ms": 428,
+              "seekTtfbP99Ms": 612,
+              "seekTtfbStddevMs": 87.0,
+              "seekFailRate": 0.018
+            },
+            "decision": {
+              "safeSustainedBudgetMbps": 143.1,
+              "actionable": true
+            },
+            "rawSamples": {}
+          },
+          "optimized": {
+            "startup": {
+              "initialTtfbMs": 1280,
+              "startupFailureRate": 0.0
+            },
+            "sustained": {
+              "averageThroughputMbps": 219.8,
+              "derivedAverageThroughputMbps": 219.8,
+              "actionable": true,
+              "p10ThroughputMbps": 203.7,
+              "p50ThroughputMbps": 221.4,
+              "peakThroughputMbps": 248.9,
+              "throughputStddevMbps": 11.5,
+              "throughputCv": 0.052,
+              "stallCount": 0,
+              "maxReadGapMs": 142,
+              "bytesTransferred": 3297000000,
+              "elapsedMs": 120000
+            },
+            "seek": {
+              "seekTtfbP50Ms": 154,
+              "seekTtfbP95Ms": 307,
+              "seekTtfbP99Ms": 454,
+              "seekTtfbStddevMs": 61.0,
+              "seekFailRate": 0.004
+            },
+            "decision": {
+              "safeSustainedBudgetMbps": 173.1,
+              "actionable": true
+            },
+            "rawSamples": {}
+          },
+          "comparison": {
+            "sustainedWinner": "OPTIMIZED",
+            "seekWinner": "OPTIMIZED",
+            "stabilityWinner": "OPTIMIZED"
+          },
+          "session": {
+            "benchmarkVersion": 3,
+            "executionOrder": [],
+            "totalElapsedMs": 240000
+          }
+        }
+      ],
+      "streams": [
+        {
+          "streamKey": "inferno",
+          "providerId": "RD",
+          "sizeBytes": 163500000000,
+          "durationMs": 12060000,
+          "filename": "The Lord of the Rings The Return of the King 2003 2160p Extended Edition HEVC HDR10 TrueHD Atmos 7 1-INFERNO.mkv",
+          "useRealParser": true
+        },
+        {
+          "streamKey": "legion",
+          "providerId": "RD",
+          "sizeBytes": 153800000000,
+          "durationMs": 12060000,
+          "filename": "The Lord of the Rings The Return of the King 2003 Extended REMUX UHD BluRay 2160p HEVC 10bit HDR Atmos DTS-HD MA 7 1-LEGi0N.mkv",
+          "useRealParser": true
+        },
+        {
+          "streamKey": "framestor",
+          "providerId": "RD",
+          "sizeBytes": 131400000000,
+          "durationMs": 12060000,
+          "filename": "The Lord of the Rings The Return of the King 2003 Extended UHD BluRay 2160p TrueHD Atmos 7 1 DV HEVC REMUX-FraMeSToR.mkv",
+          "useRealParser": true
+        },
+        {
+          "streamKey": "unknown_disc12",
+          "providerId": "RD",
+          "sizeBytes": 123600000000,
+          "durationMs": 12060000,
+          "filename": "The Lord of the Rings The Return Of The King 2003 DISC1-2 EXTENDED 2160p BluRay REMUX HDR10 HEVC TrueHD 7 1-UnKn0wn.mkv",
+          "useRealParser": true
+        },
+        {
+          "streamKey": "bdremux1080",
+          "providerId": "RD",
+          "sizeBytes": 83900000000,
+          "durationMs": 12060000,
+          "filename": "The Lord of the Rings The Return of the King 2003 1080p BDRemux DTS-MA H264 Rus Eng.mkv",
+          "useRealParser": true
+        },
+        {
+          "streamKey": "triton_theatrical",
+          "providerId": "RD",
+          "sizeBytes": 78700000000,
+          "durationMs": 12060000,
+          "filename": "The Lord of the Rings The Return of the King 2003 Theatrical 2160p UHD BluRay REMUX DV HDR HEVC Atmos-TRiToN.mkv",
+          "useRealParser": true
+        },
+        {
+          "streamKey": "guyzo_disc2",
+          "providerId": "RD",
+          "sizeBytes": 68800000000,
+          "durationMs": 12060000,
+          "filename": "The Lord of the Rings The Return of the King DISC-2 2003 2160p REMUX Multi PT-BR-GuyZo.mkv",
+          "useRealParser": true
+        },
+        {
+          "streamKey": "zax_x265",
+          "providerId": "RD",
+          "sizeBytes": 60900000000,
+          "durationMs": 12060000,
+          "filename": "The Lord of the Rings The Return of the King Extended 2003 BluRay 2160p UHD TrueHD Atmos 7 1 DV HDR10+ 10Bit x265-ZAX.mkv",
+          "useRealParser": true
+        },
+        {
+          "streamKey": "boredor_x265",
+          "providerId": "RD",
+          "sizeBytes": 52500000000,
+          "durationMs": 12060000,
+          "filename": "The Lord of the Rings The Return Of The King 2003 EXTENDED 2160p UHD BluRay x265-BOREDOR.mkv",
+          "useRealParser": true
+        },
+        {
+          "streamKey": "j3rico_1080",
+          "providerId": "RD",
+          "sizeBytes": 44500000000,
+          "durationMs": 12060000,
+          "filename": "The Lord of the Rings The Return of the King 2003 Remastered Extended 1080p BluRay DDP 7 1 x264-j3rico.mkv",
+          "useRealParser": true
+        }
+      ],
+      "expectedWinnerStreamKey": "framestor",
+      "acceptableWinnerKeys": [
+        "framestor",
+        "legion"
+      ],
+      "preferredPairs": [
+        {
+          "preferredStreamKey": "framestor",
+          "otherStreamKey": "legion",
+          "reason": "DV + TrueHD Atmos remux should beat HDR/DTS-HD remux when both are viable"
+        },
+        {
+          "preferredStreamKey": "framestor",
+          "otherStreamKey": "zax_x265",
+          "reason": "healthy remux should beat non-remux x265 encode"
+        }
+      ],
+      "notes": "Real filename corpus uses parser-backed scenario streams with external size/runtime inputs."
+    }
+  ]
+}

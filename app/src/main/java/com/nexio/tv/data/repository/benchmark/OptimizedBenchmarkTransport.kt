@@ -38,6 +38,21 @@ internal fun interface OptimizedBenchmarkDataSourceFactoryBuilder {
     ): BenchmarkReadableSourceFactory
 }
 
+data class DebridConfigBenchmarkTransportResult(
+    val summary: DebridBenchmarkSummary,
+    val sustained: DebridBenchmarkSustainedMetrics,
+    val configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+    val terminationReason: DebridBenchmarkTerminationReason,
+    val failure: DebridBenchmarkTransportFailure? = null
+) {
+    val averageThroughputMbps: Double?
+        get() = sustained.averageThroughputMbps
+    val transferredBytes: Long?
+        get() = sustained.bytesTransferred
+    val elapsedMs: Long?
+        get() = sustained.elapsedMs
+}
+
 class OptimizedBenchmarkTransport internal constructor(
     private val factoryBuilder: OptimizedBenchmarkDataSourceFactoryBuilder,
     private val nanoTimeNs: () -> Long,
@@ -96,7 +111,8 @@ class OptimizedBenchmarkTransport internal constructor(
         val sustainedPhase = runStartupAndSustainedPhase(
             readableSourceFactory = sustainedReadableSourceFactory,
             collector = collector,
-            observer = observer
+            observer = observer,
+            completionGuardBandMsOverride = 0L
         )
         if (sustainedPhase.terminationReason == DebridBenchmarkTerminationReason.COMPLETED) {
             runSeekPhase(
@@ -124,6 +140,42 @@ class OptimizedBenchmarkTransport internal constructor(
         )
     }
 
+    suspend fun runConfigProfile(
+        candidate: DebridBenchmarkCandidate,
+        configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+        observer: DebridBenchmarkObserver = DebridBenchmarkObserver {},
+        measurementDurationMs: Long = 30_000L
+    ): DebridConfigBenchmarkTransportResult = withContext(Dispatchers.IO) {
+        val collector = DebridBenchmarkMetricsCollector(
+            requiredTransferredBytes = 1L,
+            requiredElapsedMs = measurementDurationMs
+        )
+        val sustainedReadableSourceFactory = factoryBuilder.create(
+            candidate = candidate,
+            configSnapshot = configSnapshot,
+            allowStartupBootstrapReuse = true,
+            transportSampleTimeMs = { nanosToMillis(nanoTimeNs()) },
+            onTransportBytesDownloaded = { bytesRead, sampleAtMs ->
+                collector.recordTransportBytesRead(bytesRead = bytesRead, sampleAtMs = sampleAtMs)
+            }
+        )
+        val sustainedPhase = runStartupAndSustainedPhase(
+            readableSourceFactory = sustainedReadableSourceFactory,
+            collector = collector,
+            observer = observer
+        )
+        DebridConfigBenchmarkTransportResult(
+            summary = collector.currentSummary(),
+            sustained = collector.finishSustained().copy(
+                recoverableFailureCount = sustainedPhase.recoverableFailureCount,
+                recoverableTimeoutCount = sustainedPhase.recoverableTimeoutCount
+            ),
+            configSnapshot = configSnapshot,
+            terminationReason = sustainedPhase.terminationReason,
+            failure = sustainedPhase.failure
+        )
+    }
+
     private data class StartupAndSustainedPhaseResult(
         val terminationReason: DebridBenchmarkTerminationReason,
         val failure: DebridBenchmarkTransportFailure? = null,
@@ -134,7 +186,8 @@ class OptimizedBenchmarkTransport internal constructor(
     private fun runStartupAndSustainedPhase(
         readableSourceFactory: BenchmarkReadableSourceFactory,
         collector: DebridBenchmarkMetricsCollector,
-        observer: DebridBenchmarkObserver
+        observer: DebridBenchmarkObserver,
+        completionGuardBandMsOverride: Long = completionGuardBandMs
     ): StartupAndSustainedPhaseResult {
         var readableSource = readableSourceFactory.createSource()
         val buffer = ByteArray(readBufferSize)
@@ -273,7 +326,7 @@ class OptimizedBenchmarkTransport internal constructor(
 
                     if (collector.shouldComplete()) {
                         measurementCompletedAtNs = nowNs
-                        if (completionGuardBandMs <= 0L) {
+                        if (completionGuardBandMsOverride <= 0L) {
                             return StartupAndSustainedPhaseResult(
                                 terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
                                 recoverableFailureCount = recoverableFailureCount,
@@ -284,7 +337,7 @@ class OptimizedBenchmarkTransport internal constructor(
                 }
 
                 if (measurementCompletedAtNs != null &&
-                    nanosToMillis(nowNs - measurementCompletedAtNs) >= completionGuardBandMs
+                    nanosToMillis(nowNs - measurementCompletedAtNs) >= completionGuardBandMsOverride
                 ) {
                     return StartupAndSustainedPhaseResult(
                         terminationReason = DebridBenchmarkTerminationReason.COMPLETED,

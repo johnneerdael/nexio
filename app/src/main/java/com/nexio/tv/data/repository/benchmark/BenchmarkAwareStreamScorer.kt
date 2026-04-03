@@ -5,6 +5,9 @@ import com.nexio.tv.core.stream.StreamCardModel
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.ln
+import kotlin.math.roundToInt
+import kotlin.math.tanh
 
 data class ShadowRequestContext(
     val requestId: String,
@@ -31,7 +34,17 @@ data class ShadowContentScoreBreakdown(
     val codecPoints: Int,
     val releaseTypePoints: Int,
     val bitrateQualityPoints: Int,
-    val lowQuality4kPenalty: Int
+    val synergyPoints: Int,
+    val penaltyPoints: Int,
+    val lowQuality4kPenalty: Int,
+    val resolutionTier: String,
+    val releaseTypeTier: String,
+    val codecTier: String,
+    val hdrTier: String,
+    val audioTier: String,
+    val audioSupportTier: String,
+    val hdrSupportTier: String,
+    val realismRatio: Double
 )
 
 data class ShadowTransportScoreBreakdown(
@@ -53,6 +66,7 @@ data class ShadowDecisionBreakdown(
     val averageBitrateMbps: Double,
     val releaseType: String,
     val lowQuality4k: Boolean,
+    val realismRatio: Double,
     val content: ShadowContentScoreBreakdown,
     val transport: ShadowTransportScoreBreakdown
 )
@@ -97,11 +111,17 @@ data class ShadowAutoPlayDecisionEvent(
     val winners: List<ShadowStreamDecision>,
     val rejected: List<ShadowRejectedStream>,
     val selected: ShadowStreamDecision?,
+    val selectedNonDolbyVisionFallback: ShadowStreamDecision? = null,
     val timingsMs: Long? = null
 )
 
 @Singleton
-class BenchmarkAwareStreamScorer @Inject constructor() {
+class BenchmarkAwareStreamScorer internal constructor(
+    private val config: BenchmarkAwareStreamScoringConfig
+) {
+
+    @Inject
+    constructor() : this(config = BenchmarkAwareStreamScoringConfig.default())
 
     fun score(
         request: ShadowRequestContext,
@@ -161,11 +181,23 @@ class BenchmarkAwareStreamScorer @Inject constructor() {
 
         val ranked = winners.sortedWith(
             compareByDescending<ShadowStreamDecision> { it.finalScore }
-                .thenByDescending { it.transportFitScore }
+                .thenByDescending { it.contentQualityScore }
+                .thenByDescending { it.breakdown.content.bitrateQualityPoints }
                 .thenByDescending { it.suitabilityRatio }
                 .thenBy { it.breakdown.transport.startupTtfbMs ?: Long.MAX_VALUE }
                 .thenBy { it.breakdown.transport.seekTtfbP95Ms ?: Long.MAX_VALUE }
         )
+
+        val selected = ranked.firstOrNull()
+        val selectedNonDolbyVisionFallback =
+            if (selected?.breakdown?.content?.hdrTier == ShadowHdrTier.DOLBY_VISION.name.lowercase(Locale.US)) {
+                ranked.firstOrNull { candidate ->
+                    candidate.streamKey != selected.streamKey &&
+                        candidate.breakdown.content.hdrTier != ShadowHdrTier.DOLBY_VISION.name.lowercase(Locale.US)
+                }
+            } else {
+                null
+            }
 
         return ShadowAutoPlayDecisionEvent(
             eventVersion = 1,
@@ -174,7 +206,8 @@ class BenchmarkAwareStreamScorer @Inject constructor() {
             benchmarksUsed = benchmarkReferences,
             winners = ranked,
             rejected = rejected.sortedBy { it.streamKey },
-            selected = ranked.firstOrNull(),
+            selected = selected,
+            selectedNonDolbyVisionFallback = selectedNonDolbyVisionFallback,
             timingsMs = elapsedMs
         )
     }
@@ -195,15 +228,10 @@ class BenchmarkAwareStreamScorer @Inject constructor() {
             return EitherSuccessOrReject.reject(ShadowRejectReason.MISSING_RUNTIME)
         }
 
-        val device = benchmarkSession.device
-        val codecFamily = detectCodecFamily(parsed.encode)
-        if (device != null && !isCodecSupported(codecFamily, device)) {
-            return EitherSuccessOrReject.reject(ShadowRejectReason.UNSUPPORTED_CODEC)
-        }
-
         val averageBitrateMbps = calculateAverageBitrateMbps(sizeBytes, runtimeMs)
-        val releaseType = classifyReleaseType(parsed)
-        val requiredMbps = averageBitrateMbps * releaseType.burstMargin
+        val resolutionTier = resolveResolutionTier(parsed.resolution)
+        val releaseType = classifyReleaseType(parsed, averageBitrateMbps)
+        val requiredMbps = averageBitrateMbps * config.burstMargins.getValue(releaseType)
         val transportOption = bestTransportOption(
             provider = provider,
             benchmarkSession = benchmarkSession,
@@ -213,11 +241,18 @@ class BenchmarkAwareStreamScorer @Inject constructor() {
             ShadowRejectReason.NO_ELIGIBLE_TRANSPORT
         )
 
+        val device = benchmarkSession.device
+        val codecTier = resolveVideoCodecTier(parsed.encode, device)
+        if (codecTier == ShadowVideoCodecTier.UNSUPPORTED) {
+            return EitherSuccessOrReject.reject(ShadowRejectReason.UNSUPPORTED_CODEC)
+        }
+
         val contentBreakdown = buildContentScoreBreakdown(
             parsed = parsed,
             averageBitrateMbps = averageBitrateMbps,
-            codecFamily = codecFamily,
+            resolutionTier = resolutionTier,
             releaseType = releaseType,
+            codecTier = codecTier,
             device = device
         )
         val contentScore = contentBreakdown.total()
@@ -241,6 +276,7 @@ class BenchmarkAwareStreamScorer @Inject constructor() {
                     averageBitrateMbps = averageBitrateMbps,
                     releaseType = releaseType.wireKey,
                     lowQuality4k = contentBreakdown.lowQuality4kPenalty < 0,
+                    realismRatio = contentBreakdown.realismRatio,
                     content = contentBreakdown,
                     transport = transportOption.toBreakdown(provider, requiredMbps)
                 )
@@ -256,6 +292,7 @@ class BenchmarkAwareStreamScorer @Inject constructor() {
         val options = listOfNotNull(
             benchmarkSession.direct?.let {
                 ShadowTransportOption.fromProfile(
+                    config = config,
                     transport = DebridBenchmarkTransportMode.DIRECT,
                     profile = it,
                     requiredMbps = requiredMbps
@@ -263,45 +300,262 @@ class BenchmarkAwareStreamScorer @Inject constructor() {
             },
             benchmarkSession.optimized?.let {
                 ShadowTransportOption.fromProfile(
+                    config = config,
                     transport = DebridBenchmarkTransportMode.OPTIMIZED,
                     profile = it,
                     requiredMbps = requiredMbps
                 )
             }
-        ).filter { it.suitabilityRatio >= 1.0 }
+        ).filter { it.suitabilityRatio >= config.viability.minimumRatio }
 
-        return options.sortedWith(
-            compareByDescending<ShadowTransportOption> { it.totalScore() }
-                .thenByDescending { it.suitabilityRatio }
-                .thenBy { it.startupTtfbMs ?: Long.MAX_VALUE }
-                .thenBy { it.seekTtfbP95Ms ?: Long.MAX_VALUE }
-        ).firstOrNull()
+        return options.sortedWith(shadowTransportOptionComparator(config)).firstOrNull()
     }
 
     private fun buildContentScoreBreakdown(
         parsed: ParsedStreamInfo,
         averageBitrateMbps: Double,
-        codecFamily: ShadowCodecFamily,
+        resolutionTier: ShadowResolutionTier,
         releaseType: ShadowReleaseType,
+        codecTier: ShadowVideoCodecTier,
         device: DeviceCapabilitySnapshot?
     ): ShadowContentScoreBreakdown {
+        val hdrTier = resolveHdrTier(parsed.visualTags)
+        val hdrSupportTier = resolveHdrSupportLevel(hdrTier, device)
+        val audioTier = resolveAudioTier(parsed.audioTags)
+        val audioSupportTier = resolveAudioSupportTier(audioTier, device)
+        val realismRatio = bitrateRealismRatio(
+            resolutionTier = resolutionTier,
+            releaseType = releaseType,
+            averageBitrateMbps = averageBitrateMbps
+        )
         val lowQuality4kPenalty = if (
-            parsed.resolution.equals("2160p", ignoreCase = true) &&
-            averageBitrateMbps < 8.0
+            resolutionTier == ShadowResolutionTier.UHD_2160 &&
+            averageBitrateMbps < config.penalties.tinyFake4kThresholdMbps
         ) {
-            -40
+            -config.penalties.tinyFake4k
         } else {
             0
         }
-        return ShadowContentScoreBreakdown(
-            resolutionPoints = resolutionPoints(parsed.resolution),
-            audioPoints = audioPoints(parsed.audioTags, device),
-            hdrPoints = hdrPoints(parsed.visualTags, device),
-            codecPoints = codecPoints(codecFamily, device),
-            releaseTypePoints = releaseType.points,
-            bitrateQualityPoints = bitrateQualityPoints(parsed.resolution, averageBitrateMbps),
-            lowQuality4kPenalty = lowQuality4kPenalty
+
+        val resolutionPoints = config.contentRewards.resolution.getValue(resolutionTier)
+        val releaseTypePoints = config.contentRewards.source.getValue(releaseType)
+        val codecPoints = config.contentRewards.codec.getValue(codecTier)
+        val hdrPoints = config.supportMultipliers.apply(
+            points = config.contentRewards.hdr.getValue(hdrTier),
+            supportLevel = hdrSupportTier
         )
+        val audioPoints = scoreAudio(audioTier, audioSupportTier)
+        val bitrateQualityPoints = bitrateRealismReward(
+            resolutionTier = resolutionTier,
+            releaseType = releaseType,
+            averageBitrateMbps = averageBitrateMbps
+        )
+        val synergyPoints = synergyPoints(
+            releaseType = releaseType,
+            codecTier = codecTier,
+            hdrTier = hdrTier,
+            hdrSupportTier = hdrSupportTier,
+            audioTier = audioTier,
+            audioSupportTier = audioSupportTier,
+            realismRatio = realismRatio
+        )
+        val penaltyPoints = lowQuality4kPenalty + additionalPenaltyPoints(
+            resolutionTier = resolutionTier,
+            releaseType = releaseType,
+            codecTier = codecTier,
+            hdrTier = hdrTier,
+            audioTier = audioTier,
+            realismRatio = realismRatio
+        )
+
+        return ShadowContentScoreBreakdown(
+            resolutionPoints = resolutionPoints,
+            audioPoints = audioPoints,
+            hdrPoints = hdrPoints,
+            codecPoints = codecPoints,
+            releaseTypePoints = releaseTypePoints,
+            bitrateQualityPoints = bitrateQualityPoints,
+            synergyPoints = synergyPoints,
+            penaltyPoints = penaltyPoints,
+            lowQuality4kPenalty = lowQuality4kPenalty,
+            resolutionTier = resolutionTier.name.lowercase(Locale.US),
+            releaseTypeTier = releaseType.wireKey,
+            codecTier = codecTier.name.lowercase(Locale.US),
+            hdrTier = hdrTier.name.lowercase(Locale.US),
+            audioTier = audioTier.name.lowercase(Locale.US),
+            audioSupportTier = audioSupportTier.name.lowercase(Locale.US),
+            hdrSupportTier = hdrSupportTier.name.lowercase(Locale.US),
+            realismRatio = realismRatio
+        )
+    }
+
+    private fun scoreAudio(
+        audioTier: ShadowAudioTier,
+        supportTier: ShadowAudioSupportTier
+    ): Int {
+        val base = config.audioScoring.baseRewards.getValue(audioTier)
+        val multiplier = config.audioScoring.supportMultipliers.getValue(supportTier)
+        val immersiveLoss = config.audioScoring.immersiveLossPenalty[audioTier]?.get(supportTier) ?: 0
+        val downgradePenalty = config.audioScoring.downgradePenalty.getValue(supportTier)
+        return ((base * multiplier) - immersiveLoss - downgradePenalty).roundToInt()
+    }
+
+    private fun synergyPoints(
+        releaseType: ShadowReleaseType,
+        codecTier: ShadowVideoCodecTier,
+        hdrTier: ShadowHdrTier,
+        hdrSupportTier: ShadowSupportLevel,
+        audioTier: ShadowAudioTier,
+        audioSupportTier: ShadowAudioSupportTier,
+        realismRatio: Double
+    ): Int {
+        var reward = 0
+        if (releaseType == ShadowReleaseType.REMUX && realismRatio >= 0.85) {
+            reward += config.synergy.healthyRemux
+        }
+        if (hdrTier == ShadowHdrTier.DOLBY_VISION &&
+            codecTier == ShadowVideoCodecTier.HEVC_HW &&
+            hdrSupportTier == ShadowSupportLevel.FULL
+        ) {
+            reward += config.synergy.dvHevcSupported
+        }
+        if (audioTier in IMMERSIVE_AUDIO_TIERS &&
+            audioSupportTier != ShadowAudioSupportTier.UNSUPPORTED &&
+            realismRatio >= 0.80
+        ) {
+            reward += config.synergy.atmosSupportedAndHealthy
+        }
+        if (releaseType in PREMIUM_RELEASE_TYPES &&
+            hdrTier != ShadowHdrTier.SDR &&
+            audioTier in PREMIUM_AUDIO_TIERS &&
+            realismRatio >= 0.85
+        ) {
+            reward += config.synergy.premiumFeatureStack
+        }
+        return reward
+    }
+
+    private fun additionalPenaltyPoints(
+        resolutionTier: ShadowResolutionTier,
+        releaseType: ShadowReleaseType,
+        codecTier: ShadowVideoCodecTier,
+        hdrTier: ShadowHdrTier,
+        audioTier: ShadowAudioTier,
+        realismRatio: Double
+    ): Int {
+        var penalty = 0
+        val hasPremiumTags =
+            releaseType in PREMIUM_RELEASE_TYPES || hdrTier != ShadowHdrTier.SDR || audioTier in PREMIUM_AUDIO_TIERS
+        if (hasPremiumTags && realismRatio <= config.penalties.premiumTagImplausibleMaxRealismRatio) {
+            penalty -= config.penalties.premiumTagImplausible
+        }
+        if (resolutionTier == ShadowResolutionTier.UHD_2160 &&
+            codecTier in SOFTWARE_4K_CODEC_TIERS
+        ) {
+            penalty -= config.penalties.softwareDecode4k
+        }
+        if (audioTier in IMMERSIVE_AUDIO_TIERS &&
+            realismRatio <= config.penalties.atmosTooLowBitrateMaxRealismRatio
+        ) {
+            penalty -= config.penalties.atmosTooLowBitrate
+        }
+        return penalty
+    }
+
+    private fun bitrateRealismRatio(
+        resolutionTier: ShadowResolutionTier,
+        releaseType: ShadowReleaseType,
+        averageBitrateMbps: Double
+    ): Double {
+        val targetsByRelease =
+            config.bitrateRealism.targetsMbps[resolutionTier]
+                ?: config.bitrateRealism.targetsMbps.getValue(ShadowResolutionTier.OTHER)
+        val target =
+            targetsByRelease[releaseType]
+                ?: targetsByRelease[ShadowReleaseType.UNKNOWN]
+                ?: 1.0
+        if (target <= 0.0 || averageBitrateMbps <= 0.0) return 0.0
+        return averageBitrateMbps / target
+    }
+
+    private fun bitrateRealismReward(
+        resolutionTier: ShadowResolutionTier,
+        releaseType: ShadowReleaseType,
+        averageBitrateMbps: Double
+    ): Int {
+        val realismRatio = bitrateRealismRatio(resolutionTier, releaseType, averageBitrateMbps)
+        if (realismRatio <= 0.0) return config.bitrateRealism.curve.min.roundToInt()
+        val raw = config.bitrateRealism.curve.scale *
+            tanh(config.bitrateRealism.curve.slope * ln(realismRatio))
+        return raw.coerceIn(
+            config.bitrateRealism.curve.min,
+            config.bitrateRealism.curve.max
+        ).roundToInt()
+    }
+
+    private fun resolveHdrSupportLevel(
+        hdrTier: ShadowHdrTier,
+        device: DeviceCapabilitySnapshot?
+    ): ShadowSupportLevel {
+        val hdrTypes = device?.displayHdrTypes ?: return ShadowSupportLevel.FULL
+        return when (hdrTier) {
+            ShadowHdrTier.DOLBY_VISION -> if (DeviceHdrType.DOLBY_VISION in hdrTypes) ShadowSupportLevel.FULL else ShadowSupportLevel.UNSUPPORTED
+            ShadowHdrTier.HDR10_PLUS -> if (DeviceHdrType.HDR10_PLUS in hdrTypes) ShadowSupportLevel.FULL else if (DeviceHdrType.HDR10 in hdrTypes) ShadowSupportLevel.PARTIAL else ShadowSupportLevel.UNSUPPORTED
+            ShadowHdrTier.HDR10 -> if (DeviceHdrType.HDR10 in hdrTypes || DeviceHdrType.HDR10_PLUS in hdrTypes) ShadowSupportLevel.FULL else ShadowSupportLevel.UNSUPPORTED
+            ShadowHdrTier.SDR -> ShadowSupportLevel.FULL
+        }
+    }
+
+    private fun resolveAudioSupportTier(
+        audioTier: ShadowAudioTier,
+        device: DeviceCapabilitySnapshot?
+    ): ShadowAudioSupportTier {
+        val output = device?.audioOutput ?: return ShadowAudioSupportTier.FULL_IMMERSIVE_PASSTHROUGH
+        return when (audioTier) {
+            ShadowAudioTier.TRUEHD_ATMOS -> when {
+                output.truehd.passthroughLikely -> ShadowAudioSupportTier.FULL_IMMERSIVE_PASSTHROUGH
+                output.truehd.supported -> ShadowAudioSupportTier.DECODED_MULTICHANNEL_PCM
+                else -> ShadowAudioSupportTier.UNSUPPORTED
+            }
+            ShadowAudioTier.DTSX -> when {
+                output.dtshd.passthroughLikely -> ShadowAudioSupportTier.FULL_IMMERSIVE_PASSTHROUGH
+                output.dts.passthroughLikely -> ShadowAudioSupportTier.CORE_FALLBACK
+                output.dtshd.supported || output.dts.supported -> ShadowAudioSupportTier.DECODED_MULTICHANNEL_PCM
+                else -> ShadowAudioSupportTier.UNSUPPORTED
+            }
+            ShadowAudioTier.TRUEHD -> when {
+                output.truehd.passthroughLikely -> ShadowAudioSupportTier.FULL_PASSTHROUGH
+                output.truehd.supported -> ShadowAudioSupportTier.DECODED_MULTICHANNEL_PCM
+                else -> ShadowAudioSupportTier.UNSUPPORTED
+            }
+            ShadowAudioTier.DTSHD -> when {
+                output.dtshd.passthroughLikely -> ShadowAudioSupportTier.FULL_PASSTHROUGH
+                output.dts.passthroughLikely -> ShadowAudioSupportTier.CORE_FALLBACK
+                output.dtshd.supported || output.dts.supported -> ShadowAudioSupportTier.DECODED_MULTICHANNEL_PCM
+                else -> ShadowAudioSupportTier.UNSUPPORTED
+            }
+            ShadowAudioTier.DDP_ATMOS -> when {
+                output.eac3.passthroughLikely -> ShadowAudioSupportTier.FULL_IMMERSIVE_PASSTHROUGH
+                output.eac3.supported -> ShadowAudioSupportTier.DECODED_MULTICHANNEL_PCM
+                else -> ShadowAudioSupportTier.UNSUPPORTED
+            }
+            ShadowAudioTier.DDP -> when {
+                output.eac3.passthroughLikely -> ShadowAudioSupportTier.FULL_PASSTHROUGH
+                output.eac3.supported -> ShadowAudioSupportTier.DECODED_MULTICHANNEL_PCM
+                else -> ShadowAudioSupportTier.UNSUPPORTED
+            }
+            ShadowAudioTier.AC3 -> when {
+                output.ac3.passthroughLikely -> ShadowAudioSupportTier.FULL_PASSTHROUGH
+                output.ac3.supported -> ShadowAudioSupportTier.DECODED_MULTICHANNEL_PCM
+                else -> ShadowAudioSupportTier.UNSUPPORTED
+            }
+            ShadowAudioTier.DTS -> when {
+                output.dts.passthroughLikely -> ShadowAudioSupportTier.FULL_PASSTHROUGH
+                output.dts.supported -> ShadowAudioSupportTier.DECODED_MULTICHANNEL_PCM
+                else -> ShadowAudioSupportTier.UNSUPPORTED
+            }
+            ShadowAudioTier.OTHER -> ShadowAudioSupportTier.UNSUPPORTED
+        }
     }
 }
 
@@ -341,6 +595,7 @@ private data class ShadowTransportOption(
 
     companion object {
         fun fromProfile(
+            config: BenchmarkAwareStreamScoringConfig,
             transport: DebridBenchmarkTransportMode,
             profile: DebridBenchmarkTransportProfile,
             requiredMbps: Double
@@ -351,13 +606,15 @@ private data class ShadowTransportOption(
                 transport = transport,
                 safeBudgetMbps = safeBudgetMbps,
                 suitabilityRatio = suitabilityRatio,
-                ratioScore = ratioScore(suitabilityRatio),
-                startupScore = startupScore(profile.startup.initialTtfbMs),
+                ratioScore = ratioScore(config, suitabilityRatio),
+                startupScore = startupScore(config, profile.startup.initialTtfbMs),
                 seekScore = seekScore(
+                    config = config,
                     seekP95Ms = profile.seek.seekTtfbP95Ms,
                     failRate = profile.seek.seekFailRate
                 ),
                 stabilityScore = stabilityScore(
+                    config = config,
                     throughputCv = profile.sustained.throughputCv,
                     stallCount = profile.sustained.stallCount,
                     maxReadGapMs = profile.sustained.maxReadGapMs
@@ -390,27 +647,6 @@ private data class EitherSuccessOrReject<T>(
     }
 }
 
-private enum class ShadowReleaseType(
-    val wireKey: String,
-    val burstMargin: Double,
-    val points: Int
-) {
-    REMUX("remux", 1.60, 10),
-    BLURAY_ENCODE("bluray_encode", 1.35, 6),
-    WEBDL("webdl", 1.35, 4),
-    WEBRIP("webrip", 1.35, 2),
-    UNKNOWN("unknown", 1.35, 0)
-}
-
-private enum class ShadowCodecFamily {
-    AV1,
-    HEVC,
-    H264,
-    VC1,
-    MPEG2,
-    OTHER
-}
-
 private fun ShadowContentScoreBreakdown.total(): Int {
     return resolutionPoints +
         audioPoints +
@@ -418,7 +654,8 @@ private fun ShadowContentScoreBreakdown.total(): Int {
         codecPoints +
         releaseTypePoints +
         bitrateQualityPoints +
-        lowQuality4kPenalty
+        synergyPoints +
+        penaltyPoints
 }
 
 private fun StreamCardModel.toBenchmarkProvider(): DebridBenchmarkProvider? {
@@ -439,199 +676,193 @@ private fun calculateAverageBitrateMbps(sizeBytes: Long, runtimeMs: Long): Doubl
     return (sizeBytes * 8.0) / runtimeSeconds / 1_000_000.0
 }
 
-private fun classifyReleaseType(parsed: ParsedStreamInfo): ShadowReleaseType {
+private fun classifyReleaseType(
+    parsed: ParsedStreamInfo,
+    averageBitrateMbps: Double
+): ShadowReleaseType {
     val quality = parsed.quality.orEmpty().lowercase(Locale.US)
     return when {
         quality.contains("remux") -> ShadowReleaseType.REMUX
         quality.contains("blu") -> ShadowReleaseType.BLURAY_ENCODE
         quality.contains("web-dl") || quality.contains("webdl") -> ShadowReleaseType.WEBDL
         quality.contains("webrip") || quality.contains("web-rip") -> ShadowReleaseType.WEBRIP
+        averageBitrateMbps >= 30.0 -> ShadowReleaseType.HIGH_BITRATE_ENCODE
+        averageBitrateMbps >= 10.0 -> ShadowReleaseType.NORMAL_ENCODE
+        averageBitrateMbps > 0.0 -> ShadowReleaseType.SMALL_ENCODE
         else -> ShadowReleaseType.UNKNOWN
     }
 }
 
-private fun resolutionPoints(resolution: String?): Int {
+private val ShadowReleaseType.wireKey: String
+    get() = name.lowercase(Locale.US)
+
+private fun resolveResolutionTier(resolution: String?): ShadowResolutionTier {
     return when (resolution?.lowercase(Locale.US)) {
-        "2160p" -> 28
-        "1080p" -> 14
-        "720p" -> 4
-        else -> 0
+        "2160p" -> ShadowResolutionTier.UHD_2160
+        "1080p" -> ShadowResolutionTier.FHD_1080
+        "720p" -> ShadowResolutionTier.HD_720
+        else -> ShadowResolutionTier.OTHER
     }
 }
 
-private fun audioPoints(tags: List<String>, device: DeviceCapabilitySnapshot?): Int {
-    val normalized = tags.map { it.lowercase(Locale.US) }
-    val audioOutput = device?.audioOutput
-    val candidates = listOf(
-        if (normalized.any { it.contains("atmos") } &&
-            (audioOutput == null ||
-                audioOutput.truehd.passthroughLikely ||
-                audioOutput.eac3.passthroughLikely)
-        ) 24 else 0,
-        if (normalized.any { it.contains("dts:x") } &&
-            (audioOutput == null || audioOutput.dtshd.passthroughLikely)
-        ) 12 else 0,
-        if (normalized.any { it.contains("dts-hd") } &&
-            (audioOutput == null || audioOutput.dtshd.passthroughLikely)
-        ) 12 else 0,
-        if (normalized.any { it.contains("truehd") } &&
-            (audioOutput == null || audioOutput.truehd.passthroughLikely)
-        ) 12 else 0,
-        if (normalized.any { it == "dts" } &&
-            (audioOutput == null || audioOutput.dts.passthroughLikely)
-        ) 12 else 0,
-        if (normalized.any { it.contains("dd+") || it.contains("eac3") } &&
-            (audioOutput == null || audioOutput.eac3.passthroughLikely)
-        ) 12 else 0,
-        if (normalized.any { it == "dd" || it.contains("ac3") } &&
-            (audioOutput == null || audioOutput.ac3.passthroughLikely)
-        ) 12 else 0
-    )
-    return candidates.maxOrNull() ?: 0
-}
-
-private fun hdrPoints(tags: List<String>, device: DeviceCapabilitySnapshot?): Int {
+private fun resolveHdrTier(tags: List<String>): ShadowHdrTier {
     val normalized = tags.map { it.uppercase(Locale.US) }
-    val hdrTypes = device?.displayHdrTypes
     return when {
-        normalized.any { it == "DV" || it.contains("DOLBY VISION") } &&
-            (hdrTypes == null || DeviceHdrType.DOLBY_VISION in hdrTypes) -> 10
-        normalized.any { it == "HDR10+" } &&
-            (hdrTypes == null || DeviceHdrType.HDR10_PLUS in hdrTypes) -> 8
-        normalized.any { it == "HDR10" || it == "HDR" } &&
-            (hdrTypes == null || DeviceHdrType.HDR10 in hdrTypes || DeviceHdrType.HDR10_PLUS in hdrTypes) -> 5
-        else -> 0
+        normalized.any { it == "DV" || it.contains("DOLBY VISION") || it.contains("DOVI") } -> ShadowHdrTier.DOLBY_VISION
+        normalized.any { it == "HDR10+" } -> ShadowHdrTier.HDR10_PLUS
+        normalized.any { it == "HDR10" || it == "HDR" } -> ShadowHdrTier.HDR10
+        else -> ShadowHdrTier.SDR
     }
 }
 
-private fun detectCodecFamily(encode: String?): ShadowCodecFamily {
+private fun resolveAudioTier(tags: List<String>): ShadowAudioTier {
+    val normalized = tags.map { it.lowercase(Locale.US) }
+    return when {
+        normalized.any { it.contains("atmos") } && normalized.any { it.contains("truehd") } -> ShadowAudioTier.TRUEHD_ATMOS
+        normalized.any { it.contains("dts:x") || it.contains("dtsx") } -> ShadowAudioTier.DTSX
+        normalized.any { it.contains("truehd") } -> ShadowAudioTier.TRUEHD
+        normalized.any { it.contains("dts-hd") } -> ShadowAudioTier.DTSHD
+        normalized.any { it.contains("atmos") } && normalized.any { it.contains("dd+") || it.contains("eac3") || it.contains("ddp") } -> ShadowAudioTier.DDP_ATMOS
+        normalized.any { it.contains("dd+") || it.contains("eac3") || it.contains("ddp") } -> ShadowAudioTier.DDP
+        normalized.any { it == "dts" } -> ShadowAudioTier.DTS
+        normalized.any { it == "dd" || it.contains("ac3") } -> ShadowAudioTier.AC3
+        else -> ShadowAudioTier.OTHER
+    }
+}
+
+private fun resolveVideoCodecTier(
+    encode: String?,
+    device: DeviceCapabilitySnapshot?
+): ShadowVideoCodecTier {
     val normalized = encode.orEmpty().lowercase(Locale.US)
+    if (normalized.contains("vc1") || normalized.contains("vc-1") || normalized.contains("wvc1")) {
+        return ShadowVideoCodecTier.VC1
+    }
+    if (normalized.contains("mpeg2") || normalized.contains("mpeg-2")) {
+        return ShadowVideoCodecTier.MPEG2
+    }
     return when {
-        normalized.contains("av1") -> ShadowCodecFamily.AV1
-        normalized.contains("hevc") || normalized.contains("h265") || normalized.contains("x265") -> ShadowCodecFamily.HEVC
-        normalized.contains("h264") || normalized.contains("x264") || normalized.contains("avc") -> ShadowCodecFamily.H264
-        normalized.contains("vc1") || normalized.contains("vc-1") || normalized.contains("wvc1") -> ShadowCodecFamily.VC1
-        normalized.contains("mpeg2") || normalized.contains("mpeg-2") -> ShadowCodecFamily.MPEG2
-        else -> ShadowCodecFamily.OTHER
+        normalized.contains("av1") -> when {
+            device == null -> ShadowVideoCodecTier.AV1_HW
+            device.videoDecode.av1?.hardwareAccelerated == true -> ShadowVideoCodecTier.AV1_HW
+            device.videoDecode.av1?.softwareOnlyAvailable == true -> ShadowVideoCodecTier.AV1_SW
+            else -> ShadowVideoCodecTier.UNSUPPORTED
+        }
+        normalized.contains("hevc") || normalized.contains("h265") || normalized.contains("x265") -> when {
+            device == null -> ShadowVideoCodecTier.HEVC_HW
+            device.videoDecode.hevc?.hardwareAccelerated == true -> ShadowVideoCodecTier.HEVC_HW
+            device.videoDecode.hevc?.softwareOnlyAvailable == true -> ShadowVideoCodecTier.HEVC_SW
+            else -> ShadowVideoCodecTier.UNSUPPORTED
+        }
+        normalized.contains("h264") || normalized.contains("x264") || normalized.contains("avc") -> when {
+            device == null -> ShadowVideoCodecTier.H264_HW
+            device.videoDecode.h264?.hardwareAccelerated == true -> ShadowVideoCodecTier.H264_HW
+            else -> ShadowVideoCodecTier.UNSUPPORTED
+        }
+        normalized.isBlank() -> ShadowVideoCodecTier.OTHER
+        else -> ShadowVideoCodecTier.OTHER
     }
 }
 
-private fun codecPoints(codecFamily: ShadowCodecFamily, device: DeviceCapabilitySnapshot?): Int {
-    if (device == null) {
-        return when (codecFamily) {
-            ShadowCodecFamily.AV1 -> 0
-            ShadowCodecFamily.HEVC -> 6
-            ShadowCodecFamily.H264 -> 3
-            ShadowCodecFamily.VC1,
-            ShadowCodecFamily.MPEG2 -> -12
-            ShadowCodecFamily.OTHER -> 0
+private fun ratioScore(
+    config: BenchmarkAwareStreamScoringConfig,
+    ratio: Double
+): Int {
+    val band = config.transportRewards.ratioBands.firstOrNull { ratio >= it.min && ratio < it.max }
+        ?: config.transportRewards.ratioBands.lastOrNull()?.takeIf { ratio >= it.min }
+        ?: return 0
+    if (!ratio.isFinite()) return config.transportRewards.ratioBands.lastOrNull()?.base ?: 0
+    if (band.gain == 0) return band.base
+    val normalized = ((ratio - band.min) / (band.max - band.min)).coerceIn(0.0, 1.0)
+    return band.base + (band.gain * normalized).roundToInt()
+}
+
+private fun shadowTransportOptionComparator(
+    config: BenchmarkAwareStreamScoringConfig
+): Comparator<ShadowTransportOption> {
+    return Comparator { left, right ->
+        val leftComfortable = left.suitabilityRatio >= config.viability.preferStartupRatio
+        val rightComfortable = right.suitabilityRatio >= config.viability.preferStartupRatio
+        if (leftComfortable && rightComfortable) {
+            compareValuesBy(
+                left,
+                right,
+                { it.startupTtfbMs ?: Long.MAX_VALUE },
+                { it.seekTtfbP95Ms ?: Long.MAX_VALUE },
+                { it.seekFailRate ?: Double.MAX_VALUE },
+                { -it.totalScore() },
+                { -it.suitabilityRatio }
+            )
+        } else {
+            compareValuesBy(
+                left,
+                right,
+                { -it.totalScore() },
+                { -it.suitabilityRatio },
+                { it.startupTtfbMs ?: Long.MAX_VALUE },
+                { it.seekTtfbP95Ms ?: Long.MAX_VALUE },
+                { it.seekFailRate ?: Double.MAX_VALUE }
+            )
         }
-    }
-    return when (codecFamily) {
-        ShadowCodecFamily.AV1 -> when {
-            device.videoDecode.av1?.hardwareAccelerated == true -> 8
-            device.videoDecode.av1?.softwareOnlyAvailable == true -> -12
-            else -> -12
-        }
-        ShadowCodecFamily.HEVC -> if (device.videoDecode.hevc?.hardwareAccelerated == true) 6 else 0
-        ShadowCodecFamily.H264 -> if (device.videoDecode.h264?.hardwareAccelerated == true) 3 else 0
-        ShadowCodecFamily.VC1,
-        ShadowCodecFamily.MPEG2 -> -12
-        ShadowCodecFamily.OTHER -> 0
     }
 }
 
-private fun isCodecSupported(codecFamily: ShadowCodecFamily, device: DeviceCapabilitySnapshot): Boolean {
-    return when (codecFamily) {
-        ShadowCodecFamily.AV1 -> device.videoDecode.av1 != null
-        ShadowCodecFamily.HEVC -> device.videoDecode.hevc != null
-        ShadowCodecFamily.H264 -> device.videoDecode.h264 != null
-        ShadowCodecFamily.VC1,
-        ShadowCodecFamily.MPEG2 -> false
-        ShadowCodecFamily.OTHER -> true
-    }
-}
-
-private fun bitrateQualityPoints(resolution: String?, averageBitrateMbps: Double): Int {
-    return when (resolution?.lowercase(Locale.US)) {
-        "2160p" -> when {
-            averageBitrateMbps <= 8.0 -> -25
-            averageBitrateMbps <= 16.0 -> 0
-            averageBitrateMbps <= 30.0 -> 8
-            averageBitrateMbps <= 50.0 -> 16
-            averageBitrateMbps <= 80.0 -> 24
-            else -> 28
-        }
-        "1080p" -> when {
-            averageBitrateMbps <= 4.0 -> -20
-            averageBitrateMbps <= 8.0 -> 0
-            averageBitrateMbps <= 15.0 -> 10
-            averageBitrateMbps <= 25.0 -> 18
-            else -> 24
-        }
-        "720p" -> when {
-            averageBitrateMbps <= 2.0 -> -10
-            averageBitrateMbps <= 5.0 -> 0
-            averageBitrateMbps <= 8.0 -> 8
-            else -> 14
-        }
-        else -> 0
-    }
-}
-
-private fun ratioScore(ratio: Double): Int {
-    return when {
-        ratio >= 1.60 -> 35
-        ratio >= 1.40 -> 28
-        ratio >= 1.25 -> 22
-        ratio >= 1.10 -> 14
-        ratio >= 1.00 -> 8
-        else -> 0
-    }
-}
-
-private fun startupScore(initialTtfbMs: Long?): Int {
+private fun startupScore(
+    config: BenchmarkAwareStreamScoringConfig,
+    initialTtfbMs: Long?
+): Int {
     val value = initialTtfbMs ?: return 0
-    return when {
-        value <= 150L -> 6
-        value <= 300L -> 4
-        value <= 600L -> 2
-        else -> 0
-    }
+    return config.transportRewards.startupBands.firstOrNull { value <= it.maxMs }?.reward ?: 0
 }
 
-private fun seekScore(seekP95Ms: Long?, failRate: Double?): Int {
+private fun seekScore(
+    config: BenchmarkAwareStreamScoringConfig,
+    seekP95Ms: Long?,
+    failRate: Double?
+): Int {
     val p95 = seekP95Ms ?: return 0
     val failure = failRate ?: return 0
-    return when {
-        p95 <= 250L && failure <= 0.005 -> 8
-        p95 <= 350L && failure <= 0.01 -> 6
-        p95 <= 500L && failure <= 0.02 -> 3
-        else -> 0
-    }
+    return config.transportRewards.seekBands.firstOrNull {
+        p95 <= it.maxP95Ms && failure <= it.maxFailRate
+    }?.reward ?: 0
 }
 
 private fun stabilityScore(
+    config: BenchmarkAwareStreamScoringConfig,
     throughputCv: Double?,
     stallCount: Int?,
     maxReadGapMs: Long?
 ): Int {
-    val profile = DebridBenchmarkTransportProfile(
-        startup = DebridBenchmarkStartupMetrics(),
-        sustained = DebridBenchmarkSustainedMetrics(
-            actionable = true,
-            throughputCv = throughputCv,
-            stallCount = stallCount,
-            maxReadGapMs = maxReadGapMs
-        ),
-        seek = DebridBenchmarkSeekMetrics()
-    )
-    return when (profile.playbackStability()) {
-        DebridBenchmarkPlaybackStability.EXCELLENT -> 6
-        DebridBenchmarkPlaybackStability.STABLE -> 4
-        DebridBenchmarkPlaybackStability.VARIABLE -> 2
-        DebridBenchmarkPlaybackStability.UNSTABLE -> 0
-    }
+    val cv = throughputCv ?: return 0
+    return config.transportRewards.stabilityBands.firstOrNull { band ->
+        cv <= band.maxCv &&
+            (band.maxStalls == null || (stallCount ?: Int.MAX_VALUE) <= band.maxStalls) &&
+            (band.maxGapMs == null || (maxReadGapMs ?: Long.MAX_VALUE) <= band.maxGapMs)
+    }?.reward ?: 0
 }
+
+private val PREMIUM_RELEASE_TYPES = setOf(
+    ShadowReleaseType.REMUX,
+    ShadowReleaseType.BLURAY_ENCODE
+)
+
+private val PREMIUM_AUDIO_TIERS = setOf(
+    ShadowAudioTier.TRUEHD_ATMOS,
+    ShadowAudioTier.DTSX,
+    ShadowAudioTier.TRUEHD,
+    ShadowAudioTier.DTSHD,
+    ShadowAudioTier.DDP_ATMOS
+)
+
+private val IMMERSIVE_AUDIO_TIERS = setOf(
+    ShadowAudioTier.TRUEHD_ATMOS,
+    ShadowAudioTier.DTSX,
+    ShadowAudioTier.DDP_ATMOS
+)
+
+private val SOFTWARE_4K_CODEC_TIERS = setOf(
+    ShadowVideoCodecTier.AV1_SW,
+    ShadowVideoCodecTier.HEVC_SW
+)
 
 private val HDR_VISUAL_TAGS = setOf("DV", "HDR", "HDR10", "HDR10+")

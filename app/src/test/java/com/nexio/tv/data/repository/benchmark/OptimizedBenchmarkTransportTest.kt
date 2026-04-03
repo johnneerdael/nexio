@@ -80,6 +80,29 @@ class OptimizedBenchmarkTransportTest {
     }
 
     @Test
+    fun `config benchmark run returns a sustained average for the supplied snapshot`() = runTest {
+        val clock = FakeBenchmarkClock()
+        val builder = RecordingFactoryBuilder(clock)
+        val transport = buildTransport(builder, clock)
+        val configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+            useParallelConnections = true,
+            parallelConnectionCount = 3,
+            parallelChunkSizeMb = 16
+        )
+
+        val result = transport.runConfigProfile(
+            candidate = candidate(),
+            configSnapshot = configSnapshot,
+            measurementDurationMs = 30_000L
+        )
+
+        assertEquals(DebridBenchmarkTerminationReason.COMPLETED, result.terminationReason)
+        assertEquals(configSnapshot, builder.recordedConfigSnapshot)
+        assertTrue((result.elapsedMs ?: 0L) >= 29_000L)
+        assertNotNull(result.averageThroughputMbps)
+    }
+
+    @Test
     fun `optimized transport reports chunk timeout details`() = runTest {
         val clock = FakeBenchmarkClock()
         val builder = object : OptimizedBenchmarkDataSourceFactoryBuilder {
@@ -723,7 +746,7 @@ class OptimizedBenchmarkTransportTest {
         override fun close() = Unit
 
         companion object {
-            private val CONTENT_BYTES = ByteArray(1024 * 1024) { (it % 251).toByte() }
+            private val CONTENT_BYTES = ByteArray(2 * 1024 * 1024) { (it % 251).toByte() }
         }
     }
 

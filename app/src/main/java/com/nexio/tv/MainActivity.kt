@@ -136,6 +136,8 @@ import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.ThemeDataStore
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkRuntimeState
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
+import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkRuntimeState
+import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkService
 import com.nexio.tv.data.repository.IdleScreensaverRepository
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.trailer.TrailerService
@@ -261,6 +263,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var debridBenchmarkService: DebridBenchmarkService
+
+    @Inject
+    lateinit var debridConfigBenchmarkService: DebridConfigBenchmarkService
 
     private lateinit var jankStats: JankStats
     private val pendingRecommendationNavigation = mutableStateOf<RecommendationNavigation?>(null)
@@ -462,6 +467,7 @@ class MainActivity : ComponentActivity() {
                     val idleLastInteractionAtMs by idleScreensaverController.lastInteractionAtMs.collectAsState()
                     val playbackIdleSnapshot by playbackIdleGateState.snapshot.collectAsState()
                     val debridBenchmarkRuntimeState by debridBenchmarkService.activeState.collectAsState()
+                    val debridConfigBenchmarkRuntimeState by debridConfigBenchmarkService.activeState.collectAsState()
                     val idleTrailerCandidates = remember(
                         idleTrailerRepositoryCandidates,
                         idleScreensaverSlides
@@ -476,7 +482,9 @@ class MainActivity : ComponentActivity() {
                     var previousInAppTrailerPlaybackActive by remember { mutableStateOf(false) }
                     var previousBenchmarkActive by remember { mutableStateOf(false) }
                     var idleTrailerSessionStart by remember { mutableStateOf<IdleTrailerScreensaverSessionStart?>(null) }
-                    val benchmarkActive = debridBenchmarkRuntimeState is DebridBenchmarkRuntimeState.Running
+                    val benchmarkActive =
+                        debridBenchmarkRuntimeState is DebridBenchmarkRuntimeState.Running ||
+                            debridConfigBenchmarkRuntimeState is DebridConfigBenchmarkRuntimeState.Running
 
                     LaunchedEffect(pendingRecommendation) {
                         val navigation = pendingRecommendation ?: return@LaunchedEffect
@@ -1058,6 +1066,9 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         debridBenchmarkService.onAppBackgrounded()
+        lifecycleScope.launch {
+            debridConfigBenchmarkService.cancel()
+        }
         startupPerfWindowOpen = false
         deferredStartupWorkJob?.cancel()
         deferredBrowsableRequestJob?.cancel()

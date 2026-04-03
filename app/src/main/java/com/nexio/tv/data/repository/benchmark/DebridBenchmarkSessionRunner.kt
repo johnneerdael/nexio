@@ -92,7 +92,7 @@ class DebridBenchmarkSessionRunner internal constructor(
             )
         }
 
-        val deviceSnapshot = deviceCapabilitySnapshotProvider.capture()
+        val deviceSnapshot = deviceCapabilitySnapshotProvider.capture(playerSettings)
         val completedResult = DebridBenchmarkResult(
             provider = provider,
             measuredAtMs = nowMs(),

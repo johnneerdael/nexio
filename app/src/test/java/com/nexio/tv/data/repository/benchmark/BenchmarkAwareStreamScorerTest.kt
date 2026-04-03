@@ -8,6 +8,7 @@ import com.nexio.tv.domain.model.StreamBehaviorHints
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class BenchmarkAwareStreamScorerTest {
@@ -158,6 +159,215 @@ class BenchmarkAwareStreamScorerTest {
         assertEquals(127.5, event.selected?.safeBudgetMbps ?: 0.0, 0.0)
     }
 
+    @Test
+    fun `ddp atmos passthrough beats truehd atmos pcm fallback on the same device`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            device = deviceSnapshot(
+                truehdSupported = true,
+                truehdPassthrough = false,
+                eac3Supported = true,
+                eac3Passthrough = true,
+                ac3Supported = true,
+                ac3Passthrough = true,
+                dtsSupported = false,
+                dtsPassthrough = false,
+                dtshdSupported = false,
+                dtshdPassthrough = false
+            )
+        )
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "truehd_pcm",
+                    providerId = "RD",
+                    audioTags = listOf("Atmos", "TrueHD")
+                ),
+                streamCard(
+                    streamKey = "ddp_atmos",
+                    providerId = "RD",
+                    audioTags = listOf("Atmos", "DD+")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark)
+        )
+
+        assertEquals("ddp_atmos", event.selected?.streamKey)
+    }
+
+    @Test
+    fun `truehd atmos pcm fallback still beats basic ac3 passthrough`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            device = deviceSnapshot(
+                truehdSupported = true,
+                truehdPassthrough = false,
+                eac3Supported = false,
+                eac3Passthrough = false,
+                ac3Supported = true,
+                ac3Passthrough = true,
+                dtsSupported = false,
+                dtsPassthrough = false,
+                dtshdSupported = false,
+                dtshdPassthrough = false
+            )
+        )
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "truehd_pcm",
+                    providerId = "RD",
+                    audioTags = listOf("Atmos", "TrueHD")
+                ),
+                streamCard(
+                    streamKey = "ac3_passthrough",
+                    providerId = "RD",
+                    audioTags = listOf("AC3")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark)
+        )
+
+        assertEquals("truehd_pcm", event.selected?.streamKey)
+    }
+
+    @Test
+    fun `json tuned config can flip audio preference without changing code`() {
+        val tunedConfig = BenchmarkAwareStreamScoringConfig.fromJson(
+            BenchmarkAwareStreamScoringConfig.default()
+                .copy(
+                    audioScoring = BenchmarkAwareStreamScoringConfig.default().audioScoring.copy(
+                        supportMultipliers = BenchmarkAwareStreamScoringConfig.default().audioScoring.supportMultipliers +
+                            (ShadowAudioSupportTier.DECODED_MULTICHANNEL_PCM to 0.95)
+                    )
+                )
+                .toJson()
+        )
+        val tunedScorer = BenchmarkAwareStreamScorer(tunedConfig)
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            device = deviceSnapshot(
+                truehdSupported = true,
+                truehdPassthrough = false,
+                eac3Supported = true,
+                eac3Passthrough = true,
+                ac3Supported = true,
+                ac3Passthrough = true,
+                dtsSupported = false,
+                dtsPassthrough = false,
+                dtshdSupported = false,
+                dtshdPassthrough = false
+            )
+        )
+
+        val event = tunedScorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "truehd_pcm",
+                    providerId = "RD",
+                    audioTags = listOf("Atmos", "TrueHD")
+                ),
+                streamCard(
+                    streamKey = "ddp_atmos",
+                    providerId = "RD",
+                    audioTags = listOf("Atmos", "DD+")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark)
+        )
+
+        assertEquals("truehd_pcm", event.selected?.streamKey)
+    }
+
+    @Test
+    fun `selected dv winner retains best non dv fallback from the same ranked list`() {
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "dv_primary",
+                    providerId = "RD",
+                    resolution = "2160p",
+                    quality = "BluRay Remux",
+                    encode = "HEVC",
+                    sizeBytes = gib(42.0),
+                    durationMs = 120L * 60_000L,
+                    visualTags = listOf("DV"),
+                    audioTags = listOf("Atmos", "TrueHD")
+                ),
+                streamCard(
+                    streamKey = "hdr10_fallback",
+                    providerId = "RD",
+                    resolution = "2160p",
+                    quality = "BluRay Remux",
+                    encode = "HEVC",
+                    sizeBytes = gib(40.0),
+                    durationMs = 120L * 60_000L,
+                    visualTags = listOf("HDR10"),
+                    audioTags = listOf("TrueHD")
+                ),
+                streamCard(
+                    streamKey = "sdr_lower",
+                    providerId = "RD",
+                    resolution = "1080p",
+                    quality = "BluRay",
+                    encode = "H264",
+                    sizeBytes = gib(20.0),
+                    durationMs = 120L * 60_000L,
+                    visualTags = emptyList(),
+                    audioTags = listOf("DD+")
+                )
+            ),
+            benchmarkSessions = mapOf(
+                DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(
+                    provider = DebridBenchmarkProvider.REAL_DEBRID,
+                    optimizedP10Mbps = 200.0
+                )
+            )
+        )
+
+        assertEquals("dv_primary", event.selected?.streamKey)
+        assertEquals("hdr10_fallback", event.selectedNonDolbyVisionFallback?.streamKey)
+        assertTrue(event.selectedNonDolbyVisionFallback?.hdrTags?.contains("DV") == false)
+    }
+
+    @Test
+    fun `non dv winner does not expose a redundant non dv fallback`() {
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "hdr10_primary",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    sizeBytes = gib(55.0),
+                    visualTags = listOf("HDR10"),
+                    audioTags = listOf("Atmos", "TrueHD")
+                ),
+                streamCard(
+                    streamKey = "dv_secondary",
+                    providerId = "RD",
+                    quality = "WEB-DL",
+                    sizeBytes = gib(20.0),
+                    visualTags = listOf("DV"),
+                    audioTags = listOf("DD+")
+                )
+            ),
+            benchmarkSessions = mapOf(
+                DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(
+                    provider = DebridBenchmarkProvider.REAL_DEBRID,
+                    optimizedP10Mbps = 200.0
+                )
+            )
+        )
+
+        assertEquals("hdr10_primary", event.selected?.streamKey)
+        assertNull(event.selectedNonDolbyVisionFallback)
+    }
+
     private fun request(runtimeMinutes: Int = 120): ShadowRequestContext {
         return ShadowRequestContext(
             requestId = "req-1",
@@ -241,7 +451,8 @@ class BenchmarkAwareStreamScorerTest {
         directDecisionSafeBudgetMbps: Double = directP10Mbps * 0.85,
         optimizedDecisionSafeBudgetMbps: Double = optimizedP10Mbps * 0.85,
         directSeekP95Ms: Long = 340L,
-        optimizedSeekP95Ms: Long = 240L
+        optimizedSeekP95Ms: Long = 240L,
+        device: DeviceCapabilitySnapshot = deviceSnapshot()
     ): DebridBenchmarkResult {
         return DebridBenchmarkResult(
             provider = provider,
@@ -253,26 +464,7 @@ class BenchmarkAwareStreamScorerTest {
                 elapsedMs = 120_000L
             ),
             terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
-            device = DeviceCapabilitySnapshot(
-                model = "Shield",
-                manufacturer = "NVIDIA",
-                sdkInt = 35,
-                displayHdrTypes = setOf(DeviceHdrType.DOLBY_VISION, DeviceHdrType.HDR10),
-                videoDecode = DeviceVideoDecodeCapabilities(
-                    h264 = CodecSupport(true, false, true),
-                    hevc = CodecSupport(true, false, true),
-                    av1 = CodecSupport(false, true, false),
-                    dolbyVision = CodecSupport(true, false, true)
-                ),
-                audioOutput = DeviceAudioOutputCapabilities(
-                    ac3 = AudioEncodingSupport(true, true),
-                    eac3 = AudioEncodingSupport(true, true),
-                    truehd = AudioEncodingSupport(true, true),
-                    dts = AudioEncodingSupport(true, true),
-                    dtshd = AudioEncodingSupport(true, true)
-                ),
-                capturedAtMs = 40L
-            ),
+            device = device,
             direct = transportProfile(
                 p10Mbps = directP10Mbps,
                 averageMbps = directP10Mbps + 10.0,
@@ -350,5 +542,39 @@ class BenchmarkAwareStreamScorerTest {
 
     private fun gib(value: Double): Long {
         return (value * 1024.0 * 1024.0 * 1024.0).toLong()
+    }
+
+    private fun deviceSnapshot(
+        truehdSupported: Boolean = true,
+        truehdPassthrough: Boolean = true,
+        eac3Supported: Boolean = true,
+        eac3Passthrough: Boolean = true,
+        ac3Supported: Boolean = true,
+        ac3Passthrough: Boolean = true,
+        dtsSupported: Boolean = true,
+        dtsPassthrough: Boolean = true,
+        dtshdSupported: Boolean = true,
+        dtshdPassthrough: Boolean = true
+    ): DeviceCapabilitySnapshot {
+        return DeviceCapabilitySnapshot(
+            model = "Shield",
+            manufacturer = "NVIDIA",
+            sdkInt = 35,
+            displayHdrTypes = setOf(DeviceHdrType.DOLBY_VISION, DeviceHdrType.HDR10),
+            videoDecode = DeviceVideoDecodeCapabilities(
+                h264 = CodecSupport(true, false, true),
+                hevc = CodecSupport(true, false, true),
+                av1 = CodecSupport(false, true, false),
+                dolbyVision = CodecSupport(true, false, true)
+            ),
+            audioOutput = DeviceAudioOutputCapabilities(
+                ac3 = AudioEncodingSupport(ac3Supported, ac3Passthrough),
+                eac3 = AudioEncodingSupport(eac3Supported, eac3Passthrough),
+                truehd = AudioEncodingSupport(truehdSupported, truehdPassthrough),
+                dts = AudioEncodingSupport(dtsSupported, dtsPassthrough),
+                dtshd = AudioEncodingSupport(dtshdSupported, dtshdPassthrough)
+            ),
+            capturedAtMs = 40L
+        )
     }
 }

@@ -158,7 +158,7 @@ fun NexioNavHost(
                             year = null,
                             contentId = item.progress.contentId,
                             contentName = item.progress.name,
-                            runtime = null,
+                            runtime = continueWatchingRuntimeMinutes(item),
                             returnToDetailOnBack = item.progress.contentType.equals("series", ignoreCase = true)
                         )
                         is ContinueWatchingItem.NextUp -> Screen.Stream.createRoute(
@@ -175,7 +175,7 @@ fun NexioNavHost(
                             year = null,
                             contentId = item.info.contentId,
                             contentName = item.info.name,
-                            runtime = null,
+                            runtime = continueWatchingRuntimeMinutes(item),
                             returnToDetailOnBack = item.info.contentType.equals("series", ignoreCase = true)
                         )
                     }
@@ -197,7 +197,7 @@ fun NexioNavHost(
                             year = null,
                             contentId = item.progress.contentId,
                             contentName = item.progress.name,
-                            runtime = null,
+                            runtime = continueWatchingRuntimeMinutes(item),
                             returnToDetailOnBack = item.progress.contentType.equals("series", ignoreCase = true),
                             startFromBeginning = true
                         )
@@ -215,7 +215,7 @@ fun NexioNavHost(
                             year = null,
                             contentId = item.info.contentId,
                             contentName = item.info.name,
-                            runtime = null,
+                            runtime = continueWatchingRuntimeMinutes(item),
                             returnToDetailOnBack = item.info.contentType.equals("series", ignoreCase = true),
                             startFromBeginning = true
                         )
@@ -273,7 +273,7 @@ fun NexioNavHost(
                     savedState["returnFocusEpisode"] = null
                 },
                 onTrailerPlaybackActiveChanged = onDetailTrailerPlaybackActiveChanged,
-                onBackPress = { navController.popBackStack() },
+                onBackPress = { navController.navigateDetailBackToHome() },
                 onNavigateToCastDetail = { personId, personName, preferCrew ->
                     navController.navigate(Screen.CastDetail.createRoute(personId, personName, preferCrew))
                 },
@@ -702,7 +702,7 @@ fun NexioNavHost(
                             year = args.getString("year"),
                             contentId = contentId.takeIf { it.isNotBlank() },
                             contentName = args.getString("contentName"),
-                            runtime = null,
+                            runtime = parseRuntimeMinutes(args.getString("runtime")),
                             returnToDetailOnBack = returnToDetailOnBack
                         )
                         navController.navigate(route) {
@@ -752,7 +752,7 @@ fun NexioNavHost(
                                 year = args.getString("year"),
                                 contentId = args.getString("contentId"),
                                 contentName = args.getString("contentName"),
-                                runtime = null,
+                                runtime = parseRuntimeMinutes(args.getString("runtime")),
                                 manualSelection = true,
                                 returnToDetailOnBack = args.getString("returnToDetailOnBack")
                                     ?.toBooleanStrictOrNull() == true
@@ -1010,4 +1010,23 @@ fun NexioNavHost(
             )
         }
     }
+}
+
+internal fun continueWatchingRuntimeMinutes(item: ContinueWatchingItem): Int? {
+    return when (item) {
+        is ContinueWatchingItem.InProgress -> runtimeMinutesFromDurationMs(item.progress.duration)
+        is ContinueWatchingItem.NextUp -> parseRuntimeMinutes(item.info.displayMetadata?.runtime)
+    }
+}
+
+internal fun runtimeMinutesFromDurationMs(durationMs: Long?): Int? {
+    val value = durationMs?.takeIf { it > 0L } ?: return null
+    return ((value + 59_999L) / 60_000L).toInt()
+}
+
+internal fun parseRuntimeMinutes(raw: String?): Int? {
+    return raw
+        ?.let { Regex("(\\d+)").find(it)?.groupValues?.getOrNull(1) }
+        ?.toIntOrNull()
+        ?.takeIf { it > 0 }
 }

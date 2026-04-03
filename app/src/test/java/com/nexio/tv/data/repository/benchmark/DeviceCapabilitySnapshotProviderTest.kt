@@ -3,6 +3,7 @@ package com.nexio.tv.data.repository.benchmark
 import android.view.Display
 import androidx.media3.common.C
 import androidx.media3.common.MimeTypes
+import com.nexio.tv.data.local.PlayerSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -94,5 +95,32 @@ class DeviceCapabilitySnapshotProviderTest {
         assertTrue(dtshd.passthroughLikely)
         assertFalse(truehd.supported)
         assertFalse(truehd.passthroughLikely)
+    }
+
+    @Test
+    fun `buildBenchmarkSupportedEncodings maps atmos and dtshd aliases into scorer-safe encodings`() {
+        val supportedEncodings = setOf(
+            C.ENCODING_E_AC3_JOC,
+            C.ENCODING_DTS_HD
+        )
+
+        val effective = buildBenchmarkSupportedEncodings(supportedEncodings::contains).toSet()
+
+        assertTrue(C.ENCODING_E_AC3_JOC in effective)
+        assertTrue(C.ENCODING_E_AC3 in effective)
+        assertTrue(C.ENCODING_DTS in effective)
+        assertFalse(C.ENCODING_DOLBY_TRUEHD in effective)
+    }
+
+    @Test
+    fun `default player settings keep benchmark audio toggles enabled`() {
+        val defaults = PlayerSettings()
+
+        assertTrue(defaults.iecPackerAc3PassthroughEnabled)
+        assertTrue(defaults.iecPackerEac3PassthroughEnabled)
+        assertTrue(defaults.iecPackerDtsPassthroughEnabled)
+        assertTrue(defaults.iecPackerTruehdPassthroughEnabled)
+        assertTrue(defaults.iecPackerDtshdPassthroughEnabled)
+        assertTrue(defaults.iecPackerDtshdCoreFallbackEnabled)
     }
 }

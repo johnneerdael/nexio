@@ -1,0 +1,29 @@
+{
+  "datasetVersion": 1,
+  "scenarios": [
+    {
+      "id": "fill-me-in",
+      "name": "Describe the ranking case",
+      "request": {
+        "videoId": "tt1234567",
+        "contentType": "movie",
+        "title": "Example Title",
+        "runtimeMinutes": 120
+      },
+      "benchmarks": [],
+      "streams": [],
+      "expectedWinnerStreamKey": "replace_with_key",
+      "acceptableWinnerKeys": [
+        "replace_with_key"
+      ],
+      "preferredPairs": [
+        {
+          "preferredStreamKey": "replace_with_key",
+          "otherStreamKey": "other_key",
+          "reason": "why this should rank higher"
+        }
+      ],
+      "notes": "Copy an existing benchmark snapshot and replace stream rows with real candidates."
+    }
+  ]
+}
