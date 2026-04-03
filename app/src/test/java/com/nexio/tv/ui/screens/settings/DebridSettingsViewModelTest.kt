@@ -301,6 +301,35 @@ class DebridSettingsViewModelTest {
         assertEquals(3, viewModel.uiState.value.configBenchmarkResultDialog?.chunkGroups?.size)
     }
 
+    @Test
+    fun `failed config benchmark outcomes surface a user message instead of crashing`() = runTest(dispatcher) {
+        val outcomes = MutableSharedFlow<DebridConfigBenchmarkOutcome>()
+        val configBenchmarkService = mockk<DebridConfigBenchmarkService>(relaxed = true)
+        every { configBenchmarkService.activeState } returns MutableStateFlow(DebridConfigBenchmarkRuntimeState.Idle)
+        every { configBenchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns flowOf(null)
+        every { configBenchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns flowOf(null)
+        every { configBenchmarkService.outcomes } returns outcomes
+
+        val viewModel = buildViewModel(
+            realDebridConnected = true,
+            configBenchmarkService = configBenchmarkService
+        )
+        advanceUntilIdle()
+
+        val emittedMessage = async { viewModel.messages.first() }
+        outcomes.emit(
+            DebridConfigBenchmarkOutcome(
+                provider = DebridBenchmarkProvider.REAL_DEBRID,
+                terminationReason = DebridBenchmarkTerminationReason.FAILED
+            )
+        )
+
+        assertEquals(
+            "Real-Debrid config benchmark failed",
+            emittedMessage.await()
+        )
+    }
+
     private fun buildViewModel(
         realDebridConnected: Boolean = false,
         premiumizeConnected: Boolean = false,

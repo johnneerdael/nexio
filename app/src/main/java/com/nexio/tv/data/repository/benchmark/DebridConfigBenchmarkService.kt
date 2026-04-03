@@ -126,6 +126,13 @@ class DebridConfigBenchmarkService internal constructor(
                     terminationReason = DebridBenchmarkTerminationReason.CANCELED
                 )
             )
+        } catch (error: Exception) {
+            _outcomes.emit(
+                DebridConfigBenchmarkOutcome(
+                    provider = provider,
+                    terminationReason = DebridBenchmarkTerminationReason.FAILED
+                )
+            )
         } finally {
             runMutex.withLock {
                 activeJob = null
@@ -140,7 +147,6 @@ class DebridConfigBenchmarkService internal constructor(
         candidate: DebridBenchmarkCandidate
     ): DebridConfigBenchmarkResult {
         val profileResults = mutableListOf<DebridConfigBenchmarkProfileResult>()
-        var abortedFailureReason: String? = null
 
         DEFAULT_MATRIX.forEachIndexed { index, profile ->
             _activeState.value = DebridConfigBenchmarkRuntimeState.Running(
@@ -149,10 +155,6 @@ class DebridConfigBenchmarkService internal constructor(
                 completedProfiles = index,
                 totalProfiles = DEFAULT_MATRIX.size
             )
-            if (abortedFailureReason != null) {
-                profileResults += failedProfile(profile, abortedFailureReason!!)
-                return@forEachIndexed
-            }
             when (val gateDecision = memoryGate.evaluate(profile.parallelConnectionCount, profile.chunkSizeMb)) {
                 ProfileRunDecision.Run -> {
                     val snapshot = DebridBenchmarkTransportConfigSnapshot(
@@ -179,7 +181,6 @@ class DebridConfigBenchmarkService internal constructor(
                         val failureReason = transportResult.failure?.message
                             ?: transportResult.terminationReason.wireKey
                         profileResults += failedProfile(profile, failureReason)
-                        abortedFailureReason = failureReason
                     }
                 }
                 is ProfileRunDecision.Unsupported -> {

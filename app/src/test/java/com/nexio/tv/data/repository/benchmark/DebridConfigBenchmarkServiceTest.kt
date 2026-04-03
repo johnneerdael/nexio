@@ -7,6 +7,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -96,6 +98,63 @@ class DebridConfigBenchmarkServiceTest {
         assertNull(result.summary.bestProfile)
         assertEquals(0, result.summary.successfulProfileCount)
         assertEquals(9, result.profiles.size)
+    }
+
+    @Test
+    fun `failed profile does not abort later config benchmark profiles`() = runTest {
+        val persisted = CompletableDeferred<DebridConfigBenchmarkResult>()
+        val store = mockk<DebridConfigBenchmarkStore>(relaxed = true)
+        val executedSnapshots = mutableListOf<DebridBenchmarkTransportConfigSnapshot>()
+        coEvery { store.latestResult(any()) } returns emptyFlow()
+        coEvery { store.saveLatest(any()) } answers {
+            persisted.complete(firstArg())
+            Unit
+        }
+        val service = buildService(
+            store = store,
+            scope = backgroundScope,
+            runProfile = { _, snapshot, _ ->
+                executedSnapshots += snapshot
+                if (snapshot.parallelConnectionCount == 4 && snapshot.parallelChunkSizeMb == 8) {
+                    failedTransportResult("connection reset")
+                } else {
+                    successTransportResult(400.0)
+                }
+            }
+        )
+
+        assertTrue(service.start(DebridBenchmarkProvider.REAL_DEBRID))
+        val result = persisted.await()
+
+        assertEquals(9, executedSnapshots.size)
+        assertEquals(9, result.profiles.size)
+        assertEquals(
+            DebridConfigBenchmarkStatus.FAILED,
+            result.profiles.first { it.parallelConnectionCount == 4 && it.chunkSizeMb == 8 }.status
+        )
+        assertTrue(result.profiles.count { it.status == DebridConfigBenchmarkStatus.SUCCESS } >= 1)
+    }
+
+    @Test
+    fun `unexpected config benchmark exception is surfaced as failed outcome instead of crashing`() = runTest {
+        val store = mockk<DebridConfigBenchmarkStore>(relaxed = true)
+        coEvery { store.latestResult(any()) } returns emptyFlow()
+        val reported = CompletableDeferred<DebridConfigBenchmarkOutcome>()
+        val service = buildService(
+            store = store,
+            scope = backgroundScope,
+            runProfile = { _, _, _ -> throw IllegalStateException("boom") }
+        )
+
+        backgroundScope.launch {
+            reported.complete(service.outcomes.first())
+        }
+
+        assertTrue(service.start(DebridBenchmarkProvider.REAL_DEBRID))
+        assertEquals(
+            DebridBenchmarkTerminationReason.FAILED,
+            reported.await().terminationReason
+        )
     }
 
     private fun buildService(
