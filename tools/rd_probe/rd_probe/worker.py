@@ -28,8 +28,15 @@ def fetch_range(
     chunk: ByteRange,
     buffer_size: int = 64 * 1024,
     inactivity_timeout_s: float = 10.0,
+    force_connection_close: bool = False,
+    retry_backoff_ms: int = 0,
 ) -> WorkerResult:
-    request = urllib.request.Request(url, headers={"Range": f"bytes={chunk.start}-{chunk.end}"})
+    if retry_backoff_ms > 0:
+        time.sleep(retry_backoff_ms / 1000.0)
+    headers = {"Range": f"bytes={chunk.start}-{chunk.end}"}
+    if force_connection_close:
+        headers["Connection"] = "close"
+    request = urllib.request.Request(url, headers=headers)
     started_at = time.time()
     first_byte_at = None
     last_progress_at = None

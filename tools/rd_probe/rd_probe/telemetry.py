@@ -53,6 +53,8 @@ class TelemetryWriter:
 def classify_session(
     *,
     blocked_chunk: int | None,
+    blocked_chunk_state: str | None = None,
+    blocked_chunk_error_kind: str | None = None,
     completed_ahead_chunks: list[int],
     worker_overlap_count: int,
     longest_consumer_gap_ms: int,
@@ -60,7 +62,13 @@ def classify_session(
     stalled_worker_ids: list[int] | None = None,
 ) -> dict[str, Any]:
     stalled_worker_ids = stalled_worker_ids or []
-    if blocked_chunk is not None and completed_ahead_chunks and blocked_worker_id is not None:
+    if blocked_chunk_state == "failed" and blocked_chunk_error_kind == "inactivity_timeout":
+        likely = "blocked_chunk_timed_out"
+    elif blocked_chunk_state == "retried" and completed_ahead_chunks:
+        likely = "blocked_chunk_retried_while_later_chunks_completed"
+    elif blocked_chunk_state in {"assigned", "inflight", "never_completed"} and completed_ahead_chunks:
+        likely = "blocked_chunk_never_completed"
+    elif blocked_chunk is not None and completed_ahead_chunks and blocked_worker_id is not None:
         likely = "single_worker_head_of_line_stall"
     elif worker_overlap_count >= 2 and len(stalled_worker_ids) >= 2 and longest_consumer_gap_ms > 0:
         likely = "multi_worker_global_stall"

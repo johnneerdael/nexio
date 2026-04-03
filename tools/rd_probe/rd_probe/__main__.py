@@ -1,16 +1,34 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import sys
+import threading
 import time
+import warnings
+
+warnings.filterwarnings(
+    "ignore",
+    message=r"urllib3 v2 only supports OpenSSL 1\.1\.1\+.*",
+    category=Warning,
+    module=r"urllib3.*",
+)
 
 from .analyze import load_summary
+from .policies import (
+    build_default_policies,
+    can_schedule_next_chunk,
+    effective_required_chunk,
+    should_retry_blocked_chunk,
+)
 from .assembler import InOrderAssembler
 from .candidate_resolver import CandidateResolver
 from .config import load_config
 from .pcap import PcapController
-from .range_scheduler import RangeScheduler
+from .range_scheduler import ChunkTracker, RangeScheduler
 from .rd_api import RealDebridClient
 from .telemetry import TelemetryWriter, classify_session, new_run_dir
 from .worker import fetch_range
@@ -29,6 +47,16 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--output-dir")
     run_parser.add_argument("--enable-pcap", action="store_true")
     run_parser.add_argument("--inactivity-timeout", type=float, default=10.0)
+    run_parser.add_argument(
+        "--policy",
+        default="all",
+        choices=[
+            "all",
+            "baseline",
+            "fresh-session-blocked-retry",
+            "fresh-session-blocked-retry-with-backoff",
+        ],
+    )
     run_parser.add_argument("--download-id")
     run_parser.add_argument("--torrent-id")
     run_parser.add_argument("--direct-url")
@@ -36,6 +64,55 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_parser = subparsers.add_parser("analyze")
     analyze_parser.add_argument("run_dir")
     return parser
+
+
+def _start_status_bar(status: dict) -> tuple[threading.Event, threading.Thread]:
+    stop_event = threading.Event()
+    interactive_tty = sys.stdout.isatty() and not os.environ.get("TERM", "").lower() == "dumb"
+
+    def render() -> None:
+        last_line = None
+        while not stop_event.is_set():
+            elapsed = int(time.monotonic() - status["started_monotonic"])
+            line = (
+                f"[{status['policy']}] "
+                f"{elapsed:>4}s "
+                f"blocked={status.get('blocked_chunk', '-')}"
+                f"/w{status.get('blocked_worker_id', '-')}"
+                f" state={status.get('blocked_state', '-')}"
+                f" ahead={status.get('completed_ahead_count', 0)}"
+                f" active={status.get('active_workers', 0)}"
+                f" done={status.get('completed_chunks', 0)}"
+                f" retries={status.get('retry_events', 0)}"
+                f" bytes={status.get('consumer_bytes_available', 0)}"
+            )
+            line = line[:180].ljust(180)
+            if interactive_tty:
+                sys.stdout.write("\r" + line)
+                sys.stdout.flush()
+            elif line != last_line:
+                print(line.rstrip(), flush=True)
+                last_line = line
+            stop_event.wait(1.0)
+        if interactive_tty:
+            sys.stdout.write("\r" + " " * 180 + "\r")
+            sys.stdout.flush()
+        else:
+            print("[status complete]", flush=True)
+
+    thread = threading.Thread(target=render, daemon=True)
+    thread.start()
+    return stop_event, thread
+
+
+def _split_total_duration(total_duration_s: int, policy_count: int) -> list[int]:
+    total = max(total_duration_s, policy_count)
+    base = total // policy_count
+    remainder = total % policy_count
+    return [
+        base + (1 if index < remainder else 0)
+        for index in range(policy_count)
+    ]
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -55,9 +132,53 @@ def cmd_run(args: argparse.Namespace) -> int:
         direct_url=args.direct_url,
     )
 
+    policies = build_default_policies(parallel)
+    if args.policy != "all":
+        policies = [policy for policy in policies if policy.name == args.policy]
+    policy_durations = _split_total_duration(duration, len(policies))
+
+    comparison = []
+    for policy, policy_duration in zip(policies, policy_durations):
+        variant_dir = run_dir / policy.name if len(policies) > 1 else run_dir
+        summary_payload, session_payload = run_policy_variant(
+            args=args,
+            candidate=candidate,
+            parallel=parallel,
+            chunk_mb=chunk_mb,
+            duration=policy_duration,
+            variant_dir=variant_dir,
+            policy=policy,
+        )
+        comparison.append(
+            {
+                "policy": policy.name,
+                "allocated_duration": policy_duration,
+                "summary": summary_payload,
+                "session": session_payload,
+            }
+        )
+
+    if len(policies) > 1:
+        (run_dir / "comparison.json").write_text(json.dumps(comparison, indent=2, default=str))
+    print(run_dir)
+    return 0
+
+
+def run_policy_variant(
+    *,
+    args: argparse.Namespace,
+    candidate,
+    parallel: int,
+    chunk_mb: int,
+    duration: int,
+    variant_dir: Path,
+    policy,
+):
+    telemetry = TelemetryWriter(variant_dir)
     pcap = None
     pcap_info = None
     session_payload = {
+        "policy": policy.name,
         "parallel": parallel,
         "chunk_mb": chunk_mb,
         "duration": duration,
@@ -70,8 +191,21 @@ def cmd_run(args: argparse.Namespace) -> int:
         "blocked_worker_id": None,
         "stalled_worker_ids": [],
     }
+    status = {
+        "policy": policy.name,
+        "started_monotonic": time.monotonic(),
+        "blocked_chunk": "-",
+        "blocked_worker_id": "-",
+        "blocked_state": "-",
+        "completed_ahead_count": 0,
+        "active_workers": 0,
+        "completed_chunks": 0,
+        "retry_events": 0,
+        "consumer_bytes_available": 0,
+    }
+    status_stop_event, status_thread = _start_status_bar(status)
     if args.enable_pcap:
-        pcap = PcapController(run_dir / "capture.pcap", candidate.host)
+        pcap = PcapController(variant_dir / "capture.pcap", candidate.host)
         pcap.start()
 
     try:
@@ -79,15 +213,16 @@ def cmd_run(args: argparse.Namespace) -> int:
         chunk_size = chunk_mb * 1024 * 1024
         scheduler = RangeScheduler(file_size=file_size, chunk_size=chunk_size, parallelism=parallel)
         assembler = InOrderAssembler(chunk_size=chunk_size)
+        chunk_tracker = ChunkTracker()
         deadline = time.monotonic() + max(duration, 1)
         effective_byte_limit = min(file_size, args.byte_limit or file_size)
         worker_rows = []
         total_scheduled_bytes = 0
-        chunk_owner_by_index = {}
         stalled_worker_ids = set()
         longest_consumer_gap_ms = 0
         blocked_started_at = None
         previous_blocked_chunk = assembler.blocked_on_chunk
+        retry_counts = {}
 
         def can_schedule_more() -> bool:
             return time.monotonic() < deadline and total_scheduled_bytes < effective_byte_limit
@@ -98,12 +233,15 @@ def cmd_run(args: argparse.Namespace) -> int:
 
             while len(futures) < parallel and can_schedule_more():
                 chunk = scheduler.next_chunk()
-                if chunk is None:
-                    break
-                if chunk.start >= effective_byte_limit:
+                if chunk is None or chunk.start >= effective_byte_limit:
                     break
                 assigned_worker_id = worker_index % parallel
-                chunk_owner_by_index[chunk.index] = assigned_worker_id
+                chunk_tracker.mark_assigned(
+                    chunk=chunk,
+                    worker_id=assigned_worker_id,
+                    assigned_at=time.time(),
+                    retry_count=retry_counts.get(chunk.index, 0),
+                )
                 futures[
                     executor.submit(
                         fetch_range,
@@ -111,8 +249,11 @@ def cmd_run(args: argparse.Namespace) -> int:
                         url=candidate.direct_url,
                         chunk=chunk,
                         inactivity_timeout_s=args.inactivity_timeout,
+                        force_connection_close=False,
+                        retry_backoff_ms=0,
                     )
                 ] = chunk
+                status["active_workers"] = len(futures)
                 total_scheduled_bytes += (chunk.end - chunk.start + 1)
                 worker_index += 1
 
@@ -121,15 +262,43 @@ def cmd_run(args: argparse.Namespace) -> int:
                     chunk = futures.pop(future)
                     result = future.result()
                     current_chunk = result.chunk if result.chunk else chunk
+                    status["active_workers"] = len(futures)
+                    chunk_tracker.mark_inflight(
+                        chunk_index=current_chunk.index,
+                        started_at=result.started_at,
+                    )
+                    if result.last_progress_at is not None:
+                        chunk_tracker.mark_progress(
+                            chunk_index=current_chunk.index,
+                            at=result.last_progress_at,
+                        )
+
                     ahead_chunks_before = list(assembler.completed_ahead())
                     blocked_chunk_before = assembler.blocked_on_chunk
                     if result.error is None:
                         assembler.mark_chunk_complete(current_chunk.index, current_chunk.start, current_chunk.end)
+                        if result.completed_at is not None:
+                            chunk_tracker.mark_completed(
+                                chunk_index=current_chunk.index,
+                                completed_at=result.completed_at,
+                            )
+                    else:
+                        retryable = result.error_kind in policy.retryable_error_kinds
+                        chunk_tracker.mark_failed(
+                            chunk_index=current_chunk.index,
+                            failed_at=result.completed_at or time.time(),
+                            error_kind=result.error_kind,
+                            retryable=retryable,
+                        )
                     ahead_chunks_after = list(assembler.completed_ahead())
                     blocked_chunk_after = assembler.blocked_on_chunk
+                    status["blocked_chunk"] = blocked_chunk_after if blocked_chunk_after is not None else "-"
+                    status["completed_ahead_count"] = len(ahead_chunks_after)
+                    status["consumer_bytes_available"] = assembler.consumer_bytes_available
 
                     telemetry.append_worker_event(
                         {
+                            "policy": policy.name,
                             "worker_id": result.worker_id,
                             "chunk_index": current_chunk.index,
                             "start": current_chunk.start,
@@ -145,17 +314,28 @@ def cmd_run(args: argparse.Namespace) -> int:
                     )
                     worker_rows.append(
                         {
+                            "policy": policy.name,
                             "worker_id": result.worker_id,
                             "chunk_index": current_chunk.index,
                             "start": current_chunk.start,
                             "end": current_chunk.end,
                             "bytes_read": result.bytes_read,
                             "error": result.error or "",
-                            "worker_id": result.worker_id,
                         }
                     )
+                    if result.error is None:
+                        status["completed_chunks"] += 1
                     if result.error_kind == "inactivity_timeout":
                         stalled_worker_ids.add(result.worker_id)
+
+                    blocked_snapshot = chunk_tracker.snapshot_for(
+                        chunk_index=blocked_chunk_after if blocked_chunk_after is not None else -1,
+                        has_been_scheduled=(
+                            scheduler.has_been_scheduled(blocked_chunk_after)
+                            if blocked_chunk_after is not None
+                            else False
+                        ),
+                    ) if blocked_chunk_after is not None else None
 
                     if blocked_chunk_after == previous_blocked_chunk:
                         if blocked_started_at is None:
@@ -171,23 +351,88 @@ def cmd_run(args: argparse.Namespace) -> int:
 
                     telemetry.append_consumer_event(
                         {
+                            "policy": policy.name,
                             "blocked_on_chunk_before": blocked_chunk_before,
                             "blocked_on_chunk": blocked_chunk_after,
-                            "blocked_worker_id": chunk_owner_by_index.get(blocked_chunk_after) if blocked_chunk_after is not None else None,
+                            "blocked_worker_id": blocked_snapshot.get("worker_id") if blocked_snapshot else None,
+                            "blocked_chunk_state": blocked_snapshot.get("state") if blocked_snapshot else None,
+                            "blocked_chunk_retry_count": blocked_snapshot.get("retry_count") if blocked_snapshot else None,
+                            "blocked_chunk_error_kind": blocked_snapshot.get("error_kind") if blocked_snapshot else None,
                             "consumer_bytes_available": assembler.consumer_bytes_available,
                             "completed_ahead_before": ahead_chunks_before,
                             "completed_ahead": ahead_chunks_after,
                         }
                     )
+                    if blocked_snapshot:
+                        status["blocked_worker_id"] = blocked_snapshot.get("worker_id", "-")
+                        status["blocked_state"] = blocked_snapshot.get("state", "-")
+
+                    retry_count = retry_counts.get(current_chunk.index, 0)
+                    retry_target_chunk = effective_required_chunk(
+                        blocked_chunk_before,
+                        ahead_chunks_before,
+                    )
+                    if result.error is not None and should_retry_blocked_chunk(
+                        policy,
+                        failed_chunk_index=current_chunk.index,
+                        blocked_chunk_index=retry_target_chunk,
+                        completed_ahead_chunks=ahead_chunks_before,
+                        error_kind=result.error_kind,
+                        retry_count=retry_count,
+                    ):
+                        next_retry_count = retry_count + 1
+                        status["retry_events"] += 1
+                        retry_counts[current_chunk.index] = next_retry_count
+                        telemetry.append_worker_event(
+                            {
+                                "policy": policy.name,
+                                "event_type": "retry_scheduled",
+                                "worker_id": result.worker_id,
+                                "chunk_index": current_chunk.index,
+                                "retry_count": next_retry_count,
+                                "fresh_connection": policy.force_fresh_connection_on_retry,
+                                "retry_backoff_ms": policy.retry_backoff_ms,
+                            }
+                        )
+                        chunk_tracker.mark_assigned(
+                            chunk=current_chunk,
+                            worker_id=result.worker_id,
+                            assigned_at=time.time(),
+                            retry_count=next_retry_count,
+                        )
+                        futures[
+                            executor.submit(
+                                fetch_range,
+                                worker_id=result.worker_id,
+                                url=candidate.direct_url,
+                                chunk=current_chunk,
+                                inactivity_timeout_s=args.inactivity_timeout,
+                                force_connection_close=policy.force_fresh_connection_on_retry,
+                                retry_backoff_ms=policy.retry_backoff_ms,
+                            )
+                        ] = current_chunk
+                        status["active_workers"] = len(futures)
+                        break
 
                     while len(futures) < parallel and can_schedule_more():
                         next_chunk = scheduler.next_chunk()
-                        if next_chunk is None:
+                        if next_chunk is None or next_chunk.start >= effective_byte_limit:
                             break
-                        if next_chunk.start >= effective_byte_limit:
+                        if not can_schedule_next_chunk(
+                            policy,
+                            next_chunk_index=next_chunk.index,
+                            blocked_chunk_index=blocked_chunk_after,
+                            blocked_chunk_state=(blocked_snapshot.get("state") if blocked_snapshot else None),
+                            completed_ahead_chunks=ahead_chunks_after,
+                        ):
                             break
                         assigned_worker_id = worker_index % parallel
-                        chunk_owner_by_index[next_chunk.index] = assigned_worker_id
+                        chunk_tracker.mark_assigned(
+                            chunk=next_chunk,
+                            worker_id=assigned_worker_id,
+                            assigned_at=time.time(),
+                            retry_count=retry_counts.get(next_chunk.index, 0),
+                        )
                         futures[
                             executor.submit(
                                 fetch_range,
@@ -195,29 +440,43 @@ def cmd_run(args: argparse.Namespace) -> int:
                                 url=candidate.direct_url,
                                 chunk=next_chunk,
                                 inactivity_timeout_s=args.inactivity_timeout,
+                                force_connection_close=False,
+                                retry_backoff_ms=0,
                             )
                         ] = next_chunk
+                        status["active_workers"] = len(futures)
                         total_scheduled_bytes += (next_chunk.end - next_chunk.start + 1)
                         worker_index += 1
                     break
+
         if blocked_started_at is not None:
             longest_consumer_gap_ms = max(
                 longest_consumer_gap_ms,
                 int((time.monotonic() - blocked_started_at) * 1000),
             )
+        blocked_snapshot = chunk_tracker.snapshot_for(
+            chunk_index=assembler.blocked_on_chunk if assembler.blocked_on_chunk is not None else -1,
+            has_been_scheduled=(
+                scheduler.has_been_scheduled(assembler.blocked_on_chunk)
+                if assembler.blocked_on_chunk is not None
+                else False
+            ),
+        ) if assembler.blocked_on_chunk is not None else None
         telemetry.write_ranges(worker_rows)
-        summary = classify_session(
+        summary_payload = classify_session(
             blocked_chunk=assembler.blocked_on_chunk,
+            blocked_chunk_state=blocked_snapshot.get("state") if blocked_snapshot else None,
+            blocked_chunk_error_kind=blocked_snapshot.get("error_kind") if blocked_snapshot else None,
             completed_ahead_chunks=list(assembler.completed_ahead()),
             worker_overlap_count=len({row["worker_id"] for row in worker_rows if row["chunk_index"] in set(assembler.completed_ahead())}),
             longest_consumer_gap_ms=longest_consumer_gap_ms,
-            blocked_worker_id=chunk_owner_by_index.get(assembler.blocked_on_chunk) if assembler.blocked_on_chunk is not None else None,
+            blocked_worker_id=blocked_snapshot.get("worker_id") if blocked_snapshot else None,
             stalled_worker_ids=sorted(stalled_worker_ids),
         )
-        summary_payload = summary
         if pcap:
             pcap_info = pcap.stop()
         session_payload = {
+            "policy": policy.name,
             "candidate": candidate.__dict__,
             "parallel": parallel,
             "chunk_mb": chunk_mb,
@@ -228,16 +487,18 @@ def cmd_run(args: argparse.Namespace) -> int:
         }
         telemetry.write_session(session_payload)
         telemetry.write_summary(summary_payload)
-        print(run_dir)
-        return 0
+        return summary_payload, session_payload
     except Exception as exc:
         session_payload = {
             **session_payload,
+            "policy": policy.name,
             "candidate": candidate.__dict__,
             "error": str(exc),
         }
         raise
     finally:
+        status_stop_event.set()
+        status_thread.join(timeout=1.5)
         if pcap and pcap_info is None:
             pcap_info = pcap.stop()
         if pcap_info is not None:
