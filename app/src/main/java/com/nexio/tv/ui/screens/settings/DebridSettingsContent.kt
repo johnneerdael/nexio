@@ -175,6 +175,11 @@ private data class DebridConfigBenchmarkSnapshot(
     val activeState: DebridConfigBenchmarkRuntimeState
 )
 
+private data class DebridDialogSnapshot(
+    val benchmarkResultDialog: DebridBenchmarkResultDialogUi?,
+    val configBenchmarkResultDialog: DebridConfigBenchmarkResultDialogUi?
+)
+
 @Composable
 fun DebridSettingsContent(
     viewModel: DebridSettingsViewModel = hiltViewModel(),
@@ -1308,14 +1313,23 @@ class DebridSettingsViewModel @Inject constructor(
             )
         }
 
+        val dialogState = combine(
+            benchmarkResultDialog,
+            configBenchmarkResultDialog
+        ) { benchmarkDialog, configDialog ->
+            DebridDialogSnapshot(
+                benchmarkResultDialog = benchmarkDialog,
+                configBenchmarkResultDialog = configDialog
+            )
+        }
+
         viewModelScope.launch {
             combine(
                 connectionState,
                 benchmarkState,
                 configBenchmarkState,
-                benchmarkResultDialog,
-                configBenchmarkResultDialog
-            ) { connection, benchmark, configBenchmark, resultDialog, configResultDialog ->
+                dialogState
+            ) { connection, benchmark, configBenchmark, dialogs ->
                 DebridUiState(
                     realDebridMode = connection.realDebridMode,
                     realDebridUsername = connection.realDebridUsername,
@@ -1351,8 +1365,8 @@ class DebridSettingsViewModel @Inject constructor(
                         activeState = configBenchmark.activeState,
                         benchmarkActive = benchmark.activeState
                     ),
-                    benchmarkResultDialog = resultDialog,
-                    configBenchmarkResultDialog = configResultDialog,
+                    benchmarkResultDialog = dialogs.benchmarkResultDialog,
+                    configBenchmarkResultDialog = dialogs.configBenchmarkResultDialog,
                     torBoxConnected = connection.torBoxConnected,
                     torBoxEmail = connection.torBoxEmail,
                     torBoxPlan = connection.torBoxPlan,
