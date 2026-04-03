@@ -47,7 +47,8 @@ class OptimizedBenchmarkTransport internal constructor(
     private val readBufferSize: Int,
     private val maxRecoverableFailures: Int,
     private val sleepMs: (Long) -> Unit,
-    private val noProgressFailureTimeoutMs: Long
+    private val noProgressFailureTimeoutMs: Long,
+    private val completionGuardBandMs: Long
 ) {
 
     @Inject
@@ -62,7 +63,8 @@ class OptimizedBenchmarkTransport internal constructor(
         readBufferSize = 256 * 1024,
         maxRecoverableFailures = 8,
         sleepMs = { durationMs -> Thread.sleep(durationMs) },
-        noProgressFailureTimeoutMs = 20_000L
+        noProgressFailureTimeoutMs = 20_000L,
+        completionGuardBandMs = 10_000L
     )
 
     suspend fun runProfile(
@@ -143,6 +145,7 @@ class OptimizedBenchmarkTransport internal constructor(
         var recoverableTimeoutCount = 0
         var consecutiveRecoverableFailureCount = 0
         var lastProgressAtNs = requestStartedAtNs
+        var measurementCompletedAtNs: Long? = null
 
         try {
             when (val openResult = reopenReadableSource(
@@ -247,25 +250,42 @@ class OptimizedBenchmarkTransport internal constructor(
 
                 val nowNs = nanoTimeNs()
                 lastProgressAtNs = nowNs
-                if (previousReadAtNs == null) {
-                    collector.recordStartup(
-                        requestStartedAtMs = nanosToMillis(requestStartedAtNs),
-                        firstByteAtMs = nanosToMillis(nowNs)
-                    )
-                } else {
-                    collector.recordReadGap(nanosToMillis(nowNs - previousReadAtNs))
+                if (measurementCompletedAtNs == null) {
+                    if (previousReadAtNs == null) {
+                        collector.recordStartup(
+                            requestStartedAtMs = nanosToMillis(requestStartedAtNs),
+                            firstByteAtMs = nanosToMillis(nowNs)
+                        )
+                    } else {
+                        collector.recordReadGap(nanosToMillis(nowNs - previousReadAtNs))
+                    }
                 }
                 previousReadAtNs = nowNs
 
                 totalBytesRead += read
-                collector.recordBytesRead(
-                    totalBytesRead = totalBytesRead,
-                    sampleAtMs = nanosToMillis(nowNs)
-                )
-                val summary = collector.currentSummary()
-                observer.onSummaryUpdated(summary)
+                if (measurementCompletedAtNs == null) {
+                    collector.recordBytesRead(
+                        totalBytesRead = totalBytesRead,
+                        sampleAtMs = nanosToMillis(nowNs)
+                    )
+                    val summary = collector.currentSummary()
+                    observer.onSummaryUpdated(summary)
 
-                if (collector.shouldComplete()) {
+                    if (collector.shouldComplete()) {
+                        measurementCompletedAtNs = nowNs
+                        if (completionGuardBandMs <= 0L) {
+                            return StartupAndSustainedPhaseResult(
+                                terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
+                                recoverableFailureCount = recoverableFailureCount,
+                                recoverableTimeoutCount = recoverableTimeoutCount
+                            )
+                        }
+                    }
+                }
+
+                if (measurementCompletedAtNs != null &&
+                    nanosToMillis(nowNs - measurementCompletedAtNs) >= completionGuardBandMs
+                ) {
                     return StartupAndSustainedPhaseResult(
                         terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
                         recoverableFailureCount = recoverableFailureCount,

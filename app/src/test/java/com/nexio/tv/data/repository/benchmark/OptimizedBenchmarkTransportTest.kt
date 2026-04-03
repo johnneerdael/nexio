@@ -4,6 +4,7 @@ import androidx.media3.common.C
 import com.nexio.tv.ui.screens.player.ParallelRangeDataSource
 import java.io.EOFException
 import java.net.SocketException
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.TimeoutException
 import kotlinx.coroutines.test.runTest
@@ -514,6 +515,64 @@ class OptimizedBenchmarkTransportTest {
     }
 
     @Test
+    fun `optimized transport keeps downloading past the scored window but pins summary to the scored window`() = runTest {
+        val clock = FakeBenchmarkClock()
+        val readCount = AtomicInteger(0)
+        val transport = buildTransport(
+            builder = object : OptimizedBenchmarkDataSourceFactoryBuilder {
+                override fun create(
+                    candidate: DebridBenchmarkCandidate,
+                    configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    allowStartupBootstrapReuse: Boolean,
+                    transportSampleTimeMs: () -> Long,
+                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                ): BenchmarkReadableSourceFactory {
+                    return BenchmarkReadableSourceFactory {
+                        object : BenchmarkReadableSource {
+                            override fun open(position: Long, length: Long): Long {
+                                clock.advanceMs(50L)
+                                return 1024L * 1024L
+                            }
+
+                            override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                                if (readCount.get() >= 5) {
+                                    return C.RESULT_END_OF_INPUT
+                                }
+                                val bytesToRead = minOf(length, 32 * 1024)
+                                readCount.incrementAndGet()
+                                clock.advanceMs(1_000L)
+                                return bytesToRead
+                            }
+
+                            override fun close() = Unit
+                        }
+                    }
+                }
+            },
+            clock = clock,
+            sustainedThresholdBytes = 64L * 1024L,
+            sustainedThresholdElapsedMs = 2_000L,
+            completionGuardBandMs = 3_000L
+        )
+
+        val result = transport.runProfile(
+            candidate = candidate(),
+            configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                useParallelConnections = true,
+                parallelConnectionCount = 4,
+                parallelChunkSizeMb = 8
+            )
+        )
+
+        assertEquals(DebridBenchmarkTerminationReason.COMPLETED, result.terminationReason)
+        assertTrue(readCount.get() > 2)
+        assertEquals(2_050L, result.summary.elapsedMs)
+        assertEquals(64L * 1024L, result.summary.transferredBytes)
+        assertEquals(1_000L, result.profile.sustained.elapsedMs)
+        assertEquals(64L * 1024L, result.profile.sustained.bytesTransferred)
+    }
+
+    @Test
     fun `optimized transport fails after recoverable resets stop making progress for too long`() = runTest {
         val clock = FakeBenchmarkClock()
         var firstReadDone = false
@@ -575,7 +634,8 @@ class OptimizedBenchmarkTransportTest {
         clock: FakeBenchmarkClock,
         sustainedThresholdBytes: Long = 64L * 1024L,
         sustainedThresholdElapsedMs: Long = 2_000L,
-        noProgressFailureTimeoutMs: Long = 20_000L
+        noProgressFailureTimeoutMs: Long = 20_000L,
+        completionGuardBandMs: Long = 10_000L
     ): OptimizedBenchmarkTransport {
         return OptimizedBenchmarkTransport(
             factoryBuilder = builder,
@@ -586,7 +646,8 @@ class OptimizedBenchmarkTransportTest {
             readBufferSize = 32 * 1024,
             maxRecoverableFailures = 8,
             sleepMs = clock::advanceMs,
-            noProgressFailureTimeoutMs = noProgressFailureTimeoutMs
+            noProgressFailureTimeoutMs = noProgressFailureTimeoutMs,
+            completionGuardBandMs = completionGuardBandMs
         )
     }
 
