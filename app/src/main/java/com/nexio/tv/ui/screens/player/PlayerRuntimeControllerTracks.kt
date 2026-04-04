@@ -10,11 +10,13 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.Util
 import androidx.media3.common.util.UnstableApi
 import com.nexio.tv.core.player.FrameRateUtils
+import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -101,6 +103,12 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                                     detectedFrameRateSource = FrameRateSource.TRACK
                                 )
                             }
+                            maybeApplyTrackBasedAfrFallback(
+                                rawFrameRate = raw,
+                                snappedFrameRate = snapped,
+                                videoWidth = vWidth,
+                                videoHeight = vHeight
+                            )
                         }
                         break
                     }
@@ -419,7 +427,7 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
 internal fun PlayerRuntimeController.maybeAdjustLibassPipelineForTracks(tracks: Tracks) {
     if (libassPipelineSwitchInFlight) return
 
-    val desiredUseLibass = requestedUseLibassByUser && tracks.hasAssSsaTextTrack()
+    val desiredUseLibass = requestedUseLibassByUser && tracks.hasSelectedAssSsaTextTrack()
     if (desiredUseLibass == activePlayerUsesLibass) return
 
     val player = _exoPlayer ?: return
@@ -461,6 +469,78 @@ private fun Tracks.hasAssSsaTextTrack(): Boolean {
         }
     }
     return false
+}
+
+private fun Tracks.hasSelectedAssSsaTextTrack(): Boolean {
+    groups.forEach { trackGroup ->
+        if (trackGroup.type != C.TRACK_TYPE_TEXT) return@forEach
+        for (index in 0 until trackGroup.length) {
+            if (!trackGroup.isTrackSelected(index)) continue
+            val format = trackGroup.getTrackFormat(index)
+            if (format.sampleMimeType == MimeTypes.TEXT_SSA) return true
+            val hasAssCodec = format.codecs
+                ?.split(',')
+                ?.asSequence()
+                ?.map { it.trim().lowercase(Locale.US) }
+                ?.any { codec ->
+                    codec == MimeTypes.TEXT_SSA ||
+                        codec == "s_text/ass" ||
+                        codec == "s_text/ssa" ||
+                        codec.endsWith("/x-ssa")
+                } == true
+            if (hasAssCodec) return true
+        }
+    }
+    return false
+}
+
+internal fun PlayerRuntimeController.maybeApplyTrackBasedAfrFallback(
+    rawFrameRate: Float,
+    snappedFrameRate: Float,
+    videoWidth: Int,
+    videoHeight: Int
+) {
+    if (trackAfrAppliedForCurrentStream) return
+    val activity = currentHostActivity() ?: return
+    val streamUrlSnapshot = currentStreamUrl
+    trackAfrAppliedForCurrentStream = true
+
+    scope.launch {
+        val playerSettings = playerSettingsDataStore.playerSettings.first()
+        if (playerSettings.frameRateMatchingMode == FrameRateMatchingMode.OFF) {
+            return@launch
+        }
+        if (currentStreamUrl != streamUrlSnapshot) {
+            return@launch
+        }
+        val prefer23976ProbeBias = rawFrameRate in 23.95f..24.12f
+        val targetFrameRate = FrameRateUtils.refineFrameRateForDisplay(
+            activity = activity,
+            detectedFps = snappedFrameRate,
+            prefer23976Near24 = prefer23976ProbeBias
+        )
+        val result = FrameRateUtils.matchFrameRateAndWait(
+            activity = activity,
+            frameRate = targetFrameRate,
+            videoWidth = videoWidth.takeIf { it > 0 },
+            videoHeight = videoHeight.takeIf { it > 0 },
+            resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
+        )
+        if (result != null && currentStreamUrl == streamUrlSnapshot) {
+            _uiState.update {
+                it.copy(
+                    displayModeInfo = DisplayModeInfo(
+                        width = result.appliedMode.physicalWidth,
+                        height = result.appliedMode.physicalHeight,
+                        refreshRate = result.appliedMode.refreshRate
+                    ),
+                    showDisplayModeInfo = true
+                )
+            }
+        } else if (currentStreamUrl == streamUrlSnapshot) {
+            trackAfrAppliedForCurrentStream = false
+        }
+    }
 }
 
 private fun isLikelyVc1VideoFormat(

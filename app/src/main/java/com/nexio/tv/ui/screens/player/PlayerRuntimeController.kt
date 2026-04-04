@@ -17,6 +17,7 @@ import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.SkipInterval
 import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
@@ -311,6 +312,7 @@ class PlayerRuntimeController(
     internal var activePlayerUsesLibass: Boolean = false
     internal var libassPipelineSwitchInFlight: Boolean = false
     internal var libassPipelineDecisionStreamUrl: String? = null
+    internal var trackAfrAppliedForCurrentStream: Boolean = false
     internal var currentStreamHasVideoTrack: Boolean = false
     internal var currentVideoTrackIsLikelyDv5: Boolean = false
     internal var currentVideoTrackIsLikelyVc1: Boolean = false

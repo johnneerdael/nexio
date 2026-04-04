@@ -380,6 +380,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     currentVideoHash = stream.behaviorHints?.videoHash
     currentVideoSize = stream.behaviorHints?.videoSize
     currentFilename = stream.behaviorHints?.filename ?: navigationArgs.filename
+    trackAfrAppliedForCurrentStream = false
     pendingAddonSubtitleLanguage = null
     pendingAddonSubtitleTrackId = null
     pendingAudioSelectionAfterSubtitleRefresh = null
@@ -685,6 +686,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     currentVideoHash = stream.behaviorHints?.videoHash
     currentVideoSize = stream.behaviorHints?.videoSize
     currentFilename = stream.behaviorHints?.filename ?: navigationArgs.filename
+    trackAfrAppliedForCurrentStream = false
     pendingAddonSubtitleLanguage = null
     pendingAddonSubtitleTrackId = null
     pendingAudioSelectionAfterSubtitleRefresh = null
