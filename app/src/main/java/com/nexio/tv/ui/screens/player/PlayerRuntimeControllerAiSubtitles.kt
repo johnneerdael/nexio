@@ -137,6 +137,9 @@ internal fun PlayerRuntimeController.translateAndSelectAddonSubtitle(sourceSubti
                 if (error is CancellationException) {
                     return@onFailure
                 }
+                if (_uiState.value.selectedAddonSubtitle?.url != sourceSubtitle.url) {
+                    selectAddonSubtitle(sourceSubtitle)
+                }
                 _uiState.update {
                     it.copy(
                         isAiSubtitleTranslating = false,

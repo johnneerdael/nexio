@@ -357,6 +357,7 @@ class StreamScreenViewModel @Inject constructor(
                                     contentId = contentId ?: videoId.substringBefore(":"),
                                     contentType = contentType,
                                     contentName = contentName ?: title,
+                                    originalLanguage = originalLanguage,
                                     poster = poster,
                                     backdrop = backdrop,
                                     logo = logo,
@@ -466,7 +467,9 @@ class StreamScreenViewModel @Inject constructor(
                                 "No eligible links found"
                             } else {
                                 null
-                            }
+                            },
+                            shadowDecisionFinalPass = isFinalPass,
+                            shadowDecisionAllowEarlyFinish = deterministicAutoplay
                         )
                     }
                 }
@@ -476,10 +479,12 @@ class StreamScreenViewModel @Inject constructor(
                         origin = "stream_screen",
                         organizedResult = organizedResult.organizedStreams
                     )
-                    logShadowAutoPlayDecision(
+                    updateShadowAutoPlayDecision(
                         request = buildShadowRequestContext(requestId),
                         organizedStreams = organizedResult.organizedStreams.items,
-                        activeTransportMode = playerSettings.toShadowActiveTransportMode()
+                        activeTransportMode = playerSettings.toShadowActiveTransportMode(),
+                        isFinalPass = organizedResult.shadowDecisionFinalPass,
+                        allowEarlyFinishTerminal = organizedResult.shadowDecisionAllowEarlyFinish
                     )
 
                     val selectedAutoPlayStream = organizedResult.selectedAutoPlayStream
@@ -928,6 +933,7 @@ class StreamScreenViewModel @Inject constructor(
             contentId = contentId ?: videoId.substringBefore(":"),  // Use explicit contentId or extract from videoId
             contentType = contentType,
             contentName = contentName ?: title,
+            originalLanguage = originalLanguage,
             poster = poster,
             backdrop = backdrop,
             logo = logo,
@@ -1113,6 +1119,7 @@ class StreamScreenViewModel @Inject constructor(
             contentId = contentId ?: videoId.substringBefore(":"),
             contentType = contentType,
             contentName = contentName ?: title,
+            originalLanguage = originalLanguage,
             poster = poster,
             backdrop = backdrop,
             logo = logo,
@@ -1199,16 +1206,28 @@ class StreamScreenViewModel @Inject constructor(
         )
     }
 
-    private suspend fun logShadowAutoPlayDecision(
+    private suspend fun updateShadowAutoPlayDecision(
         request: ShadowRequestContext,
         organizedStreams: List<com.nexio.tv.core.stream.StreamCardModel>,
-        activeTransportMode: DebridBenchmarkTransportMode
+        activeTransportMode: DebridBenchmarkTransportMode,
+        isFinalPass: Boolean,
+        allowEarlyFinishTerminal: Boolean
     ) {
+        shadowAutoPlayReplayCoordinator.updateCandidates(
+            request = request,
+            organizedStreams = organizedStreams,
+            activeTransportMode = activeTransportMode,
+            isFinalPass = isFinalPass,
+            allowEarlyFinishTerminal = allowEarlyFinishTerminal
+        )
+        emitShadowAutoPlayDecisionIfReady()
+    }
+
+    private suspend fun emitShadowAutoPlayDecisionIfReady() {
         val startedAtMs = System.currentTimeMillis()
         try {
-            shadowAutoPlayReplayCoordinator.updateCandidates(request, organizedStreams, activeTransportMode)
             val event = withContext(Dispatchers.Default) {
-                shadowAutoPlayReplayCoordinator.buildEvent(
+                shadowAutoPlayReplayCoordinator.buildEventIfReady(
                     benchmarkSessions = latestBenchmarkSessions(),
                     timingsMs = (System.currentTimeMillis() - startedAtMs).coerceAtLeast(0L)
                 )
@@ -1223,19 +1242,7 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     private suspend fun replayShadowAutoPlayDecisionIfReady() {
-        try {
-            val event = withContext(Dispatchers.Default) {
-                shadowAutoPlayReplayCoordinator.buildEvent(
-                    benchmarkSessions = latestBenchmarkSessions()
-                )
-            } ?: return
-            shadowAutoPlayDecisionLogger.log(event)
-            shadowAutoplayCollectionUploader.submitIfEnabled(event)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            Log.w(TAG, "Shadow autoplay replay failed: ${error.message}")
-        }
+        emitShadowAutoPlayDecisionIfReady()
     }
 
     private fun latestBenchmarkSessions(): Map<DebridBenchmarkProvider, DebridBenchmarkResult> {
@@ -1317,7 +1324,9 @@ private data class OrganizedStreamPayload(
     val organizedStreams: com.nexio.tv.core.stream.OrganizedStreams,
     val selectedAutoPlayStream: Stream?,
     val autoPlayPlaybackInfo: StreamPlaybackInfo?,
-    val deterministicFailureMessage: String? = null
+    val deterministicFailureMessage: String? = null,
+    val shadowDecisionFinalPass: Boolean = false,
+    val shadowDecisionAllowEarlyFinish: Boolean = false
 )
 
 private data class PendingOrganizeRequest(
@@ -1331,24 +1340,40 @@ internal class ShadowAutoPlayReplayCoordinator(
     private var latestRequest: ShadowRequestContext? = null
     private var latestStreams: List<StreamCardModel> = emptyList()
     private var latestActiveTransportMode: DebridBenchmarkTransportMode? = null
+    private var finalPassObserved: Boolean = false
+    private var allowEarlyFinishTerminal: Boolean = false
+    private var emittedRequestId: String? = null
 
     fun updateCandidates(
         request: ShadowRequestContext,
         organizedStreams: List<StreamCardModel>,
-        activeTransportMode: DebridBenchmarkTransportMode
+        activeTransportMode: DebridBenchmarkTransportMode,
+        isFinalPass: Boolean,
+        allowEarlyFinishTerminal: Boolean
     ) {
+        if (latestRequest?.requestId != request.requestId) {
+            latestRequest = null
+            latestStreams = emptyList()
+            latestActiveTransportMode = null
+            finalPassObserved = false
+            this.allowEarlyFinishTerminal = false
+            emittedRequestId = null
+        }
         latestRequest = request
         latestStreams = organizedStreams
         latestActiveTransportMode = activeTransportMode
+        finalPassObserved = finalPassObserved || isFinalPass
+        this.allowEarlyFinishTerminal = this.allowEarlyFinishTerminal || allowEarlyFinishTerminal
     }
 
-    fun buildEvent(
+    fun buildEventIfReady(
         benchmarkSessions: Map<DebridBenchmarkProvider, DebridBenchmarkResult>,
         timingsMs: Long? = null
     ): com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionEvent? {
         val request = latestRequest ?: return null
         if (latestStreams.isEmpty()) return null
-        return buildShadowAutoPlayDecisionEvent(
+        if (emittedRequestId == request.requestId) return null
+        val event = buildShadowAutoPlayDecisionEvent(
             scorer = scorer,
             request = request,
             organizedStreams = latestStreams,
@@ -1356,15 +1381,28 @@ internal class ShadowAutoPlayReplayCoordinator(
             activeTransportMode = latestActiveTransportMode,
             timingsMs = timingsMs
         )
+        val earlyFinishDecision = deterministicAutoplayEarlyFinishDecision(event.winners, request)
+        val terminalDecisionReached = finalPassObserved ||
+            (allowEarlyFinishTerminal && earlyFinishDecision.triggered)
+        if (!terminalDecisionReached) return null
+        emittedRequestId = request.requestId
+        return event
     }
 
     fun clear() {
         latestRequest = null
         latestStreams = emptyList()
         latestActiveTransportMode = null
+        finalPassObserved = false
+        allowEarlyFinishTerminal = false
+        emittedRequestId = null
     }
 
-    fun hasCandidates(): Boolean = latestRequest != null && latestStreams.isNotEmpty()
+    fun hasCandidates(): Boolean {
+        return latestRequest != null &&
+            latestStreams.isNotEmpty() &&
+            emittedRequestId != latestRequest?.requestId
+    }
 }
 
 internal fun buildShadowAutoPlayDecisionEvent(
@@ -1594,6 +1632,7 @@ data class StreamPlaybackInfo(
     val contentId: String?,
     val contentType: String?,
     val contentName: String?,
+    val originalLanguage: String?,
     val poster: String?,
     val backdrop: String?,
     val logo: String?,

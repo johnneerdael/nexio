@@ -181,6 +181,7 @@ internal fun LazyListScope.audioSettingsItems(
         val audioLangName = when (playerSettings.preferredAudioLanguage) {
             AudioLanguageOption.DEFAULT -> stringResource(R.string.audio_lang_default)
             AudioLanguageOption.DEVICE -> stringResource(R.string.audio_lang_device)
+            AudioLanguageOption.ORIGINAL -> stringResource(R.string.audio_lang_original)
             else -> AVAILABLE_SUBTITLE_LANGUAGES.find {
                 it.code == playerSettings.preferredAudioLanguage
             }?.name ?: playerSettings.preferredAudioLanguage
@@ -443,7 +444,8 @@ private fun AudioLanguageSelectionDialog(
     val focusRequester = remember { FocusRequester() }
     val specialOptions = listOf(
         AudioLanguageOption.DEFAULT to stringResource(R.string.audio_lang_default),
-        AudioLanguageOption.DEVICE to stringResource(R.string.audio_lang_device)
+        AudioLanguageOption.DEVICE to stringResource(R.string.audio_lang_device),
+        AudioLanguageOption.ORIGINAL to stringResource(R.string.audio_lang_original)
     )
     val allOptions = specialOptions + AVAILABLE_SUBTITLE_LANGUAGES.map { it.code to it.name }
 

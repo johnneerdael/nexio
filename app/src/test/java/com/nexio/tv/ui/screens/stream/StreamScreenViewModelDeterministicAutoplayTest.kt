@@ -13,8 +13,26 @@ import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.repository.benchmark.BenchmarkAwareStreamScorer
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkComparisonSummary
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkRawSamples
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSeekMetrics
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSessionMetadata
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkStartupMetrics
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSustainedMetrics
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportConfigSnapshot
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportDecisionMetrics
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportProfile
+import com.nexio.tv.data.repository.benchmark.AudioEncodingSupport
+import com.nexio.tv.data.repository.benchmark.CodecSupport
+import com.nexio.tv.data.repository.benchmark.DeviceAudioOutputCapabilities
+import com.nexio.tv.data.repository.benchmark.DeviceCapabilitySnapshot
+import com.nexio.tv.data.repository.benchmark.DeviceHdrType
+import com.nexio.tv.data.repository.benchmark.DeviceVideoDecodeCapabilities
 import com.nexio.tv.data.repository.benchmark.ShadowContentScoreBreakdown
 import com.nexio.tv.data.repository.benchmark.ShadowDecisionBreakdown
 import com.nexio.tv.data.repository.benchmark.ShadowParsedStreamFacts
@@ -43,6 +61,7 @@ import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -214,6 +233,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
                     contentId = "tt0167261",
                     contentType = "movie",
                     contentName = "Example",
+                    originalLanguage = "en",
                     poster = null,
                     backdrop = null,
                     logo = null,
@@ -354,9 +374,92 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         )
     }
 
+    @Test
+    fun `viewmodel logs shadow autoplay exactly once across incremental pre-terminal and terminal batches`() = runTest(dispatcher) {
+        val shadowLogger = mockk<ShadowAutoPlayDecisionLogger>(relaxed = true)
+        val viewModel = buildViewModel(
+            streamFlow = flow {
+                emit(NetworkResult.Loading)
+                emit(
+                    NetworkResult.Success(
+                        listOf(
+                            AddonStreams(
+                                addonName = "RD Addon",
+                                addonLogo = null,
+                                streams = listOf(
+                                    stream(
+                                        name = "Movie.Release.2002.2160p.BluRay.REMUX.HEVC.TrueHD.Atmos.mkv",
+                                        wrappedProviderId = "RD"
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+                emit(
+                    NetworkResult.Success(
+                        listOf(
+                            AddonStreams(
+                                addonName = "RD Addon",
+                                addonLogo = null,
+                                streams = listOf(
+                                    stream(
+                                        name = "Movie.Release.2002.2160p.BluRay.REMUX.HEVC.TrueHD.Atmos.mkv",
+                                        wrappedProviderId = "RD"
+                                    )
+                                )
+                            ),
+                            AddonStreams(
+                                addonName = "PM Addon",
+                                addonLogo = null,
+                                streams = listOf(
+                                    stream(
+                                        name = "Movie.Release.2002.2160p.BluRay.REMUX.HEVC.TrueHD.Atmos.mkv",
+                                        wrappedProviderId = "PM"
+                                    )
+                                )
+                            ),
+                            AddonStreams(
+                                addonName = "TB Addon",
+                                addonLogo = null,
+                                streams = listOf(
+                                    stream(
+                                        name = "Movie.Release.2002.2160p.BluRay.REMUX.HEVC.TrueHD.Atmos.mkv",
+                                        wrappedProviderId = "TB"
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            },
+            benchmarkResults = mapOf(
+                DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(DebridBenchmarkProvider.REAL_DEBRID),
+                DebridBenchmarkProvider.PREMIUMIZE to benchmarkResult(DebridBenchmarkProvider.PREMIUMIZE),
+                DebridBenchmarkProvider.TORBOX to benchmarkResult(DebridBenchmarkProvider.TORBOX)
+            ),
+            shadowLogger = shadowLogger
+        )
+
+        try {
+            advanceUntilIdle()
+
+            verify(exactly = 1) { shadowLogger.log(any()) }
+            assertEquals(
+                "Movie.Release.2002.2160p.BluRay.REMUX.HEVC.TrueHD.Atmos.mkv",
+                viewModel.uiState.value.autoPlayPlaybackInfo?.filename
+            )
+        } finally {
+            clearViewModel(viewModel)
+            advanceUntilIdle()
+        }
+    }
+
     private fun buildViewModel(
         streamFlow: kotlinx.coroutines.flow.Flow<NetworkResult<List<AddonStreams>>>,
         cachedLink: CachedStreamLink? = null,
+        benchmarkResults: Map<DebridBenchmarkProvider, DebridBenchmarkResult> = emptyMap(),
+        shadowLogger: ShadowAutoPlayDecisionLogger = mockk(relaxed = true),
         playerSettings: PlayerSettings = PlayerSettings(
             playerPreference = PlayerPreference.INTERNAL,
             streamAutoPlayMode = StreamAutoPlayMode.FIRST_STREAM
@@ -372,7 +475,6 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         }
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val debridBenchmarkStore = mockk<DebridBenchmarkStore>()
-        val shadowLogger = mockk<ShadowAutoPlayDecisionLogger>(relaxed = true)
         val shadowCollectionUploader = mockk<ShadowAutoplayCollectionUploader>(relaxed = true)
 
         every {
@@ -394,7 +496,9 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             )
         } returns streamFlow
         every { streamRepository.cancelActiveStreamRequests(any()) } just runs
-        every { debridBenchmarkStore.latestResult(any()) } returns flowOf(null)
+        every { debridBenchmarkStore.latestResult(any()) } answers {
+            flowOf(benchmarkResults[firstArg()] as DebridBenchmarkResult?)
+        }
 
         return StreamScreenViewModel(
             context = context,
@@ -420,6 +524,120 @@ class StreamScreenViewModelDeterministicAutoplayTest {
                     "deterministicAutoplay" to "true"
                 )
             )
+        )
+    }
+
+    private fun benchmarkResult(
+        provider: DebridBenchmarkProvider,
+        directP10Mbps: Double = 150.0,
+        optimizedP10Mbps: Double = 180.0,
+        directDecisionSafeBudgetMbps: Double = directP10Mbps * 0.85,
+        optimizedDecisionSafeBudgetMbps: Double = optimizedP10Mbps * 0.85,
+        directSeekP95Ms: Long = 340L,
+        optimizedSeekP95Ms: Long = 240L
+    ): DebridBenchmarkResult {
+        return DebridBenchmarkResult(
+            provider = provider,
+            measuredAtMs = 42L,
+            summary = DebridBenchmarkSummary(
+                startupTimeMs = 140L,
+                sustainedThroughputMbps = 200.0,
+                transferredBytes = 2_048L,
+                elapsedMs = 120_000L
+            ),
+            terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
+            device = DeviceCapabilitySnapshot(
+                model = "Shield",
+                manufacturer = "NVIDIA",
+                sdkInt = 35,
+                displayHdrTypes = setOf(DeviceHdrType.DOLBY_VISION, DeviceHdrType.HDR10),
+                videoDecode = DeviceVideoDecodeCapabilities(
+                    h264 = CodecSupport(true, false, true),
+                    hevc = CodecSupport(true, false, true),
+                    av1 = CodecSupport(false, true, false),
+                    dolbyVision = CodecSupport(true, false, true)
+                ),
+                audioOutput = DeviceAudioOutputCapabilities(
+                    ac3 = AudioEncodingSupport(true, true),
+                    eac3 = AudioEncodingSupport(true, true),
+                    truehd = AudioEncodingSupport(true, true),
+                    dts = AudioEncodingSupport(true, true),
+                    dtshd = AudioEncodingSupport(true, true)
+                ),
+                capturedAtMs = 40L
+            ),
+            direct = transportProfile(
+                p10Mbps = directP10Mbps,
+                averageMbps = directP10Mbps + 10.0,
+                startupMs = 180L,
+                seekP95Ms = directSeekP95Ms,
+                decisionSafeBudgetMbps = directDecisionSafeBudgetMbps
+            ),
+            optimized = transportProfile(
+                p10Mbps = optimizedP10Mbps,
+                averageMbps = optimizedP10Mbps + 15.0,
+                startupMs = 140L,
+                seekP95Ms = optimizedSeekP95Ms,
+                decisionSafeBudgetMbps = optimizedDecisionSafeBudgetMbps,
+                configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                    useParallelConnections = true,
+                    parallelConnectionCount = 4,
+                    parallelChunkSizeMb = 8
+                )
+            ),
+            comparison = DebridBenchmarkComparisonSummary(
+                sustainedWinner = DebridBenchmarkTransportMode.OPTIMIZED,
+                seekWinner = DebridBenchmarkTransportMode.OPTIMIZED,
+                stabilityWinner = DebridBenchmarkTransportMode.OPTIMIZED
+            ),
+            session = DebridBenchmarkSessionMetadata(
+                benchmarkVersion = 3,
+                executionOrder = emptyList(),
+                totalElapsedMs = 240_000L
+            )
+        )
+    }
+
+    private fun transportProfile(
+        p10Mbps: Double,
+        averageMbps: Double,
+        startupMs: Long,
+        seekP95Ms: Long,
+        decisionSafeBudgetMbps: Double = p10Mbps * 0.85,
+        configSnapshot: DebridBenchmarkTransportConfigSnapshot? = null
+    ): DebridBenchmarkTransportProfile {
+        return DebridBenchmarkTransportProfile(
+            startup = DebridBenchmarkStartupMetrics(
+                initialTtfbMs = startupMs,
+                startupFailureRate = 0.0
+            ),
+            sustained = DebridBenchmarkSustainedMetrics(
+                averageThroughputMbps = averageMbps,
+                derivedAverageThroughputMbps = averageMbps,
+                actionable = true,
+                p10ThroughputMbps = p10Mbps,
+                p50ThroughputMbps = averageMbps,
+                peakThroughputMbps = averageMbps + 25.0,
+                throughputStddevMbps = 7.0,
+                throughputCv = 0.05,
+                stallCount = 0,
+                maxReadGapMs = 150L,
+                bytesTransferred = 2_048L,
+                elapsedMs = 120_000L
+            ),
+            seek = DebridBenchmarkSeekMetrics(
+                seekTtfbP50Ms = seekP95Ms - 60L,
+                seekTtfbP95Ms = seekP95Ms,
+                seekTtfbP99Ms = seekP95Ms + 80L,
+                seekTtfbStddevMs = 20.0,
+                seekFailRate = 0.0
+            ),
+            decision = DebridBenchmarkTransportDecisionMetrics(
+                safeSustainedBudgetMbps = decisionSafeBudgetMbps,
+                actionable = true
+            ),
+            configSnapshot = configSnapshot,
+            rawSamples = DebridBenchmarkRawSamples()
         )
     }
 

@@ -81,10 +81,13 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
     scope.launch {
         try {
             autoSubtitleSelected = false
+            autoAudioSelected = false
             hasScannedTextTracksOnce = false
             resetLoadingOverlayForNewStream()
             playerInitializationStartedAtMs = System.currentTimeMillis()
             val playerSettings = playerSettingsDataStore.playerSettings.first()
+            lastPreferredAudioLanguage = playerSettings.preferredAudioLanguage
+            lastSecondaryPreferredAudioLanguage = playerSettings.secondaryPreferredAudioLanguage
             val experimentalFireOsIecPassthroughEnabled =
                 playerSettings.experimentalDtsIecPassthroughEnabled
             val kodiCustomAudioSinkEnabled = experimentalFireOsIecPassthroughEnabled
@@ -250,7 +253,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 val preferredAudioLanguages = resolvePreferredAudioLanguages(
                     preferredAudioLanguage = playerSettings.preferredAudioLanguage,
                     secondaryPreferredAudioLanguage = playerSettings.secondaryPreferredAudioLanguage,
-                    deviceLanguages = deviceLanguages
+                    deviceLanguages = deviceLanguages,
+                    originalLanguage = originalLanguage
                 )
                 if (preferredAudioLanguages.isNotEmpty()) {
                     setParameters(
@@ -990,7 +994,8 @@ private suspend fun PlayerRuntimeController.fetchAddonSubtitlesForCurrentStream(
 internal fun resolvePreferredAudioLanguages(
     preferredAudioLanguage: String,
     secondaryPreferredAudioLanguage: String?,
-    deviceLanguages: List<String>
+    deviceLanguages: List<String>,
+    originalLanguage: String?
 ): List<String> {
     fun normalize(language: String?): String? {
         val normalized = language
@@ -1001,6 +1006,7 @@ internal fun resolvePreferredAudioLanguages(
         return when (normalized) {
             AudioLanguageOption.DEFAULT,
             AudioLanguageOption.DEVICE,
+            AudioLanguageOption.ORIGINAL,
             SUBTITLE_LANGUAGE_FORCED -> null
             else -> normalized
         }
@@ -1015,6 +1021,10 @@ internal fun resolvePreferredAudioLanguages(
             .mapNotNull(::normalize)
             + listOfNotNull(normalize(secondaryPreferredAudioLanguage))
             ).distinct()
+        AudioLanguageOption.ORIGINAL -> listOfNotNull(
+            normalize(originalLanguage),
+            normalize(secondaryPreferredAudioLanguage)
+        ).distinct()
         else -> listOfNotNull(
             normalize(preferredAudioLanguage),
             normalize(secondaryPreferredAudioLanguage)
