@@ -108,7 +108,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.media3.common.C
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MediaItem
@@ -220,6 +219,18 @@ class MainActivity : ComponentActivity() {
         private const val STARTUP_DEFERRED_WORK_MIN_DELAY_MS = 2_000L
         private const val IDLE_SCREENSAVER_TIMEOUT_MS = 2L * 60 * 1000L
         private const val BROWSABLE_REQUEST_COOLDOWN_MS = 24L * 60 * 60 * 1000
+
+        @Volatile
+        private var processUiBootstrapped: Boolean = false
+
+        @Volatile
+        private var processDeferredStartupWorkCompleted: Boolean = false
+
+        @Volatile
+        private var cachedHasSeenAuthQrOnFirstLaunch: Boolean? = null
+
+        @Volatile
+        private var cachedMainUiPrefs: MainUiPrefs? = null
     }
 
     @Inject
@@ -287,6 +298,7 @@ class MainActivity : ComponentActivity() {
     private var deferredBrowsableRequestJob: Job? = null
     private var startupPerfWindowJob: Job? = null
     private var idleScreensaverColdBootRefreshPending: Boolean = false
+    private var shouldRunDeferredStartupWorkThisStart: Boolean = false
     private val channelBrowsableLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -326,11 +338,32 @@ class MainActivity : ComponentActivity() {
 
     @OptIn(ExperimentalFoundationApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
         super.onCreate(savedInstanceState)
-        idleScreensaverColdBootRefreshPending = savedInstanceState == null
+        val launchDisposition = resolveStartupLaunchDisposition(
+            processUiBootstrapped = processUiBootstrapped,
+            hasSeenAuthQrOnFirstLaunch = cachedHasSeenAuthQrOnFirstLaunch,
+            hasChosenLayout = cachedMainUiPrefs?.hasChosenLayout
+        )
+        shouldRunDeferredStartupWorkThisStart = !processDeferredStartupWorkCompleted
+        idleScreensaverColdBootRefreshPending = !processDeferredStartupWorkCompleted
         handleRecommendationIntent(intent)
         handleTransportValidationIntent(intent)
+        logStartupPerf(
+            "launch_disposition",
+            buildString {
+                append("mode=").append(launchDisposition.name.lowercase(Locale.US))
+                append(" processUiBootstrapped=").append(processUiBootstrapped)
+                append(" deferredStartupCompleted=").append(processDeferredStartupWorkCompleted)
+                append(" criticalReady=")
+                append(
+                    isWarmResumeCriticalStateReady(
+                        cachedHasSeenAuthQrOnFirstLaunch,
+                        cachedMainUiPrefs?.hasChosenLayout
+                    )
+                )
+                append(" savedStateNull=").append(savedInstanceState == null)
+            }
+        )
         lifecycleScope.launch {
             debugSettingsDataStore.startupPerfTelemetryEnabled.collect { enabled ->
                 startupPerfTelemetryEnabled = enabled
@@ -356,7 +389,7 @@ class MainActivity : ComponentActivity() {
             val hasSeenAuthQrOnFirstLaunch by appOnboardingDataStore
                 .hasSeenAuthQrOnFirstLaunch
                 .map<Boolean, Boolean?> { it }
-                .collectAsState(initial = null)
+                .collectAsState(initial = cachedHasSeenAuthQrOnFirstLaunch)
             val authState by authManager.authState.collectAsState()
 
             LaunchedEffect(hasSeenAuthQrOnFirstLaunch, authState) {
@@ -387,7 +420,9 @@ class MainActivity : ComponentActivity() {
                     prefs.copy(trailerScreensaverEnabled = trailerScreensaverEnabled)
                 }
             }
-            val mainUiPrefs by mainUiPrefsFlow.collectAsState(initial = MainUiPrefs(hasChosenLayout = null))
+            val mainUiPrefs by mainUiPrefsFlow.collectAsState(
+                initial = cachedMainUiPrefs ?: MainUiPrefs(hasChosenLayout = null)
+            )
 
             NexioTheme(appTheme = mainUiPrefs.theme, appFont = mainUiPrefs.font) {
                 CompositionLocalProvider(
@@ -457,7 +492,12 @@ class MainActivity : ComponentActivity() {
                     val pendingValidationStop by pendingTransportValidationStop
                     val lifecycleOwner = LocalLifecycleOwner.current
                     val rootView = LocalView.current
-                    var startupSplashDismissed by rememberSaveable { mutableStateOf(false) }
+                    val initialSplashDismissed = remember {
+                        launchDisposition == StartupLaunchDisposition.WARM_PROCESS_SKIP_SPLASH
+                    }
+                    var startupSplashDismissed by rememberSaveable {
+                        mutableStateOf(initialSplashDismissed)
+                    }
                     var startupSplashReadyToPlay by remember { mutableStateOf(false) }
                     val showStartupSplash = !startupSplashDismissed
                     val idleScreensaverSlides by idleScreensaverRepository.slides.collectAsState()
@@ -496,6 +536,14 @@ class MainActivity : ComponentActivity() {
                             )
                         )
                         pendingRecommendationNavigation.value = null
+                    }
+
+                    LaunchedEffect(hasSeenAuthQrOnFirstLaunch) {
+                        cachedHasSeenAuthQrOnFirstLaunch = hasSeenAuthQrOnFirstLaunch
+                    }
+
+                    LaunchedEffect(mainUiPrefs) {
+                        cachedMainUiPrefs = mainUiPrefs
                     }
 
                     LaunchedEffect(pendingFeed) {
@@ -565,6 +613,16 @@ class MainActivity : ComponentActivity() {
                                 idleLastInteractionAtMs = idleLastInteractionAtMs
                             )
                         )
+                    }
+
+                    LaunchedEffect(hasSeenAuthQrOnFirstLaunch, layoutChosen) {
+                        if (
+                            hasSeenAuthQrOnFirstLaunch != null &&
+                            !processUiBootstrapped
+                        ) {
+                            processUiBootstrapped = true
+                            logStartupPerf("process_ui_bootstrapped")
+                        }
                     }
 
                     LaunchedEffect(currentRoute) {
@@ -988,7 +1046,10 @@ class MainActivity : ComponentActivity() {
                         if (showStartupSplash) {
                             if (startupSplashReadyToPlay) {
                                 StartupSplashOverlay(
-                                    onFinished = { startupSplashDismissed = true }
+                                    onFinished = {
+                                        processUiBootstrapped = true
+                                        startupSplashDismissed = true
+                                    }
                                 )
                             } else {
                                 Box(
@@ -1060,7 +1121,11 @@ class MainActivity : ComponentActivity() {
             startupPerfWindowOpen = false
             logStartupPerf("startup_window_closed")
         }
-        scheduleDeferredStartupWork()
+        if (shouldRunDeferredStartupWorkThisStart) {
+            scheduleDeferredStartupWork()
+        } else {
+            logStartupPerf("deferred_startup_skipped", "reason=warm_process_resume")
+        }
     }
 
     override fun onStop() {
@@ -1124,6 +1189,8 @@ class MainActivity : ComponentActivity() {
                         Log.w("MainActivity", "Deferred idle screensaver refresh failed", error)
                     }
             }
+            processDeferredStartupWorkCompleted = true
+            shouldRunDeferredStartupWorkThisStart = false
             logStartupPerf("deferred_startup_end")
         }
     }
