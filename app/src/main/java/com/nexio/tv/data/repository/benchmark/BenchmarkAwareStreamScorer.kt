@@ -210,7 +210,7 @@ class BenchmarkAwareStreamScorer internal constructor(
 
         val ranked = winners.sortedWith(baseDecisionComparator(movieMode, showMode))
         val finalRanked = when {
-            movieMode -> applyMovieCandidatePool(ranked)
+            movieMode -> preferSaferMovieCandidate(applyMovieCandidatePool(ranked))
             showMode -> applyShowCandidatePool(ranked)
             else -> ranked
         }
@@ -769,6 +769,36 @@ private fun applyMovieCandidatePool(
         .sortedWith(baseDecisionComparator(movieMode = true, showMode = false))
 }
 
+private fun preferSaferMovieCandidate(
+    ranked: List<ShadowStreamDecision>
+): List<ShadowStreamDecision> {
+    val selected = ranked.firstOrNull() ?: return ranked
+    if (selected.suitabilityRatio >= MOVIE_SAFETY_OVERRIDE_SELECTED_MAX_RATIO) {
+        return ranked
+    }
+    val selectedHeadroomMbps = selected.safeBudgetMbps - selected.requiredMbps
+    val saferCandidate = ranked
+        .drop(1)
+        .filter { challenger ->
+            challenger.finalScore >= selected.finalScore - MOVIE_SAFETY_OVERRIDE_MAX_SCORE_GAP &&
+                challenger.suitabilityRatio >= MOVIE_SAFETY_OVERRIDE_MIN_RATIO &&
+                (challenger.safeBudgetMbps - challenger.requiredMbps) - selectedHeadroomMbps >= MOVIE_SAFETY_OVERRIDE_MIN_HEADROOM_DELTA_MBPS &&
+                challenger.breakdown.averageBitrateMbps >= selected.breakdown.averageBitrateMbps * MOVIE_SAFETY_OVERRIDE_MIN_BITRATE_FRACTION
+        }
+        .maxWithOrNull(
+            compareByDescending<ShadowStreamDecision> { it.finalScore }
+                .thenByDescending { it.contentQualityScore }
+                .thenByDescending { it.breakdown.averageBitrateMbps }
+                .thenByDescending { it.suitabilityRatio }
+        )
+        ?: return ranked
+
+    return buildList {
+        add(saferCandidate)
+        addAll(ranked.filterNot { it.streamKey == saferCandidate.streamKey })
+    }
+}
+
 private fun movieResolutionPoolRank(resolutionTier: String): Int {
     return when (resolutionTier.lowercase(Locale.US)) {
         "uhd_2160" -> 3
@@ -1131,10 +1161,11 @@ private fun ratioScore(
 ): Int {
     if (movieMode) {
         return when {
-            !ratio.isFinite() -> MOVIE_TRANSPORT_SCORE_MAX
+            !ratio.isFinite() -> MOVIE_TRANSPORT_SCORE_HIGH
             ratio < MOVIE_MINIMUM_RATIO -> 0
-            ratio < MOVIE_COMFORTABLE_RATIO -> MOVIE_TRANSPORT_SCORE_MIN
-            else -> MOVIE_TRANSPORT_SCORE_MAX
+            ratio < MOVIE_COMFORTABLE_RATIO -> MOVIE_TRANSPORT_SCORE_LOW
+            ratio < MOVIE_SAFE_RATIO -> MOVIE_TRANSPORT_SCORE_MID
+            else -> MOVIE_TRANSPORT_SCORE_HIGH
         }
     } else if (showMode) {
         return when {
@@ -1245,10 +1276,17 @@ private val HDR_VISUAL_TAGS = setOf("DV", "HDR", "HDR10", "HDR10+")
 
 private const val MOVIE_POOL_PERCENTILE = 0.30
 private const val MOVIE_POOL_MIN_CANDIDATES = 3
-private const val MOVIE_MINIMUM_RATIO = 1.10
+private const val MOVIE_MINIMUM_RATIO = 1.15
 private const val MOVIE_COMFORTABLE_RATIO = 1.20
-private const val MOVIE_TRANSPORT_SCORE_MIN = 8
-private const val MOVIE_TRANSPORT_SCORE_MAX = 10
+private const val MOVIE_SAFE_RATIO = 1.25
+private const val MOVIE_TRANSPORT_SCORE_LOW = 5
+private const val MOVIE_TRANSPORT_SCORE_MID = 10
+private const val MOVIE_TRANSPORT_SCORE_HIGH = 15
+private const val MOVIE_SAFETY_OVERRIDE_SELECTED_MAX_RATIO = 1.25
+private const val MOVIE_SAFETY_OVERRIDE_MIN_RATIO = 1.50
+private const val MOVIE_SAFETY_OVERRIDE_MAX_SCORE_GAP = 3
+private const val MOVIE_SAFETY_OVERRIDE_MIN_HEADROOM_DELTA_MBPS = 20.0
+private const val MOVIE_SAFETY_OVERRIDE_MIN_BITRATE_FRACTION = 0.75
 private const val SHOW_POOL_PERCENTILE = 0.30
 private const val SHOW_POOL_MIN_CANDIDATES = 3
 private const val SHOW_MINIMUM_RATIO = 1.10
