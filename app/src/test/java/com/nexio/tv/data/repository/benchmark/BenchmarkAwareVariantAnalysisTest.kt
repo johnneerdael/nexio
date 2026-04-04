@@ -24,6 +24,7 @@ class BenchmarkAwareVariantAnalysisTest {
             "dv-profile5-autoplay-fallback.json",
             "dv-profile7-autoplay-continue.json",
             "dv-probe-unknown-autoplay-fallback.json",
+            "dv-remux-profile5-autoplay-continue.json",
             "lotr-return-of-the-king-movie.json",
             "tv-hevc-ddp-vs-av1-webdl.json",
             "movie-webdl-non-remux-quality-pack.json"

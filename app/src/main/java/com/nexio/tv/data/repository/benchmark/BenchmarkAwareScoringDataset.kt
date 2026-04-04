@@ -304,6 +304,7 @@ private fun StreamCardModel.toPlaybackInfo(
         videoHash = stream.behaviorHints?.videoHash,
         videoSize = stream.behaviorHints?.videoSize,
         streamKey = stream.wrappedOriginalStreamKey,
+        isWebDl = parsed.quality.equals("WEB-DL", ignoreCase = true),
         isDolbyVisionCandidate = isDolbyVision,
         autoPlayNonDolbyVisionFallback = fallback?.let {
             AutoPlayStreamAlternative(
@@ -314,6 +315,7 @@ private fun StreamCardModel.toPlaybackInfo(
                 filename = it.stream.behaviorHints?.filename,
                 videoHash = it.stream.behaviorHints?.videoHash,
                 videoSize = it.stream.behaviorHints?.videoSize,
+                isWebDl = it.parsed.quality.equals("WEB-DL", ignoreCase = true),
                 isDolbyVisionCandidate = it.parsed.visualTags.any { tag ->
                     val normalized = tag.lowercase()
                     normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")

@@ -2,8 +2,8 @@
   "datasetVersion": 1,
   "scenarios": [
     {
-      "id": "dv-profile5-autoplay-fallback",
-      "name": "Autoplay falls back to non-DV stream when the primary DV candidate probes as profile 5",
+      "id": "dv-remux-profile5-autoplay-continue",
+      "name": "Autoplay keeps the primary DV remux when profile 5 is detected because probing is WEB-DL only",
       "request": {
         "videoId": "tt123",
         "contentType": "movie",
@@ -156,7 +156,7 @@
           "streamKey": "dv_primary",
           "providerId": "RD",
           "resolution": "2160p",
-          "quality": "WEB-DL",
+          "quality": "BluRay Remux",
           "encode": "HEVC",
           "sizeBytes": 45097156608,
           "durationMs": 7200000,
@@ -190,9 +190,9 @@
       ],
       "autoplayExpectation": {
         "displaySupportsDolbyVision": false,
-        "expectedResolvedWinnerStreamKey": "hdr10_fallback",
+        "expectedResolvedWinnerStreamKey": "dv_primary",
         "acceptableResolvedWinnerKeys": [
-          "hdr10_fallback"
+          "dv_primary"
         ],
         "probeByStreamKey": {
           "dv_primary": {
@@ -206,7 +206,7 @@
         {
           "preferredStreamKey": "dv_primary",
           "otherStreamKey": "hdr10_fallback",
-          "reason": "Ranking should still prefer the premium DV source before the autoplay probe gate runs"
+          "reason": "Non-WEB-DL DV primaries should not be probed by the autoplay DV gate"
         }
       ]
     }

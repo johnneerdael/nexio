@@ -14,19 +14,23 @@ import androidx.media3.decoder.ffmpeg.FfmpegLibrary
 import io.github.anilbeesetti.nextlib.mediainfo.MediaInfo
 import io.github.anilbeesetti.nextlib.mediainfo.MediaInfoBuilder
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import java.net.URLDecoder
 import java.util.Locale
 
 private const val DV_AUTOPLAY_TAG = "DvAutoPlayGate"
+private const val DV_AUTOPLAY_PROBE_TIMEOUT_MS = 5_000L
 
 enum class DolbyVisionAutoPlayDecisionReason {
     NOT_AUTOPLAY,
     DISPLAY_SUPPORTS_DOLBY_VISION,
     NOT_DOLBY_VISION,
+    NOT_WEB_DL,
     PROBE_NOT_DOLBY_VISION,
     PROFILE_ALLOWED,
     UNSUPPORTED_PROFILE_5,
+    PROBE_TIMEOUT,
     PROBE_FAILED,
     PROBE_UNKNOWN,
     NO_FALLBACK_AVAILABLE
@@ -92,7 +96,8 @@ data class DolbyVisionAutoPlayGateResult(
 )
 
 class DolbyVisionAutoPlayGate(
-    private val probe: DolbyVisionProfileProbe = FfmpegDolbyVisionProfileProbe()
+    private val probe: DolbyVisionProfileProbe = FfmpegDolbyVisionProfileProbe(),
+    private val probeTimeoutMs: Long = DV_AUTOPLAY_PROBE_TIMEOUT_MS
 ) {
 
     suspend fun resolve(
@@ -102,24 +107,32 @@ class DolbyVisionAutoPlayGate(
         displaySupportsDolbyVision: Boolean
     ): DolbyVisionAutoPlayGateResult {
         if (!autoPlay) {
-            return DolbyVisionAutoPlayGateResult(
+            return finalizeResult(
                 playbackInfo = playbackInfo,
                 fallbackApplied = false,
                 reason = DolbyVisionAutoPlayDecisionReason.NOT_AUTOPLAY
             )
         }
+        logSelection(playbackInfo)
         if (displaySupportsDolbyVision) {
-            return DolbyVisionAutoPlayGateResult(
+            return finalizeResult(
                 playbackInfo = playbackInfo,
                 fallbackApplied = false,
                 reason = DolbyVisionAutoPlayDecisionReason.DISPLAY_SUPPORTS_DOLBY_VISION
             )
         }
         if (!playbackInfo.isDolbyVisionCandidate) {
-            return DolbyVisionAutoPlayGateResult(
+            return finalizeResult(
                 playbackInfo = playbackInfo,
                 fallbackApplied = false,
                 reason = DolbyVisionAutoPlayDecisionReason.NOT_DOLBY_VISION
+            )
+        }
+        if (!playbackInfo.isWebDl) {
+            return finalizeResult(
+                playbackInfo = playbackInfo,
+                fallbackApplied = false,
+                reason = DolbyVisionAutoPlayDecisionReason.NOT_WEB_DL
             )
         }
 
@@ -132,15 +145,38 @@ class DolbyVisionAutoPlayGate(
             )
         }
 
-        val probeResult = probe.probe(
-            context = context,
-            url = url,
-            headers = playbackInfo.headers,
-            filename = playbackInfo.filename
+        logEvent(
+            event = "DV_PROFILE_PROBE_STARTED",
+            details = buildString {
+                append("stream=")
+                append(playbackInfo.streamKey ?: "unknown")
+                append(" timeoutMs=")
+                append(probeTimeoutMs)
+            }
         )
+        val probeResult = withTimeoutOrNull(probeTimeoutMs) {
+            probe.probe(
+                context = context,
+                url = url,
+                headers = playbackInfo.headers,
+                filename = playbackInfo.filename
+            )
+        }
+        if (probeResult == null) {
+            logEvent(
+                event = "DV_PROFILE_TIMEOUT",
+                details = "stream=${playbackInfo.streamKey ?: "unknown"} timeoutMs=$probeTimeoutMs"
+            )
+            return fallbackOrPrimary(
+                playbackInfo = playbackInfo,
+                reason = DolbyVisionAutoPlayDecisionReason.PROBE_TIMEOUT,
+                probeResult = DolbyVisionProfileProbeResult.failed("probe_timeout")
+            )
+        }
+        logProbeResult(probeResult)
 
         return when (probeResult.status) {
-            DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION -> DolbyVisionAutoPlayGateResult(
+            DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION -> finalizeResult(
                 playbackInfo = playbackInfo,
                 fallbackApplied = false,
                 reason = DolbyVisionAutoPlayDecisionReason.PROBE_NOT_DOLBY_VISION,
@@ -154,7 +190,7 @@ class DolbyVisionAutoPlayGate(
                         probeResult = probeResult
                     )
                 } else {
-                    DolbyVisionAutoPlayGateResult(
+                    finalizeResult(
                         playbackInfo = playbackInfo,
                         fallbackApplied = false,
                         reason = DolbyVisionAutoPlayDecisionReason.PROFILE_ALLOWED,
@@ -182,19 +218,103 @@ class DolbyVisionAutoPlayGate(
     ): DolbyVisionAutoPlayGateResult {
         val fallback = playbackInfo.autoPlayNonDolbyVisionFallback
         if (fallback == null) {
-            return DolbyVisionAutoPlayGateResult(
+            return finalizeResult(
                 playbackInfo = playbackInfo,
                 fallbackApplied = false,
                 reason = DolbyVisionAutoPlayDecisionReason.NO_FALLBACK_AVAILABLE,
                 probeResult = probeResult
             )
         }
-        return DolbyVisionAutoPlayGateResult(
+        return finalizeResult(
             playbackInfo = fallback.applyTo(playbackInfo),
             fallbackApplied = true,
             reason = reason,
             probeResult = probeResult
         )
+    }
+
+    private fun finalizeResult(
+        playbackInfo: StreamPlaybackInfo,
+        fallbackApplied: Boolean,
+        reason: DolbyVisionAutoPlayDecisionReason,
+        probeResult: DolbyVisionProfileProbeResult? = null
+    ): DolbyVisionAutoPlayGateResult {
+        logEvent(
+            event = "FINAL_PLAYBACK_DECISION",
+            details = buildString {
+                append("selected=")
+                append(playbackInfo.streamKey ?: "unknown")
+                append(" fallbackApplied=")
+                append(fallbackApplied)
+                append(" reason=")
+                append(reason)
+                append(" profile=")
+                append(probeResult?.profileLabel ?: probeResult?.status?.name ?: "none")
+            }
+        )
+        return DolbyVisionAutoPlayGateResult(
+            playbackInfo = playbackInfo,
+            fallbackApplied = fallbackApplied,
+            reason = reason,
+            probeResult = probeResult
+        )
+    }
+
+    private fun logSelection(playbackInfo: StreamPlaybackInfo) {
+        logEvent(
+            event = "PRIMARY_SELECTED",
+            details = buildString {
+                append("stream=")
+                append(playbackInfo.streamKey ?: "unknown")
+                append(" webdl=")
+                append(playbackInfo.isWebDl)
+                append(" dv=")
+                append(playbackInfo.isDolbyVisionCandidate)
+            }
+        )
+        playbackInfo.autoPlayNonDolbyVisionFallback?.let { fallback ->
+            logEvent(
+                event = "FALLBACK_SELECTED",
+                details = buildString {
+                    append("stream=")
+                    append(fallback.streamKey ?: "unknown")
+                    append(" webdl=")
+                    append(fallback.isWebDl)
+                    append(" dv=")
+                    append(fallback.isDolbyVisionCandidate)
+                }
+            )
+        }
+    }
+
+    private fun logProbeResult(probeResult: DolbyVisionProfileProbeResult) {
+        val event = when (probeResult.status) {
+            DolbyVisionProfileProbeStatus.DETECTED -> "DV_PROFILE_DETECTED"
+            DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION -> "DV_PROFILE_NOT_DOLBY_VISION"
+            DolbyVisionProfileProbeStatus.UNKNOWN -> "DV_PROFILE_UNKNOWN"
+            DolbyVisionProfileProbeStatus.FAILED -> "DV_PROFILE_FAILED"
+        }
+        logEvent(
+            event = event,
+            details = buildString {
+                append("status=")
+                append(probeResult.status)
+                append(" profile=")
+                append(probeResult.profileLabel ?: "none")
+                append(" profileNumber=")
+                append(probeResult.profileNumber?.toString() ?: "none")
+                probeResult.error?.let {
+                    append(" error=")
+                    append(it)
+                }
+            }
+        )
+    }
+
+    private fun logEvent(event: String, details: String) {
+        runCatching {
+            Log.i(DV_AUTOPLAY_TAG, "$event ts=${System.currentTimeMillis()} $details")
+        }
     }
 }
 
@@ -396,6 +516,7 @@ private fun AutoPlayStreamAlternative.applyTo(base: StreamPlaybackInfo): StreamP
         videoHash = videoHash,
         videoSize = videoSize,
         streamKey = streamKey,
+        isWebDl = isWebDl,
         isDolbyVisionCandidate = isDolbyVisionCandidate,
         autoPlayNonDolbyVisionFallback = null
     )

@@ -1,17 +1,37 @@
 package com.nexio.tv.core.player
 
 import android.content.ContextWrapper
+import android.util.Log
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.ui.screens.stream.AutoPlayStreamAlternative
 import com.nexio.tv.ui.screens.stream.StreamPlaybackInfo
+import io.mockk.every
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
+import io.mockk.verify
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 
 class DolbyVisionAutoPlayGateTest {
     private val context = ContextWrapper(null)
+
+    @Before
+    fun setUp() {
+        mockkStatic(Log::class)
+        every { Log.i(any<String>(), any<String>()) } returns 0
+        every { Log.w(any<String>(), any<String>()) } returns 0
+    }
+
+    @After
+    fun tearDown() {
+        unmockkStatic(Log::class)
+    }
 
     @Test
     fun `manual playback never probes or falls back`() = runBlocking {
@@ -97,6 +117,110 @@ class DolbyVisionAutoPlayGateTest {
     }
 
     @Test
+    fun `autoplay falls back when probe times out`() = runBlocking {
+        val slowProbe = object : DolbyVisionProfileProbe {
+            override suspend fun probe(
+                context: android.content.Context,
+                url: String,
+                headers: Map<String, String>?,
+                filename: String?
+            ): DolbyVisionProfileProbeResult {
+                delay(50)
+                return DolbyVisionProfileProbeResult.detected(
+                    profileLabel = "dvhe.05",
+                    profileNumber = 5
+                )
+            }
+        }
+        val gate = DolbyVisionAutoPlayGate(probe = slowProbe, probeTimeoutMs = 10)
+
+        val resolved = gate.resolve(
+            context = context,
+            playbackInfo = primaryPlaybackInfo(),
+            autoPlay = true,
+            displaySupportsDolbyVision = false
+        )
+
+        assertEquals("fallback_hdr10", resolved.playbackInfo.streamKey)
+        assertEquals(DolbyVisionAutoPlayDecisionReason.PROBE_TIMEOUT, resolved.reason)
+        verify {
+            Log.i(
+                "DvAutoPlayGate",
+                match { message ->
+                    message.contains("DV_PROFILE_TIMEOUT") &&
+                        message.contains("timeoutMs=10")
+                }
+            )
+        }
+    }
+
+    @Test
+    fun `autoplay logs primary fallback probe result and finalized decision with timestamps`() = runBlocking {
+        val probe = RecordingDolbyVisionProfileProbe(
+            DolbyVisionProfileProbeResult.detected(profileLabel = "dvhe.05", profileNumber = 5)
+        )
+        val gate = DolbyVisionAutoPlayGate(probe)
+
+        gate.resolve(
+            context = context,
+            playbackInfo = primaryPlaybackInfo(),
+            autoPlay = true,
+            displaySupportsDolbyVision = false
+        )
+
+        verify {
+            Log.i(
+                "DvAutoPlayGate",
+                match { message ->
+                    message.contains("PRIMARY_SELECTED") &&
+                        message.contains("stream=primary") &&
+                        message.contains("ts=")
+                }
+            )
+        }
+        verify {
+            Log.i(
+                "DvAutoPlayGate",
+                match { message ->
+                    message.contains("FALLBACK_SELECTED") &&
+                        message.contains("stream=fallback_hdr10") &&
+                        message.contains("ts=")
+                }
+            )
+        }
+        verify {
+            Log.i(
+                "DvAutoPlayGate",
+                match { message ->
+                    message.contains("DV_PROFILE_PROBE_STARTED") &&
+                        message.contains("stream=primary") &&
+                        message.contains("ts=")
+                }
+            )
+        }
+        verify {
+            Log.i(
+                "DvAutoPlayGate",
+                match { message ->
+                    message.contains("DV_PROFILE_DETECTED") &&
+                        message.contains("profile=dvhe.05") &&
+                        message.contains("ts=")
+                }
+            )
+        }
+        verify {
+            Log.i(
+                "DvAutoPlayGate",
+                match { message ->
+                    message.contains("FINAL_PLAYBACK_DECISION") &&
+                        message.contains("selected=fallback_hdr10") &&
+                        message.contains("ts=")
+                }
+            )
+        }
+    }
+
+    @Test
     fun `autoplay does not probe when primary stream is not dolby vision`() = runBlocking {
         val probe = RecordingDolbyVisionProfileProbe(
             DolbyVisionProfileProbeResult.detected(profileLabel = "dvhe.05", profileNumber = 5)
@@ -116,6 +240,7 @@ class DolbyVisionAutoPlayGateTest {
     }
 
     private fun primaryPlaybackInfo(
+        isWebDl: Boolean = true,
         isDolbyVisionCandidate: Boolean = true,
         fallback: AutoPlayStreamAlternative? = fallbackAlternative()
     ): StreamPlaybackInfo {
@@ -147,6 +272,7 @@ class DolbyVisionAutoPlayGateTest {
             videoHash = null,
             videoSize = 42L,
             streamKey = "primary",
+            isWebDl = isWebDl,
             isDolbyVisionCandidate = isDolbyVisionCandidate,
             autoPlayNonDolbyVisionFallback = fallback
         )

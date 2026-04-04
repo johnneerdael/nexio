@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.R
 import com.nexio.tv.core.stream.AioCustomTemplateSelection
 import com.nexio.tv.core.stream.AioFormatterSelection
+import com.nexio.tv.core.stream.AioStrictFileParser
 import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.core.stream.StreamBingeGroupResolver
 import com.nexio.tv.core.stream.StreamCardModel
@@ -326,38 +327,52 @@ class StreamScreenViewModel @Inject constructor(
                         maxAgeMs = playerSettings.streamReuseLastLinkCacheHours * 60L * 60L * 1000L
                     )
                     if (cached != null) {
-                        autoPlayHandledForSession = true
-                        resolvedAutoPlayTarget = true
-                        updateUiStateIfChanged {
-                            it.copy(
-                                autoPlayPlaybackInfo = StreamPlaybackInfo(
-                                url = cached.url,
-                                title = title,
-                                streamName = cached.streamName,
-                                year = year,
-                                isExternal = false,
-                                isTorrent = false,
-                                infoHash = null,
-                                ytId = null,
-                                headers = cached.headers,
-                                contentId = contentId ?: videoId.substringBefore(":"),
-                                contentType = contentType,
-                                contentName = contentName ?: title,
-                                poster = poster,
-                                backdrop = backdrop,
-                                logo = logo,
-                                videoId = videoId,
-                                season = season,
-                                episode = episode,
-                                episodeTitle = episodeName,
-                                bingeGroup = cached.bingeGroup,
-                                rememberedAudioLanguage = cached.rememberedAudioLanguage,
-                                rememberedAudioName = cached.rememberedAudioName,
-                                filename = cached.filename,
-                                videoHash = cached.videoHash,
-                                videoSize = cached.videoSize
-                                )
+                        if (shouldInvalidateCachedDeterministicAutoPlayLink(cached)) {
+                            streamLinkCacheDataStore.invalidate(streamCacheKey)
+                            Log.i(
+                                TAG,
+                                "AUTOPLAY_CACHE_INVALIDATED reason=dv_webdl_requires_reselection " +
+                                    "contentKey=$streamCacheKey filename=${cached.filename ?: "none"}"
                             )
+                            Log.i(
+                                TAG,
+                                "AUTOPLAY_CACHE_RESELECTION_TRIGGERED contentKey=$streamCacheKey " +
+                                    "mode=deterministic reason=invalidated_cached_dv_webdl"
+                            )
+                        } else {
+                            autoPlayHandledForSession = true
+                            resolvedAutoPlayTarget = true
+                            updateUiStateIfChanged {
+                                it.copy(
+                                    autoPlayPlaybackInfo = StreamPlaybackInfo(
+                                    url = cached.url,
+                                    title = title,
+                                    streamName = cached.streamName,
+                                    year = year,
+                                    isExternal = false,
+                                    isTorrent = false,
+                                    infoHash = null,
+                                    ytId = null,
+                                    headers = cached.headers,
+                                    contentId = contentId ?: videoId.substringBefore(":"),
+                                    contentType = contentType,
+                                    contentName = contentName ?: title,
+                                    poster = poster,
+                                    backdrop = backdrop,
+                                    logo = logo,
+                                    videoId = videoId,
+                                    season = season,
+                                    episode = episode,
+                                    episodeTitle = episodeName,
+                                    bingeGroup = cached.bingeGroup,
+                                    rememberedAudioLanguage = cached.rememberedAudioLanguage,
+                                    rememberedAudioName = cached.rememberedAudioName,
+                                    filename = cached.filename,
+                                    videoHash = cached.videoHash,
+                                    videoSize = cached.videoSize
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -949,6 +964,11 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     suspend fun resolveAutoPlayPlaybackInfo(playbackInfo: StreamPlaybackInfo): StreamPlaybackInfo {
+        Log.i(
+            TAG,
+            "AUTOPLAY_HERO_GATED_RESOLUTION_START stream=${playbackInfo.streamKey ?: "unknown"} " +
+                "overlayActive=true deterministic=${_uiState.value.isDeterministicAutoplay}"
+        )
         val result: DolbyVisionAutoPlayGateResult = dolbyVisionAutoPlayGate.resolve(
             context = context,
             playbackInfo = playbackInfo,
@@ -973,6 +993,11 @@ class StreamScreenViewModel @Inject constructor(
                 "selected=${result.playbackInfo.streamKey ?: "unknown"} " +
                 "fallback=${result.fallbackApplied} reason=${result.reason} " +
                 "profile=${result.probeResult?.profileLabel ?: "none"}"
+        )
+        Log.i(
+            TAG,
+            "AUTOPLAY_HERO_GATED_RESOLUTION_READY selected=${result.playbackInfo.streamKey ?: "unknown"} " +
+                "overlayActive=true readyForPlayback=true"
         )
         return result.playbackInfo
     }
@@ -1102,6 +1127,7 @@ class StreamScreenViewModel @Inject constructor(
             videoHash = stream.behaviorHints?.videoHash,
             videoSize = stream.behaviorHints?.videoSize,
             streamKey = stream.wrappedOriginalStreamKey,
+            isWebDl = item.parsed.quality.equals("WEB-DL", ignoreCase = true),
             isDolbyVisionCandidate = item.parsed.visualTags.any { tag ->
                 val normalized = tag.lowercase()
                 normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
@@ -1115,6 +1141,7 @@ class StreamScreenViewModel @Inject constructor(
                     filename = fallback.stream.behaviorHints?.filename,
                     videoHash = fallback.stream.behaviorHints?.videoHash,
                     videoSize = fallback.stream.behaviorHints?.videoSize,
+                    isWebDl = fallback.parsed.quality.equals("WEB-DL", ignoreCase = true),
                     isDolbyVisionCandidate = fallback.parsed.visualTags.any { tag ->
                         val normalized = tag.lowercase()
                         normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
@@ -1228,6 +1255,22 @@ class StreamScreenViewModel @Inject constructor(
         }
         logShadowAutoPlayReadiness(sessions)
         return sessions
+    }
+
+    private fun shouldInvalidateCachedDeterministicAutoPlayLink(
+        cached: com.nexio.tv.data.local.CachedStreamLink
+    ): Boolean {
+        if (!_uiState.value.isDeterministicAutoplay) return false
+        if (supportsDolbyVisionDisplay(context)) return false
+        val parseTarget = cached.filename ?: cached.streamName
+        if (parseTarget.isBlank()) return false
+        val parsed = AioStrictFileParser.parse(parseTarget)
+        val isWebDl = parsed.quality.equals("WEB-DL", ignoreCase = true)
+        val isDolbyVision = parsed.visualTags.any { tag ->
+            val normalized = tag.lowercase()
+            normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
+        }
+        return isWebDl && isDolbyVision
     }
 
     private fun logShadowAutoPlayReadiness(
@@ -1565,6 +1608,7 @@ data class StreamPlaybackInfo(
     val videoHash: String? = null,
     val videoSize: Long? = null,
     val streamKey: String? = null,
+    val isWebDl: Boolean = false,
     val isDolbyVisionCandidate: Boolean = false,
     val autoPlayNonDolbyVisionFallback: AutoPlayStreamAlternative? = null
 )
@@ -1577,5 +1621,6 @@ data class AutoPlayStreamAlternative(
     val filename: String? = null,
     val videoHash: String? = null,
     val videoSize: Long? = null,
+    val isWebDl: Boolean = false,
     val isDolbyVisionCandidate: Boolean = false
 )
