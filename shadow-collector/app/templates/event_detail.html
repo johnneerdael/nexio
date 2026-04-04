@@ -31,16 +31,13 @@
         </div>
         {% if event.selected %}
           <div class="hero-summary-grid">
-            <div><span class="metric-label">Provider</span><strong>{{ event.selected.provider }}</strong></div>
-            <div><span class="metric-label">Transport</span><strong>{{ event.selected.transport }}</strong></div>
-            <div><span class="metric-label">Service</span><strong>{{ event.selected.service }}</strong></div>
+            <div><span class="metric-label">Debrid</span><strong>{{ event.selected.service }}</strong></div>
             <div><span class="metric-label">Score</span><strong>{{ event.selected.score }}</strong></div>
             <div><span class="metric-label">Ratio</span><strong>{{ event.selected.ratio_label }}</strong></div>
-            <div><span class="metric-label">Resolution</span><strong>{{ event.selected.resolution }}</strong></div>
+            <div><span class="metric-label">Res.</span><strong>{{ event.selected.resolution }}</strong></div>
             <div><span class="metric-label">HDR</span><strong>{{ event.selected.hdr }}</strong></div>
             <div><span class="metric-label">Audio</span><strong>{{ event.selected.audio }}</strong></div>
             <div><span class="metric-label">Size</span><strong>{{ event.selected.size_label }}</strong></div>
-            <div><span class="metric-label">Duration</span><strong>{{ event.selected.duration_label }}</strong></div>
             <div><span class="metric-label">Bitrate</span><strong>{{ event.selected.bitrate_label }}</strong></div>
             <div><span class="metric-label">Runtime source</span><strong>{{ event.selected.runtime_source }}</strong></div>
           </div>
@@ -108,46 +105,129 @@
       </div>
       <div class="table-wrap">
         <table class="data-table data-table-detail">
+          <colgroup>
+            <col class="detail-col detail-status-col">
+            <col class="detail-col detail-debrid-col">
+            <col class="detail-col detail-file-col">
+            <col class="detail-col detail-resolution-col">
+            <col class="detail-col detail-size-col">
+            <col class="detail-col detail-bitrate-col">
+            <col class="detail-col detail-score-col">
+            <col class="detail-col detail-ratio-col">
+            <col class="detail-col detail-hdr-col">
+            <col class="detail-col detail-audio-col">
+          </colgroup>
           <thead>
             <tr>
               <th>Status</th>
-              <th>Provider</th>
-              <th>Transport</th>
-              <th>Service</th>
+              <th>Debrid</th>
               <th>File</th>
-              <th>Resolution</th>
+              <th>Res.</th>
               <th>Size</th>
-              <th>Duration</th>
               <th>Bitrate</th>
               <th>Score</th>
               <th>Ratio</th>
               <th>HDR</th>
               <th>Audio</th>
-              <th>Reasons</th>
             </tr>
           </thead>
           <tbody>
             {% for candidate in event.candidates %}
               <tr>
                 <td><span class="pill pill-{{ candidate.status|lower }}">{{ candidate.status }}</span></td>
-                <td>{{ candidate.provider }}</td>
-                <td>{{ candidate.transport }}</td>
                 <td>{{ candidate.service }}</td>
                 <td class="file-cell" title="{{ candidate.file }}">{{ candidate.file }}</td>
                 <td>{{ candidate.resolution }}</td>
                 <td>{{ candidate.size_label }}</td>
-                <td>{{ candidate.duration_label }}</td>
                 <td>{{ candidate.bitrate_label }}</td>
                 <td>{{ candidate.score if candidate.score is not none else '—' }}</td>
                 <td>{{ candidate.ratio_label }}</td>
                 <td>{{ candidate.hdr }}</td>
                 <td>{{ candidate.audio }}</td>
-                <td>{{ candidate.reasons|join(', ') if candidate.reasons else '—' }}</td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
+      <script>
+        (function () {
+          const table = document.querySelector(".data-table-detail");
+          if (!table) return;
+
+          const headers = table.querySelectorAll("thead th");
+          const columns = table.querySelectorAll("colgroup col");
+          if (!headers.length || headers.length !== columns.length) return;
+
+          const MIN_WIDTH_PX = 70;
+
+          const updateColWidth = (column, widthPx) => {
+            const nextWidth = Math.max(MIN_WIDTH_PX, Math.round(widthPx));
+            column.style.width = `${nextWidth}px`;
+            table.style.maxWidth = "none";
+            table.style.width = "auto";
+          };
+
+          const beginResize = (event, column) => {
+            event.preventDefault();
+            table.classList.add("is-resizing");
+            const startX = event.clientX;
+            const startWidth = column.getBoundingClientRect().width;
+            const pointerId = event.pointerId;
+            const source = event.currentTarget;
+
+            if (pointerId !== undefined && source && source.setPointerCapture) {
+              source.setPointerCapture(pointerId);
+            }
+
+            const onPointerMove = (moveEvent) => {
+              const delta = moveEvent.clientX - startX;
+              const nextWidth = startWidth + delta;
+              updateColWidth(column, nextWidth);
+            };
+
+            const onPointerUp = () => {
+              document.removeEventListener("pointermove", onPointerMove);
+              document.removeEventListener("pointerup", onPointerUp);
+              if (pointerId !== undefined && source && source.releasePointerCapture) {
+                source.releasePointerCapture(pointerId);
+              }
+              table.classList.remove("is-resizing");
+              document.body.style.cursor = "";
+              document.body.style.userSelect = "";
+              document.documentElement.style.userSelect = "";
+            };
+
+            document.body.style.cursor = "col-resize";
+            document.body.style.userSelect = "none";
+            document.documentElement.style.userSelect = "none";
+            document.addEventListener("pointermove", onPointerMove);
+            document.addEventListener("pointerup", onPointerUp);
+          };
+
+          headers.forEach((th, index) => {
+            const column = columns[index];
+            const currentWidth = Math.max(th.offsetWidth, MIN_WIDTH_PX);
+            if (!column.style.width) {
+              column.style.width = `${currentWidth}px`;
+            }
+
+            const handle = document.createElement("span");
+            handle.className = "column-resize-handle";
+            handle.setAttribute("aria-hidden", "true");
+            handle.tabIndex = -1;
+            th.appendChild(handle);
+
+            handle.addEventListener("pointerdown", (event) => {
+              beginResize(event, column);
+            });
+            th.addEventListener("pointerdown", (event) => {
+              const hitEdge = event.offsetX >= th.offsetWidth - 18;
+              if (!hitEdge) return;
+              beginResize(event, column);
+            });
+          });
+        })();
+      </script>
     </section>
 
     <section class="detail-grid bottom-grid">

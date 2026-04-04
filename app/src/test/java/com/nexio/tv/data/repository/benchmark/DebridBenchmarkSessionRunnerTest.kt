@@ -3,6 +3,7 @@ package com.nexio.tv.data.repository.benchmark
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -65,7 +66,6 @@ class DebridBenchmarkSessionRunnerTest {
         )
 
         val playerSettings = PlayerSettings()
-        coEvery { directTransport.runProfile(any(), any(), any()) } returns directResult
         coEvery { optimizedTransport.runProfile(any(), any(), any(), any()) } returns optimizedResult
         every { playerSettingsDataStore.playerSettings } returns flowOf(playerSettings)
         every { deviceCapabilitySnapshotProvider.capture(playerSettings) } returns sampleDeviceSnapshot()
@@ -89,12 +89,13 @@ class DebridBenchmarkSessionRunnerTest {
         assertNull(result.result)
         assertNotNull(result.failureDetails)
         assertEquals(DebridBenchmarkTransportMode.OPTIMIZED, result.failureDetails?.failedTransport)
-        assertEquals(directProfile, result.failureDetails?.direct)
+        assertNull(result.failureDetails?.direct)
         assertEquals(optimizedProfile, result.failureDetails?.optimized)
+        coVerify(exactly = 0) { directTransport.runProfile(any(), any(), any()) }
     }
 
     @Test
-    fun `stability winner prefers playback stable optimized transport over lower cv direct transport`() = runTest {
+    fun `completed benchmark stores optimized profile only`() = runTest {
         val directTransport = mockk<DirectProfileBenchmarkTransport>()
         val optimizedTransport = mockk<OptimizedBenchmarkTransport>()
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
@@ -104,24 +105,6 @@ class DebridBenchmarkSessionRunnerTest {
             iecPackerDtshdCoreFallbackEnabled = true
         )
 
-        val directResult = DebridBenchmarkTransportProfileResult(
-            summary = DebridBenchmarkSummary(
-                startupTimeMs = 180L,
-                sustainedThroughputMbps = 420.0,
-                transferredBytes = 4_000_000_000L,
-                elapsedMs = 120_000L
-            ),
-            profile = profile(
-                startupMs = 180L,
-                averageMbps = 420.0,
-                p10Mbps = 300.0,
-                actionable = true,
-                throughputCv = 0.11,
-                stallCount = 1,
-                maxReadGapMs = 2_900L
-            ),
-            terminationReason = DebridBenchmarkTerminationReason.COMPLETED
-        )
         val optimizedResult = DebridBenchmarkTransportProfileResult(
             summary = DebridBenchmarkSummary(
                 startupTimeMs = 150L,
@@ -141,7 +124,6 @@ class DebridBenchmarkSessionRunnerTest {
             terminationReason = DebridBenchmarkTerminationReason.COMPLETED
         )
 
-        coEvery { directTransport.runProfile(any(), any(), any()) } returns directResult
         coEvery { optimizedTransport.runProfile(any(), any(), any(), any()) } returns optimizedResult
         every { playerSettingsDataStore.playerSettings } returns flowOf(playerSettings)
         every { deviceCapabilitySnapshotProvider.capture(playerSettings) } returns sampleDeviceSnapshot()
@@ -161,8 +143,22 @@ class DebridBenchmarkSessionRunnerTest {
         )
 
         assertEquals(DebridBenchmarkTerminationReason.COMPLETED, result.terminationReason)
-        assertEquals(DebridBenchmarkTransportMode.OPTIMIZED, result.result?.comparison?.stabilityWinner)
+        assertNull(result.result?.direct)
+        assertNull(result.result?.comparison)
+        assertNotNull(result.result?.optimized)
+        assertEquals(optimizedResult.profile.startup, result.result?.optimized?.startup)
+        assertEquals(optimizedResult.profile.seek, result.result?.optimized?.seek)
+        assertEquals(
+            optimizedResult.profile.sustained,
+            result.result?.optimized?.sustained
+        )
+        assertEquals(
+            optimizedResult.profile.sustained.p10ThroughputMbps?.times(0.85) ?: 0.0,
+            result.result?.optimized?.decision?.safeSustainedBudgetMbps ?: 0.0,
+            0.0
+        )
         verify(exactly = 1) { deviceCapabilitySnapshotProvider.capture(playerSettings) }
+        coVerify(exactly = 0) { directTransport.runProfile(any(), any(), any()) }
     }
 
     private fun candidate(): DebridBenchmarkCandidate {

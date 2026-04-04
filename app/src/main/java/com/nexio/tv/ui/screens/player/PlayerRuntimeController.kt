@@ -121,6 +121,7 @@ class PlayerRuntimeController(
 
     fun stopAndRelease() {
         beginPlayerExit()
+        endDisplayModeSessionForExit()
         Dv5HardwareToneMapRpuTap.setEnabledForPlayback(enabled = false, streamUrl = currentStreamUrl)
         releasePlayer()
         mediaSourceFactory.clearVodCache()
@@ -355,6 +356,7 @@ class PlayerRuntimeController(
 
     fun onCleared() {
         beginPlayerExit()
+        endDisplayModeSessionForExit()
         releasePlayer()
         vodTelemetryJob?.cancel()
         mediaSourceFactory.shutdown()
@@ -363,5 +365,24 @@ class PlayerRuntimeController(
 
     internal fun beginPlayerExit() {
         playbackSessionGuard.beginPlayerExit()
+    }
+
+    internal fun endDisplayModeSessionForExit() {
+        val activity = currentHostActivity()
+        val frameRateMode = _uiState.value.frameRateMatchingMode
+        if (activity != null) {
+            if (frameRateMode == FrameRateMatchingMode.START_STOP) {
+                com.nexio.tv.core.player.FrameRateUtils.restoreOriginalDisplayMode(activity)
+            } else {
+                com.nexio.tv.core.player.FrameRateUtils.cleanupDisplayListener()
+                com.nexio.tv.core.player.FrameRateUtils.clearOriginalDisplayMode()
+            }
+            com.nexio.tv.core.player.FrameRateUtils.endMainPlayerDisplayModeSession()
+            com.nexio.tv.core.player.FrameRateUtils.enforceUiPreferredRefreshRate(activity)
+        } else {
+            com.nexio.tv.core.player.FrameRateUtils.endMainPlayerDisplayModeSession()
+            com.nexio.tv.core.player.FrameRateUtils.cleanupDisplayListener()
+            com.nexio.tv.core.player.FrameRateUtils.clearOriginalDisplayMode()
+        }
     }
 }

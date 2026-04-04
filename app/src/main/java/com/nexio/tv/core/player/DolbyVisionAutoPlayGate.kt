@@ -96,7 +96,7 @@ data class DolbyVisionAutoPlayGateResult(
 )
 
 class DolbyVisionAutoPlayGate(
-    private val probe: DolbyVisionProfileProbe = FfmpegDolbyVisionProfileProbe(),
+    private val probe: DolbyVisionProfileProbe = CompositeDolbyVisionProfileProbe(),
     private val probeTimeoutMs: Long = DV_AUTOPLAY_PROBE_TIMEOUT_MS
 ) {
 
@@ -349,6 +349,41 @@ class FfmpegDolbyVisionProfileProbe(
     }
 }
 
+class CompositeDolbyVisionProfileProbe(
+    private val probes: List<DolbyVisionProfileProbe> = listOf(
+        FfmpegDolbyVisionProfileProbe(),
+        NextLibDolbyVisionProfileProbe()
+    )
+) : DolbyVisionProfileProbe {
+
+    override suspend fun probe(
+        context: Context,
+        url: String,
+        headers: Map<String, String>?,
+        filename: String?
+    ): DolbyVisionProfileProbeResult {
+        var unknownResult: DolbyVisionProfileProbeResult? = null
+        var failedResult: DolbyVisionProfileProbeResult? = null
+
+        probes.forEach { probe ->
+            val result = probe.probe(
+                context = context,
+                url = url,
+                headers = headers,
+                filename = filename
+            )
+            when (result.status) {
+                DolbyVisionProfileProbeStatus.DETECTED,
+                DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION -> return result
+                DolbyVisionProfileProbeStatus.UNKNOWN -> if (unknownResult == null) unknownResult = result
+                DolbyVisionProfileProbeStatus.FAILED -> failedResult = result
+            }
+        }
+
+        return unknownResult ?: failedResult ?: DolbyVisionProfileProbeResult.unknown()
+    }
+}
+
 class NextLibDolbyVisionProfileProbe : DolbyVisionProfileProbe {
 
     override suspend fun probe(
@@ -358,15 +393,39 @@ class NextLibDolbyVisionProfileProbe : DolbyVisionProfileProbe {
         filename: String?
     ): DolbyVisionProfileProbeResult = withContext(Dispatchers.IO) {
         runCatching {
-            probeWithMediaInfo(
-                context = context,
-                url = url,
-                filename = filename
-            ) ?: probeWithExtractor(
-                context = context,
-                url = url,
-                headers = headers
-            ) ?: DolbyVisionProfileProbeResult.unknown()
+            val candidates = buildProbeUrlCandidates(url)
+            var notDolbyVisionObserved = false
+            candidates.forEach { candidateUrl ->
+                probeWithMediaInfo(
+                    context = context,
+                    url = candidateUrl,
+                    filename = filename
+                )?.let { result ->
+                    when (result.status) {
+                        DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION -> {
+                            notDolbyVisionObserved = true
+                        }
+                        else -> return@runCatching result
+                    }
+                }
+                probeWithExtractor(
+                    context = context,
+                    url = candidateUrl,
+                    headers = headers
+                )?.let { result ->
+                    when (result.status) {
+                        DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION -> {
+                            notDolbyVisionObserved = true
+                        }
+                        else -> return@runCatching result
+                    }
+                }
+            }
+            if (notDolbyVisionObserved) {
+                DolbyVisionProfileProbeResult.notDolbyVision()
+            } else {
+                DolbyVisionProfileProbeResult.unknown()
+            }
         }.getOrElse { error ->
             Log.w(DV_AUTOPLAY_TAG, "Dolby Vision probe failed: ${error.message}")
             DolbyVisionProfileProbeResult.failed(error.message)
@@ -487,6 +546,32 @@ class NextLibDolbyVisionProfileProbe : DolbyVisionProfileProbe {
                 DolbyVisionProfileProbeResult.unknown()
             else -> DolbyVisionProfileProbeResult.notDolbyVision()
         }
+    }
+
+    private fun buildProbeUrlCandidates(sourceUrl: String): List<String> {
+        if (sourceUrl.isBlank()) return emptyList()
+        val embeddedResolveUrl = extractEmbeddedResolveUrl(sourceUrl)
+        return buildList {
+            add(sourceUrl)
+            if (!embeddedResolveUrl.isNullOrBlank() && embeddedResolveUrl != sourceUrl) {
+                add(embeddedResolveUrl)
+            }
+        }
+    }
+
+    private fun extractEmbeddedResolveUrl(sourceUrl: String): String? {
+        val marker = "/resolve/"
+        val markerIndex = sourceUrl.indexOf(marker, ignoreCase = true)
+        if (markerIndex < 0) return null
+
+        val afterResolve = sourceUrl.substring(markerIndex + marker.length)
+        val nestedEncoded = afterResolve.substringAfter('/', missingDelimiterValue = "")
+            .substringAfter('/', missingDelimiterValue = "")
+        if (nestedEncoded.isBlank()) return null
+
+        return runCatching {
+            URLDecoder.decode(nestedEncoded, Charsets.UTF_8.name())
+        }.getOrNull()
     }
 }
 

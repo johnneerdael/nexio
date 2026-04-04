@@ -53,6 +53,29 @@ class BenchmarkAwareStreamScorerTest {
     }
 
     @Test
+    fun `shadow parsed facts retain folder name when available`() {
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "rd_foldered",
+                    providerId = "RD",
+                    filename = "00010.m2ts",
+                    folderName = "The.Movie.2026.2160p.UHD.BluRay.REMUX"
+                )
+            ),
+            benchmarkSessions = mapOf(
+                DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(
+                    provider = DebridBenchmarkProvider.REAL_DEBRID
+                )
+            )
+        )
+
+        assertEquals("00010.m2ts", event.selected?.parsed?.filename)
+        assertEquals("The.Movie.2026.2160p.UHD.BluRay.REMUX", event.selected?.parsed?.folderName)
+    }
+
+    @Test
     fun `torbox and easydebrid service ids map to benchmark providers`() {
         val event = scorer.score(
             request = request(runtimeMinutes = 120),
@@ -293,7 +316,7 @@ class BenchmarkAwareStreamScorerTest {
     }
 
     @Test
-    fun `active transport mode filters out optimized path when parallel playback is disabled`() {
+    fun `active transport mode direct still resolves to optimized transport`() {
         val event = scorer.score(
             request = request(runtimeMinutes = 120),
             streams = listOf(streamCard(streamKey = "rd_stream", providerId = "RD")),
@@ -307,11 +330,11 @@ class BenchmarkAwareStreamScorerTest {
             activeTransportMode = DebridBenchmarkTransportMode.DIRECT
         )
 
-        assertEquals(DebridBenchmarkTransportMode.DIRECT, event.selected?.transport)
+        assertEquals(DebridBenchmarkTransportMode.OPTIMIZED, event.selected?.transport)
     }
 
     @Test
-    fun `scorer uses derived decision metrics as autoplay truth over raw sustained p10`() {
+    fun `scorer uses optimized derived decision metrics as autoplay truth over raw sustained p10`() {
         val event = scorer.score(
             request = request(runtimeMinutes = 120),
             streams = listOf(streamCard(streamKey = "rd_stream", providerId = "RD")),
@@ -326,8 +349,14 @@ class BenchmarkAwareStreamScorerTest {
             )
         )
 
-        assertEquals(DebridBenchmarkTransportMode.DIRECT, event.selected?.transport)
-        assertEquals(127.5, event.selected?.safeBudgetMbps ?: 0.0, 0.0)
+        assertNull(event.selected)
+        assertEquals(
+            listOf(
+                ShadowRejectReason.INSUFFICIENT_TRANSPORT_BUDGET,
+                ShadowRejectReason.NO_ELIGIBLE_TRANSPORT
+            ),
+            event.rejected.single { it.streamKey == "rd_stream" }.reasons
+        )
     }
 
     @Test
@@ -1347,6 +1376,7 @@ class BenchmarkAwareStreamScorerTest {
         providerId: String,
         wrappedProviderId: String? = providerId,
         filename: String = "$streamKey.mkv",
+        folderName: String? = null,
         resolution: String = "2160p",
         quality: String = "BluRay Remux",
         encode: String? = "HEVC",
@@ -1382,6 +1412,7 @@ class BenchmarkAwareStreamScorerTest {
             stream = stream,
             title = "Example",
             filename = filename,
+            folderName = folderName,
             sizeBytes = sizeBytes,
             resolution = resolution,
             quality = quality,

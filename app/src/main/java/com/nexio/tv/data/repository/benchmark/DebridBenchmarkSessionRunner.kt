@@ -50,24 +50,6 @@ class DebridBenchmarkSessionRunner internal constructor(
             directUrlFingerprint = sha256(candidate.directUrl)
         )
         val seekTargets = defaultSeekTargets(candidate.sourceSizeBytes)
-        val directResult = directTransport.runProfile(
-            candidate = candidate,
-            observer = observer,
-            seekTargets = seekTargets
-        )
-        if (directResult.terminationReason != DebridBenchmarkTerminationReason.COMPLETED) {
-            return DebridBenchmarkSessionResult(
-                summary = directResult.summary,
-                terminationReason = directResult.terminationReason,
-                failureDetails = DebridBenchmarkFailureDetails(
-                    candidate = candidateMetadata,
-                    failedTransport = DebridBenchmarkTransportMode.DIRECT,
-                    transportFailure = directResult.failure,
-                    direct = directResult.profile
-                )
-            )
-        }
-
         val playerSettings = playerSettingsDataStore.playerSettings.first()
         val configSnapshot = playerSettings.toBenchmarkTransportConfigSnapshot()
         val optimizedResult = optimizedTransport.runProfile(
@@ -76,7 +58,6 @@ class DebridBenchmarkSessionRunner internal constructor(
             observer = observer,
             seekTargets = seekTargets
         )
-        val directProfile = directResult.profile.withDerivedDecisionMetrics()
         val optimizedProfile = optimizedResult.profile.withDerivedDecisionMetrics()
         if (optimizedResult.terminationReason != DebridBenchmarkTerminationReason.COMPLETED) {
             return DebridBenchmarkSessionResult(
@@ -86,7 +67,6 @@ class DebridBenchmarkSessionRunner internal constructor(
                     candidate = candidateMetadata,
                     failedTransport = DebridBenchmarkTransportMode.OPTIMIZED,
                     transportFailure = optimizedResult.failure,
-                    direct = directResult.profile,
                     optimized = optimizedResult.profile
                 )
             )
@@ -101,25 +81,11 @@ class DebridBenchmarkSessionRunner internal constructor(
             candidate = candidateMetadata,
             device = deviceSnapshot,
             session = benchmarkSessionMetadata(
-                directElapsedMs = directResult.profile.sustained.elapsedMs ?: 0L,
                 optimizedElapsedMs = optimizedResult.profile.sustained.elapsedMs ?: 0L
             ),
-            direct = directProfile,
+            direct = null,
             optimized = optimizedProfile,
-            comparison = DebridBenchmarkComparisonSummary(
-                sustainedWinner = compareSustainedWinner(
-                    direct = directProfile,
-                    optimized = optimizedProfile
-                ),
-                seekWinner = compareSeekWinner(
-                    direct = directProfile,
-                    optimized = optimizedProfile
-                ),
-                stabilityWinner = compareStabilityWinner(
-                    direct = directProfile,
-                    optimized = optimizedProfile
-                )
-            )
+            comparison = null
         )
         return DebridBenchmarkSessionResult(
             summary = completedResult.summary,
@@ -146,89 +112,13 @@ class DebridBenchmarkSessionRunner internal constructor(
     }
 
     private fun benchmarkSessionMetadata(
-        directElapsedMs: Long,
         optimizedElapsedMs: Long
     ): DebridBenchmarkSessionMetadata {
         return DebridBenchmarkSessionMetadata(
             benchmarkVersion = 3,
             executionOrder = DEFAULT_EXECUTION_ORDER,
-            totalElapsedMs = directElapsedMs + optimizedElapsedMs
+            totalElapsedMs = optimizedElapsedMs
         )
-    }
-
-    private fun compareSustainedWinner(
-        direct: DebridBenchmarkTransportProfile,
-        optimized: DebridBenchmarkTransportProfile
-    ): DebridBenchmarkTransportMode {
-        if (direct.isActionableForAutoplay() && !optimized.isActionableForAutoplay()) {
-            return DebridBenchmarkTransportMode.DIRECT
-        }
-        if (optimized.isActionableForAutoplay() && !direct.isActionableForAutoplay()) {
-            return DebridBenchmarkTransportMode.OPTIMIZED
-        }
-        val directScore = direct.sustained.p10ThroughputMbps ?: Double.NEGATIVE_INFINITY
-        val optimizedScore = optimized.sustained.p10ThroughputMbps ?: Double.NEGATIVE_INFINITY
-        return if (optimizedScore > directScore) {
-            DebridBenchmarkTransportMode.OPTIMIZED
-        } else {
-            DebridBenchmarkTransportMode.DIRECT
-        }
-    }
-
-    private fun compareSeekWinner(
-        direct: DebridBenchmarkTransportProfile,
-        optimized: DebridBenchmarkTransportProfile
-    ): DebridBenchmarkTransportMode {
-        if (direct.isActionableForAutoplay() && !optimized.isActionableForAutoplay()) {
-            return DebridBenchmarkTransportMode.DIRECT
-        }
-        if (optimized.isActionableForAutoplay() && !direct.isActionableForAutoplay()) {
-            return DebridBenchmarkTransportMode.OPTIMIZED
-        }
-        val directScore = listOf(
-            direct.seek.seekFailRate ?: 1.0,
-            (direct.seek.seekTtfbP95Ms ?: Long.MAX_VALUE).toDouble(),
-            (direct.seek.seekTtfbP99Ms ?: Long.MAX_VALUE).toDouble()
-        )
-        val optimizedScore = listOf(
-            optimized.seek.seekFailRate ?: 1.0,
-            (optimized.seek.seekTtfbP95Ms ?: Long.MAX_VALUE).toDouble(),
-            (optimized.seek.seekTtfbP99Ms ?: Long.MAX_VALUE).toDouble()
-        )
-        return if (compareScoreVectors(optimizedScore, directScore) < 0) {
-            DebridBenchmarkTransportMode.OPTIMIZED
-        } else {
-            DebridBenchmarkTransportMode.DIRECT
-        }
-    }
-
-    private fun compareStabilityWinner(
-        direct: DebridBenchmarkTransportProfile,
-        optimized: DebridBenchmarkTransportProfile
-    ): DebridBenchmarkTransportMode {
-        if (direct.isActionableForAutoplay() && !optimized.isActionableForAutoplay()) {
-            return DebridBenchmarkTransportMode.DIRECT
-        }
-        if (optimized.isActionableForAutoplay() && !direct.isActionableForAutoplay()) {
-            return DebridBenchmarkTransportMode.OPTIMIZED
-        }
-        val directScore = direct.playbackStabilityVector()
-        val optimizedScore = optimized.playbackStabilityVector()
-        return if (compareScoreVectors(optimizedScore, directScore) < 0) {
-            DebridBenchmarkTransportMode.OPTIMIZED
-        } else {
-            DebridBenchmarkTransportMode.DIRECT
-        }
-    }
-
-    private fun compareScoreVectors(left: List<Double>, right: List<Double>): Int {
-        for (index in left.indices) {
-            val comparison = left[index].compareTo(right[index])
-            if (comparison != 0) {
-                return comparison
-            }
-        }
-        return 0
     }
 
     private fun sha256(value: String): String {
@@ -240,24 +130,15 @@ class DebridBenchmarkSessionRunner internal constructor(
         private val DEFAULT_EXECUTION_ORDER = listOf(
             DebridBenchmarkPhaseExecution(
                 phase = DebridBenchmarkPhase.STARTUP,
-                order = listOf(
-                    DebridBenchmarkTransportMode.DIRECT,
-                    DebridBenchmarkTransportMode.OPTIMIZED
-                )
+                order = listOf(DebridBenchmarkTransportMode.OPTIMIZED)
             ),
             DebridBenchmarkPhaseExecution(
                 phase = DebridBenchmarkPhase.SUSTAINED,
-                order = listOf(
-                    DebridBenchmarkTransportMode.DIRECT,
-                    DebridBenchmarkTransportMode.OPTIMIZED
-                )
+                order = listOf(DebridBenchmarkTransportMode.OPTIMIZED)
             ),
             DebridBenchmarkPhaseExecution(
                 phase = DebridBenchmarkPhase.SEEK,
-                order = listOf(
-                    DebridBenchmarkTransportMode.DIRECT,
-                    DebridBenchmarkTransportMode.OPTIMIZED
-                )
+                order = listOf(DebridBenchmarkTransportMode.OPTIMIZED)
             )
         )
     }

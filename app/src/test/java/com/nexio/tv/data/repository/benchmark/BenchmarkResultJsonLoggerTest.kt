@@ -42,7 +42,7 @@ class BenchmarkResultJsonLoggerTest {
 
         assertTrue(summary.contains("provider=real_debrid"))
         assertTrue(summary.contains("sustained_winner=optimized"))
-        assertTrue(summary.contains("direct_safe_budget=127.5"))
+        assertFalse(summary.contains("direct_safe_budget="))
         assertTrue(summary.contains("optimized_safe_budget=170.0"))
     }
 

@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository.servicewrap
 
+import com.nexio.tv.core.stream.AioParserSupport
 import com.nexio.tv.core.stream.AioStrictFileParser
 import com.nexio.tv.core.stream.AioStrictStreamParser
 import com.nexio.tv.core.stream.ParsedStreamInfo
@@ -144,17 +145,27 @@ internal fun stableWrapStreamKey(stream: Stream): String {
 }
 
 internal fun parseFileCandidate(path: String?): ParsedFileCandidate? {
-    val normalized = path?.substringAfterLast('/')?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    val normalizedPath = path?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    val filename = normalizedPath.substringAfterLast('/').trim().takeIf { it.isNotBlank() } ?: return null
+    val folderName = normalizedPath
+        .substringBeforeLast('/', "")
+        .substringAfterLast('/')
+        .trim()
+        .takeIf { it.isNotBlank() }
+    val fileParsed = AioStrictFileParser.parse(filename)
+    val folderParsed = folderName?.let(AioStrictFileParser::parse)
     return ParsedFileCandidate(
-        path = path,
-        filename = normalized,
-        parsed = AioStrictFileParser.parse(normalized)
+        path = normalizedPath,
+        filename = filename,
+        folderName = folderName,
+        parsed = AioParserSupport.mergeParsedFiles(fileParsed, folderParsed) ?: fileParsed
     )
 }
 
 data class ParsedFileCandidate(
     val path: String?,
     val filename: String,
+    val folderName: String? = null,
     val parsed: com.nexio.tv.core.stream.AioStrictParsedFile
 )
 

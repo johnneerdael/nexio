@@ -4,6 +4,7 @@ import com.nexio.tv.domain.model.Stream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DebridAvailabilityResolverTest {
@@ -61,6 +62,37 @@ class DebridAvailabilityResolverTest {
         )
 
         assertNotNull(score)
+    }
+
+    @Test
+    fun `parse file candidate merges filename and folder metadata like main stream parser`() {
+        val parsed = parseFileCandidate(
+            "The.Lord.of.the.Rings.The.Return.of.the.King.2003.Extended.2160p.UHD.BluRay.REMUX/00010.m2ts"
+        )
+
+        assertEquals("00010.m2ts", parsed?.filename)
+        assertEquals(
+            "The.Lord.of.the.Rings.The.Return.of.the.King.2003.Extended.2160p.UHD.BluRay.REMUX",
+            parsed?.folderName
+        )
+        assertEquals("2003", parsed?.parsed?.year)
+        assertEquals("2160p", parsed?.parsed?.resolution)
+    }
+
+    @Test
+    fun `secure wrap candidate score uses parent folder metadata for numeric m2ts files`() {
+        val candidate = buildWrapCandidate(sourceFilename = "The.Lord.of.the.Rings.The.Return.of.the.King.2003.Extended.2160p.UHD.BluRay.REMUX.mkv")
+
+        val score = scoreSecureWrapCandidateFile(
+            filename = "00010.m2ts",
+            fullPath = "The.Lord.of.the.Rings.The.Return.of.the.King.2003.Extended.2160p.UHD.BluRay.REMUX/00010.m2ts",
+            sizeBytes = 120_000_000_000L,
+            candidate = candidate,
+            requestContext = ServiceWrapRequestContext(contentType = "movie", season = null, episode = null)
+        )
+
+        assertNotNull(score)
+        assertTrue(score!! > 1000)
     }
 
     private fun buildWrapCandidate(sourceFilename: String): WrapCandidate {

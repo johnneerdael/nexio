@@ -21,6 +21,7 @@ class ShadowAutoPlayDecisionLoggerTest {
         val selectedParsed = root.getAsJsonObject("selected").getAsJsonObject("parsed")
         assertEquals("RD", selectedParsed.get("serviceId").asString)
         assertEquals("rd_stream.mkv", selectedParsed.get("filename").asString)
+        assertEquals("Example.Release.Folder", selectedParsed.get("folderName").asString)
         assertEquals(42_000_000_000L, selectedParsed.get("sizeBytes").asLong)
         assertEquals(7_200_000L, selectedParsed.get("durationMs").asLong)
         assertEquals("parser", selectedParsed.get("runtimeSource").asString)
@@ -56,6 +57,7 @@ class ShadowAutoPlayDecisionLoggerTest {
             parsed = ShadowParsedStreamFacts(
                 serviceId = "RD",
                 filename = "rd_stream.mkv",
+                folderName = "Example.Release.Folder",
                 sizeBytes = 42_000_000_000L,
                 durationMs = 7_200_000L,
                 runtimeSource = "parser",
