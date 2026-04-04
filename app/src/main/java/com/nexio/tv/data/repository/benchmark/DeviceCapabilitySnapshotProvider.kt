@@ -4,6 +4,7 @@ import android.content.Context
 import android.hardware.display.DisplayManager
 import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
+import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.MediaCodecInfo
 import android.media.MediaCodecList
@@ -38,6 +39,13 @@ internal data class DisplayHdrCaptureResult(
 internal data class AudioCapabilityCaptureResult(
     val capabilities: DeviceAudioOutputCapabilities,
     val evidence: DeviceAudioCapabilityEvidence?
+)
+
+internal data class AudioCapabilityProbeSpec(
+    val bucket: String,
+    val encoding: Int,
+    val channelMask: Int,
+    val sampleRateHz: Int
 )
 
 @Singleton
@@ -169,101 +177,68 @@ internal fun captureAudioOutputCapabilities(
         .setUsage(AudioAttributes.USAGE_MEDIA)
         .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
         .build()
-    val outputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-        .filter { it.isBenchmarkPassthroughDevice() }
-    val routedDevices = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        runCatching { audioManager.getAudioDevicesForAttributes(mediaAttributes) }.getOrDefault(emptyList())
-            .filter { it.isBenchmarkPassthroughDevice() }
+    val directPlaybackProbes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        captureDirectPlaybackProbes(audioManager, mediaAttributes)
     } else {
         emptyList()
     }
-    val prioritizedDevices = if (routedDevices.isNotEmpty()) routedDevices else outputDevices
-    val directProfiles = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        runCatching { audioManager.getDirectProfilesForAttributes(mediaAttributes) }.getOrDefault(emptyList())
-    } else {
-        emptyList()
-    }
-    val deviceEncodings = prioritizedDevices
-        .flatMap { device -> device.encodings.toList() }
-        .toSet()
-    val directProfileEncodings = directProfiles
-        .map { it.format }
-        .toSet()
-    val normalized = DeviceAudioOutputCapabilities(
-        ac3 = buildAudioEncodingSupport(
-            directProfileEncodings = directProfileEncodings,
-            deviceEncodings = deviceEncodings,
-            passthroughEncodings = intArrayOf(C.ENCODING_AC3)
-        ),
-        eac3 = buildAudioEncodingSupport(
-            directProfileEncodings = directProfileEncodings,
-            deviceEncodings = deviceEncodings,
-            passthroughEncodings = intArrayOf(C.ENCODING_E_AC3, C.ENCODING_E_AC3_JOC)
-        ),
-        truehd = buildAudioEncodingSupport(
-            directProfileEncodings = directProfileEncodings,
-            deviceEncodings = deviceEncodings,
-            passthroughEncodings = intArrayOf(C.ENCODING_DOLBY_TRUEHD)
-        ),
-        dts = buildAudioEncodingSupport(
-            directProfileEncodings = directProfileEncodings,
-            deviceEncodings = deviceEncodings,
-            passthroughEncodings = intArrayOf(
-                C.ENCODING_DTS,
-                C.ENCODING_DTS_HD,
-                C.ENCODING_DTS_UHD_P2
-            )
-        ),
-        dtshd = buildAudioEncodingSupport(
-            directProfileEncodings = directProfileEncodings,
-            deviceEncodings = deviceEncodings,
-            passthroughEncodings = intArrayOf(C.ENCODING_DTS_HD, C.ENCODING_DTS_UHD_P2)
-        )
-    )
+    val normalized = buildAudioOutputCapabilitiesFromProbes(directPlaybackProbes)
     return AudioCapabilityCaptureResult(
         capabilities = normalized,
         evidence = DeviceAudioCapabilityEvidence(
             discoveryMode = when {
-                directProfiles.isNotEmpty() -> "direct_profiles"
-                prioritizedDevices.isNotEmpty() -> "device_encodings"
+                directPlaybackProbes.isNotEmpty() -> "direct_playback_support"
                 else -> "none"
             },
-            routedDeviceTypes = routedDevices.map { deviceTypeWireName(it.type) }.distinct(),
-            outputDevices = prioritizedDevices.map { device ->
-                AudioOutputDeviceEvidence(
-                    id = device.id,
-                    type = deviceTypeWireName(device.type),
-                    productName = device.productName?.toString()?.takeIf { it.isNotBlank() },
-                    encodings = device.encodings.map(::audioEncodingWireName).distinct()
-                )
-            },
-            directProfiles = directProfiles.map { profile ->
-                AudioDirectProfileEvidence(
-                    format = audioEncodingWireName(profile.format),
-                    channelMasks = profile.channelMasks.toList(),
-                    sampleRates = profile.sampleRates.toList()
-                )
-            }
+            routedDeviceTypes = emptyList(),
+            outputDevices = emptyList(),
+            directProfiles = emptyList(),
+            directPlaybackProbes = directPlaybackProbes
         )
     )
 }
 
-internal fun buildAudioEncodingSupport(
-    directProfileEncodings: Set<Int>,
-    deviceEncodings: Set<Int>,
-    passthroughEncodings: IntArray
-): AudioEncodingSupport {
-    val supported = passthroughEncodings.any { encoding ->
-        encoding in directProfileEncodings || encoding in deviceEncodings
+@androidx.annotation.RequiresApi(Build.VERSION_CODES.TIRAMISU)
+internal fun captureDirectPlaybackProbes(
+    audioManager: AudioManager,
+    audioAttributes: AudioAttributes
+): List<AudioPlaybackProbeEvidence> {
+    return buildAudioCapabilityProbeSpecs().map { spec ->
+        val audioFormat = AudioFormat.Builder()
+            .setEncoding(spec.encoding)
+            .setChannelMask(spec.channelMask)
+            .setSampleRate(spec.sampleRateHz)
+            .build()
+        val support = runCatching {
+            AudioManager.getDirectPlaybackSupport(audioFormat, audioAttributes)
+        }.getOrDefault(AudioManager.DIRECT_PLAYBACK_NOT_SUPPORTED)
+        AudioPlaybackProbeEvidence(
+            bucket = spec.bucket,
+            format = audioEncodingWireName(spec.encoding),
+            channelMask = spec.channelMask,
+            sampleRateHz = spec.sampleRateHz,
+            supportMode = directPlaybackSupportWireName(support)
+        )
     }
-    val passthroughLikely = if (directProfileEncodings.isNotEmpty()) {
-        passthroughEncodings.any { it in directProfileEncodings }
-    } else {
-        supported
+}
+
+internal fun buildAudioOutputCapabilitiesFromProbes(
+    probes: List<AudioPlaybackProbeEvidence>
+): DeviceAudioOutputCapabilities {
+    fun bucketSupport(bucket: String): AudioEncodingSupport {
+        val relevant = probes.filter { it.bucket == bucket }
+        val passthroughLikely = relevant.any { it.supportMode == DIRECT_PLAYBACK_BITSTREAM_SUPPORTED_WIRE }
+        val supported = passthroughLikely
+        return AudioEncodingSupport(supported = supported, passthroughLikely = passthroughLikely)
     }
-    return AudioEncodingSupport(
-        supported = supported,
-        passthroughLikely = passthroughLikely
+    return DeviceAudioOutputCapabilities(
+        ac3 = bucketSupport("ac3"),
+        eac3 = bucketSupport("eac3"),
+        atmos = bucketSupport("atmos"),
+        truehd = bucketSupport("truehd"),
+        dts = bucketSupport("dts"),
+        dtshd = bucketSupport("dtshd"),
+        dtsx = bucketSupport("dtsx")
     )
 }
 
@@ -344,11 +319,51 @@ internal fun audioEncodingWireName(encoding: Int): String {
         C.ENCODING_DOLBY_TRUEHD -> "truehd"
         C.ENCODING_DTS -> "dts"
         C.ENCODING_DTS_HD -> "dtshd"
-        C.ENCODING_DTS_UHD_P2 -> "dts_uhd_p2"
+        reflectedAudioEncoding("ENCODING_DTS_UHD_P1") -> "dts_uhd_p1"
+        reflectedAudioEncoding("ENCODING_DTS_UHD_P2") -> "dts_uhd_p2"
         C.ENCODING_AC4 -> "ac4"
         else -> "encoding_$encoding"
     }
 }
+
+internal fun directPlaybackSupportWireName(value: Int): String {
+    return when (value) {
+        AudioManager.DIRECT_PLAYBACK_NOT_SUPPORTED -> DIRECT_PLAYBACK_NOT_SUPPORTED_WIRE
+        AudioManager.DIRECT_PLAYBACK_OFFLOAD_SUPPORTED -> DIRECT_PLAYBACK_OFFLOAD_SUPPORTED_WIRE
+        AudioManager.DIRECT_PLAYBACK_OFFLOAD_GAPLESS_SUPPORTED -> DIRECT_PLAYBACK_OFFLOAD_GAPLESS_SUPPORTED_WIRE
+        AudioManager.DIRECT_PLAYBACK_BITSTREAM_SUPPORTED -> DIRECT_PLAYBACK_BITSTREAM_SUPPORTED_WIRE
+        else -> "unknown:$value"
+    }
+}
+
+internal fun buildAudioCapabilityProbeSpecs(): List<AudioCapabilityProbeSpec> {
+    val specs = mutableListOf(
+        AudioCapabilityProbeSpec("ac3", C.ENCODING_AC3, AudioFormat.CHANNEL_OUT_5POINT1, 48_000),
+        AudioCapabilityProbeSpec("eac3", C.ENCODING_E_AC3, AudioFormat.CHANNEL_OUT_5POINT1, 48_000),
+        AudioCapabilityProbeSpec("eac3", C.ENCODING_E_AC3, AudioFormat.CHANNEL_OUT_7POINT1_SURROUND, 48_000),
+        AudioCapabilityProbeSpec("atmos", C.ENCODING_E_AC3_JOC, AudioFormat.CHANNEL_OUT_5POINT1, 48_000),
+        AudioCapabilityProbeSpec("atmos", C.ENCODING_E_AC3_JOC, AudioFormat.CHANNEL_OUT_7POINT1_SURROUND, 48_000),
+        AudioCapabilityProbeSpec("truehd", C.ENCODING_DOLBY_TRUEHD, AudioFormat.CHANNEL_OUT_7POINT1_SURROUND, 48_000),
+        AudioCapabilityProbeSpec("dts", C.ENCODING_DTS, AudioFormat.CHANNEL_OUT_5POINT1, 48_000),
+        AudioCapabilityProbeSpec("dtshd", C.ENCODING_DTS_HD, AudioFormat.CHANNEL_OUT_7POINT1_SURROUND, 48_000)
+    )
+    reflectedAudioEncoding("ENCODING_DTS_UHD_P1")?.let {
+        specs += AudioCapabilityProbeSpec("dtsx", it, AudioFormat.CHANNEL_OUT_7POINT1_SURROUND, 48_000)
+    }
+    reflectedAudioEncoding("ENCODING_DTS_UHD_P2")?.let {
+        specs += AudioCapabilityProbeSpec("dtsx", it, AudioFormat.CHANNEL_OUT_7POINT1_SURROUND, 48_000)
+    }
+    return specs
+}
+
+private fun reflectedAudioEncoding(fieldName: String): Int? {
+    return runCatching { AudioFormat::class.java.getField(fieldName).getInt(null) }.getOrNull()
+}
+
+private const val DIRECT_PLAYBACK_NOT_SUPPORTED_WIRE = "not_supported"
+private const val DIRECT_PLAYBACK_OFFLOAD_SUPPORTED_WIRE = "offload_supported"
+private const val DIRECT_PLAYBACK_OFFLOAD_GAPLESS_SUPPORTED_WIRE = "offload_gapless_supported"
+private const val DIRECT_PLAYBACK_BITSTREAM_SUPPORTED_WIRE = "bitstream_supported"
 
 private val SOFTWARE_CODEC_NAME_PREFIXES = listOf(
     "OMX.google.",

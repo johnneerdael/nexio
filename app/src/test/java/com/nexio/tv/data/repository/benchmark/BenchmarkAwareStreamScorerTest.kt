@@ -899,7 +899,7 @@ class BenchmarkAwareStreamScorerTest {
     }
 
     @Test
-    fun `movie scoring prefers safer transport when score gap is small`() {
+    fun `movie scoring keeps better hdr fit over lower fit candidate even when transport is saturated`() {
         val safeBudgetMbps = 100.0
         val throughputP10Mbps = safeBudgetMbps / 0.85
         val benchmark = benchmarkResult(
@@ -936,8 +936,165 @@ class BenchmarkAwareStreamScorerTest {
             activeTransportMode = DebridBenchmarkTransportMode.OPTIMIZED
         )
 
-        assertEquals("safer_bluray", event.selected?.streamKey)
-        assertEquals(listOf("safer_bluray", "risky_remux"), event.winners.map { it.streamKey })
+        assertEquals("risky_remux", event.selected?.streamKey)
+        assertEquals(listOf("risky_remux", "safer_bluray"), event.winners.map { it.streamKey })
+    }
+
+    @Test
+    fun `movie saturated headroom prefers supported hdr10 atmos over unsupported truehd remux`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            optimizedP10Mbps = 750.0,
+            directP10Mbps = 600.0,
+            device = deviceSnapshot(
+                displayHdrTypes = setOf(DeviceHdrType.HDR10, DeviceHdrType.HDR10_PLUS),
+                atmosSupported = true,
+                atmosPassthrough = true,
+                truehdSupported = false,
+                truehdPassthrough = false,
+                eac3Supported = true,
+                eac3Passthrough = true,
+                ac3Supported = true,
+                ac3Passthrough = true,
+                dtsSupported = false,
+                dtsPassthrough = false,
+                dtshdSupported = false,
+                dtshdPassthrough = false
+            )
+        )
+        val event = scorer.score(
+            request = request(runtimeMinutes = 180),
+            streams = listOf(
+                streamCard(
+                    streamKey = "nitro_truehd",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    encode = "HEVC",
+                    sizeBytes = 113_712_493_229L,
+                    durationMs = 10740_000L,
+                    visualTags = listOf("HDR"),
+                    audioTags = listOf("TrueHD")
+                ),
+                streamCard(
+                    streamKey = "hdr10_atmos",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    encode = null,
+                    filename = "The Lord of the Rings - The Two Towers 2002 Extended UHD BluRay HDR10 10Bit 2160p Dts-HDMa7.1 HEVC-d3g.mkv",
+                    sizeBytes = 139_763_188_653L,
+                    durationMs = 10740_000L,
+                    visualTags = listOf("HDR10", "DV"),
+                    audioTags = listOf("Atmos", "TrueHD")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark),
+            activeTransportMode = DebridBenchmarkTransportMode.OPTIMIZED
+        )
+        assertEquals("hdr10_atmos", event.selected?.streamKey)
+    }
+
+    @Test
+    fun `movie saturated headroom prefers hdr10 atmos over unsupported dts hd remux`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            optimizedP10Mbps = 750.0,
+            directP10Mbps = 600.0,
+            device = deviceSnapshot(
+                displayHdrTypes = setOf(DeviceHdrType.HDR10, DeviceHdrType.HDR10_PLUS),
+                atmosSupported = true,
+                atmosPassthrough = true,
+                truehdSupported = false,
+                truehdPassthrough = false,
+                eac3Supported = true,
+                eac3Passthrough = true,
+                ac3Supported = true,
+                ac3Passthrough = true,
+                dtsSupported = false,
+                dtsPassthrough = false,
+                dtshdSupported = false,
+                dtshdPassthrough = false
+            )
+        )
+        val event = scorer.score(
+            request = request(runtimeMinutes = 169),
+            streams = listOf(
+                streamCard(
+                    streamKey = "sgf_dtshd",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    encode = "HEVC",
+                    sizeBytes = 83_986_930_257L,
+                    durationMs = 10140_000L,
+                    visualTags = listOf("HDR", "DV"),
+                    audioTags = listOf("DTS-HD MA")
+                ),
+                streamCard(
+                    streamKey = "kc_hdr10_atmos",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    encode = "HEVC",
+                    sizeBytes = 95_563_022_336L,
+                    durationMs = 10140_000L,
+                    visualTags = listOf("HDR10", "DV"),
+                    audioTags = listOf("Atmos", "DTS-HD", "TrueHD")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark),
+            activeTransportMode = DebridBenchmarkTransportMode.OPTIMIZED
+        )
+        assertEquals("kc_hdr10_atmos", event.selected?.streamKey)
+    }
+
+    @Test
+    fun `movie saturated headroom prefers hdr10 atmos over unsupported truehd on return of the king`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            optimizedP10Mbps = 750.0,
+            directP10Mbps = 600.0,
+            device = deviceSnapshot(
+                displayHdrTypes = setOf(DeviceHdrType.HDR10, DeviceHdrType.HDR10_PLUS),
+                atmosSupported = true,
+                atmosPassthrough = true,
+                truehdSupported = false,
+                truehdPassthrough = false,
+                eac3Supported = true,
+                eac3Passthrough = true,
+                ac3Supported = true,
+                ac3Passthrough = true,
+                dtsSupported = false,
+                dtsPassthrough = false,
+                dtshdSupported = false,
+                dtshdPassthrough = false
+            )
+        )
+        val event = scorer.score(
+            request = request(runtimeMinutes = 201),
+            streams = listOf(
+                streamCard(
+                    streamKey = "nitro_truehd_rok",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    encode = "HEVC",
+                    sizeBytes = 133_604_792_514L,
+                    durationMs = 12060_000L,
+                    visualTags = listOf("HDR"),
+                    audioTags = listOf("TrueHD")
+                ),
+                streamCard(
+                    streamKey = "hdr10_atmos_rok",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    encode = "HEVC",
+                    sizeBytes = 136_695_949_310L,
+                    durationMs = 12060_000L,
+                    visualTags = listOf("HDR10", "DV"),
+                    audioTags = listOf("Atmos", "TrueHD")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark),
+            activeTransportMode = DebridBenchmarkTransportMode.OPTIMIZED
+        )
+        assertEquals("hdr10_atmos_rok", event.selected?.streamKey)
     }
 
     @Test
@@ -1066,7 +1223,7 @@ class BenchmarkAwareStreamScorerTest {
         filename: String = "$streamKey.mkv",
         resolution: String = "2160p",
         quality: String = "BluRay Remux",
-        encode: String = "HEVC",
+        encode: String? = "HEVC",
         sizeBytes: Long = gib(42.0),
         durationMs: Long? = 120L * 60_000L,
         visualTags: List<String> = listOf("DV"),
@@ -1240,7 +1397,9 @@ class BenchmarkAwareStreamScorerTest {
         dtsSupported: Boolean = true,
         dtsPassthrough: Boolean = true,
         dtshdSupported: Boolean = true,
-        dtshdPassthrough: Boolean = true
+        dtshdPassthrough: Boolean = true,
+        atmosSupported: Boolean? = null,
+        atmosPassthrough: Boolean? = null
     ): DeviceCapabilitySnapshot {
         return DeviceCapabilitySnapshot(
             model = "Shield",
@@ -1256,6 +1415,10 @@ class BenchmarkAwareStreamScorerTest {
             audioOutput = DeviceAudioOutputCapabilities(
                 ac3 = AudioEncodingSupport(ac3Supported, ac3Passthrough),
                 eac3 = AudioEncodingSupport(eac3Supported, eac3Passthrough),
+                atmos = AudioEncodingSupport(
+                    atmosSupported ?: (eac3Supported || truehdSupported),
+                    atmosPassthrough ?: (eac3Passthrough || truehdPassthrough)
+                ),
                 truehd = AudioEncodingSupport(truehdSupported, truehdPassthrough),
                 dts = AudioEncodingSupport(dtsSupported, dtsPassthrough),
                 dtshd = AudioEncodingSupport(dtshdSupported, dtshdPassthrough)

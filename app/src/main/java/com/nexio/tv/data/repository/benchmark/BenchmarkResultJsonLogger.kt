@@ -296,9 +296,11 @@ internal fun DeviceCapabilitySnapshot.toJsonObject(): JsonObject {
         add("audioOutput", JsonObject().apply {
             add("ac3", audioOutput.ac3.toJsonObject())
             add("eac3", audioOutput.eac3.toJsonObject())
+            add("atmos", audioOutput.atmos.toJsonObject())
             add("truehd", audioOutput.truehd.toJsonObject())
             add("dts", audioOutput.dts.toJsonObject())
             add("dtshd", audioOutput.dtshd.toJsonObject())
+            add("dtsx", audioOutput.dtsx.toJsonObject())
         })
         evidence?.let { add("evidence", it.toJsonObject()) }
         addProperty("capturedAtMs", capturedAtMs)
@@ -343,6 +345,17 @@ private fun DeviceCapabilityEvidence.toJsonObject(): JsonObject {
                             add("sampleRates", JsonArray().apply {
                                 profile.sampleRates.forEach(::add)
                             })
+                        })
+                    }
+                })
+                add("directPlaybackProbes", JsonArray().apply {
+                    audio.directPlaybackProbes.forEach { probe ->
+                        add(JsonObject().apply {
+                            addProperty("bucket", probe.bucket)
+                            addProperty("format", probe.format)
+                            addProperty("channelMask", probe.channelMask)
+                            addProperty("sampleRateHz", probe.sampleRateHz)
+                            addProperty("supportMode", probe.supportMode)
                         })
                     }
                 })
