@@ -37,6 +37,7 @@ enum class ShadowHdrTier {
     DOLBY_VISION,
     HDR10_PLUS,
     HDR10,
+    HLG,
     SDR
 }
 
@@ -235,6 +236,7 @@ data class BenchmarkAwareStreamScoringConfig(
                         ShadowHdrTier.DOLBY_VISION to 16,
                         ShadowHdrTier.HDR10_PLUS to 12,
                         ShadowHdrTier.HDR10 to 7,
+                        ShadowHdrTier.HLG to 4,
                         ShadowHdrTier.SDR to 0
                     ),
                     audio = mapOf(
