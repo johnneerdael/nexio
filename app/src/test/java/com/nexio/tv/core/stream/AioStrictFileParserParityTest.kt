@@ -46,4 +46,13 @@ class AioStrictFileParserParityTest {
         assertEquals(emptyList<Int>(), parsed.episodes)
         assertEquals(true, parsed.seasonPack)
     }
+
+    @Test
+    fun `strict file parser extracts hlg visual tag`() {
+        val parsed = AioStrictFileParser.parse(
+            "Movie.Title.2023.2160p.WEB-DL.HEVC.HLG.DDP5.1-GROUP.mkv"
+        )
+
+        assertTrue(parsed.visualTags.contains("HLG"))
+    }
 }

@@ -626,6 +626,7 @@ class BenchmarkAwareStreamScorer internal constructor(
             ShadowHdrTier.DOLBY_VISION -> if (DeviceHdrType.DOLBY_VISION in hdrTypes) ShadowSupportLevel.FULL else ShadowSupportLevel.UNSUPPORTED
             ShadowHdrTier.HDR10_PLUS -> if (DeviceHdrType.HDR10_PLUS in hdrTypes) ShadowSupportLevel.FULL else if (DeviceHdrType.HDR10 in hdrTypes) ShadowSupportLevel.PARTIAL else ShadowSupportLevel.UNSUPPORTED
             ShadowHdrTier.HDR10 -> if (DeviceHdrType.HDR10 in hdrTypes || DeviceHdrType.HDR10_PLUS in hdrTypes) ShadowSupportLevel.FULL else ShadowSupportLevel.UNSUPPORTED
+            ShadowHdrTier.HLG -> if (DeviceHdrType.HLG in hdrTypes) ShadowSupportLevel.FULL else ShadowSupportLevel.UNSUPPORTED
             ShadowHdrTier.SDR -> ShadowSupportLevel.FULL
         }
     }
@@ -1135,6 +1136,7 @@ private fun resolveHdrTier(tags: List<String>): ShadowHdrTier {
         normalized.any { it == "DV" || it.contains("DOLBY VISION") || it.contains("DOVI") } -> ShadowHdrTier.DOLBY_VISION
         normalized.any { it == "HDR10+" } -> ShadowHdrTier.HDR10_PLUS
         normalized.any { it == "HDR10" || it == "HDR" } -> ShadowHdrTier.HDR10
+        normalized.any { it == "HLG" } -> ShadowHdrTier.HLG
         else -> ShadowHdrTier.SDR
     }
 }
@@ -1307,7 +1309,7 @@ private val SOFTWARE_4K_CODEC_TIERS = setOf(
     ShadowVideoCodecTier.HEVC_SW
 )
 
-private val HDR_VISUAL_TAGS = setOf("DV", "HDR", "HDR10", "HDR10+")
+private val HDR_VISUAL_TAGS = setOf("DV", "HDR", "HDR10", "HDR10+", "HLG")
 
 private const val MOVIE_POOL_PERCENTILE = 0.30
 private const val MOVIE_POOL_MIN_CANDIDATES = 3

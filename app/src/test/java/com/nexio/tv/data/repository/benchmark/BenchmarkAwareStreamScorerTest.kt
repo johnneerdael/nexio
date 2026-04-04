@@ -750,6 +750,92 @@ class BenchmarkAwareStreamScorerTest {
     }
 
     @Test
+    fun `supported hlg ranks above sdr but below hdr10`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            device = deviceSnapshot(displayHdrTypes = setOf(DeviceHdrType.HLG, DeviceHdrType.HDR10))
+        )
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "remux_hlg",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    sizeBytes = gib(42.0),
+                    visualTags = listOf("HLG"),
+                    audioTags = listOf("Atmos", "TrueHD")
+                ),
+                streamCard(
+                    streamKey = "remux_hdr10",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    sizeBytes = gib(42.0),
+                    visualTags = listOf("HDR10"),
+                    audioTags = listOf("Atmos", "TrueHD")
+                ),
+                streamCard(
+                    streamKey = "remux_sdr",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    sizeBytes = gib(42.0),
+                    visualTags = emptyList(),
+                    audioTags = listOf("Atmos", "TrueHD")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark)
+        )
+
+        val hlg = event.winners.single { it.streamKey == "remux_hlg" }
+        val hdr10 = event.winners.single { it.streamKey == "remux_hdr10" }
+        val sdr = event.winners.single { it.streamKey == "remux_sdr" }
+        assertEquals("hlg", hlg.breakdown.content.hdrTier)
+        assertEquals("full", hlg.breakdown.content.hdrSupportTier)
+        assertTrue(hlg.breakdown.content.hdrPoints > sdr.breakdown.content.hdrPoints)
+        assertTrue(hdr10.breakdown.content.hdrPoints > hlg.breakdown.content.hdrPoints)
+        assertTrue(hlg.contentQualityScore > sdr.contentQualityScore)
+        assertTrue(hdr10.contentQualityScore > hlg.contentQualityScore)
+    }
+
+    @Test
+    fun `unsupported hlg scores like sdr`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            device = deviceSnapshot(displayHdrTypes = setOf(DeviceHdrType.HDR10))
+        )
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "remux_hlg",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    sizeBytes = gib(42.0),
+                    visualTags = listOf("HLG"),
+                    audioTags = listOf("Atmos", "TrueHD")
+                ),
+                streamCard(
+                    streamKey = "remux_sdr",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    sizeBytes = gib(42.0),
+                    visualTags = emptyList(),
+                    audioTags = listOf("Atmos", "TrueHD")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark)
+        )
+
+        val hlg = event.winners.single { it.streamKey == "remux_hlg" }
+        val sdr = event.winners.single { it.streamKey == "remux_sdr" }
+        assertEquals("hlg", hlg.breakdown.content.hdrTier)
+        assertEquals("unsupported", hlg.breakdown.content.hdrSupportTier)
+        assertEquals(0, hlg.breakdown.content.hdrPoints)
+        assertEquals(sdr.contentQualityScore, hlg.contentQualityScore)
+        assertEquals(sdr.finalScore, hlg.finalScore)
+    }
+
+    @Test
     fun `dolby vision still scores above hdr10 when display advertises dv`() {
         val benchmark = benchmarkResult(
             provider = DebridBenchmarkProvider.REAL_DEBRID,
