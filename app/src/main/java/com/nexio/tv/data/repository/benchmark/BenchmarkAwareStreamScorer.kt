@@ -563,7 +563,7 @@ class BenchmarkAwareStreamScorer internal constructor(
             ShadowHdrScoringPolicy(
                 effectiveHdrTier = ShadowHdrTier.SDR,
                 hdrSupportTier = ShadowSupportLevel.FULL,
-                additionalPenalty = 12
+                additionalPenalty = -12
             )
         } else {
             ShadowHdrScoringPolicy(
