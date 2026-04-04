@@ -129,6 +129,50 @@ class ModernHomeTrailerBehaviorTest {
     }
 
     @Test
+    fun `focused poster trailer counts as active time only when unmuted`() {
+        assertTrue(
+            shouldTreatFocusedPosterTrailerPlaybackAsActiveTime(
+                hasActivePlayback = true,
+                trailerMuted = false
+            )
+        )
+        assertFalse(
+            shouldTreatFocusedPosterTrailerPlaybackAsActiveTime(
+                hasActivePlayback = true,
+                trailerMuted = true
+            )
+        )
+        assertFalse(
+            shouldTreatFocusedPosterTrailerPlaybackAsActiveTime(
+                hasActivePlayback = false,
+                trailerMuted = false
+            )
+        )
+    }
+
+    @Test
+    fun `modern home trailer counts as active time only when internal playback is unmuted`() {
+        assertTrue(
+            shouldTreatModernHomeTrailerPlaybackAsActiveTime(
+                internalHomeTrailerPlaying = true,
+                trailerMuted = false
+            )
+        )
+        assertFalse(
+            shouldTreatModernHomeTrailerPlaybackAsActiveTime(
+                internalHomeTrailerPlaying = true,
+                trailerMuted = true
+            )
+        )
+        assertFalse(
+            shouldTreatModernHomeTrailerPlaybackAsActiveTime(
+                internalHomeTrailerPlaying = false,
+                trailerMuted = false
+            )
+        )
+    }
+
+    @Test
     fun `expanded card trailer target falls back to hero media when expanded playback is unavailable`() {
         assertEquals(
             FocusedPosterTrailerPlaybackTarget.HERO_MEDIA,

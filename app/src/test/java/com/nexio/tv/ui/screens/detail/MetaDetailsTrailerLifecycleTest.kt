@@ -154,4 +154,30 @@ class MetaDetailsTrailerLifecycleTest {
             )
         )
     }
+
+    @Test
+    fun `manual detail trailer playback counts as active time`() {
+        assertTrue(
+            shouldTreatDetailTrailerPlaybackAsActiveTime(
+                isTrailerPlaying = true,
+                showTrailerControls = true
+            )
+        )
+    }
+
+    @Test
+    fun `auto muted or non playing detail trailer does not count as active time`() {
+        assertFalse(
+            shouldTreatDetailTrailerPlaybackAsActiveTime(
+                isTrailerPlaying = true,
+                showTrailerControls = false
+            )
+        )
+        assertFalse(
+            shouldTreatDetailTrailerPlaybackAsActiveTime(
+                isTrailerPlaying = false,
+                showTrailerControls = true
+            )
+        )
+    }
 }

@@ -328,8 +328,13 @@ fun MetaDetailsScreen(
         }
     }
 
-    LaunchedEffect(detailTrailerPlaybackActive) {
-        onTrailerPlaybackActiveChanged(detailTrailerPlaybackActive)
+    LaunchedEffect(uiState.isTrailerPlaying, uiState.showTrailerControls) {
+        onTrailerPlaybackActiveChanged(
+            shouldTreatDetailTrailerPlaybackAsActiveTime(
+                isTrailerPlaying = uiState.isTrailerPlaying,
+                showTrailerControls = uiState.showTrailerControls
+            )
+        )
     }
 
     LaunchedEffect(uiState.isTrailerLoading, uiState.isTrailerPlaying) {

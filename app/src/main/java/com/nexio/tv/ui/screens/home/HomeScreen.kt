@@ -458,7 +458,10 @@ fun HomeScreen(
             onModernHomeTrailerPlaybackStarted()
         }
         onModernHomeTrailerPlaybackActiveChanged(
-            activePosterTrailerPlayback != null || pendingPosterTrailerResolution != null
+            shouldTreatFocusedPosterTrailerPlaybackAsActiveTime(
+                hasActivePlayback = activePosterTrailerPlayback != null,
+                trailerMuted = uiState.focusedPosterBackdropTrailerMuted
+            )
         )
     }
     LaunchedEffect(uiState.homeLayout, activePosterTrailerPlayback != null, pendingPosterTrailerResolution != null) {

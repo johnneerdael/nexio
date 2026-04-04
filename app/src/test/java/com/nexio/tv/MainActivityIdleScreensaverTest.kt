@@ -59,6 +59,18 @@ class MainActivityIdleScreensaverTest {
     }
 
     @Test
+    fun `detail route stays eligible when trailer playback is muted or otherwise not active time`() {
+        assertTrue(
+            isIdleScreensaverEligibleRoute(
+                currentRoute = Screen.Detail.route,
+                playbackIdleSnapshot = PlaybackIdleGateSnapshot(),
+                inAppTrailerPlaybackActive = false,
+                benchmarkActive = false
+            )
+        )
+    }
+
+    @Test
     fun `home route remains eligible without active in app trailer`() {
         assertTrue(
             isIdleScreensaverEligibleRoute(
