@@ -1,87 +1,175 @@
-# Nexio
+# NEXIO
 
-Nexio is an Android TV media player built around the Stremio addon ecosystem, a synced web account portal, and a playback stack tuned for premium TV devices.
+NEXIO is an Android TV and Fire TV streaming app built for people who want a setup that feels premium in the living room, not just functional on paper. It combines a polished TV experience, serious playback intelligence, account-backed integrations, and a real companion portal so your setup can be faster, cleaner, and more reliable than the usual "pick a stream and hope" workflow.
 
-## Highlights
+## Why people choose NEXIO
 
-- Android TV and Fire OS focused UX, Support for Android Streaming Devices
-- Account-based addon, integration and catalog sync through nexioapp.org
-- Native Trakt integration for auth, scrobble, check-in, and account-managed catalogs
-- Native MDBList integration for ratings and list-backed catalogs
-- TMDB metadata integration with shared account configuration
-- Direct RatingPostersDB and Top-Posters integrations for custom movie posters
-- Google Gemini integration for realtime subtitle translation
-- Custom Formatter with feature parity against the excellent parser/formatter from @viren070
-- Advanced Media3-based playback pipeline with Dolby Vision work and Fire OS compatibility improvements
-- Custom FFmpeg build included for AC-4 and VC-1 software decoding
-- In-app updater backed by GitHub Releases
+NEXIO is designed for users who care about more than just opening a title and scrolling through a messy stream list.
 
-## Project Structure
+It is built for:
 
-- `app/`: Android TV application
-- `nexio-web/`: private git submodule for the web portal and landing site
-- `supabase/`: schema, functions, and setup SQL
-- `docs/`: setup guides and integration notes
-- `media/`: local Media3 fork and playback libraries
+- **lean-back playback** with less manual stream picking
+- **high-quality debrid setups** that need real tuning instead of guesswork
+- **home theater users** who care about HDR, passthrough, and device-specific behavior
+- **Trakt-heavy workflows** with real Continue Watching, Up Next, and list depth
+- **people who want one account-backed ecosystem** instead of scattered settings across devices and addons
 
-## Clone
+## What makes NEXIO different
 
-Clone with submodules enabled:
+### Playback intelligence instead of blind stream selection
+NEXIO can go beyond manual stream picking with **Deterministic Autoplay**, benchmark-aware scoring, and device-aware playback decisions.
 
-```bash
-git clone --recurse-submodules https://github.com/johnneerdael/nexio.git
-cd nexio
-git submodule update --init --recursive
-```
+That means playback can reflect:
 
-`nexio-web/` is a private submodule, so GitHub access to `https://github.com/johnneerdael/nexio-web` is required when initializing submodules.
+- your measured network profile
+- your device decode capabilities
+- HDR compatibility
+- audio support and passthrough likelihood
+- transport stability and seek behavior
+- stream realism and quality signals
 
-## Android Development
+This is how NEXIO gets closer to a true *pick-and-play* experience.
 
-Requirements:
+### Real debrid workflows, not just stored credentials
+NEXIO supports meaningful debrid behavior with:
 
-- Android Studio
-- JDK 11+
-- Android SDK
+- **Real-Debrid**
+- **Premiumize**
+- **TorBox**
+- **EasyDebrid**
 
-Build:
+These integrations power real product behavior such as:
 
-```bash
-./gradlew :app:assembleDebug
-```
+- **Service Wrap**
+- cached torrent validation
+- direct playback link resolution
+- debrid-aware library behavior
+- benchmark-driven playback decisions
 
-Install on a connected device:
+### Benchmarking and transport tuning built into the app
+NEXIO includes one of its strongest differentiators for serious playback users:
 
-```bash
-./gradlew :app:installDebug
-```
+- **Config Benchmark** for connection and chunk-size profiles
+- **Benchmark** for Direct vs Optimized transport comparison
+- **parallel connections** and **chunk-size tuning**
+- **disk-backed VOD cache**
+- **stream reuse / last-link cache**
+- **buffering and transport diagnostics**
 
-## Web Portal
+For large files, remux playback, and device-specific tuning, this matters a lot.
 
-The web portal lives in the private `nexio-web/` submodule and is a Nuxt server app, not a static site.
+### Smarter stream cleanup before playback
+NEXIO works hard to clean up messy addon output so the app feels usable instead of chaotic.
 
-Build:
+That includes:
 
-```bash
-cd nexio-web
-npm install
-npm run build
-```
+- grouping streams across addons
+- deduplicating grouped streams
+- cleaner uniform stream formatting
+- wrong-episode filtering
+- wrong-movie-year filtering
+- parser-backed stream metadata rendering
+- optional WEB-DL Dolby Vision filtering when appropriate
 
-## Supabase
+### Dolby Vision fallback safety in autoplay
+NEXIO includes **DV-aware autoplay fallback logic** for problematic WEB-DL Dolby Vision scenarios.
 
-Clean-install schema and setup documentation:
+That means deterministic autoplay can keep a premium DV candidate ranked, probe it before final handoff, and fall back to a safer non-DV stream when the detected DV profile would create a bad playback experience on a non-DV display.
 
-- `supabase/account_settings_sync.sql`
-- `supabase/tmdb_secret_upgrade_patch.sql`
-- `docs/supabase-settings-sync-guide.md`
+This is the kind of real-world protection that usually does **not** exist in typical Android TV media hubs.
 
-## Releases
+### Advanced playback and audio-path work
+NEXIO includes enthusiast-grade playback features that go far beyond basic Android TV defaults.
 
-App updates are resolved from GitHub Releases for this repository:
+Highlights include:
 
-- `https://github.com/johnneerdael/nexio/releases`
+- **DV7 to DV8.1 conversion**
+- HDR-aware playback decisions
+- frame-rate matching
+- resolution matching
+- tunneled playback support
+- a custom **Kodi-inspired IEC packer / native audio sink path**
+- AC3 / E-AC3 / DTS / DTS-HD / DTS:X family passthrough work
+- DTS-HD core fallback
+- audio delay supervision for affected firmware
+
+Important caveat: **TrueHD should not be treated as fully reliable or production-stable today.**
+
+### Deep Trakt integration
+NEXIO treats Trakt as a real system layer, not a decorative add-on.
+
+That includes:
+
+- device authentication
+- Continue Watching
+- Up Next behavior
+- watch progress sync
+- scrobbling
+- check-in
+- watchlist and list workflows
+- trending, popular, recommended, and calendar rails
+- disk-backed startup behavior for heavy Trakt experiences
+
+### Metadata, posters, and discovery that feel premium
+NEXIO goes well beyond raw addon metadata with support for:
+
+- **TMDB** enrichment
+- **MDBList** ratings and lists
+- **OMDb / IMDb episode ratings**
+- **RPDB** and **TOP Posters**
+- trailer-first browsing
+- authenticated **YouTube Trailer Login**
+- trailer screensaver and ambient browsing flows
+
+### A real account portal and cross-device control plane
+NEXIO is not just a local TV app.
+
+It also includes an account system and companion portal for:
+
+- QR-based TV sign-in
+- linked-device flows
+- synced integration settings
+- addon management
+- catalog ordering and visibility
+- formatter selection
+- secure secret handling
+- migration and import workflows
+
+## Best first steps
+
+If you want the fastest way to understand what makes NEXIO work best in practice, start here:
+
+- **Creator best-practices setup guide:** https://johnneerdael.github.io/nexio/start-here/
+- **Full features overview:** https://johnneerdael.github.io/nexio/features/
+- **Latest releases:** https://github.com/johnneerdael/nexio/releases
+
+## Why the setup guide matters
+
+NEXIO is at its best when you combine:
+
+- one connected debrid provider
+- TMDB enrichment
+- Trakt sign-in
+- benchmark-driven transport tuning
+- Service Wrap
+- Deterministic Autoplay
+
+The creator guide walks beginners through that exact order so the app feels right much faster.
+
+## Bottom line
+
+NEXIO is built for users who want a modern TV experience with:
+
+- less menu friction
+- better autoplay decisions
+- stronger debrid workflows
+- better metadata and trailers
+- deeper Trakt integration
+- more serious playback tuning
+- more control over how the app actually behaves in the living room
+
+If that is what you want, start with the setup guide above and then explore the full features overview.
 
 ## Legal
 
-Nexio is a client application. It does not host or distribute media content. Media access depends on user-installed addons, services, and sources the user is authorized to use.
+NEXIO is a client application. It does not host or distribute media content. Media access depends on user-installed addons, services, and sources the user is authorized to use.
