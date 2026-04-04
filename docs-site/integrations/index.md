@@ -23,6 +23,6 @@ If a connected service stops showing up, move to [Troubleshooting](/troubleshoot
 
 ## Related guides
 
-- [Recommended Setup](/start-here/recommended-setup)
+- [Recommended Setup](/start-here/)
 - [Troubleshooting](/troubleshooting/)
 - [Advanced](/advanced/)

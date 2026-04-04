@@ -11,8 +11,8 @@ Keep service credentials in the account flow, not in notes or screenshots. Nexio
 - Use the TV app only for the QR sign-in and active-device account check.
 
 ## Related guides
-- [Security and Data](../start-here/security-and-data.md)
-- [Account and Sign In](../start-here/account-and-sign-in.md)
-- [Recommended Setup](../start-here/recommended-setup.md)
+- [Security and Data](../start-here/.md)
+- [Account and Sign In](../start-here/.md)
+- [Recommended Setup](../start-here/.md)
 - [Integrations](./admin-workspaces/integrations.md)
 - [Deployment](../dev/deployment.md)

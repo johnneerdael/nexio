@@ -58,7 +58,7 @@ If the rows are in the right order but the cards still feel hard to read, move t
 
 ## Related guides
 
-- [Recommended Setup](/start-here/recommended-setup)
+- [Recommended Setup](/start-here/)
 - [Home and Continue Watching](/watch/home-and-continue-watching)
 - [Universal Formatter](/customize/universal-formatter)
 - [Troubleshooting](/troubleshooting/)

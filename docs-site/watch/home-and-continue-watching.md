@@ -13,8 +13,8 @@ Home is the main browsing surface in Nexio. This guide explains how it is assemb
 
 - `Settings > Layout` controls the Home style, hero section, and hero catalog selection.
 - `Settings > Integration > Trakt` controls sign-in, the continue-watching window, and whether unaired next-up items are included.
-- [Recommended Setup](/start-here/recommended-setup) is the right first stop when Home still looks like a first-login state.
-- [First-run Sync and Cache](/start-here/first-run-sync-and-cache) explains why rows can appear in phases and why later launches usually look fuller.
+- [Recommended Setup](/start-here/) is the right first stop when Home still looks like a first-login state.
+- [First-run Sync and Cache](/start-here/) explains why rows can appear in phases and why later launches usually look fuller.
 - [Catalog Views and Personalization](/customize/catalog-views-and-personalization) covers catalog-backed rails, row order, and the account-level shape of Home.
 - [Integrations](/integrations/) covers the account-backed services that feed Home once setup is finished.
 

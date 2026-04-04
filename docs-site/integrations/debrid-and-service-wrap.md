@@ -42,7 +42,7 @@ Service Wrap is Nexio's account-level playback layer for supported debrid provid
 
 ## Related guides
 
-- [Recommended Setup](/start-here/recommended-setup)
+- [Recommended Setup](/start-here/)
 - [Library Integration](/integrations/library-integration)
 - [Playback](/playback/)
 - [Troubleshooting](/troubleshooting/)

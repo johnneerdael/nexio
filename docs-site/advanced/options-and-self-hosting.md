@@ -119,5 +119,5 @@ If you do not need fallback detail or self-hosting detail, stop with the main gu
 
 - [Trailers and Recaps](/watch/trailers-and-recaps)
 - [Ratings and Metadata](/integrations/ratings-and-metadata)
-- [Recommended Setup](/start-here/recommended-setup)
+- [Recommended Setup](/start-here/)
 - [Troubleshooting](/troubleshooting/)

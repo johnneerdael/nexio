@@ -50,6 +50,6 @@ If the default Universal layout is close but not quite right, use [Formatter Get
 
 ## Related guides
 
-- [Recommended Setup](/start-here/recommended-setup)
+- [Recommended Setup](/start-here/)
 - [Catalog Views and Personalization](/customize/catalog-views-and-personalization)
 - [Troubleshooting](/troubleshooting/)
