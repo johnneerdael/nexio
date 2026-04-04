@@ -516,7 +516,7 @@ def require_session(request: Request) -> None:
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
-    return TEMPLATES.TemplateResponse("login.html", {"request": request, "error": None})
+    return TEMPLATES.TemplateResponse(request, "login.html", {"error": None})
 
 
 @app.post("/login", response_class=HTMLResponse)
@@ -527,7 +527,7 @@ async def login_submit(request: Request):
     if secrets.compare_digest(username, ADMIN_USERNAME) and secrets.compare_digest(password, ADMIN_PASSWORD):
         request.session["user"] = ADMIN_USERNAME
         return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
-    return TEMPLATES.TemplateResponse("login.html", {"request": request, "error": "Invalid credentials"}, status_code=401)
+    return TEMPLATES.TemplateResponse(request, "login.html", {"error": "Invalid credentials"}, status_code=401)
 
 
 @app.post("/logout")
@@ -568,7 +568,6 @@ def dashboard(
     top_provider = provider_counts.most_common(1)[0][0] if provider_counts else "—"
 
     context = {
-        "request": request,
         "rows": rows,
         "total": total,
         "visible_total": len(filtered_events),
@@ -593,7 +592,7 @@ def dashboard(
             "transports": sorted({event["selected"]["transport"] for event in events if event.get("selected")}),
         },
     }
-    return TEMPLATES.TemplateResponse("dashboard.html", context)
+    return TEMPLATES.TemplateResponse(request, "dashboard.html", context)
 
 
 @app.get("/events/{event_id}", response_class=HTMLResponse)
@@ -604,7 +603,7 @@ def event_detail(request: Request, event_id: int):
     if row is None:
         raise HTTPException(status_code=404, detail="Not found")
     event = build_event_view(dict(row))
-    return TEMPLATES.TemplateResponse("event_detail.html", {"request": request, "event": event})
+    return TEMPLATES.TemplateResponse(request, "event_detail.html", {"event": event})
 
 
 @app.post("/admin/clear")
