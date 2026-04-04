@@ -526,6 +526,10 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
         HomeViewModel.TAG,
         "Post-startup refresh pipeline end activeCatalogItems=${activeCatalogItemKeys.size} activeContinueWatching=${activeContinueWatchingItemKeys.size}"
     )
+    runCatching { warmContinueWatchingRuntimeIfNeededPipeline() }
+        .onFailure { error ->
+            Log.w(HomeViewModel.TAG, "Failed continue watching runtime warmup", error)
+        }
     startupRefreshPending = false
 }
 

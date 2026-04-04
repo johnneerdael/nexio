@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -20,6 +21,8 @@ import com.nexio.tv.ui.screens.AndroidTvFeedBrowserScreen
 import com.nexio.tv.ui.screens.detail.MetaDetailsScreen
 import com.nexio.tv.ui.screens.home.HomeScreen
 import com.nexio.tv.ui.screens.home.HomeViewModel
+import com.nexio.tv.ui.screens.home.resolveContinueWatchingRuntimeMinutes
+import com.nexio.tv.ui.screens.home.withHydratedRuntimeMinutes
 import com.nexio.tv.ui.screens.addon.AddonManagerScreen
 import com.nexio.tv.ui.screens.addon.CatalogOrderScreen
 import com.nexio.tv.ui.screens.library.LibraryScreen
@@ -38,6 +41,7 @@ import com.nexio.tv.ui.screens.settings.YouTubeTrailerLoginScreen
 import com.nexio.tv.ui.screens.stream.StreamScreen
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.account.AuthSignInScreen
+import kotlinx.coroutines.launch
 import com.nexio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nexio.tv.ui.screens.cast.CastDetailScreen
 import com.nexio.tv.ui.screens.organization.OrganizationDetailScreen
@@ -139,6 +143,7 @@ fun NexioNavHost(
         composable(Screen.Home.route) {
             val homeViewModel: HomeViewModel = hiltViewModel()
             val homeUiState by homeViewModel.uiState.collectAsState()
+            val homeScope = rememberCoroutineScope()
             HomeScreen(
                 viewModel = homeViewModel,
                 idleScreensaverVisible = idleScreensaverVisible,
@@ -150,19 +155,29 @@ fun NexioNavHost(
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 },
                 onContinueWatchingClick = { item ->
-                    val route = buildContinueWatchingStreamRoute(
-                        item = item,
-                        deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled
-                    )
-                    navController.navigate(route)
+                    homeScope.launch {
+                        val route = buildContinueWatchingStreamRouteWithHydration(
+                            item = item,
+                            deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled,
+                            resolveRuntimeMinutes = { candidate ->
+                                homeViewModel.resolveContinueWatchingRuntimeMinutes(candidate)
+                            }
+                        )
+                        navController.navigate(route)
+                    }
                 },
                 onContinueWatchingStartFromBeginning = { item ->
-                    val route = buildContinueWatchingStreamRoute(
-                        item = item,
-                        deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled,
-                        startFromBeginning = true
-                    )
-                    navController.navigate(route)
+                    homeScope.launch {
+                        val route = buildContinueWatchingStreamRouteWithHydration(
+                            item = item,
+                            deterministicAutoplayEnabled = homeUiState.deterministicAutoplayEnabled,
+                            startFromBeginning = true,
+                            resolveRuntimeMinutes = { candidate ->
+                                homeViewModel.resolveContinueWatchingRuntimeMinutes(candidate)
+                            }
+                        )
+                        navController.navigate(route)
+                    }
                 },
                 onNavigateToCatalogSeeAll = { catalogId, addonId, type ->
                     navController.navigate(Screen.CatalogSeeAll.createRoute(catalogId, addonId, type))
@@ -1067,6 +1082,22 @@ internal fun buildContinueWatchingStreamRoute(
             deterministicAutoplay = deterministicAutoplayEnabled
         )
     }
+}
+
+internal suspend fun buildContinueWatchingStreamRouteWithHydration(
+    item: ContinueWatchingItem,
+    deterministicAutoplayEnabled: Boolean,
+    startFromBeginning: Boolean = false,
+    resolveRuntimeMinutes: suspend (ContinueWatchingItem) -> Int?
+): String {
+    val hydratedItem = item.withHydratedRuntimeMinutes(
+        continueWatchingRuntimeMinutes(item) ?: resolveRuntimeMinutes(item)
+    )
+    return buildContinueWatchingStreamRoute(
+        item = hydratedItem,
+        deterministicAutoplayEnabled = deterministicAutoplayEnabled,
+        startFromBeginning = startFromBeginning
+    )
 }
 
 internal fun runtimeMinutesFromDurationMs(durationMs: Long?): Int? {
