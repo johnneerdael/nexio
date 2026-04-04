@@ -429,7 +429,9 @@ class StreamScreenViewModel @Inject constructor(
                             requestContext = buildStreamRequestContext(),
                             parserCache = streamParserCache
                         )
-                        val autoPlayPlaybackInfo = if (deterministicAutoplay) {
+                        val autoPlayPlaybackInfo = if (autoPlayHandledForSession) {
+                            null
+                        } else if (deterministicAutoplay) {
                             buildDeterministicAutoPlayPlaybackInfo(
                                 request = buildShadowRequestContext(requestId),
                                 organizedStreams = organizedStreams.items,

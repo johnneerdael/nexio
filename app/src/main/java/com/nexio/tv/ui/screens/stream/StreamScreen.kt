@@ -121,6 +121,7 @@ fun StreamScreen(
     var pendingRestoreOnResume by rememberSaveable { mutableStateOf(false) }
     var showPlayerChoiceDialog by remember { mutableStateOf(false) }
     var pendingPlaybackInfo by remember { mutableStateOf<StreamPlaybackInfo?>(null) }
+    var directAutoPlayResolveInFlight by rememberSaveable { mutableStateOf(false) }
     val autoPlayScope = rememberCoroutineScope()
 
     fun routePlayback(playbackInfo: StreamPlaybackInfo) {
@@ -147,8 +148,17 @@ fun StreamScreen(
 
     fun routeAutoPlay(playbackInfo: StreamPlaybackInfo) {
         if (uiState.isDirectAutoPlayFlow) {
+            if (directAutoPlayResolveInFlight) {
+                return
+            }
+            directAutoPlayResolveInFlight = true
+            viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
             autoPlayScope.coroutineLaunch {
-                onAutoPlayResolved(viewModel.resolveAutoPlayPlaybackInfo(playbackInfo))
+                try {
+                    onAutoPlayResolved(viewModel.resolveAutoPlayPlaybackInfo(playbackInfo))
+                } finally {
+                    directAutoPlayResolveInFlight = false
+                }
             }
             return
         } else {
