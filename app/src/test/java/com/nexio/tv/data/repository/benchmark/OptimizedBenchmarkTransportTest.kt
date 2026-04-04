@@ -201,6 +201,81 @@ class OptimizedBenchmarkTransportTest {
     }
 
     @Test
+    fun `optimized transport recovers quickly from a single chunk wait timeout`() = runTest {
+        val clock = FakeBenchmarkClock()
+        val timedOutOnce = AtomicBoolean(false)
+        val contentBytes = ByteArray(1024 * 1024) { (it % 251).toByte() }
+        val failureOffsetBytes = 32 * 1024
+        val transport = buildTransport(
+            builder = object : OptimizedBenchmarkDataSourceFactoryBuilder {
+                override fun create(
+                    candidate: DebridBenchmarkCandidate,
+                    configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    allowStartupBootstrapReuse: Boolean,
+                    transportSampleTimeMs: () -> Long,
+                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                ): BenchmarkReadableSourceFactory {
+                    return BenchmarkReadableSourceFactory {
+                        object : BenchmarkReadableSource {
+                            private var position = 0
+                            private var limit = 0
+
+                            override fun open(position: Long, length: Long): Long {
+                                val contentLength = contentBytes.size
+                                this.position = position.toInt().coerceAtMost(contentLength)
+                                limit = when {
+                                    length == C.LENGTH_UNSET.toLong() -> contentLength
+                                    else -> (this.position + length.toInt()).coerceAtMost(contentLength)
+                                }
+                                clock.advanceMs(50L)
+                                return (limit - this.position).coerceAtLeast(0).toLong()
+                            }
+
+                            override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                                if (!timedOutOnce.get() && position >= failureOffsetBytes) {
+                                    timedOutOnce.set(true)
+                                    throw ParallelRangeDataSource.ChunkWaitTimeoutException(
+                                        chunkIndex = 2L,
+                                        timeoutMs = 1_000L,
+                                        cause = TimeoutException()
+                                    )
+                                }
+                                if (position >= limit) {
+                                    return C.RESULT_END_OF_INPUT
+                                }
+                                val bytesToRead = minOf(length, limit - position, 32 * 1024)
+                                System.arraycopy(contentBytes, position, buffer, offset, bytesToRead)
+                                position += bytesToRead
+                                clock.advanceMs(1_000L)
+                                return bytesToRead
+                            }
+
+                            override fun close() = Unit
+                        }
+                    }
+                }
+            },
+            clock = clock,
+            sustainedThresholdBytes = 320L * 1024L,
+            sustainedThresholdElapsedMs = 10_000L
+        )
+
+        val result = transport.runProfile(
+            candidate = candidate(),
+            configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                useParallelConnections = true,
+                parallelConnectionCount = 4,
+                parallelChunkSizeMb = 8
+            )
+        )
+
+        assertEquals(DebridBenchmarkTerminationReason.COMPLETED, result.terminationReason)
+        assertEquals(1, result.profile.sustained.recoverableFailureCount)
+        assertEquals(1, result.profile.sustained.recoverableTimeoutCount)
+        assertTrue((result.profile.sustained.maxReadGapMs ?: Long.MAX_VALUE) < 2_000L)
+    }
+
+    @Test
     fun `optimized transport recovers from a single chunk failure and completes`() = runTest {
         val clock = FakeBenchmarkClock()
         val failedOnce = AtomicBoolean(false)

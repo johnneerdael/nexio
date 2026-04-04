@@ -39,6 +39,7 @@ internal class ParallelRangeDataSource(
     private val upstreamFactory: OkHttpDataSource.Factory,
     private val parallelConnections: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
     private val chunkSize: Long = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB.toLong() * 1024 * 1024,
+    private val chunkWaitTimeoutMs: Long = DEFAULT_CHUNK_WAIT_TIMEOUT_MS,
     private val shouldAllowBackgroundPrefetch: () -> Boolean = { true },
     private val transportSampleTimeMs: () -> Long = { SystemClock.elapsedRealtime() },
     private val onTransportBytesDownloaded: (Long, Long) -> Unit = { _, _ -> },
@@ -78,7 +79,7 @@ internal class ParallelRangeDataSource(
         private const val TAG = "ParallelRangeDS"
         private const val READ_BUFFER_SIZE = 512 * 1024 // 512KB read buffer for chunk downloads
         private const val BOOTSTRAP_READ_BYTES = 1L * 1024L * 1024L
-        private const val CHUNK_WAIT_TIMEOUT_MS = 60_000L
+        internal const val DEFAULT_CHUNK_WAIT_TIMEOUT_MS = 60_000L
         private const val MAX_TRANSIENT_CHUNK_ATTEMPTS = 4
         private const val MAX_NON_TRANSIENT_CHUNK_ATTEMPTS = 2
     }
@@ -307,12 +308,12 @@ internal class ParallelRangeDataSource(
             ensureChunkScheduled(chunkIndex)
             val future = chunks[chunkIndex] ?: return C.RESULT_END_OF_INPUT
             try {
-                currentChunk = future.get(CHUNK_WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                currentChunk = future.get(chunkWaitTimeoutMs, TimeUnit.MILLISECONDS)
             } catch (e: TimeoutException) {
                 if (closed.get()) return C.RESULT_END_OF_INPUT
                 throw ChunkWaitTimeoutException(
                     chunkIndex = chunkIndex,
-                    timeoutMs = CHUNK_WAIT_TIMEOUT_MS,
+                    timeoutMs = chunkWaitTimeoutMs,
                     cause = e
                 )
             } catch (e: Exception) {
@@ -599,6 +600,7 @@ internal class ParallelRangeDataSource(
         private val upstreamFactory: OkHttpDataSource.Factory,
         private val parallelConnections: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
         private val chunkSize: Long = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB.toLong() * 1024 * 1024,
+        private val chunkWaitTimeoutMs: Long = DEFAULT_CHUNK_WAIT_TIMEOUT_MS,
         private val shouldAllowBackgroundPrefetch: () -> Boolean = { true },
         private val transportSampleTimeMs: () -> Long = { SystemClock.elapsedRealtime() },
         private val onTransportBytesDownloaded: (Long, Long) -> Unit = { _, _ -> },
@@ -614,6 +616,7 @@ internal class ParallelRangeDataSource(
                 upstreamFactory = upstreamFactory,
                 parallelConnections = parallelConnections,
                 chunkSize = chunkSize,
+                chunkWaitTimeoutMs = chunkWaitTimeoutMs,
                 shouldAllowBackgroundPrefetch = shouldAllowBackgroundPrefetch,
                 transportSampleTimeMs = transportSampleTimeMs,
                 onTransportBytesDownloaded = onTransportBytesDownloaded,
