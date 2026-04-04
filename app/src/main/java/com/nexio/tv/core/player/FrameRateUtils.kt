@@ -420,6 +420,10 @@ object FrameRateUtils {
         sourceUrl: String,
         headers: Map<String, String> = emptyMap()
     ): FrameRateDetection? {
+        if (isMkvSource(sourceUrl)) {
+            detectFrameRateFromExtractor(context, sourceUrl, headers)?.let { return it }
+            return detectFrameRateFromNextLib(context, sourceUrl, headers)
+        }
         detectFrameRateFromNextLib(context, sourceUrl, headers)?.let { return it }
         return detectFrameRateFromExtractor(context, sourceUrl, headers)
     }

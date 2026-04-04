@@ -203,7 +203,8 @@ android {
     sourceSets {
         getByName("main") {
             jniLibs.srcDirs(
-                "src/main/_jni_disabled"
+                "src/main/_jni_disabled",
+                "src/main/jniLibs"
             )
             // Package a filtered copy of the main assets tree so legacy staged
             // trailer-helper runtimes don't bloat every split APK.
