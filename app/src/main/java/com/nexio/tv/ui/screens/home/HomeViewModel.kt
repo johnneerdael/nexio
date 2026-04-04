@@ -18,6 +18,7 @@ import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListDiscoverySnapshotStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
+import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.local.TrailerSettingsDataStore
@@ -72,6 +73,7 @@ class HomeViewModel @Inject constructor(
     internal val tmdbSettingsDataStore: TmdbSettingsDataStore,
     internal val traktSettingsDataStore: TraktSettingsDataStore,
     internal val mdbListSettingsDataStore: MDBListSettingsDataStore,
+    internal val playerSettingsDataStore: PlayerSettingsDataStore,
     internal val traktDiscoverySnapshotStore: TraktDiscoverySnapshotStore,
     internal val mdbListDiscoverySnapshotStore: MDBListDiscoverySnapshotStore,
     internal val continueWatchingSnapshotService: ContinueWatchingSnapshotService,
@@ -261,6 +263,7 @@ class HomeViewModel @Inject constructor(
         restorePersistedCatalogSnapshot()
         observeLayoutPreferences()
         observeTrailerAutoplaySettings()
+        observePlayerSettings()
         observeYouTubeTrailerAuthSession()
         observeExternalMetaPrefetchPreference()
         loadHomeCatalogOrderPreference()
@@ -336,6 +339,20 @@ class HomeViewModel @Inject constructor(
                         homeTrailerAutoplayEnabled = settings.enabled,
                         homeTrailerAutoplayDelaySeconds = settings.delaySeconds
                     )
+                }
+            }
+        }
+    }
+
+    private fun observePlayerSettings() {
+        viewModelScope.launch {
+            playerSettingsDataStore.playerSettings.collectLatest { settings ->
+                _uiState.update { state ->
+                    if (state.deterministicAutoplayEnabled == settings.deterministicAutoplayEnabled) {
+                        state
+                    } else {
+                        state.copy(deterministicAutoplayEnabled = settings.deterministicAutoplayEnabled)
+                    }
                 }
             }
         }

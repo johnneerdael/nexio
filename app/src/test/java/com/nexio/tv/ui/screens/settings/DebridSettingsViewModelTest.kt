@@ -454,6 +454,32 @@ class DebridSettingsViewModelTest {
     }
 
     @Test
+    fun `shadow autoplay data collection toggle reflects player settings`() = runTest(dispatcher) {
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>(relaxed = true)
+        every { playerSettingsDataStore.playerSettings } returns flowOf(
+            PlayerSettings(shadowAutoplayDataCollectionEnabled = true)
+        )
+        val viewModel = buildViewModel(playerSettingsDataStore = playerSettingsDataStore)
+
+        advanceUntilIdle()
+
+        assertEquals(true, viewModel.uiState.value.shadowAutoplayDataCollectionEnabled)
+    }
+
+    @Test
+    fun `shadow autoplay data collection toggle updates settings store`() = runTest(dispatcher) {
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>(relaxed = true)
+        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
+        val viewModel = buildViewModel(playerSettingsDataStore = playerSettingsDataStore)
+
+        advanceUntilIdle()
+        viewModel.setShadowAutoplayDataCollectionEnabled(true)
+        advanceUntilIdle()
+
+        coVerify { playerSettingsDataStore.setShadowAutoplayDataCollectionEnabled(true) }
+    }
+
+    @Test
     fun `service wrap becomes available when any provider is connected`() = runTest(dispatcher) {
         val viewModel = buildViewModel(realDebridConnected = true)
 

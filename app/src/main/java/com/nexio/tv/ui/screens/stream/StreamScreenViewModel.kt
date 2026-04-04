@@ -81,6 +81,7 @@ class StreamScreenViewModel @Inject constructor(
     private val debridBenchmarkStore: DebridBenchmarkStore,
     private val benchmarkAwareStreamScorer: BenchmarkAwareStreamScorer,
     private val shadowAutoPlayDecisionLogger: ShadowAutoPlayDecisionLogger,
+    private val shadowAutoplayCollectionUploader: com.nexio.tv.data.repository.benchmark.ShadowAutoplayCollectionUploader,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var autoPlayHandledForSession = false
@@ -311,7 +312,7 @@ class StreamScreenViewModel @Inject constructor(
                             isDirectAutoPlayFlow = true,
                             showDirectAutoPlayOverlay = true,
                             directAutoPlayMessage = if (deterministicAutoplay) {
-                                "Selecting the best stream automatically"
+                                null
                             } else {
                                 context.getString(R.string.stream_finding_source)
                             }
@@ -599,7 +600,7 @@ class StreamScreenViewModel @Inject constructor(
                                     isDirectAutoPlayFlow = if (deterministicAutoplay) true else false,
                                     showDirectAutoPlayOverlay = deterministicAutoplay,
                                     directAutoPlayMessage = if (deterministicAutoplay) {
-                                        "Selecting the best stream automatically"
+                                        null
                                     } else {
                                         null
                                     },
@@ -1176,6 +1177,7 @@ class StreamScreenViewModel @Inject constructor(
                 )
             } ?: return
             shadowAutoPlayDecisionLogger.log(event)
+            shadowAutoplayCollectionUploader.submitIfEnabled(event)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -1191,6 +1193,7 @@ class StreamScreenViewModel @Inject constructor(
                 )
             } ?: return
             shadowAutoPlayDecisionLogger.log(event)
+            shadowAutoplayCollectionUploader.submitIfEnabled(event)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {

@@ -83,6 +83,8 @@ android {
         buildConfigField("String", "TRAKT_API_URL", "\"${localProperties.getProperty("TRAKT_API_URL", "https://api.trakt.tv/")}\"")
         buildConfigField("String", "TRAKT_REDIRECT_URI", "\"${localProperties.getProperty("TRAKT_REDIRECT_URI", "urn:ietf:wg:oauth:2.0:oob")}\"")
         buildConfigField("String", "TV_LOGIN_WEB_BASE_URL", "\"${localProperties.getProperty("TV_LOGIN_WEB_BASE_URL", "https://app.nuvio.tv/tv-login")}\"")
+        buildConfigField("String", "SHADOW_DATA_COLLECTION_BASE_URL", "\"${resolveProperty(devProperties, localProperties, "SHADOW_DATA_COLLECTION_BASE_URL", "https://datacollection.nexioapp.org")}\"")
+        buildConfigField("String", "SHADOW_DATA_COLLECTION_WRITE_TOKEN", "\"${resolveProperty(devProperties, localProperties, "SHADOW_DATA_COLLECTION_WRITE_TOKEN")}\"")
         buildConfigField("boolean", "DOVI_NATIVE_ENABLED", enableDoviNative.toString())
         buildConfigField("boolean", "DOVI_EXTRACTOR_HOOK_READY", doviExtractorHookReady.toString())
         if (enableDoviNative) {

@@ -21,6 +21,7 @@ import com.nexio.tv.data.repository.benchmark.ShadowRequestContext
 import com.nexio.tv.data.repository.benchmark.ShadowStreamDecision
 import com.nexio.tv.data.repository.benchmark.ShadowTransportScoreBreakdown
 import com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionLogger
+import com.nexio.tv.data.repository.benchmark.ShadowAutoplayCollectionUploader
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
 import com.nexio.tv.domain.model.AddonStreams
@@ -86,6 +87,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             assertTrue(errorState.isDeterministicAutoplay)
             assertTrue(errorState.isDirectAutoPlayFlow)
             assertTrue(errorState.showDirectAutoPlayOverlay)
+            assertEquals(null, errorState.directAutoPlayMessage)
             assertEquals(null, errorState.error)
             assertEquals("Provider timeout", errorState.deterministicAutoplayFailureMessage)
             assertEquals(null, errorState.autoPlayStream)
@@ -120,6 +122,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             val noWinnerState = noWinnerViewModel.uiState.value
             assertTrue(noWinnerState.isDeterministicAutoplay)
             assertTrue(noWinnerState.showDirectAutoPlayOverlay)
+            assertEquals(null, noWinnerState.directAutoPlayMessage)
             assertEquals(null, noWinnerState.error)
             assertEquals(null, noWinnerState.autoPlayStream)
             assertEquals(null, noWinnerState.autoPlayPlaybackInfo)
@@ -219,6 +222,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val debridBenchmarkStore = mockk<DebridBenchmarkStore>()
         val shadowLogger = mockk<ShadowAutoPlayDecisionLogger>(relaxed = true)
+        val shadowCollectionUploader = mockk<ShadowAutoplayCollectionUploader>(relaxed = true)
 
         every {
             playerSettingsDataStore.playerSettings
@@ -256,6 +260,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             debridBenchmarkStore = debridBenchmarkStore,
             benchmarkAwareStreamScorer = BenchmarkAwareStreamScorer(),
             shadowAutoPlayDecisionLogger = shadowLogger,
+            shadowAutoplayCollectionUploader = shadowCollectionUploader,
             savedStateHandle = SavedStateHandle(
                 mapOf(
                     "videoId" to "tt0167261",

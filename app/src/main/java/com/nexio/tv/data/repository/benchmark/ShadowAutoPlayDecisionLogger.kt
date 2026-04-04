@@ -28,6 +28,8 @@ class ShadowAutoPlayDecisionLogger internal constructor(
         }
     }
 
+    fun encode(event: ShadowAutoPlayDecisionEvent): String = buildEventJson(event)
+
     internal fun buildEventJson(event: ShadowAutoPlayDecisionEvent): String {
         return JsonObject().apply {
             addProperty("event_version", event.eventVersion)

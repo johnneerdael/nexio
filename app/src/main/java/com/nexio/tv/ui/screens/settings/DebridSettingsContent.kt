@@ -116,6 +116,7 @@ internal data class DebridUiState(
     val easyDebridConfigBenchmark: DebridProviderConfigBenchmarkUi = DebridProviderConfigBenchmarkUi(),
     val serviceWrapEnabled: Boolean = false,
     val serviceWrapAvailable: Boolean = false,
+    val shadowAutoplayDataCollectionEnabled: Boolean = false,
     val deterministicAutoplayEnabled: Boolean = false,
     val deterministicAutoplayAvailable: Boolean = false,
     val benchmarkResultDialog: DebridBenchmarkResultDialogUi? = null,
@@ -370,6 +371,20 @@ fun DebridSettingsContent(
                         onToggle = {
                             viewModel.setDeterministicAutoplayEnabled(
                                 !uiState.deterministicAutoplayEnabled
+                            )
+                        }
+                    )
+                }
+
+                item(key = "debrid_shadow_data_collection") {
+                    SettingsToggleRow(
+                        title = "Shadow Autoplay Data Collection",
+                        subtitle = "Opt in to upload shadow autoplay results to the self-hosted review service",
+                        checked = uiState.shadowAutoplayDataCollectionEnabled,
+                        enabled = true,
+                        onToggle = {
+                            viewModel.setShadowAutoplayDataCollectionEnabled(
+                                !uiState.shadowAutoplayDataCollectionEnabled
                             )
                         }
                     )
@@ -1524,6 +1539,9 @@ class DebridSettingsViewModel @Inject constructor(
         val deterministicAutoplayEnabled = playerSettingsDataStore.playerSettings
             .map { it.deterministicAutoplayEnabled }
 
+        val shadowAutoplayDataCollectionEnabled = playerSettingsDataStore.playerSettings
+            .map { it.shadowAutoplayDataCollectionEnabled }
+
         val serviceWrapEnabled = playerSettingsDataStore.playerSettings
             .map { it.serviceWrapEnabled }
 
@@ -1582,7 +1600,20 @@ class DebridSettingsViewModel @Inject constructor(
                 )
             }
 
-            combine(baseState, dialogState, deterministicAutoplayEnabled, deterministicAutoplayAvailable, serviceWrapEnabled) { base, dialogs, deterministicEnabled, deterministicAvailable, serviceWrapEnabled ->
+            val settingsState = combine(
+                deterministicAutoplayEnabled,
+                deterministicAutoplayAvailable,
+                serviceWrapEnabled,
+                shadowAutoplayDataCollectionEnabled
+            ) { deterministicEnabled, deterministicAvailable, serviceWrapEnabled, shadowCollectionEnabled ->
+                arrayOf(deterministicEnabled, deterministicAvailable, serviceWrapEnabled, shadowCollectionEnabled)
+            }
+
+            combine(baseState, dialogState, settingsState) { base, dialogs, settings ->
+                val deterministicEnabled = settings[0] as Boolean
+                val deterministicAvailable = settings[1] as Boolean
+                val serviceWrapEnabled = settings[2] as Boolean
+                val shadowCollectionEnabled = settings[3] as Boolean
                 DebridUiState(
                     realDebridMode = base.connection.realDebridMode,
                     realDebridUsername = base.connection.realDebridUsername,
@@ -1651,6 +1682,7 @@ class DebridSettingsViewModel @Inject constructor(
                         base.connection.premiumizeConnected ||
                         base.connection.torBoxConnected ||
                         base.connection.easyDebridConnected,
+                    shadowAutoplayDataCollectionEnabled = shadowCollectionEnabled,
                     deterministicAutoplayEnabled = deterministicEnabled,
                     deterministicAutoplayAvailable = deterministicAvailable,
                     benchmarkResultDialog = dialogs.benchmarkResultDialog,
@@ -1853,6 +1885,12 @@ class DebridSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             if (enabled && !uiState.value.deterministicAutoplayAvailable) return@launch
             playerSettingsDataStore.setDeterministicAutoplayEnabled(enabled)
+        }
+    }
+
+    fun setShadowAutoplayDataCollectionEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            playerSettingsDataStore.setShadowAutoplayDataCollectionEnabled(enabled)
         }
     }
 
