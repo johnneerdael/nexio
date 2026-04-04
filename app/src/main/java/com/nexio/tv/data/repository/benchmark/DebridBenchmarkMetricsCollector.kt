@@ -155,9 +155,10 @@ class DebridBenchmarkMetricsCollector(
 
     fun finishSustained(): DebridBenchmarkSustainedMetrics {
         val completedBuckets = completedSustainedBuckets()
-        val steadyStateBuckets = steadyStateCompletedSustainedBuckets(completedBuckets)
-        val decisionBuckets = smoothDecisionBuckets(completedBuckets)
-        val steadyStateDecisionBuckets = smoothDecisionBuckets(steadyStateBuckets)
+        val decisionBucketsSource = completedDecisionBuckets(completedBuckets)
+        val steadyStateDecisionSource = steadyStateCompletedSustainedBuckets(decisionBucketsSource)
+        val decisionBuckets = smoothDecisionBuckets(decisionBucketsSource)
+        val steadyStateDecisionBuckets = smoothDecisionBuckets(steadyStateDecisionSource)
         val sortedWindows = decisionBuckets.map { it.throughputMbps }.sorted()
         val steadyStateWindows = steadyStateDecisionBuckets.map { it.throughputMbps }.sorted()
         val average = completedBuckets.takeIf { it.isNotEmpty() }?.map { it.throughputMbps }?.average()
@@ -218,7 +219,7 @@ class DebridBenchmarkMetricsCollector(
     }
 
     fun rawSamples(): DebridBenchmarkRawSamples {
-        val effectiveBuckets = effectiveSustainedBuckets()
+        val effectiveBuckets = effectiveDecisionBuckets()
         return DebridBenchmarkRawSamples(
             throughputWindowsMbps = effectiveBuckets.map { it.throughputMbps },
             throughputBuckets = effectiveBuckets,
@@ -399,8 +400,30 @@ class DebridBenchmarkMetricsCollector(
         return completedThroughputBuckets()
     }
 
-    private fun effectiveSustainedBuckets(): List<DebridBenchmarkThroughputBucketSample> {
-        return effectiveThroughputBuckets()
+    // Parallel prefetch can make consumer-side reads look artificially bursty because
+    // buffered chunks drain from memory faster than the network fills the queue. When
+    // transport-side byte samples are available, use them for autoplay floor decisions.
+    private fun shouldUseTransportDecisionMetrics(
+        completedBuckets: List<DebridBenchmarkThroughputBucketSample> = completedSustainedBuckets()
+    ): Boolean {
+        return completedBuckets.isNotEmpty() && completedTransportThroughputBuckets().isNotEmpty()
+    }
+
+    private fun completedDecisionBuckets(
+        completedBuckets: List<DebridBenchmarkThroughputBucketSample> = completedSustainedBuckets()
+    ): List<DebridBenchmarkThroughputBucketSample> {
+        val transportBuckets = completedTransportThroughputBuckets()
+        return if (shouldUseTransportDecisionMetrics(completedBuckets)) transportBuckets else completedBuckets
+    }
+
+    private fun effectiveDecisionBuckets(): List<DebridBenchmarkThroughputBucketSample> {
+        val completedBuckets = completedSustainedBuckets()
+        val transportBuckets = effectiveTransportThroughputBuckets()
+        return if (shouldUseTransportDecisionMetrics(completedBuckets)) {
+            transportBuckets
+        } else {
+            effectiveThroughputBuckets()
+        }
     }
 
     private fun steadyStateCompletedSustainedBuckets(
@@ -431,9 +454,11 @@ class DebridBenchmarkMetricsCollector(
             .ifEmpty { completedBuckets }
     }
 
-    private fun activeStallCount(): Int = stallCount
+    private fun activeStallCount(): Int =
+        if (shouldUseTransportDecisionMetrics()) transportStallCount else stallCount
 
-    private fun activeMaxReadGapMs(): Long = maxReadGapMs
+    private fun activeMaxReadGapMs(): Long =
+        if (shouldUseTransportDecisionMetrics()) transportMaxReadGapMs else maxReadGapMs
 
     private fun Long.toMbps(durationMs: Long): Double {
         return toDouble() * 8.0 / durationMs.toDouble() / 1_000.0
