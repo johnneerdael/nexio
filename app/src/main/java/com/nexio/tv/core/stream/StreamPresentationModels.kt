@@ -26,7 +26,8 @@ data class StreamRequestContext(
     val season: Int? = null,
     val episode: Int? = null,
     val episodeTitle: String? = null,
-    val runtimeMinutes: Int? = null
+    val runtimeMinutes: Int? = null,
+    val originalLanguage: String? = null
 )
 
 enum class StreamTransportKind {

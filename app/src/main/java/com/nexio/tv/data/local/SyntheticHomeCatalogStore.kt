@@ -26,7 +26,7 @@ class SyntheticHomeCatalogStore @Inject constructor(
         private const val TAG = "SyntheticHomeCatalog"
         private const val PREFS_NAME = "synthetic_home_catalogs"
         private const val SNAPSHOT_KEY = "snapshot"
-        private const val SCHEMA_VERSION = 1
+        private const val SCHEMA_VERSION = 2
     }
 
     private val gson = Gson()

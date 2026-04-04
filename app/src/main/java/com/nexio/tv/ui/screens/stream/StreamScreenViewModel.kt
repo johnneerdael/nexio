@@ -61,6 +61,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
+import java.util.Locale
 import javax.inject.Inject
 
 private const val TAG = "StreamScreenViewModel"
@@ -94,6 +95,8 @@ class StreamScreenViewModel @Inject constructor(
     private var streamParserCache = StreamPresentationEngine.ParserCache()
     private var latestRealDebridBenchmarkResult: DebridBenchmarkResult? = null
     private var latestPremiumizeBenchmarkResult: DebridBenchmarkResult? = null
+    private var latestTorBoxBenchmarkResult: DebridBenchmarkResult? = null
+    private var latestEasyDebridBenchmarkResult: DebridBenchmarkResult? = null
     private val shadowAutoPlayReplayCoordinator =
         ShadowAutoPlayReplayCoordinator(benchmarkAwareStreamScorer)
     private val dolbyVisionAutoPlayGate = DolbyVisionAutoPlayGate()
@@ -123,11 +126,15 @@ class StreamScreenViewModel @Inject constructor(
     private val episode: Int? = savedStateHandle.get<String>("episode")?.toIntOrNull()
     private val episodeName: String? = savedStateHandle.getOptionalString("episodeName")
     private val runtime: Int? = savedStateHandle.get<String>("runtime")?.toIntOrNull()
+    private val originalLanguage: String? = savedStateHandle.getOptionalString("originalLanguage")
     private val genres: String? = savedStateHandle.getOptionalString("genres")
     private val year: String? = savedStateHandle.getOptionalString("year")
     private val contentId: String? = savedStateHandle.getOptionalString("contentId")
     private val contentName: String? = savedStateHandle.getOptionalString("contentName")
     private val manualSelection: Boolean = savedStateHandle.get<String>("manualSelection")
+        ?.toBooleanStrictOrNull()
+        ?: false
+    private val deterministicAutoplay: Boolean = savedStateHandle.get<String>("deterministicAutoplay")
         ?.toBooleanStrictOrNull()
         ?: false
     private val streamCacheKey: String = "${contentType.lowercase()}|$videoId"
@@ -145,7 +152,8 @@ class StreamScreenViewModel @Inject constructor(
             episodeName = episodeName,
             runtime = runtime,
             genres = genres,
-            year = year
+            year = year,
+            isDeterministicAutoplay = deterministicAutoplay
         )
     )
     val uiState: StateFlow<StreamScreenUiState> = _uiState.asStateFlow()
@@ -177,6 +185,18 @@ class StreamScreenViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            debridBenchmarkStore.latestResult(DebridBenchmarkProvider.TORBOX).collectLatest { result ->
+                latestTorBoxBenchmarkResult = result
+                replayShadowAutoPlayDecisionIfReady()
+            }
+        }
+        viewModelScope.launch {
+            debridBenchmarkStore.latestResult(DebridBenchmarkProvider.EASY_DEBRID).collectLatest { result ->
+                latestEasyDebridBenchmarkResult = result
+                replayShadowAutoPlayDecisionIfReady()
+            }
+        }
+        viewModelScope.launch {
             debugSettingsDataStore.streamDiagnosticsEnabled.collectLatest { enabled ->
                 streamDiagnosticsEnabled = enabled
             }
@@ -192,7 +212,8 @@ class StreamScreenViewModel @Inject constructor(
                     showDirectAutoPlayOverlay = false,
                     autoPlayStream = null,
                     autoPlayPlaybackInfo = null,
-                    directAutoPlayMessage = null
+                    directAutoPlayMessage = null,
+                    deterministicAutoplayFailureMessage = null
                 )
             }
         }
@@ -244,8 +265,13 @@ class StreamScreenViewModel @Inject constructor(
         playerPreference: PlayerPreference,
         streamAutoPlayMode: StreamAutoPlayMode
     ): Boolean {
-        return playerPreference == PlayerPreference.INTERNAL &&
+        return deterministicAutoplay || (playerPreference == PlayerPreference.INTERNAL &&
             streamAutoPlayMode != StreamAutoPlayMode.MANUAL
+        )
+    }
+
+    fun consumeDeterministicAutoplayFailure() {
+        updateUiStateIfChanged { it.copy(deterministicAutoplayFailureMessage = null) }
     }
 
     private fun loadStreams() {
@@ -284,7 +310,11 @@ class StreamScreenViewModel @Inject constructor(
                         it.copy(
                             isDirectAutoPlayFlow = true,
                             showDirectAutoPlayOverlay = true,
-                            directAutoPlayMessage = context.getString(R.string.stream_finding_source)
+                            directAutoPlayMessage = if (deterministicAutoplay) {
+                                "Selecting the best stream automatically"
+                            } else {
+                                context.getString(R.string.stream_finding_source)
+                            }
                         )
                     }
                 }
@@ -349,7 +379,8 @@ class StreamScreenViewModel @Inject constructor(
                 streamParserCache = StreamPresentationEngine.ParserCache()
 
                 suspend fun buildOrganizedPayload(
-                    addonStreamGroups: List<AddonStreams>
+                    addonStreamGroups: List<AddonStreams>,
+                    isFinalPass: Boolean = false
                 ): OrganizedStreamPayload {
                     val selectedFilter = _uiState.value.selectedAddonFilter
                     return withContext(Dispatchers.Default) {
@@ -381,13 +412,22 @@ class StreamScreenViewModel @Inject constructor(
                             requestContext = buildStreamRequestContext(),
                             parserCache = streamParserCache
                         )
-                        val autoPlayPlaybackInfo = buildBenchmarkAwareAutoPlayPlaybackInfo(
-                            request = buildShadowRequestContext(requestId),
-                            organizedStreams = organizedStreams.items,
-                            autoPlayCandidates = autoPlayCandidates,
-                            activeTransportMode = playerSettings.toShadowActiveTransportMode()
-                        )
-                        val selectedAutoPlayStream = if (autoPlayPlaybackInfo == null && !autoPlayHandledForSession) {
+                        val autoPlayPlaybackInfo = if (deterministicAutoplay) {
+                            buildDeterministicAutoPlayPlaybackInfo(
+                                request = buildShadowRequestContext(requestId),
+                                organizedStreams = organizedStreams.items,
+                                activeTransportMode = playerSettings.toShadowActiveTransportMode(),
+                                isFinalPass = isFinalPass
+                            )
+                        } else {
+                            buildBenchmarkAwareAutoPlayPlaybackInfo(
+                                request = buildShadowRequestContext(requestId),
+                                organizedStreams = organizedStreams.items,
+                                autoPlayCandidates = autoPlayCandidates,
+                                activeTransportMode = playerSettings.toShadowActiveTransportMode()
+                            )
+                        }
+                        val selectedAutoPlayStream = if (!deterministicAutoplay && autoPlayPlaybackInfo == null && !autoPlayHandledForSession) {
                             StreamAutoPlaySelector.selectAutoPlayStream(
                                 streams = autoPlayCandidates,
                                 mode = playerSettings.streamAutoPlayMode,
@@ -405,7 +445,12 @@ class StreamScreenViewModel @Inject constructor(
                             availableAddons = availableAddons,
                             organizedStreams = organizedStreams,
                             selectedAutoPlayStream = selectedAutoPlayStream,
-                            autoPlayPlaybackInfo = autoPlayPlaybackInfo
+                            autoPlayPlaybackInfo = autoPlayPlaybackInfo,
+                            deterministicFailureMessage = if (deterministicAutoplay && isFinalPass && autoPlayPlaybackInfo == null) {
+                                "No eligible links found"
+                            } else {
+                                null
+                            }
                         )
                     }
                 }
@@ -428,6 +473,7 @@ class StreamScreenViewModel @Inject constructor(
                     if (organizedResult.autoPlayPlaybackInfo != null) {
                         resolvedAutoPlayTarget = true
                     }
+                    val deterministicFailureMessage = organizedResult.deterministicFailureMessage
                     if (organizedResult.organizedStreams.items.isNotEmpty()) {
                         pendingNoStreamsRequestId = null
                         noStreamsGateController.cancel()
@@ -454,6 +500,7 @@ class StreamScreenViewModel @Inject constructor(
                             ),
                             autoPlayStream = selectedAutoPlayStream,
                             autoPlayPlaybackInfo = organizedResult.autoPlayPlaybackInfo,
+                            deterministicAutoplayFailureMessage = deterministicFailureMessage,
                             error = null,
                             showDirectAutoPlayOverlay = if (directAutoPlayFlowEnabledForSession) {
                                 true
@@ -548,10 +595,19 @@ class StreamScreenViewModel @Inject constructor(
                                 it.copy(
                                     isLoading = false,
                                     showNoStreamsState = false,
-                                    error = result.message,
-                                    isDirectAutoPlayFlow = false,
-                                    showDirectAutoPlayOverlay = false,
-                                    directAutoPlayMessage = null
+                                    error = if (deterministicAutoplay) null else result.message,
+                                    isDirectAutoPlayFlow = if (deterministicAutoplay) true else false,
+                                    showDirectAutoPlayOverlay = deterministicAutoplay,
+                                    directAutoPlayMessage = if (deterministicAutoplay) {
+                                        "Selecting the best stream automatically"
+                                    } else {
+                                        null
+                                    },
+                                    deterministicAutoplayFailureMessage = if (deterministicAutoplay) {
+                                        result.message ?: "No eligible links found"
+                                    } else {
+                                        null
+                                    }
                                 )
                             }
                         }
@@ -582,12 +638,20 @@ class StreamScreenViewModel @Inject constructor(
                                 "applied=${appliedPresentationVersion.get()}"
                         )
                     }
-                    applyOrganizedPayload(buildOrganizedPayload(finalPendingRequest.addonStreamGroups))
+                    applyOrganizedPayload(buildOrganizedPayload(finalPendingRequest.addonStreamGroups, isFinalPass = true))
+                }
+                if (deterministicAutoplay && !resolvedAutoPlayTarget) {
+                    applyOrganizedPayload(
+                        buildOrganizedPayload(
+                            _uiState.value.addonStreams,
+                            isFinalPass = true
+                        )
+                    )
                 }
 
                 markRemainingSourceChipsAsError()
 
-                if (directAutoPlayFlowEnabledForSession && !resolvedAutoPlayTarget) {
+                if (directAutoPlayFlowEnabledForSession && !resolvedAutoPlayTarget && !deterministicAutoplay) {
                     directAutoPlayFlowEnabledForSession = false
                     updateUiStateIfChanged {
                         it.copy(
@@ -950,6 +1014,51 @@ class StreamScreenViewModel @Inject constructor(
         )
     }
 
+    private fun buildDeterministicAutoPlayPlaybackInfo(
+        request: ShadowRequestContext,
+        organizedStreams: List<StreamCardModel>,
+        activeTransportMode: DebridBenchmarkTransportMode,
+        isFinalPass: Boolean
+    ): StreamPlaybackInfo? {
+        val benchmarkSessions = latestBenchmarkSessions()
+        if (benchmarkSessions.isEmpty()) return null
+        if (organizedStreams.isEmpty()) return null
+        val eligibleStreams = applyDeterministicOriginalLanguageGuard(
+            originalLanguage = originalLanguage,
+            streams = organizedStreams
+        )
+        if (eligibleStreams.isEmpty()) return null
+
+        val event = benchmarkAwareStreamScorer.score(
+            request = request,
+            streams = eligibleStreams,
+            benchmarkSessions = benchmarkSessions,
+            activeTransportMode = activeTransportMode
+        )
+        val selectedKey = event.selected?.streamKey ?: return null
+        val selectedItem = eligibleStreams.firstOrNull { item ->
+            item.stream.wrappedOriginalStreamKey == selectedKey ||
+                item.parsed.exactDuplicateKey == selectedKey
+        } ?: return null
+        val fallbackItem = event.selectedNonDolbyVisionFallback
+            ?.streamKey
+            ?.let { fallbackKey ->
+                eligibleStreams.firstOrNull { item ->
+                    item.stream.wrappedOriginalStreamKey == fallbackKey ||
+                        item.parsed.exactDuplicateKey == fallbackKey
+                }
+            }
+
+        if (!isFinalPass && !deterministicAutoplayEarlyFinishSatisfied(event.winners, request)) {
+            return null
+        }
+
+        return buildStreamPlaybackInfo(
+            item = selectedItem,
+            nonDolbyVisionFallback = fallbackItem
+        )
+    }
+
     private fun buildStreamPlaybackInfo(
         item: StreamCardModel,
         nonDolbyVisionFallback: StreamCardModel? = null
@@ -1035,7 +1144,8 @@ class StreamScreenViewModel @Inject constructor(
             season = season,
             episode = episode,
             episodeTitle = episodeName,
-            runtimeMinutes = runtime ?: _uiState.value.runtime
+            runtimeMinutes = runtime ?: _uiState.value.runtime,
+            originalLanguage = originalLanguage
         )
     }
 
@@ -1096,6 +1206,12 @@ class StreamScreenViewModel @Inject constructor(
             latestPremiumizeBenchmarkResult?.let {
                 put(DebridBenchmarkProvider.PREMIUMIZE, it)
             }
+            latestTorBoxBenchmarkResult?.let {
+                put(DebridBenchmarkProvider.TORBOX, it)
+            }
+            latestEasyDebridBenchmarkResult?.let {
+                put(DebridBenchmarkProvider.EASY_DEBRID, it)
+            }
         }
         logShadowAutoPlayReadiness(sessions)
         return sessions
@@ -1107,14 +1223,16 @@ class StreamScreenViewModel @Inject constructor(
         val replayHasCandidates = shadowAutoPlayReplayCoordinator.hasCandidates()
         val rdPresent = DebridBenchmarkProvider.REAL_DEBRID in sessions
         val pmPresent = DebridBenchmarkProvider.PREMIUMIZE in sessions
+        val tbPresent = DebridBenchmarkProvider.TORBOX in sessions
+        val edPresent = DebridBenchmarkProvider.EASY_DEBRID in sessions
         val reason = when {
             !replayHasCandidates -> "no_candidates"
-            !rdPresent && !pmPresent -> "no_benchmarks"
+            !rdPresent && !pmPresent && !tbPresent && !edPresent -> "no_benchmarks"
             else -> "ready"
         }
         Log.i(
             TAG,
-            "SHADOW_AUTOPLAY_READY rd=$rdPresent pm=$pmPresent hasCandidates=$replayHasCandidates reason=$reason"
+            "SHADOW_AUTOPLAY_READY rd=$rdPresent pm=$pmPresent tb=$tbPresent ed=$edPresent hasCandidates=$replayHasCandidates reason=$reason"
         )
     }
 
@@ -1142,7 +1260,8 @@ private data class OrganizedStreamPayload(
     val availableAddons: List<String>,
     val organizedStreams: com.nexio.tv.core.stream.OrganizedStreams,
     val selectedAutoPlayStream: Stream?,
-    val autoPlayPlaybackInfo: StreamPlaybackInfo?
+    val autoPlayPlaybackInfo: StreamPlaybackInfo?,
+    val deterministicFailureMessage: String? = null
 )
 
 private data class PendingOrganizeRequest(
@@ -1229,6 +1348,66 @@ private fun PlayerSettings.toShadowActiveTransportMode(): DebridBenchmarkTranspo
     }
 }
 
+internal fun deterministicAutoplayEarlyFinishSatisfied(
+    winners: List<com.nexio.tv.data.repository.benchmark.ShadowStreamDecision>,
+    request: ShadowRequestContext
+): Boolean {
+    val countedWinners = winners.distinctBy(::deterministicEarlyFinishCountKey)
+    if (countedWinners.isEmpty()) return false
+    val has4k = countedWinners.any { it.resolution.equals("2160p", ignoreCase = true) }
+    val hasRemux = countedWinners.any { it.breakdown.releaseType == "remux" }
+    val movie = request.contentType.equals("movie", ignoreCase = true)
+
+    fun countMatching(
+        resolution: String,
+        releaseType: String,
+        minMbps: Double
+    ): Int = countedWinners.count { candidate ->
+        candidate.resolution.equals(resolution, ignoreCase = true) &&
+            candidate.breakdown.releaseType == releaseType &&
+            candidate.breakdown.averageBitrateMbps >= minMbps
+    }
+
+    val remuxThreshold = when {
+        has4k && movie -> 45.0
+        has4k && !movie -> 30.0
+        !has4k && movie -> 25.0
+        else -> 18.0
+    }
+    val webdlThreshold = when {
+        has4k && movie -> 15.0
+        has4k && !movie -> 10.0
+        !has4k && movie -> 10.0
+        else -> 6.0
+    }
+    val resolution = if (has4k) "2160p" else "1080p"
+
+    if (countMatching(resolution, "remux", remuxThreshold) >= 3) {
+        return true
+    }
+    if (!hasRemux && countMatching(resolution, "webdl", webdlThreshold) >= 3) {
+        return true
+    }
+    return false
+}
+
+private fun deterministicEarlyFinishCountKey(
+    decision: com.nexio.tv.data.repository.benchmark.ShadowStreamDecision
+): String {
+    val providerKey = decision.provider.storageKey
+    val familyKey = decision.parsed.filename
+        ?.trim()
+        ?.lowercase(Locale.US)
+        ?.replace(Regex("""\.(mkv|mp4|avi|mov|wmv|flv|webm|m4v|ts|m2ts)$"""), "")
+        ?.replace(Regex("""[^\p{L}\p{N}]+"""), "")
+        ?.takeIf { it.isNotBlank() }
+        ?: decision.streamKey
+            .trim()
+            .lowercase(Locale.US)
+            .replace(Regex("""[^\p{L}\p{N}]+"""), "")
+    return "$providerKey::$familyKey"
+}
+
 private fun SyncedFormatterTemplateSettings.toAioFormatterSelection(): AioFormatterSelection {
     return AioFormatterSelection(
         selectedTemplateId = selectedTemplateId,
@@ -1242,6 +1421,57 @@ private fun SyncedFormatterTemplateSettings.toAioFormatterSelection(): AioFormat
             null
         }
     )
+}
+
+internal fun applyDeterministicOriginalLanguageGuard(
+    originalLanguage: String?,
+    streams: List<StreamCardModel>
+): List<StreamCardModel> {
+    if (originalLanguage.isNullOrBlank()) return streams
+    return streams.filterNot { stream ->
+        shouldRejectDeterministicAutoplayForOriginalLanguage(
+            originalLanguage = originalLanguage,
+            parsedLanguages = stream.parsed.languages
+        )
+    }
+}
+
+internal fun shouldRejectDeterministicAutoplayForOriginalLanguage(
+    originalLanguage: String?,
+    parsedLanguages: List<String>
+): Boolean {
+    if (originalLanguage.isNullOrBlank()) return false
+    if (parsedLanguages.isEmpty()) return false
+    if (parsedLanguages.any { normalizeLanguageMatchToken(it) == "multi" }) return false
+
+    val expectedTokens = buildOriginalLanguageMatchTokens(originalLanguage)
+    if (expectedTokens.isEmpty()) return false
+
+    val parsedTokens = parsedLanguages
+        .map(::normalizeLanguageMatchToken)
+        .filter { it.isNotBlank() }
+    if (parsedTokens.isEmpty()) return false
+
+    return parsedTokens.none { it in expectedTokens }
+}
+
+private fun buildOriginalLanguageMatchTokens(originalLanguage: String): Set<String> {
+    val trimmed = originalLanguage.trim()
+    if (trimmed.isBlank()) return emptySet()
+
+    val locale = Locale.forLanguageTag(trimmed)
+    val displayLanguage = runCatching { locale.getDisplayLanguage(Locale.ENGLISH) }.getOrNull()
+    return buildSet {
+        add(normalizeLanguageMatchToken(trimmed))
+        displayLanguage?.let { add(normalizeLanguageMatchToken(it)) }
+    }.filter { it.isNotBlank() }.toSet()
+}
+
+private fun normalizeLanguageMatchToken(value: String): String {
+    return value
+        .trim()
+        .lowercase(Locale.US)
+        .replace(Regex("[^a-z]"), "")
 }
 
 

@@ -1,7 +1,10 @@
 package com.nexio.tv.ui.screens.settings
 
+import android.util.Log
 import com.nexio.tv.data.local.EasyDebridSettings
 import com.nexio.tv.data.local.EasyDebridSettingsDataStore
+import com.nexio.tv.data.local.PlayerSettings
+import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PremiumizeSettings
 import com.nexio.tv.data.local.PremiumizeSettingsDataStore
 import com.nexio.tv.data.local.RealDebridAuthDataStore
@@ -32,6 +35,9 @@ import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkStatus
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.coVerify
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -58,11 +64,16 @@ class DebridSettingsViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
+        mockkStatic(Log::class)
+        every { Log.i(any<String>(), any<String>()) } returns 0
+        every { Log.w(any<String>(), any<String>()) } returns 0
+        every { Log.d(any<String>(), any<String>()) } returns 0
     }
 
     @After
     fun tearDown() {
         Dispatchers.resetMain()
+        unmockkStatic(Log::class)
     }
 
     @Test
@@ -83,14 +94,47 @@ class DebridSettingsViewModelTest {
     }
 
     @Test
+    fun `connected torbox row exposes latest benchmark result`() = runTest(dispatcher) {
+        val latestTorBoxResult = sampleResult(DebridBenchmarkProvider.TORBOX)
+        val viewModel = buildViewModel(
+            torBoxConnected = true,
+            latestTorBoxResult = latestTorBoxResult
+        )
+
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.torBoxBenchmark.canRun)
+        assertEquals(
+            latestTorBoxResult,
+            viewModel.uiState.value.torBoxBenchmark.latestResult
+        )
+    }
+
+    @Test
+    fun `connected easydebrid row exposes latest benchmark result`() = runTest(dispatcher) {
+        val latestEasyDebridResult = sampleResult(DebridBenchmarkProvider.EASY_DEBRID)
+        val viewModel = buildViewModel(
+            easyDebridConnected = true,
+            latestEasyDebridResult = latestEasyDebridResult
+        )
+
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.easyDebridBenchmark.canRun)
+        assertEquals(
+            latestEasyDebridResult,
+            viewModel.uiState.value.easyDebridBenchmark.latestResult
+        )
+    }
+
+    @Test
     fun `start benchmark updates row into measuring state`() = runTest(dispatcher) {
         val benchmarkState = MutableStateFlow<DebridBenchmarkRuntimeState>(
             DebridBenchmarkRuntimeState.Idle
         )
         val benchmarkService = mockk<DebridBenchmarkService>(relaxed = true)
         every { benchmarkService.activeState } returns benchmarkState
-        every { benchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns flowOf(null)
-        every { benchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns flowOf(null)
+        every { benchmarkService.latestResult(any()) } returns flowOf(null)
         every { benchmarkService.outcomes } returns MutableSharedFlow()
         coEvery { benchmarkService.start(DebridBenchmarkProvider.REAL_DEBRID) } answers {
             benchmarkState.value = DebridBenchmarkRuntimeState.Running(
@@ -132,8 +176,7 @@ class DebridSettingsViewModelTest {
         )
         val benchmarkService = mockk<DebridBenchmarkService>(relaxed = true)
         every { benchmarkService.activeState } returns benchmarkState
-        every { benchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns flowOf(null)
-        every { benchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns flowOf(null)
+        every { benchmarkService.latestResult(any()) } returns flowOf(null)
         every { benchmarkService.outcomes } returns MutableSharedFlow()
 
         val viewModel = buildViewModel(
@@ -152,8 +195,7 @@ class DebridSettingsViewModelTest {
         val outcomes = MutableSharedFlow<DebridBenchmarkOutcome>()
         val benchmarkService = mockk<DebridBenchmarkService>(relaxed = true)
         every { benchmarkService.activeState } returns MutableStateFlow(DebridBenchmarkRuntimeState.Idle)
-        every { benchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns flowOf(null)
-        every { benchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns flowOf(null)
+        every { benchmarkService.latestResult(any()) } returns flowOf(null)
         every { benchmarkService.outcomes } returns outcomes
 
         val viewModel = buildViewModel(
@@ -182,8 +224,7 @@ class DebridSettingsViewModelTest {
         val outcomes = MutableSharedFlow<DebridBenchmarkOutcome>()
         val benchmarkService = mockk<DebridBenchmarkService>(relaxed = true)
         every { benchmarkService.activeState } returns MutableStateFlow(DebridBenchmarkRuntimeState.Idle)
-        every { benchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns flowOf(null)
-        every { benchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns flowOf(null)
+        every { benchmarkService.latestResult(any()) } returns flowOf(null)
         every { benchmarkService.outcomes } returns outcomes
 
         val viewModel = buildViewModel(
@@ -212,8 +253,7 @@ class DebridSettingsViewModelTest {
         val outcomes = MutableSharedFlow<DebridBenchmarkOutcome>()
         val benchmarkService = mockk<DebridBenchmarkService>(relaxed = true)
         every { benchmarkService.activeState } returns MutableStateFlow(DebridBenchmarkRuntimeState.Idle)
-        every { benchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns flowOf(null)
-        every { benchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns flowOf(null)
+        every { benchmarkService.latestResult(any()) } returns flowOf(null)
         every { benchmarkService.outcomes } returns outcomes
         val result = sampleResult(DebridBenchmarkProvider.REAL_DEBRID)
 
@@ -306,8 +346,7 @@ class DebridSettingsViewModelTest {
         val outcomes = MutableSharedFlow<DebridConfigBenchmarkOutcome>()
         val configBenchmarkService = mockk<DebridConfigBenchmarkService>(relaxed = true)
         every { configBenchmarkService.activeState } returns MutableStateFlow(DebridConfigBenchmarkRuntimeState.Idle)
-        every { configBenchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns flowOf(null)
-        every { configBenchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns flowOf(null)
+        every { configBenchmarkService.latestResult(any()) } returns flowOf(null)
         every { configBenchmarkService.outcomes } returns outcomes
 
         val viewModel = buildViewModel(
@@ -351,8 +390,7 @@ class DebridSettingsViewModelTest {
         )
         val configBenchmarkService = mockk<DebridConfigBenchmarkService>(relaxed = true)
         every { configBenchmarkService.activeState } returns configBenchmarkState
-        every { configBenchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns flowOf(null)
-        every { configBenchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns flowOf(null)
+        every { configBenchmarkService.latestResult(any()) } returns flowOf(null)
         every { configBenchmarkService.outcomes } returns MutableSharedFlow<DebridConfigBenchmarkOutcome>()
 
         val viewModel = buildViewModel(
@@ -375,15 +413,107 @@ class DebridSettingsViewModelTest {
         )
     }
 
+    @Test
+    fun `deterministic autoplay is unavailable without any benchmark result`() = runTest(dispatcher) {
+        val viewModel = buildViewModel(
+            realDebridConnected = true,
+            premiumizeConnected = true
+        )
+
+        advanceUntilIdle()
+
+        assertEquals(false, viewModel.uiState.value.deterministicAutoplayAvailable)
+        assertEquals(false, viewModel.uiState.value.deterministicAutoplayEnabled)
+    }
+
+    @Test
+    fun `deterministic autoplay becomes available when any provider has benchmark result`() = runTest(dispatcher) {
+        val viewModel = buildViewModel(
+            realDebridConnected = true,
+            latestRealDebridResult = sampleResult(DebridBenchmarkProvider.REAL_DEBRID),
+            playerSettingsDataStore = mockk<PlayerSettingsDataStore>().also {
+                every {
+                    it.playerSettings
+                } returns flowOf(PlayerSettings(serviceWrapEnabled = true))
+            }
+        )
+
+        advanceUntilIdle()
+
+        assertEquals(true, viewModel.uiState.value.deterministicAutoplayAvailable)
+    }
+
+    @Test
+    fun `service wrap is unavailable when no provider is configured`() = runTest(dispatcher) {
+        val viewModel = buildViewModel()
+
+        advanceUntilIdle()
+
+        assertEquals(false, viewModel.uiState.value.serviceWrapAvailable)
+        assertEquals(false, viewModel.uiState.value.serviceWrapEnabled)
+    }
+
+    @Test
+    fun `service wrap becomes available when any provider is connected`() = runTest(dispatcher) {
+        val viewModel = buildViewModel(realDebridConnected = true)
+
+        advanceUntilIdle()
+
+        assertEquals(true, viewModel.uiState.value.serviceWrapAvailable)
+    }
+
+    @Test
+    fun `deterministic autoplay stays unavailable when benchmark exists but service wrap is disabled`() = runTest(dispatcher) {
+        val viewModel = buildViewModel(
+            realDebridConnected = true,
+            latestRealDebridResult = sampleResult(DebridBenchmarkProvider.REAL_DEBRID)
+        )
+
+        advanceUntilIdle()
+
+        assertEquals(false, viewModel.uiState.value.serviceWrapEnabled)
+        assertEquals(false, viewModel.uiState.value.deterministicAutoplayAvailable)
+    }
+
+    @Test
+    fun `disabling service wrap turns off deterministic autoplay in settings store`() = runTest(dispatcher) {
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>(relaxed = true)
+        every { playerSettingsDataStore.playerSettings } returns flowOf(
+            PlayerSettings(
+                deterministicAutoplayEnabled = true,
+                serviceWrapEnabled = true
+            )
+        )
+        val viewModel = buildViewModel(
+            realDebridConnected = true,
+            latestRealDebridResult = sampleResult(DebridBenchmarkProvider.REAL_DEBRID),
+            playerSettingsDataStore = playerSettingsDataStore
+        )
+
+        advanceUntilIdle()
+        viewModel.setServiceWrapEnabled(false)
+        advanceUntilIdle()
+
+        coVerify { playerSettingsDataStore.setServiceWrapEnabled(false) }
+        coVerify { playerSettingsDataStore.setDeterministicAutoplayEnabled(false) }
+    }
+
     private fun buildViewModel(
         realDebridConnected: Boolean = false,
         premiumizeConnected: Boolean = false,
+        torBoxConnected: Boolean = false,
+        easyDebridConnected: Boolean = false,
         latestRealDebridResult: DebridBenchmarkResult? = null,
         latestPremiumizeResult: DebridBenchmarkResult? = null,
+        latestTorBoxResult: DebridBenchmarkResult? = null,
+        latestEasyDebridResult: DebridBenchmarkResult? = null,
         latestRealDebridConfigResult: DebridConfigBenchmarkResult? = null,
         latestPremiumizeConfigResult: DebridConfigBenchmarkResult? = null,
+        latestTorBoxConfigResult: DebridConfigBenchmarkResult? = null,
+        latestEasyDebridConfigResult: DebridConfigBenchmarkResult? = null,
         benchmarkService: DebridBenchmarkService? = null,
-        configBenchmarkService: DebridConfigBenchmarkService? = null
+        configBenchmarkService: DebridConfigBenchmarkService? = null,
+        playerSettingsDataStore: PlayerSettingsDataStore? = null
     ): DebridSettingsViewModel {
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
         every { realDebridAuthDataStore.state } returns flowOf(
@@ -409,10 +539,24 @@ class DebridSettingsViewModelTest {
         )
 
         val torBoxService = mockk<TorBoxService>(relaxed = true)
-        every { torBoxService.observeAccountState() } returns flowOf(TorBoxAccountState())
+        every { torBoxService.observeAccountState() } returns flowOf(
+            TorBoxAccountState(
+                apiKey = if (torBoxConnected) "tb-key" else "",
+                email = if (torBoxConnected) "tb@example.com" else null,
+                plan = if (torBoxConnected) "premium" else null,
+                isConnected = torBoxConnected
+            )
+        )
 
         val easyDebridService = mockk<EasyDebridService>(relaxed = true)
-        every { easyDebridService.observeAccountState() } returns flowOf(EasyDebridAccountState())
+        every { easyDebridService.observeAccountState() } returns flowOf(
+            EasyDebridAccountState(
+                apiKey = if (easyDebridConnected) "ed-key" else "",
+                userId = if (easyDebridConnected) "ed-user" else null,
+                paidUntil = if (easyDebridConnected) "2099-01-01" else null,
+                isConnected = easyDebridConnected
+            )
+        )
 
         val premiumizeSettingsDataStore = mockk<PremiumizeSettingsDataStore>()
         every { premiumizeSettingsDataStore.settings } returns flowOf(PremiumizeSettings())
@@ -423,21 +567,33 @@ class DebridSettingsViewModelTest {
         val easyDebridSettingsDataStore = mockk<EasyDebridSettingsDataStore>()
         every { easyDebridSettingsDataStore.settings } returns flowOf(EasyDebridSettings())
 
+        val resolvedPlayerSettingsDataStore = playerSettingsDataStore ?: mockk<PlayerSettingsDataStore>().also {
+            every { it.playerSettings } returns flowOf(PlayerSettings())
+        }
+
         val resolvedBenchmarkService = benchmarkService ?: mockk<DebridBenchmarkService>(relaxed = true).also { service ->
             every { service.activeState } returns MutableStateFlow(DebridBenchmarkRuntimeState.Idle)
-            every { service.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns
-                flowOf(latestRealDebridResult)
-            every { service.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns
-                flowOf(latestPremiumizeResult)
+            every { service.latestResult(any()) } answers {
+                when (firstArg<DebridBenchmarkProvider>()) {
+                    DebridBenchmarkProvider.REAL_DEBRID -> flowOf(latestRealDebridResult)
+                    DebridBenchmarkProvider.PREMIUMIZE -> flowOf(latestPremiumizeResult)
+                    DebridBenchmarkProvider.TORBOX -> flowOf(latestTorBoxResult)
+                    DebridBenchmarkProvider.EASY_DEBRID -> flowOf(latestEasyDebridResult)
+                }
+            }
             every { service.outcomes } returns MutableSharedFlow()
         }
 
         val resolvedConfigBenchmarkService = configBenchmarkService ?: mockk<DebridConfigBenchmarkService>(relaxed = true).also { service ->
             every { service.activeState } returns MutableStateFlow(DebridConfigBenchmarkRuntimeState.Idle)
-            every { service.latestResult(DebridBenchmarkProvider.REAL_DEBRID) } returns
-                flowOf(latestRealDebridConfigResult)
-            every { service.latestResult(DebridBenchmarkProvider.PREMIUMIZE) } returns
-                flowOf(latestPremiumizeConfigResult)
+            every { service.latestResult(any()) } answers {
+                when (firstArg<DebridBenchmarkProvider>()) {
+                    DebridBenchmarkProvider.REAL_DEBRID -> flowOf(latestRealDebridConfigResult)
+                    DebridBenchmarkProvider.PREMIUMIZE -> flowOf(latestPremiumizeConfigResult)
+                    DebridBenchmarkProvider.TORBOX -> flowOf(latestTorBoxConfigResult)
+                    DebridBenchmarkProvider.EASY_DEBRID -> flowOf(latestEasyDebridConfigResult)
+                }
+            }
             every { service.outcomes } returns MutableSharedFlow<DebridConfigBenchmarkOutcome>()
         }
 
@@ -450,6 +606,7 @@ class DebridSettingsViewModelTest {
             torBoxSettingsDataStore = torBoxSettingsDataStore,
             easyDebridService = easyDebridService,
             easyDebridSettingsDataStore = easyDebridSettingsDataStore,
+            playerSettingsDataStore = resolvedPlayerSettingsDataStore,
             debridBenchmarkService = resolvedBenchmarkService,
             debridConfigBenchmarkService = resolvedConfigBenchmarkService
         )

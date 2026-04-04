@@ -87,6 +87,7 @@ class MetadataDiskCacheStoreTest {
                 "links": [],
                 "trailerYtIds": ["legacyTrailer1"]
               },
+              "metaSchemaVersion": 2,
               "languageEpoch": 0,
               "updatedAtMs": 1
             }
@@ -140,7 +141,7 @@ class MetadataDiskCacheStoreTest {
                 "collectionName": null
               },
               "languageEpoch": 0,
-              "tmdbSchemaVersion": 1,
+              "tmdbSchemaVersion": 2,
               "updatedAtMs": 1
             }
             """.trimIndent()
@@ -189,6 +190,7 @@ class MetadataDiskCacheStoreTest {
                 "collectionId": null,
                 "collectionName": null
               },
+              "tmdbSchemaVersion": 1,
               "languageEpoch": 0,
               "updatedAtMs": 1
             }
@@ -290,6 +292,59 @@ class MetadataDiskCacheStoreTest {
                 providerToken = "trailer"
             )
         )
+    }
+
+    @Test
+    fun `read and write meta round-trip preserves original language`() {
+        val store = MetadataDiskCacheStore(
+            context = mockContext(InMemorySharedPreferences())
+        )
+
+        store.writeMeta(
+            itemKey = "movie:tt11",
+            languageTag = "en-US",
+            providerToken = "native",
+            meta = meta("tt11").copy(language = "en")
+        )
+
+        assertEquals(
+            "en",
+            store.readMeta("movie:tt11", "en-US", "native")?.language
+        )
+    }
+
+    @Test
+    fun `read and write meta round-trip preserves runtime fields for movie and episodes`() {
+        val store = MetadataDiskCacheStore(
+            context = mockContext(InMemorySharedPreferences())
+        )
+        val meta = meta("show:1").copy(
+            runtime = "121",
+            videos = listOf(
+                com.nexio.tv.domain.model.Video(
+                    id = "show:1:1",
+                    title = "Episode 1",
+                    released = null,
+                    thumbnail = null,
+                    streams = emptyList(),
+                    season = 1,
+                    episode = 1,
+                    overview = null,
+                    runtime = 62
+                )
+            )
+        )
+
+        store.writeMeta(
+            itemKey = "series:show:1",
+            languageTag = "en-US",
+            providerToken = "native",
+            meta = meta
+        )
+
+        val restored = store.readMeta("series:show:1", "en-US", "native")
+        assertEquals("121", restored?.runtime)
+        assertEquals(62, restored?.videos?.singleOrNull()?.runtime)
     }
 
     @Test

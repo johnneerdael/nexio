@@ -7,6 +7,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
@@ -38,10 +39,13 @@ class TraktAuthServiceTest {
             "{}".toResponseBody("application/json".toMediaType())
         )
 
-        val service = TraktAuthService(
-            traktApi = traktApi,
-            traktAuthDataStore = traktAuthDataStore
+        val service = spyk(
+            TraktAuthService(
+                traktApi = traktApi,
+                traktAuthDataStore = traktAuthDataStore
+            )
         )
+        every { service.hasRequiredCredentials() } returns true
 
         val refreshed = service.refreshTokenIfNeeded(force = true)
 

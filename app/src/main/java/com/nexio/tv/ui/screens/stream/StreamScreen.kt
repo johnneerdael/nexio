@@ -107,7 +107,8 @@ fun StreamScreen(
     viewModel: StreamScreenViewModel = hiltViewModel(),
     onBackPress: () -> Unit,
     onStreamSelected: (StreamPlaybackInfo) -> Unit,
-    onAutoPlayResolved: (StreamPlaybackInfo) -> Unit
+    onAutoPlayResolved: (StreamPlaybackInfo) -> Unit,
+    onDeterministicAutoplayFailed: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val playerPreference by viewModel.playerPreference.collectAsStateWithLifecycle(
@@ -183,6 +184,12 @@ fun StreamScreen(
         }
     }
 
+    LaunchedEffect(uiState.deterministicAutoplayFailureMessage) {
+        val message = uiState.deterministicAutoplayFailureMessage ?: return@LaunchedEffect
+        onDeterministicAutoplayFailed(message)
+        viewModel.consumeDeterministicAutoplayFailure()
+    }
+
     DisposableEffect(lifecycleOwner, pendingRestoreOnResume) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME && pendingRestoreOnResume) {
@@ -207,17 +214,13 @@ fun StreamScreen(
             isLoading = uiState.isLoading
         )
 
-        if (uiState.showDirectAutoPlayOverlay) {
+        if (uiState.showDirectAutoPlayOverlay || uiState.isDeterministicAutoplay) {
             LoadingOverlay(
                 visible = true,
                 backdropUrl = uiState.backdrop ?: uiState.poster,
                 logoUrl = uiState.logo,
                 title = uiState.title,
-                message = if (uiState.directAutoPlayMessage != null) {
-                    stringResource(R.string.stream_finding_source)
-                } else {
-                    null
-                },
+                message = uiState.directAutoPlayMessage ?: stringResource(R.string.stream_finding_source),
                 modifier = Modifier.fillMaxSize()
             )
         } else {

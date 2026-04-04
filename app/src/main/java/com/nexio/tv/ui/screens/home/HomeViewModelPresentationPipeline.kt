@@ -622,7 +622,8 @@ internal fun mergeFocusedItemEnrichment(
         }
         if (tmdbSettings.useDetails) {
             merged = merged.copy(
-                releaseInfo = tmdbEnrichment.releaseInfo ?: merged.releaseInfo
+                releaseInfo = tmdbEnrichment.releaseInfo ?: merged.releaseInfo,
+                language = tmdbEnrichment.language ?: merged.language
             )
         }
     }
@@ -637,7 +638,8 @@ internal fun mergeFocusedItemEnrichment(
                 externalMeta.trailerYtIds
             } else {
                 merged.trailerYtIds
-            }
+            },
+            language = externalMeta.language ?: merged.language
         )
     }
     return merged
@@ -693,7 +695,8 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
 
                     if (settings.useDetails) {
                         enriched = enriched.copy(
-                            releaseInfo = enrichment.releaseInfo ?: enriched.releaseInfo
+                            releaseInfo = enrichment.releaseInfo ?: enriched.releaseInfo,
+                            language = enrichment.language ?: enriched.language
                         )
                     }
 

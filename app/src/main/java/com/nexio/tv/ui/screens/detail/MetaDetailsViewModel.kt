@@ -9,6 +9,7 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.ImdbSettingsDataStore
@@ -103,6 +104,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val watchProgressRepository: WatchProgressRepository,
     private val traktScrobbleService: TraktScrobbleService,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val trailerService: TrailerService,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -142,6 +144,7 @@ class MetaDetailsViewModel @Inject constructor(
     private var currentTraktIsShow = false
 
     init {
+        observeDeterministicAutoplaySetting()
         observeMetaViewSettings()
         observeLibraryState()
         observeWatchProgress()
@@ -151,6 +154,20 @@ class MetaDetailsViewModel @Inject constructor(
         observeHideUnreleasedContent()
         observeEpisodeRatingsProviderChanges()
         loadMeta()
+    }
+
+    private fun observeDeterministicAutoplaySetting() {
+        viewModelScope.launch {
+            playerSettingsDataStore.playerSettings
+                .map { it.deterministicAutoplayEnabled }
+                .distinctUntilChanged()
+                .collectLatest { enabled ->
+                    _uiState.update { state ->
+                        if (state.deterministicAutoplayEnabled == enabled) state
+                        else state.copy(deterministicAutoplayEnabled = enabled)
+                    }
+                }
+        }
     }
 
     private fun observeMetaViewSettings() {

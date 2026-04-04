@@ -482,7 +482,8 @@ class TmdbMetadataService @Inject constructor(
                             description = rec.overview?.takeIf { it.isNotBlank() },
                             releaseInfo = releaseInfo,
                             imdbRating = rec.voteAverage?.toFloat(),
-                            genres = emptyList()
+                            genres = emptyList(),
+                            language = rec.originalLanguage?.takeIf { it.isNotBlank() }
                         )
                         posterRatingsUrlResolver.apply(basePreview, activePosterProvider)
                     }

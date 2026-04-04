@@ -52,6 +52,38 @@ class BenchmarkAwareStreamScorerTest {
     }
 
     @Test
+    fun `torbox and easydebrid service ids map to benchmark providers`() {
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "tb_stream",
+                    providerId = "TB",
+                    wrappedProviderId = null,
+                    filename = "TorBox.Release.mkv"
+                ),
+                streamCard(
+                    streamKey = "ed_stream",
+                    providerId = "ED",
+                    wrappedProviderId = null,
+                    filename = "EasyDebrid.Release.mkv"
+                )
+            ),
+            benchmarkSessions = mapOf(
+                DebridBenchmarkProvider.TORBOX to benchmarkResult(
+                    provider = DebridBenchmarkProvider.TORBOX
+                ),
+                DebridBenchmarkProvider.EASY_DEBRID to benchmarkResult(
+                    provider = DebridBenchmarkProvider.EASY_DEBRID
+                )
+            )
+        )
+
+        assertTrue(event.winners.any { it.provider == DebridBenchmarkProvider.TORBOX })
+        assertTrue(event.winners.any { it.provider == DebridBenchmarkProvider.EASY_DEBRID })
+    }
+
+    @Test
     fun `runtime falls back to metadata when parser duration is missing`() {
         val event = scorer.score(
             request = request(runtimeMinutes = 46),
@@ -72,6 +104,59 @@ class BenchmarkAwareStreamScorerTest {
 
         assertEquals(46L * 60_000L, event.selected?.parsed?.durationMs)
         assertEquals("metadata", event.selected?.parsed?.runtimeSource)
+    }
+
+    @Test
+    fun `parser runtime remains preferred when metadata runtime also exists`() {
+        val event = scorer.score(
+            request = request(runtimeMinutes = 46),
+            streams = listOf(
+                streamCard(
+                    streamKey = "rd_parser_runtime",
+                    providerId = "RD",
+                    sizeBytes = gib(8.0),
+                    durationMs = 50L * 60_000L
+                )
+            ),
+            benchmarkSessions = mapOf(
+                DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(
+                    provider = DebridBenchmarkProvider.REAL_DEBRID
+                )
+            )
+        )
+
+        assertEquals(50L * 60_000L, event.selected?.parsed?.durationMs)
+        assertEquals("parser", event.selected?.parsed?.runtimeSource)
+    }
+
+    @Test
+    fun `missing runtime still allows final scoring on non bitrate metrics`() {
+        val event = scorer.score(
+            request = request(runtimeMinutes = null),
+            streams = listOf(
+                streamCard(
+                    streamKey = "rd_no_runtime",
+                    providerId = "RD",
+                    resolution = "2160p",
+                    quality = "WEB-DL",
+                    encode = "HEVC",
+                    sizeBytes = gib(8.0),
+                    durationMs = null,
+                    visualTags = listOf("HDR"),
+                    audioTags = listOf("DD+")
+                )
+            ),
+            benchmarkSessions = mapOf(
+                DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(
+                    provider = DebridBenchmarkProvider.REAL_DEBRID
+                )
+            )
+        )
+
+        assertEquals("rd_no_runtime", event.selected?.streamKey)
+        assertTrue(event.rejected.none { it.streamKey == "rd_no_runtime" })
+        assertEquals(0.0, event.selected?.breakdown?.averageBitrateMbps)
+        assertEquals(0, event.selected?.breakdown?.content?.bitrateQualityPoints)
     }
 
     @Test
@@ -561,7 +646,158 @@ class BenchmarkAwareStreamScorerTest {
         assertEquals("remux_dv", event.selected?.streamKey)
     }
 
-    private fun request(runtimeMinutes: Int = 120): ShadowRequestContext {
+    @Test
+    fun `movie scoring caps transport reward so viable remux beats tiny webdl`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            optimizedP10Mbps = 600.0,
+            directP10Mbps = 300.0
+        )
+        val event = scorer.score(
+            request = request(runtimeMinutes = 179),
+            streams = listOf(
+                streamCard(
+                    streamKey = "tiny_webdl",
+                    providerId = "RD",
+                    quality = "WEB-DL",
+                    sizeBytes = gib(33.0),
+                    visualTags = listOf("HDR10"),
+                    audioTags = listOf("Atmos", "DD+")
+                ),
+                streamCard(
+                    streamKey = "large_remux",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    sizeBytes = gib(105.0),
+                    visualTags = listOf("HDR10"),
+                    audioTags = listOf("TrueHD")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark),
+            activeTransportMode = DebridBenchmarkTransportMode.OPTIMIZED
+        )
+
+        assertEquals("large_remux", event.selected?.streamKey)
+        val tiny = event.winners.single { it.streamKey == "tiny_webdl" }
+        val remux = event.winners.single { it.streamKey == "large_remux" }
+        assertEquals(tiny.transportFitScore, remux.transportFitScore)
+    }
+
+    @Test
+    fun `movie scoring keeps only top bitrate pool in highest viable resolution tier`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            optimizedP10Mbps = 600.0
+        )
+        val event = scorer.score(
+            request = request(runtimeMinutes = 179),
+            streams = listOf(
+                streamCard(streamKey = "2160_small_1", providerId = "RD", quality = "WEB-DL", sizeBytes = gib(20.0)),
+                streamCard(streamKey = "2160_small_2", providerId = "RD", quality = "WEB-DL", sizeBytes = gib(25.0)),
+                streamCard(streamKey = "2160_mid", providerId = "RD", quality = "BluRay", sizeBytes = gib(60.0)),
+                streamCard(streamKey = "2160_large", providerId = "RD", quality = "BluRay Remux", sizeBytes = gib(100.0)),
+                streamCard(streamKey = "2160_huge", providerId = "RD", quality = "BluRay Remux", sizeBytes = gib(150.0)),
+                streamCard(streamKey = "1080_massive", providerId = "RD", resolution = "1080p", quality = "BluRay Remux", sizeBytes = gib(200.0))
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark),
+            activeTransportMode = DebridBenchmarkTransportMode.OPTIMIZED
+        )
+
+        assertEquals(listOf("2160_huge", "2160_large", "2160_mid"), event.winners.map { it.streamKey })
+    }
+
+    @Test
+    fun `show scoring caps transport reward so viable higher bitrate release wins over tiny webdl`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            optimizedP10Mbps = 600.0,
+            directP10Mbps = 300.0
+        )
+        val event = scorer.score(
+            request = seriesRequest(runtimeMinutes = 46),
+            streams = listOf(
+                streamCard(
+                    streamKey = "show_tiny_webdl",
+                    providerId = "RD",
+                    quality = "WEB-DL",
+                    sizeBytes = gib(3.0),
+                    visualTags = listOf("HDR10"),
+                    audioTags = listOf("DD+")
+                ),
+                streamCard(
+                    streamKey = "show_large_bluray",
+                    providerId = "RD",
+                    quality = "BluRay",
+                    sizeBytes = gib(15.0),
+                    visualTags = listOf("HDR10"),
+                    audioTags = listOf("DD+")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark),
+            activeTransportMode = DebridBenchmarkTransportMode.OPTIMIZED
+        )
+
+        assertEquals("show_large_bluray", event.selected?.streamKey)
+        val tiny = event.winners.single { it.streamKey == "show_tiny_webdl" }
+        val large = event.winners.single { it.streamKey == "show_large_bluray" }
+        assertEquals(tiny.transportFitScore, large.transportFitScore)
+    }
+
+    @Test
+    fun `show scoring falls back one pool lower when top pool is only bad webdl dv`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            device = deviceSnapshot(
+                displayHdrTypes = setOf(DeviceHdrType.HDR10, DeviceHdrType.HDR10_PLUS, DeviceHdrType.HLG)
+            ),
+            optimizedP10Mbps = 300.0
+        )
+        val event = scorer.score(
+            request = seriesRequest(runtimeMinutes = 46),
+            streams = listOf(
+                streamCard(
+                    streamKey = "show_top_bad_dv_1",
+                    providerId = "RD",
+                    quality = "WEB-DL",
+                    sizeBytes = gib(12.0),
+                    visualTags = listOf("DV"),
+                    audioTags = listOf("DD+")
+                ),
+                streamCard(
+                    streamKey = "show_top_bad_dv_2",
+                    providerId = "RD",
+                    quality = "WEB-DL",
+                    sizeBytes = gib(11.0),
+                    visualTags = listOf("DV"),
+                    audioTags = listOf("DD+")
+                ),
+                streamCard(
+                    streamKey = "show_top_bad_dv_3",
+                    providerId = "RD",
+                    quality = "WEB-DL",
+                    sizeBytes = gib(10.0),
+                    visualTags = listOf("DV"),
+                    audioTags = listOf("DD+")
+                ),
+                streamCard(
+                    streamKey = "show_lower_hdr10",
+                    providerId = "RD",
+                    resolution = "1080p",
+                    quality = "WEB-DL",
+                    sizeBytes = gib(6.0),
+                    visualTags = listOf("HDR10"),
+                    audioTags = listOf("DD+")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark),
+            activeTransportMode = DebridBenchmarkTransportMode.OPTIMIZED
+        )
+
+        assertEquals(listOf("show_lower_hdr10"), event.winners.map { it.streamKey })
+        assertEquals("show_lower_hdr10", event.selected?.streamKey)
+    }
+
+    private fun request(runtimeMinutes: Int? = 120): ShadowRequestContext {
         return ShadowRequestContext(
             requestId = "req-1",
             videoId = "tt123",
@@ -569,6 +805,18 @@ class BenchmarkAwareStreamScorerTest {
             title = "Example",
             season = null,
             episode = null,
+            runtimeMinutes = runtimeMinutes
+        )
+    }
+
+    private fun seriesRequest(runtimeMinutes: Int? = 46): ShadowRequestContext {
+        return ShadowRequestContext(
+            requestId = "req-series-1",
+            videoId = "tt123:1:1",
+            contentType = "series",
+            title = "Example Show",
+            season = 1,
+            episode = 1,
             runtimeMinutes = runtimeMinutes
         )
     }
@@ -582,7 +830,7 @@ class BenchmarkAwareStreamScorerTest {
         quality: String = "BluRay Remux",
         encode: String = "HEVC",
         sizeBytes: Long = gib(42.0),
-        durationMs: Long = 120L * 60_000L,
+        durationMs: Long? = 120L * 60_000L,
         visualTags: List<String> = listOf("DV"),
         audioTags: List<String> = listOf("Atmos", "TrueHD")
     ): StreamCardModel {
@@ -627,7 +875,7 @@ class BenchmarkAwareStreamScorerTest {
             releaseGroup = "GROUP",
             serviceId = providerId,
             isCached = true,
-            durationMs = durationMs.takeIf { it > 0L },
+            durationMs = durationMs?.takeIf { it > 0L },
             transportKind = StreamTransportKind.CACHED
         )
         return StreamCardModel(

@@ -18,7 +18,8 @@ data class MetaPreview(
     val imdbRating: Float?,
     val tomatoesRating: Double? = null,
     val genres: List<String>,
-    val trailerYtIds: List<String> = emptyList()
+    val trailerYtIds: List<String> = emptyList(),
+    val language: String? = null
 ) {
     val apiType: String
         get() = type.toApiString(rawType)

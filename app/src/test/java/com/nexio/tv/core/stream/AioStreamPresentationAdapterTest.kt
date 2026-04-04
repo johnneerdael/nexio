@@ -44,10 +44,10 @@ class AioStreamPresentationAdapterTest {
             requestContext = StreamRequestContext(contentType = "movie")
         ).items.single()
 
-        assertEquals("⭐⭐⭐⭐⭐ 4K UHD - Movie Title (2023)", item.title)
+        assertEquals("[[icon:4k]] Movie Title (2023)", item.title)
         assertEquals(
             listOf(
-                "🎥 Blu-ray  • 🔊 Dolby Atmos Dolby TrueHD 7.1 • ⏱️ Unknown"
+                "[[icon:dovi]][[icon:atmos]] [[icon:truehd]], 💾 62.5 GB, [[icon:realdebrid]] Real-Debrid, 📄 Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.mkv"
             ),
             item.detailLines
         )

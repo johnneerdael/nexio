@@ -7,6 +7,8 @@ import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.data.local.PlayerSettings
+import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TmdbSettingsDataStore
@@ -230,6 +232,63 @@ class MetaDetailsSeasonMediaViewModelTest {
                 contentId = any()
             )
         }
+    }
+
+    @Test
+    fun `tmdb episode enrichment hydrates per episode runtime before detail playback`() = runTest(dispatcher) {
+        val trailerService = mockk<TrailerService>(relaxed = true)
+        coEvery { trailerService.getTitleMediaAvailability(any(), any(), any(), any()) } returns false
+        coEvery { trailerService.getSeasonMediaAvailability(any(), any(), any(), any()) } returns SeasonMediaAvailability()
+        val tmdbService = mockk<TmdbService>()
+        coEvery { tmdbService.tmdbToImdb(any(), any()) } returns null
+        coEvery { tmdbService.ensureTmdbId(any(), any()) } returns "1399"
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        coEvery {
+            tmdbMetadataService.fetchEnrichment(
+                tmdbId = any(),
+                contentType = any(),
+                language = any()
+            )
+        } returns null
+        coEvery {
+            tmdbMetadataService.fetchEpisodeEnrichment(
+                tmdbId = "1399",
+                seasonNumbers = listOf(1, 2),
+                language = any()
+            )
+        } returns mapOf(
+            (1 to 1) to com.nexio.tv.core.tmdb.TmdbEpisodeEnrichment(
+                tmdbEpisodeId = 1,
+                voteAverage = null,
+                title = null,
+                overview = null,
+                thumbnail = null,
+                airDate = null,
+                runtimeMinutes = 62
+            ),
+            (2 to 1) to com.nexio.tv.core.tmdb.TmdbEpisodeEnrichment(
+                tmdbEpisodeId = 2,
+                voteAverage = null,
+                title = null,
+                overview = null,
+                thumbnail = null,
+                airDate = null,
+                runtimeMinutes = 58
+            )
+        )
+
+        val viewModel = buildViewModel(
+            trailerService = trailerService,
+            tmdbService = tmdbService,
+            tmdbMetadataService = tmdbMetadataService,
+            tmdbSettings = TmdbSettings(enabled = true, apiKey = "tmdb-key")
+        )
+
+        advanceUntilIdle()
+
+        val meta = viewModel.uiState.value.meta
+        assertEquals(62, meta?.videos?.firstOrNull { it.season == 1 && it.episode == 1 }?.runtime)
+        assertEquals(58, meta?.videos?.firstOrNull { it.season == 2 && it.episode == 1 }?.runtime)
     }
 
     @Test
@@ -808,7 +867,10 @@ class MetaDetailsSeasonMediaViewModelTest {
 
     private fun buildViewModel(
         trailerService: TrailerService,
-        meta: Meta = buildSeriesMeta()
+        meta: Meta = buildSeriesMeta(),
+        tmdbService: TmdbService? = null,
+        tmdbMetadataService: TmdbMetadataService? = null,
+        tmdbSettings: TmdbSettings = TmdbSettings()
     ): MetaDetailsViewModel {
         val metaRepository = mockk<MetaRepository>()
         every {
@@ -838,7 +900,7 @@ class MetaDetailsSeasonMediaViewModelTest {
         every { layoutPreferenceDataStore.blurUnwatchedEpisodes } returns flowOf(false)
 
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
-        every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings())
+        every { tmdbSettingsDataStore.settings } returns flowOf(tmdbSettings)
 
         val imdbSettingsDataStore = mockk<ImdbSettingsDataStore>()
         every { imdbSettingsDataStore.settings } returns flowOf(ImdbSettings())
@@ -847,17 +909,20 @@ class MetaDetailsSeasonMediaViewModelTest {
         every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(false)
         every { traktAuthDataStore.state } returns flowOf(TraktAuthState())
 
-        val tmdbService = mockk<TmdbService>()
-        coEvery { tmdbService.tmdbToImdb(any(), any()) } returns null
-        coEvery { tmdbService.ensureTmdbId(any(), any()) } returns null
+        val resolvedTmdbService = tmdbService ?: mockk<TmdbService>().also {
+            coEvery { it.tmdbToImdb(any(), any()) } returns null
+            coEvery { it.ensureTmdbId(any(), any()) } returns null
+        }
 
-        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val resolvedTmdbMetadataService = tmdbMetadataService ?: mockk<TmdbMetadataService>(relaxed = true)
         val episodeRatingsSelectionRepository = mockk<EpisodeRatingsSelectionRepository>(relaxed = true)
         val mdbListRepository = mockk<MDBListRepository>(relaxed = true)
         val traktApi = mockk<TraktApi>(relaxed = true)
         val traktAuthService = mockk<TraktAuthService>(relaxed = true)
         val traktScrobbleService = mockk<TraktScrobbleService>(relaxed = true)
         val context = mockk<Context>(relaxed = true)
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
+        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
 
         return MetaDetailsViewModel(
             context = context,
@@ -867,14 +932,15 @@ class MetaDetailsSeasonMediaViewModelTest {
             traktAuthDataStore = traktAuthDataStore,
             tmdbSettingsDataStore = tmdbSettingsDataStore,
             imdbSettingsDataStore = imdbSettingsDataStore,
-            tmdbService = tmdbService,
-            tmdbMetadataService = tmdbMetadataService,
+            tmdbService = resolvedTmdbService,
+            tmdbMetadataService = resolvedTmdbMetadataService,
             mdbListRepository = mdbListRepository,
             episodeRatingsSelectionRepository = episodeRatingsSelectionRepository,
             libraryRepository = libraryRepository,
             watchProgressRepository = watchProgressRepository,
             traktScrobbleService = traktScrobbleService,
             layoutPreferenceDataStore = layoutPreferenceDataStore,
+            playerSettingsDataStore = playerSettingsDataStore,
             trailerService = trailerService,
             savedStateHandle = SavedStateHandle(
                 mapOf(

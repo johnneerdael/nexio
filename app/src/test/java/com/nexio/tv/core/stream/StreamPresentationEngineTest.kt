@@ -145,6 +145,70 @@ class StreamPresentationEngineTest {
     }
 
     @Test
+    fun `uniform formatting falls back to metadata runtime when parser duration is missing`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Movie.Title.2023.2160p.BluRay.HEVC-GROUP.mkv",
+                    description = "Movie.Title.2023.2160p.BluRay.HEVC-GROUP.mkv"
+                )
+            ),
+            availableAddons = listOf("Test Addon"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                uniformFormattingEnabled = true,
+                groupAcrossAddonsEnabled = false,
+                uniformFormattingTemplate = AioFormatterSelection(
+                    selectedTemplateId = "custom",
+                    customTemplate = AioCustomTemplateSelection(
+                        label = "Runtime fallback",
+                        nameTemplate = "{stream.title}",
+                        descriptionTemplate = "{stream.duration::time}"
+                    )
+                )
+            ),
+            requestContext = StreamRequestContext(
+                contentType = "movie",
+                runtimeMinutes = 152
+            )
+        )
+
+        assertEquals(listOf("2h:32m:0s"), result.items.single().detailLines)
+    }
+
+    @Test
+    fun `uniform formatting keeps parser runtime over metadata fallback`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Movie.Title.2023.2160p.BluRay.HEVC-GROUP.mkv",
+                    description = "Movie.Title.2023.2160p.BluRay.HEVC-GROUP.mkv\n12.5 Mbps • 2h 10m 0s"
+                )
+            ),
+            availableAddons = listOf("Test Addon"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                uniformFormattingEnabled = true,
+                groupAcrossAddonsEnabled = false,
+                uniformFormattingTemplate = AioFormatterSelection(
+                    selectedTemplateId = "custom",
+                    customTemplate = AioCustomTemplateSelection(
+                        label = "Runtime priority",
+                        nameTemplate = "{stream.title}",
+                        descriptionTemplate = "{stream.duration::time}"
+                    )
+                )
+            ),
+            requestContext = StreamRequestContext(
+                contentType = "movie",
+                runtimeMinutes = 152
+            )
+        )
+
+        assertEquals(listOf("2h:10m:0s"), result.items.single().detailLines)
+    }
+
+    @Test
     fun `torrentio PM plus marker is recognized as cached`() {
         val item = organize(
             stream(

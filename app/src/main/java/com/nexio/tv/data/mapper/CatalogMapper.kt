@@ -20,6 +20,7 @@ fun MetaPreviewDto.toDomain(): MetaPreview {
         runtime = runtime,
         imdbRating = imdbRating?.toFloatOrNull(),
         genres = genres ?: emptyList(),
-        trailerYtIds = trailerStreams?.mapNotNull { it.ytId?.takeIf { id -> id.isNotBlank() } } ?: emptyList()
+        trailerYtIds = trailerStreams?.mapNotNull { it.ytId?.takeIf { id -> id.isNotBlank() } } ?: emptyList(),
+        language = language
     )
 }

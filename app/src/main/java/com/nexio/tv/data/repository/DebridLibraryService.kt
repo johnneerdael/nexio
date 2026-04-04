@@ -1,9 +1,14 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.data.local.RealDebridAuthDataStore
+import com.nexio.tv.data.remote.api.EasyDebridApi
 import com.nexio.tv.data.remote.api.PremiumizeApi
 import com.nexio.tv.data.remote.api.RealDebridApi
 import com.nexio.tv.data.remote.api.TorBoxApi
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridGenerateDto
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridGeneratedFileDto
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridLookupDetailsResultDto
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridLookupRequestDto
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeItemDetailsDto
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeListAllFileDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDownloadDto
@@ -44,7 +49,9 @@ class DebridLibraryService @Inject constructor(
     private val premiumizeApi: PremiumizeApi,
     private val premiumizeService: PremiumizeService,
     private val torBoxApi: TorBoxApi,
-    private val torBoxService: TorBoxService
+    private val torBoxService: TorBoxService,
+    private val easyDebridApi: EasyDebridApi,
+    private val easyDebridService: EasyDebridService
 ) {
     private data class RealDebridBenchmarkPreview(
         val torrent: RealDebridTorrentDto,
@@ -102,6 +109,26 @@ class DebridLibraryService @Inject constructor(
                     DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
                 } else {
                     fetchPremiumizeBenchmarkCandidates(apiKey)
+                }
+            }
+            DebridBenchmarkProvider.TORBOX -> {
+                torBoxService.refreshAccountState()
+                val torBoxState = torBoxService.observeAccountState().first()
+                val apiKey = torBoxState.apiKey.trim()
+                if (!torBoxState.isConnected || apiKey.isBlank()) {
+                    DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
+                } else {
+                    fetchTorBoxBenchmarkCandidates(apiKey)
+                }
+            }
+            DebridBenchmarkProvider.EASY_DEBRID -> {
+                easyDebridService.refreshAccountState()
+                val easyDebridState = easyDebridService.observeAccountState().first()
+                val apiKey = easyDebridState.apiKey.trim()
+                if (!easyDebridState.isConnected || apiKey.isBlank()) {
+                    DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
+                } else {
+                    fetchEasyDebridBenchmarkCandidates(apiKey)
                 }
             }
         }
@@ -179,19 +206,106 @@ class DebridLibraryService @Inject constructor(
         }
     }
 
+    private suspend fun fetchTorBoxBenchmarkCandidates(apiKey: String): DebridBenchmarkCandidateLookupResult = withContext(Dispatchers.IO) {
+        val entries = fetchTorBoxItems(apiKey)
+        val shortlistedEntries = selectBenchmarkResolutionShortlist(
+            items = entries,
+            sizeOf = { entry: LibraryEntry -> entry.playbackSizeBytes },
+            timestampOf = { entry: LibraryEntry -> entry.listedAt }
+        )
+        if (shortlistedEntries.isEmpty()) {
+            return@withContext DebridBenchmarkCandidateLookupResult.NoLargeDownload
+        }
+
+        val candidates = shortlistedEntries.mapNotNull {
+            it.toBenchmarkCandidate(DebridBenchmarkProvider.TORBOX)
+        }
+        if (candidates.isEmpty()) {
+            DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
+        } else {
+            DebridBenchmarkCandidateLookupResult.Candidates(candidates)
+        }
+    }
+
+    private suspend fun fetchEasyDebridBenchmarkCandidates(apiKey: String): DebridBenchmarkCandidateLookupResult = withContext(Dispatchers.IO) {
+        val authorization = "Bearer $apiKey"
+        val sources = EASY_DEBRID_BENCHMARK_SOURCES
+        val lookupResponse = runCatching {
+            easyDebridApi.lookupDetails(
+                authorization = authorization,
+                body = EasyDebridLookupRequestDto(urls = sources.map { it.url })
+            )
+        }.getOrNull() ?: return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
+        val lookupBody = lookupResponse.body() ?: return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
+        if (!lookupResponse.isSuccessful) {
+            return@withContext DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
+        }
+
+        val lookupCandidates = sources.mapIndexedNotNull { index, source ->
+            val result = lookupBody.result.getOrNull(index) ?: return@mapIndexedNotNull null
+            if (!result.cached) return@mapIndexedNotNull null
+            val largestFile = result.files
+                .filter { file ->
+                    !isLikelySampleFile(file.name, file.folder) &&
+                        isLikelyVideo(file.name, null)
+                }
+                .maxByOrNull { it.size ?: 0L }
+                ?: return@mapIndexedNotNull null
+            EasyDebridBenchmarkLookupCandidate(
+                source = source,
+                largestSizeBytes = largestFile.size ?: 0L
+            )
+        }.sortedByDescending { it.largestSizeBytes }
+
+        val shortlisted = lookupCandidates.filter { it.largestSizeBytes >= EASY_DEBRID_MIN_BENCHMARK_BYTES }
+        if (shortlisted.isEmpty()) {
+            return@withContext DebridBenchmarkCandidateLookupResult.NoLargeDownload
+        }
+
+        val resolvedCandidates = shortlisted.take(BENCHMARK_MAX_RESOLUTION_COUNT).mapNotNull { candidate ->
+            val generateResponse = runCatching {
+                easyDebridApi.generate(
+                    authorization = authorization,
+                    body = com.nexio.tv.data.remote.dto.debrid.EasyDebridGenerateRequestDto(url = candidate.source.url)
+                )
+            }.getOrNull() ?: return@mapNotNull null
+            val generateBody = generateResponse.body() ?: return@mapNotNull null
+            if (!generateResponse.isSuccessful) return@mapNotNull null
+
+            val selectedFile = generateBody.files
+                .filter { file ->
+                    !isLikelySampleFile(file.filename, file.directory.joinToString("/")) &&
+                        isLikelyVideo(file.filename, null)
+                }
+                .maxByOrNull { it.size ?: 0L }
+                ?: return@mapNotNull null
+
+            selectedFile.toBenchmarkCandidate(DebridBenchmarkProvider.EASY_DEBRID)
+        }
+
+        if (resolvedCandidates.isEmpty()) {
+            DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem
+        } else {
+            DebridBenchmarkCandidateLookupResult.Candidates(resolvedCandidates)
+        }
+    }
+
     fun observeIsRefreshing(): Flow<Boolean> = refreshingState
 
     fun observeIsConnected(): Flow<Boolean> {
         return combine(
             realDebridAuthDataStore.isAuthenticated,
             premiumizeService.observeAccountState(),
-            torBoxService.observeAccountState()
-        ) { rdAuthenticated, pmState, torBoxState ->
+            torBoxService.observeAccountState(),
+            easyDebridService.observeAccountState()
+        ) { rdAuthenticated, pmState, torBoxState, easyDebridState ->
             rdAuthenticated ||
                 pmState.isConnected ||
                 pmState.apiKey.isNotBlank() ||
                 torBoxState.isConnected ||
-                torBoxState.apiKey.isNotBlank()
+                torBoxState.apiKey.isNotBlank() ||
+                easyDebridState.isConnected ||
+                easyDebridState.apiKey.isNotBlank()
         }.distinctUntilChanged()
     }
 
@@ -587,6 +701,17 @@ class DebridLibraryService @Inject constructor(
         )
     }
 
+    private fun EasyDebridGeneratedFileDto.toBenchmarkCandidate(provider: DebridBenchmarkProvider): DebridBenchmarkCandidate? {
+        val directUrl = url?.takeIf { it.isNotBlank() } ?: return null
+        return DebridBenchmarkCandidate(
+            provider = provider,
+            directUrl = directUrl,
+            headers = emptyMap(),
+            filename = filename?.takeIf { it.isNotBlank() },
+            sourceSizeBytes = size
+        )
+    }
+
     private fun isLikelyPlayable(download: RealDebridResolvedDownload): Boolean {
         return isLikelyVideo(
             filename = download.filename ?: extractFilenameFromUrl(download.downloadUrl),
@@ -629,6 +754,20 @@ class DebridLibraryService @Inject constructor(
         return filename.startsWith("sample.") ||
             filename.startsWith("sample-") ||
             filename.contains(".sample.")
+    }
+
+    private fun isLikelySampleFile(filename: String?, folder: String?): Boolean {
+        val normalizedPath = listOfNotNull(folder, filename)
+            .joinToString("/")
+            .trim()
+            .lowercase()
+        if (normalizedPath.isBlank()) return false
+        val segments = normalizedPath.split('/').filter { it.isNotBlank() }
+        if (segments.any { it == "sample" || it == "samples" }) return true
+        val extractedFilename = extractFilenameFromPath(normalizedPath).orEmpty()
+        return extractedFilename.startsWith("sample.") ||
+            extractedFilename.startsWith("sample-") ||
+            extractedFilename.contains(".sample.")
     }
 
     private fun isLikelyVideo(filename: String?, mimeType: String?): Boolean {
@@ -732,8 +871,10 @@ class DebridLibraryService @Inject constructor(
         const val REAL_DEBRID_LIST_KEY = "service:realdebrid"
         const val PREMIUMIZE_LIST_KEY = "service:premiumize"
         const val TORBOX_LIST_KEY = "service:torbox"
+        const val EASY_DEBRID_LIST_KEY = "service:easydebrid"
         private const val BENCHMARK_SIZE_GIB = 1024L * 1024L * 1024L
         private const val BENCHMARK_MAX_RESOLUTION_COUNT = 2
+        private const val EASY_DEBRID_MIN_BENCHMARK_BYTES = 1L * BENCHMARK_SIZE_GIB
         private val BENCHMARK_SIZE_THRESHOLDS_BYTES = listOf(
             20L * BENCHMARK_SIZE_GIB,
             15L * BENCHMARK_SIZE_GIB,
@@ -749,6 +890,17 @@ class DebridLibraryService @Inject constructor(
             Regex("""\bs\d{1,2}e\d{1,2}\b"""),
             Regex("""\b\d{1,2}x\d{1,2}\b""")
         )
+
+        private val EASY_DEBRID_BENCHMARK_SOURCES = listOf(
+            EasyDebridBenchmarkSource(
+                label = "Ubuntu 22.04.4 desktop",
+                url = "magnet:?xt=urn:btih:018e50b58106b84a42c223ccf0494334f8d55958&dn=ubuntu-22.04.4-desktop-amd64.iso&tr=https%3A%2F%2Ftorrent.ubuntu.com%2Fannounce&tr=https%3A%2F%2Fipv6.torrent.ubuntu.com%2Fannounce"
+            ),
+            EasyDebridBenchmarkSource(
+                label = "Big Buck Bunny sample",
+                url = "magnet:?xt=urn:btih:dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c&dn=Big+Buck+Bunny&tr=udp%3A%2F%2Fexplodie.org%3A6969&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.empire-js.us%3A1337&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.fastcast.nz&tr=wss%3A%2F%2Ftracker.openwebtorrent.com&ws=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2F&xs=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fbig-buck-bunny.torrent"
+            )
+        )
     }
 
     private data class RealDebridResolvedDownload(
@@ -757,6 +909,16 @@ class DebridLibraryService @Inject constructor(
         val filename: String?,
         val mimeType: String?,
         val fileSize: Long?
+    )
+
+    private data class EasyDebridBenchmarkSource(
+        val label: String,
+        val url: String
+    )
+
+    private data class EasyDebridBenchmarkLookupCandidate(
+        val source: EasyDebridBenchmarkSource,
+        val largestSizeBytes: Long
     )
 
     private fun <T> selectBenchmarkResolutionShortlist(

@@ -743,7 +743,8 @@ class TraktDiscoveryService @Inject constructor(
             releaseInfo = releaseInfo,
             imdbRating = imdbRating,
             genres = genres,
-            trailerYtIds = trailerYtIds
+            trailerYtIds = trailerYtIds,
+            language = language
         )
     }
 
