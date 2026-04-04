@@ -399,65 +399,100 @@ internal class ParallelRangeDataSource(
     }
 
     private fun downloadChunk(chunkIndex: Long): DownloadedChunk {
-        var lastException: Exception? = null
-        val maxAttempts = MAX_TRANSIENT_CHUNK_ATTEMPTS
-        for (attempt in 0 until maxAttempts) {
-            try {
-                return downloadChunkOnce(chunkIndex)
-            } catch (e: Exception) {
-                if (closed.get()) throw IOException("DataSource closed")
-                lastException = e
-                val recoverable = e.isRecoverableChunkFailure()
-                val attemptNumber = attempt + 1
-                val allowedAttempts = if (recoverable) {
-                    MAX_TRANSIENT_CHUNK_ATTEMPTS
-                } else {
-                    MAX_NON_TRANSIENT_CHUNK_ATTEMPTS
-                }
-                if (attemptNumber >= allowedAttempts) {
-                    break
-                }
-                if (e.isTransientInterruption()) {
-                    Log.d(TAG, "Chunk $chunkIndex interrupted during prefetch (attempt $attemptNumber), retrying")
-                } else {
-                    Log.w(
-                        TAG,
-                        "Chunk $chunkIndex download failed (attempt $attemptNumber/$allowedAttempts), retrying: ${e.message}"
-                    )
-                }
-                try {
-                    Thread.sleep(retryBackoffMs(attemptNumber))
-                } catch (_: InterruptedException) {
-                }
-            }
-        }
-        throw ChunkDownloadException(
-            chunkIndex = chunkIndex,
-            message = "Failed to download chunk $chunkIndex after retries",
-            cause = lastException
-        )
-    }
-
-    private fun downloadChunkOnce(chunkIndex: Long): DownloadedChunk {
         val start = chunkIndex * chunkSize
         val end = if (totalFileLength != C.LENGTH_UNSET.toLong()) {
             minOf(start + chunkSize, totalFileLength)
         } else {
             start + chunkSize
         }
+        val expectedBytes = (end - start).coerceAtLeast(0L).toInt()
+        val buffer = acquireBuffer()
+        var totalRead = 0
+        var lastException: Exception? = null
+        var transientAttemptNumber = 0
+        var nonTransientAttemptNumber = 0
 
-        val ds = upstreamFactory.createDataSource()
-        val uri = resolvedUri ?: originalDataSpec?.uri ?: throw IOException("No URI available")
-        val spec = DataSpec.Builder()
-            .setUri(uri)
-            .setPosition(start)
-            .setLength(end - start)
-            .build()
+        try {
+            while (!closed.get() && totalRead < expectedBytes) {
+                val ds = upstreamFactory.createDataSource()
+                try {
+                    val uri = resolvedUri ?: originalDataSpec?.uri ?: throw IOException("No URI available")
+                    val spec = DataSpec.Builder()
+                        .setUri(uri)
+                        .setPosition(start + totalRead)
+                        .setLength((expectedBytes - totalRead).toLong())
+                        .build()
 
-        ds.open(spec)
-        val chunk = readIntoChunk(ds)
-        ds.close()
-        return chunk
+                    ds.open(spec)
+                    while (!closed.get() && totalRead < expectedBytes) {
+                        val maxRead = minOf(expectedBytes - totalRead, READ_BUFFER_SIZE)
+                        if (maxRead <= 0) break
+                        val read = ds.read(buffer, totalRead, maxRead)
+                        if (read == C.RESULT_END_OF_INPUT) {
+                            if (totalRead >= expectedBytes) {
+                                break
+                            }
+                            throw EOFException("Unexpected end of chunk $chunkIndex after $totalRead / $expectedBytes bytes")
+                        }
+                        totalRead += read
+                        onTransportBytesDownloaded(read.toLong(), transportSampleTimeMs())
+                    }
+                    ds.close()
+                } catch (e: Exception) {
+                    runCatching { ds.close() }
+                    if (closed.get()) throw IOException("DataSource closed")
+                    lastException = e
+                    val recoverable = e.isRecoverableChunkFailure()
+                    if (!recoverable) {
+                        nonTransientAttemptNumber += 1
+                        if (nonTransientAttemptNumber >= MAX_NON_TRANSIENT_CHUNK_ATTEMPTS) {
+                            break
+                        }
+                    } else {
+                        transientAttemptNumber += 1
+                        if (transientAttemptNumber >= MAX_TRANSIENT_CHUNK_ATTEMPTS) {
+                            break
+                        }
+                    }
+                    val allowedAttempts = if (recoverable) MAX_TRANSIENT_CHUNK_ATTEMPTS else MAX_NON_TRANSIENT_CHUNK_ATTEMPTS
+                    val attemptNumber = if (recoverable) transientAttemptNumber else nonTransientAttemptNumber
+                    val resumeOffset = totalRead
+                    if (e.isTransientInterruption()) {
+                        Log.d(TAG, "Chunk $chunkIndex interrupted during prefetch at $resumeOffset bytes (attempt $attemptNumber), retrying")
+                    } else {
+                        Log.w(
+                            TAG,
+                            "Chunk $chunkIndex download failed at $resumeOffset / $expectedBytes bytes (attempt $attemptNumber/$allowedAttempts), retrying: ${e.message}"
+                        )
+                    }
+                    val delayMs = retryBackoffMs(attemptNumber, madeProgress = resumeOffset > 0)
+                    if (delayMs > 0L) {
+                        try {
+                            Thread.sleep(delayMs)
+                        } catch (_: InterruptedException) {
+                        }
+                    }
+                    continue
+                }
+            }
+
+            if (closed.get()) {
+                throw IOException("DataSource closed")
+            }
+            if (totalRead >= expectedBytes) {
+                return DownloadedChunk(buffer, totalRead)
+            }
+        } catch (e: Exception) {
+            releaseBuffer(buffer)
+            throw e
+        }
+
+        releaseBuffer(buffer)
+        throw ChunkDownloadException(
+            chunkIndex = chunkIndex,
+            message = "Failed to download chunk $chunkIndex after retries",
+            cause = lastException
+        )
     }
 
     private fun Exception.isTransientInterruption(): Boolean {
@@ -481,38 +516,21 @@ internal class ParallelRangeDataSource(
         return cause.isRecoverableChunkFailure()
     }
 
-    private fun retryBackoffMs(attemptNumber: Int): Long {
+    private fun retryBackoffMs(attemptNumber: Int, madeProgress: Boolean = false): Long {
+        if (madeProgress) {
+            return when (attemptNumber) {
+                1 -> 0L
+                2 -> 25L
+                3 -> 50L
+                else -> 100L
+            }
+        }
         return when (attemptNumber) {
             1 -> 50L
             2 -> 100L
             3 -> 200L
             else -> 250L
         }
-    }
-
-    /** Read from an already-opened DataSource into a pooled chunk buffer. */
-    private fun readIntoChunk(ds: DataSource): DownloadedChunk {
-        val buffer = acquireBuffer()
-        var totalRead = 0
-        try {
-            while (!closed.get()) {
-                val maxRead = minOf(buffer.size - totalRead, READ_BUFFER_SIZE)
-                if (maxRead <= 0) break
-                val read = ds.read(buffer, totalRead, maxRead)
-                if (read == C.RESULT_END_OF_INPUT) break
-                totalRead += read
-                onTransportBytesDownloaded(read.toLong(), transportSampleTimeMs())
-            }
-        } catch (e: Exception) {
-            releaseBuffer(buffer)
-            if (closed.get()) throw IOException("DataSource closed")
-            throw e
-        }
-        if (closed.get()) {
-            releaseBuffer(buffer)
-            throw IOException("DataSource closed")
-        }
-        return DownloadedChunk(buffer, totalRead)
     }
 
     /** Read only a small startup window from an already-opened DataSource. */
