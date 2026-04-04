@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
@@ -129,6 +130,67 @@ class HomeViewModelPresentationPipelineTest {
         assertEquals(ContentType.SERIES, preview.type)
         assertEquals("Show A • S2E4 Episode 4", preview.name)
         assertEquals(PosterShape.LANDSCAPE, preview.posterShape)
+    }
+
+    @Test
+    fun `continue watching runtime warm candidates only include episodic items missing runtime`() {
+        val missingEpisode = ContinueWatchingItem.NextUp(
+            NextUpInfo(
+                contentId = "show-a",
+                contentType = "series",
+                name = "Show A",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                displayMetadata = HomeDisplayMetadata(runtime = null),
+                videoId = "show-a:2:4",
+                season = 2,
+                episode = 4,
+                episodeTitle = "Episode 4",
+                thumbnail = null,
+                lastWatched = 1_000L
+            )
+        )
+        val alreadyHasRuntime = ContinueWatchingItem.NextUp(
+            NextUpInfo(
+                contentId = "show-b",
+                contentType = "series",
+                name = "Show B",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                displayMetadata = HomeDisplayMetadata(runtime = "47m"),
+                videoId = "show-b:1:2",
+                season = 1,
+                episode = 2,
+                episodeTitle = "Episode 2",
+                thumbnail = null,
+                lastWatched = 1_000L
+            )
+        )
+        val movie = ContinueWatchingItem.InProgress(
+            progress = com.nexio.tv.domain.model.WatchProgress(
+                contentId = "tt123",
+                contentType = "movie",
+                name = "Movie",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                videoId = "tt123",
+                season = null,
+                episode = null,
+                episodeTitle = null,
+                position = 1_000L,
+                duration = 0L,
+                lastWatched = 42L
+            )
+        )
+
+        val candidates = continueWatchingItemsMissingRuntime(
+            listOf(missingEpisode, alreadyHasRuntime, movie)
+        )
+
+        assertEquals(listOf(missingEpisode), candidates)
     }
 
     @Test

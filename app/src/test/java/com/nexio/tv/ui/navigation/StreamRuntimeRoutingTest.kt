@@ -4,6 +4,7 @@ import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.home.NextUpInfo
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
@@ -75,6 +76,33 @@ class StreamRuntimeRoutingTest {
 
         assertTrue(route.contains("startFromBeginning=true"))
         assertTrue(route.contains("deterministicAutoplay=true"))
+    }
+
+    @Test
+    fun `missing runtime is hydrated before continue watching route build`() = runTest {
+        val route = buildContinueWatchingStreamRouteWithHydration(
+            item = ContinueWatchingItem.NextUp(
+                info = nextUpInfo(runtime = null)
+            ),
+            deterministicAutoplayEnabled = true,
+            resolveRuntimeMinutes = { 62 }
+        )
+
+        assertTrue(route.contains("runtime=62"))
+    }
+
+    @Test
+    fun `continue watching route still builds when runtime hydration fails`() = runTest {
+        val route = buildContinueWatchingStreamRouteWithHydration(
+            item = ContinueWatchingItem.NextUp(
+                info = nextUpInfo(runtime = null)
+            ),
+            deterministicAutoplayEnabled = true,
+            resolveRuntimeMinutes = { null }
+        )
+
+        assertTrue(route.contains("deterministicAutoplay=true"))
+        assertTrue(route.contains("runtime="))
     }
 
     private fun watchProgress(durationMs: Long): WatchProgress {
