@@ -40,6 +40,7 @@ import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.LibraryRepository
 import com.nexio.tv.domain.repository.MetaRepository
+import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import com.nexio.tv.core.util.isUnreleased
 import java.time.LocalDate
@@ -102,6 +103,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val episodeRatingsSelectionRepository: EpisodeRatingsSelectionRepository,
     private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
+    private val addonRepository: AddonRepository,
     private val traktScrobbleService: TraktScrobbleService,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
@@ -145,6 +147,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     init {
         observeDeterministicAutoplaySetting()
+        observeInstalledAddons()
         observeMetaViewSettings()
         observeLibraryState()
         observeWatchProgress()
@@ -165,6 +168,30 @@ class MetaDetailsViewModel @Inject constructor(
                     _uiState.update { state ->
                         if (state.deterministicAutoplayEnabled == enabled) state
                         else state.copy(deterministicAutoplayEnabled = enabled)
+                    }
+                }
+        }
+    }
+
+    private fun observeInstalledAddons() {
+        viewModelScope.launch {
+            addonRepository.getInstalledAddons()
+                .distinctUntilChanged()
+                .collectLatest { addons ->
+                    val count = addons.size
+                    val universalMode = shouldUseUniversalStreamerMode(count)
+                    _uiState.update { state ->
+                        if (
+                            state.installedAddonsCount == count &&
+                            state.universalStreamerModeEnabled == universalMode
+                        ) {
+                            state
+                        } else {
+                            state.copy(
+                                installedAddonsCount = count,
+                                universalStreamerModeEnabled = universalMode
+                            )
+                        }
                     }
                 }
         }

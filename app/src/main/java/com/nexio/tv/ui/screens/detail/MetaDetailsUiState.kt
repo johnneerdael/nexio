@@ -58,6 +58,8 @@ data class MetaDetailsUiState(
     val mdbListRatings: MDBListRatings? = null,
     val showMdbListImdb: Boolean = false,
     val deterministicAutoplayEnabled: Boolean = false,
+    val installedAddonsCount: Int = 0,
+    val universalStreamerModeEnabled: Boolean = false,
     val userMessage: String? = null,
     val userMessageIsError: Boolean = false
 )

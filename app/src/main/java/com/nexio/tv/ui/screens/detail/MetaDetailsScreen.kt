@@ -267,6 +267,9 @@ fun MetaDetailsScreen(
     var immediateTrailerTakeoverPending by rememberSaveable { mutableStateOf(false) }
     var pendingTrailerTakeoverRequest by remember { mutableStateOf<DetailTrailerTakeoverRequest?>(null) }
     var immediateTrailerTakeoverClaimed by remember { mutableStateOf(false) }
+    var officialAppChooserTargets by remember { mutableStateOf<List<OfficialStreamingAppTarget>>(emptyList()) }
+    var pendingOfficialAppTitle by remember { mutableStateOf<String?>(null) }
+    var showNoOfficialAppDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(activity) {
         if (activity != null) {
@@ -404,6 +407,28 @@ fun MetaDetailsScreen(
             )
         }
         viewModel.onEvent(MetaDetailsEvent.OnExternalTrailerConsumed)
+    }
+
+    fun handleUniversalStreamerPlayRequest(contentTitle: String) {
+        val installedPackages = context.packageManager
+            .getInstalledApplications(0)
+            .mapTo(linkedSetOf()) { it.packageName }
+        val searchablePackages = resolveSearchableStreamingPackages(context, installedPackages)
+        val targets = resolveInstalledOfficialStreamingApps(installedPackages, searchablePackages)
+        when {
+            targets.isEmpty() -> {
+                showNoOfficialAppDialog = true
+            }
+            targets.size == 1 -> {
+                buildOfficialStreamingAppIntent(context, targets.first(), contentTitle)?.let { intent ->
+                    context.startActivity(intent)
+                }
+            }
+            else -> {
+                pendingOfficialAppTitle = contentTitle
+                officialAppChooserTargets = targets
+            }
+        }
     }
 
     androidx.compose.runtime.DisposableEffect(trailerLifecycleOwner) {
@@ -579,42 +604,50 @@ fun MetaDetailsScreen(
                         onSeasonOptionsOpened = { viewModel.onEvent(MetaDetailsEvent.OnSeasonOptionsOpened(it)) },
                         onProgrammaticSeasonSelected = { viewModel.setSelectedSeasonProgrammatically(it) },
                         onEpisodeClick = { video ->
-                            onPlayClick(
-                                video.id,
-                                meta.apiType,
-                                meta.id,
-                                meta.name,
-                                video.thumbnail ?: meta.poster,
-                                meta.background,
-                                meta.logo,
-                                video.season,
-                                video.episode,
-                                video.title,
-                                null,
-                                null,
-                                video.runtime,
-                                meta.language,
-                                uiState.deterministicAutoplayEnabled
-                            )
+                            if (uiState.universalStreamerModeEnabled) {
+                                handleUniversalStreamerPlayRequest(meta.name)
+                            } else {
+                                onPlayClick(
+                                    video.id,
+                                    meta.apiType,
+                                    meta.id,
+                                    meta.name,
+                                    video.thumbnail ?: meta.poster,
+                                    meta.background,
+                                    meta.logo,
+                                    video.season,
+                                    video.episode,
+                                    video.title,
+                                    null,
+                                    null,
+                                    video.runtime,
+                                    meta.language,
+                                    uiState.deterministicAutoplayEnabled
+                                )
+                            }
                         },
                         onPlayClick = { videoId ->
-                            onPlayClick(
-                                videoId,
-                                meta.apiType,
-                                meta.id,
-                                meta.name,
-                                meta.poster,
-                                meta.background,
-                                meta.logo,
-                                null,
-                                null,
-                                null,
-                                genresString,
-                                yearString,
-                                null,
-                                meta.language,
-                                uiState.deterministicAutoplayEnabled
-                            )
+                            if (uiState.universalStreamerModeEnabled) {
+                                handleUniversalStreamerPlayRequest(meta.name)
+                            } else {
+                                onPlayClick(
+                                    videoId,
+                                    meta.apiType,
+                                    meta.id,
+                                    meta.name,
+                                    meta.poster,
+                                    meta.background,
+                                    meta.logo,
+                                    null,
+                                    null,
+                                    null,
+                                    genresString,
+                                    yearString,
+                                    null,
+                                    meta.language,
+                                    uiState.deterministicAutoplayEnabled
+                                )
+                            }
                         },
                         onPlayButtonFocused = { viewModel.onEvent(MetaDetailsEvent.OnPlayButtonFocused) },
                         onToggleLibrary = { viewModel.onEvent(MetaDetailsEvent.OnToggleLibrary) },
@@ -725,6 +758,31 @@ fun MetaDetailsScreen(
                 },
                 onSave = { viewModel.onEvent(MetaDetailsEvent.OnPickerSave) },
                 onDismiss = { viewModel.onEvent(MetaDetailsEvent.OnPickerDismiss) }
+            )
+        }
+
+        if (officialAppChooserTargets.isNotEmpty()) {
+            OfficialAppChooserDialog(
+                title = pendingOfficialAppTitle ?: uiState.meta?.name ?: uiState.meta?.id.orEmpty(),
+                targets = officialAppChooserTargets,
+                onOpen = { target ->
+                    val contentTitle = pendingOfficialAppTitle ?: uiState.meta?.name.orEmpty()
+                    buildOfficialStreamingAppIntent(context, target, contentTitle)?.let { intent ->
+                        context.startActivity(intent)
+                    }
+                    officialAppChooserTargets = emptyList()
+                    pendingOfficialAppTitle = null
+                },
+                onDismiss = {
+                    officialAppChooserTargets = emptyList()
+                    pendingOfficialAppTitle = null
+                }
+            )
+        }
+
+        if (showNoOfficialAppDialog) {
+            NoOfficialAppDialog(
+                onDismiss = { showNoOfficialAppDialog = false }
             )
         }
 
@@ -2260,6 +2318,61 @@ private fun LibraryListPickerDialog(
             ) {
                 Text(if (isPending) stringResource(R.string.action_saving) else stringResource(R.string.action_save))
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun OfficialAppChooserDialog(
+    title: String,
+    targets: List<OfficialStreamingAppTarget>,
+    onOpen: (OfficialStreamingAppTarget) -> Unit,
+    onDismiss: () -> Unit
+) {
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = "Open in an installed streaming app",
+        subtitle = "Choose where to search for $title"
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            targets.forEach { target ->
+                Button(
+                    onClick = { onOpen(target) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(target.displayName)
+                }
+            }
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundElevated,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun NoOfficialAppDialog(
+    onDismiss: () -> Unit
+) {
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = "No supported streaming app found",
+        subtitle = "Install a supported official streaming app on this device or enable your first addon in NEXIO to use the normal playback flow."
+    ) {
+        Button(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.action_close))
         }
     }
 }

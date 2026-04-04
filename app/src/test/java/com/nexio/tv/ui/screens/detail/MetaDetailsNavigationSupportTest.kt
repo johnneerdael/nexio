@@ -15,6 +15,46 @@ import org.junit.Test
 class MetaDetailsNavigationSupportTest {
 
     @Test
+    fun `universal streamer mode is enabled only when no addons are installed`() {
+        assertTrue(shouldUseUniversalStreamerMode(0))
+        assertFalse(shouldUseUniversalStreamerMode(1))
+        assertFalse(shouldUseUniversalStreamerMode(3))
+    }
+
+    @Test
+    fun `installed official app resolution returns supported streaming apps in stable order`() {
+        val resolved = resolveInstalledOfficialStreamingApps(
+            setOf(
+                "com.wbd.stream",
+                "com.netflix.ninja",
+                "com.unknown.app"
+            ),
+            setOf(
+                "com.wbd.stream",
+                "com.netflix.ninja"
+            )
+        )
+
+        assertEquals(
+            listOf("Netflix", "Max"),
+            resolved.map { it.displayName }
+        )
+    }
+
+    @Test
+    fun `installed official app resolution excludes non searchable providers`() {
+        val resolved = resolveInstalledOfficialStreamingApps(
+            setOf(
+                "com.wbd.stream",
+                "com.netflix.ninja"
+            ),
+            setOf("com.netflix.ninja")
+        )
+
+        assertEquals(listOf("Netflix"), resolved.map { it.displayName })
+    }
+
+    @Test
     fun returnFocusRequestIsLatchedOnceAndMarkedForConsumption() {
         val resolved = resolveDetailReturnFocusRequest(
             returnFocusSeason = 3,

@@ -28,6 +28,7 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.Video
+import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.LibraryRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
@@ -152,6 +153,45 @@ class MetaDetailsSeasonMediaViewModelTest {
                 contentId = any()
             )
         }
+    }
+
+    @Test
+    fun `view model enables universal streamer mode when no addons are installed`() = runTest(dispatcher) {
+        val trailerService = mockk<TrailerService>(relaxed = true)
+        val viewModel = buildViewModel(
+            trailerService = trailerService,
+            installedAddons = emptyList()
+        )
+        advanceUntilIdle()
+
+        assertEquals(0, viewModel.uiState.value.installedAddonsCount)
+        assertTrue(viewModel.uiState.value.universalStreamerModeEnabled)
+    }
+
+    @Test
+    fun `view model disables universal streamer mode when an addon is installed`() = runTest(dispatcher) {
+        val trailerService = mockk<TrailerService>(relaxed = true)
+        val viewModel = buildViewModel(
+            trailerService = trailerService,
+            installedAddons = listOf(
+                com.nexio.tv.domain.model.Addon(
+                    id = "addon-1",
+                    name = "Example",
+                    displayName = "Example",
+                    version = "1.0.0",
+                    description = null,
+                    logo = null,
+                    baseUrl = "https://example.com",
+                    catalogs = emptyList(),
+                    types = listOf(ContentType.MOVIE),
+                    resources = emptyList()
+                )
+            )
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, viewModel.uiState.value.installedAddonsCount)
+        assertFalse(viewModel.uiState.value.universalStreamerModeEnabled)
     }
 
     @Test
@@ -870,7 +910,8 @@ class MetaDetailsSeasonMediaViewModelTest {
         meta: Meta = buildSeriesMeta(),
         tmdbService: TmdbService? = null,
         tmdbMetadataService: TmdbMetadataService? = null,
-        tmdbSettings: TmdbSettings = TmdbSettings()
+        tmdbSettings: TmdbSettings = TmdbSettings(),
+        installedAddons: List<com.nexio.tv.domain.model.Addon> = emptyList()
     ): MetaDetailsViewModel {
         val metaRepository = mockk<MetaRepository>()
         every {
@@ -920,9 +961,11 @@ class MetaDetailsSeasonMediaViewModelTest {
         val traktApi = mockk<TraktApi>(relaxed = true)
         val traktAuthService = mockk<TraktAuthService>(relaxed = true)
         val traktScrobbleService = mockk<TraktScrobbleService>(relaxed = true)
+        val addonRepository = mockk<AddonRepository>()
         val context = mockk<Context>(relaxed = true)
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
         every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
+        every { addonRepository.getInstalledAddons() } returns flowOf(installedAddons)
 
         return MetaDetailsViewModel(
             context = context,
@@ -938,6 +981,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             episodeRatingsSelectionRepository = episodeRatingsSelectionRepository,
             libraryRepository = libraryRepository,
             watchProgressRepository = watchProgressRepository,
+            addonRepository = addonRepository,
             traktScrobbleService = traktScrobbleService,
             layoutPreferenceDataStore = layoutPreferenceDataStore,
             playerSettingsDataStore = playerSettingsDataStore,
