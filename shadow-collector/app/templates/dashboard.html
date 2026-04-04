@@ -1,1 +1,182 @@
-<!doctype html><html><head><meta charset="utf-8"><title>Nexio Shadow Collector</title><link rel="stylesheet" href="/static/styles.css"></head><body><main class="container"><header class="row between"><div><h1>Shadow Autoplay Dashboard</h1><p>Total events: {{ total }}</p></div><div class="row gap"><form method="post" action="/admin/clear" onsubmit="return confirm('Clear all collected data?');"><button class="danger" type="submit">Clear data</button></form><form method="post" action="/logout"><button type="submit">Logout</button></form></div></header><table><thead><tr><th>ID</th><th>When</th><th>Type</th><th>Title</th><th>Winner</th><th>Transport</th><th>Score</th><th>W/R</th></tr></thead><tbody>{% for row in rows %}<tr><td><a href="/events/{{ row.id }}">{{ row.id }}</a></td><td>{{ row.received_at_ms }}</td><td>{{ row.content_type or '-' }}</td><td>{{ row.title or row.video_id }}</td><td>{{ row.selected_provider or 'none' }}</td><td>{{ row.selected_transport or '-' }}</td><td>{{ row.selected_score or '-' }}</td><td>{{ row.winner_count }}/{{ row.rejected_count }}</td></tr>{% endfor %}</tbody></table></main></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nexio Shadow Collector</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Shadow autoplay telemetry</p>
+        <h1>Shadow Autoplay Dashboard</h1>
+        <p class="lede">User-friendly telemetry for autoplay decisions, candidate quality, and transport fitness.</p>
+      </div>
+      <div class="header-actions">
+        <form method="post" action="/admin/clear" onsubmit="return confirm('Clear all collected data?');">
+          <button class="button button-danger" type="submit">Clear data</button>
+        </form>
+        <form method="post" action="/logout">
+          <button class="button button-secondary" type="submit">Logout</button>
+        </form>
+      </div>
+    </header>
+
+    <section class="stats-grid">
+      <article class="stat-card">
+        <span class="stat-label">Collected events</span>
+        <strong class="stat-value">{{ total }}</strong>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">Visible after filters</span>
+        <strong class="stat-value">{{ visible_total }}</strong>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">Average winner score</span>
+        <strong class="stat-value">{{ stats.average_score }}</strong>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">Top provider</span>
+        <strong class="stat-value">{{ stats.top_provider }}</strong>
+      </article>
+    </section>
+
+    <section class="panel">
+      <form method="get" class="filters-grid">
+        <label class="field field-search">
+          <span>Search</span>
+          <input type="search" name="q" value="{{ filters.q }}" placeholder="Title, request id, file, provider, service, HDR, audio…">
+        </label>
+        <label class="field">
+          <span>Provider</span>
+          <select name="provider">
+            <option value="">All providers</option>
+            {% for value in options.providers %}
+              <option value="{{ value }}" {% if filters.provider == value %}selected{% endif %}>{{ value }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="field">
+          <span>Content type</span>
+          <select name="content_type">
+            <option value="">All types</option>
+            {% for value in options.content_types %}
+              <option value="{{ value }}" {% if filters.content_type == value %}selected{% endif %}>{{ value }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="field">
+          <span>Transport</span>
+          <select name="transport">
+            <option value="">All transports</option>
+            {% for value in options.transports %}
+              <option value="{{ value }}" {% if filters.transport == value %}selected{% endif %}>{{ value }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="field">
+          <span>Sort by</span>
+          <select name="sort">
+            <option value="received" {% if filters.sort == 'received' %}selected{% endif %}>Newest</option>
+            <option value="score" {% if filters.sort == 'score' %}selected{% endif %}>Winner score</option>
+            <option value="ratio" {% if filters.sort == 'ratio' %}selected{% endif %}>Suitability ratio</option>
+            <option value="size" {% if filters.sort == 'size' %}selected{% endif %}>File size</option>
+            <option value="bitrate" {% if filters.sort == 'bitrate' %}selected{% endif %}>Bitrate</option>
+            <option value="provider" {% if filters.sort == 'provider' %}selected{% endif %}>Provider</option>
+            <option value="title" {% if filters.sort == 'title' %}selected{% endif %}>Title</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Direction</span>
+          <select name="direction">
+            <option value="desc" {% if filters.direction == 'desc' %}selected{% endif %}>Descending</option>
+            <option value="asc" {% if filters.direction == 'asc' %}selected{% endif %}>Ascending</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Rows</span>
+          <select name="limit">
+            {% for value in [25, 50, 100, 200, 500] %}
+              <option value="{{ value }}" {% if filters.limit == value %}selected{% endif %}>{{ value }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="field-actions">
+          <button class="button" type="submit">Apply</button>
+          <a class="button button-secondary" href="/">Reset</a>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel table-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Decision feed</h2>
+          <p>{{ rows|length }} shown · separate columns mirror the ADB winner summary fields.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Event</th>
+              <th>When</th>
+              <th>Title</th>
+              <th>Provider</th>
+              <th>Service</th>
+              <th>File</th>
+              <th>Size</th>
+              <th>Score</th>
+              <th>Ratio</th>
+              <th>Resolution</th>
+              <th>HDR</th>
+              <th>Audio</th>
+              <th>Transport</th>
+              <th>W/R</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if rows %}
+              {% for row in rows %}
+                {% set selected = row.selected %}
+                <tr>
+                  <td>
+                    <a class="event-link" href="/events/{{ row.id }}">#{{ row.id }}</a>
+                    <div class="subtle">{{ row.request_id }}</div>
+                    <div class="subtle">{{ row.video_id }}</div>
+                  </td>
+                  <td>
+                    <div>{{ row.received_at_label }}</div>
+                    <div class="subtle">sent {{ row.sent_at_label }}</div>
+                  </td>
+                  <td>
+                    <div class="title-cell">{{ row.title }}</div>
+                    <div class="summary-line">{{ row.result_line }}</div>
+                  </td>
+                  <td><span class="pill">{{ selected.provider if selected else 'none' }}</span></td>
+                  <td>{{ selected.service if selected else '—' }}</td>
+                  <td class="file-cell" title="{{ selected.file if selected else '' }}">{{ selected.file if selected else '—' }}</td>
+                  <td>{{ selected.size_label if selected else '—' }}</td>
+                  <td>{{ selected.score if selected and selected.score is not none else '—' }}</td>
+                  <td>{{ selected.ratio_label if selected else '—' }}</td>
+                  <td>{{ selected.resolution if selected else '—' }}</td>
+                  <td>{{ selected.hdr if selected else '—' }}</td>
+                  <td>{{ selected.audio if selected else '—' }}</td>
+                  <td>{{ selected.transport if selected else '—' }}</td>
+                  <td>{{ row.winner_count }}/{{ row.rejected_count }}</td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="14" class="empty-state">No events match the current filters.</td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -1050,7 +1050,17 @@ class StreamScreenViewModel @Inject constructor(
                 }
             }
 
-        if (!isFinalPass && !deterministicAutoplayEarlyFinishSatisfied(event.winners, request)) {
+        val earlyFinishDecision = deterministicAutoplayEarlyFinishDecision(event.winners, request)
+        if (!isFinalPass) {
+            Log.i(
+                TAG,
+                "DETERMINISTIC_EARLY_FINISH triggered=${earlyFinishDecision.triggered} " +
+                    "reason=${earlyFinishDecision.reason} count=${earlyFinishDecision.matchingCount} " +
+                    "resolution=${earlyFinishDecision.resolution} releaseType=${earlyFinishDecision.releaseType} " +
+                    "hasRemux=${earlyFinishDecision.hasRemux}"
+            )
+        }
+        if (!isFinalPass && !earlyFinishDecision.triggered) {
             return null
         }
 
@@ -1355,8 +1365,33 @@ internal fun deterministicAutoplayEarlyFinishSatisfied(
     winners: List<com.nexio.tv.data.repository.benchmark.ShadowStreamDecision>,
     request: ShadowRequestContext
 ): Boolean {
+    return deterministicAutoplayEarlyFinishDecision(winners, request).triggered
+}
+
+internal data class DeterministicEarlyFinishDecision(
+    val triggered: Boolean,
+    val reason: String,
+    val matchingCount: Int,
+    val resolution: String,
+    val releaseType: String,
+    val hasRemux: Boolean
+)
+
+internal fun deterministicAutoplayEarlyFinishDecision(
+    winners: List<com.nexio.tv.data.repository.benchmark.ShadowStreamDecision>,
+    request: ShadowRequestContext
+): DeterministicEarlyFinishDecision {
     val countedWinners = winners.distinctBy(::deterministicEarlyFinishCountKey)
-    if (countedWinners.isEmpty()) return false
+    if (countedWinners.isEmpty()) {
+        return DeterministicEarlyFinishDecision(
+            triggered = false,
+            reason = "no_winners",
+            matchingCount = 0,
+            resolution = "none",
+            releaseType = "none",
+            hasRemux = false
+        )
+    }
     val has4k = countedWinners.any { it.resolution.equals("2160p", ignoreCase = true) }
     val hasRemux = countedWinners.any { it.breakdown.releaseType == "remux" }
     val movie = request.contentType.equals("movie", ignoreCase = true)
@@ -1385,13 +1420,36 @@ internal fun deterministicAutoplayEarlyFinishSatisfied(
     }
     val resolution = if (has4k) "2160p" else "1080p"
 
-    if (countMatching(resolution, "remux", remuxThreshold) >= 3) {
-        return true
+    val remuxCount = countMatching(resolution, "remux", remuxThreshold)
+    if (remuxCount >= 3) {
+        return DeterministicEarlyFinishDecision(
+            triggered = true,
+            reason = "threshold_met",
+            matchingCount = remuxCount,
+            resolution = resolution,
+            releaseType = "remux",
+            hasRemux = hasRemux
+        )
     }
-    if (!hasRemux && countMatching(resolution, "webdl", webdlThreshold) >= 3) {
-        return true
+    val webdlCount = countMatching(resolution, "webdl", webdlThreshold)
+    if (!hasRemux && webdlCount >= 3) {
+        return DeterministicEarlyFinishDecision(
+            triggered = true,
+            reason = "threshold_met",
+            matchingCount = webdlCount,
+            resolution = resolution,
+            releaseType = "webdl",
+            hasRemux = hasRemux
+        )
     }
-    return false
+    return DeterministicEarlyFinishDecision(
+        triggered = false,
+        reason = if (hasRemux) "insufficient_remux_count" else "insufficient_count",
+        matchingCount = if (hasRemux) remuxCount else webdlCount,
+        resolution = resolution,
+        releaseType = if (hasRemux) "remux" else "webdl",
+        hasRemux = hasRemux
+    )
 }
 
 private fun deterministicEarlyFinishCountKey(
