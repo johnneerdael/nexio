@@ -220,7 +220,11 @@ fun StreamScreen(
                 backdropUrl = uiState.backdrop ?: uiState.poster,
                 logoUrl = uiState.logo,
                 title = uiState.title,
-                message = uiState.directAutoPlayMessage ?: stringResource(R.string.stream_finding_source),
+                message = if (uiState.isDeterministicAutoplay) {
+                    uiState.directAutoPlayMessage
+                } else {
+                    uiState.directAutoPlayMessage ?: stringResource(R.string.stream_finding_source)
+                },
                 modifier = Modifier.fillMaxSize()
             )
         } else {

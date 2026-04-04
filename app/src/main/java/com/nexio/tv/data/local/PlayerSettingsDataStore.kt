@@ -229,6 +229,7 @@ data class PlayerSettings(
     val groupStreamsAcrossAddonsEnabled: Boolean = true,
     val deduplicateGroupedStreamsEnabled: Boolean = true,
     val serviceWrapEnabled: Boolean = false,
+    val shadowAutoplayDataCollectionEnabled: Boolean = false,
     val filterWebDolbyVisionStreamsEnabled: Boolean = false,
     val filterEpisodeMismatchStreamsEnabled: Boolean = true,
     val filterMovieYearMismatchStreamsEnabled: Boolean = true,
@@ -445,6 +446,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val groupStreamsAcrossAddonsEnabledKey = booleanPreferencesKey("group_streams_across_addons_enabled")
     private val deduplicateGroupedStreamsEnabledKey = booleanPreferencesKey("deduplicate_grouped_streams_enabled")
     private val serviceWrapEnabledKey = booleanPreferencesKey("service_wrap_enabled")
+    private val shadowAutoplayDataCollectionEnabledKey = booleanPreferencesKey("shadow_autoplay_data_collection_enabled")
     private val filterWebDolbyVisionStreamsEnabledKey = booleanPreferencesKey("filter_web_dolby_vision_streams_enabled")
     private val filterEpisodeMismatchStreamsEnabledKey = booleanPreferencesKey("filter_episode_mismatch_streams_enabled")
     private val filterMovieYearMismatchStreamsEnabledKey = booleanPreferencesKey("filter_movie_year_mismatch_streams_enabled")
@@ -750,6 +752,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 groupStreamsAcrossAddonsEnabled = true,
                 deduplicateGroupedStreamsEnabled = prefs[deduplicateGroupedStreamsEnabledKey] ?: true,
                 serviceWrapEnabled = prefs[serviceWrapEnabledKey] ?: false,
+                shadowAutoplayDataCollectionEnabled = prefs[shadowAutoplayDataCollectionEnabledKey] ?: false,
                 filterWebDolbyVisionStreamsEnabled = prefs[filterWebDolbyVisionStreamsEnabledKey] ?: false,
                 filterEpisodeMismatchStreamsEnabled = prefs[filterEpisodeMismatchStreamsEnabledKey] ?: true,
                 filterMovieYearMismatchStreamsEnabled = prefs[filterMovieYearMismatchStreamsEnabledKey] ?: true,
@@ -1054,6 +1057,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setServiceWrapEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[serviceWrapEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setShadowAutoplayDataCollectionEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[shadowAutoplayDataCollectionEnabledKey] = enabled
         }
     }
 

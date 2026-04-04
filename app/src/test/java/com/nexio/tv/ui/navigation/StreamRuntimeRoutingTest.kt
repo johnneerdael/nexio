@@ -5,6 +5,7 @@ import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.home.NextUpInfo
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -47,6 +48,33 @@ class StreamRuntimeRoutingTest {
         assertEquals(47, parseRuntimeMinutes("47m"))
         assertEquals(125, parseRuntimeMinutes("125 min"))
         assertNull(parseRuntimeMinutes("unknown"))
+    }
+
+    @Test
+    fun `continue watching route forwards deterministic autoplay when enabled`() {
+        val route = buildContinueWatchingStreamRoute(
+            item = ContinueWatchingItem.NextUp(
+                info = nextUpInfo(runtime = "47m")
+            ),
+            deterministicAutoplayEnabled = true
+        )
+
+        assertTrue(route.contains("deterministicAutoplay=true"))
+        assertTrue(route.contains("returnToDetailOnBack=true"))
+    }
+
+    @Test
+    fun `continue watching start from beginning route preserves flags`() {
+        val route = buildContinueWatchingStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = watchProgress(durationMs = 9_091_000L)
+            ),
+            deterministicAutoplayEnabled = true,
+            startFromBeginning = true
+        )
+
+        assertTrue(route.contains("startFromBeginning=true"))
+        assertTrue(route.contains("deterministicAutoplay=true"))
     }
 
     private fun watchProgress(durationMs: Long): WatchProgress {
