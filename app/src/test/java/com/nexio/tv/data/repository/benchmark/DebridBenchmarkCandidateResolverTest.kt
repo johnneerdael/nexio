@@ -56,10 +56,42 @@ class DebridBenchmarkCandidateResolverTest {
         )
     }
 
+    @Test
+    fun `resolver forwards torbox provider lookup`() = runTest {
+        val resolver = buildResolver(
+            torBoxCandidates = DebridBenchmarkCandidateLookupResult.Candidates(
+                listOf(candidate(provider = DebridBenchmarkProvider.TORBOX, directUrl = "torbox"))
+            )
+        )
+
+        val result = resolver.resolve(DebridBenchmarkProvider.TORBOX)
+
+        assertTrue(result is DebridBenchmarkCandidateResolution.Candidate)
+        assertEquals("torbox", (result as DebridBenchmarkCandidateResolution.Candidate).value.directUrl)
+    }
+
+    @Test
+    fun `resolver forwards easydebrid provider lookup`() = runTest {
+        val resolver = buildResolver(
+            easyDebridCandidates = DebridBenchmarkCandidateLookupResult.Candidates(
+                listOf(candidate(provider = DebridBenchmarkProvider.EASY_DEBRID, directUrl = "easy"))
+            )
+        )
+
+        val result = resolver.resolve(DebridBenchmarkProvider.EASY_DEBRID)
+
+        assertTrue(result is DebridBenchmarkCandidateResolution.Candidate)
+        assertEquals("easy", (result as DebridBenchmarkCandidateResolution.Candidate).value.directUrl)
+    }
+
     private fun buildResolver(
         realDebridCandidates: DebridBenchmarkCandidateLookupResult =
             DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem,
         premiumizeCandidates: DebridBenchmarkCandidateLookupResult =
+            DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem,
+        torBoxCandidates: DebridBenchmarkCandidateLookupResult =
+            DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem,
+        easyDebridCandidates: DebridBenchmarkCandidateLookupResult =
             DebridBenchmarkCandidateLookupResult.NoPlayableLibraryItem,
         chooseIndex: (Int) -> Int = { 0 }
     ): DebridBenchmarkCandidateResolver {
@@ -72,6 +104,14 @@ class DebridBenchmarkCandidateResolverTest {
         coEvery {
             debridLibraryService.getBenchmarkCandidates(DebridBenchmarkProvider.PREMIUMIZE)
         } returns premiumizeCandidates
+
+        coEvery {
+            debridLibraryService.getBenchmarkCandidates(DebridBenchmarkProvider.TORBOX)
+        } returns torBoxCandidates
+
+        coEvery {
+            debridLibraryService.getBenchmarkCandidates(DebridBenchmarkProvider.EASY_DEBRID)
+        } returns easyDebridCandidates
 
         return DebridBenchmarkCandidateResolver(
             debridLibraryService = debridLibraryService,

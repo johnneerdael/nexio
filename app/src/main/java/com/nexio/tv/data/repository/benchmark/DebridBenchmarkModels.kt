@@ -13,6 +13,14 @@ enum class DebridBenchmarkProvider(
     PREMIUMIZE(
         storageKey = "premiumize",
         listKey = DebridLibraryService.PREMIUMIZE_LIST_KEY
+    ),
+    TORBOX(
+        storageKey = "torbox",
+        listKey = DebridLibraryService.TORBOX_LIST_KEY
+    ),
+    EASY_DEBRID(
+        storageKey = "easy_debrid",
+        listKey = DebridLibraryService.EASY_DEBRID_LIST_KEY
     );
 
     companion object {

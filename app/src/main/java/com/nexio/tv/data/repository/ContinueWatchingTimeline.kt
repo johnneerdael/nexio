@@ -93,11 +93,37 @@ internal fun <R, N> buildMixedContinueWatchingTimeline(
         }
 
         entries.subList(clusterStart, clusterEnd)
-            .sortedWith(
-                compareBy<TimelineEntry<R, N>> { it.kindPriority }
-                    .thenByDescending { it.activityAtMs }
-                    .thenBy { it.stableKey() }
-            )
+            .let { cluster ->
+                var leadResume: TimelineEntry.Resume<R>? = null
+                cluster.forEach { entry ->
+                    if (entry is TimelineEntry.Resume<R>) {
+                        if (
+                            leadResume == null ||
+                            entry.activityAtMs > leadResume!!.activityAtMs ||
+                            (entry.activityAtMs == leadResume!!.activityAtMs &&
+                                entry.stableKey() < leadResume!!.stableKey())
+                        ) {
+                            leadResume = entry
+                        }
+                    }
+                }
+                val remaining = if (leadResume == null) {
+                    cluster
+                } else {
+                    buildList {
+                        addAll(cluster)
+                        remove(leadResume)
+                    }
+                }.sortedWith(
+                    compareByDescending<TimelineEntry<R, N>> { it.activityAtMs }
+                        .thenBy { it.kindPriority }
+                        .thenBy { it.stableKey() }
+                )
+                buildList {
+                    leadResume?.let(::add)
+                    addAll(remaining)
+                }
+            }
             .forEach { entry ->
                 rows += when (entry) {
                     is TimelineEntry.Resume -> ContinueWatchingTimelineRow.Resume(entry.value)

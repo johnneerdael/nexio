@@ -5,9 +5,16 @@ import com.nexio.tv.data.local.RealDebridAuthState
 import com.nexio.tv.data.remote.api.PremiumizeApi
 import com.nexio.tv.data.remote.api.RealDebridApi
 import com.nexio.tv.data.remote.api.TorBoxApi
+import com.nexio.tv.data.remote.api.EasyDebridApi
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeItemDetailsDto
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeListAllDto
 import com.nexio.tv.data.remote.dto.debrid.PremiumizeListAllFileDto
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridGenerateDto
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridGeneratedFileDto
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridLookupDetailsDto
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridLookupDetailsResultDto
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridLookupFileDto
+import com.nexio.tv.data.remote.dto.debrid.EasyDebridLookupRequestDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDownloadDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentFileDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTorrentInfoDto
@@ -41,11 +48,14 @@ class DebridLibraryServiceTest {
         val premiumizeService = mockk<PremiumizeService>()
         val torBoxApi = mockk<TorBoxApi>()
         val torBoxService = mockk<TorBoxService>()
+        val easyDebridApi = mockk<EasyDebridApi>()
+        val easyDebridService = mockk<EasyDebridService>()
 
         stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
         coJustRun { premiumizeService.refreshAccountState() }
         stubDisconnectedTorBox(torBoxService)
+        stubDisconnectedEasyDebrid(easyDebridService)
 
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
             listOf(
@@ -120,7 +130,9 @@ class DebridLibraryServiceTest {
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
-            torBoxService = torBoxService
+            torBoxService = torBoxService,
+            easyDebridApi = easyDebridApi,
+            easyDebridService = easyDebridService
         )
 
         service.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
@@ -143,11 +155,14 @@ class DebridLibraryServiceTest {
         val premiumizeService = mockk<PremiumizeService>()
         val torBoxApi = mockk<TorBoxApi>()
         val torBoxService = mockk<TorBoxService>()
+        val easyDebridApi = mockk<EasyDebridApi>()
+        val easyDebridService = mockk<EasyDebridService>()
 
         stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
         coJustRun { premiumizeService.refreshAccountState() }
         stubDisconnectedTorBox(torBoxService)
+        stubDisconnectedEasyDebrid(easyDebridService)
 
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
             listOf(
@@ -217,7 +232,9 @@ class DebridLibraryServiceTest {
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
-            torBoxService = torBoxService
+            torBoxService = torBoxService,
+            easyDebridApi = easyDebridApi,
+            easyDebridService = easyDebridService
         )
 
         service.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
@@ -237,11 +254,14 @@ class DebridLibraryServiceTest {
         val premiumizeService = mockk<PremiumizeService>()
         val torBoxApi = mockk<TorBoxApi>()
         val torBoxService = mockk<TorBoxService>()
+        val easyDebridApi = mockk<EasyDebridApi>()
+        val easyDebridService = mockk<EasyDebridService>()
 
         stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
         coJustRun { premiumizeService.refreshAccountState() }
         stubDisconnectedTorBox(torBoxService)
+        stubDisconnectedEasyDebrid(easyDebridService)
 
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
             listOf(
@@ -292,7 +312,9 @@ class DebridLibraryServiceTest {
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
-            torBoxService = torBoxService
+            torBoxService = torBoxService,
+            easyDebridApi = easyDebridApi,
+            easyDebridService = easyDebridService
         )
 
         service.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
@@ -311,11 +333,14 @@ class DebridLibraryServiceTest {
         val premiumizeService = mockk<PremiumizeService>()
         val torBoxApi = mockk<TorBoxApi>()
         val torBoxService = mockk<TorBoxService>()
+        val easyDebridApi = mockk<EasyDebridApi>()
+        val easyDebridService = mockk<EasyDebridService>()
 
         stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
         coJustRun { premiumizeService.refreshAccountState() }
         stubDisconnectedTorBox(torBoxService)
+        stubDisconnectedEasyDebrid(easyDebridService)
 
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
             listOf(
@@ -368,7 +393,9 @@ class DebridLibraryServiceTest {
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
-            torBoxService = torBoxService
+            torBoxService = torBoxService,
+            easyDebridApi = easyDebridApi,
+            easyDebridService = easyDebridService
         )
 
         service.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
@@ -387,11 +414,14 @@ class DebridLibraryServiceTest {
         val premiumizeService = mockk<PremiumizeService>()
         val torBoxApi = mockk<TorBoxApi>()
         val torBoxService = mockk<TorBoxService>()
+        val easyDebridApi = mockk<EasyDebridApi>()
+        val easyDebridService = mockk<EasyDebridService>()
 
         stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
         coJustRun { premiumizeService.refreshAccountState() }
         stubDisconnectedTorBox(torBoxService)
+        stubDisconnectedEasyDebrid(easyDebridService)
 
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
             listOf(
@@ -465,7 +495,9 @@ class DebridLibraryServiceTest {
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
-            torBoxService = torBoxService
+            torBoxService = torBoxService,
+            easyDebridApi = easyDebridApi,
+            easyDebridService = easyDebridService
         )
 
         service.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
@@ -485,6 +517,8 @@ class DebridLibraryServiceTest {
         val premiumizeService = mockk<PremiumizeService>()
         val torBoxApi = mockk<TorBoxApi>()
         val torBoxService = mockk<TorBoxService>()
+        val easyDebridApi = mockk<EasyDebridApi>()
+        val easyDebridService = mockk<EasyDebridService>()
 
         stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(
@@ -495,6 +529,7 @@ class DebridLibraryServiceTest {
         )
         coJustRun { premiumizeService.refreshAccountState() }
         stubDisconnectedTorBox(torBoxService)
+        stubDisconnectedEasyDebrid(easyDebridService)
 
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(emptyList())
         coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(emptyList())
@@ -557,7 +592,9 @@ class DebridLibraryServiceTest {
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
-            torBoxService = torBoxService
+            torBoxService = torBoxService,
+            easyDebridApi = easyDebridApi,
+            easyDebridService = easyDebridService
         )
 
         service.refreshNow(DebridLibraryService.RefreshTarget.REAL_DEBRID)
@@ -583,11 +620,14 @@ class DebridLibraryServiceTest {
         val premiumizeService = mockk<PremiumizeService>()
         val torBoxApi = mockk<TorBoxApi>()
         val torBoxService = mockk<TorBoxService>()
+        val easyDebridApi = mockk<EasyDebridApi>()
+        val easyDebridService = mockk<EasyDebridService>()
 
         stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
         coJustRun { premiumizeService.refreshAccountState() }
         stubDisconnectedTorBox(torBoxService)
+        stubDisconnectedEasyDebrid(easyDebridService)
 
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
             listOf(
@@ -723,7 +763,9 @@ class DebridLibraryServiceTest {
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
-            torBoxService = torBoxService
+            torBoxService = torBoxService,
+            easyDebridApi = easyDebridApi,
+            easyDebridService = easyDebridService
         )
 
         val result = service.getBenchmarkCandidates(DebridBenchmarkProvider.REAL_DEBRID)
@@ -757,11 +799,14 @@ class DebridLibraryServiceTest {
         val premiumizeService = mockk<PremiumizeService>()
         val torBoxApi = mockk<TorBoxApi>()
         val torBoxService = mockk<TorBoxService>()
+        val easyDebridApi = mockk<EasyDebridApi>()
+        val easyDebridService = mockk<EasyDebridService>()
 
         stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
         coJustRun { premiumizeService.refreshAccountState() }
         stubDisconnectedTorBox(torBoxService)
+        stubDisconnectedEasyDebrid(easyDebridService)
 
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
             listOf(
@@ -839,7 +884,9 @@ class DebridLibraryServiceTest {
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
-            torBoxService = torBoxService
+            torBoxService = torBoxService,
+            easyDebridApi = easyDebridApi,
+            easyDebridService = easyDebridService
         )
 
         val result = service.getBenchmarkCandidates(DebridBenchmarkProvider.REAL_DEBRID)
@@ -861,6 +908,8 @@ class DebridLibraryServiceTest {
         val premiumizeService = mockk<PremiumizeService>()
         val torBoxApi = mockk<TorBoxApi>()
         val torBoxService = mockk<TorBoxService>()
+        val easyDebridApi = mockk<EasyDebridApi>()
+        val easyDebridService = mockk<EasyDebridService>()
 
         stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(
@@ -871,6 +920,7 @@ class DebridLibraryServiceTest {
         )
         coJustRun { premiumizeService.refreshAccountState() }
         stubDisconnectedTorBox(torBoxService)
+        stubDisconnectedEasyDebrid(easyDebridService)
 
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(emptyList())
         coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(emptyList())
@@ -883,7 +933,9 @@ class DebridLibraryServiceTest {
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
-            torBoxService = torBoxService
+            torBoxService = torBoxService,
+            easyDebridApi = easyDebridApi,
+            easyDebridService = easyDebridService
         )
 
         val result = service.getBenchmarkCandidates(DebridBenchmarkProvider.PREMIUMIZE)
@@ -902,6 +954,8 @@ class DebridLibraryServiceTest {
         val premiumizeService = mockk<PremiumizeService>()
         val torBoxApi = mockk<TorBoxApi>()
         val torBoxService = mockk<TorBoxService>()
+        val easyDebridApi = mockk<EasyDebridApi>()
+        val easyDebridService = mockk<EasyDebridService>()
 
         stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(
@@ -912,6 +966,7 @@ class DebridLibraryServiceTest {
         )
         coJustRun { premiumizeService.refreshAccountState() }
         stubDisconnectedTorBox(torBoxService)
+        stubDisconnectedEasyDebrid(easyDebridService)
 
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(
             listOf(
@@ -986,7 +1041,9 @@ class DebridLibraryServiceTest {
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
-            torBoxService = torBoxService
+            torBoxService = torBoxService,
+            easyDebridApi = easyDebridApi,
+            easyDebridService = easyDebridService
         )
 
         service.getBenchmarkCandidates(DebridBenchmarkProvider.PREMIUMIZE)
@@ -1006,6 +1063,8 @@ class DebridLibraryServiceTest {
         val premiumizeService = mockk<PremiumizeService>()
         val torBoxApi = mockk<TorBoxApi>()
         val torBoxService = mockk<TorBoxService>()
+        val easyDebridApi = mockk<EasyDebridApi>()
+        val easyDebridService = mockk<EasyDebridService>()
 
         stubAuthenticatedRealDebrid(realDebridAuthDataStore)
         every { premiumizeService.observeAccountState() } returns flowOf(
@@ -1016,6 +1075,7 @@ class DebridLibraryServiceTest {
         )
         coJustRun { premiumizeService.refreshAccountState() }
         stubDisconnectedTorBox(torBoxService)
+        stubDisconnectedEasyDebrid(easyDebridService)
 
         coEvery { realDebridApi.getTorrents(any(), any(), any()) } returns Response.success(emptyList())
         coEvery { realDebridApi.getDownloads(any(), any(), any()) } returns Response.success(emptyList())
@@ -1052,7 +1112,9 @@ class DebridLibraryServiceTest {
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
-            torBoxService = torBoxService
+            torBoxService = torBoxService,
+            easyDebridApi = easyDebridApi,
+            easyDebridService = easyDebridService
         )
 
         service.getBenchmarkCandidates(DebridBenchmarkProvider.REAL_DEBRID)
@@ -1070,6 +1132,8 @@ class DebridLibraryServiceTest {
         val premiumizeService = mockk<PremiumizeService>()
         val torBoxApi = mockk<TorBoxApi>()
         val torBoxService = mockk<TorBoxService>()
+        val easyDebridApi = mockk<EasyDebridApi>()
+        val easyDebridService = mockk<EasyDebridService>()
 
         every { realDebridAuthDataStore.isAuthenticated } returns flowOf(false)
         every { realDebridAuthDataStore.state } returns flowOf(RealDebridAuthState())
@@ -1132,7 +1196,9 @@ class DebridLibraryServiceTest {
             premiumizeApi = premiumizeApi,
             premiumizeService = premiumizeService,
             torBoxApi = torBoxApi,
-            torBoxService = torBoxService
+            torBoxService = torBoxService,
+            easyDebridApi = easyDebridApi,
+            easyDebridService = easyDebridService
         )
 
         service.refreshNow(DebridLibraryService.RefreshTarget.TORBOX)
@@ -1145,6 +1211,147 @@ class DebridLibraryServiceTest {
         assertEquals("https://tb.test/download/movie.mkv", items.single().directPlaybackUrl)
         assertEquals(setOf(DebridLibraryService.TORBOX_LIST_KEY), items.single().listKeys)
         assertEquals("TorBox.Movie.2026.1080p", items.single().name)
+    }
+
+    @Test
+    fun `torbox benchmark lookup returns direct candidate from cached torrent list`() = runTest {
+        val realDebridApi = mockk<RealDebridApi>()
+        val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
+        val premiumizeApi = mockk<PremiumizeApi>()
+        val premiumizeService = mockk<PremiumizeService>()
+        val torBoxApi = mockk<TorBoxApi>()
+        val torBoxService = mockk<TorBoxService>()
+        val easyDebridApi = mockk<EasyDebridApi>()
+        val easyDebridService = mockk<EasyDebridService>()
+
+        every { realDebridAuthDataStore.isAuthenticated } returns flowOf(false)
+        every { realDebridAuthDataStore.state } returns flowOf(RealDebridAuthState())
+        every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
+        coJustRun { premiumizeService.refreshAccountState() }
+        every { torBoxService.observeAccountState() } returns flowOf(
+            TorBoxAccountState(apiKey = "tb-key", isConnected = true)
+        )
+        coJustRun { torBoxService.refreshAccountState() }
+        stubDisconnectedEasyDebrid(easyDebridService)
+
+        coEvery {
+            torBoxApi.getMyTorrentList("Bearer tb-key", null, true, null, 100)
+        } returns Response.success(
+            TorBoxEnvelopeDto(
+                success = true,
+                data = listOf(
+                    TorBoxTorrentListItemDto(
+                        id = 9,
+                        name = "TorBox.Benchmark.Movie.2026",
+                        downloadFinished = true,
+                        downloadPresent = true,
+                        createdAt = "2026-03-30T12:00:00Z",
+                        files = listOf(
+                            TorBoxFileDto(
+                                id = 1,
+                                name = "TorBox.Benchmark.Movie.2026.mkv",
+                                shortName = "TorBox.Benchmark.Movie.2026.mkv",
+                                size = 6L * 1024L * 1024L * 1024L,
+                                mimeType = "video/x-matroska"
+                            )
+                        )
+                    )
+                )
+            )
+        )
+        coEvery {
+            torBoxApi.requestDownloadLink("tb-key", 9, 1, false, false)
+        } returns Response.success(TorBoxEnvelopeDto(success = true, data = "https://tb.test/benchmark.mkv"))
+
+        val service = DebridLibraryService(
+            realDebridApi = realDebridApi,
+            realDebridAuthDataStore = realDebridAuthDataStore,
+            realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore),
+            premiumizeApi = premiumizeApi,
+            premiumizeService = premiumizeService,
+            torBoxApi = torBoxApi,
+            torBoxService = torBoxService,
+            easyDebridApi = easyDebridApi,
+            easyDebridService = easyDebridService
+        )
+
+        val result = service.getBenchmarkCandidates(DebridBenchmarkProvider.TORBOX)
+
+        assertTrue(result is DebridBenchmarkCandidateLookupResult.Candidates)
+        assertEquals("https://tb.test/benchmark.mkv", (result as DebridBenchmarkCandidateLookupResult.Candidates).items.single().directUrl)
+    }
+
+    @Test
+    fun `easydebrid benchmark lookup returns generated candidate from cached source`() = runTest {
+        val realDebridApi = mockk<RealDebridApi>()
+        val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
+        val premiumizeApi = mockk<PremiumizeApi>()
+        val premiumizeService = mockk<PremiumizeService>()
+        val torBoxApi = mockk<TorBoxApi>()
+        val torBoxService = mockk<TorBoxService>()
+        val easyDebridApi = mockk<EasyDebridApi>()
+        val easyDebridService = mockk<EasyDebridService>()
+
+        every { realDebridAuthDataStore.isAuthenticated } returns flowOf(false)
+        every { realDebridAuthDataStore.state } returns flowOf(RealDebridAuthState())
+        every { premiumizeService.observeAccountState() } returns flowOf(PremiumizeAccountState())
+        coJustRun { premiumizeService.refreshAccountState() }
+        stubDisconnectedTorBox(torBoxService)
+        every { easyDebridService.observeAccountState() } returns flowOf(
+            EasyDebridAccountState(apiKey = "ed-key", userId = "ed-user", isConnected = true)
+        )
+        coJustRun { easyDebridService.refreshAccountState() }
+
+        coEvery {
+            easyDebridApi.lookupDetails("Bearer ed-key", any<EasyDebridLookupRequestDto>())
+        } returns Response.success(
+            EasyDebridLookupDetailsDto(
+                result = listOf(
+                    EasyDebridLookupDetailsResultDto(
+                        cached = true,
+                        files = listOf(
+                            EasyDebridLookupFileDto(
+                                size = 6L * 1024L * 1024L * 1024L,
+                                name = "EasyDebrid.Benchmark.Movie.2026.mkv",
+                                folder = "benchmark"
+                            )
+                        )
+                    ),
+                    EasyDebridLookupDetailsResultDto(cached = false, files = emptyList())
+                )
+            )
+        )
+        coEvery {
+            easyDebridApi.generate("Bearer ed-key", any())
+        } returns Response.success(
+            EasyDebridGenerateDto(
+                files = listOf(
+                    EasyDebridGeneratedFileDto(
+                        filename = "EasyDebrid.Benchmark.Movie.2026.mkv",
+                        directory = listOf("benchmark"),
+                        size = 6L * 1024L * 1024L * 1024L,
+                        url = "https://ed.test/benchmark.mkv"
+                    )
+                )
+            )
+        )
+
+        val service = DebridLibraryService(
+            realDebridApi = realDebridApi,
+            realDebridAuthDataStore = realDebridAuthDataStore,
+            realDebridAuthService = RealDebridAuthService(realDebridApi, realDebridAuthDataStore),
+            premiumizeApi = premiumizeApi,
+            premiumizeService = premiumizeService,
+            torBoxApi = torBoxApi,
+            torBoxService = torBoxService,
+            easyDebridApi = easyDebridApi,
+            easyDebridService = easyDebridService
+        )
+
+        val result = service.getBenchmarkCandidates(DebridBenchmarkProvider.EASY_DEBRID)
+
+        assertTrue(result is DebridBenchmarkCandidateLookupResult.Candidates)
+        assertEquals("https://ed.test/benchmark.mkv", (result as DebridBenchmarkCandidateLookupResult.Candidates).items.single().directUrl)
     }
 
     private fun stubAuthenticatedRealDebrid(realDebridAuthDataStore: RealDebridAuthDataStore) {
@@ -1165,5 +1372,10 @@ class DebridLibraryServiceTest {
     private fun stubDisconnectedTorBox(torBoxService: TorBoxService) {
         every { torBoxService.observeAccountState() } returns flowOf(TorBoxAccountState())
         coJustRun { torBoxService.refreshAccountState() }
+    }
+
+    private fun stubDisconnectedEasyDebrid(easyDebridService: EasyDebridService) {
+        every { easyDebridService.observeAccountState() } returns flowOf(EasyDebridAccountState())
+        coJustRun { easyDebridService.refreshAccountState() }
     }
 }

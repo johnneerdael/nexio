@@ -32,8 +32,8 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val TMDB_SEASON_VIDEOS_PREFIX = "tmdb_season_videos::"
         private const val HOME_REF_PREFIX = "home_ref::"
         private const val LANGUAGE_EPOCH_KEY = "metadata_language_epoch"
-        private const val META_CACHE_SCHEMA_VERSION = 2
-        private const val TMDB_CACHE_SCHEMA_VERSION = 1
+        private const val META_CACHE_SCHEMA_VERSION = 3
+        private const val TMDB_CACHE_SCHEMA_VERSION = 2
         private const val TMDB_VIDEO_CACHE_SCHEMA_VERSION = 1
         private val TMDB_VIDEO_CACHE_TTL: Duration = Duration.ofHours(12)
     }

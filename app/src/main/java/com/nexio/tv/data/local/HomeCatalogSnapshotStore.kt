@@ -21,7 +21,7 @@ class HomeCatalogSnapshotStore @Inject constructor(
         private const val TAG = "HomeCatalogSnapshot"
         private const val PREFS_NAME = "home_catalog_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
-        private const val SCHEMA_VERSION = 2
+        private const val SCHEMA_VERSION = 3
     }
 
     private val gson = Gson()

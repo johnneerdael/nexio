@@ -252,8 +252,10 @@ fun MetaDetailsScreen(
         episodeName: String?,
         genres: String?,
         year: String?,
-        runtime: Int?
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _ -> }
+        runtime: Int?,
+        originalLanguage: String?,
+        deterministicAutoplay: Boolean
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -590,7 +592,9 @@ fun MetaDetailsScreen(
                                 video.title,
                                 null,
                                 null,
-                                video.runtime
+                                video.runtime,
+                                meta.language,
+                                uiState.deterministicAutoplayEnabled
                             )
                         },
                         onPlayClick = { videoId ->
@@ -607,7 +611,9 @@ fun MetaDetailsScreen(
                                 null,
                                 genresString,
                                 yearString,
-                                null
+                                null,
+                                meta.language,
+                                uiState.deterministicAutoplayEnabled
                             )
                         },
                         onPlayButtonFocused = { viewModel.onEvent(MetaDetailsEvent.OnPlayButtonFocused) },

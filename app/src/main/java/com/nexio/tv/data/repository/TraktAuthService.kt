@@ -54,6 +54,14 @@ class TraktAuthService @Inject constructor(
     private val getRequestTimestamps = ArrayDeque<Long>()
     private val rateLimitMutex = Mutex()
 
+    private inline fun logDebug(message: () -> String) {
+        runCatching { Log.d("TraktAuthService", message()) }
+    }
+
+    private inline fun logWarn(message: () -> String) {
+        runCatching { Log.w("TraktAuthService", message()) }
+    }
+
     private fun isCircuitOpen(): Boolean {
         return System.currentTimeMillis() < circuitOpenUntilMs
     }
@@ -65,8 +73,9 @@ class TraktAuthService @Inject constructor(
         val cooldownMs = (circuitBaseCooldownMs shl (failures - 1).coerceAtMost(4))
             .coerceAtMost(circuitMaxCooldownMs)
         circuitOpenUntilMs = System.currentTimeMillis() + cooldownMs
-        Log.w("TraktAuthService",
-            "Circuit breaker OPEN: $reason (failures=$failures, cooldown=${cooldownMs / 1000}s)")
+        logWarn {
+            "Circuit breaker OPEN: $reason (failures=$failures, cooldown=${cooldownMs / 1000}s)"
+        }
     }
 
     private fun resetCircuit() {
@@ -88,8 +97,9 @@ class TraktAuthService @Inject constructor(
                 val oldestInWindow = getRequestTimestamps.first()
                 val waitMs = oldestInWindow + rateLimitWindowMs - now + 100L
                 if (waitMs > 0) {
-                    Log.w("TraktAuthService",
-                        "GET rate limit approaching (${getRequestTimestamps.size}/$rateLimitMaxCalls in window), delaying ${waitMs}ms")
+                    logWarn {
+                        "GET rate limit approaching (${getRequestTimestamps.size}/$rateLimitMaxCalls in window), delaying ${waitMs}ms"
+                    }
                     delay(waitMs)
                 }
                 val afterDelay = System.currentTimeMillis()
@@ -104,7 +114,7 @@ class TraktAuthService @Inject constructor(
 
     private fun trace(message: String) {
         if (BuildConfig.DEBUG) {
-            Log.d("TraktAuthService", message)
+            logDebug { message }
         }
     }
 
@@ -230,7 +240,7 @@ class TraktAuthService @Inject constructor(
                     )
                 )
             } catch (e: IOException) {
-                Log.w("TraktAuthService", "Network error while refreshing token", e)
+                logWarn { "Network error while refreshing token: ${e.message ?: "unknown"}" }
                 return@withLock false
             }
 
@@ -238,10 +248,9 @@ class TraktAuthService @Inject constructor(
             if (!response.isSuccessful || tokenBody == null) {
                 trace("refreshTokenIfNeeded: failed code=${response.code()}")
                 if (response.code() == 400 || response.code() == 401 || response.code() == 403) {
-                    Log.w(
-                        "TraktAuthService",
+                    logWarn {
                         "Token refresh returned ${response.code()}, clearing auth state"
-                    )
+                    }
                     traktAuthDataStore.clearAuth()
                     tripCircuit("Token refresh returned ${response.code()}")
                 }

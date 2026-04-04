@@ -1,6 +1,5 @@
 package com.nexio.tv.ui.components
 
-import android.net.Uri
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
@@ -50,11 +49,11 @@ internal fun shouldUseChunkedTrailerDataSource(
 ): Boolean {
     val videoUsesChunking = trailerUrl
         ?.takeIf { it.isNotBlank() }
-        ?.let { shouldUseYouTubeChunkedTransfer(Uri.parse(it)) }
+        ?.let(::shouldUseYouTubeChunkedTransfer)
         ?: false
     val audioUsesChunking = trailerAudioUrl
         ?.takeIf { it.isNotBlank() }
-        ?.let { shouldUseYouTubeChunkedTransfer(Uri.parse(it)) }
+        ?.let(::shouldUseYouTubeChunkedTransfer)
         ?: false
     return videoUsesChunking || audioUsesChunking
 }

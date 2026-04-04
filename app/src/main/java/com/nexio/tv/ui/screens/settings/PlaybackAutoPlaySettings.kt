@@ -126,17 +126,6 @@ internal fun LazyListScope.autoPlaySettingsItems(
         )
     }
 
-    item(key = "streams_service_wrap") {
-        ToggleSettingsItem(
-            icon = Icons.Default.AutoAwesome,
-            title = stringResource(R.string.streams_service_wrap_title),
-            subtitle = stringResource(R.string.streams_service_wrap_sub),
-            isChecked = playerSettings.serviceWrapEnabled,
-            onCheckedChange = onSetServiceWrapEnabled,
-            onFocused = onItemFocused
-        )
-    }
-
     item(key = "streams_filter_dv5_webdl") {
         ToggleSettingsItem(
             icon = Icons.Default.FilterAlt,

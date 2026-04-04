@@ -57,6 +57,7 @@ data class MetaDetailsUiState(
     val episodeRatingsError: String? = null,
     val mdbListRatings: MDBListRatings? = null,
     val showMdbListImdb: Boolean = false,
+    val deterministicAutoplayEnabled: Boolean = false,
     val userMessage: String? = null,
     val userMessageIsError: Boolean = false
 )

@@ -218,6 +218,7 @@ data class PlayerSettings(
     val streamAutoPlayRegex: String = "",
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
     val streamAutoPlayPreferBingeGroupForNextEpisode: Boolean = true,
+    val deterministicAutoplayEnabled: Boolean = false,
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
     val nextEpisodeThresholdPercent: Float = 99f,
     val nextEpisodeThresholdMinutesBeforeEnd: Float = 2f,
@@ -427,6 +428,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val streamAutoPlayNextEpisodeEnabledKey = booleanPreferencesKey("stream_auto_play_next_episode_enabled")
     private val streamAutoPlayPreferBingeGroupForNextEpisodeKey =
         booleanPreferencesKey("stream_auto_play_prefer_binge_group_for_next_episode")
+    private val deterministicAutoplayEnabledKey = booleanPreferencesKey("deterministic_autoplay_enabled")
     private val nextEpisodeThresholdModeKey = stringPreferencesKey("next_episode_threshold_mode")
     private val nextEpisodeThresholdPercentLegacyKey = intPreferencesKey("next_episode_threshold_percent")
     private val nextEpisodeThresholdMinutesBeforeEndLegacyKey = intPreferencesKey("next_episode_threshold_minutes_before_end")
@@ -716,6 +718,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 streamAutoPlayNextEpisodeEnabled = prefs[streamAutoPlayNextEpisodeEnabledKey] ?: false,
                 streamAutoPlayPreferBingeGroupForNextEpisode =
                     prefs[streamAutoPlayPreferBingeGroupForNextEpisodeKey] ?: true,
+                deterministicAutoplayEnabled = prefs[deterministicAutoplayEnabledKey] ?: false,
                 nextEpisodeThresholdMode = prefs[nextEpisodeThresholdModeKey]?.let {
                     runCatching { NextEpisodeThresholdMode.valueOf(it) }.getOrDefault(NextEpisodeThresholdMode.PERCENTAGE)
                 } ?: NextEpisodeThresholdMode.PERCENTAGE,
@@ -945,6 +948,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setStreamAutoPlayPreferBingeGroupForNextEpisode(enabled: Boolean) {
         store().edit { prefs ->
             prefs[streamAutoPlayPreferBingeGroupForNextEpisodeKey] = enabled
+        }
+    }
+
+    suspend fun setDeterministicAutoplayEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[deterministicAutoplayEnabledKey] = enabled
         }
     }
 

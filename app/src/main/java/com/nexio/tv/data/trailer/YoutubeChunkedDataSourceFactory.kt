@@ -10,12 +10,28 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.TransferListener
 
 internal fun shouldUseYouTubeChunkedTransfer(uri: Uri): Boolean {
-    val host = uri.host.orEmpty()
+    return shouldUseYouTubeChunkedTransfer(
+        host = uri.host.orEmpty(),
+        path = uri.encodedPath.orEmpty()
+    )
+}
+
+internal fun shouldUseYouTubeChunkedTransfer(url: String): Boolean {
+    val parsed = runCatching { java.net.URI(url) }.getOrNull() ?: return false
+    return shouldUseYouTubeChunkedTransfer(
+        host = parsed.host.orEmpty(),
+        path = parsed.rawPath.orEmpty()
+    )
+}
+
+private fun shouldUseYouTubeChunkedTransfer(
+    host: String,
+    path: String
+): Boolean {
     if (!host.contains("googlevideo.com")) {
         return false
     }
 
-    val path = uri.encodedPath.orEmpty()
     val isManifestPath = host.startsWith("manifest.") ||
         path.contains("/manifest/") ||
         path.endsWith(".m3u8")
