@@ -16,9 +16,10 @@ object BenchmarkAwareScoringVariantGridGenerator {
         variants += BenchmarkAwareGeneratedVariant(
             "pcm-heavy.json",
             base.copy(
-                audioScoring = base.audioScoring.copy(
-                    supportMultipliers = base.audioScoring.supportMultipliers +
-                        (ShadowAudioSupportTier.DECODED_MULTICHANNEL_PCM to 0.95)
+                contentRewards = base.contentRewards.copy(
+                    audio = base.contentRewards.audio +
+                        (ShadowAudioTier.TRUEHD_ATMOS to 18) +
+                        (ShadowAudioTier.TRUEHD to 14)
                 )
             )
         )
@@ -26,29 +27,23 @@ object BenchmarkAwareScoringVariantGridGenerator {
             "immersive-heavy.json",
             base.copy(
                 contentRewards = base.contentRewards.copy(
-                    hdr = base.contentRewards.hdr + (ShadowHdrTier.DOLBY_VISION to 20),
+                    hdr = base.contentRewards.hdr +
+                        (ShadowHdrTier.DOLBY_VISION to 18) +
+                        (ShadowHdrTier.HDR10_PLUS to 14),
                     audio = base.contentRewards.audio +
-                        (ShadowAudioTier.TRUEHD_ATMOS to 24) +
-                        (ShadowAudioTier.DDP_ATMOS to 16)
-                ),
-                synergy = base.synergy.copy(
-                    dvHevcSupported = base.synergy.dvHevcSupported + 2,
-                    premiumFeatureStack = base.synergy.premiumFeatureStack + 4
+                        (ShadowAudioTier.TRUEHD_ATMOS to 18) +
+                        (ShadowAudioTier.DTSX to 18) +
+                        (ShadowAudioTier.DDP_ATMOS to 18)
                 )
             )
         )
         variants += BenchmarkAwareGeneratedVariant(
             "bitrate-strict.json",
             base.copy(
-                penalties = base.penalties.copy(
-                    tinyFake4k = base.penalties.tinyFake4k + 10,
-                    premiumTagImplausible = base.penalties.premiumTagImplausible + 6
-                ),
-                bitrateRealism = base.bitrateRealism.copy(
-                    curve = base.bitrateRealism.curve.copy(
-                        scale = base.bitrateRealism.curve.scale + 4.0,
-                        slope = base.bitrateRealism.curve.slope + 0.15
-                    )
+                viability = base.viability.copy(
+                    minimumRatio = 1.20,
+                    comfortableRatio = 1.25,
+                    preferStartupRatio = 1.30
                 )
             )
         )
@@ -56,15 +51,15 @@ object BenchmarkAwareScoringVariantGridGenerator {
             "transport-conservative.json",
             base.copy(
                 viability = base.viability.copy(
-                    safeBudgetMultiplier = 0.80,
+                    minimumRatio = 1.25,
                     comfortableRatio = 1.30,
-                    preferStartupRatio = 1.50
+                    preferStartupRatio = 1.35
                 ),
                 transportRewards = base.transportRewards.copy(
                     ratioBands = listOf(
-                        ShadowRatioBand(1.0, 1.20, 6, 8),
-                        ShadowRatioBand(1.20, 1.50, 16, 8),
-                        ShadowRatioBand(1.50, 999.0, 24, 0)
+                        ShadowRatioBand(1.25, 1.30, 5, 0),
+                        ShadowRatioBand(1.30, 1.40, 10, 0),
+                        ShadowRatioBand(1.40, 999.0, 15, 0)
                     )
                 )
             )

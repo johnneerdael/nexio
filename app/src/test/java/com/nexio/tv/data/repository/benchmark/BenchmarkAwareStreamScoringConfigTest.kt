@@ -1,7 +1,6 @@
 package com.nexio.tv.data.repository.benchmark
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BenchmarkAwareStreamScoringConfigTest {
@@ -17,10 +16,8 @@ class BenchmarkAwareStreamScoringConfigTest {
             reparsed.contentRewards.audio.getValue(ShadowAudioTier.TRUEHD_ATMOS)
         )
         assertEquals(
-            config.audioScoring.supportMultipliers.getValue(ShadowAudioSupportTier.DECODED_MULTICHANNEL_PCM),
-            reparsed.audioScoring.supportMultipliers.getValue(ShadowAudioSupportTier.DECODED_MULTICHANNEL_PCM),
-            0.0
+            config.transportRewards.ratioBands.first().base,
+            reparsed.transportRewards.ratioBands.first().base
         )
-        assertTrue(reparsed.synergy.premiumFeatureStack > 0)
     }
 }

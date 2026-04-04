@@ -208,12 +208,8 @@ class BenchmarkAwareStreamScorer internal constructor(
             )
         }
 
-        val ranked = winners.sortedWith(baseDecisionComparator(movieMode, showMode))
-        val finalRanked = when {
-            movieMode -> applyMovieTransportSaturatedOrdering(preferSaferMovieCandidate(applyMovieCandidatePool(ranked)))
-            showMode -> applyShowCandidatePool(ranked)
-            else -> ranked
-        }
+        val ranked = winners.sortedWith(baseDecisionComparator())
+        val finalRanked = applyViableBitrateBucket(ranked)
 
         val selected = finalRanked.firstOrNull()
         val selectedNonDolbyVisionFallback =
@@ -373,11 +369,7 @@ class BenchmarkAwareStreamScorer internal constructor(
                 )
             }
         ).filter { option ->
-            option.suitabilityRatio >= when {
-                movieMode -> MOVIE_MINIMUM_RATIO
-                showMode -> SHOW_MINIMUM_RATIO
-                else -> config.viability.minimumRatio
-            } &&
+            option.suitabilityRatio >= config.viability.minimumRatio &&
                 (activeTransportMode == null || option.transport == activeTransportMode)
         }
 
@@ -424,197 +416,37 @@ class BenchmarkAwareStreamScorer internal constructor(
         )
         val hdrTier = hdrPolicy.effectiveHdrTier
         val hdrSupportTier = hdrPolicy.hdrSupportTier
-        val audioTier = resolveAudioTier(parsed.audioTags)
-        val audioSupportTier = resolveAudioSupportTier(audioTier, device)
-        val realismRatio = if (runtimeKnown) {
-            bitrateRealismRatio(
-                resolutionTier = resolutionTier,
-                releaseType = releaseType,
-                averageBitrateMbps = averageBitrateMbps
-            )
-        } else {
-            1.0
-        }
-        val lowQuality4kPenalty = if (
-            runtimeKnown &&
-            resolutionTier == ShadowResolutionTier.UHD_2160 &&
-            averageBitrateMbps < config.penalties.tinyFake4kThresholdMbps
-        ) {
-            -config.penalties.tinyFake4k
-        } else {
-            0
-        }
-
-        val resolutionPoints = config.contentRewards.resolution.getValue(resolutionTier)
-        val releaseTypePoints = config.contentRewards.source.getValue(releaseType)
+        val audioDecision = resolveAudioScoringDecision(parsed.audioTags, device)
+        val audioTier = audioDecision.effectiveTier
+        val audioSupportTier = audioDecision.supportStatus
         val codecPoints = config.contentRewards.codec.getValue(codecTier)
-        val hdrPoints = config.supportMultipliers.apply(
-            points = config.contentRewards.hdr.getValue(hdrTier),
-            supportLevel = hdrSupportTier
-        )
-        val audioPoints = scoreAudio(audioTier, audioSupportTier)
-        val bitrateQualityPoints = if (runtimeKnown) {
-            bitrateRealismReward(
-                resolutionTier = resolutionTier,
-                releaseType = releaseType,
-                averageBitrateMbps = averageBitrateMbps
-            )
-        } else {
+        val hdrPoints = if (hdrSupportTier == ShadowSupportLevel.UNSUPPORTED) {
             0
+        } else {
+            config.contentRewards.hdr.getValue(hdrTier)
         }
-        val synergyPoints = synergyPoints(
-            releaseType = releaseType,
-            codecTier = codecTier,
-            hdrTier = hdrTier,
-            hdrSupportTier = hdrSupportTier,
-            audioTier = audioTier,
-            audioSupportTier = audioSupportTier,
-            realismRatio = realismRatio,
-            runtimeKnown = runtimeKnown
-        )
-        val penaltyPoints = lowQuality4kPenalty + hdrPolicy.additionalPenalty + additionalPenaltyPoints(
-            resolutionTier = resolutionTier,
-            releaseType = releaseType,
-            codecTier = codecTier,
-            hdrTier = hdrTier,
-            audioTier = audioTier,
-            realismRatio = realismRatio,
-            runtimeKnown = runtimeKnown
-        )
+        val audioBasePoints = config.contentRewards.audio.getValue(audioDecision.effectiveTier)
+        val audioPoints = if (audioDecision.supported) audioBasePoints else -audioBasePoints
 
         return ShadowContentScoreBreakdown(
-            resolutionPoints = resolutionPoints,
+            resolutionPoints = 0,
             audioPoints = audioPoints,
             hdrPoints = hdrPoints,
             codecPoints = codecPoints,
-            releaseTypePoints = releaseTypePoints,
-            bitrateQualityPoints = bitrateQualityPoints,
-            synergyPoints = synergyPoints,
-            penaltyPoints = penaltyPoints,
-            lowQuality4kPenalty = lowQuality4kPenalty,
+            releaseTypePoints = 0,
+            bitrateQualityPoints = 0,
+            synergyPoints = 0,
+            penaltyPoints = 0,
+            lowQuality4kPenalty = 0,
             resolutionTier = resolutionTier.name.lowercase(Locale.US),
             releaseTypeTier = releaseType.wireKey,
             codecTier = codecTier.name.lowercase(Locale.US),
             hdrTier = hdrTier.name.lowercase(Locale.US),
             audioTier = audioTier.name.lowercase(Locale.US),
-            audioSupportTier = audioSupportTier.name.lowercase(Locale.US),
+            audioSupportTier = audioSupportTier,
             hdrSupportTier = hdrSupportTier.name.lowercase(Locale.US),
-            realismRatio = realismRatio
+            realismRatio = if (runtimeKnown) 1.0 else 0.0
         )
-    }
-
-    private fun scoreAudio(
-        audioTier: ShadowAudioTier,
-        supportTier: ShadowAudioSupportTier
-    ): Int {
-        if (supportTier == ShadowAudioSupportTier.UNSUPPORTED && audioTier in PREMIUM_AUDIO_TIERS) {
-            return 0
-        }
-        val base = config.audioScoring.baseRewards.getValue(audioTier)
-        val multiplier = config.audioScoring.supportMultipliers.getValue(supportTier)
-        val immersiveLoss = config.audioScoring.immersiveLossPenalty[audioTier]?.get(supportTier) ?: 0
-        val downgradePenalty = config.audioScoring.downgradePenalty.getValue(supportTier)
-        return ((base * multiplier) - immersiveLoss - downgradePenalty).roundToInt()
-    }
-
-    private fun synergyPoints(
-        releaseType: ShadowReleaseType,
-        codecTier: ShadowVideoCodecTier,
-        hdrTier: ShadowHdrTier,
-        hdrSupportTier: ShadowSupportLevel,
-        audioTier: ShadowAudioTier,
-        audioSupportTier: ShadowAudioSupportTier,
-        realismRatio: Double,
-        runtimeKnown: Boolean
-    ): Int {
-        var reward = 0
-        if (runtimeKnown && releaseType == ShadowReleaseType.REMUX && realismRatio >= 0.85) {
-            reward += config.synergy.healthyRemux
-        }
-        if (hdrTier == ShadowHdrTier.DOLBY_VISION &&
-            codecTier == ShadowVideoCodecTier.HEVC_HW &&
-            hdrSupportTier == ShadowSupportLevel.FULL
-        ) {
-            reward += config.synergy.dvHevcSupported
-        }
-        if (audioTier in IMMERSIVE_AUDIO_TIERS &&
-            audioSupportTier != ShadowAudioSupportTier.UNSUPPORTED &&
-            runtimeKnown &&
-            realismRatio >= 0.80
-        ) {
-            reward += config.synergy.atmosSupportedAndHealthy
-        }
-        if (releaseType in PREMIUM_RELEASE_TYPES &&
-            hdrTier != ShadowHdrTier.SDR &&
-            hdrSupportTier != ShadowSupportLevel.UNSUPPORTED &&
-            audioTier in PREMIUM_AUDIO_TIERS &&
-            audioSupportTier != ShadowAudioSupportTier.UNSUPPORTED &&
-            runtimeKnown &&
-            realismRatio >= 0.85
-        ) {
-            reward += config.synergy.premiumFeatureStack
-        }
-        return reward
-    }
-
-    private fun additionalPenaltyPoints(
-        resolutionTier: ShadowResolutionTier,
-        releaseType: ShadowReleaseType,
-        codecTier: ShadowVideoCodecTier,
-        hdrTier: ShadowHdrTier,
-        audioTier: ShadowAudioTier,
-        realismRatio: Double,
-        runtimeKnown: Boolean
-    ): Int {
-        var penalty = 0
-        val hasPremiumTags =
-            releaseType in PREMIUM_RELEASE_TYPES || hdrTier != ShadowHdrTier.SDR || audioTier in PREMIUM_AUDIO_TIERS
-        if (runtimeKnown && hasPremiumTags && realismRatio <= config.penalties.premiumTagImplausibleMaxRealismRatio) {
-            penalty -= config.penalties.premiumTagImplausible
-        }
-        if (resolutionTier == ShadowResolutionTier.UHD_2160 &&
-            codecTier in SOFTWARE_4K_CODEC_TIERS
-        ) {
-            penalty -= config.penalties.softwareDecode4k
-        }
-        if (audioTier in IMMERSIVE_AUDIO_TIERS &&
-            runtimeKnown &&
-            realismRatio <= config.penalties.atmosTooLowBitrateMaxRealismRatio
-        ) {
-            penalty -= config.penalties.atmosTooLowBitrate
-        }
-        return penalty
-    }
-
-    private fun bitrateRealismRatio(
-        resolutionTier: ShadowResolutionTier,
-        releaseType: ShadowReleaseType,
-        averageBitrateMbps: Double
-    ): Double {
-        val targetsByRelease =
-            config.bitrateRealism.targetsMbps[resolutionTier]
-                ?: config.bitrateRealism.targetsMbps.getValue(ShadowResolutionTier.OTHER)
-        val target =
-            targetsByRelease[releaseType]
-                ?: targetsByRelease[ShadowReleaseType.UNKNOWN]
-                ?: 1.0
-        if (target <= 0.0 || averageBitrateMbps <= 0.0) return 0.0
-        return averageBitrateMbps / target
-    }
-
-    private fun bitrateRealismReward(
-        resolutionTier: ShadowResolutionTier,
-        releaseType: ShadowReleaseType,
-        averageBitrateMbps: Double
-    ): Int {
-        val realismRatio = bitrateRealismRatio(resolutionTier, releaseType, averageBitrateMbps)
-        if (realismRatio <= 0.0) return config.bitrateRealism.curve.min.roundToInt()
-        val raw = config.bitrateRealism.curve.scale *
-            tanh(config.bitrateRealism.curve.slope * ln(realismRatio))
-        return raw.coerceIn(
-            config.bitrateRealism.curve.min,
-            config.bitrateRealism.curve.max
-        ).roundToInt()
     }
 
     private fun resolveHdrSupportLevel(
@@ -638,63 +470,39 @@ class BenchmarkAwareStreamScorer internal constructor(
     ): ShadowHdrScoringPolicy {
         val originalHdrTier = resolveHdrTier(parsed.visualTags)
         val originalSupport = resolveHdrSupportLevel(originalHdrTier, device)
-        if (originalHdrTier != ShadowHdrTier.DOLBY_VISION ||
-            originalSupport != ShadowSupportLevel.UNSUPPORTED
-        ) {
-            return ShadowHdrScoringPolicy(
+        return when (originalHdrTier) {
+            ShadowHdrTier.DOLBY_VISION -> when {
+                originalSupport == ShadowSupportLevel.FULL -> ShadowHdrScoringPolicy(
+                    effectiveHdrTier = ShadowHdrTier.DOLBY_VISION,
+                    hdrSupportTier = ShadowSupportLevel.FULL
+                )
+                resolveHdrSupportLevel(ShadowHdrTier.HDR10, device) == ShadowSupportLevel.FULL -> ShadowHdrScoringPolicy(
+                    effectiveHdrTier = ShadowHdrTier.HDR10,
+                    hdrSupportTier = ShadowSupportLevel.FALLBACK
+                )
+                else -> ShadowHdrScoringPolicy(
+                    effectiveHdrTier = ShadowHdrTier.DOLBY_VISION,
+                    hdrSupportTier = ShadowSupportLevel.UNSUPPORTED
+                )
+            }
+            ShadowHdrTier.HDR10_PLUS -> when {
+                originalSupport == ShadowSupportLevel.FULL -> ShadowHdrScoringPolicy(
+                    effectiveHdrTier = ShadowHdrTier.HDR10_PLUS,
+                    hdrSupportTier = ShadowSupportLevel.FULL
+                )
+                resolveHdrSupportLevel(ShadowHdrTier.HDR10, device) == ShadowSupportLevel.FULL -> ShadowHdrScoringPolicy(
+                    effectiveHdrTier = ShadowHdrTier.HDR10,
+                    hdrSupportTier = ShadowSupportLevel.FALLBACK
+                )
+                else -> ShadowHdrScoringPolicy(
+                    effectiveHdrTier = ShadowHdrTier.HDR10_PLUS,
+                    hdrSupportTier = ShadowSupportLevel.UNSUPPORTED
+                )
+            }
+            else -> ShadowHdrScoringPolicy(
                 effectiveHdrTier = originalHdrTier,
                 hdrSupportTier = originalSupport
             )
-        }
-
-        return ShadowHdrScoringPolicy(
-            effectiveHdrTier = ShadowHdrTier.HDR10,
-            hdrSupportTier = resolveHdrSupportLevel(ShadowHdrTier.HDR10, device)
-        )
-    }
-
-    private fun resolveAudioSupportTier(
-        audioTier: ShadowAudioTier,
-        device: DeviceCapabilitySnapshot?
-    ): ShadowAudioSupportTier {
-        val output = device?.audioOutput ?: return ShadowAudioSupportTier.FULL_IMMERSIVE_PASSTHROUGH
-        return when (audioTier) {
-            ShadowAudioTier.TRUEHD_ATMOS -> when {
-                output.truehd.passthroughLikely -> ShadowAudioSupportTier.FULL_IMMERSIVE_PASSTHROUGH
-                output.atmos.passthroughLikely || output.truehd.supported -> ShadowAudioSupportTier.DECODED_MULTICHANNEL_PCM
-                else -> ShadowAudioSupportTier.UNSUPPORTED
-            }
-            ShadowAudioTier.DTSX -> when {
-                output.dtsx.passthroughLikely -> ShadowAudioSupportTier.FULL_IMMERSIVE_PASSTHROUGH
-                output.dts.passthroughLikely -> ShadowAudioSupportTier.CORE_FALLBACK
-                else -> ShadowAudioSupportTier.UNSUPPORTED
-            }
-            ShadowAudioTier.TRUEHD -> when {
-                output.truehd.passthroughLikely -> ShadowAudioSupportTier.FULL_PASSTHROUGH
-                else -> ShadowAudioSupportTier.UNSUPPORTED
-            }
-            ShadowAudioTier.DTSHD -> when {
-                output.dtshd.passthroughLikely -> ShadowAudioSupportTier.FULL_PASSTHROUGH
-                output.dts.passthroughLikely -> ShadowAudioSupportTier.CORE_FALLBACK
-                else -> ShadowAudioSupportTier.UNSUPPORTED
-            }
-            ShadowAudioTier.DDP_ATMOS -> when {
-                output.atmos.passthroughLikely || output.eac3.passthroughLikely -> ShadowAudioSupportTier.FULL_IMMERSIVE_PASSTHROUGH
-                else -> ShadowAudioSupportTier.UNSUPPORTED
-            }
-            ShadowAudioTier.DDP -> when {
-                output.eac3.passthroughLikely -> ShadowAudioSupportTier.FULL_PASSTHROUGH
-                else -> ShadowAudioSupportTier.UNSUPPORTED
-            }
-            ShadowAudioTier.AC3 -> when {
-                output.ac3.passthroughLikely -> ShadowAudioSupportTier.FULL_PASSTHROUGH
-                else -> ShadowAudioSupportTier.UNSUPPORTED
-            }
-            ShadowAudioTier.DTS -> when {
-                output.dts.passthroughLikely -> ShadowAudioSupportTier.FULL_PASSTHROUGH
-                else -> ShadowAudioSupportTier.UNSUPPORTED
-            }
-            ShadowAudioTier.OTHER -> ShadowAudioSupportTier.UNSUPPORTED
         }
     }
 }
@@ -754,85 +562,43 @@ private fun ShadowStreamDecision.isDolbyVisionSource(): Boolean {
     }
 }
 
-private fun applyMovieCandidatePool(
+private fun applyViableBitrateBucket(
     ranked: List<ShadowStreamDecision>
 ): List<ShadowStreamDecision> {
     if (ranked.isEmpty()) return ranked
-    val highestTier = ranked
-        .maxOfOrNull { movieResolutionPoolRank(it.breakdown.content.resolutionTier) }
-        ?: return ranked
-    val sameTier = ranked.filter { movieResolutionPoolRank(it.breakdown.content.resolutionTier) == highestTier }
-    val sourcePool = when {
-        sameTier.any { !it.breakdown.lowQuality4k } -> sameTier
-        highestTier <= 0 -> sameTier
-        else -> ranked.filter { movieResolutionPoolRank(it.breakdown.content.resolutionTier) == highestTier - 1 }
-            .ifEmpty { sameTier }
+    val highestViableBitrate = ranked.maxOfOrNull { it.breakdown.averageBitrateMbps } ?: return ranked
+    val bitrateFloor = highestViableBitrate * VIABLE_BUCKET_FRACTION
+    val bitrateBucket = ranked.filter { candidate ->
+        candidate.breakdown.averageBitrateMbps >= bitrateFloor
     }
-    if (sourcePool.size <= MOVIE_POOL_MIN_CANDIDATES) {
-        return sourcePool
-    }
-    val targetCount = maxOf(MOVIE_POOL_MIN_CANDIDATES, kotlin.math.ceil(sourcePool.size * MOVIE_POOL_PERCENTILE).toInt())
-    return sourcePool
-        .sortedByDescending { it.breakdown.averageBitrateMbps }
-        .take(targetCount.coerceAtMost(sourcePool.size))
-        .sortedWith(baseDecisionComparator(movieMode = true, showMode = false))
+    val resolutionCollapsed = collapseResolutionBucket(bitrateBucket)
+    return resolutionCollapsed.sortedWith(baseDecisionComparator())
 }
 
-private fun applyMovieTransportSaturatedOrdering(
-    ranked: List<ShadowStreamDecision>
+private fun collapseResolutionBucket(
+    bucket: List<ShadowStreamDecision>
 ): List<ShadowStreamDecision> {
-    val top = ranked.firstOrNull() ?: return ranked
-    if (top.suitabilityRatio < MOVIE_SATURATED_RATIO) return ranked
-    return ranked.sortedWith(
-        compareByDescending<ShadowStreamDecision> { movieMediaFitClass(it) }
-            .thenByDescending { it.breakdown.averageBitrateMbps }
-            .thenByDescending { it.finalScore }
-            .thenByDescending { it.contentQualityScore }
-            .thenByDescending { it.suitabilityRatio }
-            .thenBy { it.breakdown.transport.startupTtfbMs ?: Long.MAX_VALUE }
-            .thenBy { it.breakdown.transport.seekTtfbP95Ms ?: Long.MAX_VALUE }
-    )
-}
-
-private fun movieMediaFitClass(candidate: ShadowStreamDecision): Int {
-    val hdrSupported = candidate.breakdown.content.hdrSupportTier != ShadowSupportLevel.UNSUPPORTED.name.lowercase(Locale.US)
-    val audioUsable = candidate.breakdown.content.audioSupportTier != ShadowAudioSupportTier.UNSUPPORTED.name.lowercase(Locale.US)
-    return when {
-        hdrSupported && audioUsable -> 2
-        hdrSupported -> 1
-        audioUsable -> 1
-        else -> 0
+    if (bucket.isEmpty()) return bucket
+    val qualifying4k = bucket.count { candidate ->
+        movieResolutionPoolRank(candidate.breakdown.content.resolutionTier) == 3 &&
+            candidate.breakdown.releaseType in setOf(
+                ShadowReleaseType.WEBDL.wireKey,
+                ShadowReleaseType.BLURAY_ENCODE.wireKey,
+                ShadowReleaseType.REMUX.wireKey
+            )
     }
-}
-
-private fun preferSaferMovieCandidate(
-    ranked: List<ShadowStreamDecision>
-): List<ShadowStreamDecision> {
-    val selected = ranked.firstOrNull() ?: return ranked
-    if (selected.suitabilityRatio >= MOVIE_SAFETY_OVERRIDE_SELECTED_MAX_RATIO) {
-        return ranked
+    if (qualifying4k >= RESOLUTION_BUCKET_MIN_COUNT) {
+        return bucket.filter { movieResolutionPoolRank(it.breakdown.content.resolutionTier) == 3 }
     }
-    val selectedHeadroomMbps = selected.safeBudgetMbps - selected.requiredMbps
-    val saferCandidate = ranked
-        .drop(1)
-        .filter { challenger ->
-            challenger.finalScore >= selected.finalScore - MOVIE_SAFETY_OVERRIDE_MAX_SCORE_GAP &&
-                challenger.suitabilityRatio >= MOVIE_SAFETY_OVERRIDE_MIN_RATIO &&
-                (challenger.safeBudgetMbps - challenger.requiredMbps) - selectedHeadroomMbps >= MOVIE_SAFETY_OVERRIDE_MIN_HEADROOM_DELTA_MBPS &&
-                challenger.breakdown.averageBitrateMbps >= selected.breakdown.averageBitrateMbps * MOVIE_SAFETY_OVERRIDE_MIN_BITRATE_FRACTION
-        }
-        .maxWithOrNull(
-            compareByDescending<ShadowStreamDecision> { it.finalScore }
-                .thenByDescending { it.contentQualityScore }
-                .thenByDescending { it.breakdown.averageBitrateMbps }
-                .thenByDescending { it.suitabilityRatio }
-        )
-        ?: return ranked
-
-    return buildList {
-        add(saferCandidate)
-        addAll(ranked.filterNot { it.streamKey == saferCandidate.streamKey })
+    val qualifying1080 = bucket.count { movieResolutionPoolRank(it.breakdown.content.resolutionTier) == 2 }
+    if (qualifying1080 >= RESOLUTION_BUCKET_MIN_COUNT) {
+        return bucket.filter { movieResolutionPoolRank(it.breakdown.content.resolutionTier) >= 2 }
     }
+    val qualifying720 = bucket.count { movieResolutionPoolRank(it.breakdown.content.resolutionTier) == 1 }
+    if (qualifying720 >= RESOLUTION_BUCKET_MIN_COUNT) {
+        return bucket.filter { movieResolutionPoolRank(it.breakdown.content.resolutionTier) >= 1 }
+    }
+    return bucket
 }
 
 private fun movieResolutionPoolRank(resolutionTier: String): Int {
@@ -844,61 +610,13 @@ private fun movieResolutionPoolRank(resolutionTier: String): Int {
     }
 }
 
-private fun applyShowCandidatePool(
-    ranked: List<ShadowStreamDecision>
-): List<ShadowStreamDecision> {
-    if (ranked.isEmpty()) return ranked
-    val highestTier = ranked
-        .maxOfOrNull { movieResolutionPoolRank(it.breakdown.content.resolutionTier) }
-        ?: return ranked
-    val sameTier = ranked.filter { movieResolutionPoolRank(it.breakdown.content.resolutionTier) == highestTier }
-    val pool = if (sameTier.size <= SHOW_POOL_MIN_CANDIDATES) {
-        sameTier
-    } else {
-        val targetCount = maxOf(SHOW_POOL_MIN_CANDIDATES, kotlin.math.ceil(sameTier.size * SHOW_POOL_PERCENTILE).toInt())
-        sameTier
-            .sortedByDescending { it.breakdown.averageBitrateMbps }
-            .take(targetCount.coerceAtMost(sameTier.size))
-    }
-
-    val nonProblematicPool = pool.filterNot { candidate ->
-        candidate.breakdown.releaseType == ShadowReleaseType.WEBDL.wireKey &&
-            candidate.parsed.visualTags.any { tag ->
-                val normalized = tag.uppercase(Locale.US)
-                normalized == "DV" || normalized.contains("DOLBY VISION") || normalized.contains("DOVI")
-            } &&
-            candidate.breakdown.content.hdrTier == ShadowHdrTier.SDR.name.lowercase(Locale.US)
-    }
-
-    val finalPool = when {
-        nonProblematicPool.isNotEmpty() -> nonProblematicPool
-        highestTier <= 0 -> pool
-        else -> {
-            val nextTier = ranked.filter { movieResolutionPoolRank(it.breakdown.content.resolutionTier) == highestTier - 1 }
-            if (nextTier.isEmpty()) pool else nextTier
-        }
-    }
-
-    return finalPool.sortedWith(baseDecisionComparator(movieMode = false, showMode = true))
-}
-
-private fun baseDecisionComparator(movieMode: Boolean, showMode: Boolean): Comparator<ShadowStreamDecision> {
-    return if (movieMode || showMode) {
-        compareByDescending<ShadowStreamDecision> { it.finalScore }
-            .thenByDescending { it.contentQualityScore }
-            .thenByDescending { it.breakdown.content.bitrateQualityPoints }
-            .thenByDescending { it.breakdown.averageBitrateMbps }
-            .thenByDescending { it.suitabilityRatio }
-            .thenBy { it.breakdown.transport.startupTtfbMs ?: Long.MAX_VALUE }
-            .thenBy { it.breakdown.transport.seekTtfbP95Ms ?: Long.MAX_VALUE }
-    } else {
-        compareByDescending<ShadowStreamDecision> { it.finalScore }
-            .thenByDescending { it.contentQualityScore }
-            .thenByDescending { it.breakdown.content.bitrateQualityPoints }
-            .thenByDescending { it.suitabilityRatio }
-            .thenBy { it.breakdown.transport.startupTtfbMs ?: Long.MAX_VALUE }
-            .thenBy { it.breakdown.transport.seekTtfbP95Ms ?: Long.MAX_VALUE }
-    }
+private fun baseDecisionComparator(): Comparator<ShadowStreamDecision> {
+    return compareByDescending<ShadowStreamDecision> { it.finalScore }
+        .thenByDescending { it.contentQualityScore }
+        .thenByDescending { it.breakdown.averageBitrateMbps }
+        .thenByDescending { it.safeBudgetMbps }
+        .thenBy { it.breakdown.transport.startupTtfbMs ?: Long.MAX_VALUE }
+        .thenBy { it.breakdown.transport.seekTtfbP95Ms ?: Long.MAX_VALUE }
 }
 
 private data class ShadowTransportOption(
@@ -951,18 +669,9 @@ private data class ShadowTransportOption(
                 safeBudgetMbps = safeBudgetMbps,
                 suitabilityRatio = suitabilityRatio,
                 ratioScore = ratioScore(config, suitabilityRatio, movieMode, showMode),
-                startupScore = startupScore(config, profile.startup.initialTtfbMs),
-                seekScore = seekScore(
-                    config = config,
-                    seekP95Ms = profile.seek.seekTtfbP95Ms,
-                    failRate = profile.seek.seekFailRate
-                ),
-                stabilityScore = stabilityScore(
-                    config = config,
-                    throughputCv = profile.sustained.throughputCv,
-                    stallCount = profile.sustained.stallCount,
-                    maxReadGapMs = profile.sustained.maxReadGapMs
-                ),
+                startupScore = 0,
+                seekScore = 0,
+                stabilityScore = 0,
                 startupTtfbMs = profile.startup.initialTtfbMs,
                 seekTtfbP95Ms = profile.seek.seekTtfbP95Ms,
                 seekFailRate = profile.seek.seekFailRate
@@ -996,6 +705,12 @@ private data class ShadowHdrScoringPolicy(
     val additionalPenalty: Int = 0
 )
 
+private data class ShadowAudioScoringDecision(
+    val effectiveTier: ShadowAudioTier,
+    val supported: Boolean,
+    val supportStatus: String
+)
+
 private data class EitherSuccessOrReject<T>(
     val success: T? = null,
     val rejectReasons: List<ShadowRejectReason> = emptyList()
@@ -1026,6 +741,100 @@ private fun ShadowContentScoreBreakdown.total(): Int {
         synergyPoints +
         penaltyPoints
 }
+
+private fun resolveAudioScoringDecision(
+    tags: List<String>,
+    device: DeviceCapabilitySnapshot?
+): ShadowAudioScoringDecision {
+    val candidates = detectAudioTierCandidates(tags)
+    if (candidates.isEmpty()) {
+        return ShadowAudioScoringDecision(
+            effectiveTier = ShadowAudioTier.OTHER,
+            supported = true,
+            supportStatus = "supported"
+        )
+    }
+
+    val supportedCandidate = candidates.firstOrNull { audioTierSupported(it, device) }
+    if (supportedCandidate != null) {
+        return ShadowAudioScoringDecision(
+            effectiveTier = supportedCandidate,
+            supported = true,
+            supportStatus = "supported"
+        )
+    }
+
+    return ShadowAudioScoringDecision(
+        effectiveTier = candidates.minByOrNull(::audioBasePoints) ?: ShadowAudioTier.OTHER,
+        supported = false,
+        supportStatus = "unsupported"
+    )
+}
+
+private fun detectAudioTierCandidates(tags: List<String>): List<ShadowAudioTier> {
+    val normalized = tags.map { it.lowercase(Locale.US) }
+    val hasAtmos = normalized.any { it.contains("atmos") }
+    val hasTrueHd = normalized.any { it.contains("truehd") }
+    val hasDtsX = normalized.any { it.contains("dts:x") || it.contains("dtsx") }
+    val hasDtsHd = normalized.any { it.contains("dts-hd") }
+    val hasDdp = normalized.any { it.contains("dd+") || it.contains("eac3") || it.contains("ddp") }
+    val hasAc3 = normalized.any { it == "dd" || it.contains("ac3") }
+    val hasDts = normalized.any { it == "dts" }
+
+    return buildList {
+        if (hasAtmos && hasTrueHd) {
+            add(ShadowAudioTier.TRUEHD_ATMOS)
+            add(ShadowAudioTier.DDP_ATMOS)
+        }
+        if (hasAtmos && hasDdp && !hasTrueHd) {
+            add(ShadowAudioTier.DDP_ATMOS)
+            add(ShadowAudioTier.TRUEHD_ATMOS)
+        }
+        if (hasAtmos && !hasTrueHd && !hasDdp) {
+            add(ShadowAudioTier.TRUEHD_ATMOS)
+            add(ShadowAudioTier.DDP_ATMOS)
+        }
+        if (hasDtsX) add(ShadowAudioTier.DTSX)
+        if (hasTrueHd) add(ShadowAudioTier.TRUEHD)
+        if (hasDtsHd) add(ShadowAudioTier.DTSHD)
+        if (hasDdp) add(ShadowAudioTier.DDP)
+        if (hasAc3) add(ShadowAudioTier.AC3)
+        if (hasDts) add(ShadowAudioTier.DTS)
+    }.distinct()
+}
+
+private fun audioTierSupported(
+    tier: ShadowAudioTier,
+    device: DeviceCapabilitySnapshot?
+): Boolean {
+    val output = device?.audioOutput ?: return true
+    return when (tier) {
+        ShadowAudioTier.TRUEHD_ATMOS -> output.truehd.passthroughLikely
+        ShadowAudioTier.DTSX -> output.dtsx.passthroughLikely
+        ShadowAudioTier.TRUEHD -> output.truehd.passthroughLikely
+        ShadowAudioTier.DTSHD -> output.dtshd.passthroughLikely
+        ShadowAudioTier.DDP_ATMOS -> output.atmos.passthroughLikely || output.eac3.passthroughLikely
+        ShadowAudioTier.DDP -> output.eac3.passthroughLikely
+        ShadowAudioTier.AC3 -> output.ac3.passthroughLikely
+        ShadowAudioTier.DTS -> output.dts.passthroughLikely
+        ShadowAudioTier.OTHER -> true
+    }
+}
+
+private fun audioBasePoints(tier: ShadowAudioTier): Int {
+    return when (tier) {
+        ShadowAudioTier.TRUEHD_ATMOS,
+        ShadowAudioTier.DTSX,
+        ShadowAudioTier.DDP_ATMOS -> 16
+        ShadowAudioTier.TRUEHD,
+        ShadowAudioTier.DTSHD -> 12
+        ShadowAudioTier.DDP -> 10
+        ShadowAudioTier.AC3,
+        ShadowAudioTier.DTS -> 7
+        ShadowAudioTier.OTHER -> 0
+    }
+}
+
 
 private fun StreamCardModel.toBenchmarkProvider(): DebridBenchmarkProvider? {
     return when (shadowServiceId()) {
@@ -1196,22 +1005,6 @@ private fun ratioScore(
     movieMode: Boolean,
     showMode: Boolean
 ): Int {
-    if (movieMode) {
-        return when {
-            !ratio.isFinite() -> MOVIE_TRANSPORT_SCORE_HIGH
-            ratio < MOVIE_MINIMUM_RATIO -> 0
-            ratio < MOVIE_COMFORTABLE_RATIO -> MOVIE_TRANSPORT_SCORE_LOW
-            ratio < MOVIE_SAFE_RATIO -> MOVIE_TRANSPORT_SCORE_MID
-            else -> MOVIE_TRANSPORT_SCORE_HIGH
-        }
-    } else if (showMode) {
-        return when {
-            !ratio.isFinite() -> SHOW_TRANSPORT_SCORE_MAX
-            ratio < SHOW_MINIMUM_RATIO -> 0
-            ratio < SHOW_COMFORTABLE_RATIO -> SHOW_TRANSPORT_SCORE_MIN
-            else -> SHOW_TRANSPORT_SCORE_MAX
-        }
-    }
     val band = config.transportRewards.ratioBands.firstOrNull { ratio >= it.min && ratio < it.max }
         ?: config.transportRewards.ratioBands.lastOrNull()?.takeIf { ratio >= it.min }
         ?: return 0
@@ -1224,113 +1017,16 @@ private fun ratioScore(
 private fun shadowTransportOptionComparator(
     config: BenchmarkAwareStreamScoringConfig
 ): Comparator<ShadowTransportOption> {
-    return Comparator { left, right ->
-        val leftComfortable = left.suitabilityRatio >= config.viability.preferStartupRatio
-        val rightComfortable = right.suitabilityRatio >= config.viability.preferStartupRatio
-        if (leftComfortable && rightComfortable) {
-            compareValuesBy(
-                left,
-                right,
-                { it.startupTtfbMs ?: Long.MAX_VALUE },
-                { it.seekTtfbP95Ms ?: Long.MAX_VALUE },
-                { it.seekFailRate ?: Double.MAX_VALUE },
-                { -it.totalScore() },
-                { -it.suitabilityRatio }
-            )
-        } else {
-            compareValuesBy(
-                left,
-                right,
-                { -it.totalScore() },
-                { -it.suitabilityRatio },
-                { it.startupTtfbMs ?: Long.MAX_VALUE },
-                { it.seekTtfbP95Ms ?: Long.MAX_VALUE },
-                { it.seekFailRate ?: Double.MAX_VALUE }
-            )
-        }
-    }
+    return compareByDescending<ShadowTransportOption> { it.totalScore() }
+        .thenByDescending { it.safeBudgetMbps }
+        .thenBy { it.startupTtfbMs ?: Long.MAX_VALUE }
+        .thenBy { it.seekTtfbP95Ms ?: Long.MAX_VALUE }
+        .thenBy { it.seekFailRate ?: Double.MAX_VALUE }
 }
-
-private fun startupScore(
-    config: BenchmarkAwareStreamScoringConfig,
-    initialTtfbMs: Long?
-): Int {
-    val value = initialTtfbMs ?: return 0
-    return config.transportRewards.startupBands.firstOrNull { value <= it.maxMs }?.reward ?: 0
-}
-
-private fun seekScore(
-    config: BenchmarkAwareStreamScoringConfig,
-    seekP95Ms: Long?,
-    failRate: Double?
-): Int {
-    val p95 = seekP95Ms ?: return 0
-    val failure = failRate ?: return 0
-    return config.transportRewards.seekBands.firstOrNull {
-        p95 <= it.maxP95Ms && failure <= it.maxFailRate
-    }?.reward ?: 0
-}
-
-private fun stabilityScore(
-    config: BenchmarkAwareStreamScoringConfig,
-    throughputCv: Double?,
-    stallCount: Int?,
-    maxReadGapMs: Long?
-): Int {
-    val cv = throughputCv ?: return 0
-    return config.transportRewards.stabilityBands.firstOrNull { band ->
-        cv <= band.maxCv &&
-            (band.maxStalls == null || (stallCount ?: Int.MAX_VALUE) <= band.maxStalls) &&
-            (band.maxGapMs == null || (maxReadGapMs ?: Long.MAX_VALUE) <= band.maxGapMs)
-    }?.reward ?: 0
-}
-
-private val PREMIUM_RELEASE_TYPES = setOf(
-    ShadowReleaseType.REMUX,
-    ShadowReleaseType.BLURAY_ENCODE
-)
-
-private val PREMIUM_AUDIO_TIERS = setOf(
-    ShadowAudioTier.TRUEHD_ATMOS,
-    ShadowAudioTier.DTSX,
-    ShadowAudioTier.TRUEHD,
-    ShadowAudioTier.DTSHD,
-    ShadowAudioTier.DDP_ATMOS
-)
-
-private val IMMERSIVE_AUDIO_TIERS = setOf(
-    ShadowAudioTier.TRUEHD_ATMOS,
-    ShadowAudioTier.DTSX,
-    ShadowAudioTier.DDP_ATMOS
-)
-
-private val SOFTWARE_4K_CODEC_TIERS = setOf(
-    ShadowVideoCodecTier.AV1_SW,
-    ShadowVideoCodecTier.HEVC_SW
-)
 
 private val HDR_VISUAL_TAGS = setOf("DV", "HDR", "HDR10", "HDR10+", "HLG")
-
-private const val MOVIE_POOL_PERCENTILE = 0.30
-private const val MOVIE_POOL_MIN_CANDIDATES = 3
-private const val MOVIE_MINIMUM_RATIO = 1.15
-private const val MOVIE_COMFORTABLE_RATIO = 1.20
-private const val MOVIE_SAFE_RATIO = 1.25
-private const val MOVIE_TRANSPORT_SCORE_LOW = 5
-private const val MOVIE_TRANSPORT_SCORE_MID = 10
-private const val MOVIE_TRANSPORT_SCORE_HIGH = 15
-private const val MOVIE_SAFETY_OVERRIDE_SELECTED_MAX_RATIO = 1.25
-private const val MOVIE_SAFETY_OVERRIDE_MIN_RATIO = 1.50
-private const val MOVIE_SAFETY_OVERRIDE_MAX_SCORE_GAP = 3
-private const val MOVIE_SAFETY_OVERRIDE_MIN_HEADROOM_DELTA_MBPS = 20.0
-private const val MOVIE_SAFETY_OVERRIDE_MIN_BITRATE_FRACTION = 0.75
-private const val MOVIE_SATURATED_RATIO = 1.25
-private const val SHOW_POOL_PERCENTILE = 0.30
-private const val SHOW_POOL_MIN_CANDIDATES = 3
-private const val SHOW_MINIMUM_RATIO = 1.10
-private const val SHOW_COMFORTABLE_RATIO = 1.20
-private const val SHOW_TRANSPORT_SCORE_MIN = 8
-private const val SHOW_TRANSPORT_SCORE_MAX = 10
+private const val VIABLE_BUCKET_FRACTION = 0.70
+private const val RESOLUTION_BUCKET_MIN_COUNT = 3
 
 private fun ShadowRequestContext.isMovieLike(): Boolean {
     return contentType.equals("movie", ignoreCase = true)
