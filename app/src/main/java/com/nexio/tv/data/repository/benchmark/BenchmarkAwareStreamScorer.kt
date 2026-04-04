@@ -217,11 +217,14 @@ class BenchmarkAwareStreamScorer internal constructor(
 
         val selected = finalRanked.firstOrNull()
         val selectedNonDolbyVisionFallback =
-            if (selected?.breakdown?.content?.hdrTier == ShadowHdrTier.DOLBY_VISION.name.lowercase(Locale.US)) {
-                finalRanked.firstOrNull { candidate ->
-                    candidate.streamKey != selected.streamKey &&
-                        candidate.breakdown.content.hdrTier != ShadowHdrTier.DOLBY_VISION.name.lowercase(Locale.US)
-                }
+            if (selected != null && selected.isDolbyVisionSource()) {
+                selectNonDolbyVisionFallback(
+                    selected = selected,
+                    ranked = ranked,
+                    initialPool = finalRanked,
+                    movieMode = movieMode,
+                    showMode = showMode
+                )
             } else {
                 null
             }
@@ -627,18 +630,10 @@ class BenchmarkAwareStreamScorer internal constructor(
             )
         }
 
-        return if (releaseType == ShadowReleaseType.WEBDL) {
-            ShadowHdrScoringPolicy(
-                effectiveHdrTier = ShadowHdrTier.SDR,
-                hdrSupportTier = ShadowSupportLevel.FULL,
-                additionalPenalty = -12
-            )
-        } else {
-            ShadowHdrScoringPolicy(
-                effectiveHdrTier = ShadowHdrTier.HDR10,
-                hdrSupportTier = resolveHdrSupportLevel(ShadowHdrTier.HDR10, device)
-            )
-        }
+        return ShadowHdrScoringPolicy(
+            effectiveHdrTier = ShadowHdrTier.HDR10,
+            hdrSupportTier = resolveHdrSupportLevel(ShadowHdrTier.HDR10, device)
+        )
     }
 
     private fun resolveAudioSupportTier(
@@ -694,6 +689,61 @@ class BenchmarkAwareStreamScorer internal constructor(
     }
 }
 
+private fun selectNonDolbyVisionFallback(
+    selected: ShadowStreamDecision,
+    ranked: List<ShadowStreamDecision>,
+    initialPool: List<ShadowStreamDecision>,
+    movieMode: Boolean,
+    showMode: Boolean
+): ShadowStreamDecision? {
+    val seen = mutableSetOf<String>()
+    val groupSize = when {
+        initialPool.isNotEmpty() -> initialPool.size
+        movieMode || showMode -> 3
+        else -> 1
+    }.coerceAtLeast(1)
+    val groups = buildList {
+        add(initialPool)
+        val remaining = ranked.filterNot { candidate ->
+            candidate.streamKey == selected.streamKey || initialPool.any { it.streamKey == candidate.streamKey }
+        }
+        if (movieMode || showMode) {
+            addAll(
+                remaining
+                    .sortedByDescending { it.breakdown.averageBitrateMbps }
+                    .chunked(groupSize)
+            )
+        } else {
+            remaining.forEach { add(listOf(it)) }
+        }
+    }
+
+    groups.forEach { group ->
+        val fallback = group
+            .filter { candidate ->
+                seen.add(candidate.streamKey) &&
+                    candidate.streamKey != selected.streamKey &&
+                    !candidate.isDolbyVisionSource() &&
+                    candidate.breakdown.content.audioSupportTier != "unsupported"
+            }
+            .maxWithOrNull(
+                compareByDescending<ShadowStreamDecision> { it.breakdown.averageBitrateMbps }
+                    .thenByDescending { it.finalScore }
+                    .thenByDescending { it.suitabilityRatio }
+            )
+        if (fallback != null) return fallback
+    }
+
+    return null
+}
+
+private fun ShadowStreamDecision.isDolbyVisionSource(): Boolean {
+    return parsed.visualTags.any { tag ->
+        val normalized = tag.uppercase(Locale.US)
+        normalized == "DV" || normalized.contains("DOLBY VISION") || normalized.contains("DOVI")
+    }
+}
+
 private fun applyMovieCandidatePool(
     ranked: List<ShadowStreamDecision>
 ): List<ShadowStreamDecision> {
@@ -702,13 +752,19 @@ private fun applyMovieCandidatePool(
         .maxOfOrNull { movieResolutionPoolRank(it.breakdown.content.resolutionTier) }
         ?: return ranked
     val sameTier = ranked.filter { movieResolutionPoolRank(it.breakdown.content.resolutionTier) == highestTier }
-    if (sameTier.size <= MOVIE_POOL_MIN_CANDIDATES) {
-        return sameTier
+    val sourcePool = when {
+        sameTier.any { !it.breakdown.lowQuality4k } -> sameTier
+        highestTier <= 0 -> sameTier
+        else -> ranked.filter { movieResolutionPoolRank(it.breakdown.content.resolutionTier) == highestTier - 1 }
+            .ifEmpty { sameTier }
     }
-    val targetCount = maxOf(MOVIE_POOL_MIN_CANDIDATES, kotlin.math.ceil(sameTier.size * MOVIE_POOL_PERCENTILE).toInt())
-    return sameTier
+    if (sourcePool.size <= MOVIE_POOL_MIN_CANDIDATES) {
+        return sourcePool
+    }
+    val targetCount = maxOf(MOVIE_POOL_MIN_CANDIDATES, kotlin.math.ceil(sourcePool.size * MOVIE_POOL_PERCENTILE).toInt())
+    return sourcePool
         .sortedByDescending { it.breakdown.averageBitrateMbps }
-        .take(targetCount.coerceAtMost(sameTier.size))
+        .take(targetCount.coerceAtMost(sourcePool.size))
         .sortedWith(baseDecisionComparator(movieMode = true, showMode = false))
 }
 

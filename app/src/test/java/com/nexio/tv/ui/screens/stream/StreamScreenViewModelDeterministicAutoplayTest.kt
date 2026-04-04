@@ -4,6 +4,7 @@ import android.util.Log
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.data.local.CachedStreamLink
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.DebridBenchmarkStore
 import com.nexio.tv.data.local.PlayerPreference
@@ -32,12 +33,14 @@ import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.StreamRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.runs
 import io.mockk.unmockkStatic
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
@@ -56,6 +59,7 @@ import org.junit.Test
 class StreamScreenViewModelDeterministicAutoplayTest {
 
     private val dispatcher = StandardTestDispatcher()
+    private lateinit var cachedStore: StreamLinkCacheDataStore
 
     @Before
     fun setUp() {
@@ -128,6 +132,128 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             assertEquals(null, noWinnerState.autoPlayPlaybackInfo)
         } finally {
             clearViewModel(noWinnerViewModel)
+            advanceUntilIdle()
+        }
+    }
+
+    @Test
+    fun `deterministic autoplay invalidates cached dv webdl link and does not reuse it`() = runTest(dispatcher) {
+        val addonStreams = listOf(
+            AddonStreams(
+                addonName = "Example Addon",
+                addonLogo = null,
+                streams = listOf(
+                    stream(
+                        name = "The.Movie.2002.2160p.WEB-DL.HDR10.DDP5.1.mkv",
+                        wrappedProviderId = null
+                    )
+                )
+            )
+        )
+        val viewModel = buildViewModel(
+            streamFlow = flowOf(
+                NetworkResult.Loading,
+                NetworkResult.Success(addonStreams)
+            ),
+            cachedLink = CachedStreamLink(
+                url = "https://example.com/cached-dv.mkv",
+                streamName = "Cached DV",
+                headers = emptyMap(),
+                cachedAtMs = System.currentTimeMillis(),
+                filename = "The.Movie.2002.2160p.WEB-DL.DV.DDP5.1.mkv",
+                videoSize = 35_839_352_065
+            ),
+            playerSettings = PlayerSettings(
+                playerPreference = PlayerPreference.INTERNAL,
+                streamAutoPlayMode = StreamAutoPlayMode.FIRST_STREAM,
+                streamReuseLastLinkEnabled = true
+            )
+        )
+
+        try {
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(null, state.autoPlayPlaybackInfo)
+            coVerify(exactly = 1) { cachedStore.invalidate(any()) }
+            verify {
+                Log.i(
+                    any<String>(),
+                    match { message ->
+                        message.contains("AUTOPLAY_CACHE_RESELECTION_TRIGGERED") &&
+                            message.contains("mode=deterministic") &&
+                            message.contains("invalidated_cached_dv_webdl")
+                    }
+                )
+            }
+        } finally {
+            clearViewModel(viewModel)
+            advanceUntilIdle()
+        }
+    }
+
+    @Test
+    fun `hero gated autoplay resolution logs start and ready before playback handoff`() = runTest(dispatcher) {
+        val viewModel = buildViewModel(
+            streamFlow = flowOf(NetworkResult.Loading)
+        )
+
+        try {
+            val resolved = viewModel.resolveAutoPlayPlaybackInfo(
+                StreamPlaybackInfo(
+                    url = "https://example.com/final.mkv",
+                    title = "Example",
+                    streamName = "Primary",
+                    playerBackend = PlayerPreference.INTERNAL,
+                    year = "2002",
+                    isExternal = false,
+                    isTorrent = false,
+                    infoHash = null,
+                    ytId = null,
+                    headers = null,
+                    contentId = "tt0167261",
+                    contentType = "movie",
+                    contentName = "Example",
+                    poster = null,
+                    backdrop = null,
+                    logo = null,
+                    videoId = "tt0167261",
+                    season = null,
+                    episode = null,
+                    episodeTitle = null,
+                    bingeGroup = null,
+                    rememberedAudioLanguage = null,
+                    rememberedAudioName = null,
+                    filename = "Example.2002.1080p.WEB-DL.HDR10.mkv",
+                    videoHash = null,
+                    videoSize = 1L,
+                    streamKey = "primary",
+                    isWebDl = true,
+                    isDolbyVisionCandidate = false
+                )
+            )
+
+            assertEquals("primary", resolved.streamKey)
+            verify {
+                Log.i(
+                    any<String>(),
+                    match { message ->
+                        message.contains("AUTOPLAY_HERO_GATED_RESOLUTION_START") &&
+                            message.contains("overlayActive=true")
+                    }
+                )
+            }
+            verify {
+                Log.i(
+                    any<String>(),
+                    match { message ->
+                        message.contains("AUTOPLAY_HERO_GATED_RESOLUTION_READY") &&
+                            message.contains("readyForPlayback=true")
+                    }
+                )
+            }
+        } finally {
+            clearViewModel(viewModel)
             advanceUntilIdle()
         }
     }
@@ -229,14 +355,21 @@ class StreamScreenViewModelDeterministicAutoplayTest {
     }
 
     private fun buildViewModel(
-        streamFlow: kotlinx.coroutines.flow.Flow<NetworkResult<List<AddonStreams>>>
+        streamFlow: kotlinx.coroutines.flow.Flow<NetworkResult<List<AddonStreams>>>,
+        cachedLink: CachedStreamLink? = null,
+        playerSettings: PlayerSettings = PlayerSettings(
+            playerPreference = PlayerPreference.INTERNAL,
+            streamAutoPlayMode = StreamAutoPlayMode.FIRST_STREAM
+        )
     ): StreamScreenViewModel {
         val context = mockk<Context>(relaxed = true)
         val streamRepository = mockk<StreamRepository>()
         val addonRepository = mockk<AddonRepository>()
         val metaRepository = mockk<MetaRepository>(relaxed = true)
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
-        val streamLinkCacheDataStore = mockk<StreamLinkCacheDataStore>()
+        val streamLinkCacheDataStore = mockk<StreamLinkCacheDataStore>(relaxed = true).also {
+            cachedStore = it
+        }
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val debridBenchmarkStore = mockk<DebridBenchmarkStore>()
         val shadowLogger = mockk<ShadowAutoPlayDecisionLogger>(relaxed = true)
@@ -244,13 +377,9 @@ class StreamScreenViewModelDeterministicAutoplayTest {
 
         every {
             playerSettingsDataStore.playerSettings
-        } returns flowOf(
-            PlayerSettings(
-                playerPreference = PlayerPreference.INTERNAL,
-                streamAutoPlayMode = StreamAutoPlayMode.FIRST_STREAM
-            )
-        )
-        coEvery { streamLinkCacheDataStore.getValid(any(), any()) } returns null
+        } returns flowOf(playerSettings)
+        coEvery { streamLinkCacheDataStore.getValid(any(), any()) } returns cachedLink
+        coEvery { streamLinkCacheDataStore.invalidate(any()) } just runs
         every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
         every { addonRepository.getInstalledAddons() } returns flowOf(listOf(installedAddon()))
         every {
@@ -293,6 +422,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             )
         )
     }
+
 
     private fun installedAddon(): Addon {
         return Addon(

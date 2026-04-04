@@ -505,6 +505,68 @@ class BenchmarkAwareStreamScorerTest {
     }
 
     @Test
+    fun `selected dv winner expands to next bitrate group when current pool has no non dv fallback`() {
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "dv_huge",
+                    providerId = "RD",
+                    resolution = "2160p",
+                    quality = "WEB-DL",
+                    encode = "HEVC",
+                    sizeBytes = gib(42.0),
+                    durationMs = 120L * 60_000L,
+                    visualTags = listOf("DV"),
+                    audioTags = listOf("Atmos", "DD+")
+                ),
+                streamCard(
+                    streamKey = "dv_large",
+                    providerId = "RD",
+                    resolution = "2160p",
+                    quality = "WEB-DL",
+                    encode = "HEVC",
+                    sizeBytes = gib(38.0),
+                    durationMs = 120L * 60_000L,
+                    visualTags = listOf("DV"),
+                    audioTags = listOf("Atmos", "DD+")
+                ),
+                streamCard(
+                    streamKey = "dv_mid",
+                    providerId = "RD",
+                    resolution = "2160p",
+                    quality = "WEB-DL",
+                    encode = "HEVC",
+                    sizeBytes = gib(34.0),
+                    durationMs = 120L * 60_000L,
+                    visualTags = listOf("DV"),
+                    audioTags = listOf("DD+")
+                ),
+                streamCard(
+                    streamKey = "hdr10_next_group",
+                    providerId = "RD",
+                    resolution = "2160p",
+                    quality = "WEB-DL",
+                    encode = "HEVC",
+                    sizeBytes = gib(28.0),
+                    durationMs = 120L * 60_000L,
+                    visualTags = listOf("HDR10"),
+                    audioTags = listOf("DD+")
+                )
+            ),
+            benchmarkSessions = mapOf(
+                DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(
+                    provider = DebridBenchmarkProvider.REAL_DEBRID,
+                    optimizedP10Mbps = 200.0
+                )
+            )
+        )
+
+        assertEquals("dv_huge", event.selected?.streamKey)
+        assertEquals("hdr10_next_group", event.selectedNonDolbyVisionFallback?.streamKey)
+    }
+
+    @Test
     fun `non dv winner does not expose a redundant non dv fallback`() {
         val event = scorer.score(
             request = request(runtimeMinutes = 120),
@@ -539,7 +601,7 @@ class BenchmarkAwareStreamScorerTest {
     }
 
     @Test
-    fun `webdl dolby vision scores below sdr when display does not advertise dv`() {
+    fun `webdl dolby vision scores like hdr10 when display does not advertise dv`() {
         val benchmark = benchmarkResult(
             provider = DebridBenchmarkProvider.REAL_DEBRID,
             device = deviceSnapshot(
@@ -558,11 +620,11 @@ class BenchmarkAwareStreamScorerTest {
                     audioTags = listOf("DD+")
                 ),
                 streamCard(
-                    streamKey = "sdr_webdl",
+                    streamKey = "hdr10_webdl",
                     providerId = "RD",
                     quality = "WEB-DL",
                     sizeBytes = gib(20.0),
-                    visualTags = emptyList(),
+                    visualTags = listOf("HDR10"),
                     audioTags = listOf("DD+")
                 )
             ),
@@ -570,9 +632,9 @@ class BenchmarkAwareStreamScorerTest {
         )
 
         val webdlDv = event.winners.single { it.streamKey == "webdl_dv" }
-        val sdr = event.winners.single { it.streamKey == "sdr_webdl" }
-        assertTrue(webdlDv.finalScore < sdr.finalScore)
-        assertEquals("sdr_webdl", event.selected?.streamKey)
+        val hdr10 = event.winners.single { it.streamKey == "hdr10_webdl" }
+        assertEquals(hdr10.finalScore, webdlDv.finalScore)
+        assertEquals(hdr10.contentQualityScore, webdlDv.contentQualityScore)
     }
 
     @Test
@@ -744,7 +806,7 @@ class BenchmarkAwareStreamScorerTest {
     }
 
     @Test
-    fun `show scoring falls back one pool lower when top pool is only bad webdl dv`() {
+    fun `show scoring keeps top webdl dv pool and records lower non dv fallback`() {
         val benchmark = benchmarkResult(
             provider = DebridBenchmarkProvider.REAL_DEBRID,
             device = deviceSnapshot(
@@ -793,8 +855,12 @@ class BenchmarkAwareStreamScorerTest {
             activeTransportMode = DebridBenchmarkTransportMode.OPTIMIZED
         )
 
-        assertEquals(listOf("show_lower_hdr10"), event.winners.map { it.streamKey })
-        assertEquals("show_lower_hdr10", event.selected?.streamKey)
+        assertEquals(
+            listOf("show_top_bad_dv_1", "show_top_bad_dv_2", "show_top_bad_dv_3"),
+            event.winners.map { it.streamKey }
+        )
+        assertEquals("show_top_bad_dv_1", event.selected?.streamKey)
+        assertEquals("show_lower_hdr10", event.selectedNonDolbyVisionFallback?.streamKey)
     }
 
     private fun request(runtimeMinutes: Int? = 120): ShadowRequestContext {

@@ -15,12 +15,13 @@ class BenchmarkAwareScoringCorpusTest {
         val corpus = BenchmarkAwareScoringCorpusLoader.load(corpusDir)
 
         assertEquals("sample-benchmark-scoring-corpus", corpus.manifest.name)
-        assertEquals(12, corpus.dataset.scenarios.size)
+        assertEquals(13, corpus.dataset.scenarios.size)
         assertTrue(corpus.dataset.scenarios.any { it.id == "audio-fallback-1" })
         assertTrue(corpus.dataset.scenarios.any { it.id == "dv-vs-hdr10plus" })
         assertTrue(corpus.dataset.scenarios.any { it.id == "dv-profile5-autoplay-fallback" })
         assertTrue(corpus.dataset.scenarios.any { it.id == "dv-profile7-autoplay-continue" })
         assertTrue(corpus.dataset.scenarios.any { it.id == "dv-probe-unknown-autoplay-fallback" })
+        assertTrue(corpus.dataset.scenarios.any { it.id == "dv-remux-profile5-autoplay-continue" })
         assertTrue(corpus.dataset.scenarios.any { it.id == "lotr-return-of-the-king-movie" })
         assertTrue(corpus.dataset.scenarios.any { it.id == "tv-hevc-ddp-vs-av1-webdl" })
         assertTrue(corpus.dataset.scenarios.any { it.id == "movie-webdl-non-remux-quality-pack" })
@@ -223,7 +224,8 @@ class BenchmarkAwareScoringCorpusTest {
         val selectedScenarios = corpus.dataset.scenarios.filter {
             it.id == "dv-profile5-autoplay-fallback" ||
                 it.id == "dv-profile7-autoplay-continue" ||
-                it.id == "dv-probe-unknown-autoplay-fallback"
+                it.id == "dv-probe-unknown-autoplay-fallback" ||
+                it.id == "dv-remux-profile5-autoplay-continue"
         }
 
         val summary = BenchmarkAwareScoringEvaluator().evaluate(
@@ -263,6 +265,7 @@ class BenchmarkAwareScoringCorpusTest {
             "dv-profile5-autoplay-fallback.json",
             "dv-profile7-autoplay-continue.json",
             "dv-probe-unknown-autoplay-fallback.json",
+            "dv-remux-profile5-autoplay-continue.json",
             "lotr-return-of-the-king-movie.json",
             "tv-hevc-ddp-vs-av1-webdl.json",
             "movie-webdl-non-remux-quality-pack.json"

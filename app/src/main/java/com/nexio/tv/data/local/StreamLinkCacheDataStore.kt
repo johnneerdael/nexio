@@ -113,6 +113,13 @@ class StreamLinkCacheDataStore @Inject constructor(
         return parsed
     }
 
+    suspend fun invalidate(contentKey: String) {
+        val key = cachePrefKey(contentKey)
+        store().edit { prefs ->
+            prefs.remove(key)
+        }
+    }
+
     private fun cachePrefKey(contentKey: String): Preferences.Key<String> {
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(contentKey.toByteArray(Charsets.UTF_8))
