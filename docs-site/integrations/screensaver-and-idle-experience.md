@@ -32,6 +32,6 @@ Nexio's modern screensaver is part of the app experience, not a separate utility
 
 ## Related guides
 
-- [Recommended Setup](/start-here/recommended-setup)
+- [Recommended Setup](/start-here/)
 - [Home and Continue Watching](/watch/home-and-continue-watching)
 - [Troubleshooting](/troubleshooting/)

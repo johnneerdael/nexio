@@ -65,7 +65,7 @@ For most users, the simplest path is:
 
 ## Related guides
 
-- [Recommended Setup](/start-here/recommended-setup)
+- [Recommended Setup](/start-here/)
 - [Details, Seasons, and Watching Flow](/watch/details-seasons-and-watching-flow)
 - [Options and Self-Hosting](/advanced/options-and-self-hosting)
 - [Troubleshooting](/troubleshooting/)

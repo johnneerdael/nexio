@@ -40,7 +40,7 @@ Library integration turns supported debrid accounts into first-class browsing co
 
 ## Related guides
 
-- [Recommended Setup](/start-here/recommended-setup)
+- [Recommended Setup](/start-here/)
 - [Debrid and Service Wrap](/integrations/debrid-and-service-wrap)
 - [Home and Continue Watching](/watch/home-and-continue-watching)
 - [Troubleshooting](/troubleshooting/)

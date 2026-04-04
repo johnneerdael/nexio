@@ -4,7 +4,7 @@ Troubleshooting stays close to the rest of the docs so recovery does not feel li
 
 ## Start with the symptom you have
 
-- **Home is empty or incomplete after first login**: Go to [First-run Sync and Cache](/start-here/first-run-sync-and-cache) and [Home and Continue Watching](/watch/home-and-continue-watching). First action: give the initial sync and disk-backed cache time to settle, then confirm you signed into the same account you prepared.
+- **Home is empty or incomplete after first login**: Go to [First-run Sync and Cache](/start-here/) and [Home and Continue Watching](/watch/home-and-continue-watching). First action: give the initial sync and disk-backed cache time to settle, then confirm you signed into the same account you prepared.
 - **Continue Watching is missing items**: Go to [Home and Continue Watching](/watch/home-and-continue-watching). First action: check Trakt sign-in, the continue-watching window, and whether the title has recent progress to sync.
 - **Trailers do not play**: Go to [Trailers and Recaps](/watch/trailers-and-recaps) and [Options and Self-Hosting](/advanced/options-and-self-hosting). First action: run the in-app YouTube trailer login and retry the same title.
 - **Subtitle translation is not working**: Go to [Subtitles and Auto-Translate](/playback/subtitles-and-auto-translate). First action: confirm Gemini is enabled, the API key is present, and you selected a text subtitle track instead of a bitmap track.

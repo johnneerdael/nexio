@@ -17,6 +17,6 @@ Move to [Troubleshooting](/troubleshooting/) once the guides and portal settings
 
 ## Related guides
 
-- [Recommended Setup](/start-here/recommended-setup)
+- [Recommended Setup](/start-here/)
 - [Home and Continue Watching](/watch/home-and-continue-watching)
 - [Troubleshooting](/troubleshooting/)

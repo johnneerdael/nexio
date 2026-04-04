@@ -14,7 +14,7 @@ The detail flow is where you decide what to watch next. It brings together play 
 - `Settings > Integration` controls the metadata and ratings services that feed detail pages.
 - `Settings > Playback` controls the playback behavior that takes over after you press Play.
 - [Ratings and Metadata](/integrations/ratings-and-metadata) covers TMDB, OMDb, MDBList, and the optional self-hosted ratings path.
-- [Recommended Setup](/start-here/recommended-setup) is the right path if the whole account still looks unfinished instead of just one title.
+- [Recommended Setup](/start-here/) is the right path if the whole account still looks unfinished instead of just one title.
 
 ## Recommended setup
 

@@ -11,9 +11,9 @@ Use the website to prepare the account before you sign in on the TV app. The por
 - Use the TV app QR flow when you want to watch on a device.
 
 ## Related guides
-- [Account and Sign In](../start-here/account-and-sign-in.md)
-- [Recommended Setup](../start-here/recommended-setup.md)
-- [Security and Data](../start-here/security-and-data.md)
+- [Account and Sign In](../start-here/.md)
+- [Recommended Setup](../start-here/.md)
+- [Security and Data](../start-here/.md)
 - [Integrations](./admin-workspaces/integrations.md)
 - [Catalog Inventory](./admin-workspaces/catalogs.md)
 - [Addon Manager](./admin-workspaces/addons.md)

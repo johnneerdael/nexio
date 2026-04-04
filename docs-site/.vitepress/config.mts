@@ -2,13 +2,9 @@ import { defineConfig } from 'vitepress'
 
 // https://vitepress.dev/reference/site-config
 const startHereSection = {
-  text: 'Start Here',
+  text: 'Getting Started',
   items: [
-    { text: 'Overview', link: '/start-here/' },
-    { text: 'Recommended Setup', link: '/start-here/recommended-setup' },
-    { text: 'First-run Sync and Cache', link: '/start-here/first-run-sync-and-cache' },
-    { text: 'Account and Sign In', link: '/start-here/account-and-sign-in' },
-    { text: 'Security and Data', link: '/start-here/security-and-data' }
+    { text: 'Creator Best-Practices Setup Guide', link: '/start-here/' }
   ]
 }
 
@@ -82,7 +78,7 @@ const troubleshootingSection = {
   text: 'Troubleshooting',
   items: [
     { text: 'Overview', link: '/troubleshooting/' },
-    { text: 'Start Here', link: '/start-here/' },
+    { text: 'Getting Started', link: '/start-here/' },
     { text: 'Watching', link: '/watch/' },
     { text: 'Playback', link: '/playback/' },
     { text: 'Integrations', link: '/integrations/' },
@@ -144,7 +140,7 @@ export default defineConfig({
     // https://vitepress.dev/reference/default-theme-config
     nav: [
       { text: 'Home', link: '/' },
-      { text: 'Start Here', link: '/start-here/' },
+      { text: 'Getting Started', link: '/start-here/' },
       { text: 'Watching', link: '/watch/' },
       { text: 'Playback', link: '/playback/' },
       { text: 'Integrations', link: '/integrations/' },
