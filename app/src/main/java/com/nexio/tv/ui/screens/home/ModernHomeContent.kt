@@ -164,6 +164,16 @@ internal fun resolveModernHomeHeroTrailerMuted(
     fullscreenTrailerActive: Boolean
 ): Boolean = !fullscreenTrailerActive
 
+internal fun shouldTreatFocusedPosterTrailerPlaybackAsActiveTime(
+    hasActivePlayback: Boolean,
+    trailerMuted: Boolean
+): Boolean = hasActivePlayback && !trailerMuted
+
+internal fun shouldTreatModernHomeTrailerPlaybackAsActiveTime(
+    internalHomeTrailerPlaying: Boolean,
+    trailerMuted: Boolean
+): Boolean = internalHomeTrailerPlaying && !trailerMuted
+
 internal data class ModernHomeTrailerEndedState(
     val unlockedTrailerFocusKey: String? = null,
     val pendingHeroTrailerFocusKey: String? = null,
@@ -983,8 +993,22 @@ internal fun ModernHomeContent(
                 !contentState.trailerPreviewUrls[expandedId].isNullOrBlank()
         }
         var previousHomeTrailerPlaying by remember { mutableStateOf(false) }
-        LaunchedEffect(heroTrailerActive, expandedCardTrailerActive, internalHomeTrailerPlaying) {
-            onModernHomeTrailerPlaybackActiveChanged(heroTrailerActive || expandedCardTrailerActive)
+        val activeTrailerMuted = if (
+            effectiveTrailerPlaybackTarget == com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget.HERO_MEDIA
+        ) {
+            resolveModernHomeHeroTrailerMuted(
+                fullscreenTrailerActive = fullscreenTrailerActive
+            )
+        } else {
+            contentState.focusedPosterBackdropTrailerMuted
+        }
+        LaunchedEffect(internalHomeTrailerPlaying, activeTrailerMuted) {
+            onModernHomeTrailerPlaybackActiveChanged(
+                shouldTreatModernHomeTrailerPlaybackAsActiveTime(
+                    internalHomeTrailerPlaying = internalHomeTrailerPlaying,
+                    trailerMuted = activeTrailerMuted
+                )
+            )
             if (internalHomeTrailerPlaying && !previousHomeTrailerPlaying) {
                 onModernHomeTrailerPlaybackStarted()
             }

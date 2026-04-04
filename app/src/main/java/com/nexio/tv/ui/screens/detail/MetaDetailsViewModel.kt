@@ -77,6 +77,11 @@ internal fun shouldStopAutoTrailerOnLifecyclePause(
     showTrailerControls: Boolean
 ): Boolean = isTrailerPlaying && !showTrailerControls
 
+internal fun shouldTreatDetailTrailerPlaybackAsActiveTime(
+    isTrailerPlaying: Boolean,
+    showTrailerControls: Boolean
+): Boolean = isTrailerPlaying && showTrailerControls
+
 private data class TraktReviewQuery(
     val pathId: String,
     val isShowEndpoint: Boolean
