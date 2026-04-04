@@ -80,6 +80,7 @@ internal class ParallelRangeDataSource(
         private const val READ_BUFFER_SIZE = 512 * 1024 // 512KB read buffer for chunk downloads
         private const val BOOTSTRAP_READ_BYTES = 1L * 1024L * 1024L
         internal const val DEFAULT_CHUNK_WAIT_TIMEOUT_MS = 60_000L
+        private const val MAX_CHUNK_WAIT_RETRIES = 3
         private const val MAX_TRANSIENT_CHUNK_ATTEMPTS = 4
         private const val MAX_NON_TRANSIENT_CHUNK_ATTEMPTS = 2
     }
@@ -308,7 +309,7 @@ internal class ParallelRangeDataSource(
             ensureChunkScheduled(chunkIndex)
             val future = chunks[chunkIndex] ?: return C.RESULT_END_OF_INPUT
             try {
-                currentChunk = future.get(chunkWaitTimeoutMs, TimeUnit.MILLISECONDS)
+                currentChunk = awaitChunkWithRecovery(chunkIndex, future)
             } catch (e: TimeoutException) {
                 if (closed.get()) return C.RESULT_END_OF_INPUT
                 throw ChunkWaitTimeoutException(
@@ -369,6 +370,26 @@ internal class ParallelRangeDataSource(
             if (totalFileLength != C.LENGTH_UNSET.toLong() && ci * chunkSize >= totalFileLength) break
             ensureChunkScheduled(ci)
         }
+    }
+
+    private fun awaitChunkWithRecovery(
+        chunkIndex: Long,
+        initialFuture: CompletableFuture<DownloadedChunk>
+    ): DownloadedChunk {
+        var future = initialFuture
+        repeat(MAX_CHUNK_WAIT_RETRIES) { attempt ->
+            try {
+                return future.get(chunkWaitTimeoutMs, TimeUnit.MILLISECONDS)
+            } catch (timeout: TimeoutException) {
+                if (closed.get()) throw timeout
+                Log.w(TAG, "Chunk $chunkIndex wait timed out (attempt ${attempt + 1}/$MAX_CHUNK_WAIT_RETRIES), restarting worker")
+                future.cancel(true)
+                chunks.remove(chunkIndex, future)
+                ensureChunkScheduled(chunkIndex)
+                future = chunks[chunkIndex] ?: throw timeout
+            }
+        }
+        return future.get(chunkWaitTimeoutMs, TimeUnit.MILLISECONDS)
     }
 
     private fun ensureChunkScheduled(chunkIndex: Long) {
