@@ -91,7 +91,7 @@ class StreamScreenShadowSelectionTest {
         val benchmarks = mapOf(
             DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(
                 provider = DebridBenchmarkProvider.REAL_DEBRID,
-                optimizedP10Mbps = 205.0
+                optimizedP10Mbps = 220.0
             ),
             DebridBenchmarkProvider.PREMIUMIZE to benchmarkResult(
                 provider = DebridBenchmarkProvider.PREMIUMIZE,
