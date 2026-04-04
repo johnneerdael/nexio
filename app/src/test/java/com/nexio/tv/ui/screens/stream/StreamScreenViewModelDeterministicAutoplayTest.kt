@@ -178,6 +178,24 @@ class StreamScreenViewModelDeterministicAutoplayTest {
     }
 
     @Test
+    fun `early finish decision reports threshold details when triggered`() {
+        val decision = deterministicAutoplayEarlyFinishDecision(
+            winners = listOf(
+                remuxWinner("rd", DebridBenchmarkProvider.REAL_DEBRID, 60.0, "A.mkv"),
+                remuxWinner("pm", DebridBenchmarkProvider.PREMIUMIZE, 60.0, "B.mkv"),
+                remuxWinner("rd2", DebridBenchmarkProvider.REAL_DEBRID, 60.0, "C.mkv")
+            ),
+            request = movieRequest()
+        )
+
+        assertEquals(true, decision.triggered)
+        assertEquals("threshold_met", decision.reason)
+        assertEquals("2160p", decision.resolution)
+        assertEquals("remux", decision.releaseType)
+        assertEquals(3, decision.matchingCount)
+    }
+
+    @Test
     fun `same release across different unlockers can satisfy early finish`() {
         val winners = listOf(
             remuxWinner("rd", DebridBenchmarkProvider.REAL_DEBRID, 60.0, "Movie.Release.2160p.REMUX.mkv"),

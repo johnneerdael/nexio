@@ -1,1 +1,180 @@
-<!doctype html><html><head><meta charset="utf-8"><title>Event {{ event.id }}</title><link rel="stylesheet" href="/static/styles.css"></head><body><main class="container"><p><a href="/">← Back</a></p><h1>Event {{ event.id }}</h1><dl class="grid">{% for key, value in event.items() if key != 'raw_json' %}<dt>{{ key }}</dt><dd>{{ value }}</dd>{% endfor %}</dl><h2>Raw JSON</h2><pre>{{ event.raw_json }}</pre></main></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Event {{ event.id }}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="shell shell-detail">
+    <header class="page-header page-header-detail">
+      <div>
+        <a class="back-link" href="/">← Back to dashboard</a>
+        <p class="eyebrow">Event {{ event.id }}</p>
+        <h1>{{ event.title }}</h1>
+        <p class="lede">{{ event.result_line }}</p>
+      </div>
+      <div class="detail-meta">
+        <span class="pill">{{ event.content_type }}</span>
+        <span class="pill pill-secondary">{{ event.event_type }}</span>
+      </div>
+    </header>
+
+    <section class="detail-grid">
+      <article class="panel hero-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Selected winner</h2>
+            <p>The stream chosen by deterministic shadow autoplay.</p>
+          </div>
+        </div>
+        {% if event.selected %}
+          <div class="hero-summary-grid">
+            <div><span class="metric-label">Provider</span><strong>{{ event.selected.provider }}</strong></div>
+            <div><span class="metric-label">Transport</span><strong>{{ event.selected.transport }}</strong></div>
+            <div><span class="metric-label">Service</span><strong>{{ event.selected.service }}</strong></div>
+            <div><span class="metric-label">Score</span><strong>{{ event.selected.score }}</strong></div>
+            <div><span class="metric-label">Ratio</span><strong>{{ event.selected.ratio_label }}</strong></div>
+            <div><span class="metric-label">Resolution</span><strong>{{ event.selected.resolution }}</strong></div>
+            <div><span class="metric-label">HDR</span><strong>{{ event.selected.hdr }}</strong></div>
+            <div><span class="metric-label">Audio</span><strong>{{ event.selected.audio }}</strong></div>
+            <div><span class="metric-label">Size</span><strong>{{ event.selected.size_label }}</strong></div>
+            <div><span class="metric-label">Duration</span><strong>{{ event.selected.duration_label }}</strong></div>
+            <div><span class="metric-label">Bitrate</span><strong>{{ event.selected.bitrate_label }}</strong></div>
+            <div><span class="metric-label">Runtime source</span><strong>{{ event.selected.runtime_source }}</strong></div>
+          </div>
+          <div class="file-banner" title="{{ event.selected.file }}">{{ event.selected.file }}</div>
+        {% else %}
+          <p class="empty-copy">No winner was selected for this event.</p>
+        {% endif %}
+      </article>
+
+      <article class="panel compact-panel">
+        <div class="panel-heading"><div><h2>Request</h2><p>Playback context</p></div></div>
+        <dl class="info-list">
+          {% for card in event.request_cards %}
+            <div><dt>{{ card.label }}</dt><dd>{{ card.value }}</dd></div>
+          {% endfor %}
+        </dl>
+      </article>
+
+      <article class="panel compact-panel">
+        <div class="panel-heading"><div><h2>Client</h2><p>Source device metadata</p></div></div>
+        <dl class="info-list">
+          {% for card in event.client_cards %}
+            <div><dt>{{ card.label }}</dt><dd>{{ card.value }}</dd></div>
+          {% endfor %}
+        </dl>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Bitrate comparison</h2>
+          <p>Computed from size ÷ duration for winner and candidate streams.</p>
+        </div>
+        {% if event.bitrate_chart.has_data %}
+          <span class="subtle">Peak {{ event.bitrate_chart.max_mbps }}</span>
+        {% endif %}
+      </div>
+      {% if event.bitrate_chart.has_data %}
+        <div class="bar-chart">
+          {% for item in event.bitrate_chart.data_points %}
+            <div class="bar-row">
+              <div class="bar-copy">
+                <strong>{{ item.label }}</strong>
+                <span>{{ item.provider }} · {{ item.status }}</span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill bar-fill-{{ item.status|lower }}" style="width: {{ item.width_pct }}%"></div>
+              </div>
+              <div class="bar-value">{{ item.value_label }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-panel-state">{{ event.bitrate_chart.message }}</div>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Candidate comparison</h2>
+          <p>Selected winner, viable winners, and rejected candidates in one structured table.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table data-table-detail">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Provider</th>
+              <th>Transport</th>
+              <th>Service</th>
+              <th>File</th>
+              <th>Resolution</th>
+              <th>Size</th>
+              <th>Duration</th>
+              <th>Bitrate</th>
+              <th>Score</th>
+              <th>Ratio</th>
+              <th>HDR</th>
+              <th>Audio</th>
+              <th>Reasons</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for candidate in event.candidates %}
+              <tr>
+                <td><span class="pill pill-{{ candidate.status|lower }}">{{ candidate.status }}</span></td>
+                <td>{{ candidate.provider }}</td>
+                <td>{{ candidate.transport }}</td>
+                <td>{{ candidate.service }}</td>
+                <td class="file-cell" title="{{ candidate.file }}">{{ candidate.file }}</td>
+                <td>{{ candidate.resolution }}</td>
+                <td>{{ candidate.size_label }}</td>
+                <td>{{ candidate.duration_label }}</td>
+                <td>{{ candidate.bitrate_label }}</td>
+                <td>{{ candidate.score if candidate.score is not none else '—' }}</td>
+                <td>{{ candidate.ratio_label }}</td>
+                <td>{{ candidate.hdr }}</td>
+                <td>{{ candidate.audio }}</td>
+                <td>{{ candidate.reasons|join(', ') if candidate.reasons else '—' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="detail-grid bottom-grid">
+      <article class="panel compact-panel">
+        <div class="panel-heading"><div><h2>Benchmarks used</h2><p>Provider measurements attached to this decision.</p></div></div>
+        {% if event.benchmarks_used %}
+          <ul class="list-reset stack-list">
+            {% for benchmark in event.benchmarks_used %}
+              <li>
+                <strong>{{ benchmark.provider }}</strong>
+                <span class="subtle">{{ benchmark.measuredAtMs }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="empty-copy">No benchmark references recorded.</p>
+        {% endif %}
+      </article>
+
+      <article class="panel compact-panel">
+        <div class="panel-heading"><div><h2>Raw JSON</h2><p>Full preserved payload for debugging.</p></div></div>
+        <details class="raw-json-details">
+          <summary>Show raw event JSON</summary>
+          <pre>{{ event.raw_json_pretty }}</pre>
+        </details>
+      </article>
+    </section>
+  </main>
+</body>
+</html>
