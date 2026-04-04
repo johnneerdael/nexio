@@ -82,6 +82,29 @@ class ParallelRangeDataSourceTest {
         }
     }
 
+
+    @Test(timeout = 5_000L)
+    fun `parallel range datasource resumes a failed chunk from the partial offset`() {
+        val fixture = RangeServerFixture(
+            content = ByteArray(512 * 1024) { (it % 251).toByte() },
+            chunkSize = 64 * 1024L,
+            transientFailuresByChunkIndex = mutableMapOf(3L to 1),
+            transientFailureBytesByChunkIndex = mutableMapOf(3L to 48 * 1024)
+        )
+
+        fixture.use { server ->
+            val dataSource = server.createDataSource()
+            val bytes = readAll(dataSource, server.dataSpec())
+
+            assertArrayEquals(server.content, bytes)
+            val requestStarts = server.requestStartsForChunk(3L)
+            assertEquals(2, requestStarts.size)
+            assertEquals(3L * 64 * 1024L, requestStarts.first())
+            assertTrue(requestStarts[1] > requestStarts.first())
+            assertTrue(requestStarts[1] < ((3L + 1L) * 64 * 1024L))
+        }
+    }
+
     @Test(timeout = 5_000L)
     fun `parallel range datasource reports transport bytes for bootstrap reads`() {
         val content = ByteArray(512 * 1024) { (it % 251).toByte() }
@@ -134,10 +157,12 @@ class ParallelRangeDataSourceTest {
     private class RangeServerFixture(
         val content: ByteArray,
         private val chunkSize: Long,
-        private val transientFailuresByChunkIndex: MutableMap<Long, Int>
+        private val transientFailuresByChunkIndex: MutableMap<Long, Int>,
+        private val transientFailureBytesByChunkIndex: MutableMap<Long, Int> = mutableMapOf()
     ) : AutoCloseable {
         private val server = MockWebServer()
         private val chunkRequestCounts = ConcurrentHashMap<Long, Int>()
+        private val chunkRequestStarts = ConcurrentHashMap<Long, MutableList<Long>>()
 
         init {
             server.dispatcher = object : Dispatcher() {
@@ -181,6 +206,8 @@ class ParallelRangeDataSourceTest {
 
         fun requestsForChunk(chunkIndex: Long): Int = chunkRequestCounts[chunkIndex] ?: 0
 
+        fun requestStartsForChunk(chunkIndex: Long): List<Long> = chunkRequestStarts[chunkIndex]?.toList() ?: emptyList()
+
         override fun close() {
             server.shutdown()
         }
@@ -202,11 +229,15 @@ class ParallelRangeDataSourceTest {
             val length = (endExclusive - start).toInt()
             val chunkIndex = start / chunkSize
             chunkRequestCounts.merge(chunkIndex, 1, Int::plus)
+            chunkRequestStarts.compute(chunkIndex) { _, starts ->
+                (starts ?: mutableListOf()).apply { add(start) }
+            }
 
             val remainingFailures = transientFailuresByChunkIndex[chunkIndex] ?: 0
             if (remainingFailures > 0) {
                 transientFailuresByChunkIndex[chunkIndex] = remainingFailures - 1
-                val partialLength = minOf(length, 8 * 1024)
+                val configuredPartialLength = transientFailureBytesByChunkIndex[chunkIndex]
+                val partialLength = minOf(length, configuredPartialLength ?: (8 * 1024))
                 val partialBuffer = Buffer().write(content, start.toInt(), partialLength)
                 return MockResponse()
                     .setResponseCode(206)
