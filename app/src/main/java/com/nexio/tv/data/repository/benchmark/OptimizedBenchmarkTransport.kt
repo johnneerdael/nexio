@@ -624,6 +624,7 @@ private class DefaultOptimizedBenchmarkDataSourceFactoryBuilder(
                     ?: PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT).coerceAtLeast(2),
                 chunkSize = (configSnapshot.parallelChunkSizeMb
                     ?: PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB).toLong() * 1024L * 1024L,
+                chunkWaitTimeoutMs = 1_000L,
                 transportSampleTimeMs = transportSampleTimeMs,
                 onTransportBytesDownloaded = onTransportBytesDownloaded,
                 allowStartupBootstrapReuse = allowStartupBootstrapReuse
