@@ -30,6 +30,7 @@ import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.domain.model.StreamBehaviorHints
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 class StreamScreenShadowSelectionTest {
@@ -37,27 +38,51 @@ class StreamScreenShadowSelectionTest {
     private val scorer = BenchmarkAwareStreamScorer()
 
     @Test
-    fun `coordinator replays a shadow decision when benchmark data arrives after streams`() {
+    fun `coordinator does not emit before a terminal decision even when benchmarks arrive later`() {
         val coordinator = ShadowAutoPlayReplayCoordinator(scorer)
         coordinator.updateCandidates(
             request(),
             listOf(streamCard(streamKey = "rd_stream", providerId = "RD")),
-            DebridBenchmarkTransportMode.OPTIMIZED
+            DebridBenchmarkTransportMode.OPTIMIZED,
+            isFinalPass = false,
+            allowEarlyFinishTerminal = true
         )
 
-        val beforeBenchmark = coordinator.buildEvent(emptyMap())
-        assertNull(beforeBenchmark?.selected)
-        assertEquals(
-            listOf(ShadowRejectReason.MISSING_BENCHMARK),
-            beforeBenchmark?.rejected?.single()?.reasons
-        )
+        val beforeBenchmark = coordinator.buildEventIfReady(emptyMap())
+        assertNull(beforeBenchmark)
 
-        val afterBenchmark = coordinator.buildEvent(
+        val afterBenchmark = coordinator.buildEventIfReady(
             mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(DebridBenchmarkProvider.REAL_DEBRID))
         )
 
-        assertEquals("rd_stream", afterBenchmark?.selected?.streamKey)
-        assertEquals(DebridBenchmarkTransportMode.OPTIMIZED, afterBenchmark?.selected?.transport)
+        assertNull(afterBenchmark)
+    }
+
+    @Test
+    fun `coordinator emits once when benchmark replay reaches early finish terminal state`() {
+        val coordinator = ShadowAutoPlayReplayCoordinator(scorer)
+        val benchmarks = mapOf(
+            DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(DebridBenchmarkProvider.REAL_DEBRID),
+            DebridBenchmarkProvider.PREMIUMIZE to benchmarkResult(DebridBenchmarkProvider.PREMIUMIZE),
+            DebridBenchmarkProvider.TORBOX to benchmarkResult(DebridBenchmarkProvider.TORBOX)
+        )
+
+        coordinator.updateCandidates(
+            request(),
+            listOf(
+                streamCard(streamKey = "rd_stream", providerId = "RD"),
+                streamCard(streamKey = "pm_stream", providerId = "PM"),
+                streamCard(streamKey = "tb_stream", providerId = "TB")
+            ),
+            DebridBenchmarkTransportMode.OPTIMIZED,
+            isFinalPass = false,
+            allowEarlyFinishTerminal = true
+        )
+
+        val event = coordinator.buildEventIfReady(benchmarks)
+        assertNotNull(event)
+        assertEquals(DebridBenchmarkTransportMode.OPTIMIZED, event?.selected?.transport)
+        assertNull(coordinator.buildEventIfReady(benchmarks))
     }
 
     @Test
@@ -85,10 +110,12 @@ class StreamScreenShadowSelectionTest {
                     sizeBytes = gib(12.0)
                 )
             ),
-            DebridBenchmarkTransportMode.OPTIMIZED
+            DebridBenchmarkTransportMode.OPTIMIZED,
+            isFinalPass = false,
+            allowEarlyFinishTerminal = true
         )
-        val earlyEvent = coordinator.buildEvent(benchmarks)
-        assertEquals("pm_ok", earlyEvent?.selected?.streamKey)
+        val earlyEvent = coordinator.buildEventIfReady(benchmarks)
+        assertNull(earlyEvent)
 
         coordinator.updateCandidates(
             request(),
@@ -108,11 +135,14 @@ class StreamScreenShadowSelectionTest {
                     sizeBytes = gib(82.0)
                 )
             ),
-            DebridBenchmarkTransportMode.OPTIMIZED
+            DebridBenchmarkTransportMode.OPTIMIZED,
+            isFinalPass = true,
+            allowEarlyFinishTerminal = true
         )
-        val laterEvent = coordinator.buildEvent(benchmarks)
+        val laterEvent = coordinator.buildEventIfReady(benchmarks)
         assertEquals("rd_remux", laterEvent?.selected?.streamKey)
         assertEquals(DebridBenchmarkTransportMode.OPTIMIZED, laterEvent?.selected?.transport)
+        assertNull(coordinator.buildEventIfReady(benchmarks))
     }
 
     @Test
@@ -121,13 +151,15 @@ class StreamScreenShadowSelectionTest {
         coordinator.updateCandidates(
             request(),
             listOf(streamCard(streamKey = "rd_stream", providerId = "RD")),
-            DebridBenchmarkTransportMode.OPTIMIZED
+            DebridBenchmarkTransportMode.OPTIMIZED,
+            isFinalPass = false,
+            allowEarlyFinishTerminal = true
         )
 
         coordinator.clear()
 
         assertNull(
-            coordinator.buildEvent(
+            coordinator.buildEventIfReady(
                 mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(DebridBenchmarkProvider.REAL_DEBRID))
             )
         )
@@ -139,14 +171,34 @@ class StreamScreenShadowSelectionTest {
         coordinator.updateCandidates(
             request(),
             listOf(streamCard(streamKey = "rd_stream", providerId = "RD")),
-            DebridBenchmarkTransportMode.DIRECT
+            DebridBenchmarkTransportMode.DIRECT,
+            isFinalPass = true,
+            allowEarlyFinishTerminal = false
         )
 
-        val event = coordinator.buildEvent(
+        val event = coordinator.buildEventIfReady(
             mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(DebridBenchmarkProvider.REAL_DEBRID))
         )
 
         assertEquals(DebridBenchmarkTransportMode.DIRECT, event?.selected?.transport)
+    }
+
+    @Test
+    fun `coordinator emits one final no-winner event after final pass`() {
+        val coordinator = ShadowAutoPlayReplayCoordinator(scorer)
+        coordinator.updateCandidates(
+            request(),
+            listOf(streamCard(streamKey = "http_stream", providerId = null)),
+            DebridBenchmarkTransportMode.OPTIMIZED,
+            isFinalPass = true,
+            allowEarlyFinishTerminal = false
+        )
+
+        val event = coordinator.buildEventIfReady(emptyMap())
+        assertNotNull(event)
+        assertNull(event?.selected)
+        assertEquals(listOf(ShadowRejectReason.NOT_DEBRID_WRAPPED), event?.rejected?.single()?.reasons)
+        assertNull(coordinator.buildEventIfReady(emptyMap()))
     }
 
     private fun request(): ShadowRequestContext {
@@ -163,7 +215,7 @@ class StreamScreenShadowSelectionTest {
 
     private fun streamCard(
         streamKey: String,
-        providerId: String,
+        providerId: String?,
         resolution: String = "2160p",
         quality: String = "BluRay Remux",
         encode: String = "HEVC",

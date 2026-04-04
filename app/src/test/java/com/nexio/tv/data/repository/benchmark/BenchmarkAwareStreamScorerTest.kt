@@ -10,6 +10,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
+import kotlin.math.roundToLong
 
 class BenchmarkAwareStreamScorerTest {
 
@@ -202,7 +203,7 @@ class BenchmarkAwareStreamScorerTest {
     fun `rd remux wins when premiumize budget rejects the stream`() {
         val rdBenchmark = benchmarkResult(
             provider = DebridBenchmarkProvider.REAL_DEBRID,
-            optimizedP10Mbps = 205.0
+            optimizedP10Mbps = 220.0
         )
         val pmBenchmark = benchmarkResult(
             provider = DebridBenchmarkProvider.PREMIUMIZE,
@@ -843,6 +844,103 @@ class BenchmarkAwareStreamScorerTest {
     }
 
     @Test
+    fun `movie scoring rejects borderline remux and selects safer high bitrate 4k candidate`() {
+        val safeBudgetMbps = 102.2301392
+        val throughputP10Mbps = safeBudgetMbps / 0.85
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            directP10Mbps = throughputP10Mbps,
+            optimizedP10Mbps = throughputP10Mbps,
+            directDecisionSafeBudgetMbps = safeBudgetMbps,
+            optimizedDecisionSafeBudgetMbps = safeBudgetMbps,
+            optimizedSeekP95Ms = 415L,
+            device = deviceSnapshot(
+                displayHdrTypes = emptySet(),
+                truehdSupported = false,
+                truehdPassthrough = false,
+                eac3Supported = false,
+                eac3Passthrough = false,
+                ac3Supported = false,
+                ac3Passthrough = false,
+                dtsSupported = false,
+                dtsPassthrough = false,
+                dtshdSupported = false,
+                dtshdPassthrough = false
+            )
+        )
+
+        val event = scorer.score(
+            request = request(runtimeMinutes = 180),
+            streams = listOf(
+                streamCard(
+                    streamKey = "borderline_remux",
+                    providerId = "RD",
+                    filename = "The.Lord.of.the.Rings.The.Two.Towers.2002.THEATRICAL.4K.HDR.2160p.BDRemux Ita Eng x265-NAHOM.mkv",
+                    quality = "BluRay REMUX",
+                    sizeBytes = 77_883_182_944L,
+                    visualTags = listOf("HDR"),
+                    audioTags = emptyList()
+                ),
+                streamCard(
+                    streamKey = "safer_hdr10_bluray",
+                    providerId = "RD",
+                    filename = "The Lord of the Rings - The Two Towers 2002 Extended UHD BluRay HDR10 10Bit 2160p Dts-HDMa7.1 HEVC-d3g.mkv",
+                    quality = "BluRay",
+                    sizeBytes = 58_778_158_991L,
+                    visualTags = listOf("HDR10", "10bit"),
+                    audioTags = emptyList()
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark),
+            activeTransportMode = DebridBenchmarkTransportMode.OPTIMIZED
+        )
+
+        assertEquals("safer_hdr10_bluray", event.selected?.streamKey)
+    }
+
+    @Test
+    fun `movie scoring prefers safer transport when score gap is small`() {
+        val safeBudgetMbps = 100.0
+        val throughputP10Mbps = safeBudgetMbps / 0.85
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            directP10Mbps = throughputP10Mbps,
+            optimizedP10Mbps = throughputP10Mbps,
+            directDecisionSafeBudgetMbps = safeBudgetMbps,
+            optimizedDecisionSafeBudgetMbps = safeBudgetMbps
+        )
+
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "risky_remux",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    encode = "HEVC",
+                    sizeBytes = sizeBytesForAverageBitrateMbps(52.0, 120),
+                    visualTags = listOf("HDR10"),
+                    audioTags = emptyList()
+                ),
+                streamCard(
+                    streamKey = "safer_bluray",
+                    providerId = "RD",
+                    quality = "BluRay",
+                    encode = "HEVC",
+                    sizeBytes = sizeBytesForAverageBitrateMbps(46.8, 120),
+                    visualTags = emptyList(),
+                    audioTags = emptyList()
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark),
+            activeTransportMode = DebridBenchmarkTransportMode.OPTIMIZED
+        )
+
+        assertEquals("safer_bluray", event.selected?.streamKey)
+        assertEquals(listOf("safer_bluray", "risky_remux"), event.winners.map { it.streamKey })
+    }
+
+    @Test
     fun `show scoring caps transport reward so viable higher bitrate release wins over tiny webdl`() {
         val benchmark = benchmarkResult(
             provider = DebridBenchmarkProvider.REAL_DEBRID,
@@ -1125,6 +1223,10 @@ class BenchmarkAwareStreamScorerTest {
 
     private fun gib(value: Double): Long {
         return (value * 1024.0 * 1024.0 * 1024.0).toLong()
+    }
+
+    private fun sizeBytesForAverageBitrateMbps(value: Double, runtimeMinutes: Int): Long {
+        return ((value * 1_000_000.0) * (runtimeMinutes * 60.0) / 8.0).roundToLong()
     }
 
     private fun deviceSnapshot(
