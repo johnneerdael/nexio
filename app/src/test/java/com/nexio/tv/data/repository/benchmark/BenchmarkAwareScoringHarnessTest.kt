@@ -253,7 +253,9 @@ class BenchmarkAwareScoringHarnessTest {
         dtsSupported: Boolean,
         dtsPassthrough: Boolean,
         dtshdSupported: Boolean,
-        dtshdPassthrough: Boolean
+        dtshdPassthrough: Boolean,
+        atmosSupported: Boolean? = null,
+        atmosPassthrough: Boolean? = null
     ): DeviceCapabilitySnapshot {
         return DeviceCapabilitySnapshot(
             model = "Shield",
@@ -269,6 +271,10 @@ class BenchmarkAwareScoringHarnessTest {
             audioOutput = DeviceAudioOutputCapabilities(
                 ac3 = AudioEncodingSupport(ac3Supported, ac3Passthrough),
                 eac3 = AudioEncodingSupport(eac3Supported, eac3Passthrough),
+                atmos = AudioEncodingSupport(
+                    atmosSupported ?: (eac3Supported || truehdSupported),
+                    atmosPassthrough ?: (eac3Passthrough || truehdPassthrough)
+                ),
                 truehd = AudioEncodingSupport(truehdSupported, truehdPassthrough),
                 dts = AudioEncodingSupport(dtsSupported, dtsPassthrough),
                 dtshd = AudioEncodingSupport(dtshdSupported, dtshdPassthrough)

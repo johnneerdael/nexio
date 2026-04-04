@@ -151,9 +151,11 @@ data class AudioEncodingSupport(
 data class DeviceAudioOutputCapabilities(
     val ac3: AudioEncodingSupport = AudioEncodingSupport(false, false),
     val eac3: AudioEncodingSupport = AudioEncodingSupport(false, false),
+    val atmos: AudioEncodingSupport = AudioEncodingSupport(false, false),
     val truehd: AudioEncodingSupport = AudioEncodingSupport(false, false),
     val dts: AudioEncodingSupport = AudioEncodingSupport(false, false),
-    val dtshd: AudioEncodingSupport = AudioEncodingSupport(false, false)
+    val dtshd: AudioEncodingSupport = AudioEncodingSupport(false, false),
+    val dtsx: AudioEncodingSupport = AudioEncodingSupport(false, false)
 )
 
 data class DeviceHdrCapabilityEvidence(
@@ -167,6 +169,14 @@ data class AudioDirectProfileEvidence(
     val sampleRates: List<Int> = emptyList()
 )
 
+data class AudioPlaybackProbeEvidence(
+    val bucket: String,
+    val format: String,
+    val channelMask: Int,
+    val sampleRateHz: Int,
+    val supportMode: String
+)
+
 data class AudioOutputDeviceEvidence(
     val id: Int? = null,
     val type: String,
@@ -178,7 +188,8 @@ data class DeviceAudioCapabilityEvidence(
     val discoveryMode: String? = null,
     val routedDeviceTypes: List<String> = emptyList(),
     val outputDevices: List<AudioOutputDeviceEvidence> = emptyList(),
-    val directProfiles: List<AudioDirectProfileEvidence> = emptyList()
+    val directProfiles: List<AudioDirectProfileEvidence> = emptyList(),
+    val directPlaybackProbes: List<AudioPlaybackProbeEvidence> = emptyList()
 )
 
 data class VideoDecoderEvidence(

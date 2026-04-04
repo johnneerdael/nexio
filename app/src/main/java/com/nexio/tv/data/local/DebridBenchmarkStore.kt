@@ -12,6 +12,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.nexio.tv.data.repository.benchmark.AudioEncodingSupport
 import com.nexio.tv.data.repository.benchmark.AudioDirectProfileEvidence
+import com.nexio.tv.data.repository.benchmark.AudioPlaybackProbeEvidence
 import com.nexio.tv.data.repository.benchmark.AudioOutputDeviceEvidence
 import com.nexio.tv.data.repository.benchmark.CodecSupport
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkCandidateMetadata
@@ -228,7 +229,7 @@ class DebridBenchmarkStore internal constructor(
     }
 
     private fun DeviceAudioOutputCapabilities.isValid(): Boolean {
-        return listOf(ac3, eac3, truehd, dts, dtshd).all { it.isValid() }
+        return listOf(ac3, eac3, atmos, truehd, dts, dtshd, dtsx).all { it.isValid() }
     }
 
     private fun AudioEncodingSupport.isValid(): Boolean {
@@ -249,7 +250,8 @@ class DebridBenchmarkStore internal constructor(
         return discoveryMode?.isNotBlank() != false &&
             routedDeviceTypes.all { it.isNotBlank() } &&
             outputDevices.all { it.isValid() } &&
-            directProfiles.all { it.isValid() }
+            directProfiles.all { it.isValid() } &&
+            directPlaybackProbes.all { it.isValid() }
     }
 
     private fun AudioOutputDeviceEvidence.isValid(): Boolean {
@@ -258,6 +260,13 @@ class DebridBenchmarkStore internal constructor(
 
     private fun AudioDirectProfileEvidence.isValid(): Boolean {
         return format.isNotBlank()
+    }
+
+    private fun AudioPlaybackProbeEvidence.isValid(): Boolean {
+        return bucket.isNotBlank() &&
+            format.isNotBlank() &&
+            sampleRateHz > 0 &&
+            supportMode.isNotBlank()
     }
 
     private fun DeviceVideoDecoderEvidence.isValid(): Boolean {
@@ -477,6 +486,9 @@ class DebridBenchmarkStore internal constructor(
             },
             directProfiles = audioJson.arrayOrEmpty("directProfiles").map { profile ->
                 parseAudioDirectProfileEvidence(profile.asJsonObjectOrThrow())
+            },
+            directPlaybackProbes = audioJson.arrayOrEmpty("directPlaybackProbes").map { probe ->
+                parseAudioPlaybackProbeEvidence(probe.asJsonObjectOrThrow())
             }
         )
     }
@@ -499,6 +511,16 @@ class DebridBenchmarkStore internal constructor(
             sampleRates = profileJson.arrayOrEmpty("sampleRates").map {
                 it.asIntegralIntOrThrow()
             }
+        )
+    }
+
+    private fun parseAudioPlaybackProbeEvidence(probeJson: JsonObject): AudioPlaybackProbeEvidence {
+        return AudioPlaybackProbeEvidence(
+            bucket = probeJson.stringOrNull("bucket") ?: throw InvalidDebridBenchmarkPayload(),
+            format = probeJson.stringOrNull("format") ?: throw InvalidDebridBenchmarkPayload(),
+            channelMask = probeJson.strictIntegralIntOrNull("channelMask") ?: throw InvalidDebridBenchmarkPayload(),
+            sampleRateHz = probeJson.strictIntegralIntOrNull("sampleRateHz") ?: throw InvalidDebridBenchmarkPayload(),
+            supportMode = probeJson.stringOrNull("supportMode") ?: throw InvalidDebridBenchmarkPayload()
         )
     }
 
@@ -548,9 +570,13 @@ class DebridBenchmarkStore internal constructor(
         return DeviceAudioOutputCapabilities(
             ac3 = audioOutputJson.requiredObject("ac3").let(::parseAudioEncodingSupport),
             eac3 = audioOutputJson.requiredObject("eac3").let(::parseAudioEncodingSupport),
+            atmos = audioOutputJson.getAsJsonObject("atmos")?.let(::parseAudioEncodingSupport)
+                ?: audioOutputJson.requiredObject("eac3").let(::parseAudioEncodingSupport),
             truehd = audioOutputJson.requiredObject("truehd").let(::parseAudioEncodingSupport),
             dts = audioOutputJson.requiredObject("dts").let(::parseAudioEncodingSupport),
-            dtshd = audioOutputJson.requiredObject("dtshd").let(::parseAudioEncodingSupport)
+            dtshd = audioOutputJson.requiredObject("dtshd").let(::parseAudioEncodingSupport),
+            dtsx = audioOutputJson.getAsJsonObject("dtsx")?.let(::parseAudioEncodingSupport)
+                ?: audioOutputJson.requiredObject("dtshd").let(::parseAudioEncodingSupport)
         )
     }
 

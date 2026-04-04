@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
+import android.media.AudioFormat
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkCandidateMetadata
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkComparisonSummary
@@ -27,6 +28,7 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportProfile
 import com.nexio.tv.data.repository.benchmark.AudioEncodingSupport
 import com.nexio.tv.data.repository.benchmark.AudioDirectProfileEvidence
+import com.nexio.tv.data.repository.benchmark.AudioPlaybackProbeEvidence
 import com.nexio.tv.data.repository.benchmark.AudioOutputDeviceEvidence
 import com.nexio.tv.data.repository.benchmark.CodecSupport
 import com.nexio.tv.data.repository.benchmark.DeviceAudioCapabilityEvidence
@@ -339,7 +341,8 @@ class DebridBenchmarkStoreTest {
                       "eac3":{"supported":true,"passthroughLikely":true},
                       "truehd":{"supported":false,"passthroughLikely":false},
                       "dts":{"supported":false,"passthroughLikely":false},
-                      "dtshd":{"supported":false,"passthroughLikely":false}
+                      "dtshd":{"supported":false,"passthroughLikely":false},
+                      "dtsx":{"supported":false,"passthroughLikely":false}
                     },
                     "capturedAtMs":99
                   }
@@ -759,9 +762,11 @@ class DebridBenchmarkStoreTest {
             audioOutput = DeviceAudioOutputCapabilities(
                 ac3 = AudioEncodingSupport(supported = true, passthroughLikely = true),
                 eac3 = AudioEncodingSupport(supported = true, passthroughLikely = true),
+                atmos = AudioEncodingSupport(supported = true, passthroughLikely = true),
                 truehd = AudioEncodingSupport(supported = true, passthroughLikely = true),
                 dts = AudioEncodingSupport(supported = true, passthroughLikely = true),
-                dtshd = AudioEncodingSupport(supported = false, passthroughLikely = false)
+                dtshd = AudioEncodingSupport(supported = false, passthroughLikely = false),
+                dtsx = AudioEncodingSupport(supported = false, passthroughLikely = false)
             ),
             evidence = DeviceCapabilityEvidence(
                 hdr = DeviceHdrCapabilityEvidence(
@@ -784,6 +789,15 @@ class DebridBenchmarkStoreTest {
                             format = "truehd",
                             channelMasks = listOf(12),
                             sampleRates = listOf(48000)
+                        )
+                    ),
+                    directPlaybackProbes = listOf(
+                        AudioPlaybackProbeEvidence(
+                            bucket = "atmos",
+                            format = "eac3_joc",
+                            channelMask = AudioFormat.CHANNEL_OUT_7POINT1_SURROUND,
+                            sampleRateHz = 48000,
+                            supportMode = "bitstream_supported"
                         )
                     )
                 ),

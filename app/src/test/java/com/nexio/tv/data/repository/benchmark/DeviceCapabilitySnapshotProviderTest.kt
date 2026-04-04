@@ -1,7 +1,9 @@
 package com.nexio.tv.data.repository.benchmark
 
 import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.view.Display
+import android.media.AudioFormat
 import androidx.media3.common.C
 import androidx.media3.common.MimeTypes
 import org.junit.Assert.assertEquals
@@ -65,74 +67,49 @@ class DeviceCapabilitySnapshotProviderTest {
     }
 
     @Test
-    fun `buildAudioEncodingSupport respects passthrough encoding aliases`() {
-        val directProfiles = setOf(
-            C.ENCODING_AC3,
-            C.ENCODING_E_AC3_JOC
-        )
-        val deviceEncodings = setOf(C.ENCODING_DTS_HD)
-
-        val ac3 = buildAudioEncodingSupport(
-            directProfileEncodings = directProfiles,
-            deviceEncodings = deviceEncodings,
-            passthroughEncodings = intArrayOf(C.ENCODING_AC3)
-        )
-        val eac3 = buildAudioEncodingSupport(
-            directProfileEncodings = directProfiles,
-            deviceEncodings = deviceEncodings,
-            passthroughEncodings = intArrayOf(C.ENCODING_E_AC3, C.ENCODING_E_AC3_JOC)
-        )
-        val dtshd = buildAudioEncodingSupport(
-            directProfileEncodings = directProfiles,
-            deviceEncodings = deviceEncodings,
-            passthroughEncodings = intArrayOf(C.ENCODING_DTS_HD, C.ENCODING_DTS_UHD_P2)
-        )
-        val truehd = buildAudioEncodingSupport(
-            directProfileEncodings = directProfiles,
-            deviceEncodings = deviceEncodings,
-            passthroughEncodings = intArrayOf(C.ENCODING_DOLBY_TRUEHD)
-        )
-
-        assertTrue(ac3.supported)
-        assertTrue(ac3.passthroughLikely)
-        assertTrue(eac3.supported)
-        assertTrue(eac3.passthroughLikely)
-        assertTrue(dtshd.supported)
-        assertFalse(dtshd.passthroughLikely)
-        assertFalse(truehd.supported)
-        assertFalse(truehd.passthroughLikely)
-    }
-
-    @Test
-    fun `buildAudioEncodingSupport maps direct profiles and device encodings into support and passthrough`() {
-        val directProfiles = setOf(
-            C.ENCODING_E_AC3_JOC,
-            C.ENCODING_DTS_HD
-        )
-        val deviceEncodings = setOf(C.ENCODING_DTS)
-
-        val eac3 = buildAudioEncodingSupport(
-            directProfileEncodings = directProfiles,
-            deviceEncodings = emptySet(),
-            passthroughEncodings = intArrayOf(C.ENCODING_E_AC3, C.ENCODING_E_AC3_JOC)
-        )
-        val dts = buildAudioEncodingSupport(
-            directProfileEncodings = emptySet(),
-            deviceEncodings = deviceEncodings,
-            passthroughEncodings = intArrayOf(C.ENCODING_DTS, C.ENCODING_DTS_HD)
-        )
-
-        assertTrue(eac3.supported)
-        assertTrue(eac3.passthroughLikely)
-        assertTrue(dts.supported)
-        assertTrue(dts.passthroughLikely)
-    }
-
-    @Test
     fun `wire name helpers expose stable raw evidence values`() {
         assertEquals("hdmi_earc", deviceTypeWireName(AudioDeviceInfo.TYPE_HDMI_EARC))
         assertEquals("truehd", audioEncodingWireName(C.ENCODING_DOLBY_TRUEHD))
         assertEquals("dolby_vision", hdrTypeWireName(Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION))
         assertEquals("unknown:999", hdrTypeWireName(999))
+    }
+
+    @Test
+    fun `direct playback support wire names stay stable`() {
+        assertEquals("not_supported", directPlaybackSupportWireName(AudioManager.DIRECT_PLAYBACK_NOT_SUPPORTED))
+        assertEquals("offload_supported", directPlaybackSupportWireName(AudioManager.DIRECT_PLAYBACK_OFFLOAD_SUPPORTED))
+        assertEquals("offload_gapless_supported", directPlaybackSupportWireName(AudioManager.DIRECT_PLAYBACK_OFFLOAD_GAPLESS_SUPPORTED))
+        assertEquals("bitstream_supported", directPlaybackSupportWireName(AudioManager.DIRECT_PLAYBACK_BITSTREAM_SUPPORTED))
+    }
+
+    @Test
+    fun `probe specs include atmos and truehd separation`() {
+        val specs = buildAudioCapabilityProbeSpecs()
+        assertTrue(specs.any { it.bucket == "atmos" && it.encoding == C.ENCODING_E_AC3_JOC })
+        assertTrue(specs.any { it.bucket == "truehd" && it.encoding == C.ENCODING_DOLBY_TRUEHD })
+        assertTrue(specs.any { it.bucket == "dtsx" && it.encoding == C.ENCODING_DTS_UHD_P2 })
+        assertTrue(specs.any { it.channelMask == AudioFormat.CHANNEL_OUT_7POINT1_SURROUND })
+    }
+
+    @Test
+    fun `probe capability derivation uses bitstream only and can represent atmos without truehd or dtshd`() {
+        val capabilities = buildAudioOutputCapabilitiesFromProbes(
+            listOf(
+                AudioPlaybackProbeEvidence("ac3", "ac3", AudioFormat.CHANNEL_OUT_5POINT1, 48_000, "bitstream_supported"),
+                AudioPlaybackProbeEvidence("eac3", "eac3", AudioFormat.CHANNEL_OUT_5POINT1, 48_000, "offload_supported"),
+                AudioPlaybackProbeEvidence("atmos", "eac3_joc", AudioFormat.CHANNEL_OUT_7POINT1_SURROUND, 48_000, "bitstream_supported"),
+                AudioPlaybackProbeEvidence("truehd", "truehd", AudioFormat.CHANNEL_OUT_7POINT1_SURROUND, 48_000, "not_supported"),
+                AudioPlaybackProbeEvidence("dtshd", "dtshd", AudioFormat.CHANNEL_OUT_7POINT1_SURROUND, 48_000, "not_supported"),
+                AudioPlaybackProbeEvidence("dtsx", "dts_uhd_p2", AudioFormat.CHANNEL_OUT_7POINT1_SURROUND, 48_000, "not_supported")
+            )
+        )
+
+        assertTrue(capabilities.ac3.supported)
+        assertFalse(capabilities.eac3.supported)
+        assertTrue(capabilities.atmos.supported)
+        assertTrue(capabilities.atmos.passthroughLikely)
+        assertFalse(capabilities.truehd.supported)
+        assertFalse(capabilities.dtshd.supported)
+        assertFalse(capabilities.dtsx.supported)
     }
 }
