@@ -367,6 +367,12 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
     maybeRestorePendingAudioSelectionAfterSubtitleRefresh(audioTracks)?.let { restoredIndex ->
         selectedAudioIndex = restoredIndex
     }
+    maybeApplyStartupPreferredAudioSelection(
+        audioTracks = audioTracks,
+        currentSelectedIndex = selectedAudioIndex
+    )?.let { startupIndex ->
+        selectedAudioIndex = startupIndex
+    }
     if (selectedAudioIndex in audioTracks.indices) {
         val selectedAudioTrack = audioTracks[selectedAudioIndex]
         selectedAudioCodec = selectedAudioTrack.codec
@@ -422,6 +428,49 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
     }
     tryAutoSelectPreferredSubtitleFromAvailableTracks()
     maybeAdjustLibassPipelineForTracks(tracks)
+}
+
+internal fun PlayerRuntimeController.maybeApplyStartupPreferredAudioSelection(
+    audioTracks: List<TrackInfo>,
+    currentSelectedIndex: Int
+): Int? {
+    if (autoAudioSelected) return null
+    if (audioTracks.isEmpty()) return null
+    if (hasAppliedRememberedAudioSelection) {
+        autoAudioSelected = true
+        return null
+    }
+
+    val preferredAudioLanguages = resolvePreferredAudioLanguages(
+        preferredAudioLanguage = lastPreferredAudioLanguage,
+        secondaryPreferredAudioLanguage = lastSecondaryPreferredAudioLanguage,
+        deviceLanguages = run {
+            val localeList = context.resources.configuration.locales
+            List(localeList.size()) { localeList[it].isO3Language }
+        },
+        originalLanguage = originalLanguage
+    )
+
+    if (preferredAudioLanguages.isEmpty()) {
+        autoAudioSelected = true
+        return null
+    }
+
+    val currentIndex = currentSelectedIndex
+    if (
+        currentIndex in audioTracks.indices &&
+        preferredAudioLanguages.any { target -> audioTrackMatchesLanguage(audioTracks[currentIndex], target) }
+    ) {
+        autoAudioSelected = true
+        return currentIndex
+    }
+
+    val bestIndex = findBestStartupAudioTrackIndex(audioTracks, preferredAudioLanguages)
+    autoAudioSelected = true
+    if (bestIndex < 0) return null
+
+    selectAudioTrack(bestIndex)
+    return bestIndex
 }
 
 internal fun PlayerRuntimeController.maybeAdjustLibassPipelineForTracks(tracks: Tracks) {
@@ -819,6 +868,67 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
         autoSubtitleSelected = true
         Log.d(PlayerRuntimeController.TAG, "AUTO_SUB stop: preferred=none")
         return
+    }
+
+    val startupDecision = decideStartupSubtitleAutoSelection(
+        subtitleTracks = state.subtitleTracks,
+        addonSubtitles = state.addonSubtitles,
+        preferredLanguage = state.subtitleStyle.preferredLanguage,
+        secondaryLanguage = state.subtitleStyle.secondaryPreferredLanguage,
+        hasScannedTextTracksOnce = hasScannedTextTracksOnce,
+        playerReady = backendIsReady(),
+        aiTranslationConfigured = geminiEnabled && geminiApiKey.isNotBlank(),
+        startupPhase = !hasRenderedFirstFrame
+    )
+    when (startupDecision) {
+        is StartupSubtitleAutoSelectionDecision.Internal -> {
+            autoSubtitleSelected = true
+            val currentInternal = state.selectedSubtitleTrackIndex
+            val currentAddon = state.selectedAddonSubtitle
+            if (currentInternal != startupDecision.index || currentAddon != null) {
+                Log.d(
+                    PlayerRuntimeController.TAG,
+                    "AUTO_SUB startup pick internal index=${startupDecision.index} " +
+                        "lang=${state.subtitleTracks[startupDecision.index].language} ai=${startupDecision.enableAiTranslation}"
+                )
+                selectSubtitleTrack(startupDecision.index)
+                _uiState.update {
+                    it.copy(
+                        selectedSubtitleTrackIndex = startupDecision.index,
+                        selectedAddonSubtitle = null
+                    )
+                }
+            }
+            if (startupDecision.enableAiTranslation) {
+                enableAiSubtitles()
+            }
+            return
+        }
+        is StartupSubtitleAutoSelectionDecision.Addon -> {
+            autoSubtitleSelected = true
+            Log.d(
+                PlayerRuntimeController.TAG,
+                "AUTO_SUB startup pick addon lang=${startupDecision.subtitle.lang} " +
+                    "id=${startupDecision.subtitle.id} ai=${startupDecision.enableAiTranslation}"
+            )
+            if (startupDecision.enableAiTranslation) {
+                _uiState.update {
+                    it.copy(
+                        aiSubtitlesEnabled = true,
+                        aiSubtitleError = null
+                    )
+                }
+                translateAndSelectAddonSubtitle(startupDecision.subtitle)
+            } else {
+                selectAddonSubtitle(startupDecision.subtitle)
+            }
+            return
+        }
+        StartupSubtitleAutoSelectionDecision.DeferAddonFallback -> {
+            Log.d(PlayerRuntimeController.TAG, "AUTO_SUB defer startup addon fallback")
+            return
+        }
+        StartupSubtitleAutoSelectionDecision.None -> Unit
     }
 
     val internalIndex = findBestInternalSubtitleTrackIndex(

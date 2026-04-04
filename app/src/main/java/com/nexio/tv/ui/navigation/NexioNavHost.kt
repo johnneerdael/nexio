@@ -415,6 +415,7 @@ fun NexioNavHost(
                                 contentId = playbackInfo.contentId,
                                 contentType = playbackInfo.contentType,
                                 contentName = playbackInfo.contentName,
+                                originalLanguage = playbackInfo.originalLanguage,
                                 poster = playbackInfo.poster,
                                 backdrop = playbackInfo.backdrop,
                                 logo = playbackInfo.logo,
@@ -450,6 +451,7 @@ fun NexioNavHost(
                                 contentId = playbackInfo.contentId,
                                 contentType = playbackInfo.contentType,
                                 contentName = playbackInfo.contentName,
+                                originalLanguage = playbackInfo.originalLanguage,
                                 poster = playbackInfo.poster,
                                 backdrop = playbackInfo.backdrop,
                                 logo = playbackInfo.logo,
@@ -526,6 +528,11 @@ fun NexioNavHost(
                     defaultValue = null
                 },
                 navArgument("contentName") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("originalLanguage") {
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null

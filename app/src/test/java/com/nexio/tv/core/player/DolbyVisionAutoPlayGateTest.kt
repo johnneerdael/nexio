@@ -258,6 +258,7 @@ class DolbyVisionAutoPlayGateTest {
             contentId = "tt0167260",
             contentType = "movie",
             contentName = "Example",
+            originalLanguage = "en",
             poster = null,
             backdrop = null,
             logo = null,

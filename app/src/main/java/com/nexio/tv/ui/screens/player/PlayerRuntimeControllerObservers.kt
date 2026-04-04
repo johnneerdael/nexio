@@ -248,6 +248,8 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                 schedulePauseOverlay()
             }
             streamReuseLastLinkEnabled = settings.streamReuseLastLinkEnabled
+            lastPreferredAudioLanguage = settings.preferredAudioLanguage
+            lastSecondaryPreferredAudioLanguage = settings.secondaryPreferredAudioLanguage
             streamAutoPlayModeSetting = settings.streamAutoPlayMode
             streamAutoPlayNextEpisodeEnabledSetting = settings.streamAutoPlayNextEpisodeEnabled
             nextEpisodeThresholdModeSetting = settings.nextEpisodeThresholdMode

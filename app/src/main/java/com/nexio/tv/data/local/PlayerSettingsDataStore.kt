@@ -136,6 +136,7 @@ data class SyncedFormatterTemplateSettings(
 object AudioLanguageOption {
     const val DEFAULT = "default"  // Use media file default
     const val DEVICE = "device"    // Use device locale
+    const val ORIGINAL = "original" // Prefer the content original language
 }
 
 enum class IecPackerChannelLayout(val storedValue: String, val kodiChannelLayoutValue: Int) {
@@ -1123,6 +1124,7 @@ class PlayerSettingsDataStore @Inject constructor(
             "pt-br", "pt_br", "br", "pob" -> "pt-br"
             "pt-pt", "pt_pt", "por" -> "pt"
             "forced", "force", "forc" -> SUBTITLE_LANGUAGE_FORCED
+            AudioLanguageOption.ORIGINAL -> AudioLanguageOption.ORIGINAL
             else -> code
         }
     }
@@ -1132,6 +1134,7 @@ class PlayerSettingsDataStore @Inject constructor(
         return when (normalized) {
             AudioLanguageOption.DEFAULT,
             AudioLanguageOption.DEVICE,
+            AudioLanguageOption.ORIGINAL,
             SUBTITLE_LANGUAGE_FORCED -> null
             else -> normalized
         }

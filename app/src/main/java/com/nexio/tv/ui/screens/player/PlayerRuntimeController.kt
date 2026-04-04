@@ -15,6 +15,7 @@ import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
+import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.FrameRateMatchingMode
@@ -94,6 +95,7 @@ class PlayerRuntimeController(
     internal val contentId: String? = navigationArgs.contentId
     internal val contentType: String? = navigationArgs.contentType
     internal val contentName: String? = navigationArgs.contentName
+    internal val originalLanguage: String? = navigationArgs.originalLanguage
     internal val poster: String? = navigationArgs.poster
     internal val backdrop: String? = navigationArgs.backdrop
     internal val logo: String? = navigationArgs.logo
@@ -224,6 +226,9 @@ class PlayerRuntimeController(
     internal var skipIntroFetchedKey: String? = null
     internal var lastActiveSkipType: String? = null
     internal var autoSubtitleSelected: Boolean = false
+    internal var autoAudioSelected: Boolean = false
+    internal var lastPreferredAudioLanguage: String = AudioLanguageOption.DEVICE
+    internal var lastSecondaryPreferredAudioLanguage: String? = null
     internal var lastSubtitlePreferredLanguage: String? = null
     internal var lastSubtitleSecondaryLanguage: String? = null
     internal var pendingAddonSubtitleLanguage: String? = null

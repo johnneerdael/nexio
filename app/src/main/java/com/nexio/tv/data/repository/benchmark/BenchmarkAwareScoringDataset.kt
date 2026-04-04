@@ -118,6 +118,7 @@ data class BenchmarkAwareScoringScenarioRequest(
     val videoId: String,
     val contentType: String,
     val title: String? = null,
+    val originalLanguage: String? = null,
     val season: Int? = null,
     val episode: Int? = null,
     val runtimeMinutes: Int? = null
@@ -290,6 +291,7 @@ private fun StreamCardModel.toPlaybackInfo(
         contentId = request.videoId,
         contentType = request.contentType,
         contentName = request.title,
+        originalLanguage = request.originalLanguage,
         poster = null,
         backdrop = null,
         logo = null,
