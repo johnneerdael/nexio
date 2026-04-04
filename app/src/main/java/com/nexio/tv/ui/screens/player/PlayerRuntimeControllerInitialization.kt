@@ -76,6 +76,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
         return
     }
 
+    com.nexio.tv.core.player.FrameRateUtils.beginMainPlayerDisplayModeSession()
+
     val playbackSessionId = playbackSessionGuard.beginPlaybackSession()
 
     scope.launch {
@@ -902,6 +904,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 )
             }
         } catch (e: Exception) {
+            com.nexio.tv.core.player.FrameRateUtils.endMainPlayerDisplayModeSession()
             if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) {
                 return@launch
             }

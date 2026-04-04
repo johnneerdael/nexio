@@ -173,7 +173,6 @@ class DebridBenchmarkStore internal constructor(
     private fun DebridBenchmarkResult.hasComparisonPayload(): Boolean {
         return candidate != null ||
             session != null ||
-            direct != null ||
             optimized != null ||
             comparison != null
     }
@@ -183,15 +182,14 @@ class DebridBenchmarkStore internal constructor(
         return candidate?.isValid() == true &&
             device?.isValid() != false &&
             session?.isValid() == true &&
-            direct?.isValid() == true &&
             optimized?.isValid() == true &&
-            comparison?.isValid() == true
+            (direct?.isValid() != false) &&
+            (comparison?.isValid() != false)
     }
 
     private fun DebridBenchmarkResult.comparisonPayloadIsCompletedValid(): Boolean {
         if (!hasComparisonPayload()) return true
         return comparisonPayloadIsValid() &&
-            direct?.isCompletedValid() == true &&
             optimized?.isCompletedValidForStoredCompletedResult() == true
     }
 

@@ -190,6 +190,106 @@ select {
   min-width: 1480px;
 }
 
+.data-table-detail {
+  table-layout: fixed;
+  min-width: 1000px;
+  width: 100%;
+  max-width: none;
+}
+
+.data-table-detail th {
+  position: relative;
+  overflow: visible;
+  white-space: nowrap;
+  padding-right: 20px;
+}
+
+.data-table-detail td {
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.data-table-detail .file-cell {
+  max-width: none;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.data-table-detail td.file-cell {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  max-width: none;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.data-table-detail .file-cell[title] {
+  cursor: default;
+}
+
+.data-table-detail .detail-file-col {
+  width: 460px;
+}
+
+.data-table-detail .detail-status-col { width: 100px; }
+.data-table-detail .detail-debrid-col { width: 110px; }
+.data-table-detail .detail-resolution-col { width: 80px; }
+.data-table-detail .detail-size-col { width: 100px; }
+.data-table-detail .detail-bitrate-col { width: 100px; }
+.data-table-detail .detail-score-col { width: 90px; }
+.data-table-detail .detail-ratio-col { width: 90px; }
+.data-table-detail .detail-hdr-col { width: 90px; }
+.data-table-detail .detail-audio-col { width: 140px; }
+
+.column-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 14px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  pointer-events: all;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.02),
+    rgba(255, 255, 255, 0.16)
+  );
+}
+
+.column-resize-handle::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.data-table-detail.is-resizing .column-resize-handle {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.24)
+  );
+}
+
+.column-resize-handle:hover,
+.column-resize-handle:focus {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0)
+  );
+}
+
 .data-table thead th {
   position: sticky;
   top: 0;

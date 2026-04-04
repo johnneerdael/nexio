@@ -195,6 +195,7 @@ private fun ShadowParsedStreamFacts.toJsonObject(): JsonObject {
     return JsonObject().apply {
         serviceId?.let { addProperty("serviceId", it) }
         filename?.let { addProperty("filename", it) }
+        folderName?.let { addProperty("folderName", it) }
         sizeBytes?.let { addProperty("sizeBytes", it) }
         durationMs?.let { addProperty("durationMs", it) }
         runtimeSource?.let { addProperty("runtimeSource", it) }

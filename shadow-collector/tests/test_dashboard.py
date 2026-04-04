@@ -36,6 +36,7 @@ SAMPLE_ENVELOPE = {
                 "parsed": {
                     "serviceId": "RD",
                     "filename": "Invincible.2021.S04E02.1080p.AMZN.WEB-DL.DDP5.1.ENG.ITA.H265-TheBlackKing.mkv",
+                    "folderName": "Invincible.2021.Season.04",
                     "sizeBytes": 826277888,
                     "durationMs": 3360000,
                     "runtimeSource": "request_runtime",
@@ -75,6 +76,7 @@ SAMPLE_ENVELOPE = {
                 "parsed": {
                     "serviceId": "PM",
                     "filename": "Invincible.2021.S04E02.2160p.Remux.mkv",
+                    "folderName": "Invincible.2021.Season.04",
                     "sizeBytes": 16866297139,
                     "durationMs": 3360000,
                     "resolution": "2160p",
@@ -87,10 +89,11 @@ SAMPLE_ENVELOPE = {
         ],
         "selected": {
             "streamKey": "winner-1",
-            "parsed": {
-                "serviceId": "RD",
-                "filename": "Invincible.2021.S04E02.1080p.AMZN.WEB-DL.DDP5.1.ENG.ITA.H265-TheBlackKing.mkv",
-                "sizeBytes": 826277888,
+                "parsed": {
+                    "serviceId": "RD",
+                    "filename": "Invincible.2021.S04E02.1080p.AMZN.WEB-DL.DDP5.1.ENG.ITA.H265-TheBlackKing.mkv",
+                    "folderName": "Invincible.2021.Season.04",
+                    "sizeBytes": 826277888,
                 "durationMs": 3360000,
                 "runtimeSource": "request_runtime",
                 "resolution": "1080p",
@@ -159,6 +162,7 @@ class ShadowCollectorDashboardTest(unittest.TestCase):
         self.assertEqual(event["selected"]["service"], "RD")
         self.assertEqual(event["selected"]["audio"], "DD+")
         self.assertEqual(event["selected"]["resolution"], "1080p")
+        self.assertEqual(event["selected"]["folder_name"], "Invincible.2021.Season.04")
         self.assertIn("service=RD", event["result_line"])
         self.assertTrue(event["bitrate_chart"]["has_data"])
 
@@ -183,7 +187,9 @@ class ShadowCollectorDashboardTest(unittest.TestCase):
         html = response.text
         self.assertIn("Bitrate comparison", html)
         self.assertIn("Candidate comparison", html)
-        self.assertIn("Insufficient Transport Budget", html)
+        self.assertIn("Debrid", html)
+        self.assertIn("Res.", html)
+        self.assertNotIn("Insufficient Transport Budget", html)
         self.assertIn("DD+", html)
 
 

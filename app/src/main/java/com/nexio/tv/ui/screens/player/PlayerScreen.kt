@@ -305,13 +305,11 @@ fun PlayerScreen(
     val activity = LocalContext.current as? android.app.Activity
     LaunchedEffect(activity) {
         com.nexio.tv.core.player.FrameRateUtils.setBlockDisplayModeChangesOutsideMainPlayer(true)
-        com.nexio.tv.core.player.FrameRateUtils.setMainPlayerDisplayModeSessionActive(activity != null)
         viewModel.attachHostActivity(activity)
         viewModel.startInitialPlaybackIfNeeded()
     }
     DisposableEffect(activity) {
         onDispose {
-            com.nexio.tv.core.player.FrameRateUtils.setMainPlayerDisplayModeSessionActive(false)
             viewModel.attachHostActivity(null)
         }
     }
@@ -322,20 +320,6 @@ fun PlayerScreen(
             com.nexio.tv.core.player.FrameRateUtils.restoreOriginalDisplayMode(activity)
         }
     }
-    // Restore original display mode when leaving the player
-    DisposableEffect(activity, uiState.frameRateMatchingMode) {
-        onDispose {
-            if (activity != null) {
-                if (uiState.frameRateMatchingMode == com.nexio.tv.data.local.FrameRateMatchingMode.START_STOP) {
-                    com.nexio.tv.core.player.FrameRateUtils.restoreOriginalDisplayMode(activity)
-                } else {
-                    com.nexio.tv.core.player.FrameRateUtils.cleanupDisplayListener()
-                    com.nexio.tv.core.player.FrameRateUtils.clearOriginalDisplayMode()
-                }
-            }
-        }
-    }
-
     // Request focus for key events when controls visibility or panel state changes
     LaunchedEffect(
         uiState.showControls,

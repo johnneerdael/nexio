@@ -239,6 +239,50 @@ class DolbyVisionAutoPlayGateTest {
         assertEquals(0, probe.invocations)
     }
 
+    @Test
+    fun `composite probe falls back to next probe when ffmpeg fails`() = runBlocking {
+        val probe = CompositeDolbyVisionProfileProbe(
+            probes = listOf(
+                RecordingDolbyVisionProfileProbe(DolbyVisionProfileProbeResult.failed("ffmpeg_probe_failed")),
+                RecordingDolbyVisionProfileProbe(
+                    DolbyVisionProfileProbeResult.detected(
+                        profileLabel = "dvhe.07",
+                        profileNumber = 7
+                    )
+                )
+            )
+        )
+
+        val result = probe.probe(
+            context = context,
+            url = "https://example.com/stream.mkv",
+            headers = null,
+            filename = "stream.mkv"
+        )
+
+        assertEquals(DolbyVisionProfileProbeStatus.DETECTED, result.status)
+        assertEquals(7, result.profileNumber)
+    }
+
+    @Test
+    fun `composite probe prefers unknown over failed when no definitive result exists`() = runBlocking {
+        val probe = CompositeDolbyVisionProfileProbe(
+            probes = listOf(
+                RecordingDolbyVisionProfileProbe(DolbyVisionProfileProbeResult.failed("ffmpeg_probe_failed")),
+                RecordingDolbyVisionProfileProbe(DolbyVisionProfileProbeResult.unknown())
+            )
+        )
+
+        val result = probe.probe(
+            context = context,
+            url = "https://example.com/stream.mkv",
+            headers = null,
+            filename = "stream.mkv"
+        )
+
+        assertEquals(DolbyVisionProfileProbeStatus.UNKNOWN, result.status)
+    }
+
     private fun primaryPlaybackInfo(
         isWebDl: Boolean = true,
         isDolbyVisionCandidate: Boolean = true,

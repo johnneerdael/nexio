@@ -140,24 +140,25 @@ class BenchmarkResultJsonLogger internal constructor(
     }
 
     internal fun buildSummaryLine(result: DebridBenchmarkResult): String {
-        val directBudget = result.direct.safeSustainedBudgetMbps()
         val optimizedBudget = result.optimized.safeSustainedBudgetMbps()
         return buildString {
             append("provider=")
             append(result.provider.storageKey)
-            append(" sustained_winner=")
-            append(result.comparison?.sustainedWinner?.wireKey ?: "unknown")
-            append(" seek_winner=")
-            append(result.comparison?.seekWinner?.wireKey ?: "unknown")
-            append(" stability_winner=")
-            append(result.comparison?.stabilityWinner?.wireKey ?: "unknown")
-            directBudget?.let {
-                append(" direct_safe_budget=")
-                append(String.format(Locale.US, "%.1f", it))
-            }
             optimizedBudget?.let {
                 append(" optimized_safe_budget=")
                 append(String.format(Locale.US, "%.1f", it))
+            }
+            result.comparison?.sustainedWinner?.let {
+                append(" sustained_winner=")
+                append(it.wireKey)
+            }
+            result.comparison?.seekWinner?.let {
+                append(" seek_winner=")
+                append(it.wireKey)
+            }
+            result.comparison?.stabilityWinner?.let {
+                append(" stability_winner=")
+                append(it.wireKey)
             }
         }
     }

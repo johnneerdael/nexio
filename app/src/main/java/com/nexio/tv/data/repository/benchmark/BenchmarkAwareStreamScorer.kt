@@ -74,6 +74,7 @@ data class ShadowDecisionBreakdown(
 data class ShadowParsedStreamFacts(
     val serviceId: String? = null,
     val filename: String? = null,
+    val folderName: String? = null,
     val sizeBytes: Long? = null,
     val durationMs: Long? = null,
     val runtimeSource: String? = null,
@@ -347,17 +348,8 @@ class BenchmarkAwareStreamScorer internal constructor(
         movieMode: Boolean,
         showMode: Boolean
     ): ShadowTransportOption? {
+        val requestedTransport = activeTransportMode?.let { DebridBenchmarkTransportMode.OPTIMIZED }
         val options = listOfNotNull(
-            benchmarkSession.direct?.let {
-                ShadowTransportOption.fromProfile(
-                    config = config,
-                    transport = DebridBenchmarkTransportMode.DIRECT,
-                    profile = it,
-                    requiredMbps = requiredMbps,
-                    movieMode = movieMode,
-                    showMode = showMode
-                )
-            },
             benchmarkSession.optimized?.let {
                 ShadowTransportOption.fromProfile(
                     config = config,
@@ -370,7 +362,7 @@ class BenchmarkAwareStreamScorer internal constructor(
             }
         ).filter { option ->
             option.suitabilityRatio >= config.viability.minimumRatio &&
-                (activeTransportMode == null || option.transport == activeTransportMode)
+                (requestedTransport == null || option.transport == requestedTransport)
         }
 
         return options.sortedWith(shadowTransportOptionComparator(config)).firstOrNull()
@@ -380,13 +372,8 @@ class BenchmarkAwareStreamScorer internal constructor(
         benchmarkSession: DebridBenchmarkResult,
         activeTransportMode: DebridBenchmarkTransportMode?
     ): ShadowTransportOption? {
+        val requestedTransport = activeTransportMode?.let { DebridBenchmarkTransportMode.OPTIMIZED }
         val options = listOfNotNull(
-            benchmarkSession.direct?.let {
-                ShadowTransportOption.fromProfileWithoutRuntime(
-                    transport = DebridBenchmarkTransportMode.DIRECT,
-                    profile = it
-                )
-            },
             benchmarkSession.optimized?.let {
                 ShadowTransportOption.fromProfileWithoutRuntime(
                     transport = DebridBenchmarkTransportMode.OPTIMIZED,
@@ -394,7 +381,7 @@ class BenchmarkAwareStreamScorer internal constructor(
                 )
             }
         ).filter { option ->
-            activeTransportMode == null || option.transport == activeTransportMode
+            requestedTransport == null || option.transport == requestedTransport
         }
 
         return options.sortedWith(shadowTransportOptionComparator(config)).firstOrNull()
@@ -885,6 +872,7 @@ private fun StreamCardModel.shadowParsedFacts(request: ShadowRequestContext): Sh
     return ShadowParsedStreamFacts(
         serviceId = shadowServiceId(),
         filename = shadowFilename(),
+        folderName = parsed.folderName?.trim()?.takeIf { it.isNotBlank() },
         sizeBytes = parsed.sizeBytes,
         durationMs = shadowRuntimeMs(request),
         runtimeSource = shadowRuntimeSource(request),

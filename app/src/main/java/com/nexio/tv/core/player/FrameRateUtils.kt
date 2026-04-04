@@ -83,6 +83,15 @@ object FrameRateUtils {
         mainPlayerDisplayModeSessionActive = active
     }
 
+    fun beginMainPlayerDisplayModeSession() {
+        setBlockDisplayModeChangesOutsideMainPlayer(true)
+        setMainPlayerDisplayModeSessionActive(true)
+    }
+
+    fun endMainPlayerDisplayModeSession() {
+        setMainPlayerDisplayModeSessionActive(false)
+    }
+
     private fun canChangeDisplayModeForPlayback(): Boolean {
         return !blockDisplayModeChangesOutsideMainPlayer || mainPlayerDisplayModeSessionActive
     }
@@ -641,5 +650,19 @@ object FrameRateUtils {
         return runCatching {
             URLDecoder.decode(nestedEncoded, StandardCharsets.UTF_8.name())
         }.getOrNull()
+    }
+
+    internal fun isMainPlayerDisplayModeSessionActiveForTests(): Boolean {
+        return mainPlayerDisplayModeSessionActive
+    }
+
+    internal fun canChangeDisplayModeForPlaybackForTests(): Boolean {
+        return canChangeDisplayModeForPlayback()
+    }
+
+    internal fun resetDisplayModeSessionStateForTests() {
+        blockDisplayModeChangesOutsideMainPlayer = true
+        mainPlayerDisplayModeSessionActive = false
+        originalModeId = null
     }
 }
