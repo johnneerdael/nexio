@@ -196,7 +196,7 @@ class BenchmarkAwareStreamScorerTest {
         )
 
         assertEquals("healthy_remux", event.selected?.streamKey)
-        assertTrue(event.winners.single { it.streamKey == "tiny_4k" }.breakdown.lowQuality4k)
+        assertTrue(event.winners.none { it.streamKey == "tiny_4k" })
     }
 
     @Test
@@ -331,7 +331,7 @@ class BenchmarkAwareStreamScorerTest {
     }
 
     @Test
-    fun `ddp atmos passthrough beats truehd atmos pcm fallback on the same device`() {
+    fun `atmos tagged streams can score equivalently when ddp passthrough is available`() {
         val benchmark = benchmarkResult(
             provider = DebridBenchmarkProvider.REAL_DEBRID,
             device = deviceSnapshot(
@@ -364,11 +364,14 @@ class BenchmarkAwareStreamScorerTest {
             benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark)
         )
 
-        assertEquals("ddp_atmos", event.selected?.streamKey)
+        val truehd = event.winners.single { it.streamKey == "truehd_pcm" }
+        val ddp = event.winners.single { it.streamKey == "ddp_atmos" }
+        assertEquals(truehd.contentQualityScore, ddp.contentQualityScore)
+        assertEquals(truehd.finalScore, ddp.finalScore)
     }
 
     @Test
-    fun `truehd atmos pcm fallback still beats basic ac3 passthrough`() {
+    fun `supported ac3 beats unsupported truehd atmos`() {
         val benchmark = benchmarkResult(
             provider = DebridBenchmarkProvider.REAL_DEBRID,
             device = deviceSnapshot(
@@ -401,7 +404,42 @@ class BenchmarkAwareStreamScorerTest {
             benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark)
         )
 
-        assertEquals("truehd_pcm", event.selected?.streamKey)
+        assertEquals("ac3_passthrough", event.selected?.streamKey)
+    }
+
+    @Test
+    fun `all unsupported audio tags use the highest numeric score`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            device = deviceSnapshot(
+                truehdSupported = false,
+                truehdPassthrough = false,
+                eac3Supported = false,
+                eac3Passthrough = false,
+                ac3Supported = false,
+                ac3Passthrough = false,
+                dtsSupported = false,
+                dtsPassthrough = false,
+                dtshdSupported = false,
+                dtshdPassthrough = false,
+                atmosSupported = false,
+                atmosPassthrough = false
+            )
+        )
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "unsupported_combo",
+                    providerId = "RD",
+                    audioTags = listOf("DTS:X", "Atmos", "AC3")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark)
+        )
+
+        val stream = event.selected ?: event.winners.single()
+        assertEquals(-7, stream.breakdown.content.audioPoints)
     }
 
     @Test
@@ -409,9 +447,10 @@ class BenchmarkAwareStreamScorerTest {
         val tunedConfig = BenchmarkAwareStreamScoringConfig.fromJson(
             BenchmarkAwareStreamScoringConfig.default()
                 .copy(
-                    audioScoring = BenchmarkAwareStreamScoringConfig.default().audioScoring.copy(
-                        supportMultipliers = BenchmarkAwareStreamScoringConfig.default().audioScoring.supportMultipliers +
-                            (ShadowAudioSupportTier.DECODED_MULTICHANNEL_PCM to 0.95)
+                    contentRewards = BenchmarkAwareStreamScoringConfig.default().contentRewards.copy(
+                        audio = BenchmarkAwareStreamScoringConfig.default().contentRewards.audio +
+                            (ShadowAudioTier.TRUEHD_ATMOS to 18) +
+                            (ShadowAudioTier.DDP_ATMOS to 14)
                     )
                 )
                 .toJson()
@@ -421,7 +460,7 @@ class BenchmarkAwareStreamScorerTest {
             provider = DebridBenchmarkProvider.REAL_DEBRID,
             device = deviceSnapshot(
                 truehdSupported = true,
-                truehdPassthrough = false,
+                truehdPassthrough = true,
                 eac3Supported = true,
                 eac3Passthrough = true,
                 ac3Supported = true,
@@ -901,9 +940,8 @@ class BenchmarkAwareStreamScorerTest {
         )
 
         assertEquals("large_remux", event.selected?.streamKey)
-        val tiny = event.winners.single { it.streamKey == "tiny_webdl" }
-        val remux = event.winners.single { it.streamKey == "large_remux" }
-        assertEquals(tiny.transportFitScore, remux.transportFitScore)
+        assertTrue(event.winners.none { it.streamKey == "tiny_webdl" })
+        assertTrue(event.winners.any { it.streamKey == "large_remux" })
     }
 
     @Test
@@ -926,7 +964,10 @@ class BenchmarkAwareStreamScorerTest {
             activeTransportMode = DebridBenchmarkTransportMode.OPTIMIZED
         )
 
-        assertEquals(listOf("2160_huge", "2160_large", "2160_mid"), event.winners.map { it.streamKey })
+        assertTrue(event.winners.any { it.streamKey == "2160_huge" })
+        assertTrue(event.winners.any { it.streamKey == "1080_massive" })
+        assertTrue(event.winners.none { it.streamKey == "2160_small_1" })
+        assertTrue(event.winners.none { it.streamKey == "2160_small_2" })
     }
 
     @Test
@@ -1215,9 +1256,8 @@ class BenchmarkAwareStreamScorerTest {
         )
 
         assertEquals("show_large_bluray", event.selected?.streamKey)
-        val tiny = event.winners.single { it.streamKey == "show_tiny_webdl" }
-        val large = event.winners.single { it.streamKey == "show_large_bluray" }
-        assertEquals(tiny.transportFitScore, large.transportFitScore)
+        assertTrue(event.winners.none { it.streamKey == "show_tiny_webdl" })
+        assertTrue(event.winners.any { it.streamKey == "show_large_bluray" })
     }
 
     @Test
