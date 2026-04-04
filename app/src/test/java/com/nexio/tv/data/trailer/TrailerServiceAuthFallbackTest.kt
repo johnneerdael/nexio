@@ -5,6 +5,8 @@ import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbApi
+import com.nexio.tv.data.remote.api.TmdbVideoResult
+import com.nexio.tv.data.remote.api.TmdbVideosResponse
 import com.nexio.tv.data.remote.api.TrailerApi
 import com.nexio.tv.data.trailer.helper.TrailerAvailabilityService
 import com.nexio.tv.domain.model.TmdbSettings
@@ -28,6 +30,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
+import retrofit2.Response
 
 class TrailerServiceAuthFallbackTest {
 
@@ -131,6 +134,109 @@ class TrailerServiceAuthFallbackTest {
         assertEquals(nativeSource, resolved)
         coVerify(exactly = 1) { inAppYouTubeExtractor.extractPlaybackSource(youtubeUrl) }
         coVerify(exactly = 0) { trailerAvailabilityService.resolveAuthenticatedYouTubePlayback(youtubeUrl) }
+    }
+
+    @Test
+    fun `tmdb movie trailer lookup falls back to english when localized trailer metadata filters out`() = runTest {
+        val trailerApi = mockk<TrailerApi>(relaxed = true)
+        val tmdbApi = mockk<TmdbApi>()
+        val inAppYouTubeExtractor = mockk<InAppYouTubeExtractor>()
+        val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
+        val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>()
+        val addonRepository = mockk<AddonRepository>(relaxed = true)
+        val streamRepository = mockk<StreamRepository>(relaxed = true)
+        val trailerAvailabilityService = mockk<TrailerAvailabilityService>(relaxed = true)
+
+        every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings(apiKey = "tmdb-key"))
+        every { tmdbMetadataService.currentTmdbLanguageTag() } returns "nl-NL"
+        every {
+            metadataDiskCacheStore.readTmdbTitleVideos(
+                tmdbId = 550,
+                mediaType = "movie",
+                languageTag = any(),
+                providerToken = any()
+            )
+        } returns null
+
+        coEvery { trailerAvailabilityService.isSignedIn() } returns false
+        coEvery {
+            tmdbApi.getMovieVideos(550, "tmdb-key", "nl-NL")
+        } returns Response.success(
+            TmdbVideosResponse(
+                id = 550,
+                results = listOf(
+                    TmdbVideoResult(
+                        iso6391 = "nl",
+                        iso31661 = "NL",
+                        name = "Nederlandse trailer",
+                        key = "dutchtrail01",
+                        site = "YouTube",
+                        size = 1080,
+                        type = "Trailer",
+                        official = true,
+                        publishedAt = "2024-01-01T00:00:00Z",
+                        id = "nl-trailer"
+                    )
+                )
+            )
+        )
+        coEvery {
+            tmdbApi.getMovieVideos(550, "tmdb-key", "en-US")
+        } returns Response.success(
+            TmdbVideosResponse(
+                id = 550,
+                results = listOf(
+                    TmdbVideoResult(
+                        iso6391 = "en",
+                        iso31661 = "US",
+                        name = "English trailer",
+                        key = "englishtr01",
+                        site = "YouTube",
+                        size = 1080,
+                        type = "Trailer",
+                        official = true,
+                        publishedAt = "2024-01-02T00:00:00Z",
+                        id = "en-trailer"
+                    )
+                )
+            )
+        )
+        coEvery {
+            inAppYouTubeExtractor.extractPlaybackSource("https://www.youtube.com/watch?v=englishtr01")
+        } returns TrailerPlaybackSource(
+            videoUrl = "https://video.example/english.m3u8",
+            audioUrl = "https://audio.example/english.m4a"
+        )
+
+        val service = TrailerService(
+            trailerApi = trailerApi,
+            tmdbApi = tmdbApi,
+            inAppYouTubeExtractor = inAppYouTubeExtractor,
+            tmdbSettingsDataStore = tmdbSettingsDataStore,
+            metadataDiskCacheStore = metadataDiskCacheStore,
+            tmdbMetadataService = tmdbMetadataService,
+            addonRepository = addonRepository,
+            streamRepository = streamRepository,
+            trailerAvailabilityService = trailerAvailabilityService,
+            clock = Clock.fixed(Instant.parse("2026-04-01T00:00:00Z"), ZoneOffset.UTC)
+        )
+
+        val resolved = service.getTrailerPlaybackSourceFromTmdbId(
+            tmdbId = "550",
+            type = "movie",
+            title = "Fight Club",
+            year = "1999"
+        )
+
+        assertEquals("https://video.example/english.m3u8", resolved?.videoUrl)
+        coVerifyOrder {
+            tmdbApi.getMovieVideos(550, "tmdb-key", "nl-NL")
+            tmdbApi.getMovieVideos(550, "tmdb-key", "en-US")
+        }
+        coVerify(exactly = 1) {
+            inAppYouTubeExtractor.extractPlaybackSource("https://www.youtube.com/watch?v=englishtr01")
+        }
     }
 
     @Test
