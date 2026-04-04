@@ -1,5 +1,7 @@
 package com.nexio.tv.data.repository.servicewrap
 
+import com.nexio.tv.data.repository.extractFilenameFromCandidatePath
+import com.nexio.tv.data.repository.isStrictPlayableVideoCandidate
 import com.nexio.tv.data.local.EasyDebridSettingsDataStore
 import com.nexio.tv.data.local.PremiumizeSettingsDataStore
 import com.nexio.tv.data.local.TorBoxSettingsDataStore
@@ -118,6 +120,7 @@ class DebridAvailabilityResolver @Inject constructor(
                     streamUrl = directBody.location
                 )
             }
+            if (selected.score == Int.MIN_VALUE) return emptyList()
             val playbackUrl = selected.streamUrl?.takeIf { it.isNotBlank() } ?: return emptyList()
             return listOf(
                 ResolvedServiceWrapStream(
@@ -439,13 +442,13 @@ class DebridAvailabilityResolver @Inject constructor(
     ): PremiumizeSelection {
         return content.mapIndexed { index, item ->
             val path = item.path?.trim().takeUnless { it.isNullOrBlank() }
-            val score = scoreCandidateFile(
+            val score = scoreSecureWrapCandidateFile(
                 filename = path?.substringAfterLast('/'),
                 fullPath = path,
                 sizeBytes = item.size,
                 candidate = candidate,
                 requestContext = requestContext
-            )
+            ) ?: return@mapIndexed null
             PremiumizeSelection(
                 index = index,
                 path = path,
@@ -453,7 +456,7 @@ class DebridAvailabilityResolver @Inject constructor(
                 streamUrl = item.streamLink ?: item.link,
                 score = score
             )
-        }.maxWithOrNull(
+        }.filterNotNull().maxWithOrNull(
             compareBy<PremiumizeSelection> { it.score }
                 .thenBy { it.size ?: 0L }
         ) ?: PremiumizeSelection(index = 0, path = null, size = null, streamUrl = null)
@@ -467,13 +470,13 @@ class DebridAvailabilityResolver @Inject constructor(
         return variants.mapNotNull { variant ->
             val fileSelections = variant.entries.mapNotNull { entry ->
                 val fileId = entry.key.toIntOrNull() ?: return@mapNotNull null
-                val score = scoreCandidateFile(
+                val score = scoreSecureWrapCandidateFile(
                     filename = entry.value.filename,
                     fullPath = entry.value.filename,
                     sizeBytes = entry.value.filesize,
                     candidate = candidate,
                     requestContext = requestContext
-                )
+                ) ?: return@mapNotNull null
                 RealDebridVariantFileScore(
                     fileId = fileId,
                     filename = entry.value.filename,
@@ -495,13 +498,13 @@ class DebridAvailabilityResolver @Inject constructor(
                 )
             }
         }.maxByOrNull { selection ->
-            scoreCandidateFile(
+            scoreSecureWrapCandidateFile(
                 filename = selection.targetFilename,
                 fullPath = selection.targetFilename,
                 sizeBytes = null,
                 candidate = candidate,
                 requestContext = requestContext
-            )
+            ) ?: Int.MIN_VALUE
         }
     }
 
@@ -532,13 +535,13 @@ class DebridAvailabilityResolver @Inject constructor(
         return torrent.files.mapIndexedNotNull { index, file ->
             val filename = file.shortName?.takeIf { it.isNotBlank() } ?: file.name?.takeIf { it.isNotBlank() }
             if (filename == null) return@mapIndexedNotNull null
-            val score = scoreCandidateFile(
+            val score = scoreSecureWrapCandidateFile(
                 filename = filename,
                 fullPath = filename,
                 sizeBytes = file.size,
                 candidate = candidate,
                 requestContext = requestContext
-            )
+            ) ?: return@mapIndexedNotNull null
             TorBoxSelection(
                 index = index,
                 file = file,
@@ -558,13 +561,13 @@ class DebridAvailabilityResolver @Inject constructor(
         val candidateSelections = torrent.files.mapIndexedNotNull { index, file ->
             val filename = file.shortName?.takeIf { it.isNotBlank() } ?: file.name?.takeIf { it.isNotBlank() }
             if (filename == null) return@mapIndexedNotNull null
-            var score = scoreCandidateFile(
+            var score = scoreSecureWrapCandidateFile(
                 filename = filename,
                 fullPath = filename,
                 sizeBytes = file.size,
                 candidate = candidate,
                 requestContext = requestContext
-            )
+            ) ?: return@mapIndexedNotNull null
             if (preferredFileId != null && preferredFileId == file.id) {
                 score += 250
             }
@@ -589,13 +592,13 @@ class DebridAvailabilityResolver @Inject constructor(
         return generate.files.mapIndexedNotNull { index, file ->
             val filename = file.filename?.trim()?.takeIf { it.isNotBlank() } ?: return@mapIndexedNotNull null
             val path = buildEasyDebridPath(file)
-            var score = scoreCandidateFile(
+            var score = scoreSecureWrapCandidateFile(
                 filename = filename,
                 fullPath = path,
                 sizeBytes = file.size,
                 candidate = candidate,
                 requestContext = requestContext
-            )
+            ) ?: return@mapIndexedNotNull null
             val lookupMatch = lookupFilesByName[normalizeLookupKey(filename, file.directory.joinToString("/"))]
             if (lookupMatch != null) {
                 score += 120
@@ -627,64 +630,6 @@ class DebridAvailabilityResolver @Inject constructor(
             append(filename)
         }
         return normalizeMatchKey(path)
-    }
-
-    private fun scoreCandidateFile(
-        filename: String?,
-        fullPath: String?,
-        sizeBytes: Long?,
-        candidate: WrapCandidate,
-        requestContext: ServiceWrapRequestContext
-    ): Int {
-        val parsed = parseFileCandidate(fullPath ?: filename)
-        var score = 0
-        val ext = filename?.substringAfterLast('.', "")?.lowercase(Locale.US).orEmpty()
-        if (ext in PLAYABLE_VIDEO_EXTENSIONS) {
-            score += 1_000
-        } else {
-            score -= 500
-        }
-
-        val requestedSeason = requestContext.season ?: candidate.sourceParsed.seasons.firstOrNull()
-        val requestedEpisode = requestContext.episode ?: candidate.sourceParsed.episodes.firstOrNull()
-        val parsedFile = parsed?.parsed
-
-        if (requestedSeason != null) {
-            when {
-                parsedFile?.seasons?.contains(requestedSeason) == true -> score += 350
-                !parsedFile?.seasons.isNullOrEmpty() -> score -= 250
-            }
-        }
-        if (requestedEpisode != null) {
-            when {
-                parsedFile?.episodes?.contains(requestedEpisode) == true -> score += 450
-                !parsedFile?.episodes.isNullOrEmpty() -> score -= 300
-            }
-        }
-
-        val sourceTitleKey = normalizeMatchKey(candidate.sourceParsed.title)
-        val parsedTitleKey = normalizeMatchKey(parsedFile?.title)
-        if (sourceTitleKey != null && parsedTitleKey != null) {
-            score += if (sourceTitleKey == parsedTitleKey) 180 else -40
-        }
-
-        val sourceYear = candidate.sourceParsed.year
-        val parsedYear = parsedFile?.year
-        if (sourceYear != null && parsedYear != null) {
-            score += if (sourceYear == parsedYear) 90 else -80
-        }
-
-        val sourceResolution = candidate.sourceParsed.resolution
-        if (sourceResolution != null && parsedFile?.resolution == sourceResolution) {
-            score += 40
-        }
-        val sourceQuality = candidate.sourceParsed.quality
-        if (sourceQuality != null && parsedFile?.quality == sourceQuality) {
-            score += 25
-        }
-
-        score += ((sizeBytes ?: 0L) / (1024L * 1024L * 1024L)).coerceAtMost(120L).toInt()
-        return score
     }
 
     private fun normalizeMatchKey(value: String?): String? {
@@ -736,20 +681,71 @@ class DebridAvailabilityResolver @Inject constructor(
         val file: EasyDebridGeneratedFileDto,
         val score: Int
     )
+}
 
-    private companion object {
-        val PLAYABLE_VIDEO_EXTENSIONS = setOf(
-            "mkv",
-            "mp4",
-            "avi",
-            "m4v",
-            "mov",
-            "ts",
-            "m2ts",
-            "wmv",
-            "webm"
-        )
+internal fun scoreSecureWrapCandidateFile(
+    filename: String?,
+    fullPath: String?,
+    sizeBytes: Long?,
+    candidate: WrapCandidate,
+    requestContext: ServiceWrapRequestContext
+): Int? {
+    val normalizedPath = fullPath ?: filename
+    val normalizedFilename = filename ?: extractFilenameFromCandidatePath(normalizedPath)
+    if (!isStrictPlayableVideoCandidate(filename = normalizedFilename, fullPath = normalizedPath)) {
+        return null
     }
+
+    val parsed = parseFileCandidate(normalizedPath ?: normalizedFilename)
+    var score = 1_000
+
+    val requestedSeason = requestContext.season ?: candidate.sourceParsed.seasons.firstOrNull()
+    val requestedEpisode = requestContext.episode ?: candidate.sourceParsed.episodes.firstOrNull()
+    val parsedFile = parsed?.parsed
+
+    if (requestedSeason != null) {
+        when {
+            parsedFile?.seasons?.contains(requestedSeason) == true -> score += 350
+            !parsedFile?.seasons.isNullOrEmpty() -> score -= 250
+        }
+    }
+    if (requestedEpisode != null) {
+        when {
+            parsedFile?.episodes?.contains(requestedEpisode) == true -> score += 450
+            !parsedFile?.episodes.isNullOrEmpty() -> score -= 300
+        }
+    }
+
+    val sourceTitleKey = normalizeSecureWrapMatchKey(candidate.sourceParsed.title)
+    val parsedTitleKey = normalizeSecureWrapMatchKey(parsedFile?.title)
+    if (sourceTitleKey != null && parsedTitleKey != null) {
+        score += if (sourceTitleKey == parsedTitleKey) 180 else -40
+    }
+
+    val sourceYear = candidate.sourceParsed.year
+    val parsedYear = parsedFile?.year
+    if (sourceYear != null && parsedYear != null) {
+        score += if (sourceYear == parsedYear) 90 else -80
+    }
+
+    val sourceResolution = candidate.sourceParsed.resolution
+    if (sourceResolution != null && parsedFile?.resolution == sourceResolution) {
+        score += 40
+    }
+    val sourceQuality = candidate.sourceParsed.quality
+    if (sourceQuality != null && parsedFile?.quality == sourceQuality) {
+        score += 25
+    }
+
+    score += ((sizeBytes ?: 0L) / (1024L * 1024L * 1024L)).coerceAtMost(120L).toInt()
+    return score
+}
+
+private fun normalizeSecureWrapMatchKey(value: String?): String? {
+    return value
+        ?.lowercase(Locale.US)
+        ?.replace(Regex("""[^\p{L}\p{N}]+"""), "")
+        ?.takeIf { it.isNotBlank() }
 }
 
 internal fun extractRealDebridVariants(

@@ -247,7 +247,10 @@ class DebridLibraryService @Inject constructor(
             val largestFile = result.files
                 .filter { file ->
                     !isLikelySampleFile(file.name, file.folder) &&
-                        isLikelyVideo(file.name, null)
+                        isStrictPlayableVideoCandidate(
+                            filename = file.name,
+                            folder = file.folder
+                        )
                 }
                 .maxByOrNull { it.size ?: 0L }
                 ?: return@mapIndexedNotNull null
@@ -275,7 +278,10 @@ class DebridLibraryService @Inject constructor(
             val selectedFile = generateBody.files
                 .filter { file ->
                     !isLikelySampleFile(file.filename, file.directory.joinToString("/")) &&
-                        isLikelyVideo(file.filename, null)
+                        isStrictPlayableVideoCandidate(
+                            filename = file.filename,
+                            folder = file.directory.joinToString("/")
+                        )
                 }
                 .maxByOrNull { it.size ?: 0L }
                 ?: return@mapNotNull null
@@ -713,68 +719,42 @@ class DebridLibraryService @Inject constructor(
     }
 
     private fun isLikelyPlayable(download: RealDebridResolvedDownload): Boolean {
-        return isLikelyVideo(
-            filename = download.filename ?: extractFilenameFromUrl(download.downloadUrl),
-            mimeType = download.mimeType
+        return isStrictPlayableVideoCandidate(
+            filename = download.filename ?: extractFilenameFromUrl(download.downloadUrl)
         )
     }
 
     private fun isLikelyPlayable(file: RealDebridTorrentFileDto): Boolean {
-        return isLikelyVideo(
+        return isStrictPlayableVideoCandidate(
             filename = extractFilenameFromPath(file.path),
-            mimeType = null
+            fullPath = file.path
         )
     }
 
     private fun isLikelyPlayable(file: PremiumizeListAllFileDto): Boolean {
-        return isLikelyVideo(file.name, file.mimeType)
+        return isStrictPlayableVideoCandidate(
+            filename = file.name,
+            fullPath = file.path
+        )
     }
 
     private fun isLikelyPlayable(file: TorBoxFileDto): Boolean {
-        return isLikelyVideo(file.shortName ?: file.name, file.mimeType)
+        return isStrictPlayableVideoCandidate(filename = file.shortName ?: file.name)
     }
 
     private fun isLikelySampleFile(file: RealDebridTorrentFileDto): Boolean {
-        val normalizedPath = file.path.orEmpty().trim().lowercase()
-        if (normalizedPath.isBlank()) return false
-        val segments = normalizedPath.split('/').filter { it.isNotBlank() }
-        if (segments.any { it == "sample" || it == "samples" }) return true
-        val filename = extractFilenameFromPath(normalizedPath).orEmpty()
-        return filename.startsWith("sample.") ||
-            filename.startsWith("sample-") ||
-            filename.contains(".sample.")
+        return isLikelySampleVideoFile(
+            filename = extractFilenameFromPath(file.path),
+            folder = file.path?.substringBeforeLast('/', "")
+        )
     }
 
     private fun isLikelySampleFile(file: TorBoxFileDto): Boolean {
-        val normalizedName = (file.name ?: file.shortName).orEmpty().trim().lowercase()
-        if (normalizedName.isBlank()) return false
-        val segments = normalizedName.split('/').filter { it.isNotBlank() }
-        if (segments.any { it == "sample" || it == "samples" }) return true
-        val filename = extractFilenameFromPath(normalizedName).orEmpty()
-        return filename.startsWith("sample.") ||
-            filename.startsWith("sample-") ||
-            filename.contains(".sample.")
+        return isLikelySampleVideoFile(filename = file.name ?: file.shortName)
     }
 
     private fun isLikelySampleFile(filename: String?, folder: String?): Boolean {
-        val normalizedPath = listOfNotNull(folder, filename)
-            .joinToString("/")
-            .trim()
-            .lowercase()
-        if (normalizedPath.isBlank()) return false
-        val segments = normalizedPath.split('/').filter { it.isNotBlank() }
-        if (segments.any { it == "sample" || it == "samples" }) return true
-        val extractedFilename = extractFilenameFromPath(normalizedPath).orEmpty()
-        return extractedFilename.startsWith("sample.") ||
-            extractedFilename.startsWith("sample-") ||
-            extractedFilename.contains(".sample.")
-    }
-
-    private fun isLikelyVideo(filename: String?, mimeType: String?): Boolean {
-        val normalizedMime = mimeType.orEmpty().trim().lowercase()
-        if (normalizedMime.startsWith("video/")) return true
-        val normalizedName = filename.orEmpty().trim().lowercase()
-        return VIDEO_EXTENSIONS.any { normalizedName.endsWith(it) }
+        return isLikelySampleVideoFile(filename = filename, folder = folder)
     }
 
     private fun inferContentType(filename: String?, mimeType: String?): String {
@@ -782,7 +762,7 @@ class DebridLibraryService @Inject constructor(
         if (SERIES_PATTERNS.any { it.containsMatchIn(normalizedName) }) {
             return "series"
         }
-        return if (isLikelyVideo(filename, mimeType)) "movie" else "other"
+        return if (isStrictPlayableVideoCandidate(filename = filename)) "movie" else "other"
     }
 
     private fun stripVideoExtension(filename: String): String {
@@ -880,10 +860,6 @@ class DebridLibraryService @Inject constructor(
             15L * BENCHMARK_SIZE_GIB,
             10L * BENCHMARK_SIZE_GIB,
             5L * BENCHMARK_SIZE_GIB
-        )
-
-        private val VIDEO_EXTENSIONS = listOf(
-            ".mkv", ".mp4", ".avi", ".mov", ".wmv", ".ts", ".m2ts", ".webm", ".mpg", ".mpeg"
         )
 
         private val SERIES_PATTERNS = listOf(
