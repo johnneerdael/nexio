@@ -8,6 +8,13 @@ const startHereSection = {
   ]
 }
 
+const featuresSection = {
+  text: 'Features',
+  items: [
+    { text: 'Overview', link: '/features/' }
+  ]
+}
+
 const watchingSection = {
   text: 'Watching',
   items: [
@@ -107,6 +114,7 @@ const androidTechnicalSection = {
 
 const taskBasedSidebar = [
   startHereSection,
+  featuresSection,
   watchingSection,
   playbackSection,
   integrationsSection,
@@ -141,6 +149,7 @@ export default defineConfig({
     nav: [
       { text: 'Home', link: '/' },
       { text: 'Getting Started', link: '/start-here/' },
+      { text: 'Features', link: '/features/' },
       { text: 'Watching', link: '/watch/' },
       { text: 'Playback', link: '/playback/' },
       { text: 'Integrations', link: '/integrations/' },
@@ -153,6 +162,7 @@ export default defineConfig({
       '/web/': webSidebar,
       '/android/': taskBasedSidebar,
       '/start-here/': [startHereSection, helpSection],
+      '/features/': [featuresSection, helpSection],
       '/watch/': [watchingSection, helpSection],
       '/playback/': [playbackSection, developerNotesSection],
       '/integrations/': [integrationsSection, helpSection],
