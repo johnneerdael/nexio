@@ -532,6 +532,7 @@ class BenchmarkAwareStreamScorer internal constructor(
         }
         if (releaseType in PREMIUM_RELEASE_TYPES &&
             hdrTier != ShadowHdrTier.SDR &&
+            hdrSupportTier != ShadowSupportLevel.UNSUPPORTED &&
             audioTier in PREMIUM_AUDIO_TIERS &&
             runtimeKnown &&
             realismRatio >= 0.85

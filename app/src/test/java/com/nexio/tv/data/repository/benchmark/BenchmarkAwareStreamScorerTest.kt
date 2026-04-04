@@ -675,6 +675,80 @@ class BenchmarkAwareStreamScorerTest {
     }
 
     @Test
+    fun `unsupported dolby vision does not keep premium hdr synergy when hdr10 is unavailable`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            device = deviceSnapshot(displayHdrTypes = setOf(DeviceHdrType.HLG))
+        )
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "remux_dv",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    sizeBytes = gib(42.0),
+                    visualTags = listOf("DV"),
+                    audioTags = listOf("Atmos", "TrueHD")
+                ),
+                streamCard(
+                    streamKey = "remux_sdr",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    sizeBytes = gib(42.0),
+                    visualTags = emptyList(),
+                    audioTags = listOf("Atmos", "TrueHD")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark)
+        )
+
+        val remuxDv = event.winners.single { it.streamKey == "remux_dv" }
+        val remuxSdr = event.winners.single { it.streamKey == "remux_sdr" }
+        assertEquals(0, remuxDv.breakdown.content.hdrPoints)
+        assertEquals(remuxSdr.breakdown.content.synergyPoints, remuxDv.breakdown.content.synergyPoints)
+        assertEquals(remuxSdr.contentQualityScore, remuxDv.contentQualityScore)
+        assertEquals(remuxSdr.finalScore, remuxDv.finalScore)
+    }
+
+    @Test
+    fun `unsupported hdr10 does not keep premium hdr synergy when hdr is unavailable`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            device = deviceSnapshot(displayHdrTypes = setOf(DeviceHdrType.HLG))
+        )
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "remux_hdr10",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    sizeBytes = gib(42.0),
+                    visualTags = listOf("HDR10"),
+                    audioTags = listOf("Atmos", "TrueHD")
+                ),
+                streamCard(
+                    streamKey = "remux_sdr",
+                    providerId = "RD",
+                    quality = "BluRay Remux",
+                    sizeBytes = gib(42.0),
+                    visualTags = emptyList(),
+                    audioTags = listOf("Atmos", "TrueHD")
+                )
+            ),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark)
+        )
+
+        val remuxHdr10 = event.winners.single { it.streamKey == "remux_hdr10" }
+        val remuxSdr = event.winners.single { it.streamKey == "remux_sdr" }
+        assertEquals(0, remuxHdr10.breakdown.content.hdrPoints)
+        assertEquals(remuxSdr.breakdown.content.synergyPoints, remuxHdr10.breakdown.content.synergyPoints)
+        assertEquals(remuxSdr.contentQualityScore, remuxHdr10.contentQualityScore)
+        assertEquals(remuxSdr.finalScore, remuxHdr10.finalScore)
+    }
+
+    @Test
     fun `dolby vision still scores above hdr10 when display advertises dv`() {
         val benchmark = benchmarkResult(
             provider = DebridBenchmarkProvider.REAL_DEBRID,
