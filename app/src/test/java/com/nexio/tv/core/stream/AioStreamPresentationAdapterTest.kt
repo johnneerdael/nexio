@@ -47,7 +47,10 @@ class AioStreamPresentationAdapterTest {
         assertEquals("[[icon:4k]] Movie Title (2023)", item.title)
         assertEquals(
             listOf(
-                "[[icon:dovi]][[icon:atmos]] [[icon:truehd]], 💾 62.5 GB, [[icon:realdebrid]] Real-Debrid, 📄 Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.mkv"
+                "[[icon:dovi]][[icon:atmos]] [[icon:truehd]]",
+                "💾 62.5 GB",
+                "[[icon:realdebrid]] Real-Debrid",
+                "📄 Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.mkv"
             ),
             item.detailLines
         )
