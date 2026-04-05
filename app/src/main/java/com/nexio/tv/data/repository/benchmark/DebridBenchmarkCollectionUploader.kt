@@ -18,13 +18,12 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
-private const val TAG = "ShadowAutoplayUpload"
+private const val TAG = "BenchmarkUpload"
 
 @Singleton
-class ShadowAutoplayCollectionUploader internal constructor(
+class DebridBenchmarkCollectionUploader internal constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val okHttpClient: OkHttpClient,
-    private val logger: ShadowAutoPlayDecisionLogger,
     private val baseUrlProvider: () -> String,
     private val tokenProvider: () -> String,
     private val clientInfoProvider: () -> JsonObject
@@ -33,35 +32,34 @@ class ShadowAutoplayCollectionUploader internal constructor(
     constructor(
         @ApplicationContext context: Context,
         playerSettingsDataStore: PlayerSettingsDataStore,
-        okHttpClient: OkHttpClient,
-        logger: ShadowAutoPlayDecisionLogger
+        okHttpClient: OkHttpClient
     ) : this(
         playerSettingsDataStore = playerSettingsDataStore,
         okHttpClient = okHttpClient,
-        logger = logger,
         baseUrlProvider = { BuildConfig.SHADOW_DATA_COLLECTION_BASE_URL.trim().trimEnd('/') },
         tokenProvider = { BuildConfig.SHADOW_DATA_COLLECTION_WRITE_TOKEN.trim() },
-        clientInfoProvider = { buildCollectorClientInfo(context) }
+        clientInfoProvider = { buildBenchmarkCollectorClientInfo(context) }
     )
 
-    suspend fun submitIfEnabled(event: ShadowAutoPlayDecisionEvent) {
+    suspend fun submitIfEnabled(result: DebridBenchmarkResult) {
         val settings = playerSettingsDataStore.playerSettings.first()
-        if (!settings.shadowAutoplayDataCollectionEnabled) return
+        if (!settings.debridBenchmarkDataCollectionEnabled) return
+        if (result.terminationReason != DebridBenchmarkTerminationReason.COMPLETED) return
+
         val baseUrl = baseUrlProvider()
         val token = tokenProvider()
         if (baseUrl.isBlank() || token.isBlank()) return
 
-        val payloadJson = logger.encode(event)
         val envelope = JsonObject().apply {
             addProperty("sentAtMs", System.currentTimeMillis())
             add("client", clientInfoProvider())
-            add("payload", com.google.gson.JsonParser.parseString(payloadJson))
+            add("result", result.toJsonObject())
         }.toString()
 
         withContext(Dispatchers.IO) {
             runCatching {
                 val request = Request.Builder()
-                    .url("$baseUrl/api/v1/shadow-autoplay-events")
+                    .url("$baseUrl/api/v1/debrid-benchmark-results")
                     .header("Authorization", "Bearer $token")
                     .post(envelope.toRequestBody("application/json".toMediaType()))
                     .build()
@@ -77,7 +75,7 @@ class ShadowAutoplayCollectionUploader internal constructor(
     }
 }
 
-private fun buildCollectorClientInfo(context: Context): JsonObject {
+private fun buildBenchmarkCollectorClientInfo(context: Context): JsonObject {
     return JsonObject().apply {
         addProperty("appVersion", BuildConfig.VERSION_NAME)
         addProperty("buildType", if (BuildConfig.IS_DEBUG_BUILD) "debug" else "release")

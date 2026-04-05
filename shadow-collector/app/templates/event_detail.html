@@ -64,6 +64,22 @@
           {% endfor %}
         </dl>
       </article>
+
+      <article class="panel compact-panel">
+        <div class="panel-heading"><div><h2>Latest device benchmark</h2><p>Newest benchmark for this Android ID, if available.</p></div></div>
+        {% if latest_benchmark %}
+          <dl class="info-list">
+            <div><dt>Benchmark ID</dt><dd>#{{ latest_benchmark.id }}</dd></div>
+            <div><dt>Provider</dt><dd>{{ latest_benchmark.provider }}</dd></div>
+            <div><dt>Measured</dt><dd>{{ latest_benchmark.measured_at_label }}</dd></div>
+          </dl>
+          <a class="button" href="/benchmarks/{{ latest_benchmark.id }}/download">Download latest benchmark JSON</a>
+        {% elif event.client_android_id %}
+          <p class="empty-copy">No benchmark uploaded yet for this Android ID.</p>
+        {% else %}
+          <p class="empty-copy">This event does not include an Android ID.</p>
+        {% endif %}
+      </article>
     </section>
 
     <section class="panel">

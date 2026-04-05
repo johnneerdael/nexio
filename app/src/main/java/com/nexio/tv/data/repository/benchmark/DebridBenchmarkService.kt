@@ -34,6 +34,7 @@ class DebridBenchmarkService internal constructor(
     private val resolver: DebridBenchmarkCandidateResolver,
     private val store: DebridBenchmarkStore,
     private val sessionRunner: DebridBenchmarkSessionRunner,
+    private val collectionUploader: DebridBenchmarkCollectionUploader,
     private val benchmarkResultJsonLogger: BenchmarkResultJsonLogger,
     private val scope: CoroutineScope,
     private val nowMs: () -> Long,
@@ -51,12 +52,14 @@ class DebridBenchmarkService internal constructor(
         resolver: DebridBenchmarkCandidateResolver,
         store: DebridBenchmarkStore,
         sessionRunner: DebridBenchmarkSessionRunner,
+        collectionUploader: DebridBenchmarkCollectionUploader,
         benchmarkResultJsonLogger: BenchmarkResultJsonLogger,
         executionGate: DebridBenchmarkExecutionGate
     ) : this(
         resolver = resolver,
         store = store,
         sessionRunner = sessionRunner,
+        collectionUploader = collectionUploader,
         benchmarkResultJsonLogger = benchmarkResultJsonLogger,
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
         nowMs = System::currentTimeMillis,
@@ -160,6 +163,7 @@ class DebridBenchmarkService internal constructor(
 
             transportResult.result?.let {
                 store.saveLatest(it)
+                collectionUploader.submitIfEnabled(it)
                 benchmarkResultJsonLogger.logCompleted(it)
             } ?: benchmarkResultJsonLogger.logOutcome(
                 provider = provider,

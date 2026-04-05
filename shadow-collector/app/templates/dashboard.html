@@ -47,7 +47,7 @@
       <form method="get" class="filters-grid">
         <label class="field field-search">
           <span>Search</span>
-          <input type="search" name="q" value="{{ filters.q }}" placeholder="Title, request id, file, provider, service, HDR, audio…">
+          <input type="search" name="q" value="{{ filters.q }}" placeholder="Title, request id, Android ID, file, provider, service, HDR, audio…">
         </label>
         <label class="field">
           <span>Provider</span>
@@ -75,6 +75,10 @@
               <option value="{{ value }}" {% if filters.transport == value %}selected{% endif %}>{{ value }}</option>
             {% endfor %}
           </select>
+        </label>
+        <label class="field">
+          <span>Android ID</span>
+          <input type="search" name="android_id" value="{{ filters.android_id }}" placeholder="Optional device id">
         </label>
         <label class="field">
           <span>Sort by</span>

@@ -5,6 +5,9 @@ Self-hosted FastAPI service for collecting shadow autoplay decision payloads.
 ## Features
 - `POST /api/v1/shadow-autoplay-events` write-token ingestion
 - `GET /api/v1/shadow-autoplay-events` read-token bulk export for LLM analysis
+- `POST /api/v1/debrid-benchmark-results` write-token ingestion for completed provider benchmarks
+- `GET /api/v1/debrid-benchmark-results` read-token export for support analysis
+- Optional `client.androidId` support for POST ingestion and GET filtering
 - Session-authenticated dashboard at `/`
 - SQLite storage with indefinite retention by default
 - Clear-all action from dashboard

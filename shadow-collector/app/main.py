@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security.utils import get_authorization_scheme_param
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -36,12 +36,19 @@ class ClientInfo(BaseModel):
     buildType: Optional[str] = None
     deviceModel: Optional[str] = None
     sdkInt: Optional[int] = None
+    androidId: Optional[str] = None
 
 
 class ShadowAutoplayEnvelope(BaseModel):
     sentAtMs: int = Field(default_factory=lambda: int(time.time() * 1000))
     client: ClientInfo = Field(default_factory=ClientInfo)
     payload: dict[str, Any]
+
+
+class DebridBenchmarkEnvelope(BaseModel):
+    sentAtMs: int = Field(default_factory=lambda: int(time.time() * 1000))
+    client: ClientInfo = Field(default_factory=ClientInfo)
+    result: dict[str, Any]
 
 
 def db() -> sqlite3.Connection:
@@ -73,20 +80,54 @@ def init_db() -> None:
                 client_build_type TEXT,
                 client_device_model TEXT,
                 client_sdk_int INTEGER,
+                client_android_id TEXT,
                 raw_json TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_shadow_received_at ON shadow_autoplay_events(received_at_ms DESC);
             CREATE INDEX IF NOT EXISTS idx_shadow_request_id ON shadow_autoplay_events(request_id);
             CREATE INDEX IF NOT EXISTS idx_shadow_video_id ON shadow_autoplay_events(video_id);
             CREATE INDEX IF NOT EXISTS idx_shadow_selected_provider ON shadow_autoplay_events(selected_provider);
+            CREATE INDEX IF NOT EXISTS idx_shadow_android_id ON shadow_autoplay_events(client_android_id);
+            CREATE TABLE IF NOT EXISTS debrid_benchmark_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                received_at_ms INTEGER NOT NULL,
+                sent_at_ms INTEGER NOT NULL,
+                provider TEXT NOT NULL,
+                measured_at_ms INTEGER NOT NULL,
+                termination_reason TEXT NOT NULL,
+                client_app_version TEXT,
+                client_build_type TEXT,
+                client_device_model TEXT,
+                client_sdk_int INTEGER,
+                client_android_id TEXT,
+                device_model TEXT,
+                device_manufacturer TEXT,
+                raw_json TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_benchmark_received_at ON debrid_benchmark_events(received_at_ms DESC);
+            CREATE INDEX IF NOT EXISTS idx_benchmark_provider ON debrid_benchmark_events(provider);
+            CREATE INDEX IF NOT EXISTS idx_benchmark_measured_at ON debrid_benchmark_events(measured_at_ms DESC);
+            CREATE INDEX IF NOT EXISTS idx_benchmark_device_model ON debrid_benchmark_events(device_model);
+            CREATE INDEX IF NOT EXISTS idx_benchmark_android_id ON debrid_benchmark_events(client_android_id);
             """
         )
+        ensure_column(conn, "shadow_autoplay_events", "client_android_id", "TEXT")
+        ensure_column(conn, "debrid_benchmark_events", "client_android_id", "TEXT")
         conn.commit()
 
 
 @app.on_event("startup")
 def startup() -> None:
     init_db()
+
+
+def ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, column_type: str) -> None:
+    columns = {
+        row["name"]
+        for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+    if column_name not in columns:
+        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
 
 
 def require_bearer(request: Request, expected_token: str) -> None:
@@ -318,11 +359,48 @@ def summarize(payload: dict[str, Any], envelope: ShadowAutoplayEnvelope) -> dict
         "client_build_type": envelope.client.buildType,
         "client_device_model": envelope.client.deviceModel,
         "client_sdk_int": envelope.client.sdkInt,
+        "client_android_id": envelope.client.androidId,
         "raw_json": json.dumps(
             {
                 "sentAtMs": envelope.sentAtMs,
                 "client": envelope.client.model_dump(),
                 "payload": payload,
+            },
+            separators=(",", ":"),
+        ),
+    }
+
+
+def summarize_benchmark(result: dict[str, Any], envelope: DebridBenchmarkEnvelope) -> dict[str, Any]:
+    provider = first_non_blank(result.get("provider"))
+    measured_at_ms = result.get("measuredAtMs")
+    termination_reason = first_non_blank(result.get("terminationReason"))
+    device = result.get("device")
+    if provider is None or not isinstance(measured_at_ms, int) or measured_at_ms <= 0:
+        raise HTTPException(status_code=422, detail="Invalid benchmark payload")
+    if termination_reason != "completed":
+        raise HTTPException(status_code=422, detail="Only completed benchmark results are accepted")
+    if not isinstance(device, dict) or not device:
+        raise HTTPException(status_code=422, detail="Benchmark payload must include device capabilities")
+
+    return {
+        "received_at_ms": int(time.time() * 1000),
+        "sent_at_ms": envelope.sentAtMs,
+        "provider": provider,
+        "measured_at_ms": measured_at_ms,
+        "termination_reason": termination_reason,
+        "client_app_version": envelope.client.appVersion,
+        "client_build_type": envelope.client.buildType,
+        "client_device_model": envelope.client.deviceModel,
+        "client_sdk_int": envelope.client.sdkInt,
+        "client_android_id": envelope.client.androidId,
+        "device_model": first_non_blank(device.get("model")),
+        "device_manufacturer": first_non_blank(device.get("manufacturer")),
+        "raw_json": json.dumps(
+            {
+                "sentAtMs": envelope.sentAtMs,
+                "client": envelope.client.model_dump(),
+                "result": result,
             },
             separators=(",", ":"),
         ),
@@ -384,6 +462,14 @@ def build_event_view(row: dict[str, Any]) -> dict[str, Any]:
         "content_type": row.get("content_type") or request_data.get("contentType") or "—",
         "winner_count": row.get("winner_count") or len(normalized_winners),
         "rejected_count": row.get("rejected_count") or len(rejected),
+        "client_android_id": row.get("client_android_id") or client_data.get("androidId"),
+        "client": {
+            "appVersion": row.get("client_app_version") or client_data.get("appVersion"),
+            "buildType": row.get("client_build_type") or client_data.get("buildType"),
+            "deviceModel": row.get("client_device_model") or client_data.get("deviceModel"),
+            "sdkInt": row.get("client_sdk_int") or client_data.get("sdkInt"),
+            "androidId": row.get("client_android_id") or client_data.get("androidId"),
+        },
         "selected": selected,
         "winners": normalized_winners,
         "rejected": rejected,
@@ -407,6 +493,7 @@ def build_event_view(row: dict[str, Any]) -> dict[str, Any]:
             {"label": "Build Type", "value": row.get("client_build_type") or client_data.get("buildType") or "—"},
             {"label": "Device Model", "value": row.get("client_device_model") or client_data.get("deviceModel") or "—"},
             {"label": "SDK", "value": row.get("client_sdk_int") or client_data.get("sdkInt") or "—"},
+            {"label": "Android ID", "value": row.get("client_android_id") or client_data.get("androidId") or "—"},
             {"label": "Received", "value": format_timestamp(row.get("received_at_ms"))},
             {"label": "Sent", "value": format_timestamp(row.get("sent_at_ms"))},
         ],
@@ -419,6 +506,7 @@ def build_event_view(row: dict[str, Any]) -> dict[str, Any]:
             event["request_id"],
             event["video_id"],
             event["content_type"],
+            row.get("client_android_id") or client_data.get("androidId"),
             result_line,
             " ".join(candidate["search_blob"] for candidate in candidates),
         ]
@@ -427,12 +515,61 @@ def build_event_view(row: dict[str, Any]) -> dict[str, Any]:
     return event
 
 
+def build_benchmark_view(row: dict[str, Any]) -> dict[str, Any]:
+    envelope = parse_raw_json(row.get("raw_json"))
+    client = envelope.get("client") or {}
+    result = envelope.get("result") or {}
+    device = result.get("device") or {}
+    summary = result.get("summary") or {}
+    return {
+        "id": row.get("id"),
+        "received_at_ms": row.get("received_at_ms"),
+        "received_at_label": format_timestamp(row.get("received_at_ms")),
+        "sent_at_ms": row.get("sent_at_ms"),
+        "sent_at_label": format_timestamp(row.get("sent_at_ms")),
+        "provider": row.get("provider") or result.get("provider") or "—",
+        "measured_at_ms": row.get("measured_at_ms") or result.get("measuredAtMs"),
+        "measured_at_label": format_timestamp(row.get("measured_at_ms") or result.get("measuredAtMs")),
+        "termination_reason": row.get("termination_reason") or result.get("terminationReason") or "—",
+        "client": {
+            "appVersion": row.get("client_app_version") or client.get("appVersion"),
+            "buildType": row.get("client_build_type") or client.get("buildType"),
+            "deviceModel": row.get("client_device_model") or client.get("deviceModel"),
+            "sdkInt": row.get("client_sdk_int") or client.get("sdkInt"),
+            "androidId": row.get("client_android_id") or client.get("androidId"),
+        },
+        "client_android_id": row.get("client_android_id") or client.get("androidId"),
+        "device_model": row.get("device_model") or device.get("model"),
+        "device_manufacturer": row.get("device_manufacturer") or device.get("manufacturer"),
+        "summary": summary,
+        "result": result,
+        "search_blob": " ".join(
+            str(part).lower()
+            for part in [
+                row.get("provider"),
+                row.get("client_android_id"),
+                row.get("device_model"),
+                row.get("device_manufacturer"),
+                client.get("deviceModel"),
+                client.get("androidId"),
+                result.get("provider"),
+                device.get("model"),
+                device.get("manufacturer"),
+                result.get("terminationReason"),
+                result.get("candidate", {}).get("filename"),
+            ]
+            if part
+        ),
+    }
+
+
 def filter_events(
     events: list[dict[str, Any]],
     query: str,
     provider: Optional[str],
     content_type: Optional[str],
     transport: Optional[str],
+    android_id: Optional[str],
 ) -> list[dict[str, Any]]:
     filtered = events
     if query:
@@ -444,6 +581,8 @@ def filter_events(
         filtered = [event for event in filtered if event.get("content_type") == content_type]
     if transport:
         filtered = [event for event in filtered if event.get("selected", {}).get("transport") == transport]
+    if android_id:
+        filtered = [event for event in filtered if (event.get("client_android_id") or "") == android_id]
     return filtered
 
 
@@ -462,6 +601,95 @@ def sort_events(events: list[dict[str, Any]], sort_key: str, direction: str) -> 
     return sorted(events, key=sorter, reverse=reverse)
 
 
+def filter_benchmarks(
+    items: list[dict[str, Any]],
+    query: str,
+    provider: Optional[str],
+    android_id: Optional[str],
+) -> list[dict[str, Any]]:
+    filtered = items
+    if query:
+        normalized_query = query.strip().lower()
+        filtered = [item for item in filtered if normalized_query in item["search_blob"]]
+    if provider:
+        filtered = [item for item in filtered if item.get("provider") == provider]
+    if android_id:
+        filtered = [item for item in filtered if (item.get("client_android_id") or "") == android_id]
+    return filtered
+
+
+def sort_benchmarks(items: list[dict[str, Any]], sort_key: str, direction: str) -> list[dict[str, Any]]:
+    reverse = direction != "asc"
+    key_functions = {
+        "received": lambda item: item.get("received_at_ms") or 0,
+        "measured": lambda item: item.get("measured_at_ms") or 0,
+        "provider": lambda item: item.get("provider") or "",
+        "device": lambda item: item.get("device_model") or "",
+    }
+    sorter = key_functions.get(sort_key, key_functions["received"])
+    return sorted(items, key=sorter, reverse=reverse)
+
+
+def fetch_shadow_rows(
+    conn: sqlite3.Connection,
+    provider: Optional[str] = None,
+    content_type: Optional[str] = None,
+    transport: Optional[str] = None,
+    android_id: Optional[str] = None,
+) -> list[dict[str, Any]]:
+    sql = "SELECT * FROM shadow_autoplay_events WHERE 1=1"
+    params: list[Any] = []
+    if provider:
+        sql += " AND selected_provider = ?"
+        params.append(provider)
+    if content_type:
+        sql += " AND content_type = ?"
+        params.append(content_type)
+    if transport:
+        sql += " AND selected_transport = ?"
+        params.append(transport)
+    if android_id:
+        sql += " AND client_android_id = ?"
+        params.append(android_id)
+    sql += " ORDER BY received_at_ms DESC"
+    return [dict(row) for row in conn.execute(sql, tuple(params)).fetchall()]
+
+
+def fetch_benchmark_rows(
+    conn: sqlite3.Connection,
+    provider: Optional[str] = None,
+    android_id: Optional[str] = None,
+) -> list[dict[str, Any]]:
+    sql = "SELECT * FROM debrid_benchmark_events WHERE 1=1"
+    params: list[Any] = []
+    if provider:
+        sql += " AND provider = ?"
+        params.append(provider)
+    if android_id:
+        sql += " AND client_android_id = ?"
+        params.append(android_id)
+    sql += " ORDER BY received_at_ms DESC"
+    return [dict(row) for row in conn.execute(sql, tuple(params)).fetchall()]
+
+
+def latest_benchmark_for_android_id(
+    conn: sqlite3.Connection,
+    android_id: Optional[str],
+) -> Optional[dict[str, Any]]:
+    if not android_id:
+        return None
+    row = conn.execute(
+        """
+        SELECT * FROM debrid_benchmark_events
+        WHERE client_android_id = ?
+        ORDER BY measured_at_ms DESC, received_at_ms DESC
+        LIMIT 1
+        """,
+        (android_id,),
+    ).fetchone()
+    return dict(row) if row is not None else None
+
+
 @app.post("/api/v1/shadow-autoplay-events")
 def ingest_shadow_autoplay(request: Request, envelope: ShadowAutoplayEnvelope):
     require_bearer(request, WRITE_TOKEN)
@@ -472,8 +700,8 @@ def ingest_shadow_autoplay(request: Request, envelope: ShadowAutoplayEnvelope):
             INSERT INTO shadow_autoplay_events (
                 received_at_ms, sent_at_ms, event_type, request_id, video_id, content_type, title,
                 selected_provider, selected_transport, selected_score, winner_count, rejected_count,
-                client_app_version, client_build_type, client_device_model, client_sdk_int, raw_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                client_app_version, client_build_type, client_device_model, client_sdk_int, client_android_id, raw_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             tuple(row.values()),
         )
@@ -490,6 +718,7 @@ def list_shadow_autoplay_events(
     provider: Optional[str] = None,
     content_type: Optional[str] = None,
     transport: Optional[str] = None,
+    android_id: Optional[str] = None,
     q: str = "",
     sort: str = "received",
     direction: str = "desc",
@@ -497,18 +726,64 @@ def list_shadow_autoplay_events(
     require_bearer(request, READ_TOKEN)
     limit = max(1, min(limit, 2000))
     with closing(db()) as conn:
-        raw_rows = [
-            dict(row)
-            for row in conn.execute(
-                "SELECT * FROM shadow_autoplay_events ORDER BY received_at_ms DESC LIMIT 2000 OFFSET ?",
-                (max(0, offset),),
-            ).fetchall()
-        ]
+        raw_rows = fetch_shadow_rows(
+            conn,
+            provider=provider,
+            content_type=content_type,
+            transport=transport,
+            android_id=android_id,
+        )
     events = [build_event_view(row) for row in raw_rows]
-    events = filter_events(events, q, provider, content_type, transport)
+    events = filter_events(events, q, provider, content_type, transport, android_id)
     events = sort_events(events, sort, direction)
-    sliced = events[:limit]
+    sliced = events[max(0, offset):max(0, offset) + limit]
     return {"items": sliced, "count": len(sliced), "total": len(events), "limit": limit, "offset": offset}
+
+
+@app.post("/api/v1/debrid-benchmark-results")
+def ingest_debrid_benchmark_result(request: Request, envelope: DebridBenchmarkEnvelope):
+    require_bearer(request, WRITE_TOKEN)
+    row = summarize_benchmark(envelope.result, envelope)
+    with closing(db()) as conn:
+        conn.execute(
+            """
+            INSERT INTO debrid_benchmark_events (
+                received_at_ms, sent_at_ms, provider, measured_at_ms, termination_reason,
+                client_app_version, client_build_type, client_device_model, client_sdk_int, client_android_id,
+                device_model, device_manufacturer, raw_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            tuple(row.values()),
+        )
+        conn.commit()
+        event_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+    return {"ok": True, "id": event_id}
+
+
+@app.get("/api/v1/debrid-benchmark-results")
+def list_debrid_benchmark_results(
+    request: Request,
+    limit: int = 200,
+    offset: int = 0,
+    provider: Optional[str] = None,
+    android_id: Optional[str] = None,
+    q: str = "",
+    sort: str = "received",
+    direction: str = "desc",
+):
+    require_bearer(request, READ_TOKEN)
+    limit = max(1, min(limit, 2000))
+    with closing(db()) as conn:
+        raw_rows = fetch_benchmark_rows(
+            conn,
+            provider=provider,
+            android_id=android_id,
+        )
+    items = [build_benchmark_view(row) for row in raw_rows]
+    items = filter_benchmarks(items, q, provider, android_id)
+    items = sort_benchmarks(items, sort, direction)
+    sliced = items[max(0, offset):max(0, offset) + limit]
+    return {"items": sliced, "count": len(sliced), "total": len(items), "limit": limit, "offset": offset}
 
 
 def require_session(request: Request) -> None:
@@ -546,22 +821,24 @@ def dashboard(
     provider: Optional[str] = None,
     content_type: Optional[str] = None,
     transport: Optional[str] = None,
+    android_id: Optional[str] = None,
     sort: str = "received",
     direction: str = "desc",
 ):
     require_session(request)
     limit = max(1, min(limit, 500))
     with closing(db()) as conn:
-        raw_rows = [
-            dict(row)
-            for row in conn.execute(
-                "SELECT * FROM shadow_autoplay_events ORDER BY received_at_ms DESC LIMIT 2000"
-            ).fetchall()
-        ]
+        raw_rows = fetch_shadow_rows(
+            conn,
+            provider=provider,
+            content_type=content_type,
+            transport=transport,
+            android_id=android_id,
+        )
         total = conn.execute("SELECT COUNT(*) AS c FROM shadow_autoplay_events").fetchone()["c"]
 
     events = [build_event_view(row) for row in raw_rows]
-    filtered_events = filter_events(events, q, provider, content_type, transport)
+    filtered_events = filter_events(events, q, provider, content_type, transport, android_id)
     sorted_events = sort_events(filtered_events, sort, direction)
     rows = sorted_events[:limit]
 
@@ -584,6 +861,7 @@ def dashboard(
             "provider": provider or "",
             "content_type": content_type or "",
             "transport": transport or "",
+            "android_id": android_id or "",
             "sort": sort,
             "direction": direction,
             "limit": limit,
@@ -602,10 +880,38 @@ def event_detail(request: Request, event_id: int):
     require_session(request)
     with closing(db()) as conn:
         row = conn.execute("SELECT * FROM shadow_autoplay_events WHERE id = ?", (event_id,)).fetchone()
+        latest_benchmark_row = latest_benchmark_for_android_id(
+            conn,
+            dict(row).get("client_android_id") if row is not None else None,
+        )
     if row is None:
         raise HTTPException(status_code=404, detail="Not found")
     event = build_event_view(dict(row))
-    return TEMPLATES.TemplateResponse(request, "event_detail.html", {"event": event})
+    latest_benchmark = build_benchmark_view(latest_benchmark_row) if latest_benchmark_row else None
+    return TEMPLATES.TemplateResponse(
+        request,
+        "event_detail.html",
+        {
+            "event": event,
+            "latest_benchmark": latest_benchmark,
+        },
+    )
+
+
+@app.get("/benchmarks/{benchmark_id}/download")
+def benchmark_download(request: Request, benchmark_id: int):
+    require_session(request)
+    with closing(db()) as conn:
+        row = conn.execute("SELECT * FROM debrid_benchmark_events WHERE id = ?", (benchmark_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    payload = build_benchmark_view(dict(row))
+    return JSONResponse(
+        payload,
+        headers={
+            "Content-Disposition": f'attachment; filename="benchmark-{benchmark_id}.json"'
+        },
+    )
 
 
 @app.post("/admin/clear")
@@ -613,5 +919,6 @@ def clear_events(request: Request):
     require_session(request)
     with closing(db()) as conn:
         conn.execute("DELETE FROM shadow_autoplay_events")
+        conn.execute("DELETE FROM debrid_benchmark_events")
         conn.commit()
     return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)

@@ -117,6 +117,7 @@ internal data class DebridUiState(
     val serviceWrapEnabled: Boolean = false,
     val serviceWrapAvailable: Boolean = false,
     val shadowAutoplayDataCollectionEnabled: Boolean = false,
+    val debridBenchmarkDataCollectionEnabled: Boolean = false,
     val deterministicAutoplayEnabled: Boolean = false,
     val deterministicAutoplayAvailable: Boolean = false,
     val benchmarkResultDialog: DebridBenchmarkResultDialogUi? = null,
@@ -196,6 +197,14 @@ private data class DebridConfigBenchmarkSnapshot(
 private data class DebridDialogSnapshot(
     val benchmarkResultDialog: DebridBenchmarkResultDialogUi?,
     val configBenchmarkResultDialog: DebridConfigBenchmarkResultDialogUi?
+)
+
+private data class DebridSettingsToggleSnapshot(
+    val deterministicAutoplayEnabled: Boolean,
+    val deterministicAutoplayAvailable: Boolean,
+    val serviceWrapEnabled: Boolean,
+    val shadowAutoplayDataCollectionEnabled: Boolean,
+    val debridBenchmarkDataCollectionEnabled: Boolean
 )
 
 private data class DebridUiBaseSnapshot(
@@ -385,6 +394,20 @@ fun DebridSettingsContent(
                         onToggle = {
                             viewModel.setShadowAutoplayDataCollectionEnabled(
                                 !uiState.shadowAutoplayDataCollectionEnabled
+                            )
+                        }
+                    )
+                }
+
+                item(key = "debrid_benchmark_data_collection") {
+                    SettingsToggleRow(
+                        title = "Benchmark Data Collection",
+                        subtitle = "Opt in to upload completed debrid benchmark results to the self-hosted review service",
+                        checked = uiState.debridBenchmarkDataCollectionEnabled,
+                        enabled = true,
+                        onToggle = {
+                            viewModel.setDebridBenchmarkDataCollectionEnabled(
+                                !uiState.debridBenchmarkDataCollectionEnabled
                             )
                         }
                     )
@@ -1551,6 +1574,9 @@ class DebridSettingsViewModel @Inject constructor(
         val shadowAutoplayDataCollectionEnabled = playerSettingsDataStore.playerSettings
             .map { it.shadowAutoplayDataCollectionEnabled }
 
+        val debridBenchmarkDataCollectionEnabled = playerSettingsDataStore.playerSettings
+            .map { it.debridBenchmarkDataCollectionEnabled }
+
         val serviceWrapEnabled = playerSettingsDataStore.playerSettings
             .map { it.serviceWrapEnabled }
 
@@ -1613,16 +1639,19 @@ class DebridSettingsViewModel @Inject constructor(
                 deterministicAutoplayEnabled,
                 deterministicAutoplayAvailable,
                 serviceWrapEnabled,
-                shadowAutoplayDataCollectionEnabled
-            ) { deterministicEnabled, deterministicAvailable, serviceWrapEnabled, shadowCollectionEnabled ->
-                arrayOf(deterministicEnabled, deterministicAvailable, serviceWrapEnabled, shadowCollectionEnabled)
+                shadowAutoplayDataCollectionEnabled,
+                debridBenchmarkDataCollectionEnabled
+            ) { deterministicEnabled, deterministicAvailable, serviceWrapEnabled, shadowCollectionEnabled, benchmarkCollectionEnabled ->
+                DebridSettingsToggleSnapshot(
+                    deterministicAutoplayEnabled = deterministicEnabled,
+                    deterministicAutoplayAvailable = deterministicAvailable,
+                    serviceWrapEnabled = serviceWrapEnabled,
+                    shadowAutoplayDataCollectionEnabled = shadowCollectionEnabled,
+                    debridBenchmarkDataCollectionEnabled = benchmarkCollectionEnabled
+                )
             }
 
             combine(baseState, dialogState, settingsState) { base, dialogs, settings ->
-                val deterministicEnabled = settings[0] as Boolean
-                val deterministicAvailable = settings[1] as Boolean
-                val serviceWrapEnabled = settings[2] as Boolean
-                val shadowCollectionEnabled = settings[3] as Boolean
                 DebridUiState(
                     realDebridMode = base.connection.realDebridMode,
                     realDebridUsername = base.connection.realDebridUsername,
@@ -1686,14 +1715,15 @@ class DebridSettingsViewModel @Inject constructor(
                         activeState = base.configBenchmark.activeState,
                         benchmarkActive = base.benchmark.activeState
                     ),
-                    serviceWrapEnabled = serviceWrapEnabled,
+                    serviceWrapEnabled = settings.serviceWrapEnabled,
                     serviceWrapAvailable = base.connection.realDebridMode == DebridConnectionMode.CONNECTED ||
                         base.connection.premiumizeConnected ||
                         base.connection.torBoxConnected ||
                         base.connection.easyDebridConnected,
-                    shadowAutoplayDataCollectionEnabled = shadowCollectionEnabled,
-                    deterministicAutoplayEnabled = deterministicEnabled,
-                    deterministicAutoplayAvailable = deterministicAvailable,
+                    shadowAutoplayDataCollectionEnabled = settings.shadowAutoplayDataCollectionEnabled,
+                    debridBenchmarkDataCollectionEnabled = settings.debridBenchmarkDataCollectionEnabled,
+                    deterministicAutoplayEnabled = settings.deterministicAutoplayEnabled,
+                    deterministicAutoplayAvailable = settings.deterministicAutoplayAvailable,
                     benchmarkResultDialog = dialogs.benchmarkResultDialog,
                     configBenchmarkResultDialog = dialogs.configBenchmarkResultDialog,
                     torBoxConnected = base.connection.torBoxConnected,
@@ -1900,6 +1930,12 @@ class DebridSettingsViewModel @Inject constructor(
     fun setShadowAutoplayDataCollectionEnabled(enabled: Boolean) {
         viewModelScope.launch {
             playerSettingsDataStore.setShadowAutoplayDataCollectionEnabled(enabled)
+        }
+    }
+
+    fun setDebridBenchmarkDataCollectionEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            playerSettingsDataStore.setDebridBenchmarkDataCollectionEnabled(enabled)
         }
     }
 

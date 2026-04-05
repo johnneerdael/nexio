@@ -480,6 +480,32 @@ class DebridSettingsViewModelTest {
     }
 
     @Test
+    fun `benchmark data collection toggle reflects player settings`() = runTest(dispatcher) {
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>(relaxed = true)
+        every { playerSettingsDataStore.playerSettings } returns flowOf(
+            PlayerSettings(debridBenchmarkDataCollectionEnabled = true)
+        )
+        val viewModel = buildViewModel(playerSettingsDataStore = playerSettingsDataStore)
+
+        advanceUntilIdle()
+
+        assertEquals(true, viewModel.uiState.value.debridBenchmarkDataCollectionEnabled)
+    }
+
+    @Test
+    fun `benchmark data collection toggle updates settings store`() = runTest(dispatcher) {
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>(relaxed = true)
+        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
+        val viewModel = buildViewModel(playerSettingsDataStore = playerSettingsDataStore)
+
+        advanceUntilIdle()
+        viewModel.setDebridBenchmarkDataCollectionEnabled(true)
+        advanceUntilIdle()
+
+        coVerify { playerSettingsDataStore.setDebridBenchmarkDataCollectionEnabled(true) }
+    }
+
+    @Test
     fun `service wrap becomes available when any provider is connected`() = runTest(dispatcher) {
         val viewModel = buildViewModel(realDebridConnected = true)
 
