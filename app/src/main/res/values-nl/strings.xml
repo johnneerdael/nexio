@@ -154,7 +154,7 @@
   <string name="settings_gemini_subtitle">AI-ondertitelvertaling met Gemini</string>
   <string name="about_title">Over</string>
   <string name="about_subtitle">Appinformatie, updates en juridische links</string>
-  <string name="about_made_with_love">Gemaakt met ❤️ door Tapframe en vrienden</string>
+  <string name="about_made_with_love">Forked from Tapframe, Made by johnneerdael</string>
   <string name="about_version">Versie %1$s</string>
   <string name="about_check_updates">Controleren op updates</string>
   <string name="about_check_updates_subtitle">Download de nieuwste release</string>
