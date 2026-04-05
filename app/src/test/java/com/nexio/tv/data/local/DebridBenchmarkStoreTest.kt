@@ -96,6 +96,56 @@ class DebridBenchmarkStoreTest {
     }
 
     @Test
+    fun `saving a completed optimized only result persists across store reopen`() = runTest {
+        val file = File.createTempFile("debrid_benchmark_store_optimized_only", ".preferences_pb")
+        file.deleteOnExit()
+        val storeJob = SupervisorJob()
+        val storeScope = CoroutineScope(backgroundScope.coroutineContext + storeJob)
+        val expected = sampleOptimizedOnlyResult(
+            provider = DebridBenchmarkProvider.PREMIUMIZE,
+            measuredAtMs = 19L
+        )
+        val firstStore = buildStore(storeScope, file)
+
+        firstStore.saveLatest(expected)
+        storeJob.cancelAndJoin()
+
+        val reopenedStore = buildStore(backgroundScope, file)
+        val restored = reopenedStore.latestResult(DebridBenchmarkProvider.PREMIUMIZE).first()
+
+        assertEquals(expected, restored)
+        assertEquals(null, restored?.direct)
+        assertEquals(null, restored?.comparison)
+        assertEquals(178.5, restored?.optimized?.decision?.safeSustainedBudgetMbps ?: 0.0, 0.0)
+    }
+
+    @Test
+    fun `saving a completed legacy direct optimized result without candidate or comparison persists across store reopen`() = runTest {
+        val file = File.createTempFile("debrid_benchmark_store_legacy", ".preferences_pb")
+        file.deleteOnExit()
+        val storeJob = SupervisorJob()
+        val storeScope = CoroutineScope(backgroundScope.coroutineContext + storeJob)
+        val expected = sampleLegacyTransportOnlyResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            measuredAtMs = 29L
+        )
+        val firstStore = buildStore(storeScope, file)
+
+        firstStore.saveLatest(expected)
+        storeJob.cancelAndJoin()
+
+        val reopenedStore = buildStore(backgroundScope, file)
+        val restored = reopenedStore.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first()
+
+        assertEquals(expected, restored)
+        assertNotNull(restored?.direct)
+        assertNotNull(restored?.optimized)
+        assertEquals(null, restored?.candidate)
+        assertEquals(null, restored?.session)
+        assertEquals(null, restored?.comparison)
+    }
+
+    @Test
     fun `saving a completed comparison result persists embedded device capabilities`() = runTest {
         val file = File.createTempFile("debrid_benchmark_store_device", ".preferences_pb")
         file.deleteOnExit()
@@ -354,6 +404,103 @@ class DebridBenchmarkStoreTest {
         assertNotNull(restored)
         assertEquals(null, restored?.device?.evidence)
         assertEquals("Legacy Box", restored?.device?.model)
+    }
+
+    @Test
+    fun `latest result restores optimized only completed payload from raw json`() = runTest {
+        val dataStore = buildDataStore(backgroundScope)
+        val store = DebridBenchmarkStore(dataStore)
+        val key = stringPreferencesKey("debrid_benchmark_latest_premiumize")
+        dataStore.edit { prefs ->
+            prefs[key] = """
+                {
+                  "provider":"premiumize",
+                  "measuredAtMs":1775345971399,
+                  "summary":{
+                    "startupTimeMs":312,
+                    "sustainedThroughputMbps":738.1670948967937,
+                    "transferredBytes":11148722176,
+                    "elapsedMs":121138
+                  },
+                  "terminationReason":"completed",
+                  "candidate":{
+                    "filename":"Example.mp4",
+                    "sizeBytes":41466942646,
+                    "host":"1-cdn2-ovh-fra.energycdn.com",
+                    "directUrlFingerprint":"099e7b29dcf01341"
+                  },
+                  "session":{
+                    "benchmarkVersion":3,
+                    "executionOrder":[
+                      {"phase":"startup","order":["optimized"]},
+                      {"phase":"sustained","order":["optimized"]},
+                      {"phase":"seek","order":["optimized"]}
+                    ],
+                    "totalElapsedMs":120000
+                  },
+                  "optimized":{
+                    "startup":{"initialTtfbMs":312,"startupFailureRate":0.0},
+                    "sustained":{
+                      "collectorVersion":3,
+                      "samplingMode":"fixed_time_bucket",
+                      "bucketMs":1000,
+                      "averageThroughputMbps":743.1615479622145,
+                      "derivedAverageThroughputMbps":743.1615439333334,
+                      "actionable":true,
+                      "recoverableFailureCount":2,
+                      "recoverableTimeoutCount":2,
+                      "p10ThroughputMbps":165.9150496,
+                      "p50ThroughputMbps":885.8435104,
+                      "peakThroughputMbps":927.2169888,
+                      "throughputStddevMbps":297.47904267042594,
+                      "throughputCv":0.4062628906829621,
+                      "stallCount":6,
+                      "maxReadGapMs":5293,
+                      "bytesTransferred":11147423159,
+                      "elapsedMs":120000
+                    },
+                    "seek":{
+                      "seekTtfbP50Ms":52,
+                      "seekTtfbP95Ms":53,
+                      "seekTtfbP99Ms":53,
+                      "seekTtfbStddevMs":0.816496580927726,
+                      "seekFailRate":0.0
+                    },
+                    "decision":{"safeSustainedBudgetMbps":141.02779216,"actionable":true},
+                    "configSnapshot":{
+                      "useParallelConnections":true,
+                      "parallelConnectionCount":3,
+                      "parallelChunkSizeMb":24
+                    },
+                    "rawSamples":{
+                      "throughputWindowsMbps":[583.3904955270937,617.8688335576521],
+                      "throughputBuckets":[
+                        {
+                          "startOffsetMs":0,
+                          "durationMs":1000,
+                          "bytesTransferred":72923811,
+                          "throughputMbps":583.3904955270937,
+                          "complete":true
+                        }
+                      ],
+                      "seekSamples":[
+                        {"targetOffsetBytes":10366735661,"ttfbMs":52,"succeeded":true},
+                        {"targetOffsetBytes":20733471323,"ttfbMs":51,"succeeded":true},
+                        {"targetOffsetBytes":31100206984,"ttfbMs":53,"succeeded":true}
+                      ]
+                    }
+                  }
+                }
+            """.trimIndent()
+        }
+
+        val restored = store.latestResult(DebridBenchmarkProvider.PREMIUMIZE).first()
+
+        assertNotNull(restored)
+        assertEquals(DebridBenchmarkProvider.PREMIUMIZE, restored?.provider)
+        assertEquals(141.02779216, restored?.optimized?.decision?.safeSustainedBudgetMbps ?: 0.0, 0.0)
+        assertEquals(null, restored?.direct)
+        assertEquals(null, restored?.comparison)
     }
 
     @Test
@@ -728,6 +875,91 @@ class DebridBenchmarkStoreTest {
                 seekWinner = DebridBenchmarkTransportMode.OPTIMIZED,
                 stabilityWinner = DebridBenchmarkTransportMode.OPTIMIZED
             )
+        )
+    }
+
+    private fun sampleOptimizedOnlyResult(
+        provider: DebridBenchmarkProvider,
+        measuredAtMs: Long = 100L
+    ): DebridBenchmarkResult {
+        val optimized = sampleTransportProfile(
+            startupTimeMs = 95L,
+            averageMbps = 240.0,
+            p10Mbps = 210.0,
+            peakMbps = 300.0,
+            seekP95Ms = 210L,
+            seekP99Ms = 280L
+        )
+        return DebridBenchmarkResult(
+            provider = provider,
+            measuredAtMs = measuredAtMs,
+            summary = DebridBenchmarkSummary(
+                startupTimeMs = optimized.startup.initialTtfbMs,
+                sustainedThroughputMbps = optimized.sustained.averageThroughputMbps,
+                transferredBytes = requireNotNull(optimized.sustained.bytesTransferred),
+                elapsedMs = requireNotNull(optimized.sustained.elapsedMs)
+            ),
+            terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
+            candidate = DebridBenchmarkCandidateMetadata(
+                filename = "OptimizedOnly.mkv",
+                sizeBytes = 30L * 1024L * 1024L * 1024L,
+                host = "optimized.example.com",
+                directUrlFingerprint = "opt123"
+            ),
+            session = DebridBenchmarkSessionMetadata(
+                benchmarkVersion = 3,
+                executionOrder = listOf(
+                    DebridBenchmarkPhaseExecution(
+                        phase = DebridBenchmarkPhase.STARTUP,
+                        order = listOf(DebridBenchmarkTransportMode.OPTIMIZED)
+                    ),
+                    DebridBenchmarkPhaseExecution(
+                        phase = DebridBenchmarkPhase.SUSTAINED,
+                        order = listOf(DebridBenchmarkTransportMode.OPTIMIZED)
+                    ),
+                    DebridBenchmarkPhaseExecution(
+                        phase = DebridBenchmarkPhase.SEEK,
+                        order = listOf(DebridBenchmarkTransportMode.OPTIMIZED)
+                    )
+                ),
+                totalElapsedMs = 180_000L
+            ),
+            optimized = optimized
+        )
+    }
+
+    private fun sampleLegacyTransportOnlyResult(
+        provider: DebridBenchmarkProvider,
+        measuredAtMs: Long = 100L
+    ): DebridBenchmarkResult {
+        val direct = sampleTransportProfile(
+            startupTimeMs = 180L,
+            averageMbps = 165.0,
+            p10Mbps = 140.0,
+            peakMbps = 200.0,
+            seekP95Ms = 360L,
+            seekP99Ms = 450L
+        )
+        val optimized = sampleTransportProfile(
+            startupTimeMs = 120L,
+            averageMbps = 225.0,
+            p10Mbps = 190.0,
+            peakMbps = 260.0,
+            seekP95Ms = 240L,
+            seekP99Ms = 320L
+        )
+        return DebridBenchmarkResult(
+            provider = provider,
+            measuredAtMs = measuredAtMs,
+            summary = DebridBenchmarkSummary(
+                startupTimeMs = optimized.startup.initialTtfbMs,
+                sustainedThroughputMbps = optimized.sustained.averageThroughputMbps,
+                transferredBytes = requireNotNull(optimized.sustained.bytesTransferred),
+                elapsedMs = requireNotNull(optimized.sustained.elapsedMs)
+            ),
+            terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
+            direct = direct,
+            optimized = optimized
         )
     }
 

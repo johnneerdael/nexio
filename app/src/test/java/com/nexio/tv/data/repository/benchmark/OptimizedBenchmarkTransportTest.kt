@@ -382,6 +382,53 @@ class OptimizedBenchmarkTransportTest {
     }
 
     @Test
+    fun `optimized transport immediately reopens on first recoverable reset without synthetic backoff`() = runTest {
+        val clock = FakeBenchmarkClock()
+        val failedOnce = AtomicBoolean(false)
+        val sleepCallsMs = mutableListOf<Long>()
+        val transport = OptimizedBenchmarkTransport(
+            factoryBuilder = object : OptimizedBenchmarkDataSourceFactoryBuilder {
+                override fun create(
+                    candidate: DebridBenchmarkCandidate,
+                    configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    allowStartupBootstrapReuse: Boolean,
+                    transportSampleTimeMs: () -> Long,
+                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                ): BenchmarkReadableSourceFactory {
+                    return BenchmarkReadableSourceFactory {
+                        RecoveringBenchmarkDataSource(clock, failedOnce)
+                    }
+                }
+            },
+            nanoTimeNs = clock::nowNs,
+            sustainedThresholdBytes = 64L * 1024L,
+            sustainedThresholdElapsedMs = 2_000L,
+            seekProbeBytes = 4L * 1024L,
+            readBufferSize = 32 * 1024,
+            maxRecoverableFailures = 8,
+            sleepMs = { durationMs ->
+                sleepCallsMs += durationMs
+                clock.advanceMs(durationMs)
+            },
+            noProgressFailureTimeoutMs = 20_000L,
+            completionGuardBandMs = 10_000L
+        )
+
+        val result = transport.runProfile(
+            candidate = candidate(),
+            configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                useParallelConnections = true,
+                parallelConnectionCount = 4,
+                parallelChunkSizeMb = 8
+            )
+        )
+
+        assertEquals(DebridBenchmarkTerminationReason.COMPLETED, result.terminationReason)
+        assertTrue(sleepCallsMs.isNotEmpty())
+        assertEquals(0L, sleepCallsMs.first())
+    }
+
+    @Test
     fun `optimized transport recovers from a single connection closed eof and completes`() = runTest {
         val clock = FakeBenchmarkClock()
         val failedOnce = AtomicBoolean(false)
@@ -783,7 +830,8 @@ class OptimizedBenchmarkTransportTest {
         sustainedThresholdBytes: Long = 64L * 1024L,
         sustainedThresholdElapsedMs: Long = 2_000L,
         noProgressFailureTimeoutMs: Long = 20_000L,
-        completionGuardBandMs: Long = 10_000L
+        completionGuardBandMs: Long = 10_000L,
+        sleepMs: (Long) -> Unit = clock::advanceMs
     ): OptimizedBenchmarkTransport {
         return OptimizedBenchmarkTransport(
             factoryBuilder = builder,
@@ -793,7 +841,7 @@ class OptimizedBenchmarkTransportTest {
             seekProbeBytes = 4L * 1024L,
             readBufferSize = 32 * 1024,
             maxRecoverableFailures = 8,
-            sleepMs = clock::advanceMs,
+            sleepMs = sleepMs,
             noProgressFailureTimeoutMs = noProgressFailureTimeoutMs,
             completionGuardBandMs = completionGuardBandMs
         )

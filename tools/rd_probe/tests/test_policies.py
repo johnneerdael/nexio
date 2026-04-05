@@ -57,6 +57,18 @@ def test_fresh_session_policy_retries_non_blocked_chunk_with_same_retryable_erro
     ) is True
 
 
+def test_fresh_session_policy_retries_generic_error_kind():
+    policies = build_default_policies(4)
+    assert should_retry_blocked_chunk(
+        policies[1],
+        failed_chunk_index=10,
+        blocked_chunk_index=10,
+        completed_ahead_chunks=[],
+        error_kind="error",
+        retry_count=0,
+    ) is True
+
+
 def test_total_duration_is_split_across_selected_policies():
     assert _split_total_duration(120, 3) == [40, 40, 40]
     assert _split_total_duration(122, 3) == [41, 41, 40]

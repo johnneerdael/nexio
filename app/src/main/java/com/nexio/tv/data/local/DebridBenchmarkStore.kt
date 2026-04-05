@@ -124,7 +124,6 @@ class DebridBenchmarkStore internal constructor(
                 DebridBenchmarkTerminationReason.fromWireKey(reason)
             } ?: return null
             if (terminationReason != DebridBenchmarkTerminationReason.COMPLETED) return null
-            val comparisonPayloadPresent = COMPARISON_PAYLOAD_KEYS.any(root::has)
             val candidate = root.optionalObject("candidate")?.let(::parseCandidate)
             val device = root.optionalObject("device")?.let(::parseDeviceSnapshotBestEffort)
             val session = root.optionalObject("session")?.let(::parseSession)
@@ -132,13 +131,7 @@ class DebridBenchmarkStore internal constructor(
             val optimized = root.optionalObject("optimized")?.let(::parseTransportProfile)
             val comparison = root.optionalObject("comparison")?.let(::parseComparisonSummary)
 
-            if (comparisonPayloadPresent &&
-                (candidate == null || session == null || direct == null || optimized == null || comparison == null)
-            ) {
-                return null
-            }
-
-            DebridBenchmarkResult(
+            val parsed = DebridBenchmarkResult(
                 provider = parsedProvider,
                 measuredAtMs = measuredAtMs,
                 summary = summary,
@@ -149,10 +142,16 @@ class DebridBenchmarkStore internal constructor(
                 direct = direct,
                 optimized = optimized,
                 comparison = comparison
-            ).takeIf { it.isCompletedAndValid() }
+            )
+            if (!parsed.isCompletedAndValid()) {
+                logWarning(
+                    "Rejected stored benchmark provider=${expectedProvider.storageKey} candidate=${parsed.candidate != null} session=${parsed.session != null} direct=${parsed.direct != null} optimized=${parsed.optimized != null} comparison=${parsed.comparison != null}"
+                )
+                return null
+            }
+            parsed
         } catch (error: InvalidDebridBenchmarkPayload) {
-            Log.w(
-                TAG,
+            logWarning(
                 "Failed to restore stored benchmark provider=${expectedProvider.storageKey} reason=${error.reason ?: "invalid_payload"}"
             )
             null
@@ -173,15 +172,16 @@ class DebridBenchmarkStore internal constructor(
     private fun DebridBenchmarkResult.hasComparisonPayload(): Boolean {
         return candidate != null ||
             session != null ||
+            direct != null ||
             optimized != null ||
             comparison != null
     }
 
     private fun DebridBenchmarkResult.comparisonPayloadIsValid(): Boolean {
         if (!hasComparisonPayload()) return device?.isValid() != false
-        return candidate?.isValid() == true &&
+        return candidate?.isValid() != false &&
             device?.isValid() != false &&
-            session?.isValid() == true &&
+            session?.isValid() != false &&
             optimized?.isValid() == true &&
             (direct?.isValid() != false) &&
             (comparison?.isValid() != false)
@@ -300,6 +300,7 @@ class DebridBenchmarkStore internal constructor(
         return collectorVersion > 0 &&
             samplingMode?.isNotBlank() != false &&
             bucketMs?.let { it > 0L } != false &&
+            decisionWindowMs?.let { it > 0L } != false &&
             averageThroughputMbps.isNonNegativeFiniteOrNull() &&
             derivedAverageThroughputMbps.isNonNegativeFiniteOrNull() &&
             recoverableFailureCount >= 0 &&
@@ -625,6 +626,7 @@ class DebridBenchmarkStore internal constructor(
                 collectorVersion = sustainedJson.optionalStrictIntegralIntOrNull("collectorVersion") ?: 1,
                 samplingMode = sustainedJson.stringOrNull("samplingMode"),
                 bucketMs = sustainedJson.optionalStrictIntegralLongOrNull("bucketMs"),
+                decisionWindowMs = sustainedJson.optionalStrictIntegralLongOrNull("decisionWindowMs"),
                 averageThroughputMbps = sustainedJson.optionalStrictDoubleOrNull("averageThroughputMbps"),
                 derivedAverageThroughputMbps = sustainedJson.optionalStrictDoubleOrNull("derivedAverageThroughputMbps"),
                 actionable = sustainedJson.optionalStrictBooleanOrNull("actionable") ?: true,
@@ -806,16 +808,13 @@ class DebridBenchmarkStore internal constructor(
     companion object {
         private const val TAG = "DebridBenchmarkStore"
         private val INTEGRAL_NUMBER_REGEX = Regex("^-?\\d+$")
-        private val COMPARISON_PAYLOAD_KEYS = setOf(
-            "candidate",
-            "session",
-            "direct",
-            "optimized",
-            "comparison"
-        )
     }
 
     private class InvalidDebridBenchmarkPayload(
         val reason: String? = null
     ) : IllegalArgumentException()
+
+    private fun logWarning(message: String) {
+        runCatching { Log.w(TAG, message) }
+    }
 }

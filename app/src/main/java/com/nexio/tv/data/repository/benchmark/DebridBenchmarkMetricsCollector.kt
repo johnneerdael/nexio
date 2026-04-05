@@ -11,11 +11,13 @@ class DebridBenchmarkMetricsCollector(
     private val throughputWindowMs: Long = 1_000L
 ) {
     companion object {
-        private const val COLLECTOR_VERSION = 3
+        private const val COLLECTOR_VERSION = 5
         private const val SAMPLING_MODE_FIXED_TIME_BUCKET = "fixed_time_bucket"
         private const val CONSISTENCY_TOLERANCE_RATIO = 0.10
         private const val STEADY_STATE_WARMUP_MS = 10_000L
-        private const val DECISION_SMOOTHING_BUCKET_COUNT = 5
+        private const val DECISION_CONSUMER_WINDOW_MS = 5_000L
+        private const val DECISION_TRANSIENT_DROP_FLOOR_RATIO = 0.25
+        private const val DECISION_MIN_WINDOW_COUNT_FOR_FLOOR = 4
     }
 
     private var requestStartedAtMs: Long? = null
@@ -155,19 +157,20 @@ class DebridBenchmarkMetricsCollector(
 
     fun finishSustained(): DebridBenchmarkSustainedMetrics {
         val completedBuckets = completedSustainedBuckets()
-        val steadyStateBuckets = steadyStateCompletedSustainedBuckets(completedBuckets)
-        val decisionBuckets = smoothDecisionBuckets(completedBuckets)
-        val steadyStateDecisionBuckets = smoothDecisionBuckets(steadyStateBuckets)
+        val decisionBuckets = buildDecisionBuckets(completedBuckets)
+        val steadyStateDecisionBuckets = steadyStateCompletedSustainedBuckets(decisionBuckets)
         val sortedWindows = decisionBuckets.map { it.throughputMbps }.sorted()
         val steadyStateWindows = steadyStateDecisionBuckets.map { it.throughputMbps }.sorted()
+        val decisionWindows = filterTransientDropWindows(sortedWindows)
+        val steadyStateDecisionWindows = filterTransientDropWindows(steadyStateWindows)
         val average = completedBuckets.takeIf { it.isNotEmpty() }?.map { it.throughputMbps }?.average()
-        val steadyStateAverage = steadyStateWindows.takeIf { it.isNotEmpty() }?.average()
+        val steadyStateAverage = steadyStateDecisionWindows.takeIf { it.isNotEmpty() }?.average()
         val completedBytesTransferred = completedBuckets.sumOf { it.bytesTransferred }
         val completedElapsedMs = completedBuckets.sumOf { it.durationMs }
         val derivedAverage = completedBytesTransferred
             .takeIf { completedElapsedMs > 0L }
             ?.toMbps(completedElapsedMs)
-        val stddev = steadyStateWindows.standardDeviation(steadyStateAverage)
+        val stddev = steadyStateDecisionWindows.standardDeviation(steadyStateAverage)
         val actionable = average != null &&
             derivedAverage != null &&
             average.isWithinRatio(
@@ -178,12 +181,13 @@ class DebridBenchmarkMetricsCollector(
             collectorVersion = COLLECTOR_VERSION,
             samplingMode = SAMPLING_MODE_FIXED_TIME_BUCKET,
             bucketMs = throughputWindowMs,
+            decisionWindowMs = decisionWindowMs(),
             averageThroughputMbps = average,
             derivedAverageThroughputMbps = derivedAverage,
             actionable = actionable,
-            p10ThroughputMbps = steadyStateWindows.percentileNearestRank(0.10),
-            p50ThroughputMbps = steadyStateWindows.percentileNearestRank(0.50),
-            peakThroughputMbps = steadyStateWindows.maxOrNull(),
+            p10ThroughputMbps = steadyStateDecisionWindows.percentileNearestRank(0.10),
+            p50ThroughputMbps = steadyStateDecisionWindows.percentileNearestRank(0.50),
+            peakThroughputMbps = decisionWindows.maxOrNull(),
             throughputStddevMbps = stddev,
             throughputCv = if (steadyStateAverage != null && steadyStateAverage > 0.0 && stddev != null) {
                 stddev / steadyStateAverage
@@ -410,25 +414,49 @@ class DebridBenchmarkMetricsCollector(
         return if (steadyStateBuckets.isNotEmpty()) steadyStateBuckets else completedBuckets
     }
 
-    private fun smoothDecisionBuckets(
+    private fun buildDecisionBuckets(
         completedBuckets: List<DebridBenchmarkThroughputBucketSample>
     ): List<DebridBenchmarkThroughputBucketSample> {
-        if (completedBuckets.size < DECISION_SMOOTHING_BUCKET_COUNT) return completedBuckets
-        return completedBuckets
-            .chunked(DECISION_SMOOTHING_BUCKET_COUNT)
-            .mapNotNull { window ->
-                if (window.size < DECISION_SMOOTHING_BUCKET_COUNT) return@mapNotNull null
-                val durationMs = window.sumOf { it.durationMs }
-                val bytesTransferred = window.sumOf { it.bytesTransferred }
-                DebridBenchmarkThroughputBucketSample(
-                    startOffsetMs = window.first().startOffsetMs,
+        val decisionWindowMs = decisionWindowMs()
+        if (decisionWindowMs <= throughputWindowMs) return completedBuckets
+
+        val aggregatedBuckets = mutableListOf<DebridBenchmarkThroughputBucketSample>()
+        var currentWindow = mutableListOf<DebridBenchmarkThroughputBucketSample>()
+        var currentDurationMs = 0L
+
+        completedBuckets.forEach { bucket ->
+            currentWindow += bucket
+            currentDurationMs += bucket.durationMs
+
+            if (currentDurationMs >= decisionWindowMs) {
+                val durationMs = currentWindow.sumOf { it.durationMs }
+                val bytesTransferred = currentWindow.sumOf { it.bytesTransferred }
+                aggregatedBuckets += DebridBenchmarkThroughputBucketSample(
+                    startOffsetMs = currentWindow.first().startOffsetMs,
                     durationMs = durationMs,
                     bytesTransferred = bytesTransferred,
                     throughputMbps = bytesTransferred.toMbps(durationMs),
                     complete = true
                 )
+                currentWindow = mutableListOf()
+                currentDurationMs = 0L
             }
-            .ifEmpty { completedBuckets }
+        }
+
+        return aggregatedBuckets.ifEmpty { completedBuckets }
+    }
+
+    private fun decisionWindowMs(): Long {
+        return maxOf(throughputWindowMs, DECISION_CONSUMER_WINDOW_MS)
+    }
+
+    private fun filterTransientDropWindows(windows: List<Double>): List<Double> {
+        if (windows.size < DECISION_MIN_WINDOW_COUNT_FOR_FLOOR) return windows
+        val median = windows.percentileNearestRank(0.50) ?: return windows
+        if (!median.isFinite() || median <= 0.0) return windows
+        val floor = median * DECISION_TRANSIENT_DROP_FLOOR_RATIO
+        val filtered = windows.filter { it >= floor }
+        return if (filtered.size >= DECISION_MIN_WINDOW_COUNT_FOR_FLOOR) filtered else windows
     }
 
     private fun activeStallCount(): Int = stallCount

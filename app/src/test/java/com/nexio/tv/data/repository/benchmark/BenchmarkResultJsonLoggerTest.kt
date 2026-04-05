@@ -31,6 +31,7 @@ class BenchmarkResultJsonLoggerTest {
             evidence.getAsJsonObject("video").getAsJsonArray("decoders").first().asJsonObject.get("codecName").asString
         )
         assertEquals(1_000L, result.getAsJsonObject("optimized").getAsJsonObject("sustained").get("bucketMs").asLong)
+        assertEquals(5_000L, result.getAsJsonObject("optimized").getAsJsonObject("sustained").get("decisionWindowMs").asLong)
         assertEquals(4, result.getAsJsonObject("optimized").getAsJsonObject("configSnapshot").get("parallelConnectionCount").asInt)
     }
 
@@ -44,6 +45,23 @@ class BenchmarkResultJsonLoggerTest {
         assertTrue(summary.contains("sustained_winner=optimized"))
         assertFalse(summary.contains("direct_safe_budget="))
         assertTrue(summary.contains("optimized_safe_budget=170.0"))
+    }
+
+    @Test
+    fun `summary line keeps optimized safe budget when result has no direct or comparison payload`() {
+        val logger = BenchmarkResultJsonLogger { _, _ -> }
+        val optimizedOnly = sampleResult().copy(
+            direct = null,
+            comparison = null
+        )
+
+        val summary = logger.buildSummaryLine(optimizedOnly)
+
+        assertTrue(summary.contains("provider=real_debrid"))
+        assertTrue(summary.contains("optimized_safe_budget=170.0"))
+        assertFalse(summary.contains("sustained_winner="))
+        assertFalse(summary.contains("seek_winner="))
+        assertFalse(summary.contains("stability_winner="))
     }
 
     @Test
@@ -364,9 +382,10 @@ class BenchmarkResultJsonLoggerTest {
                 startupFailureRate = 0.0
             ),
             sustained = DebridBenchmarkSustainedMetrics(
-                collectorVersion = 2,
+                collectorVersion = 5,
                 samplingMode = "fixed_time_bucket",
                 bucketMs = 1_000L,
+                decisionWindowMs = 5_000L,
                 averageThroughputMbps = averageMbps,
                 derivedAverageThroughputMbps = averageMbps,
                 actionable = true,

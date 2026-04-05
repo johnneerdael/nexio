@@ -947,6 +947,12 @@ private fun DebridBenchmarkResultDialog(
                     optimized = result.optimized
                 )
             } else {
+                result.optimized?.safeSustainedBudgetMbps()?.let { safeBudgetMbps ->
+                    DebridBenchmarkMetricRow(
+                        label = stringResource(R.string.debrid_benchmark_metric_safe_budget),
+                        value = formatBenchmarkThroughput(safeBudgetMbps)
+                    )
+                }
                 DebridBenchmarkMetricRow(
                     label = stringResource(R.string.debrid_benchmark_metric_startup),
                     value = result.summary.startupTimeMs?.let(::formatBenchmarkLatency) ?: unavailable
@@ -1307,9 +1313,12 @@ private fun formatRunningBenchmarkSummary(summary: DebridBenchmarkSummary?): Str
 }
 
 private fun formatLatestBenchmarkSummary(result: DebridBenchmarkResult): String {
+    val safeBudget = result.optimized?.safeSustainedBudgetMbps()?.let {
+        formatBenchmarkThroughput(it) + " safe"
+    }
     val throughput = result.summary.sustainedThroughputMbps?.let { formatBenchmarkThroughput(it) }
     val startup = result.summary.startupTimeMs?.let { formatBenchmarkStartup(it) }
-    return listOfNotNull("Latest", throughput?.plus(" sustained"), startup).joinToString(" | ")
+    return listOfNotNull("Latest", safeBudget, throughput?.plus(" sustained"), startup).joinToString(" | ")
 }
 
 private fun formatLatestConfigBenchmarkSummary(result: DebridConfigBenchmarkResult): String {

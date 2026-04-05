@@ -496,7 +496,7 @@ class OptimizedBenchmarkTransport internal constructor(
 
     private fun recoverableRetryBackoffMs(attemptNumber: Int): Long {
         return when (attemptNumber) {
-            1 -> 50L
+            1 -> 0L
             2 -> 100L
             3 -> 200L
             4 -> 400L

@@ -55,10 +55,10 @@ class BenchmarkAwareGeneratedVariantAnalysisTest {
         val pcmHeavy = result.rankedVariants.first { it.name == "pcm-heavy.json" }
         val bitrateStrict = result.rankedVariants.first { it.name == "bitrate-strict.json" }
         assertTrue(pcmHeavy.summary.failureSlices.any { slice ->
-            slice.category == "wrong_winner" && slice.scenarios.contains("audio-fallback-1")
+            slice.category == "pairwise_mismatch" && slice.scenarios.contains("tv-hevc-ddp-vs-av1-webdl")
         })
         assertTrue(bitrateStrict.summary.failureSlices.any { slice ->
-            slice.category == "wrong_winner" && slice.scenarios.contains("remux-vs-webdl")
+            slice.category == "pairwise_mismatch" && slice.scenarios.contains("tv-hevc-ddp-vs-av1-webdl")
         })
     }
 }

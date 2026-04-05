@@ -12,7 +12,7 @@ class FfmpegDolbyVisionProfileProbeTest {
     @Test
     fun `native backend result 5 maps to detected profile 5`() = runBlocking {
         val probe = FfmpegDolbyVisionProfileProbe(
-            backend = NativeDolbyVisionProfileBackend { _, _ -> 5 }
+            backend = fakeBackend(profile = 5)
         )
 
         val result = probe.probe(
@@ -29,10 +29,10 @@ class FfmpegDolbyVisionProfileProbeTest {
     @Test
     fun `native backend negative results map to unknown and failed`() = runBlocking {
         val unknown = FfmpegDolbyVisionProfileProbe(
-            backend = NativeDolbyVisionProfileBackend { _, _ -> -2 }
+            backend = fakeBackend(profile = -2)
         ).probe(context, "https://example.com/b.mkv", null, "b.mkv")
         val failed = FfmpegDolbyVisionProfileProbe(
-            backend = NativeDolbyVisionProfileBackend { _, _ -> -3 }
+            backend = fakeBackend(profile = -3)
         ).probe(context, "https://example.com/c.mkv", null, "c.mkv")
 
         assertEquals(DolbyVisionProfileProbeStatus.UNKNOWN, unknown.status)
@@ -43,9 +43,11 @@ class FfmpegDolbyVisionProfileProbeTest {
     fun `headers are serialized for ffmpeg style input`() = runBlocking {
         var capturedHeaders: String? = null
         val probe = FfmpegDolbyVisionProfileProbe(
-            backend = NativeDolbyVisionProfileBackend { _, headers ->
-                capturedHeaders = headers
-                -1
+            backend = object : NativeDolbyVisionProfileBackend {
+                override fun probe(url: String, requestHeadersBlob: String?): Int {
+                    capturedHeaders = requestHeadersBlob
+                    return -1
+                }
             }
         )
 
@@ -57,5 +59,38 @@ class FfmpegDolbyVisionProfileProbeTest {
         )
 
         assertEquals("Authorization: Bearer token\r\nUser-Agent: Nexio\r\n", capturedHeaders)
+    }
+
+    @Test
+    fun `metadata blob populates video audio and hdr fields`() = runBlocking {
+        val probe = FfmpegDolbyVisionProfileProbe(
+            backend = fakeBackend(
+                profile = 7,
+                metadataBlob = "video=hevc;audio=truehd;hdr=DolbyVision"
+            )
+        )
+
+        val result = probe.probe(
+            context = context,
+            url = "https://example.com/test.mkv",
+            headers = null,
+            filename = "test.mkv"
+        )
+
+        assertEquals(DolbyVisionProfileProbeStatus.DETECTED, result.status)
+        assertEquals(7, result.profileNumber)
+        assertEquals("hevc", result.videoCodec)
+        assertEquals("truehd", result.audioCodec)
+        assertEquals("DolbyVision", result.hdrType)
+    }
+
+    private fun fakeBackend(
+        profile: Int,
+        metadataBlob: String? = null
+    ): NativeDolbyVisionProfileBackend {
+        return object : NativeDolbyVisionProfileBackend {
+            override fun probe(url: String, requestHeadersBlob: String?): Int = profile
+            override fun probeMetadataBlob(url: String, requestHeadersBlob: String?): String? = metadataBlob
+        }
     }
 }

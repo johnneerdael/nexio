@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -26,12 +27,29 @@ from .policies import (
 )
 from .assembler import InOrderAssembler
 from .candidate_resolver import CandidateResolver
+from .premiumize_candidate_resolver import PremiumizeCandidateResolver
 from .config import load_config
 from .pcap import PcapController
+from .premiumize_api import PremiumizeClient
 from .range_scheduler import ChunkTracker, RangeScheduler
 from .rd_api import RealDebridClient
 from .telemetry import TelemetryWriter, classify_session, new_run_dir
 from .worker import fetch_range
+
+
+def _percentile(values: list[float], q: float) -> float | None:
+    if not values:
+        return None
+    sorted_values = sorted(values)
+    k = (len(sorted_values) - 1) * q
+    floor_index = math.floor(k)
+    ceil_index = math.ceil(k)
+    if floor_index == ceil_index:
+        return sorted_values[int(k)]
+    return (
+        sorted_values[floor_index] * (ceil_index - k)
+        + sorted_values[ceil_index] * (k - floor_index)
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -40,6 +58,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_parser = subparsers.add_parser("run")
     run_parser.add_argument("--env-file", default=".env")
+    run_parser.add_argument(
+        "--provider",
+        choices=["realdebrid", "premiumize"],
+        help="Debrid provider for candidate resolution (default from config/env, fallback: realdebrid).",
+    )
     run_parser.add_argument("--parallel", type=int)
     run_parser.add_argument("--chunk-mb", type=int)
     run_parser.add_argument("--duration", type=int)
@@ -59,6 +82,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument("--download-id")
     run_parser.add_argument("--torrent-id")
+    run_parser.add_argument("--item-id", help="Premiumize item id override.")
     run_parser.add_argument("--direct-url")
 
     analyze_parser = subparsers.add_parser("analyze")
@@ -117,20 +141,37 @@ def _split_total_duration(total_duration_s: int, policy_count: int) -> list[int]
 
 def cmd_run(args: argparse.Namespace) -> int:
     config = load_config(args.env_file)
+    provider = (args.provider or config.provider or "realdebrid").lower()
     parallel = args.parallel or config.parallel
     chunk_mb = args.chunk_mb or config.chunk_mb
     duration = args.duration or config.duration
     base_dir = Path(args.output_dir) if args.output_dir else config.output_dir
     run_dir = new_run_dir(base_dir)
-    telemetry = TelemetryWriter(run_dir)
-
-    client = RealDebridClient(config.realdebrid_api_token)
-    resolver = CandidateResolver(client)
-    candidate = resolver.resolve(
-        download_id=args.download_id,
-        torrent_id=args.torrent_id,
-        direct_url=args.direct_url,
-    )
+    if provider == "realdebrid":
+        if not config.realdebrid_api_token:
+            raise ValueError("REALDEBRID_API_TOKEN is required when --provider realdebrid is selected.")
+        if args.item_id:
+            raise ValueError("--item-id is only supported with --provider premiumize.")
+        client = RealDebridClient(config.realdebrid_api_token)
+        resolver = CandidateResolver(client)
+        candidate = resolver.resolve(
+            download_id=args.download_id,
+            torrent_id=args.torrent_id,
+            direct_url=args.direct_url,
+        )
+    elif provider == "premiumize":
+        if not config.premiumize_api_key:
+            raise ValueError("PREMIUMIZE_API_KEY is required when --provider premiumize is selected.")
+        if args.download_id or args.torrent_id:
+            raise ValueError("--download-id and --torrent-id are only supported with --provider realdebrid.")
+        client = PremiumizeClient(config.premiumize_api_key)
+        resolver = PremiumizeCandidateResolver(client)
+        candidate = resolver.resolve(
+            item_id=args.item_id,
+            direct_url=args.direct_url,
+        )
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")
 
     policies = build_default_policies(parallel)
     if args.policy != "all":
@@ -143,6 +184,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         summary_payload, session_payload = run_policy_variant(
             args=args,
             candidate=candidate,
+            provider=provider,
             parallel=parallel,
             chunk_mb=chunk_mb,
             duration=policy_duration,
@@ -168,6 +210,7 @@ def run_policy_variant(
     *,
     args: argparse.Namespace,
     candidate,
+    provider: str,
     parallel: int,
     chunk_mb: int,
     duration: int,
@@ -178,6 +221,7 @@ def run_policy_variant(
     pcap = None
     pcap_info = None
     session_payload = {
+        "provider": provider,
         "policy": policy.name,
         "parallel": parallel,
         "chunk_mb": chunk_mb,
@@ -190,6 +234,7 @@ def run_policy_variant(
         "blocked_chunk": None,
         "blocked_worker_id": None,
         "stalled_worker_ids": [],
+        "consumer_p10_mbps": None,
     }
     status = {
         "policy": policy.name,
@@ -223,6 +268,9 @@ def run_policy_variant(
         blocked_started_at = None
         previous_blocked_chunk = assembler.blocked_on_chunk
         retry_counts = {}
+        consumer_throughput_samples_mbps = []
+        previous_consumer_bytes = 0
+        previous_consumer_event_at = None
 
         def can_schedule_more() -> bool:
             return time.monotonic() < deadline and total_scheduled_bytes < effective_byte_limit
@@ -352,6 +400,7 @@ def run_policy_variant(
                     telemetry.append_consumer_event(
                         {
                             "policy": policy.name,
+                            "event_at": result.completed_at,
                             "blocked_on_chunk_before": blocked_chunk_before,
                             "blocked_on_chunk": blocked_chunk_after,
                             "blocked_worker_id": blocked_snapshot.get("worker_id") if blocked_snapshot else None,
@@ -363,6 +412,22 @@ def run_policy_variant(
                             "completed_ahead": ahead_chunks_after,
                         }
                     )
+
+                    current_consumer_event_at = result.completed_at
+                    current_consumer_bytes = assembler.consumer_bytes_available
+                    if (
+                        previous_consumer_event_at is not None and
+                        current_consumer_event_at is not None and
+                        current_consumer_event_at > previous_consumer_event_at and
+                        current_consumer_bytes > previous_consumer_bytes
+                    ):
+                        delta_seconds = current_consumer_event_at - previous_consumer_event_at
+                        delta_bytes = current_consumer_bytes - previous_consumer_bytes
+                        consumer_throughput_samples_mbps.append(
+                            (delta_bytes * 8.0) / delta_seconds / 1_000_000.0
+                        )
+                    previous_consumer_event_at = current_consumer_event_at
+                    previous_consumer_bytes = current_consumer_bytes
                     if blocked_snapshot:
                         status["blocked_worker_id"] = blocked_snapshot.get("worker_id", "-")
                         status["blocked_state"] = blocked_snapshot.get("state", "-")
@@ -473,9 +538,11 @@ def run_policy_variant(
             blocked_worker_id=blocked_snapshot.get("worker_id") if blocked_snapshot else None,
             stalled_worker_ids=sorted(stalled_worker_ids),
         )
+        summary_payload["consumer_p10_mbps"] = _percentile(consumer_throughput_samples_mbps, 0.10)
         if pcap:
             pcap_info = pcap.stop()
         session_payload = {
+            "provider": provider,
             "policy": policy.name,
             "candidate": candidate.__dict__,
             "parallel": parallel,
@@ -491,6 +558,7 @@ def run_policy_variant(
     except Exception as exc:
         session_payload = {
             **session_payload,
+            "provider": provider,
             "policy": policy.name,
             "candidate": candidate.__dict__,
             "error": str(exc),
