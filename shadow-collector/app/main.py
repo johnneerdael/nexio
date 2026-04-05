@@ -83,11 +83,6 @@ def init_db() -> None:
                 client_android_id TEXT,
                 raw_json TEXT NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_shadow_received_at ON shadow_autoplay_events(received_at_ms DESC);
-            CREATE INDEX IF NOT EXISTS idx_shadow_request_id ON shadow_autoplay_events(request_id);
-            CREATE INDEX IF NOT EXISTS idx_shadow_video_id ON shadow_autoplay_events(video_id);
-            CREATE INDEX IF NOT EXISTS idx_shadow_selected_provider ON shadow_autoplay_events(selected_provider);
-            CREATE INDEX IF NOT EXISTS idx_shadow_android_id ON shadow_autoplay_events(client_android_id);
             CREATE TABLE IF NOT EXISTS debrid_benchmark_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 received_at_ms INTEGER NOT NULL,
@@ -104,6 +99,17 @@ def init_db() -> None:
                 device_manufacturer TEXT,
                 raw_json TEXT NOT NULL
             );
+            """
+        )
+        ensure_column(conn, "shadow_autoplay_events", "client_android_id", "TEXT")
+        ensure_column(conn, "debrid_benchmark_events", "client_android_id", "TEXT")
+        conn.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_shadow_received_at ON shadow_autoplay_events(received_at_ms DESC);
+            CREATE INDEX IF NOT EXISTS idx_shadow_request_id ON shadow_autoplay_events(request_id);
+            CREATE INDEX IF NOT EXISTS idx_shadow_video_id ON shadow_autoplay_events(video_id);
+            CREATE INDEX IF NOT EXISTS idx_shadow_selected_provider ON shadow_autoplay_events(selected_provider);
+            CREATE INDEX IF NOT EXISTS idx_shadow_android_id ON shadow_autoplay_events(client_android_id);
             CREATE INDEX IF NOT EXISTS idx_benchmark_received_at ON debrid_benchmark_events(received_at_ms DESC);
             CREATE INDEX IF NOT EXISTS idx_benchmark_provider ON debrid_benchmark_events(provider);
             CREATE INDEX IF NOT EXISTS idx_benchmark_measured_at ON debrid_benchmark_events(measured_at_ms DESC);
@@ -111,8 +117,6 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_benchmark_android_id ON debrid_benchmark_events(client_android_id);
             """
         )
-        ensure_column(conn, "shadow_autoplay_events", "client_android_id", "TEXT")
-        ensure_column(conn, "debrid_benchmark_events", "client_android_id", "TEXT")
         conn.commit()
 
 

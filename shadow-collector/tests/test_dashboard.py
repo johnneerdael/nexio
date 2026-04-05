@@ -1,3 +1,4 @@
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -305,6 +306,77 @@ class ShadowCollectorDashboardTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         return response.json()["id"]
+
+    def test_init_db_reconciles_legacy_db_missing_android_id_before_creating_indexes(self):
+        legacy_path = Path(self.tempdir.name) / "legacy-shadow-autoplay.db"
+        with sqlite3.connect(legacy_path) as conn:
+            conn.executescript(
+                """
+                CREATE TABLE shadow_autoplay_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    received_at_ms INTEGER NOT NULL,
+                    sent_at_ms INTEGER NOT NULL,
+                    event_type TEXT,
+                    request_id TEXT,
+                    video_id TEXT,
+                    content_type TEXT,
+                    title TEXT,
+                    selected_provider TEXT,
+                    selected_transport TEXT,
+                    selected_score INTEGER,
+                    winner_count INTEGER NOT NULL DEFAULT 0,
+                    rejected_count INTEGER NOT NULL DEFAULT 0,
+                    client_app_version TEXT,
+                    client_build_type TEXT,
+                    client_device_model TEXT,
+                    client_sdk_int INTEGER,
+                    raw_json TEXT NOT NULL
+                );
+                CREATE TABLE debrid_benchmark_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    received_at_ms INTEGER NOT NULL,
+                    sent_at_ms INTEGER NOT NULL,
+                    provider TEXT NOT NULL,
+                    measured_at_ms INTEGER NOT NULL,
+                    termination_reason TEXT NOT NULL,
+                    client_app_version TEXT,
+                    client_build_type TEXT,
+                    client_device_model TEXT,
+                    client_sdk_int INTEGER,
+                    device_model TEXT,
+                    device_manufacturer TEXT,
+                    raw_json TEXT NOT NULL
+                );
+                """
+            )
+
+        original_sqlite_path = main.SQLITE_PATH
+        try:
+            main.SQLITE_PATH = str(legacy_path)
+            main.init_db()
+
+            with sqlite3.connect(legacy_path) as conn:
+                shadow_columns = {
+                    row[1]
+                    for row in conn.execute("PRAGMA table_info(shadow_autoplay_events)")
+                }
+                benchmark_columns = {
+                    row[1]
+                    for row in conn.execute("PRAGMA table_info(debrid_benchmark_events)")
+                }
+                indexes = {
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'index'"
+                    )
+                }
+        finally:
+            main.SQLITE_PATH = original_sqlite_path
+
+        self.assertIn("client_android_id", shadow_columns)
+        self.assertIn("client_android_id", benchmark_columns)
+        self.assertIn("idx_shadow_android_id", indexes)
+        self.assertIn("idx_benchmark_android_id", indexes)
 
     def test_build_event_view_extracts_dashboard_fields(self):
         summary = main.summarize(SAMPLE_ENVELOPE["payload"], main.ShadowAutoplayEnvelope(**SAMPLE_ENVELOPE))
