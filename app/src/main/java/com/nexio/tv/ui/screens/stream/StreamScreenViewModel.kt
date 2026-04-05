@@ -629,7 +629,7 @@ class StreamScreenViewModel @Inject constructor(
                                         null
                                     },
                                     deterministicAutoplayFailureMessage = if (deterministicAutoplay) {
-                                        result.message ?: "No eligible links found"
+                                        result.message
                                     } else {
                                         null
                                     }
@@ -1150,7 +1150,9 @@ class StreamScreenViewModel @Inject constructor(
                 AutoPlayStreamAlternative(
                     streamKey = fallback.stream.wrappedOriginalStreamKey ?: fallback.parsed.exactDuplicateKey,
                     url = fallback.stream.getStreamUrl(),
-                    streamName = fallback.stream.name ?: fallback.stream.addonName ?: "Fallback",
+                    streamName = (fallback.stream.name ?: "").ifEmpty {
+                        fallback.stream.addonName ?: "Fallback"
+                    },
                     headers = fallback.stream.behaviorHints?.proxyHeaders?.request,
                     filename = fallback.stream.behaviorHints?.filename,
                     videoHash = fallback.stream.behaviorHints?.videoHash,

@@ -53,6 +53,9 @@ val doviPrebuiltRootPath = resolveProperty(devProperties, localProperties, "DOVI
 val useMedia3Source = parseBooleanProperty(
     resolveProperty(devProperties, localProperties, "USE_MEDIA3_SOURCE")
 )
+val playPublishTaskRequested = gradle.startParameter.taskNames.any { taskName ->
+    taskName.endsWith("bundlePlayRelease") || taskName.endsWith(":app:bundlePlayRelease")
+}
 val filteredMainAssetsDir = layout.buildDirectory.dir("filtered-assets/main")
 val syncFilteredMainAssets by tasks.registering(Sync::class) {
     from("src/main/assets")
@@ -163,22 +166,28 @@ android {
 
     flavorDimensions += "abiPackaging"
     productFlavors {
-        create("arm64") {
-            dimension = "abiPackaging"
-            ndk {
-                abiFilters += listOf("arm64-v8a")
+        if (!playPublishTaskRequested) {
+            create("arm64") {
+                dimension = "abiPackaging"
+                ndk {
+                    abiFilters += listOf("arm64-v8a")
+                }
             }
-        }
-        create("armv7") {
-            dimension = "abiPackaging"
-            ndk {
-                abiFilters += listOf("armeabi-v7a")
+            create("armv7") {
+                dimension = "abiPackaging"
+                ndk {
+                    abiFilters += listOf("armeabi-v7a")
+                }
             }
         }
         create("universal") {
             dimension = "abiPackaging"
             ndk {
-                abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+                abiFilters += if (playPublishTaskRequested) {
+                    listOf("arm64-v8a")
+                } else {
+                    listOf("armeabi-v7a", "arm64-v8a")
+                }
             }
         }
     }
@@ -236,9 +245,25 @@ chaquopy {
 }
 
 androidComponents {
+    beforeVariants(selector().withBuildType("release")) { variantBuilder ->
+        if (!playPublishTaskRequested) return@beforeVariants
+        val abiFlavor = variantBuilder.productFlavors
+            .firstOrNull { (dimension, _) -> dimension == "abiPackaging" }
+            ?.second
+        if (abiFlavor != "universal") {
+            variantBuilder.enable = false
+        }
+    }
+
     onVariants(selector().withBuildType("debug")) { variant ->
         variant.applicationId.set("com.nexiodebug.tv")
     }
+}
+
+tasks.register("bundlePlayRelease") {
+    group = "build"
+    description = "Build the Play-targeted universal release bundle without support-only release variants."
+    dependsOn("bundleUniversalRelease")
 }
 
 composeCompiler {
