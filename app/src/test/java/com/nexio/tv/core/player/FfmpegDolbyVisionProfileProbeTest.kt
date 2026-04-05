@@ -1,18 +1,43 @@
 package com.nexio.tv.core.player
 
 import android.content.ContextWrapper
+import android.util.Log
+import io.mockk.every
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Test
 
 class FfmpegDolbyVisionProfileProbeTest {
 
     private val context = ContextWrapper(null)
 
+    @Before
+    fun setUp() {
+        mockkStatic(Log::class)
+        every { Log.w(any<String>(), any<String>()) } returns 0
+    }
+
+    @After
+    fun tearDown() {
+        unmockkStatic(Log::class)
+    }
+
     @Test
-    fun `native backend result 5 maps to detected profile 5`() = runBlocking {
+    fun `stream metadata result 5 maps to detected profile 5`() = runBlocking {
         val probe = FfmpegDolbyVisionProfileProbe(
-            backend = fakeBackend(profile = 5)
+            backend = fakeBackend(
+                streamMetadataJson = """
+                    {
+                      "streams": [
+                        {"codec_type":"video","codec_name":"hevc","color_transfer":"smpte2084","color_primaries":"bt2020","dv_profile":5}
+                      ]
+                    }
+                """.trimIndent()
+            )
         )
 
         val result = probe.probe(
@@ -27,16 +52,12 @@ class FfmpegDolbyVisionProfileProbeTest {
     }
 
     @Test
-    fun `native backend negative results map to unknown and failed`() = runBlocking {
+    fun `missing stream metadata maps to failed`() = runBlocking {
         val unknown = FfmpegDolbyVisionProfileProbe(
-            backend = fakeBackend(profile = -2)
+            backend = fakeBackend(streamMetadataJson = null)
         ).probe(context, "https://example.com/b.mkv", null, "b.mkv")
-        val failed = FfmpegDolbyVisionProfileProbe(
-            backend = fakeBackend(profile = -3)
-        ).probe(context, "https://example.com/c.mkv", null, "c.mkv")
 
-        assertEquals(DolbyVisionProfileProbeStatus.UNKNOWN, unknown.status)
-        assertEquals(DolbyVisionProfileProbeStatus.FAILED, failed.status)
+        assertEquals(DolbyVisionProfileProbeStatus.FAILED, unknown.status)
     }
 
     @Test
@@ -44,9 +65,11 @@ class FfmpegDolbyVisionProfileProbeTest {
         var capturedHeaders: String? = null
         val probe = FfmpegDolbyVisionProfileProbe(
             backend = object : NativeDolbyVisionProfileBackend {
-                override fun probe(url: String, requestHeadersBlob: String?): Int {
+                override fun probe(url: String, requestHeadersBlob: String?): Int = error("unused")
+
+                override fun probeStreamMetadataJson(url: String, requestHeadersBlob: String?): String? {
                     capturedHeaders = requestHeadersBlob
-                    return -1
+                    return """{"streams":[]}"""
                 }
             }
         )
@@ -62,11 +85,17 @@ class FfmpegDolbyVisionProfileProbeTest {
     }
 
     @Test
-    fun `metadata blob populates video audio and hdr fields`() = runBlocking {
+    fun `stream metadata populates video audio and hdr fields`() = runBlocking {
         val probe = FfmpegDolbyVisionProfileProbe(
             backend = fakeBackend(
-                profile = 7,
-                metadataBlob = "video=hevc;audio=truehd;hdr=DolbyVision"
+                streamMetadataJson = """
+                    {
+                      "streams": [
+                        {"codec_type":"video","codec_name":"hevc","color_transfer":"smpte2084","color_primaries":"bt2020","dv_profile":7},
+                        {"codec_type":"audio","codec_name":"truehd"}
+                      ]
+                    }
+                """.trimIndent()
             )
         )
 
@@ -81,16 +110,60 @@ class FfmpegDolbyVisionProfileProbeTest {
         assertEquals(7, result.profileNumber)
         assertEquals("hevc", result.videoCodec)
         assertEquals("truehd", result.audioCodec)
-        assertEquals("DolbyVision", result.hdrType)
+        assertEquals("dolbyvision", result.hdrType)
+    }
+
+    @Test
+    fun `stream metadata prefers strongest audio track`() = runBlocking {
+        val probe = FfmpegDolbyVisionProfileProbe(
+            backend = fakeBackend(
+                streamMetadataJson = """
+                    {
+                      "streams": [
+                        {"codec_type":"video","codec_name":"hevc","color_transfer":"smpte2084","color_primaries":"bt2020"},
+                        {"codec_type":"audio","codec_name":"ac3"},
+                        {"codec_type":"audio","codec_name":"truehd"}
+                      ]
+                    }
+                """.trimIndent()
+            )
+        )
+
+        val result = probe.probe(context, "https://example.com/test.mkv", null, "test.mkv")
+
+        assertEquals(DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION, result.status)
+        assertEquals("truehd", result.audioCodec)
+        assertEquals("hdr10", result.hdrType)
+    }
+
+    @Test
+    fun `stream metadata detects hdr10 plus`() = runBlocking {
+        val probe = FfmpegDolbyVisionProfileProbe(
+            backend = fakeBackend(
+                streamMetadataJson = """
+                    {
+                      "streams": [
+                        {"codec_type":"video","codec_name":"hevc","color_transfer":"smpte2084","color_primaries":"bt2020","hdr10_plus":true},
+                        {"codec_type":"audio","codec_name":"eac3"}
+                      ]
+                    }
+                """.trimIndent()
+            )
+        )
+
+        val result = probe.probe(context, "https://example.com/test.mkv", null, "test.mkv")
+
+        assertEquals(DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION, result.status)
+        assertEquals("hdr10+", result.hdrType)
+        assertEquals("eac3", result.audioCodec)
     }
 
     private fun fakeBackend(
-        profile: Int,
-        metadataBlob: String? = null
+        streamMetadataJson: String?
     ): NativeDolbyVisionProfileBackend {
         return object : NativeDolbyVisionProfileBackend {
-            override fun probe(url: String, requestHeadersBlob: String?): Int = profile
-            override fun probeMetadataBlob(url: String, requestHeadersBlob: String?): String? = metadataBlob
+            override fun probe(url: String, requestHeadersBlob: String?): Int = error("unused")
+            override fun probeStreamMetadataJson(url: String, requestHeadersBlob: String?): String? = streamMetadataJson
         }
     }
 }

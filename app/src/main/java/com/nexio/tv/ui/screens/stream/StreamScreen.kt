@@ -93,6 +93,7 @@ import com.nexio.tv.ui.screens.player.LoadingOverlay
 import com.nexio.tv.ui.theme.NexioTheme
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay as coroutineDelay
 import kotlinx.coroutines.launch as coroutineLaunch
 import androidx.lifecycle.Lifecycle
@@ -152,10 +153,15 @@ fun StreamScreen(
                 return
             }
             directAutoPlayResolveInFlight = true
-            viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
             autoPlayScope.coroutineLaunch {
                 try {
                     onAutoPlayResolved(viewModel.resolveAutoPlayPlaybackInfo(playbackInfo))
+                    viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
+                    throw error
                 } finally {
                     directAutoPlayResolveInFlight = false
                 }

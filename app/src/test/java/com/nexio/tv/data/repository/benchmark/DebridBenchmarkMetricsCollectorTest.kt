@@ -7,7 +7,7 @@ import org.junit.Test
 class DebridBenchmarkMetricsCollectorTest {
 
     @Test
-    fun `finishSustained ignores transient collapse windows for decision percentile`() {
+    fun `finishSustained uses rd probe style consumer p10 for collapse windows`() {
         val collector = DebridBenchmarkMetricsCollector()
         val windowsMbps = buildList {
             repeat(10) { add(800.0) } // warmup
@@ -18,9 +18,10 @@ class DebridBenchmarkMetricsCollectorTest {
         feedThroughputWindows(collector, windowsMbps)
         val sustained = collector.finishSustained()
 
-        assertEquals(5, sustained.collectorVersion)
+        assertEquals(8, sustained.collectorVersion)
         assertEquals(5_000L, sustained.decisionWindowMs)
-        assertTrue((sustained.p10ThroughputMbps ?: 0.0) > 700.0)
+        assertEquals(5.0, sustained.p10ThroughputMbps ?: 0.0, 0.2)
+        assertEquals(800.0, sustained.p50ThroughputMbps ?: 0.0, 0.2)
     }
 
     @Test
@@ -31,13 +32,13 @@ class DebridBenchmarkMetricsCollectorTest {
         feedThroughputWindows(collector, windowsMbps)
         val sustained = collector.finishSustained()
 
-        assertEquals(5, sustained.collectorVersion)
+        assertEquals(8, sustained.collectorVersion)
         assertEquals(5_000L, sustained.decisionWindowMs)
         assertEquals(12.0, sustained.p10ThroughputMbps ?: 0.0, 0.2)
     }
 
     @Test
-    fun `finishSustained uses 5 second consumer decision windows so single second pauses do not crush p10`() {
+    fun `finishSustained keeps rd probe consumer p10 resilient to a single zero sample`() {
         val collector = DebridBenchmarkMetricsCollector()
         val windowsMbps = buildList {
             repeat(10) { add(600.0) } // warmup
@@ -49,7 +50,46 @@ class DebridBenchmarkMetricsCollectorTest {
         val sustained = collector.finishSustained()
 
         assertEquals(5_000L, sustained.decisionWindowMs)
-        assertEquals(480.0, sustained.p10ThroughputMbps ?: 0.0, 0.2)
+        assertEquals(600.0, sustained.p10ThroughputMbps ?: 0.0, 0.2)
+    }
+
+    @Test
+    fun `finishSustained ignores startup baseline and post completion drain in consumer p10`() {
+        val collector = DebridBenchmarkMetricsCollector(
+            requiredTransferredBytes = 10L,
+            requiredElapsedMs = 3_000L
+        )
+
+        collector.recordStartup(
+            requestStartedAtMs = 0L,
+            firstByteAtMs = 0L
+        )
+        collector.recordBytesRead(totalBytesRead = 625_000L, sampleAtMs = 1_000L)
+        collector.recordBytesRead(totalBytesRead = 125_625_000L, sampleAtMs = 2_000L)
+        collector.recordBytesRead(totalBytesRead = 250_625_000L, sampleAtMs = 3_000L)
+        collector.recordBytesRead(totalBytesRead = 250_725_000L, sampleAtMs = 4_000L)
+        collector.recordBytesRead(totalBytesRead = 250_825_000L, sampleAtMs = 5_000L)
+
+        val sustained = collector.finishSustained()
+
+        assertEquals(1_000.0, sustained.p10ThroughputMbps ?: 0.0, 0.2)
+    }
+
+    @Test
+    fun `finishSustained records cache absorbable deficits separately from draining deficits`() {
+        val collector = DebridBenchmarkMetricsCollector()
+        val windowsMbps = buildList {
+            repeat(10) { add(800.0) }
+            addAll(listOf(800.0, 760.0, 740.0, 780.0, 790.0, 760.0, 750.0, 780.0))
+        }
+
+        feedThroughputWindows(collector, windowsMbps)
+        val sustained = collector.finishSustained()
+
+        assertEquals(8, sustained.collectorVersion)
+        assertTrue((sustained.cacheAbsorbableDeficitCount ?: 0) > 0)
+        assertEquals(0, sustained.cacheDrainingDeficitCount ?: 0)
+        assertTrue((sustained.estimatedMinCacheHeadroomMs ?: 0L) >= 5_000L)
     }
 
     private fun feedThroughputWindows(

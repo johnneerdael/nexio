@@ -145,17 +145,55 @@ class DebridBenchmarkSessionRunner internal constructor(
 }
 
 private fun DebridBenchmarkTransportProfile.withDerivedDecisionMetrics(): DebridBenchmarkTransportProfile {
-    val safeBudgetMbps = if (sustained.actionable) {
+    val startupBudgetMbps = if (sustained.actionable) {
         sustained.p10ThroughputMbps?.times(0.85)
+    } else {
+        null
+    }
+    val steadyStateBudgetMbps = if (sustained.actionable) {
+        deriveSteadyStateBudgetMbps(this, startupBudgetMbps)
     } else {
         null
     }
     return copy(
         decision = DebridBenchmarkTransportDecisionMetrics(
-            safeSustainedBudgetMbps = safeBudgetMbps,
+            safeSustainedBudgetMbps = steadyStateBudgetMbps,
+            startupSafeBudgetMbps = startupBudgetMbps,
+            steadyStateSafeBudgetMbps = steadyStateBudgetMbps,
             actionable = sustained.actionable
         )
     )
+}
+
+private fun deriveSteadyStateBudgetMbps(
+    profile: DebridBenchmarkTransportProfile,
+    startupBudgetMbps: Double?
+): Double? {
+    val sustained = profile.sustained
+    val baseline = listOfNotNull(
+        sustained.steadyStateReferenceMbps,
+        sustained.p50ThroughputMbps,
+        sustained.averageThroughputMbps
+    ).minOrNull() ?: return startupBudgetMbps
+
+    if (profile.configSnapshot?.useParallelConnections != true) {
+        return startupBudgetMbps ?: baseline
+    }
+
+    var penalty = 0.0
+    penalty += (sustained.cacheAbsorbableDeficitCount ?: 0) * 0.02
+    penalty += (sustained.cacheDrainingDeficitCount ?: 0) * 0.12
+    penalty += sustained.recoverableFailureCount * 0.03
+    penalty += sustained.recoverableTimeoutCount * 0.04
+    penalty += when {
+        (sustained.maxReadGapMs ?: 0L) > 8_000L -> 0.18
+        (sustained.maxReadGapMs ?: 0L) > 3_000L -> 0.08
+        else -> 0.0
+    }
+    penalty += ((sustained.throughputCv ?: 0.0) - 0.12).coerceAtLeast(0.0) * 0.75
+    penalty = penalty.coerceIn(0.0, 0.45)
+
+    return baseline * (1.0 - penalty)
 }
 
 private fun DebridBenchmarkTransportProfile.isActionableForAutoplay(): Boolean {

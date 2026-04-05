@@ -17,9 +17,6 @@ import com.nexio.tv.core.stream.StreamRequestContext
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.player.DolbyVisionAutoPlayGate
 import com.nexio.tv.core.player.DolbyVisionAutoPlayGateResult
-import com.nexio.tv.core.player.DolbyVisionProfileProbeResult
-import com.nexio.tv.core.player.DolbyVisionProfileProbeStatus
-import com.nexio.tv.core.player.FfmpegDolbyVisionProfileProbe
 import com.nexio.tv.core.player.supportsDolbyVisionDisplay
 import com.nexio.tv.core.player.StreamAutoPlaySelector
 import com.nexio.tv.data.local.PlayerPreference
@@ -51,7 +48,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -76,10 +72,6 @@ private const val TAG = "StreamScreenViewModel"
 private const val EMBEDDED_STREAM_GROUP_NAME = "Embedded Streams"
 private const val EMBEDDED_STREAM_FALLBACK_NAME = "Embed Stream"
 private const val NO_STREAMS_EMPTY_STATE_DELAY_MS = 10_000L
-private const val ENABLE_BENCHMARK_TOP5_FFPROBE_RESCORING = true
-private const val TOP_MOVIE_FFPROBE_COUNT = 5
-private const val TOP_MOVIE_FFPROBE_TOTAL_TIMEOUT_MS = 8_000L
-
 @HiltViewModel
 class StreamScreenViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -112,7 +104,6 @@ class StreamScreenViewModel @Inject constructor(
     private val shadowAutoPlayReplayCoordinator =
         ShadowAutoPlayReplayCoordinator(benchmarkAwareStreamScorer)
     private val dolbyVisionAutoPlayGate = DolbyVisionAutoPlayGate()
-    private val ffmpegDolbyVisionProfileProbe = FfmpegDolbyVisionProfileProbe()
     private val noStreamsGateController = NoStreamsGateController(
         scope = viewModelScope,
         delayMs = NO_STREAMS_EMPTY_STATE_DELAY_MS
@@ -1036,7 +1027,7 @@ class StreamScreenViewModel @Inject constructor(
         val candidateItems = organizedStreams.filter { item -> item.stream in autoPlayCandidates }
         if (candidateItems.isEmpty()) return null
 
-        val event = runMovieTopBitrateFfprobeRescoreIfEnabled(
+        val event = benchmarkAwareStreamScorer.score(
             request = request,
             streams = candidateItems,
             benchmarkSessions = benchmarkSessions,
@@ -1077,7 +1068,7 @@ class StreamScreenViewModel @Inject constructor(
         )
         if (eligibleStreams.isEmpty()) return null
 
-        val event = runMovieTopBitrateFfprobeRescoreIfEnabled(
+        val event = benchmarkAwareStreamScorer.score(
             request = request,
             streams = eligibleStreams,
             benchmarkSessions = benchmarkSessions,
@@ -1117,179 +1108,6 @@ class StreamScreenViewModel @Inject constructor(
         )
     }
 
-    private suspend fun runMovieTopBitrateFfprobeRescoreIfEnabled(
-        request: ShadowRequestContext,
-        streams: List<StreamCardModel>,
-        benchmarkSessions: Map<DebridBenchmarkProvider, DebridBenchmarkResult>,
-        activeTransportMode: DebridBenchmarkTransportMode
-    ): com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionEvent {
-        val baseline = benchmarkAwareStreamScorer.score(
-            request = request,
-            streams = streams,
-            benchmarkSessions = benchmarkSessions,
-            activeTransportMode = activeTransportMode
-        )
-        if (!ENABLE_BENCHMARK_TOP5_FFPROBE_RESCORING) return baseline
-        if (!request.contentType.equals("movie", ignoreCase = true)) return baseline
-        if (baseline.winners.isEmpty()) return baseline
-
-        val topMovieWinners = baseline.winners
-            .sortedByDescending { it.breakdown.averageBitrateMbps }
-            .take(TOP_MOVIE_FFPROBE_COUNT)
-        if (topMovieWinners.isEmpty()) return baseline
-
-        val streamByKey = streams.associateBy { streamCard ->
-            streamCard.stream.wrappedOriginalStreamKey ?: streamCard.parsed.exactDuplicateKey
-        }
-        val probeResultsByKey = probeTopMovieWinners(
-            topMovieWinners = topMovieWinners,
-            streamByKey = streamByKey
-        )
-        if (probeResultsByKey.isEmpty()) return baseline
-
-        val displaySupportsDolbyVision = supportsDolbyVisionDisplay(context)
-        val rejectDv5Keys = if (displaySupportsDolbyVision) {
-            emptySet()
-        } else {
-            probeResultsByKey.entries
-                .filter { (_, result) ->
-                    result.status == DolbyVisionProfileProbeStatus.DETECTED &&
-                        result.profileNumber == 5
-                }
-                .mapTo(mutableSetOf()) { it.key }
-        }
-
-        val rescoredCandidates = streams
-            .filterNot { candidate ->
-                val key = candidate.stream.wrappedOriginalStreamKey ?: candidate.parsed.exactDuplicateKey
-                key in rejectDv5Keys
-            }
-            .map { candidate ->
-                val key = candidate.stream.wrappedOriginalStreamKey ?: candidate.parsed.exactDuplicateKey
-                val probeResult = probeResultsByKey[key] ?: return@map candidate
-                applyFfprobeMetadataOverride(candidate, probeResult)
-            }
-        if (rescoredCandidates.isEmpty()) {
-            Log.i(
-                TAG,
-                "AUTOPLAY_MOVIE_TOP5_FFPROBE_RESCORING all_candidates_rejected dv5RejectCount=${rejectDv5Keys.size}"
-            )
-            return baseline
-        }
-
-        val rescored = benchmarkAwareStreamScorer.score(
-            request = request,
-            streams = rescoredCandidates,
-            benchmarkSessions = benchmarkSessions,
-            activeTransportMode = activeTransportMode
-        )
-        Log.i(
-            TAG,
-            "AUTOPLAY_MOVIE_TOP5_FFPROBE_RESCORING applied=true " +
-                "probed=${probeResultsByKey.size} dv5Rejected=${rejectDv5Keys.size} " +
-                "baselineSelected=${baseline.selected?.streamKey ?: "none"} " +
-                "rescoredSelected=${rescored.selected?.streamKey ?: "none"}"
-        )
-        return rescored
-    }
-
-    private suspend fun probeTopMovieWinners(
-        topMovieWinners: List<com.nexio.tv.data.repository.benchmark.ShadowStreamDecision>,
-        streamByKey: Map<String, StreamCardModel>
-    ): Map<String, DolbyVisionProfileProbeResult> = coroutineScope {
-        val deferred = topMovieWinners.mapNotNull { winner ->
-            val key = winner.streamKey
-            val item = streamByKey[key] ?: return@mapNotNull null
-            val url = item.stream.getStreamUrl()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            async(Dispatchers.IO) {
-                key to ffmpegDolbyVisionProfileProbe.probe(
-                    context = context,
-                    url = url,
-                    headers = item.stream.behaviorHints?.proxyHeaders?.request,
-                    filename = item.stream.behaviorHints?.filename
-                )
-            }
-        }
-        if (deferred.isEmpty()) return@coroutineScope emptyMap()
-
-        val results = LinkedHashMap<String, DolbyVisionProfileProbeResult>()
-        withTimeoutOrNull(TOP_MOVIE_FFPROBE_TOTAL_TIMEOUT_MS) {
-            deferred.forEach { probe ->
-                val (key, result) = probe.await()
-                results[key] = result
-            }
-        }
-        deferred.forEach { probe ->
-            if (!probe.isCompleted) {
-                probe.cancel()
-            }
-        }
-        results
-    }
-
-    private fun applyFfprobeMetadataOverride(
-        candidate: StreamCardModel,
-        probeResult: DolbyVisionProfileProbeResult
-    ): StreamCardModel {
-        val mappedVideoCodec = mapFfprobeVideoCodecToParserEncode(probeResult.videoCodec)
-        val mappedAudioTags = mapFfprobeAudioCodecToParserAudioTags(probeResult.audioCodec)
-        val mappedVisualTags = mapFfprobeHdrToParserVisualTags(probeResult)
-        val overrideApplied =
-            mappedVideoCodec != null ||
-                mappedAudioTags.isNotEmpty() ||
-                mappedVisualTags.isNotEmpty()
-        if (!overrideApplied) return candidate
-
-        val parsed = candidate.parsed.copy(
-            encode = mappedVideoCodec,
-            audioTags = mappedAudioTags,
-            visualTags = mappedVisualTags
-        )
-        return candidate.copy(parsed = parsed)
-    }
-
-    private fun mapFfprobeVideoCodecToParserEncode(videoCodec: String?): String? {
-        return when (videoCodec?.lowercase(Locale.US)) {
-            "hevc" -> "HEVC"
-            "h264", "avc" -> "H264"
-            "av1" -> "AV1"
-            "vp9" -> "VP9"
-            else -> videoCodec?.takeIf { it.isNotBlank() }?.uppercase(Locale.US)
-        }
-    }
-
-    private fun mapFfprobeAudioCodecToParserAudioTags(audioCodec: String?): List<String> {
-        return when (audioCodec?.lowercase(Locale.US)) {
-            "truehd" -> listOf("TrueHD")
-            "eac3" -> listOf("EAC3")
-            "ac3" -> listOf("AC3")
-            "dts" -> listOf("DTS")
-            "aac" -> listOf("AAC")
-            else -> audioCodec
-                ?.takeIf { it.isNotBlank() }
-                ?.let { listOf(it.uppercase(Locale.US)) }
-                ?: emptyList()
-        }
-    }
-
-    private fun mapFfprobeHdrToParserVisualTags(
-        probeResult: DolbyVisionProfileProbeResult
-    ): List<String> {
-        val tags = mutableListOf<String>()
-        val hdrType = probeResult.hdrType?.lowercase(Locale.US)
-        if (probeResult.status == DolbyVisionProfileProbeStatus.DETECTED) {
-            tags += "DV"
-        } else if (hdrType == "dolbyvision" || hdrType == "dolby_vision") {
-            tags += "DV"
-        }
-        when (hdrType) {
-            "hdr10" -> tags += "HDR10"
-            "hdr10+" -> tags += "HDR10+"
-            "hlg" -> tags += "HLG"
-        }
-        return tags.distinct()
-    }
-
     private fun buildStreamPlaybackInfo(
         item: StreamCardModel,
         nonDolbyVisionFallback: StreamCardModel? = null
@@ -1322,7 +1140,7 @@ class StreamScreenViewModel @Inject constructor(
             filename = stream.behaviorHints?.filename,
             videoHash = stream.behaviorHints?.videoHash,
             videoSize = stream.behaviorHints?.videoSize,
-            streamKey = stream.wrappedOriginalStreamKey,
+            streamKey = stream.wrappedOriginalStreamKey ?: item.parsed.exactDuplicateKey,
             isWebDl = item.parsed.quality.equals("WEB-DL", ignoreCase = true),
             isDolbyVisionCandidate = item.parsed.visualTags.any { tag ->
                 val normalized = tag.lowercase()
@@ -1330,7 +1148,7 @@ class StreamScreenViewModel @Inject constructor(
             },
             autoPlayNonDolbyVisionFallback = nonDolbyVisionFallback?.let { fallback ->
                 AutoPlayStreamAlternative(
-                    streamKey = fallback.stream.wrappedOriginalStreamKey,
+                    streamKey = fallback.stream.wrappedOriginalStreamKey ?: fallback.parsed.exactDuplicateKey,
                     url = fallback.stream.getStreamUrl(),
                     streamName = fallback.stream.name ?: fallback.stream.addonName ?: "Fallback",
                     headers = fallback.stream.behaviorHints?.proxyHeaders?.request,

@@ -8,9 +8,21 @@ import android.view.Display
 import com.nexio.tv.ui.screens.stream.AutoPlayStreamAlternative
 import com.nexio.tv.ui.screens.stream.StreamPlaybackInfo
 import androidx.media3.decoder.ffmpeg.FfmpegLibrary
+import com.google.gson.JsonParser
+import com.nexio.tv.data.repository.benchmark.BenchmarkAwareStreamScoringConfig
+import com.nexio.tv.data.repository.benchmark.DeviceCapabilitySnapshot
+import com.nexio.tv.data.repository.benchmark.DeviceCapabilitySnapshotProvider
+import com.nexio.tv.data.repository.benchmark.DeviceHdrType
+import com.nexio.tv.data.repository.benchmark.ShadowAudioTier
+import com.nexio.tv.data.repository.benchmark.ShadowHdrTier
+import com.nexio.tv.data.repository.benchmark.ShadowSupportLevel
+import com.nexio.tv.data.repository.benchmark.ShadowVideoCodecTier
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 private const val DV_AUTOPLAY_TAG = "DvAutoPlayGate"
 private const val DV_AUTOPLAY_PROBE_TIMEOUT_MS = 5_000L
@@ -110,6 +122,8 @@ interface DolbyVisionProfileProbe {
 interface NativeDolbyVisionProfileBackend {
     fun probe(url: String, requestHeadersBlob: String?): Int
     fun probeMetadataBlob(url: String, requestHeadersBlob: String?): String? = null
+    fun probeBlob(url: String, requestHeadersBlob: String?): String? = null
+    fun probeStreamMetadataJson(url: String, requestHeadersBlob: String?): String? = null
 }
 
 data class DolbyVisionAutoPlayGateResult(
@@ -128,7 +142,8 @@ class DolbyVisionAutoPlayGate(
         context: Context,
         playbackInfo: StreamPlaybackInfo,
         autoPlay: Boolean,
-        displaySupportsDolbyVision: Boolean
+        displaySupportsDolbyVision: Boolean,
+        precomputedProbeResult: DolbyVisionProfileProbeResult? = null
     ): DolbyVisionAutoPlayGateResult {
         if (!autoPlay) {
             return finalizeResult(
@@ -169,21 +184,36 @@ class DolbyVisionAutoPlayGate(
             )
         }
 
-        logEvent(
-            event = "DV_PROFILE_PROBE_STARTED",
-            details = buildString {
-                append("stream=")
-                append(playbackInfo.streamKey ?: "unknown")
-                append(" timeoutMs=")
-                append(probeTimeoutMs)
+        val probeResult = precomputedProbeResult ?: run {
+            logEvent(
+                event = "DV_PROFILE_PROBE_STARTED",
+                details = buildString {
+                    append("stream=")
+                    append(playbackInfo.streamKey ?: "unknown")
+                    append(" timeoutMs=")
+                    append(probeTimeoutMs)
+                }
+            )
+            withTimeoutOrNull(probeTimeoutMs) {
+                probe.probe(
+                    context = context,
+                    url = url,
+                    headers = playbackInfo.headers,
+                    filename = playbackInfo.filename
+                )
             }
-        )
-        val probeResult = withTimeoutOrNull(probeTimeoutMs) {
-            probe.probe(
-                context = context,
-                url = url,
-                headers = playbackInfo.headers,
-                filename = playbackInfo.filename
+        }
+        if (precomputedProbeResult != null) {
+            logEvent(
+                event = "DV_PROFILE_PROBE_REUSED",
+                details = buildString {
+                    append("stream=")
+                    append(playbackInfo.streamKey ?: "unknown")
+                    append(" status=")
+                    append(precomputedProbeResult.status)
+                    append(" profile=")
+                    append(precomputedProbeResult.profileLabel ?: "none")
+                }
             )
         }
         if (probeResult == null) {
@@ -357,8 +387,23 @@ class FfmpegDolbyVisionProfileProbe(
         override fun probeMetadataBlob(url: String, requestHeadersBlob: String?): String? {
             return FfmpegLibrary.probeDolbyVisionMetadataBlob(url, requestHeadersBlob)
         }
+
+        override fun probeBlob(url: String, requestHeadersBlob: String?): String? {
+            return FfmpegLibrary.probeDolbyVisionProbeBlob(url, requestHeadersBlob)
+        }
+
+        override fun probeStreamMetadataJson(url: String, requestHeadersBlob: String?): String? {
+            return FfmpegLibrary.probeDolbyVisionStreamMetadataJson(url, requestHeadersBlob)
+        }
     }
 ) : DolbyVisionProfileProbe {
+
+    companion object {
+        // The bundled FFmpeg network/crypto probe path is not safe to enter concurrently on all
+        // Android builds, so native probe calls are serialized even when callers dispatch them
+        // asynchronously.
+        private val nativeProbeMutex = Mutex()
+    }
 
     override suspend fun probe(
         context: Context,
@@ -368,33 +413,18 @@ class FfmpegDolbyVisionProfileProbe(
     ): DolbyVisionProfileProbeResult = withContext(Dispatchers.IO) {
         runCatching {
             val headerBlob = headers.toHeaderBlob()
-            val metadata = parseNativeDolbyVisionMetadataBlob(
-                backend.probeMetadataBlob(url, headerBlob)
-            )
-            when (val profile = backend.probe(url, headerBlob)) {
-                -3 -> DolbyVisionProfileProbeResult.failed("ffmpeg_probe_failed").copy(
-                    videoCodec = metadata.videoCodec,
-                    audioCodec = metadata.audioCodec,
-                    hdrType = metadata.hdrType
-                )
-                -2 -> DolbyVisionProfileProbeResult.unknown(
-                    videoCodec = metadata.videoCodec,
-                    audioCodec = metadata.audioCodec,
-                    hdrType = metadata.hdrType
-                )
-                -1 -> DolbyVisionProfileProbeResult.notDolbyVision(
-                    videoCodec = metadata.videoCodec,
-                    audioCodec = metadata.audioCodec,
-                    hdrType = metadata.hdrType
-                )
-                else -> DolbyVisionProfileProbeResult.detected(
-                    profileLabel = "dv_profile_$profile",
-                    profileNumber = profile,
-                    videoCodec = metadata.videoCodec,
-                    audioCodec = metadata.audioCodec,
-                    hdrType = metadata.hdrType
-                )
+            val deviceSnapshot = runCatching { context.applicationContext }
+                .getOrNull()
+                ?.let { appContext ->
+                    runCatching { DeviceCapabilitySnapshotProvider(appContext).capture() }.getOrNull()
+                }
+            val metadataJson = nativeProbeMutex.withLock {
+                backend.probeStreamMetadataJson(url, headerBlob)
             }
+            parseStreamMetadataProbeResult(
+                json = metadataJson,
+                device = deviceSnapshot
+            ) ?: DolbyVisionProfileProbeResult.failed("ffprobe_probe_failed")
         }.getOrElse { error ->
             Log.w(DV_AUTOPLAY_TAG, "FFmpeg Dolby Vision probe failed: ${error.message}")
             DolbyVisionProfileProbeResult.failed(error.message)
@@ -406,6 +436,15 @@ private data class NativeDolbyVisionMetadata(
     val videoCodec: String? = null,
     val audioCodec: String? = null,
     val hdrType: String? = null
+)
+
+private data class StreamProbeStreamMetadata(
+    val codecType: String,
+    val codecName: String?,
+    val colorTransfer: String?,
+    val colorPrimaries: String?,
+    val dvProfile: Int?,
+    val hdr10Plus: Boolean
 )
 
 private fun parseNativeDolbyVisionMetadataBlob(blob: String?): NativeDolbyVisionMetadata {
@@ -424,6 +463,280 @@ private fun parseNativeDolbyVisionMetadataBlob(blob: String?): NativeDolbyVision
         audioCodec = entries["audio"],
         hdrType = entries["hdr"]
     )
+}
+
+private fun parseNativeDolbyVisionProbeBlob(blob: String?): DolbyVisionProfileProbeResult {
+    if (blob.isNullOrBlank()) return DolbyVisionProfileProbeResult.failed("empty_probe_blob")
+    val entries = blob.split(';')
+        .mapNotNull { entry ->
+            val delimiter = entry.indexOf('=')
+            if (delimiter <= 0 || delimiter == entry.lastIndex) return@mapNotNull null
+            val key = entry.substring(0, delimiter).trim()
+            val value = entry.substring(delimiter + 1).trim()
+            if (key.isEmpty() || value.isEmpty()) null else key to value
+        }
+        .toMap()
+    val videoCodec = entries["video"]?.takeUnless { it == "unknown" }
+    val audioCodec = entries["audio"]?.takeUnless { it == "unknown" }
+    val hdrType = entries["hdr"]?.takeUnless { it == "unknown" }
+    return when (entries["status"]) {
+        "detected" -> {
+            val profileNumber = entries["profile"]?.toIntOrNull()
+            if (profileNumber == null) {
+                DolbyVisionProfileProbeResult.failed("invalid_profile_blob").copy(
+                    videoCodec = videoCodec,
+                    audioCodec = audioCodec,
+                    hdrType = hdrType
+                )
+            } else {
+                DolbyVisionProfileProbeResult.detected(
+                    profileLabel = "dv_profile_$profileNumber",
+                    profileNumber = profileNumber,
+                    videoCodec = videoCodec,
+                    audioCodec = audioCodec,
+                    hdrType = hdrType
+                )
+            }
+        }
+        "not_dolby_vision" -> DolbyVisionProfileProbeResult.notDolbyVision(
+            videoCodec = videoCodec,
+            audioCodec = audioCodec,
+            hdrType = hdrType
+        )
+        "unknown" -> DolbyVisionProfileProbeResult.unknown(
+            videoCodec = videoCodec,
+            audioCodec = audioCodec,
+            hdrType = hdrType
+        )
+        else -> DolbyVisionProfileProbeResult.failed(entries["error"]).copy(
+            videoCodec = videoCodec,
+            audioCodec = audioCodec,
+            hdrType = hdrType
+        )
+    }
+}
+
+private fun parseStreamMetadataProbeResult(
+    json: String?,
+    device: DeviceCapabilitySnapshot?
+): DolbyVisionProfileProbeResult? {
+    if (json.isNullOrBlank()) return null
+    val streams = runCatching {
+        JsonParser.parseString(json)
+            .asJsonObject
+            .getAsJsonArray("streams")
+            ?.mapNotNull { element ->
+                val obj = element?.asJsonObject ?: return@mapNotNull null
+                StreamProbeStreamMetadata(
+                    codecType = obj.get("codec_type")?.asString ?: return@mapNotNull null,
+                    codecName = obj.get("codec_name")?.asString,
+                    colorTransfer = obj.get("color_transfer")?.asString,
+                    colorPrimaries = obj.get("color_primaries")?.asString,
+                    dvProfile = obj.get("dv_profile")?.asInt,
+                    hdr10Plus = obj.get("hdr10_plus")?.asBoolean ?: false
+                )
+            }
+            .orEmpty()
+    }.getOrNull() ?: return null
+
+    val selectedVideo = selectBestVideoStream(streams, device) ?: return null
+    val selectedAudio = selectBestAudioStream(streams, device)
+
+    return if (selectedVideo.stream.dvProfile != null) {
+        DolbyVisionProfileProbeResult.detected(
+            profileLabel = "dv_profile_${selectedVideo.stream.dvProfile}",
+            profileNumber = selectedVideo.stream.dvProfile,
+            videoCodec = selectedVideo.stream.codecName,
+            audioCodec = selectedAudio?.stream?.codecName,
+            hdrType = selectedVideo.selectedHdrTier.toProbeHdrType()
+        )
+    } else {
+        DolbyVisionProfileProbeResult.notDolbyVision(
+            videoCodec = selectedVideo.stream.codecName,
+            audioCodec = selectedAudio?.stream?.codecName,
+            hdrType = selectedVideo.selectedHdrTier.toProbeHdrType()
+        )
+    }
+}
+
+private data class SelectedVideoStream(
+    val stream: StreamProbeStreamMetadata,
+    val selectedHdrTier: ShadowHdrTier
+)
+
+private data class SelectedAudioStream(
+    val stream: StreamProbeStreamMetadata
+)
+
+private fun selectBestVideoStream(
+    streams: List<StreamProbeStreamMetadata>,
+    device: DeviceCapabilitySnapshot?
+): SelectedVideoStream? {
+    val rewards = BenchmarkAwareStreamScoringConfig.default().contentRewards
+    return streams.asSequence()
+        .filter { it.codecType.equals("video", ignoreCase = true) }
+        .map { stream ->
+            val codecTier = resolveProbeVideoCodecTier(stream.codecName, device)
+            val hdrPolicy = resolveProbeHdrPolicy(resolveProbeHdrTier(stream), device)
+            val supported = codecTier != ShadowVideoCodecTier.UNSUPPORTED &&
+                hdrPolicy.second != ShadowSupportLevel.UNSUPPORTED
+            val score = rewards.codec.getValue(codecTier) +
+                if (hdrPolicy.second == ShadowSupportLevel.UNSUPPORTED) 0 else rewards.hdr.getValue(hdrPolicy.first)
+            Triple(SelectedVideoStream(stream, hdrPolicy.first), supported, score)
+        }
+        .sortedWith(
+            compareByDescending<Triple<SelectedVideoStream, Boolean, Int>> { it.second }
+                .thenByDescending { it.third }
+                .thenByDescending { it.first.stream.dvProfile != null }
+        )
+        .map { it.first }
+        .firstOrNull()
+}
+
+private fun selectBestAudioStream(
+    streams: List<StreamProbeStreamMetadata>,
+    device: DeviceCapabilitySnapshot?
+): SelectedAudioStream? {
+    val rewards = BenchmarkAwareStreamScoringConfig.default().contentRewards
+    return streams.asSequence()
+        .filter { it.codecType.equals("audio", ignoreCase = true) }
+        .map { stream ->
+            val tier = resolveProbeAudioTier(stream.codecName)
+            val supported = probeAudioTierSupported(tier, device)
+            val points = rewards.audio.getValue(tier)
+            Triple(SelectedAudioStream(stream), supported, if (supported) points else -points)
+        }
+        .sortedWith(
+            compareByDescending<Triple<SelectedAudioStream, Boolean, Int>> { it.second }
+                .thenByDescending { it.third }
+        )
+        .map { it.first }
+        .firstOrNull()
+}
+
+private fun resolveProbeVideoCodecTier(
+    codecName: String?,
+    device: DeviceCapabilitySnapshot?
+): ShadowVideoCodecTier {
+    val normalized = codecName.orEmpty().lowercase(Locale.US)
+    return when {
+        normalized.contains("av1") -> when {
+            device == null -> ShadowVideoCodecTier.AV1_HW
+            device.videoDecode.av1?.hardwareAccelerated == true -> ShadowVideoCodecTier.AV1_HW
+            device.videoDecode.av1?.softwareOnlyAvailable == true -> ShadowVideoCodecTier.AV1_SW
+            else -> ShadowVideoCodecTier.UNSUPPORTED
+        }
+        normalized.contains("hevc") || normalized.contains("h265") -> when {
+            device == null -> ShadowVideoCodecTier.HEVC_HW
+            device.videoDecode.hevc?.hardwareAccelerated == true -> ShadowVideoCodecTier.HEVC_HW
+            device.videoDecode.hevc?.softwareOnlyAvailable == true -> ShadowVideoCodecTier.HEVC_SW
+            else -> ShadowVideoCodecTier.UNSUPPORTED
+        }
+        normalized.contains("h264") || normalized.contains("avc") -> when {
+            device == null -> ShadowVideoCodecTier.H264_HW
+            device.videoDecode.h264?.hardwareAccelerated == true -> ShadowVideoCodecTier.H264_HW
+            else -> ShadowVideoCodecTier.UNSUPPORTED
+        }
+        normalized.contains("vc1") || normalized.contains("vc-1") || normalized.contains("wvc1") -> ShadowVideoCodecTier.VC1
+        normalized.contains("mpeg2") || normalized.contains("mpeg-2") -> ShadowVideoCodecTier.MPEG2
+        normalized.isBlank() -> ShadowVideoCodecTier.OTHER
+        else -> ShadowVideoCodecTier.OTHER
+    }
+}
+
+private fun resolveProbeHdrTier(stream: StreamProbeStreamMetadata): ShadowHdrTier {
+    return when {
+        stream.dvProfile != null -> ShadowHdrTier.DOLBY_VISION
+        stream.hdr10Plus -> ShadowHdrTier.HDR10_PLUS
+        stream.colorTransfer.equals("arib-std-b67", ignoreCase = true) -> ShadowHdrTier.HLG
+        stream.colorTransfer.equals("smpte2084", ignoreCase = true) &&
+            stream.colorPrimaries.equals("bt2020", ignoreCase = true) -> ShadowHdrTier.HDR10
+        else -> ShadowHdrTier.SDR
+    }
+}
+
+private fun resolveProbeHdrPolicy(
+    originalHdrTier: ShadowHdrTier,
+    device: DeviceCapabilitySnapshot?
+): Pair<ShadowHdrTier, ShadowSupportLevel> {
+    val originalSupport = resolveProbeHdrSupportLevel(originalHdrTier, device)
+    return when (originalHdrTier) {
+        ShadowHdrTier.DOLBY_VISION -> when {
+            originalSupport == ShadowSupportLevel.FULL ->
+                ShadowHdrTier.DOLBY_VISION to ShadowSupportLevel.FULL
+            resolveProbeHdrSupportLevel(ShadowHdrTier.HDR10, device) == ShadowSupportLevel.FULL ->
+                ShadowHdrTier.HDR10 to ShadowSupportLevel.FALLBACK
+            else -> ShadowHdrTier.DOLBY_VISION to ShadowSupportLevel.UNSUPPORTED
+        }
+        ShadowHdrTier.HDR10_PLUS -> when {
+            originalSupport == ShadowSupportLevel.FULL ->
+                ShadowHdrTier.HDR10_PLUS to ShadowSupportLevel.FULL
+            resolveProbeHdrSupportLevel(ShadowHdrTier.HDR10, device) == ShadowSupportLevel.FULL ->
+                ShadowHdrTier.HDR10 to ShadowSupportLevel.FALLBACK
+            else -> ShadowHdrTier.HDR10_PLUS to ShadowSupportLevel.UNSUPPORTED
+        }
+        else -> originalHdrTier to originalSupport
+    }
+}
+
+private fun resolveProbeHdrSupportLevel(
+    hdrTier: ShadowHdrTier,
+    device: DeviceCapabilitySnapshot?
+): ShadowSupportLevel {
+    val hdrTypes = device?.displayHdrTypes ?: return ShadowSupportLevel.FULL
+    return when (hdrTier) {
+        ShadowHdrTier.DOLBY_VISION ->
+            if (DeviceHdrType.DOLBY_VISION in hdrTypes) ShadowSupportLevel.FULL else ShadowSupportLevel.UNSUPPORTED
+        ShadowHdrTier.HDR10_PLUS ->
+            if (DeviceHdrType.HDR10_PLUS in hdrTypes) ShadowSupportLevel.FULL
+            else if (DeviceHdrType.HDR10 in hdrTypes) ShadowSupportLevel.PARTIAL
+            else ShadowSupportLevel.UNSUPPORTED
+        ShadowHdrTier.HDR10 ->
+            if (DeviceHdrType.HDR10 in hdrTypes || DeviceHdrType.HDR10_PLUS in hdrTypes) ShadowSupportLevel.FULL
+            else ShadowSupportLevel.UNSUPPORTED
+        ShadowHdrTier.HLG ->
+            if (DeviceHdrType.HLG in hdrTypes) ShadowSupportLevel.FULL else ShadowSupportLevel.UNSUPPORTED
+        ShadowHdrTier.SDR -> ShadowSupportLevel.FULL
+    }
+}
+
+private fun resolveProbeAudioTier(codecName: String?): ShadowAudioTier {
+    val normalized = codecName.orEmpty().lowercase(Locale.US)
+    return when {
+        normalized.contains("truehd") -> ShadowAudioTier.TRUEHD
+        normalized.contains("eac3") -> ShadowAudioTier.DDP
+        normalized.contains("ac3") -> ShadowAudioTier.AC3
+        normalized == "dts" || normalized.contains("dts") -> ShadowAudioTier.DTS
+        else -> ShadowAudioTier.OTHER
+    }
+}
+
+private fun probeAudioTierSupported(
+    tier: ShadowAudioTier,
+    device: DeviceCapabilitySnapshot?
+): Boolean {
+    val output = device?.audioOutput ?: return true
+    return when (tier) {
+        ShadowAudioTier.TRUEHD_ATMOS -> output.truehd.passthroughLikely
+        ShadowAudioTier.DTSX -> output.dtsx.passthroughLikely
+        ShadowAudioTier.TRUEHD -> output.truehd.passthroughLikely
+        ShadowAudioTier.DTSHD -> output.dtshd.passthroughLikely
+        ShadowAudioTier.DDP_ATMOS -> output.atmos.passthroughLikely || output.eac3.passthroughLikely
+        ShadowAudioTier.DDP -> output.eac3.passthroughLikely
+        ShadowAudioTier.AC3 -> output.ac3.passthroughLikely
+        ShadowAudioTier.DTS -> output.dts.passthroughLikely
+        ShadowAudioTier.OTHER -> true
+    }
+}
+
+private fun ShadowHdrTier.toProbeHdrType(): String {
+    return when (this) {
+        ShadowHdrTier.DOLBY_VISION -> "dolbyvision"
+        ShadowHdrTier.HDR10_PLUS -> "hdr10+"
+        ShadowHdrTier.HDR10 -> "hdr10"
+        ShadowHdrTier.HLG -> "hlg"
+        ShadowHdrTier.SDR -> "sdr"
+    }
 }
 
 class CompositeDolbyVisionProfileProbe(
