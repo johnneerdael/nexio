@@ -237,6 +237,7 @@ data class DebridBenchmarkSustainedMetrics(
     val collectorVersion: Int = 1,
     val samplingMode: String? = null,
     val bucketMs: Long? = null,
+    val decisionWindowMs: Long? = null,
     val averageThroughputMbps: Double? = null,
     val derivedAverageThroughputMbps: Double? = null,
     val actionable: Boolean = true,

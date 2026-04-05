@@ -166,7 +166,7 @@ class BenchmarkAwareScoringCorpusTest {
     }
 
     @Test
-    fun `expanded corpus variant sweep shows pcm heavy variant fails audio fallback case`() {
+    fun `expanded corpus variant sweep keeps pairwise mismatch trace for tv hevc vs av1 scenario`() {
         val corpusDir = copySampleCorpusToTempDir()
         val corpus = BenchmarkAwareScoringCorpusLoader.load(corpusDir)
 
@@ -178,7 +178,8 @@ class BenchmarkAwareScoringCorpusTest {
 
         assertEquals("default.json", result.winner?.name)
         assertTrue(markdown.contains("## Variant: pcm-heavy.json"))
-        assertTrue(markdown.contains("audio-fallback-1"))
+        assertTrue(markdown.contains("pairwise_mismatch"))
+        assertTrue(markdown.contains("tv-hevc-ddp-vs-av1-webdl"))
     }
 
     @Test

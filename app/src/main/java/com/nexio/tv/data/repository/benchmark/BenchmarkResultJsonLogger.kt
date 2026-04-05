@@ -391,6 +391,7 @@ private fun DebridBenchmarkTransportProfile.toJsonObject(): JsonObject {
             addProperty("collectorVersion", sustained.collectorVersion)
             sustained.samplingMode?.let { addProperty("samplingMode", it) }
             sustained.bucketMs?.let { addProperty("bucketMs", it) }
+            sustained.decisionWindowMs?.let { addProperty("decisionWindowMs", it) }
             sustained.averageThroughputMbps?.let { addProperty("averageThroughputMbps", it) }
             sustained.derivedAverageThroughputMbps?.let { addProperty("derivedAverageThroughputMbps", it) }
             addProperty("actionable", sustained.actionable)

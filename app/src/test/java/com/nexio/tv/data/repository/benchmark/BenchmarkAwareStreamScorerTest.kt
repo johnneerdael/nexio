@@ -316,7 +316,7 @@ class BenchmarkAwareStreamScorerTest {
     }
 
     @Test
-    fun `active transport mode direct still resolves to optimized transport`() {
+    fun `active transport mode direct resolves to direct transport`() {
         val event = scorer.score(
             request = request(runtimeMinutes = 120),
             streams = listOf(streamCard(streamKey = "rd_stream", providerId = "RD")),
@@ -330,11 +330,31 @@ class BenchmarkAwareStreamScorerTest {
             activeTransportMode = DebridBenchmarkTransportMode.DIRECT
         )
 
-        assertEquals(DebridBenchmarkTransportMode.OPTIMIZED, event.selected?.transport)
+        assertEquals(DebridBenchmarkTransportMode.DIRECT, event.selected?.transport)
     }
 
     @Test
-    fun `scorer uses optimized derived decision metrics as autoplay truth over raw sustained p10`() {
+    fun `optimized only benchmark payload remains usable for scoring without direct fallback`() {
+        val benchmark = benchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            optimizedP10Mbps = 210.0
+        ).copy(
+            direct = null,
+            comparison = null
+        )
+
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(streamCard(streamKey = "rd_stream", providerId = "RD")),
+            benchmarkSessions = mapOf(DebridBenchmarkProvider.REAL_DEBRID to benchmark)
+        )
+
+        assertEquals(DebridBenchmarkTransportMode.OPTIMIZED, event.selected?.transport)
+        assertEquals(178.5, event.selected?.safeBudgetMbps ?: 0.0, 0.0)
+    }
+
+    @Test
+    fun `scorer can select direct transport when optimized decision budget is insufficient`() {
         val event = scorer.score(
             request = request(runtimeMinutes = 120),
             streams = listOf(streamCard(streamKey = "rd_stream", providerId = "RD")),
@@ -349,18 +369,12 @@ class BenchmarkAwareStreamScorerTest {
             )
         )
 
-        assertNull(event.selected)
-        assertEquals(
-            listOf(
-                ShadowRejectReason.INSUFFICIENT_TRANSPORT_BUDGET,
-                ShadowRejectReason.NO_ELIGIBLE_TRANSPORT
-            ),
-            event.rejected.single { it.streamKey == "rd_stream" }.reasons
-        )
+        assertEquals("rd_stream", event.selected?.streamKey)
+        assertEquals(DebridBenchmarkTransportMode.DIRECT, event.selected?.transport)
     }
 
     @Test
-    fun `atmos tagged streams can score equivalently when ddp passthrough is available`() {
+    fun `ddp atmos outranks truehd atmos when truehd passthrough is unavailable`() {
         val benchmark = benchmarkResult(
             provider = DebridBenchmarkProvider.REAL_DEBRID,
             device = deviceSnapshot(
@@ -395,8 +409,9 @@ class BenchmarkAwareStreamScorerTest {
 
         val truehd = event.winners.single { it.streamKey == "truehd_pcm" }
         val ddp = event.winners.single { it.streamKey == "ddp_atmos" }
-        assertEquals(truehd.contentQualityScore, ddp.contentQualityScore)
-        assertEquals(truehd.finalScore, ddp.finalScore)
+        assertTrue(ddp.contentQualityScore > truehd.contentQualityScore)
+        assertTrue(ddp.finalScore > truehd.finalScore)
+        assertEquals("ddp_atmos", event.selected?.streamKey)
     }
 
     @Test

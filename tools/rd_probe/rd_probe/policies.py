@@ -9,7 +9,7 @@ class ProbePolicy:
     blocked_priority_retry: bool = False
     ahead_limit_chunks: int | None = None
     max_blocked_chunk_retries: int = 1
-    retryable_error_kinds: tuple[str, ...] = ("url_error", "inactivity_timeout")
+    retryable_error_kinds: tuple[str, ...] = ("url_error", "inactivity_timeout", "connection_reset", "error")
     force_fresh_connection_on_retry: bool = False
     retry_backoff_ms: int = 0
 

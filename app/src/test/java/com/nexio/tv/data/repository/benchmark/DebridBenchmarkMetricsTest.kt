@@ -205,7 +205,7 @@ class DebridBenchmarkMetricsTest {
 
         assertEquals(693.76, sustained.averageThroughputMbps ?: 0.0, 0.00001)
         assertEquals(481.28, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(481.28, sustained.peakThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(800.0, sustained.peakThroughputMbps ?: 0.0, 0.00001)
     }
 
     @Test

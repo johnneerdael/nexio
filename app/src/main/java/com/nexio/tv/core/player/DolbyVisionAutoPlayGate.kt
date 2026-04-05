@@ -2,22 +2,15 @@ package com.nexio.tv.core.player
 
 import android.content.Context
 import android.hardware.display.DisplayManager
-import android.media.MediaExtractor
 import android.os.Build
 import android.util.Log
 import android.view.Display
-import androidx.media3.common.util.ParsableByteArray
-import androidx.media3.container.DolbyVisionConfig
 import com.nexio.tv.ui.screens.stream.AutoPlayStreamAlternative
 import com.nexio.tv.ui.screens.stream.StreamPlaybackInfo
 import androidx.media3.decoder.ffmpeg.FfmpegLibrary
-import io.github.anilbeesetti.nextlib.mediainfo.MediaInfo
-import io.github.anilbeesetti.nextlib.mediainfo.MediaInfoBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
-import java.net.URLDecoder
-import java.util.Locale
 
 private const val DV_AUTOPLAY_TAG = "DvAutoPlayGate"
 private const val DV_AUTOPLAY_PROBE_TIMEOUT_MS = 5_000L
@@ -47,23 +40,53 @@ data class DolbyVisionProfileProbeResult(
     val status: DolbyVisionProfileProbeStatus,
     val profileLabel: String? = null,
     val profileNumber: Int? = null,
+    val videoCodec: String? = null,
+    val audioCodec: String? = null,
+    val hdrType: String? = null,
     val error: String? = null
 ) {
     companion object {
-        fun detected(profileLabel: String, profileNumber: Int): DolbyVisionProfileProbeResult {
+        fun detected(
+            profileLabel: String,
+            profileNumber: Int,
+            videoCodec: String? = null,
+            audioCodec: String? = null,
+            hdrType: String? = null
+        ): DolbyVisionProfileProbeResult {
             return DolbyVisionProfileProbeResult(
                 status = DolbyVisionProfileProbeStatus.DETECTED,
                 profileLabel = profileLabel,
-                profileNumber = profileNumber
+                profileNumber = profileNumber,
+                videoCodec = videoCodec,
+                audioCodec = audioCodec,
+                hdrType = hdrType
             )
         }
 
-        fun notDolbyVision(): DolbyVisionProfileProbeResult {
-            return DolbyVisionProfileProbeResult(status = DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION)
+        fun notDolbyVision(
+            videoCodec: String? = null,
+            audioCodec: String? = null,
+            hdrType: String? = null
+        ): DolbyVisionProfileProbeResult {
+            return DolbyVisionProfileProbeResult(
+                status = DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION,
+                videoCodec = videoCodec,
+                audioCodec = audioCodec,
+                hdrType = hdrType
+            )
         }
 
-        fun unknown(): DolbyVisionProfileProbeResult {
-            return DolbyVisionProfileProbeResult(status = DolbyVisionProfileProbeStatus.UNKNOWN)
+        fun unknown(
+            videoCodec: String? = null,
+            audioCodec: String? = null,
+            hdrType: String? = null
+        ): DolbyVisionProfileProbeResult {
+            return DolbyVisionProfileProbeResult(
+                status = DolbyVisionProfileProbeStatus.UNKNOWN,
+                videoCodec = videoCodec,
+                audioCodec = audioCodec,
+                hdrType = hdrType
+            )
         }
 
         fun failed(error: String? = null): DolbyVisionProfileProbeResult {
@@ -84,8 +107,9 @@ interface DolbyVisionProfileProbe {
     ): DolbyVisionProfileProbeResult
 }
 
-fun interface NativeDolbyVisionProfileBackend {
+interface NativeDolbyVisionProfileBackend {
     fun probe(url: String, requestHeadersBlob: String?): Int
+    fun probeMetadataBlob(url: String, requestHeadersBlob: String?): String? = null
 }
 
 data class DolbyVisionAutoPlayGateResult(
@@ -303,6 +327,12 @@ class DolbyVisionAutoPlayGate(
                 append(probeResult.profileLabel ?: "none")
                 append(" profileNumber=")
                 append(probeResult.profileNumber?.toString() ?: "none")
+                append(" videoCodec=")
+                append(probeResult.videoCodec ?: "unknown")
+                append(" audioCodec=")
+                append(probeResult.audioCodec ?: "unknown")
+                append(" hdrType=")
+                append(probeResult.hdrType ?: "unknown")
                 probeResult.error?.let {
                     append(" error=")
                     append(it)
@@ -323,6 +353,10 @@ class FfmpegDolbyVisionProfileProbe(
         override fun probe(url: String, requestHeadersBlob: String?): Int {
             return FfmpegLibrary.probeDolbyVisionProfile(url, requestHeadersBlob)
         }
+
+        override fun probeMetadataBlob(url: String, requestHeadersBlob: String?): String? {
+            return FfmpegLibrary.probeDolbyVisionMetadataBlob(url, requestHeadersBlob)
+        }
     }
 ) : DolbyVisionProfileProbe {
 
@@ -333,13 +367,32 @@ class FfmpegDolbyVisionProfileProbe(
         filename: String?
     ): DolbyVisionProfileProbeResult = withContext(Dispatchers.IO) {
         runCatching {
-            when (val profile = backend.probe(url, headers.toHeaderBlob())) {
-                -3 -> DolbyVisionProfileProbeResult.failed("ffmpeg_probe_failed")
-                -2 -> DolbyVisionProfileProbeResult.unknown()
-                -1 -> DolbyVisionProfileProbeResult.notDolbyVision()
+            val headerBlob = headers.toHeaderBlob()
+            val metadata = parseNativeDolbyVisionMetadataBlob(
+                backend.probeMetadataBlob(url, headerBlob)
+            )
+            when (val profile = backend.probe(url, headerBlob)) {
+                -3 -> DolbyVisionProfileProbeResult.failed("ffmpeg_probe_failed").copy(
+                    videoCodec = metadata.videoCodec,
+                    audioCodec = metadata.audioCodec,
+                    hdrType = metadata.hdrType
+                )
+                -2 -> DolbyVisionProfileProbeResult.unknown(
+                    videoCodec = metadata.videoCodec,
+                    audioCodec = metadata.audioCodec,
+                    hdrType = metadata.hdrType
+                )
+                -1 -> DolbyVisionProfileProbeResult.notDolbyVision(
+                    videoCodec = metadata.videoCodec,
+                    audioCodec = metadata.audioCodec,
+                    hdrType = metadata.hdrType
+                )
                 else -> DolbyVisionProfileProbeResult.detected(
                     profileLabel = "dv_profile_$profile",
-                    profileNumber = profile
+                    profileNumber = profile,
+                    videoCodec = metadata.videoCodec,
+                    audioCodec = metadata.audioCodec,
+                    hdrType = metadata.hdrType
                 )
             }
         }.getOrElse { error ->
@@ -349,11 +402,35 @@ class FfmpegDolbyVisionProfileProbe(
     }
 }
 
+private data class NativeDolbyVisionMetadata(
+    val videoCodec: String? = null,
+    val audioCodec: String? = null,
+    val hdrType: String? = null
+)
+
+private fun parseNativeDolbyVisionMetadataBlob(blob: String?): NativeDolbyVisionMetadata {
+    if (blob.isNullOrBlank()) return NativeDolbyVisionMetadata()
+    val entries = blob.split(';')
+        .mapNotNull { entry ->
+            val delimiter = entry.indexOf('=')
+            if (delimiter <= 0 || delimiter == entry.lastIndex) return@mapNotNull null
+            val key = entry.substring(0, delimiter).trim()
+            val value = entry.substring(delimiter + 1).trim()
+            if (key.isEmpty() || value.isEmpty() || value == "unknown") null else key to value
+        }
+        .toMap()
+    return NativeDolbyVisionMetadata(
+        videoCodec = entries["video"],
+        audioCodec = entries["audio"],
+        hdrType = entries["hdr"]
+    )
+}
+
 class CompositeDolbyVisionProfileProbe(
     private val probes: List<DolbyVisionProfileProbe> = listOf(
-        FfmpegDolbyVisionProfileProbe(),
-        NextLibDolbyVisionProfileProbe()
-    )
+        FfmpegDolbyVisionProfileProbe()
+    ),
+    private val continueAfterUnknown: Boolean = false
 ) : DolbyVisionProfileProbe {
 
     override suspend fun probe(
@@ -375,213 +452,18 @@ class CompositeDolbyVisionProfileProbe(
             when (result.status) {
                 DolbyVisionProfileProbeStatus.DETECTED,
                 DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION -> return result
-                DolbyVisionProfileProbeStatus.UNKNOWN -> if (unknownResult == null) unknownResult = result
+                DolbyVisionProfileProbeStatus.UNKNOWN -> {
+                    if (!continueAfterUnknown) {
+                        return result
+                    }
+                    if (unknownResult == null) unknownResult = result
+                }
                 DolbyVisionProfileProbeStatus.FAILED -> failedResult = result
             }
         }
 
         return unknownResult ?: failedResult ?: DolbyVisionProfileProbeResult.unknown()
     }
-}
-
-class NextLibDolbyVisionProfileProbe : DolbyVisionProfileProbe {
-
-    override suspend fun probe(
-        context: Context,
-        url: String,
-        headers: Map<String, String>?,
-        filename: String?
-    ): DolbyVisionProfileProbeResult = withContext(Dispatchers.IO) {
-        runCatching {
-            val candidates = buildProbeUrlCandidates(url)
-            var notDolbyVisionObserved = false
-            candidates.forEach { candidateUrl ->
-                probeWithMediaInfo(
-                    context = context,
-                    url = candidateUrl,
-                    filename = filename
-                )?.let { result ->
-                    when (result.status) {
-                        DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION -> {
-                            notDolbyVisionObserved = true
-                        }
-                        else -> return@runCatching result
-                    }
-                }
-                probeWithExtractor(
-                    context = context,
-                    url = candidateUrl,
-                    headers = headers
-                )?.let { result ->
-                    when (result.status) {
-                        DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION -> {
-                            notDolbyVisionObserved = true
-                        }
-                        else -> return@runCatching result
-                    }
-                }
-            }
-            if (notDolbyVisionObserved) {
-                DolbyVisionProfileProbeResult.notDolbyVision()
-            } else {
-                DolbyVisionProfileProbeResult.unknown()
-            }
-        }.getOrElse { error ->
-            Log.w(DV_AUTOPLAY_TAG, "Dolby Vision probe failed: ${error.message}")
-            DolbyVisionProfileProbeResult.failed(error.message)
-        }
-    }
-
-    private fun probeWithMediaInfo(
-        context: Context,
-        url: String,
-        filename: String?
-    ): DolbyVisionProfileProbeResult? {
-        var mediaInfo: MediaInfo? = null
-        return try {
-            val uri = android.net.Uri.parse(url)
-            mediaInfo = MediaInfoBuilder().from(context = context, uri = uri).build()
-            val videoStream = mediaInfo?.videoStream ?: return null
-            val probeValues = buildList {
-                addAll(extractStringValues(videoStream))
-                filename?.let { add("filename=$it") }
-            }
-            parseProbeValues(probeValues)
-        } catch (error: Throwable) {
-            Log.w(DV_AUTOPLAY_TAG, "NextLib Dolby Vision probe failed: ${error.message}")
-            null
-        } finally {
-            runCatching { mediaInfo?.release() }
-        }
-    }
-
-    private fun extractStringValues(videoStream: Any): List<String> {
-        return videoStream.javaClass.methods
-            .asSequence()
-            .filter { method ->
-                method.parameterCount == 0 &&
-                    method.declaringClass != Any::class.java &&
-                    (method.returnType == String::class.java ||
-                        Number::class.java.isAssignableFrom(method.returnType) ||
-                        method.returnType == java.lang.Integer.TYPE ||
-                        method.returnType == java.lang.Long.TYPE ||
-                        method.returnType == java.lang.Boolean.TYPE ||
-                        method.returnType == java.lang.Float.TYPE ||
-                        method.returnType == java.lang.Double.TYPE)
-            }
-            .mapNotNull { method ->
-                runCatching { method.invoke(videoStream) }
-                    .getOrNull()
-                    ?.toString()
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { "${method.name}=$it" }
-            }
-            .toList()
-    }
-
-    private fun probeWithExtractor(
-        context: Context,
-        url: String,
-        headers: Map<String, String>?
-    ): DolbyVisionProfileProbeResult? {
-        val extractor = MediaExtractor()
-        return try {
-            val uri = android.net.Uri.parse(url)
-            when (uri.scheme?.lowercase(Locale.ROOT)) {
-                "http", "https" -> extractor.setDataSource(url, headers ?: emptyMap())
-                else -> extractor.setDataSource(context, uri, headers ?: emptyMap())
-            }
-
-            for (index in 0 until extractor.trackCount) {
-                val format = extractor.getTrackFormat(index)
-                val mime = format.getString(android.media.MediaFormat.KEY_MIME)?.lowercase(Locale.ROOT)
-                if (mime?.startsWith("video/") != true) continue
-
-                val codecString = runCatching {
-                    format.getString(android.media.MediaFormat.KEY_CODECS_STRING)
-                }.getOrNull()
-                parseDolbyVisionProfile(codecString)?.let { (label, profile) ->
-                    return DolbyVisionProfileProbeResult.detected(label, profile)
-                }
-
-                val csd0 = runCatching { format.getByteBuffer("csd-0") }.getOrNull()
-                if (csd0 != null) {
-                    val bytes = ByteArray(csd0.remaining())
-                    csd0.duplicate().get(bytes)
-                    val profile = runCatching {
-                        DolbyVisionConfig.parse(ParsableByteArray(bytes))?.profile
-                    }.getOrNull()
-                    if (profile != null) {
-                        return DolbyVisionProfileProbeResult.detected(
-                            profileLabel = "dv_profile_$profile",
-                            profileNumber = profile
-                        )
-                    }
-                }
-
-                if (mime == "video/dolby-vision" || codecString?.contains("dvhe", ignoreCase = true) == true ||
-                    codecString?.contains("dvh1", ignoreCase = true) == true
-                ) {
-                    return DolbyVisionProfileProbeResult.unknown()
-                }
-            }
-            null
-        } catch (error: Throwable) {
-            Log.w(DV_AUTOPLAY_TAG, "Extractor Dolby Vision probe failed: ${error.message}")
-            null
-        } finally {
-            runCatching { extractor.release() }
-        }
-    }
-
-    private fun parseProbeValues(values: List<String>): DolbyVisionProfileProbeResult {
-        values.forEach { value ->
-            parseDolbyVisionProfile(value)?.let { (label, profile) ->
-                return DolbyVisionProfileProbeResult.detected(label, profile)
-            }
-        }
-        val normalized = values.joinToString(separator = " ").lowercase(Locale.ROOT)
-        return when {
-            normalized.contains("dolby vision") || normalized.contains("dvhe") || normalized.contains("dvh1") ->
-                DolbyVisionProfileProbeResult.unknown()
-            else -> DolbyVisionProfileProbeResult.notDolbyVision()
-        }
-    }
-
-    private fun buildProbeUrlCandidates(sourceUrl: String): List<String> {
-        if (sourceUrl.isBlank()) return emptyList()
-        val embeddedResolveUrl = extractEmbeddedResolveUrl(sourceUrl)
-        return buildList {
-            add(sourceUrl)
-            if (!embeddedResolveUrl.isNullOrBlank() && embeddedResolveUrl != sourceUrl) {
-                add(embeddedResolveUrl)
-            }
-        }
-    }
-
-    private fun extractEmbeddedResolveUrl(sourceUrl: String): String? {
-        val marker = "/resolve/"
-        val markerIndex = sourceUrl.indexOf(marker, ignoreCase = true)
-        if (markerIndex < 0) return null
-
-        val afterResolve = sourceUrl.substring(markerIndex + marker.length)
-        val nestedEncoded = afterResolve.substringAfter('/', missingDelimiterValue = "")
-            .substringAfter('/', missingDelimiterValue = "")
-        if (nestedEncoded.isBlank()) return null
-
-        return runCatching {
-            URLDecoder.decode(nestedEncoded, Charsets.UTF_8.name())
-        }.getOrNull()
-    }
-}
-
-private fun parseDolbyVisionProfile(value: String?): Pair<String, Int>? {
-    val normalized = value.orEmpty()
-    val match = DOLBY_VISION_CODEC_REGEX.find(normalized) ?: return null
-    val family = match.groupValues[1].lowercase(Locale.ROOT)
-    val profile = match.groupValues[2].toIntOrNull() ?: return null
-    val label = "$family.${match.groupValues[2]}"
-    return label to profile
 }
 
 fun supportsDolbyVisionDisplay(context: Context): Boolean {
@@ -606,8 +488,6 @@ private fun AutoPlayStreamAlternative.applyTo(base: StreamPlaybackInfo): StreamP
         autoPlayNonDolbyVisionFallback = null
     )
 }
-
-private val DOLBY_VISION_CODEC_REGEX = Regex("""\b(dvhe|dvh1)\.(\d{2})\b""", RegexOption.IGNORE_CASE)
 
 private fun Map<String, String>?.toHeaderBlob(): String? {
     if (this.isNullOrEmpty()) return null

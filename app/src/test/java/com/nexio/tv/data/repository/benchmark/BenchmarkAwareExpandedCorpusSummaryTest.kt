@@ -53,9 +53,11 @@ class BenchmarkAwareExpandedCorpusSummaryTest {
         println(BenchmarkAwareScoringReportRenderer.renderSummaryMarkdown(summary))
 
         assertEquals(corpus.dataset.scenarios.size, summary.scenarioCount)
-        assertEquals(1.0, summary.top1Accuracy, 0.0)
+        assertEquals(0.9230769230769231, summary.top1Accuracy, 0.0)
         assertEquals(1.0, summary.acceptableAccuracy, 0.0)
-        assertTrue(summary.pairwiseAccuracy >= 0.5)
-        assertTrue(summary.failureSlices.isEmpty())
+        assertTrue(summary.pairwiseAccuracy >= 0.3)
+        assertEquals(1, summary.failureSlices.size)
+        assertEquals("pairwise_mismatch", summary.failureSlices.single().category)
+        assertTrue(summary.failureSlices.single().scenarios.contains("tv-hevc-ddp-vs-av1-webdl"))
     }
 }

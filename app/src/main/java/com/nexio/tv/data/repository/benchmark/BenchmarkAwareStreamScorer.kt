@@ -348,8 +348,18 @@ class BenchmarkAwareStreamScorer internal constructor(
         movieMode: Boolean,
         showMode: Boolean
     ): ShadowTransportOption? {
-        val requestedTransport = activeTransportMode?.let { DebridBenchmarkTransportMode.OPTIMIZED }
+        val requestedTransport = activeTransportMode
         val options = listOfNotNull(
+            benchmarkSession.direct?.let {
+                ShadowTransportOption.fromProfile(
+                    config = config,
+                    transport = DebridBenchmarkTransportMode.DIRECT,
+                    profile = it,
+                    requiredMbps = requiredMbps,
+                    movieMode = movieMode,
+                    showMode = showMode
+                )
+            },
             benchmarkSession.optimized?.let {
                 ShadowTransportOption.fromProfile(
                     config = config,
@@ -372,8 +382,14 @@ class BenchmarkAwareStreamScorer internal constructor(
         benchmarkSession: DebridBenchmarkResult,
         activeTransportMode: DebridBenchmarkTransportMode?
     ): ShadowTransportOption? {
-        val requestedTransport = activeTransportMode?.let { DebridBenchmarkTransportMode.OPTIMIZED }
+        val requestedTransport = activeTransportMode
         val options = listOfNotNull(
+            benchmarkSession.direct?.let {
+                ShadowTransportOption.fromProfileWithoutRuntime(
+                    transport = DebridBenchmarkTransportMode.DIRECT,
+                    profile = it
+                )
+            },
             benchmarkSession.optimized?.let {
                 ShadowTransportOption.fromProfileWithoutRuntime(
                     transport = DebridBenchmarkTransportMode.OPTIMIZED,
@@ -771,15 +787,13 @@ private fun detectAudioTierCandidates(tags: List<String>): List<ShadowAudioTier>
     return buildList {
         if (hasAtmos && hasTrueHd) {
             add(ShadowAudioTier.TRUEHD_ATMOS)
-            add(ShadowAudioTier.DDP_ATMOS)
         }
-        if (hasAtmos && hasDdp && !hasTrueHd) {
+        if (hasAtmos && hasDdp) {
             add(ShadowAudioTier.DDP_ATMOS)
-            add(ShadowAudioTier.TRUEHD_ATMOS)
         }
         if (hasAtmos && !hasTrueHd && !hasDdp) {
-            add(ShadowAudioTier.TRUEHD_ATMOS)
             add(ShadowAudioTier.DDP_ATMOS)
+            add(ShadowAudioTier.TRUEHD_ATMOS)
         }
         if (hasDtsX) add(ShadowAudioTier.DTSX)
         if (hasTrueHd) add(ShadowAudioTier.TRUEHD)

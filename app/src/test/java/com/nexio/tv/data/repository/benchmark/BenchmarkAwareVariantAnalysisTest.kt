@@ -49,7 +49,8 @@ class BenchmarkAwareVariantAnalysisTest {
         val pcmHeavy = result.rankedVariants.first { it.name == "pcm-heavy.json" }
         assertTrue(pcmHeavy.summary.failureSlices.isNotEmpty())
         assertTrue(pcmHeavy.summary.failureSlices.any { slice ->
-            slice.scenarios.contains("audio-fallback-1")
+            slice.category == "pairwise_mismatch" &&
+                slice.scenarios.contains("tv-hevc-ddp-vs-av1-webdl")
         })
     }
 }

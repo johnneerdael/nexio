@@ -283,6 +283,31 @@ class DolbyVisionAutoPlayGateTest {
         assertEquals(DolbyVisionProfileProbeStatus.UNKNOWN, result.status)
     }
 
+    @Test
+    fun `composite probe short-circuits on unknown by default`() = runBlocking {
+        val first = RecordingDolbyVisionProfileProbe(DolbyVisionProfileProbeResult.unknown())
+        val second = RecordingDolbyVisionProfileProbe(
+            DolbyVisionProfileProbeResult.detected(
+                profileLabel = "dvhe.07",
+                profileNumber = 7
+            )
+        )
+        val probe = CompositeDolbyVisionProfileProbe(
+            probes = listOf(first, second)
+        )
+
+        val result = probe.probe(
+            context = context,
+            url = "https://example.com/stream.mkv",
+            headers = null,
+            filename = "stream.mkv"
+        )
+
+        assertEquals(DolbyVisionProfileProbeStatus.UNKNOWN, result.status)
+        assertEquals(1, first.invocations)
+        assertEquals(0, second.invocations)
+    }
+
     private fun primaryPlaybackInfo(
         isWebDl: Boolean = true,
         isDolbyVisionCandidate: Boolean = true,

@@ -21,6 +21,26 @@ class WorkerResult:
     error_kind: str | None = None
 
 
+def _classify_error_kind(exc: Exception) -> str:
+    message = str(exc).lower()
+    if isinstance(exc, TimeoutError) or "timed out" in message:
+        return "inactivity_timeout"
+    if (
+        isinstance(exc, ConnectionResetError) or
+        "connection reset" in message or
+        "reset by peer" in message
+    ):
+        return "connection_reset"
+    if isinstance(exc, URLError):
+        reason = getattr(exc, "reason", None)
+        if isinstance(reason, Exception):
+            nested_kind = _classify_error_kind(reason)
+            if nested_kind != "error":
+                return nested_kind
+        return "url_error"
+    return "error"
+
+
 def fetch_range(
     *,
     worker_id: int,
@@ -71,10 +91,9 @@ def fetch_range(
             last_progress_at=last_progress_at,
             completed_at=time.time(),
             error=str(exc),
-            error_kind="inactivity_timeout",
+            error_kind=_classify_error_kind(exc),
         )
     except URLError as exc:  # pragma: no cover - network path
-        kind = "inactivity_timeout" if "timed out" in str(exc).lower() else "url_error"
         return WorkerResult(
             worker_id=worker_id,
             chunk=chunk,
@@ -84,7 +103,7 @@ def fetch_range(
             last_progress_at=last_progress_at,
             completed_at=time.time(),
             error=str(exc),
-            error_kind=kind,
+            error_kind=_classify_error_kind(exc),
         )
     except Exception as exc:  # pragma: no cover - network path
         return WorkerResult(
@@ -96,5 +115,5 @@ def fetch_range(
             last_progress_at=last_progress_at,
             completed_at=time.time(),
             error=str(exc),
-            error_kind="error",
+            error_kind=_classify_error_kind(exc),
         )
