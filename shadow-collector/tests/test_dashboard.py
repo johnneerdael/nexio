@@ -307,6 +307,12 @@ class ShadowCollectorDashboardTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         return response.json()["id"]
 
+    def token_for_android_id(self, android_id: str) -> str:
+        return main.derive_public_dashboard_token(android_id)
+
+    def public_token_for_event_sample(self) -> str:
+        return self.token_for_android_id("android-id-shadow-1")
+
     def test_init_db_reconciles_legacy_db_missing_android_id_before_creating_indexes(self):
         legacy_path = Path(self.tempdir.name) / "legacy-shadow-autoplay.db"
         with sqlite3.connect(legacy_path) as conn:
@@ -737,6 +743,87 @@ class ShadowCollectorDashboardTest(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 422)
+
+    def test_public_dashboard_requires_valid_token_and_hides_android_id(self):
+        self.ingest_sample()
+        token = self.public_token_for_event_sample()
+
+        response = self.client.get(f"/public/{token}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Public Dashboard", response.text)
+        self.assertIn("Invincible", response.text)
+        self.assertNotIn("android-id-shadow-1", response.text)
+        self.assertNotIn("Android ID", response.text)
+
+    def test_public_dashboard_rejects_invalid_token(self):
+        token = self.token_for_android_id("android-id-does-not-exist")
+        response = self.client.get(f"/public/{token}")
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_public_detail_rejects_event_out_of_scope(self):
+        first_event_id = self.ingest_sample()
+        second_payload = {
+            **SAMPLE_ENVELOPE,
+            "client": {**SAMPLE_ENVELOPE["client"], "androidId": "android-id-shadow-2"},
+        }
+        response = self.client.post(
+            "/api/v1/shadow-autoplay-events",
+            headers={"Authorization": "Bearer write-token"},
+            json=second_payload,
+        )
+        self.assertEqual(response.status_code, 200)
+        second_event_id = response.json()["id"]
+
+        token_one = self.token_for_android_id("android-id-shadow-1")
+        token_two = self.token_for_android_id("android-id-shadow-2")
+
+        allowed = self.client.get(f"/public/{token_one}/events/{first_event_id}")
+        denied = self.client.get(f"/public/{token_one}/events/{second_event_id}")
+        allowed_scoped = self.client.get(f"/public/{token_two}/events/{second_event_id}")
+
+        self.assertEqual(allowed.status_code, 200)
+        self.assertEqual(denied.status_code, 404)
+        self.assertEqual(allowed_scoped.status_code, 200)
+
+    def test_public_benchmark_download_is_scoped_and_sanitized(self):
+        event_id = self.ingest_sample()
+        benchmark_payload = {
+            **SAMPLE_BENCHMARK_ENVELOPE,
+            "client": {**SAMPLE_BENCHMARK_ENVELOPE["client"], "androidId": "android-id-shadow-1"},
+            "result": {
+                **SAMPLE_BENCHMARK_ENVELOPE["result"],
+                "measuredAtMs": 2000,
+            },
+        }
+
+        response = self.client.post(
+            "/api/v1/debrid-benchmark-results",
+            headers={"Authorization": "Bearer write-token"},
+            json=benchmark_payload,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        token = self.token_for_android_id("android-id-shadow-1")
+        response = self.client.get(f"/public/{token}/benchmarks/latest/download")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual("real_debrid", payload["provider"])
+        self.assertEqual(2000, payload["measuredAtMs"])
+        self.assertIn("summary", payload)
+        self.assertIn("candidate", payload)
+        self.assertIn("capabilitySummary", payload)
+        self.assertNotIn("id", payload)
+        self.assertNotIn("client", payload)
+        self.assertNotIn("raw_json", payload)
+        self.assertNotIn("client_android_id", response.text)
+
+    def test_public_benchmark_download_rejects_invalid_token(self):
+        token = self.token_for_android_id("android-id-does-not-exist")
+        response = self.client.get(f"/public/{token}/benchmarks/latest/download")
+        self.assertEqual(response.status_code, 404)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,9 @@ Self-hosted FastAPI service for collecting shadow autoplay decision payloads.
 - `GET /api/v1/debrid-benchmark-results` read-token export for support analysis
 - Optional `client.androidId` support for POST ingestion and GET filtering
 - Session-authenticated dashboard at `/`
+- Public tokenized dashboard at `/public/<token>` (SHA3-512 + Base64url token from raw Android ID)
+- Public event route `/public/<token>/events/{event_id}` and benchmark download
+  `/public/<token>/benchmarks/latest/download`
 - SQLite storage with indefinite retention by default
 - Clear-all action from dashboard
 

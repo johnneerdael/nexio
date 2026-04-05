@@ -4,8 +4,8 @@ import androidx.media3.common.C
 import com.nexio.tv.ui.screens.player.ParallelRangeDataSource
 import java.io.EOFException
 import java.net.SocketException
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.TimeoutException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -31,11 +31,87 @@ class OptimizedBenchmarkTransportTest {
             candidate = candidate(),
             configSnapshot = configSnapshot
         )
+        val expectedConfigSnapshot = withBenchmarkChunkTimeout(configSnapshot)
 
         assertEquals(DebridBenchmarkTerminationReason.COMPLETED, result.terminationReason)
-        assertEquals(configSnapshot, builder.recordedConfigSnapshot)
-        assertEquals(configSnapshot, result.profile.configSnapshot)
+        assertEquals(expectedConfigSnapshot, builder.recordedConfigSnapshot)
+        assertEquals(expectedConfigSnapshot, result.profile.configSnapshot)
         assertTrue((result.profile.seek.seekTtfbP95Ms ?: 0L) > 0L)
+    }
+
+    @Test
+    fun `optimized transport scales chunk timeout across the 8 16 24 32 MB matrix`() = runTest {
+        val chunkSizeMatrix = listOf(
+            8 to 1_000L,
+            16 to 2_000L,
+            24 to 3_000L,
+            32 to 4_000L
+        )
+
+        chunkSizeMatrix.forEach { (chunkSizeMb, expectedTimeoutMs) ->
+            val clock = FakeBenchmarkClock()
+            var observedChunkWaitTimeout = 0L
+            val builder = object : OptimizedBenchmarkDataSourceFactoryBuilder {
+                override fun create(
+                    candidate: DebridBenchmarkCandidate,
+                    configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    chunkWaitTimeoutMs: Long,
+                    allowStartupBootstrapReuse: Boolean,
+                    transportSampleTimeMs: () -> Long,
+                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                ): BenchmarkReadableSourceFactory {
+                    observedChunkWaitTimeout = chunkWaitTimeoutMs
+                    return BenchmarkReadableSourceFactory {
+                        FakeBenchmarkDataSource(clock = clock)
+                    }
+                }
+            }
+
+            val transport = buildTransport(builder, clock)
+            transport.runProfile(
+                candidate = candidate(),
+                configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                    useParallelConnections = true,
+                    parallelConnectionCount = 3,
+                    parallelChunkSizeMb = chunkSizeMb
+                )
+            )
+
+            assertEquals(expectedTimeoutMs, observedChunkWaitTimeout)
+        }
+    }
+
+    @Test
+    fun `optimized transport caps chunk wait timeout at 6_000ms for oversized chunks`() = runTest {
+        val clock = FakeBenchmarkClock()
+        var observedChunkWaitTimeout = 0L
+        val builder = object : OptimizedBenchmarkDataSourceFactoryBuilder {
+            override fun create(
+                candidate: DebridBenchmarkCandidate,
+                configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                chunkWaitTimeoutMs: Long,
+                allowStartupBootstrapReuse: Boolean,
+                transportSampleTimeMs: () -> Long,
+                onTransportBytesDownloaded: (Long, Long) -> Unit
+            ): BenchmarkReadableSourceFactory {
+                observedChunkWaitTimeout = chunkWaitTimeoutMs
+                return BenchmarkReadableSourceFactory {
+                    FakeBenchmarkDataSource(clock = clock)
+                }
+            }
+        }
+
+        val transport = buildTransport(builder, clock)
+        transport.runProfile(
+            candidate = candidate(),
+            configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                useParallelConnections = true,
+                parallelConnectionCount = 3,
+                parallelChunkSizeMb = 64
+            )
+        )
+
+        assertEquals(6_000L, observedChunkWaitTimeout)
     }
 
     @Test
@@ -95,9 +171,10 @@ class OptimizedBenchmarkTransportTest {
             configSnapshot = configSnapshot,
             measurementDurationMs = 30_000L
         )
+        val expectedConfigSnapshot = withBenchmarkChunkTimeout(configSnapshot)
 
         assertEquals(DebridBenchmarkTerminationReason.COMPLETED, result.terminationReason)
-        assertEquals(configSnapshot, builder.recordedConfigSnapshot)
+        assertEquals(expectedConfigSnapshot, builder.recordedConfigSnapshot)
         assertTrue((result.elapsedMs ?: 0L) >= 29_000L)
         assertNotNull(result.averageThroughputMbps)
     }
@@ -111,6 +188,7 @@ class OptimizedBenchmarkTransportTest {
                 override fun create(
                     candidate: DebridBenchmarkCandidate,
                     configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
                     onTransportBytesDownloaded: (Long, Long) -> Unit
@@ -159,6 +237,7 @@ class OptimizedBenchmarkTransportTest {
             override fun create(
                 candidate: DebridBenchmarkCandidate,
                 configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                chunkWaitTimeoutMs: Long,
                 allowStartupBootstrapReuse: Boolean,
                 transportSampleTimeMs: () -> Long,
                 onTransportBytesDownloaded: (Long, Long) -> Unit
@@ -211,6 +290,7 @@ class OptimizedBenchmarkTransportTest {
                 override fun create(
                     candidate: DebridBenchmarkCandidate,
                     configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
                     onTransportBytesDownloaded: (Long, Long) -> Unit
@@ -284,6 +364,7 @@ class OptimizedBenchmarkTransportTest {
                 override fun create(
                     candidate: DebridBenchmarkCandidate,
                     configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
                     onTransportBytesDownloaded: (Long, Long) -> Unit
@@ -320,6 +401,7 @@ class OptimizedBenchmarkTransportTest {
             override fun create(
                 candidate: DebridBenchmarkCandidate,
                 configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                chunkWaitTimeoutMs: Long,
                 allowStartupBootstrapReuse: Boolean,
                 transportSampleTimeMs: () -> Long,
                 onTransportBytesDownloaded: (Long, Long) -> Unit
@@ -391,6 +473,7 @@ class OptimizedBenchmarkTransportTest {
                 override fun create(
                     candidate: DebridBenchmarkCandidate,
                     configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
                     onTransportBytesDownloaded: (Long, Long) -> Unit
@@ -439,6 +522,7 @@ class OptimizedBenchmarkTransportTest {
                 override fun create(
                     candidate: DebridBenchmarkCandidate,
                     configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
                     onTransportBytesDownloaded: (Long, Long) -> Unit
@@ -508,6 +592,7 @@ class OptimizedBenchmarkTransportTest {
                 override fun create(
                     candidate: DebridBenchmarkCandidate,
                     configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
                     onTransportBytesDownloaded: (Long, Long) -> Unit
@@ -580,6 +665,7 @@ class OptimizedBenchmarkTransportTest {
             override fun create(
                 candidate: DebridBenchmarkCandidate,
                 configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                chunkWaitTimeoutMs: Long,
                 allowStartupBootstrapReuse: Boolean,
                 transportSampleTimeMs: () -> Long,
                 onTransportBytesDownloaded: (Long, Long) -> Unit
@@ -650,6 +736,7 @@ class OptimizedBenchmarkTransportTest {
                 override fun create(
                     candidate: DebridBenchmarkCandidate,
                     configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
                     onTransportBytesDownloaded: (Long, Long) -> Unit
@@ -718,6 +805,7 @@ class OptimizedBenchmarkTransportTest {
                 override fun create(
                     candidate: DebridBenchmarkCandidate,
                     configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
                     onTransportBytesDownloaded: (Long, Long) -> Unit
@@ -776,6 +864,7 @@ class OptimizedBenchmarkTransportTest {
                 override fun create(
                     candidate: DebridBenchmarkCandidate,
                     configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+                    chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
                     onTransportBytesDownloaded: (Long, Long) -> Unit
@@ -876,6 +965,7 @@ class OptimizedBenchmarkTransportTest {
         override fun create(
             candidate: DebridBenchmarkCandidate,
             configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+            chunkWaitTimeoutMs: Long,
             allowStartupBootstrapReuse: Boolean,
             transportSampleTimeMs: () -> Long,
             onTransportBytesDownloaded: (Long, Long) -> Unit
@@ -966,5 +1056,16 @@ class OptimizedBenchmarkTransportTest {
             private const val FAILURE_OFFSET_BYTES = 32 * 1024
             private val CONTENT_BYTES = ByteArray(1024 * 1024) { (it % 251).toByte() }
         }
+    }
+
+    private fun withBenchmarkChunkTimeout(
+        snapshot: DebridBenchmarkTransportConfigSnapshot
+    ): DebridBenchmarkTransportConfigSnapshot {
+        if (snapshot.chunkWaitTimeoutMs != null) return snapshot
+        val effectiveChunkSizeMb = (snapshot.parallelChunkSizeMb ?: 16)
+            .coerceAtLeast(1)
+        val chunkGroups = (effectiveChunkSizeMb + 7).div(8)
+        val calculatedChunkTimeoutMs = (1_000L * chunkGroups).coerceAtMost(6_000L)
+        return snapshot.copy(chunkWaitTimeoutMs = calculatedChunkTimeoutMs)
     }
 }

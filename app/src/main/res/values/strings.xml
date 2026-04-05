@@ -672,6 +672,16 @@
     <string name="debrid_pending">Pending</string>
     <string name="debrid_connect_action">Connect</string>
     <string name="debrid_disconnect_action">Disconnect</string>
+    <string name="debrid_data_collection_analyse_title">Analyse Data Collection logs</string>
+    <string name="debrid_data_collection_analyse_subtitle">Open a public dashboard view generated from this device.</string>
+    <string name="debrid_data_collection_view_qr_action">View QR</string>
+    <string name="debrid_data_collection_qr_title">Collector dashboard QR</string>
+    <string name="debrid_data_collection_qr_subtitle">Scan this QR code or open the URL on another device.</string>
+    <string name="debrid_data_collection_qr_unavailable">QR code is unavailable</string>
+    <string name="debrid_data_collection_qr_code_content_description">Collector dashboard QR code</string>
+    <string name="debrid_data_collection_qr_base_url_missing">Collector dashboard base URL is not configured.</string>
+    <string name="debrid_data_collection_qr_android_id_missing">Collector dashboard token cannot be generated because the device ID is unavailable.</string>
+    <string name="debrid_data_collection_qr_hash_failed">Collector dashboard token cannot be generated because hashing failed.</string>
 
     <!-- Anime-Skip -->
     <string name="animeskip_title">Anime Skip</string>

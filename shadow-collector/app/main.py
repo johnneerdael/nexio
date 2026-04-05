@@ -1,7 +1,10 @@
 import json
 import os
+import base64
+import hashlib
 import secrets
 import sqlite3
+import logging
 import time
 from collections import Counter
 from contextlib import closing
@@ -27,6 +30,7 @@ ADMIN_USERNAME = os.environ.get("SHADOW_COLLECTOR_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("SHADOW_COLLECTOR_ADMIN_PASSWORD", "")
 
 app = FastAPI(title="Nexio Shadow Collector", version="1.1.0")
+LOGGER = logging.getLogger(__name__)
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
@@ -163,6 +167,13 @@ def first_non_blank(*values: Any) -> Optional[str]:
     return None
 
 
+PUBLIC_DASHBOARD_HASH_ALGORITHMS = ("sha3-512", "sha-512")
+PUBLIC_DASHBOARD_HASH_FUNCTIONS = {
+    "sha3-512": hashlib.sha3_512,
+    "sha-512": hashlib.sha512,
+}
+
+
 def format_timestamp(epoch_ms: Optional[int]) -> str:
     if not epoch_ms:
         return "—"
@@ -191,6 +202,47 @@ def format_duration(duration_ms: Optional[int]) -> str:
     if hours:
         return f"{hours}h {minutes}m"
     return f"{minutes}m"
+
+
+def derive_public_dashboard_token(android_id: str) -> str:
+    return base64.urlsafe_b64encode(
+        hashlib.sha3_512(android_id.encode("utf-8")).digest()
+    ).decode("ascii").rstrip("=")
+
+
+def derive_public_dashboard_tokens(android_id: str) -> set[str]:
+    """Return supported dashboard tokens for known hashing algorithms."""
+    android_id_bytes = android_id.encode("utf-8")
+    return {
+        base64.urlsafe_b64encode(PUBLIC_DASHBOARD_HASH_FUNCTIONS[algorithm](android_id_bytes).digest())
+        .decode("ascii")
+        .rstrip("=")
+        for algorithm in PUBLIC_DASHBOARD_HASH_ALGORITHMS
+    }
+
+
+def resolve_public_token_android_id(
+    conn: sqlite3.Connection,
+    token: str,
+) -> Optional[str]:
+    if not token or not token.strip():
+        return None
+    candidate_rows = conn.execute(
+        """
+        SELECT DISTINCT client_android_id AS android_id FROM shadow_autoplay_events
+        WHERE client_android_id IS NOT NULL AND TRIM(client_android_id) != ''
+        UNION
+        SELECT DISTINCT client_android_id AS android_id FROM debrid_benchmark_events
+        WHERE client_android_id IS NOT NULL AND TRIM(client_android_id) != ''
+        """
+    ).fetchall()
+    for row in candidate_rows:
+        android_id = row["android_id"]
+        if not android_id:
+            continue
+        if token in derive_public_dashboard_tokens(str(android_id)):
+            return str(android_id)
+    return None
 
 
 def compute_bitrate_mbps(size_bytes: Optional[int], duration_ms: Optional[int]) -> Optional[float]:
@@ -519,6 +571,18 @@ def build_event_view(row: dict[str, Any]) -> dict[str, Any]:
     return event
 
 
+def build_public_event_view(row: dict[str, Any]) -> dict[str, Any]:
+    event = build_event_view(row)
+    event["client"]["androidId"] = None
+    event["client_android_id"] = None
+    event["client_cards"] = [
+        card for card in event["client_cards"] if card["label"] != "Android ID"
+    ]
+    event.pop("raw_json_pretty", None)
+    event.pop("search_blob", None)
+    return event
+
+
 def build_benchmark_view(row: dict[str, Any]) -> dict[str, Any]:
     envelope = parse_raw_json(row.get("raw_json"))
     client = envelope.get("client") or {}
@@ -564,6 +628,42 @@ def build_benchmark_view(row: dict[str, Any]) -> dict[str, Any]:
             ]
             if part
         ),
+    }
+
+
+def build_public_benchmark_download_payload(row: dict[str, Any]) -> dict[str, Any]:
+    envelope = parse_raw_json(row.get("raw_json"))
+    result = envelope.get("result") or {}
+    candidate = result.get("candidate") or {}
+    device = result.get("device") or {}
+    summary = result.get("summary") or {}
+    comparison = result.get("comparison") or {}
+
+    return {
+        "provider": row.get("provider") or result.get("provider") or "—",
+        "measuredAtMs": row.get("measured_at_ms") or result.get("measuredAtMs"),
+        "terminationReason": row.get("termination_reason") or result.get("terminationReason") or "—",
+        "candidate": {
+            "filename": candidate.get("filename"),
+            "sizeBytes": candidate.get("sizeBytes"),
+            "host": candidate.get("host"),
+        },
+        "summary": {
+            "startupTimeMs": summary.get("startupTimeMs"),
+            "sustainedThroughputMbps": summary.get("sustainedThroughputMbps"),
+            "transferredBytes": summary.get("transferredBytes"),
+            "elapsedMs": summary.get("elapsedMs"),
+        },
+        "device": {
+            "model": row.get("device_model") or device.get("model"),
+            "manufacturer": row.get("device_manufacturer") or device.get("manufacturer"),
+            "sdkInt": row.get("client_sdk_int") or device.get("sdkInt"),
+        },
+        "capabilitySummary": {
+            "sustainedWinner": comparison.get("sustainedWinner"),
+            "seekWinner": comparison.get("seekWinner"),
+            "stabilityWinner": comparison.get("stabilityWinner"),
+        },
     }
 
 
@@ -692,6 +792,11 @@ def latest_benchmark_for_android_id(
         (android_id,),
     ).fetchone()
     return dict(row) if row is not None else None
+
+
+def public_not_found() -> None:
+    LOGGER.info("Public collector route lookup failed for unresolved token or mismatched scope")
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
 
 @app.post("/api/v1/shadow-autoplay-events")
@@ -879,6 +984,59 @@ def dashboard(
     return TEMPLATES.TemplateResponse(request, "dashboard.html", context)
 
 
+@app.get("/public/{token}", response_class=HTMLResponse)
+def public_dashboard(
+    request: Request,
+    token: str,
+):
+    with closing(db()) as conn:
+        android_id = resolve_public_token_android_id(conn, token)
+        if android_id is None:
+            public_not_found()
+        rows = [build_public_event_view(row) for row in fetch_shadow_rows(conn, android_id=android_id)]
+
+    context = {
+        "rows": rows,
+        "token": token,
+        "public_rows": len(rows),
+    }
+    return TEMPLATES.TemplateResponse(request, "public_dashboard.html", context)
+
+
+@app.get("/public/{token}/events/{event_id}", response_class=HTMLResponse)
+def public_event_detail(request: Request, token: str, event_id: int):
+    with closing(db()) as conn:
+        android_id = resolve_public_token_android_id(conn, token)
+        if android_id is None:
+            public_not_found()
+
+        row = conn.execute(
+            "SELECT * FROM shadow_autoplay_events WHERE id = ?",
+            (event_id,),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Not found")
+        event_android_id = row["client_android_id"] if row is not None else None
+        if not event_android_id or event_android_id != android_id:
+            public_not_found()
+
+        latest_benchmark_row = latest_benchmark_for_android_id(conn, android_id)
+
+    event = build_public_event_view(dict(row))
+    latest_benchmark = (
+        build_benchmark_view(latest_benchmark_row) if latest_benchmark_row else None
+    )
+    return TEMPLATES.TemplateResponse(
+        request,
+        "public_event_detail.html",
+        {
+            "event": event,
+            "token": token,
+            "latest_benchmark": latest_benchmark,
+        },
+    )
+
+
 @app.get("/events/{event_id}", response_class=HTMLResponse)
 def event_detail(request: Request, event_id: int):
     require_session(request)
@@ -899,6 +1057,24 @@ def event_detail(request: Request, event_id: int):
             "event": event,
             "latest_benchmark": latest_benchmark,
         },
+    )
+
+
+@app.get("/public/{token}/benchmarks/latest/download")
+def public_benchmark_download(request: Request, token: str):
+    with closing(db()) as conn:
+        android_id = resolve_public_token_android_id(conn, token)
+        if android_id is None:
+            public_not_found()
+
+        row = latest_benchmark_for_android_id(conn, android_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Not found")
+
+    payload = build_public_benchmark_download_payload(row)
+    return JSONResponse(
+        payload,
+        headers={"Content-Disposition": 'attachment; filename="benchmark-latest.json"'},
     )
 
 

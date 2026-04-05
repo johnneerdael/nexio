@@ -32,11 +32,14 @@ internal fun interface OptimizedBenchmarkDataSourceFactoryBuilder {
     fun create(
         candidate: DebridBenchmarkCandidate,
         configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+        chunkWaitTimeoutMs: Long,
         allowStartupBootstrapReuse: Boolean,
         transportSampleTimeMs: () -> Long,
         onTransportBytesDownloaded: (Long, Long) -> Unit
     ): BenchmarkReadableSourceFactory
 }
+
+private const val BASE_CHUNK_WAIT_TIMEOUT_MS = 1_000L
 
 data class DebridConfigBenchmarkTransportResult(
     val summary: DebridBenchmarkSummary,
@@ -88,13 +91,15 @@ class OptimizedBenchmarkTransport internal constructor(
         observer: DebridBenchmarkObserver = DebridBenchmarkObserver {},
         seekTargets: List<Long> = defaultSeekTargets(candidate.sourceSizeBytes)
     ): DebridBenchmarkTransportProfileResult = withContext(Dispatchers.IO) {
+        val effectiveConfigSnapshot = transportConfigWithBenchmarkTimeout(configSnapshot)
         val collector = DebridBenchmarkMetricsCollector(
             requiredTransferredBytes = sustainedThresholdBytes,
             requiredElapsedMs = sustainedThresholdElapsedMs
         )
         val sustainedReadableSourceFactory = factoryBuilder.create(
             candidate = candidate,
-            configSnapshot = configSnapshot,
+            configSnapshot = effectiveConfigSnapshot,
+            chunkWaitTimeoutMs = effectiveConfigSnapshot.chunkWaitTimeoutMs ?: BASE_CHUNK_WAIT_TIMEOUT_MS,
             allowStartupBootstrapReuse = true,
             transportSampleTimeMs = { nanosToMillis(nanoTimeNs()) },
             onTransportBytesDownloaded = { bytesRead, sampleAtMs ->
@@ -103,7 +108,8 @@ class OptimizedBenchmarkTransport internal constructor(
         )
         val seekReadableSourceFactory = factoryBuilder.create(
             candidate = candidate,
-            configSnapshot = configSnapshot,
+            configSnapshot = effectiveConfigSnapshot,
+            chunkWaitTimeoutMs = effectiveConfigSnapshot.chunkWaitTimeoutMs ?: BASE_CHUNK_WAIT_TIMEOUT_MS,
             allowStartupBootstrapReuse = false,
             transportSampleTimeMs = { nanosToMillis(nanoTimeNs()) },
             onTransportBytesDownloaded = { _, _ -> }
@@ -132,7 +138,7 @@ class OptimizedBenchmarkTransport internal constructor(
                     recoverableTimeoutCount = sustainedPhase.recoverableTimeoutCount
                 ),
                 seek = collector.finishSeek(),
-                configSnapshot = configSnapshot,
+                configSnapshot = effectiveConfigSnapshot,
                 rawSamples = collector.rawSamples()
             ),
             terminationReason = sustainedPhase.terminationReason,
@@ -146,13 +152,15 @@ class OptimizedBenchmarkTransport internal constructor(
         observer: DebridBenchmarkObserver = DebridBenchmarkObserver {},
         measurementDurationMs: Long = 30_000L
     ): DebridConfigBenchmarkTransportResult = withContext(Dispatchers.IO) {
+        val effectiveConfigSnapshot = transportConfigWithBenchmarkTimeout(configSnapshot)
         val collector = DebridBenchmarkMetricsCollector(
             requiredTransferredBytes = 1L,
             requiredElapsedMs = measurementDurationMs
         )
         val sustainedReadableSourceFactory = factoryBuilder.create(
             candidate = candidate,
-            configSnapshot = configSnapshot,
+            configSnapshot = effectiveConfigSnapshot,
+            chunkWaitTimeoutMs = effectiveConfigSnapshot.chunkWaitTimeoutMs ?: BASE_CHUNK_WAIT_TIMEOUT_MS,
             allowStartupBootstrapReuse = true,
             transportSampleTimeMs = { nanosToMillis(nanoTimeNs()) },
             onTransportBytesDownloaded = { bytesRead, sampleAtMs ->
@@ -171,7 +179,7 @@ class OptimizedBenchmarkTransport internal constructor(
                 recoverableFailureCount = sustainedPhase.recoverableFailureCount,
                 recoverableTimeoutCount = sustainedPhase.recoverableTimeoutCount
             ),
-            configSnapshot = configSnapshot,
+            configSnapshot = effectiveConfigSnapshot,
             terminationReason = sustainedPhase.terminationReason,
             failure = sustainedPhase.failure
         )
@@ -576,13 +584,32 @@ class OptimizedBenchmarkTransport internal constructor(
             rootCauseMessage?.contains("broken pipe", ignoreCase = true) == true
     }
 
-    private fun DebridBenchmarkTransportFailure.toTerminationReason(): DebridBenchmarkTerminationReason {
+private fun DebridBenchmarkTransportFailure.toTerminationReason(): DebridBenchmarkTerminationReason {
         return if (isTimeoutLike()) {
             DebridBenchmarkTerminationReason.TIMEOUT
         } else {
             DebridBenchmarkTerminationReason.FAILED
         }
     }
+
+internal fun transportConfigWithBenchmarkTimeout(
+    snapshot: DebridBenchmarkTransportConfigSnapshot
+): DebridBenchmarkTransportConfigSnapshot {
+    if (snapshot.chunkWaitTimeoutMs != null) return snapshot
+    return snapshot.copy(
+        chunkWaitTimeoutMs = benchmarkChunkWaitTimeoutMs(
+            parallelChunkSizeMb = snapshot.parallelChunkSizeMb
+        )
+    )
+}
+
+internal fun benchmarkChunkWaitTimeoutMs(
+    parallelChunkSizeMb: Int?
+): Long {
+    val effectiveChunkSizeMb = (parallelChunkSizeMb ?: PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB).coerceAtLeast(1)
+    val chunkGroups = (effectiveChunkSizeMb + 7L).div(8L)
+    return (BASE_CHUNK_WAIT_TIMEOUT_MS * chunkGroups).coerceAtMost(6_000L)
+}
 
     private fun deepestCause(error: Throwable): Throwable {
         var current = error
@@ -608,6 +635,7 @@ private class DefaultOptimizedBenchmarkDataSourceFactoryBuilder(
     override fun create(
         candidate: DebridBenchmarkCandidate,
         configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+        chunkWaitTimeoutMs: Long,
         allowStartupBootstrapReuse: Boolean,
         transportSampleTimeMs: () -> Long,
         onTransportBytesDownloaded: (Long, Long) -> Unit
@@ -624,7 +652,7 @@ private class DefaultOptimizedBenchmarkDataSourceFactoryBuilder(
                     ?: PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT).coerceAtLeast(2),
                 chunkSize = (configSnapshot.parallelChunkSizeMb
                     ?: PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB).toLong() * 1024L * 1024L,
-                chunkWaitTimeoutMs = 1_000L,
+                chunkWaitTimeoutMs = chunkWaitTimeoutMs,
                 transportSampleTimeMs = transportSampleTimeMs,
                 onTransportBytesDownloaded = onTransportBytesDownloaded,
                 allowStartupBootstrapReuse = allowStartupBootstrapReuse
