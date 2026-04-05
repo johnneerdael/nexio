@@ -57,6 +57,7 @@ private class DefaultDirectBenchmarkReadableSourceFactoryBuilder(
     override fun create(
         candidate: DebridBenchmarkCandidate,
         configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+        chunkWaitTimeoutMs: Long,
         allowStartupBootstrapReuse: Boolean,
         transportSampleTimeMs: () -> Long,
         onTransportBytesDownloaded: (Long, Long) -> Unit

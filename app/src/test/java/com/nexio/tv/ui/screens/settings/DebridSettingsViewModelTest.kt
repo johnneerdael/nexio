@@ -23,6 +23,8 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkOutcome
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkRuntimeState
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
+import com.nexio.tv.data.repository.benchmark.CollectorPublicDashboardLinkProvider
+import com.nexio.tv.data.repository.benchmark.CollectorPublicDashboardLinkResult
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkOutcome
@@ -444,6 +446,48 @@ class DebridSettingsViewModelTest {
     }
 
     @Test
+    fun `collector dashboard link is unavailable when provider reports base url is missing`() = runTest(dispatcher) {
+        val viewModel = buildViewModel(
+            collectorPublicDashboardLinkProvider = mockProvider(
+                CollectorPublicDashboardLinkResult.Unavailable(
+                    CollectorPublicDashboardLinkResult.Reason.BASE_URL_MISSING
+                )
+            )
+        )
+
+        advanceUntilIdle()
+
+        assertEquals(
+            false,
+            viewModel.uiState.value.collectorDashboardAvailable
+        )
+        assertEquals(
+            CollectorPublicDashboardLinkResult.Reason.BASE_URL_MISSING,
+            viewModel.uiState.value.collectorDashboardUnavailableReason
+        )
+    }
+
+    @Test
+    fun `collector dashboard refreshes provider result`() = runTest(dispatcher) {
+        val provider = mockProvider(
+            CollectorPublicDashboardLinkResult.Available(
+                token = "token",
+                url = "https://collector.local/public/token"
+            )
+        )
+        val viewModel = buildViewModel(
+            collectorPublicDashboardLinkProvider = provider
+        )
+
+        viewModel.refreshPublicCollectorDashboardLink()
+        advanceUntilIdle()
+
+        assertEquals(true, viewModel.uiState.value.collectorDashboardAvailable)
+        assertEquals("https://collector.local/public/token", viewModel.uiState.value.collectorDashboardUrl)
+        assertEquals(null, viewModel.uiState.value.collectorDashboardUnavailableReason)
+    }
+
+    @Test
     fun `service wrap is unavailable when no provider is configured`() = runTest(dispatcher) {
         val viewModel = buildViewModel()
 
@@ -565,7 +609,8 @@ class DebridSettingsViewModelTest {
         latestEasyDebridConfigResult: DebridConfigBenchmarkResult? = null,
         benchmarkService: DebridBenchmarkService? = null,
         configBenchmarkService: DebridConfigBenchmarkService? = null,
-        playerSettingsDataStore: PlayerSettingsDataStore? = null
+        playerSettingsDataStore: PlayerSettingsDataStore? = null,
+        collectorPublicDashboardLinkProvider: CollectorPublicDashboardLinkProvider? = null
     ): DebridSettingsViewModel {
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
         every { realDebridAuthDataStore.state } returns flowOf(
@@ -649,6 +694,13 @@ class DebridSettingsViewModelTest {
             every { service.outcomes } returns MutableSharedFlow<DebridConfigBenchmarkOutcome>()
         }
 
+        val resolvedCollectorPublicDashboardLinkProvider = collectorPublicDashboardLinkProvider
+            ?: mockProvider(
+                CollectorPublicDashboardLinkResult.Unavailable(
+                    CollectorPublicDashboardLinkResult.Reason.BASE_URL_MISSING
+                )
+            )
+
         return DebridSettingsViewModel(
             realDebridAuthService = mockk<RealDebridAuthService>(relaxed = true),
             realDebridAuthDataStore = realDebridAuthDataStore,
@@ -660,8 +712,15 @@ class DebridSettingsViewModelTest {
             easyDebridSettingsDataStore = easyDebridSettingsDataStore,
             playerSettingsDataStore = resolvedPlayerSettingsDataStore,
             debridBenchmarkService = resolvedBenchmarkService,
-            debridConfigBenchmarkService = resolvedConfigBenchmarkService
+            debridConfigBenchmarkService = resolvedConfigBenchmarkService,
+            collectorPublicDashboardLinkProvider = resolvedCollectorPublicDashboardLinkProvider
         )
+    }
+
+    private fun mockProvider(result: CollectorPublicDashboardLinkResult): CollectorPublicDashboardLinkProvider {
+        return mockk<CollectorPublicDashboardLinkProvider>(relaxed = true).also {
+            every { it.resolvePublicDashboardLink() } returns result
+        }
     }
 
     private fun sampleResult(provider: DebridBenchmarkProvider): DebridBenchmarkResult {

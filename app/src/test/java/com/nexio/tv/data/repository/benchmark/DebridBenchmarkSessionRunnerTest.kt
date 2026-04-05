@@ -202,7 +202,7 @@ class DebridBenchmarkSessionRunnerTest {
                 parallelChunkSizeMb = 24
             )
         )
-        coEvery { optimizedTransport.runProfile(any(), any(), any()) } returns
+        coEvery { optimizedTransport.runProfile(any(), any(), any(), any()) } returns
             DebridBenchmarkTransportProfileResult(
                 summary = DebridBenchmarkSummary(
                     startupTimeMs = 250L,
@@ -231,6 +231,166 @@ class DebridBenchmarkSessionRunnerTest {
         val decision = result.result?.optimized?.decision
         assertEquals(65.536 * 0.85, decision?.startupSafeBudgetMbps ?: 0.0, 0.001)
         assertTrue((decision?.steadyStateSafeBudgetMbps ?: 0.0) > (decision?.startupSafeBudgetMbps ?: 0.0))
+    }
+
+    @Test
+    fun `timeout-heavy transport penalties reduce steady state budget compared to clean transport`() = runTest {
+        val directTransport = mockk<DirectProfileBenchmarkTransport>()
+        val optimizedTransport = mockk<OptimizedBenchmarkTransport>()
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
+        val deviceCapabilitySnapshotProvider = mockk<DeviceCapabilitySnapshotProvider>()
+        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
+        every { deviceCapabilitySnapshotProvider.capture(any()) } returns sampleDeviceSnapshot()
+
+        val cleanProfile = timeoutPressureProfile(
+            maxReadGapMs = 500L,
+            recoverableFailureCount = 0,
+            recoverableTimeoutCount = 0
+        )
+        val cleanResult = DebridBenchmarkTransportProfileResult(
+            summary = DebridBenchmarkSummary(
+                startupTimeMs = 150L,
+                sustainedThroughputMbps = 40.0,
+                transferredBytes = 2_000_000_000L,
+                elapsedMs = 10_000L
+            ),
+            profile = cleanProfile,
+            terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
+            failure = null
+        )
+
+        val timeoutProfile = timeoutPressureProfile(
+            maxReadGapMs = 500L,
+            recoverableFailureCount = 8,
+            recoverableTimeoutCount = 10
+        )
+        val timeoutResult = DebridBenchmarkTransportProfileResult(
+            summary = DebridBenchmarkSummary(
+                startupTimeMs = 150L,
+                sustainedThroughputMbps = 40.0,
+                transferredBytes = 2_000_000_000L,
+                elapsedMs = 10_000L
+            ),
+            profile = timeoutProfile,
+            terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
+            failure = null
+        )
+
+        val runner = DebridBenchmarkSessionRunner(
+            directTransport = directTransport,
+            optimizedTransport = optimizedTransport,
+            playerSettingsDataStore = playerSettingsDataStore,
+            deviceCapabilitySnapshotProvider = deviceCapabilitySnapshotProvider,
+            nowMs = { 5678L }
+        )
+
+        coEvery { optimizedTransport.runProfile(any(), any(), any(), any()) } returnsMany listOf(
+            cleanResult,
+            timeoutResult
+        )
+
+        val cleanSession = runner.run(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            candidate = candidate(),
+            observer = DebridBenchmarkObserver {}
+        )
+
+        val timeoutSession = runner.run(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            candidate = candidate(),
+            observer = DebridBenchmarkObserver {}
+        )
+
+        val cleanBudget = cleanSession.result?.optimized?.decision?.steadyStateSafeBudgetMbps ?: 0.0
+        val cleanStartupBudget = cleanSession.result?.optimized?.decision?.startupSafeBudgetMbps ?: 0.0
+        val timeoutBudget = timeoutSession.result?.optimized?.decision?.steadyStateSafeBudgetMbps ?: 0.0
+
+        assertEquals(40.0, cleanBudget, 0.001)
+        assertEquals(40.0 * 0.85, cleanStartupBudget, 0.001)
+        assertEquals(36.32, timeoutBudget, 0.01)
+        assertTrue(timeoutBudget < cleanBudget)
+    }
+
+    @Test
+    fun `id=3 wireless anchor fixture remains timeout-penalized before remediation`() = runTest {
+        val directTransport = mockk<DirectProfileBenchmarkTransport>()
+        val optimizedTransport = mockk<OptimizedBenchmarkTransport>()
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
+        val deviceCapabilitySnapshotProvider = mockk<DeviceCapabilitySnapshotProvider>()
+        val fixture = wirelessRegressionFixtureId3
+        val degradedProfile = anchorRegressionProfile(
+            fixture = fixture,
+            recoverableFailureCount = fixture.recoverableFailureCount,
+            recoverableTimeoutCount = fixture.recoverableTimeoutCount,
+            maxReadGapMs = fixture.maxReadGapMs,
+            cacheAbsorbableDeficitCount = fixture.cacheAbsorbableDeficitCount
+        )
+        val remediatedProfile = anchorRegressionProfile(
+            fixture = fixture,
+            recoverableFailureCount = 0,
+            recoverableTimeoutCount = 0,
+            maxReadGapMs = 500L,
+            cacheAbsorbableDeficitCount = 0
+        )
+        val degradedResult = DebridBenchmarkTransportProfileResult(
+            summary = DebridBenchmarkSummary(
+                startupTimeMs = fixture.startupMs,
+                sustainedThroughputMbps = fixture.sustainedThroughputMbps,
+                transferredBytes = 2_000_000_000L,
+                elapsedMs = fixture.summaryElapsedMs
+            ),
+            profile = degradedProfile,
+            terminationReason = DebridBenchmarkTerminationReason.COMPLETED
+        )
+        val remediatedResult = DebridBenchmarkTransportProfileResult(
+            summary = DebridBenchmarkSummary(
+                startupTimeMs = fixture.startupMs,
+                sustainedThroughputMbps = fixture.sustainedThroughputMbps,
+                transferredBytes = 2_000_000_000L,
+                elapsedMs = fixture.summaryElapsedMs
+            ),
+            profile = remediatedProfile,
+            terminationReason = DebridBenchmarkTerminationReason.COMPLETED
+        )
+
+        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
+        every { deviceCapabilitySnapshotProvider.capture(any()) } returns sampleDeviceSnapshot()
+        coEvery { optimizedTransport.runProfile(any(), any(), any(), any()) } returnsMany listOf(
+            degradedResult,
+            remediatedResult
+        )
+
+        val runner = DebridBenchmarkSessionRunner(
+            directTransport = directTransport,
+            optimizedTransport = optimizedTransport,
+            playerSettingsDataStore = playerSettingsDataStore,
+            deviceCapabilitySnapshotProvider = deviceCapabilitySnapshotProvider,
+            nowMs = { 5678L }
+        )
+
+        val degradedSession = runner.run(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            candidate = candidate(),
+            observer = DebridBenchmarkObserver {}
+        )
+        val remediatedSession = runner.run(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            candidate = candidate(),
+            observer = DebridBenchmarkObserver {}
+        )
+
+        val degradedDecision = degradedSession.result?.optimized?.decision
+        val remediatedDecision = remediatedSession.result?.optimized?.decision
+        val degradedProfileSummary = degradedSession.result?.optimized
+
+        assertEquals(27.8528, degradedDecision?.startupSafeBudgetMbps ?: 0.0, 0.0001)
+        assertEquals(19.2267, degradedDecision?.steadyStateSafeBudgetMbps ?: 0.0, 0.05)
+        assertTrue((remediatedDecision?.steadyStateSafeBudgetMbps ?: 0.0) > 23.0)
+        assertEquals(22, degradedProfileSummary?.sustained?.recoverableTimeoutCount)
+        assertEquals(4882L, degradedProfileSummary?.sustained?.maxReadGapMs)
+        assertTrue((remediatedDecision?.steadyStateSafeBudgetMbps ?: 0.0) >
+            (degradedDecision?.steadyStateSafeBudgetMbps ?: 0.0))
+        assertEquals(fixture.parallelChunkSizeMb, degradedProfileSummary?.configSnapshot?.parallelChunkSizeMb)
     }
 
     private fun candidate(): DebridBenchmarkCandidate {
@@ -288,6 +448,104 @@ class DebridBenchmarkSessionRunnerTest {
                 actionable = actionable
             ),
             rawSamples = DebridBenchmarkRawSamples()
+        )
+    }
+
+    private fun timeoutPressureProfile(
+        maxReadGapMs: Long,
+        recoverableFailureCount: Int,
+        recoverableTimeoutCount: Int
+    ): DebridBenchmarkTransportProfile {
+        val baseProfile = profile(
+            startupMs = 150L,
+            averageMbps = 40.0,
+            p10Mbps = 40.0,
+            actionable = true,
+            throughputCv = 0.05,
+            stallCount = 2,
+            maxReadGapMs = maxReadGapMs,
+        )
+
+        return baseProfile.copy(
+            sustained = baseProfile.sustained.copy(
+                steadyStateReferenceMbps = 40.0,
+                p50ThroughputMbps = 40.0,
+                cacheAbsorbableDeficitCount = 0,
+                cacheDrainingDeficitCount = 0,
+                recoverableFailureCount = recoverableFailureCount,
+                recoverableTimeoutCount = recoverableTimeoutCount,
+                maxReadGapMs = maxReadGapMs
+            ),
+            configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                useParallelConnections = true,
+                parallelConnectionCount = 4,
+                parallelChunkSizeMb = 24,
+                chunkWaitTimeoutMs = 6_000L
+            )
+        )
+    }
+
+    private data class WirelessRegressionAnchorFixture(
+        val startupMs: Long,
+        val sustainedThroughputMbps: Double,
+        val parallelChunkSizeMb: Int,
+        val parallelConnectionCount: Int,
+        val throughputCv: Double,
+        val stallCount: Int,
+        val maxReadGapMs: Long,
+        val recoverableFailureCount: Int,
+        val recoverableTimeoutCount: Int,
+        val cacheAbsorbableDeficitCount: Int,
+        val summaryElapsedMs: Long
+    )
+
+    private val wirelessRegressionFixtureId3 = WirelessRegressionAnchorFixture(
+        startupMs = 816L,
+        sustainedThroughputMbps = 34.957636,
+        parallelChunkSizeMb = 24,
+        parallelConnectionCount = 3,
+        throughputCv = 1.55,
+        stallCount = 4,
+        maxReadGapMs = 4882L,
+        recoverableFailureCount = 22,
+        recoverableTimeoutCount = 22,
+        cacheAbsorbableDeficitCount = 2,
+        summaryElapsedMs = 120_000L
+    )
+
+    private fun anchorRegressionProfile(
+        fixture: WirelessRegressionAnchorFixture,
+        recoverableFailureCount: Int,
+        recoverableTimeoutCount: Int,
+        maxReadGapMs: Long,
+        cacheAbsorbableDeficitCount: Int
+    ): DebridBenchmarkTransportProfile {
+        val baseProfile = profile(
+            startupMs = fixture.startupMs,
+            averageMbps = fixture.sustainedThroughputMbps,
+            p10Mbps = 32.768,
+            actionable = true,
+            throughputCv = fixture.throughputCv,
+            stallCount = fixture.stallCount,
+            maxReadGapMs = maxReadGapMs
+        )
+
+        return baseProfile.copy(
+            sustained = baseProfile.sustained.copy(
+                steadyStateReferenceMbps = fixture.sustainedThroughputMbps,
+                p50ThroughputMbps = fixture.sustainedThroughputMbps,
+                cacheAbsorbableDeficitCount = cacheAbsorbableDeficitCount,
+                cacheDrainingDeficitCount = 0,
+                recoverableFailureCount = recoverableFailureCount,
+                recoverableTimeoutCount = recoverableTimeoutCount,
+                maxReadGapMs = maxReadGapMs,
+                elapsedMs = fixture.summaryElapsedMs
+            ),
+            configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                useParallelConnections = true,
+                parallelConnectionCount = fixture.parallelConnectionCount,
+                parallelChunkSizeMb = fixture.parallelChunkSizeMb
+            )
         )
     }
 

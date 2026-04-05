@@ -3,6 +3,7 @@
 package com.nexio.tv.ui.screens.settings
 
 import android.view.KeyEvent
+import androidx.compose.ui.Alignment
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,10 +17,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.Composable
@@ -33,6 +36,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
@@ -70,11 +75,14 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkRuntimeState
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
+import com.nexio.tv.data.repository.benchmark.CollectorPublicDashboardLinkProvider
+import com.nexio.tv.data.repository.benchmark.CollectorPublicDashboardLinkResult
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkProfileResult
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkResult
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkRuntimeState
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkService
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkStatus
+import com.nexio.tv.core.qr.QrCodeGenerator
 import com.nexio.tv.data.repository.benchmark.safeSustainedBudgetMbps
 import com.nexio.tv.data.repository.benchmark.playbackStability
 import com.nexio.tv.ui.components.NexioDialog
@@ -118,6 +126,9 @@ internal data class DebridUiState(
     val serviceWrapAvailable: Boolean = false,
     val shadowAutoplayDataCollectionEnabled: Boolean = false,
     val debridBenchmarkDataCollectionEnabled: Boolean = false,
+    val collectorDashboardUrl: String? = null,
+    val collectorDashboardUnavailableReason: CollectorPublicDashboardLinkResult.Reason? = null,
+    val collectorDashboardAvailable: Boolean = false,
     val deterministicAutoplayEnabled: Boolean = false,
     val deterministicAutoplayAvailable: Boolean = false,
     val benchmarkResultDialog: DebridBenchmarkResultDialogUi? = null,
@@ -199,6 +210,12 @@ private data class DebridDialogSnapshot(
     val configBenchmarkResultDialog: DebridConfigBenchmarkResultDialogUi?
 )
 
+private data class DebridCollectorDashboardSnapshot(
+    val collectorDashboardUrl: String?,
+    val collectorDashboardUnavailableReason: CollectorPublicDashboardLinkResult.Reason?,
+    val collectorDashboardAvailable: Boolean
+)
+
 private data class DebridSettingsToggleSnapshot(
     val deterministicAutoplayEnabled: Boolean,
     val deterministicAutoplayAvailable: Boolean,
@@ -214,7 +231,7 @@ private data class DebridUiBaseSnapshot(
 )
 
 @Composable
-fun DebridSettingsContent(
+internal fun DebridSettingsContent(
     viewModel: DebridSettingsViewModel = hiltViewModel(),
     initialFocusRequester: FocusRequester? = null
 ) {
@@ -229,6 +246,7 @@ fun DebridSettingsContent(
     var showPremiumizeDialog by remember { mutableStateOf(false) }
     var showTorBoxDialog by remember { mutableStateOf(false) }
     var showEasyDebridDialog by remember { mutableStateOf(false) }
+    var showCollectorDashboardDialog by remember { mutableStateOf(false) }
     val premiumizeCustomerId = uiState.premiumizeCustomerId
 
     LaunchedEffect(Unit) {
@@ -409,6 +427,18 @@ fun DebridSettingsContent(
                             viewModel.setDebridBenchmarkDataCollectionEnabled(
                                 !uiState.debridBenchmarkDataCollectionEnabled
                             )
+                        }
+                    )
+                }
+
+                item(key = "debrid_data_collection_qr") {
+                    SettingsActionRow(
+                        title = stringResource(R.string.debrid_data_collection_analyse_title),
+                        subtitle = stringResource(R.string.debrid_data_collection_analyse_subtitle),
+                        value = stringResource(R.string.debrid_data_collection_view_qr_action),
+                        onClick = {
+                            viewModel.refreshPublicCollectorDashboardLink()
+                            showCollectorDashboardDialog = true
                         }
                     )
                 }
@@ -610,6 +640,14 @@ fun DebridSettingsContent(
                 }
             }
         }
+
+        if (showCollectorDashboardDialog) {
+            CollectorDashboardQrDialog(
+                url = uiState.collectorDashboardUrl,
+                unavailableReason = uiState.collectorDashboardUnavailableReason,
+                onDismiss = { showCollectorDashboardDialog = false }
+            )
+        }
     }
 
     if (showPremiumizeDialog) {
@@ -668,6 +706,80 @@ fun DebridSettingsContent(
             dialog = dialog,
             onDismiss = viewModel::dismissConfigBenchmarkResultDialog
         )
+    }
+}
+
+@Composable
+private fun CollectorDashboardQrDialog(
+    url: String?,
+    unavailableReason: CollectorPublicDashboardLinkResult.Reason?,
+    onDismiss: () -> Unit
+) {
+    val qrBitmap = remember(url) {
+        runCatching {
+            url?.let { QrCodeGenerator.generate(it, 420) }
+        }.getOrNull()
+    }
+
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.debrid_data_collection_qr_title),
+        subtitle = stringResource(R.string.debrid_data_collection_qr_subtitle),
+        width = 700.dp
+    ) {
+        if (unavailableReason != null) {
+            Text(
+                text = collectorDashboardUnavailableReason(unavailableReason),
+                color = Color.Red,
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center
+            )
+            return@NexioDialog
+        }
+
+        if (qrBitmap == null) {
+            Text(
+                text = stringResource(R.string.debrid_data_collection_qr_unavailable),
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color.Red,
+                textAlign = TextAlign.Center
+            )
+            return@NexioDialog
+        }
+
+        Image(
+            bitmap = qrBitmap.asImageBitmap(),
+            contentDescription = stringResource(R.string.debrid_data_collection_qr_code_content_description),
+            modifier = Modifier
+                .heightIn(max = 260.dp)
+                .fillMaxWidth(),
+            alignment = Alignment.Center
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text(
+            text = url ?: "",
+            style = MaterialTheme.typography.bodySmall,
+            color = NexioColors.TextTertiary,
+            textAlign = TextAlign.Center
+        )
+
+        Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Text(text = stringResource(R.string.action_cancel))
+        }
+    }
+}
+
+@Composable
+private fun collectorDashboardUnavailableReason(reason: CollectorPublicDashboardLinkResult.Reason): String {
+    return when (reason) {
+        CollectorPublicDashboardLinkResult.Reason.BASE_URL_MISSING ->
+            stringResource(R.string.debrid_data_collection_qr_base_url_missing)
+        CollectorPublicDashboardLinkResult.Reason.ANDROID_ID_MISSING ->
+            stringResource(R.string.debrid_data_collection_qr_android_id_missing)
+        CollectorPublicDashboardLinkResult.Reason.HASHING_FAILED ->
+            stringResource(R.string.debrid_data_collection_qr_hash_failed)
     }
 }
 
@@ -1499,7 +1611,7 @@ private fun formatBenchmarkBytes(bytes: Long): String {
 }
 
 @HiltViewModel
-class DebridSettingsViewModel @Inject constructor(
+internal class DebridSettingsViewModel @Inject internal constructor(
     private val realDebridAuthService: RealDebridAuthService,
     realDebridAuthDataStore: RealDebridAuthDataStore,
     private val premiumizeService: PremiumizeService,
@@ -1509,12 +1621,18 @@ class DebridSettingsViewModel @Inject constructor(
     private val easyDebridService: EasyDebridService,
     easyDebridSettingsDataStore: EasyDebridSettingsDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val collectorPublicDashboardLinkProvider: CollectorPublicDashboardLinkProvider,
     private val debridBenchmarkService: DebridBenchmarkService,
     private val debridConfigBenchmarkService: DebridConfigBenchmarkService
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(DebridUiState())
     private val benchmarkResultDialog = MutableStateFlow<DebridBenchmarkResultDialogUi?>(null)
     private val configBenchmarkResultDialog = MutableStateFlow<DebridConfigBenchmarkResultDialogUi?>(null)
+    private val collectorDashboardLink = MutableStateFlow<CollectorPublicDashboardLinkResult>(
+        CollectorPublicDashboardLinkResult.Unavailable(
+            CollectorPublicDashboardLinkResult.Reason.BASE_URL_MISSING
+        )
+    )
     internal val uiState: StateFlow<DebridUiState> = _uiState.asStateFlow()
     internal val savingPremiumize = MutableStateFlow(false)
     internal val savingTorBox = MutableStateFlow(false)
@@ -1621,6 +1739,22 @@ class DebridSettingsViewModel @Inject constructor(
             )
         }
 
+        val collectorDashboardState = collectorDashboardLink.map { result ->
+            when (result) {
+                is CollectorPublicDashboardLinkResult.Available -> DebridCollectorDashboardSnapshot(
+                    collectorDashboardUrl = result.url,
+                    collectorDashboardUnavailableReason = null,
+                    collectorDashboardAvailable = true
+                )
+
+                is CollectorPublicDashboardLinkResult.Unavailable -> DebridCollectorDashboardSnapshot(
+                    collectorDashboardUrl = null,
+                    collectorDashboardUnavailableReason = result.reason,
+                    collectorDashboardAvailable = false
+                )
+            }
+        }
+
         viewModelScope.launch {
             val baseState = combine(
                 connectionState,
@@ -1651,7 +1785,12 @@ class DebridSettingsViewModel @Inject constructor(
                 )
             }
 
-            combine(baseState, dialogState, settingsState) { base, dialogs, settings ->
+            combine(baseState, dialogState, settingsState, collectorDashboardState) {
+                base,
+                dialogs,
+                settings,
+                collectorDashboard
+            ->
                 DebridUiState(
                     realDebridMode = base.connection.realDebridMode,
                     realDebridUsername = base.connection.realDebridUsername,
@@ -1722,6 +1861,9 @@ class DebridSettingsViewModel @Inject constructor(
                         base.connection.easyDebridConnected,
                     shadowAutoplayDataCollectionEnabled = settings.shadowAutoplayDataCollectionEnabled,
                     debridBenchmarkDataCollectionEnabled = settings.debridBenchmarkDataCollectionEnabled,
+                    collectorDashboardUrl = collectorDashboard.collectorDashboardUrl,
+                    collectorDashboardUnavailableReason = collectorDashboard.collectorDashboardUnavailableReason,
+                    collectorDashboardAvailable = collectorDashboard.collectorDashboardAvailable,
                     deterministicAutoplayEnabled = settings.deterministicAutoplayEnabled,
                     deterministicAutoplayAvailable = settings.deterministicAutoplayAvailable,
                     benchmarkResultDialog = dialogs.benchmarkResultDialog,
@@ -1769,6 +1911,8 @@ class DebridSettingsViewModel @Inject constructor(
                 }
             }
         }
+
+        refreshPublicCollectorDashboardLink()
 
         viewModelScope.launch {
             debridConfigBenchmarkService.outcomes.collect { outcome ->
@@ -1947,6 +2091,10 @@ class DebridSettingsViewModel @Inject constructor(
                 playerSettingsDataStore.setDeterministicAutoplayEnabled(false)
             }
         }
+    }
+
+    fun refreshPublicCollectorDashboardLink() {
+        collectorDashboardLink.value = collectorPublicDashboardLinkProvider.resolvePublicDashboardLink()
     }
 
     fun savePremiumizeApiKey(value: String, onSuccess: () -> Unit) {
