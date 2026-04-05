@@ -250,6 +250,10 @@ data class DebridBenchmarkSustainedMetrics(
     val throughputCv: Double? = null,
     val stallCount: Int? = null,
     val maxReadGapMs: Long? = null,
+    val steadyStateReferenceMbps: Double? = null,
+    val cacheAbsorbableDeficitCount: Int? = null,
+    val cacheDrainingDeficitCount: Int? = null,
+    val estimatedMinCacheHeadroomMs: Long? = null,
     val bytesTransferred: Long? = null,
     val elapsedMs: Long? = null
 )
@@ -278,6 +282,8 @@ data class DebridBenchmarkTransportConfigSnapshot(
 
 data class DebridBenchmarkTransportDecisionMetrics(
     val safeSustainedBudgetMbps: Double? = null,
+    val startupSafeBudgetMbps: Double? = null,
+    val steadyStateSafeBudgetMbps: Double? = null,
     val actionable: Boolean = true
 )
 

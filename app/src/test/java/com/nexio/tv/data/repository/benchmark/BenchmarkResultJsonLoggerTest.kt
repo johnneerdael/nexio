@@ -73,6 +73,8 @@ class BenchmarkResultJsonLoggerTest {
         val optimizedDecision = result.getAsJsonObject("optimized").getAsJsonObject("decision")
 
         assertEquals(170.0, optimizedDecision.get("safeSustainedBudgetMbps").asDouble, 0.0)
+        assertEquals(95.0, optimizedDecision.get("startupSafeBudgetMbps").asDouble, 0.0)
+        assertEquals(170.0, optimizedDecision.get("steadyStateSafeBudgetMbps").asDouble, 0.0)
         assertTrue(optimizedDecision.get("actionable").asBoolean)
         assertEquals(
             220.0,
@@ -81,6 +83,13 @@ class BenchmarkResultJsonLoggerTest {
                 .get("averageThroughputMbps")
                 .asDouble,
             0.0
+        )
+        assertEquals(
+            2,
+            result.getAsJsonObject("optimized")
+                .getAsJsonObject("sustained")
+                .get("cacheAbsorbableDeficitCount")
+                .asInt
         )
     }
 
@@ -350,6 +359,8 @@ class BenchmarkResultJsonLoggerTest {
         averageMbps: Double,
         seekP95Ms: Long,
         decisionSafeBudgetMbps: Double = p10Mbps * 0.85,
+        startupSafeBudgetMbps: Double = 95.0,
+        steadyStateSafeBudgetMbps: Double = decisionSafeBudgetMbps,
         decisionActionable: Boolean = true,
         rawWindowCount: Int = 2,
         rawBucketCount: Int = 1,
@@ -396,6 +407,10 @@ class BenchmarkResultJsonLoggerTest {
                 throughputCv = 0.05,
                 stallCount = 0,
                 maxReadGapMs = 120L,
+                steadyStateReferenceMbps = averageMbps,
+                cacheAbsorbableDeficitCount = 2,
+                cacheDrainingDeficitCount = 0,
+                estimatedMinCacheHeadroomMs = 9_000L,
                 bytesTransferred = 2_048L,
                 elapsedMs = 120_000L
             ),
@@ -408,6 +423,8 @@ class BenchmarkResultJsonLoggerTest {
             ),
             decision = DebridBenchmarkTransportDecisionMetrics(
                 safeSustainedBudgetMbps = decisionSafeBudgetMbps,
+                startupSafeBudgetMbps = startupSafeBudgetMbps,
+                steadyStateSafeBudgetMbps = steadyStateSafeBudgetMbps,
                 actionable = decisionActionable
             ),
             configSnapshot = configSnapshot,

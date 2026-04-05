@@ -155,6 +155,29 @@ class DolbyVisionAutoPlayGateTest {
     }
 
     @Test
+    fun `autoplay reuses precomputed probe result instead of probing again`() = runBlocking {
+        val probe = RecordingDolbyVisionProfileProbe(
+            DolbyVisionProfileProbeResult.detected(profileLabel = "dvhe.07", profileNumber = 7)
+        )
+        val gate = DolbyVisionAutoPlayGate(probe)
+
+        val resolved = gate.resolve(
+            context = context,
+            playbackInfo = primaryPlaybackInfo(),
+            autoPlay = true,
+            displaySupportsDolbyVision = false,
+            precomputedProbeResult = DolbyVisionProfileProbeResult.detected(
+                profileLabel = "dvhe.07",
+                profileNumber = 7
+            )
+        )
+
+        assertEquals("primary", resolved.playbackInfo.streamKey)
+        assertFalse(resolved.fallbackApplied)
+        assertEquals(0, probe.invocations)
+    }
+
+    @Test
     fun `autoplay logs primary fallback probe result and finalized decision with timestamps`() = runBlocking {
         val probe = RecordingDolbyVisionProfileProbe(
             DolbyVisionProfileProbeResult.detected(profileLabel = "dvhe.05", profileNumber = 5)

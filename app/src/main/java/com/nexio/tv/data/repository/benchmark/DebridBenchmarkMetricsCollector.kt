@@ -11,13 +11,16 @@ class DebridBenchmarkMetricsCollector(
     private val throughputWindowMs: Long = 1_000L
 ) {
     companion object {
-        private const val COLLECTOR_VERSION = 5
+        private const val COLLECTOR_VERSION = 8
         private const val SAMPLING_MODE_FIXED_TIME_BUCKET = "fixed_time_bucket"
         private const val CONSISTENCY_TOLERANCE_RATIO = 0.10
-        private const val STEADY_STATE_WARMUP_MS = 10_000L
+        private const val STEADY_STATE_WARMUP_MS = 5_000L
         private const val DECISION_CONSUMER_WINDOW_MS = 5_000L
         private const val DECISION_TRANSIENT_DROP_FLOOR_RATIO = 0.25
         private const val DECISION_MIN_WINDOW_COUNT_FOR_FLOOR = 4
+        private const val CACHE_HEADROOM_INITIAL_MS = 10_000L
+        private const val CACHE_HEADROOM_MAX_MS = 45_000L
+        private const val CACHE_HEADROOM_DRAINING_FLOOR_MS = 5_000L
     }
 
     private var requestStartedAtMs: Long? = null
@@ -26,6 +29,7 @@ class DebridBenchmarkMetricsCollector(
     private var lastSampleAtMs: Long? = null
     private var lastSampleBytesRead = 0L
     private var pendingOuterDeltaBytes = 0.0
+    private val consumerThroughputSamples = mutableListOf<ConsumerThroughputSample>()
     private var stallCount = 0
     private var maxReadGapMs = 0L
     private val throughputBuckets = mutableListOf<DebridBenchmarkThroughputBucketSample>()
@@ -61,12 +65,19 @@ class DebridBenchmarkMetricsCollector(
         val sampleTimeMs = sampleAtMs.coerceAtLeast(0L)
         val clampedBytesRead = totalBytesRead.coerceAtLeast(0L)
         val previousSampleAtMs = lastSampleAtMs
+        val completedBeforeSample = shouldComplete()
 
         if (previousSampleAtMs != null) {
             val deltaMs = (sampleTimeMs - previousSampleAtMs).coerceAtLeast(0L)
             val deltaBytes = (clampedBytesRead - lastSampleBytesRead).coerceAtLeast(0L)
             pendingOuterDeltaBytes += deltaBytes.toDouble()
             if (deltaMs > 0L) {
+                if (!completedBeforeSample) {
+                    recordConsumerThroughputSample(
+                        deltaBytes = deltaBytes.toDouble(),
+                        deltaMs = deltaMs
+                    )
+                }
                 recordThroughputInterval(
                     intervalStartMs = previousSampleAtMs,
                     intervalEndMs = sampleTimeMs,
@@ -163,8 +174,18 @@ class DebridBenchmarkMetricsCollector(
         val steadyStateWindows = steadyStateDecisionBuckets.map { it.throughputMbps }.sorted()
         val decisionWindows = filterTransientDropWindows(sortedWindows)
         val steadyStateDecisionWindows = filterTransientDropWindows(steadyStateWindows)
+        val consumerP10 = consumerP10Mbps()
+        val bucketP10 = steadyStateDecisionWindows.percentileNearestRank(0.10)
         val average = completedBuckets.takeIf { it.isNotEmpty() }?.map { it.throughputMbps }?.average()
         val steadyStateAverage = steadyStateDecisionWindows.takeIf { it.isNotEmpty() }?.average()
+        val steadyStateReference = listOfNotNull(
+            steadyStateDecisionWindows.percentileNearestRank(0.50),
+            steadyStateAverage
+        ).minOrNull()
+        val cacheEvidence = analyzeCacheAwareDeficits(
+            buckets = steadyStateDecisionBuckets,
+            referenceMbps = steadyStateReference
+        )
         val completedBytesTransferred = completedBuckets.sumOf { it.bytesTransferred }
         val completedElapsedMs = completedBuckets.sumOf { it.durationMs }
         val derivedAverage = completedBytesTransferred
@@ -185,7 +206,7 @@ class DebridBenchmarkMetricsCollector(
             averageThroughputMbps = average,
             derivedAverageThroughputMbps = derivedAverage,
             actionable = actionable,
-            p10ThroughputMbps = steadyStateDecisionWindows.percentileNearestRank(0.10),
+            p10ThroughputMbps = consumerP10 ?: bucketP10,
             p50ThroughputMbps = steadyStateDecisionWindows.percentileNearestRank(0.50),
             peakThroughputMbps = decisionWindows.maxOrNull(),
             throughputStddevMbps = stddev,
@@ -198,6 +219,10 @@ class DebridBenchmarkMetricsCollector(
             },
             stallCount = activeStallCount(),
             maxReadGapMs = activeMaxReadGapMs(),
+            steadyStateReferenceMbps = steadyStateReference,
+            cacheAbsorbableDeficitCount = cacheEvidence.absorbableDeficitCount,
+            cacheDrainingDeficitCount = cacheEvidence.drainingDeficitCount,
+            estimatedMinCacheHeadroomMs = cacheEvidence.minHeadroomMs,
             bytesTransferred = completedBytesTransferred,
             elapsedMs = completedElapsedMs
         )
@@ -282,6 +307,16 @@ class DebridBenchmarkMetricsCollector(
         }
 
         transportThroughputWindowAccumulatedBytes += bytesRead
+    }
+
+    private fun recordConsumerThroughputSample(
+        deltaBytes: Double,
+        deltaMs: Long
+    ) {
+        if (deltaBytes <= 0.0 || deltaMs <= 0L) return
+        consumerThroughputSamples += ConsumerThroughputSample(
+            throughputMbps = deltaBytes.toMbps(deltaMs)
+        )
     }
 
     private fun ensureThroughputWindowStarted() {
@@ -450,6 +485,13 @@ class DebridBenchmarkMetricsCollector(
         return maxOf(throughputWindowMs, DECISION_CONSUMER_WINDOW_MS)
     }
 
+    private fun consumerP10Mbps(): Double? {
+        val steadyState = consumerThroughputSamples
+            .map { it.throughputMbps }
+            .sorted()
+        return steadyState.percentileNearestRank(0.10)
+    }
+
     private fun filterTransientDropWindows(windows: List<Double>): List<Double> {
         if (windows.size < DECISION_MIN_WINDOW_COUNT_FOR_FLOOR) return windows
         val median = windows.percentileNearestRank(0.50) ?: return windows
@@ -457,6 +499,46 @@ class DebridBenchmarkMetricsCollector(
         val floor = median * DECISION_TRANSIENT_DROP_FLOOR_RATIO
         val filtered = windows.filter { it >= floor }
         return if (filtered.size >= DECISION_MIN_WINDOW_COUNT_FOR_FLOOR) filtered else windows
+    }
+
+    private fun analyzeCacheAwareDeficits(
+        buckets: List<DebridBenchmarkThroughputBucketSample>,
+        referenceMbps: Double?
+    ): CacheAwareDeficitEvidence {
+        if (buckets.isEmpty() || referenceMbps == null || !referenceMbps.isFinite() || referenceMbps <= 0.0) {
+            return CacheAwareDeficitEvidence(
+                absorbableDeficitCount = 0,
+                drainingDeficitCount = 0,
+                minHeadroomMs = CACHE_HEADROOM_INITIAL_MS
+            )
+        }
+
+        var headroomMs = CACHE_HEADROOM_INITIAL_MS.toDouble()
+        var minHeadroomMs = headroomMs
+        var absorbableDeficitCount = 0
+        var drainingDeficitCount = 0
+
+        buckets.forEach { bucket ->
+            val ratio = bucket.throughputMbps / referenceMbps
+            val deltaHeadroomMs = (ratio - 1.0) * bucket.durationMs.toDouble()
+            headroomMs = (headroomMs + deltaHeadroomMs)
+                .coerceIn(0.0, CACHE_HEADROOM_MAX_MS.toDouble())
+            minHeadroomMs = minOf(minHeadroomMs, headroomMs)
+
+            if (ratio < 1.0) {
+                if (headroomMs >= CACHE_HEADROOM_DRAINING_FLOOR_MS.toDouble()) {
+                    absorbableDeficitCount += 1
+                } else {
+                    drainingDeficitCount += 1
+                }
+            }
+        }
+
+        return CacheAwareDeficitEvidence(
+            absorbableDeficitCount = absorbableDeficitCount,
+            drainingDeficitCount = drainingDeficitCount,
+            minHeadroomMs = minHeadroomMs.toLong()
+        )
     }
 
     private fun activeStallCount(): Int = stallCount
@@ -491,3 +573,13 @@ class DebridBenchmarkMetricsCollector(
         return sqrt(variance)
     }
 }
+
+private data class ConsumerThroughputSample(
+    val throughputMbps: Double
+)
+
+private data class CacheAwareDeficitEvidence(
+    val absorbableDeficitCount: Int,
+    val drainingDeficitCount: Int,
+    val minHeadroomMs: Long
+)

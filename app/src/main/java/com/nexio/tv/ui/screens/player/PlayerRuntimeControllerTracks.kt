@@ -456,21 +456,36 @@ internal fun PlayerRuntimeController.maybeApplyStartupPreferredAudioSelection(
         return null
     }
 
-    val currentIndex = currentSelectedIndex
-    if (
-        currentIndex in audioTracks.indices &&
-        preferredAudioLanguages.any { target -> audioTrackMatchesLanguage(audioTracks[currentIndex], target) }
-    ) {
-        autoAudioSelected = true
-        return currentIndex
-    }
-
-    val bestIndex = findBestStartupAudioTrackIndex(audioTracks, preferredAudioLanguages)
+    val bestIndex = resolveStartupAudioSelectionIndex(
+        audioTracks = audioTracks,
+        targets = preferredAudioLanguages,
+        currentSelectedIndex = currentSelectedIndex,
+        capabilitySupport = detectStartupAudioCapabilitySupport()
+    )
     autoAudioSelected = true
     if (bestIndex < 0) return null
+    if (bestIndex == currentSelectedIndex) return bestIndex
 
     selectAudioTrack(bestIndex)
     return bestIndex
+}
+
+internal fun PlayerRuntimeController.detectStartupAudioCapabilitySupport(): StartupAudioCapabilitySupport {
+    val detected = androidx.media3.exoplayer.audio.AudioCapabilities.getCapabilities(
+        context,
+        androidx.media3.common.AudioAttributes.DEFAULT,
+        null
+    )
+    return StartupAudioCapabilitySupport(
+        ac3Supported = detected.supportsEncoding(C.ENCODING_AC3),
+        eac3Supported = detected.supportsEncoding(C.ENCODING_E_AC3) ||
+            detected.supportsEncoding(C.ENCODING_E_AC3_JOC),
+        truehdSupported = detected.supportsEncoding(C.ENCODING_DOLBY_TRUEHD),
+        dtsSupported = detected.supportsEncoding(C.ENCODING_DTS),
+        dtshdSupported = detected.supportsEncoding(C.ENCODING_DTS_HD),
+        aacSupported = true,
+        unknownSupported = true
+    )
 }
 
 internal fun PlayerRuntimeController.maybeAdjustLibassPipelineForTracks(tracks: Tracks) {

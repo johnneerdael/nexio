@@ -153,12 +153,84 @@ class DebridBenchmarkSessionRunnerTest {
             result.result?.optimized?.sustained
         )
         assertEquals(
-            optimizedResult.profile.sustained.p10ThroughputMbps?.times(0.85) ?: 0.0,
-            result.result?.optimized?.decision?.safeSustainedBudgetMbps ?: 0.0,
-            0.0
+            result.result?.optimized?.decision?.steadyStateSafeBudgetMbps,
+            result.result?.optimized?.decision?.safeSustainedBudgetMbps
         )
         verify(exactly = 1) { deviceCapabilitySnapshotProvider.capture(playerSettings) }
         coVerify(exactly = 0) { directTransport.runProfile(any(), any(), any()) }
+    }
+
+    @Test
+    fun `parallel optimized profile keeps steady state budget above startup floor during brief stalls`() = runTest {
+        val directTransport = mockk<DirectProfileBenchmarkTransport>()
+        val optimizedTransport = mockk<OptimizedBenchmarkTransport>()
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
+        val deviceCapabilitySnapshotProvider = mockk<DeviceCapabilitySnapshotProvider>()
+        val playerSettings = PlayerSettings()
+        every { playerSettingsDataStore.playerSettings } returns flowOf(playerSettings)
+        every { deviceCapabilitySnapshotProvider.capture(playerSettings) } returns sampleDeviceSnapshot()
+        coEvery { directTransport.runProfile(any(), any(), any()) } returns
+            DebridBenchmarkTransportProfileResult(
+                summary = DebridBenchmarkSummary(
+                    startupTimeMs = 180L,
+                    sustainedThroughputMbps = 120.0,
+                    transferredBytes = 1_000L,
+                    elapsedMs = 120_000L
+                ),
+                profile = profile(180L, 120.0, 100.0, actionable = true),
+                terminationReason = DebridBenchmarkTerminationReason.COMPLETED
+            )
+        val optimizedProfile = profile(
+            startupMs = 250L,
+            averageMbps = 780.0,
+            p10Mbps = 65.536,
+            actionable = true,
+            throughputCv = 0.18,
+            stallCount = 2,
+            maxReadGapMs = 4_000L
+        ).copy(
+            sustained = profile(250L, 780.0, 65.536, actionable = true, throughputCv = 0.18, stallCount = 2, maxReadGapMs = 4_000L).sustained.copy(
+                p50ThroughputMbps = 846.0,
+                steadyStateReferenceMbps = 780.0,
+                cacheAbsorbableDeficitCount = 2,
+                cacheDrainingDeficitCount = 0,
+                estimatedMinCacheHeadroomMs = 9_000L
+            ),
+            configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                useParallelConnections = true,
+                parallelConnectionCount = 3,
+                parallelChunkSizeMb = 24
+            )
+        )
+        coEvery { optimizedTransport.runProfile(any(), any(), any()) } returns
+            DebridBenchmarkTransportProfileResult(
+                summary = DebridBenchmarkSummary(
+                    startupTimeMs = 250L,
+                    sustainedThroughputMbps = 780.0,
+                    transferredBytes = 9_000_000_000L,
+                    elapsedMs = 120_000L
+                ),
+                profile = optimizedProfile,
+                terminationReason = DebridBenchmarkTerminationReason.COMPLETED
+            )
+
+        val runner = DebridBenchmarkSessionRunner(
+            directTransport = directTransport,
+            optimizedTransport = optimizedTransport,
+            playerSettingsDataStore = playerSettingsDataStore,
+            deviceCapabilitySnapshotProvider = deviceCapabilitySnapshotProvider,
+            nowMs = { 5678L }
+        )
+
+        val result = runner.run(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            candidate = candidate(),
+            observer = DebridBenchmarkObserver {}
+        )
+
+        val decision = result.result?.optimized?.decision
+        assertEquals(65.536 * 0.85, decision?.startupSafeBudgetMbps ?: 0.0, 0.001)
+        assertTrue((decision?.steadyStateSafeBudgetMbps ?: 0.0) > (decision?.startupSafeBudgetMbps ?: 0.0))
     }
 
     private fun candidate(): DebridBenchmarkCandidate {
@@ -211,6 +283,8 @@ class DebridBenchmarkSessionRunnerTest {
             ),
             decision = DebridBenchmarkTransportDecisionMetrics(
                 safeSustainedBudgetMbps = if (actionable) p10Mbps * 0.85 else null,
+                startupSafeBudgetMbps = if (actionable) p10Mbps * 0.85 else null,
+                steadyStateSafeBudgetMbps = if (actionable) p10Mbps * 0.85 else null,
                 actionable = actionable
             ),
             rawSamples = DebridBenchmarkRawSamples()

@@ -404,6 +404,10 @@ private fun DebridBenchmarkTransportProfile.toJsonObject(): JsonObject {
             sustained.throughputCv?.let { addProperty("throughputCv", it) }
             sustained.stallCount?.let { addProperty("stallCount", it) }
             sustained.maxReadGapMs?.let { addProperty("maxReadGapMs", it) }
+            sustained.steadyStateReferenceMbps?.let { addProperty("steadyStateReferenceMbps", it) }
+            sustained.cacheAbsorbableDeficitCount?.let { addProperty("cacheAbsorbableDeficitCount", it) }
+            sustained.cacheDrainingDeficitCount?.let { addProperty("cacheDrainingDeficitCount", it) }
+            sustained.estimatedMinCacheHeadroomMs?.let { addProperty("estimatedMinCacheHeadroomMs", it) }
             sustained.bytesTransferred?.let { addProperty("bytesTransferred", it) }
             sustained.elapsedMs?.let { addProperty("elapsedMs", it) }
         })
@@ -417,6 +421,8 @@ private fun DebridBenchmarkTransportProfile.toJsonObject(): JsonObject {
         decision?.let { decision ->
             add("decision", JsonObject().apply {
                 decision.safeSustainedBudgetMbps?.let { addProperty("safeSustainedBudgetMbps", it) }
+                decision.startupSafeBudgetMbps?.let { addProperty("startupSafeBudgetMbps", it) }
+                decision.steadyStateSafeBudgetMbps?.let { addProperty("steadyStateSafeBudgetMbps", it) }
                 addProperty("actionable", decision.actionable)
             })
         }
@@ -481,6 +487,7 @@ internal fun DebridBenchmarkTransportProfile?.safeSustainedBudgetMbps(): Double?
     val profile = this ?: return null
     profile.decision?.let { decision ->
         if (!decision.actionable) return null
+        decision.steadyStateSafeBudgetMbps?.let { return it }
         decision.safeSustainedBudgetMbps?.let { return it }
     }
     val sustained = profile.sustained

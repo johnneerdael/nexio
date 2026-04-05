@@ -42,6 +42,31 @@ import androidx.tv.material3.Text
 import com.nexio.tv.ui.theme.NexioColors
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
+import androidx.compose.foundation.lazy.rememberLazyListState
+
+internal data class AudioDialogInitialSelection(
+    val focusIndex: Int,
+    val firstVisibleIndex: Int
+)
+
+internal fun resolveAudioDialogInitialSelection(
+    tracks: List<TrackInfo>,
+    selectedIndex: Int
+): AudioDialogInitialSelection {
+    if (tracks.isEmpty()) {
+        return AudioDialogInitialSelection(
+            focusIndex = -1,
+            firstVisibleIndex = 0
+        )
+    }
+
+    val safeFocusIndex = selectedIndex.takeIf { it in tracks.indices } ?: 0
+    val firstVisibleIndex = (safeFocusIndex - 1).coerceAtLeast(0)
+    return AudioDialogInitialSelection(
+        focusIndex = safeFocusIndex,
+        firstVisibleIndex = firstVisibleIndex
+    )
+}
 
 @Composable
 internal fun AudioSelectionDialog(
@@ -50,7 +75,22 @@ internal fun AudioSelectionDialog(
     onTrackSelected: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val firstItemFocusRequester = remember { FocusRequester() }
+    val initialSelection = remember(tracks, selectedIndex) {
+        resolveAudioDialogInitialSelection(
+            tracks = tracks,
+            selectedIndex = selectedIndex
+        )
+    }
+    val initialFocusRequester = remember(initialSelection.focusIndex) { FocusRequester() }
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = initialSelection.firstVisibleIndex
+    )
+
+    LaunchedEffect(initialSelection.focusIndex) {
+        if (initialSelection.focusIndex >= 0) {
+            runCatching { initialFocusRequester.requestFocus() }
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -72,26 +112,24 @@ internal fun AudioSelectionDialog(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(top = 4.dp),
-                    modifier = Modifier.height(300.dp)
+                    modifier = Modifier.height(300.dp),
+                    state = listState
                 ) {
                     items(tracks) { track ->
                         AudioTrackItem(
                             track = track,
                             isSelected = track.index == selectedIndex,
                             onClick = { onTrackSelected(track.index) },
-                            focusRequester = if (track == tracks.firstOrNull()) firstItemFocusRequester else null
+                            focusRequester = if (track.index == initialSelection.focusIndex) {
+                                initialFocusRequester
+                            } else {
+                                null
+                            }
                         )
                     }
                 }
             }
         }
-    }
-
-    LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(100)
-        try {
-            firstItemFocusRequester.requestFocus()
-        } catch (_: Exception) {}
     }
 }
 
@@ -115,7 +153,10 @@ private fun AudioTrackItem(
                 isSelected -> Color.White.copy(alpha = 0.12f)
                 else -> Color.White.copy(alpha = 0.05f)
             },
-            focusedContainerColor = Color.White.copy(alpha = 0.15f)
+            focusedContainerColor = when {
+                isSelected -> Color.White.copy(alpha = 0.20f)
+                else -> Color.White.copy(alpha = 0.15f)
+            }
         ),
         shape = CardDefaults.shape(RoundedCornerShape(12.dp))
     ) {

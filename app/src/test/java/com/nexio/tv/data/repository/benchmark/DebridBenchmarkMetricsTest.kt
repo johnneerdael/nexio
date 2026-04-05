@@ -122,7 +122,7 @@ class DebridBenchmarkMetricsTest {
     }
 
     @Test
-    fun `collector derives conservative floor from steady state outer buckets after warm up`() {
+    fun `collector derives autoplay floor from consumer deltas across the full run`() {
         val collector = DebridBenchmarkMetricsCollector()
 
         collector.recordStartup(
@@ -145,7 +145,7 @@ class DebridBenchmarkMetricsTest {
 
         val sustained = collector.finishSustained()
 
-        assertEquals(800.0, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(400.0, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
         assertEquals(800.0, sustained.p50ThroughputMbps ?: 0.0, 0.00001)
         assertEquals(800.0, sustained.peakThroughputMbps ?: 0.0, 0.00001)
         assertEquals(0.0, sustained.throughputCv ?: 0.0, 0.00001)
@@ -181,7 +181,7 @@ class DebridBenchmarkMetricsTest {
     }
 
     @Test
-    fun `collector uses smoothed 5 second decision windows for autoplay floor`() {
+    fun `collector keeps autoplay floor aligned to rd probe consumer samples`() {
         val collector = DebridBenchmarkMetricsCollector()
 
         collector.recordStartup(
@@ -204,8 +204,35 @@ class DebridBenchmarkMetricsTest {
         val sustained = collector.finishSustained()
 
         assertEquals(693.76, sustained.averageThroughputMbps ?: 0.0, 0.00001)
-        assertEquals(481.28, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
+        assertEquals(800.0, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
         assertEquals(800.0, sustained.peakThroughputMbps ?: 0.0, 0.00001)
+    }
+
+    @Test
+    fun `collector does not let post completion tail collapse autoplay floor`() {
+        val collector = DebridBenchmarkMetricsCollector(
+            requiredTransferredBytes = 10L,
+            requiredElapsedMs = 5.seconds
+        )
+
+        collector.recordStartup(
+            requestStartedAtMs = 0L,
+            firstByteAtMs = 0L
+        )
+
+        repeat(5) { index ->
+            collector.recordBytesRead(
+                totalBytesRead = (index + 1) * 100_000_000L,
+                sampleAtMs = (index + 1).seconds
+            )
+        }
+        collector.recordBytesRead(totalBytesRead = 500_100_000L, sampleAtMs = 6.seconds)
+        collector.recordBytesRead(totalBytesRead = 500_200_000L, sampleAtMs = 7.seconds)
+        collector.recordBytesRead(totalBytesRead = 500_300_000L, sampleAtMs = 8.seconds)
+
+        val sustained = collector.finishSustained()
+
+        assertEquals(800.0, sustained.p10ThroughputMbps ?: 0.0, 0.00001)
     }
 
     @Test

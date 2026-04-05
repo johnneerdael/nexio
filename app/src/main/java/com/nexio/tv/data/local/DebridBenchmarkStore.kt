@@ -354,7 +354,9 @@ class DebridBenchmarkStore internal constructor(
     }
 
     private fun DebridBenchmarkTransportDecisionMetrics.isValid(): Boolean {
-        return safeSustainedBudgetMbps.isNonNegativeFiniteOrNull()
+        return safeSustainedBudgetMbps.isNonNegativeFiniteOrNull() &&
+            startupSafeBudgetMbps.isNonNegativeFiniteOrNull() &&
+            steadyStateSafeBudgetMbps.isNonNegativeFiniteOrNull()
     }
 
     private fun DebridBenchmarkSeekSample.isValid(): Boolean {
@@ -639,6 +641,10 @@ class DebridBenchmarkStore internal constructor(
                 throughputCv = sustainedJson.optionalStrictDoubleOrNull("throughputCv"),
                 stallCount = sustainedJson.optionalStrictIntegralIntOrNull("stallCount"),
                 maxReadGapMs = sustainedJson.optionalStrictIntegralLongOrNull("maxReadGapMs"),
+                steadyStateReferenceMbps = sustainedJson.optionalStrictDoubleOrNull("steadyStateReferenceMbps"),
+                cacheAbsorbableDeficitCount = sustainedJson.optionalStrictIntegralIntOrNull("cacheAbsorbableDeficitCount"),
+                cacheDrainingDeficitCount = sustainedJson.optionalStrictIntegralIntOrNull("cacheDrainingDeficitCount"),
+                estimatedMinCacheHeadroomMs = sustainedJson.optionalStrictIntegralLongOrNull("estimatedMinCacheHeadroomMs"),
                 bytesTransferred = sustainedJson.optionalStrictIntegralLongOrNull("bytesTransferred"),
                 elapsedMs = sustainedJson.optionalStrictIntegralLongOrNull("elapsedMs")
             ),
@@ -652,6 +658,8 @@ class DebridBenchmarkStore internal constructor(
             decision = profileJson.optionalObject("decision")?.let { decisionJson ->
                 DebridBenchmarkTransportDecisionMetrics(
                     safeSustainedBudgetMbps = decisionJson.optionalStrictDoubleOrNull("safeSustainedBudgetMbps"),
+                    startupSafeBudgetMbps = decisionJson.optionalStrictDoubleOrNull("startupSafeBudgetMbps"),
+                    steadyStateSafeBudgetMbps = decisionJson.optionalStrictDoubleOrNull("steadyStateSafeBudgetMbps"),
                     actionable = decisionJson.optionalStrictBooleanOrNull("actionable")
                         ?: throw InvalidDebridBenchmarkPayload()
                 )

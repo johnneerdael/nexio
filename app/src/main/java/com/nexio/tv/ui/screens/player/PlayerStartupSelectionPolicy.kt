@@ -5,17 +5,118 @@ import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.domain.model.Subtitle
 import java.util.Locale
 
+internal data class StartupAudioCapabilitySupport(
+    val ac3Supported: Boolean = true,
+    val eac3Supported: Boolean = true,
+    val truehdSupported: Boolean = true,
+    val dtsSupported: Boolean = true,
+    val dtshdSupported: Boolean = true,
+    val aacSupported: Boolean = true,
+    val unknownSupported: Boolean = true
+)
+
 internal fun findBestStartupAudioTrackIndex(
     audioTracks: List<TrackInfo>,
-    targets: List<String>
+    targets: List<String>,
+    capabilitySupport: StartupAudioCapabilitySupport = StartupAudioCapabilitySupport()
 ): Int {
     for (target in targets) {
-        val match = audioTracks.indexOfFirst { track ->
+        val candidateIndexes = audioTracks.indices.filter { index ->
+            val track = audioTracks[index]
             audioTrackMatchesLanguage(track, target)
         }
-        if (match >= 0) return match
+        if (candidateIndexes.isNotEmpty()) {
+            return candidateIndexes.maxWithOrNull(
+                compareBy<Int> { startupAudioTrackScore(audioTracks[it], capabilitySupport).supportedRank }
+                    .thenBy { startupAudioTrackScore(audioTracks[it], capabilitySupport).commentaryRank }
+                    .thenBy { startupAudioTrackScore(audioTracks[it], capabilitySupport).originalRank }
+                    .thenBy { startupAudioTrackScore(audioTracks[it], capabilitySupport).codecRank }
+                    .thenBy { startupAudioTrackScore(audioTracks[it], capabilitySupport).channelRank }
+                    .thenBy { -it }
+            ) ?: candidateIndexes.first()
+        }
     }
     return -1
+}
+
+internal fun resolveStartupAudioSelectionIndex(
+    audioTracks: List<TrackInfo>,
+    targets: List<String>,
+    currentSelectedIndex: Int,
+    capabilitySupport: StartupAudioCapabilitySupport = StartupAudioCapabilitySupport()
+): Int {
+    val bestIndex = findBestStartupAudioTrackIndex(
+        audioTracks = audioTracks,
+        targets = targets,
+        capabilitySupport = capabilitySupport
+    )
+    if (bestIndex < 0) {
+        return if (currentSelectedIndex in audioTracks.indices) currentSelectedIndex else -1
+    }
+
+    if (currentSelectedIndex !in audioTracks.indices) {
+        return bestIndex
+    }
+
+    val currentTrack = audioTracks[currentSelectedIndex]
+    return if (targets.any { target -> audioTrackMatchesLanguage(currentTrack, target) } &&
+        currentSelectedIndex == bestIndex
+    ) {
+        currentSelectedIndex
+    } else {
+        bestIndex
+    }
+}
+
+private data class StartupAudioTrackScore(
+    val supportedRank: Int,
+    val commentaryRank: Int,
+    val originalRank: Int,
+    val codecRank: Int,
+    val channelRank: Int
+)
+
+private fun startupAudioTrackScore(
+    track: TrackInfo,
+    capabilitySupport: StartupAudioCapabilitySupport
+): StartupAudioTrackScore {
+    val haystack = listOfNotNull(track.name, track.language, track.trackId, track.codec)
+        .joinToString(" ")
+        .lowercase(Locale.ROOT)
+
+    fun containsAny(vararg terms: String): Boolean = terms.any { haystack.contains(it) }
+
+    val commentaryPenalty = if (containsAny("commentary", "director", "writers", "design team")) 0 else 1
+    val originalBoost = if (containsAny("original", "main", "default")) 1 else 0
+    val codecRank = when {
+        containsAny("truehd", "true hd", "mlp") -> 5
+        containsAny("dts-hd ma", "dts hd ma", "dtshd-ma") -> 4
+        containsAny("dts-hd", "dts hd", "dtshd") -> 3
+        containsAny("e-ac-3", "eac3", "dd+", "dolby digital plus") -> 2
+        containsAny("ac-3", "ac3", "dolby digital") -> 1
+        containsAny("aac") -> 0
+        else -> 0
+    }
+    val supportedRank = when {
+        containsAny("truehd", "true hd", "mlp") -> if (capabilitySupport.truehdSupported) 1 else 0
+        containsAny("dts-hd ma", "dts hd ma", "dtshd-ma", "dts-hd", "dts hd", "dtshd") ->
+            if (capabilitySupport.dtshdSupported) 1 else 0
+        containsAny("dts") -> if (capabilitySupport.dtsSupported) 1 else 0
+        containsAny("e-ac-3", "eac3", "dd+", "dolby digital plus") ->
+            if (capabilitySupport.eac3Supported) 1 else 0
+        containsAny("ac-3", "ac3", "dolby digital") -> if (capabilitySupport.ac3Supported) 1 else 0
+        containsAny("aac") -> if (capabilitySupport.aacSupported) 1 else 0
+        else -> if (capabilitySupport.unknownSupported) 1 else 0
+    }
+    val channelRank = track.channelCount ?: 0
+
+    return StartupAudioTrackScore(
+        supportedRank = supportedRank,
+        commentaryRank = commentaryPenalty,
+        originalRank = originalBoost,
+        codecRank = codecRank,
+        channelRank = channelRank
+    )
 }
 
 internal fun audioTrackMatchesLanguage(track: TrackInfo, target: String): Boolean {
