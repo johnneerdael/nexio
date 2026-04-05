@@ -61,7 +61,7 @@
   <string name="cd_selected">Sélectionné</string>
   <string name="about_title">À propos</string>
   <string name="about_subtitle">Informations sur l\'application, mises à jour et liens légaux</string>
-  <string name="about_made_with_love">Créé avec ❤️ par Tapframe et ses amis</string>
+  <string name="about_made_with_love">Forked from Tapframe, Made by johnneerdael</string>
   <string name="about_version">Version %1$s</string>
   <string name="about_check_updates">Vérifier les mises à jour</string>
   <string name="about_check_updates_subtitle">Télécharger la dernière version</string>
