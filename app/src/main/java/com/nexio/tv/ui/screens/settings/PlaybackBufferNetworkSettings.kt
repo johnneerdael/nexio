@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.ui.Modifier
@@ -33,8 +32,8 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
     onSetVodCacheSizeMode: (VodCacheSizeMode) -> Unit,
     onSetVodCacheSizeMb: (Int) -> Unit,
     onSetUseParallelConnections: (Boolean) -> Unit,
-    onSetParallelConnectionCount: (Int) -> Unit,
-    onSetParallelChunkSizeMb: (Int) -> Unit,
+    @Suppress("UNUSED_PARAMETER") onSetParallelConnectionCount: (Int) -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") onSetParallelChunkSizeMb: (Int) -> Unit = {},
     onResetNetworkToDefaults: () -> Unit
 ) {
     item {
@@ -125,41 +124,6 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
             isChecked = playerSettings.useParallelConnections,
             onCheckedChange = onSetUseParallelConnections
         )
-    }
-
-    if (playerSettings.useParallelConnections) {
-        item {
-            SliderSettingsItem(
-                icon = Icons.Default.Hub,
-                title = stringResource(R.string.playback_buffer_connection_count),
-                subtitle = stringResource(R.string.playback_buffer_connection_count_sub),
-                value = playerSettings.parallelConnectionCount,
-                valueText = playerSettings.parallelConnectionCount.toString(),
-                minValue = MemoryBudget.MIN_CONNECTIONS,
-                maxValue = MemoryBudget.MAX_CONNECTIONS,
-                step = 1,
-                onValueChange = onSetParallelConnectionCount
-            )
-        }
-
-        item {
-            val maxChunkSizeMb = MemoryBudget.maxChunkMb(
-                MemoryBudget.defaultBufferSizeMb,
-                playerSettings.parallelConnectionCount
-            )
-            val chunkSizeMb = playerSettings.parallelChunkSizeMb.coerceAtMost(maxChunkSizeMb)
-            SliderSettingsItem(
-                icon = Icons.Default.Storage,
-                title = stringResource(R.string.playback_buffer_chunk_size),
-                subtitle = stringResource(R.string.playback_buffer_chunk_size_sub),
-                value = chunkSizeMb,
-                valueText = "$chunkSizeMb MB",
-                minValue = MemoryBudget.MIN_CHUNK_MB,
-                maxValue = maxChunkSizeMb,
-                step = 8,
-                onValueChange = onSetParallelChunkSizeMb
-            )
-        }
     }
 
     item {

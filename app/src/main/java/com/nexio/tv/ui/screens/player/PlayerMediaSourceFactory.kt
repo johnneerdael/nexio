@@ -894,7 +894,8 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     companion object {
         private const val TAG = "PlayerMediaSource"
         private const val ENABLE_VOD_CACHE = true
-        private const val VOD_CACHE_DIR = "player_vod_cache"
+        // v2: migrated from URL-based to stable identity cache keys (StableCacheKeyFactory)
+        private const val VOD_CACHE_DIR = "player_vod_cache_v2"
         private const val VOD_CACHE_FREE_SPACE_RESERVE_BYTES = 1024L * 1024L * 1024L
         private const val MIN_RUNTIME_VOD_CACHE_BYTES = 1L * 1024L * 1024L
         private const val PREFETCH_BLOCK_BYTES = 16L * 1024L * 1024L
