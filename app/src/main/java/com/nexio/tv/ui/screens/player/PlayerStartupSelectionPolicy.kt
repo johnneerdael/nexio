@@ -1,6 +1,5 @@
 package com.nexio.tv.ui.screens.player
 
-import com.nexio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.domain.model.Subtitle
 import java.util.Locale
@@ -18,20 +17,31 @@ internal data class StartupAudioCapabilitySupport(
 internal fun findBestStartupAudioTrackIndex(
     audioTracks: List<TrackInfo>,
     targets: List<String>,
+    originalLanguage: String? = null,
     capabilitySupport: StartupAudioCapabilitySupport = StartupAudioCapabilitySupport()
 ): Int {
     for (target in targets) {
         val candidateIndexes = audioTracks.indices.filter { index ->
             val track = audioTracks[index]
-            audioTrackMatchesLanguage(track, target)
+            audioTrackMatchesLanguage(track, target, originalLanguage)
         }
         if (candidateIndexes.isNotEmpty()) {
+            fun score(index: Int): StartupAudioTrackScore {
+                return startupAudioTrackScore(
+                    track = audioTracks[index],
+                    target = target,
+                    originalLanguage = originalLanguage,
+                    capabilitySupport = capabilitySupport
+                )
+            }
+
             return candidateIndexes.maxWithOrNull(
-                compareBy<Int> { startupAudioTrackScore(audioTracks[it], capabilitySupport).supportedRank }
-                    .thenBy { startupAudioTrackScore(audioTracks[it], capabilitySupport).commentaryRank }
-                    .thenBy { startupAudioTrackScore(audioTracks[it], capabilitySupport).originalRank }
-                    .thenBy { startupAudioTrackScore(audioTracks[it], capabilitySupport).codecRank }
-                    .thenBy { startupAudioTrackScore(audioTracks[it], capabilitySupport).channelRank }
+                compareBy<Int> { score(it).supportedRank }
+                    .thenBy { score(it).primaryRank }
+                    .thenBy { score(it).dubbedRank }
+                    .thenBy { score(it).originalRank }
+                    .thenBy { score(it).codecRank }
+                    .thenBy { score(it).channelRank }
                     .thenBy { -it }
             ) ?: candidateIndexes.first()
         }
@@ -43,11 +53,13 @@ internal fun resolveStartupAudioSelectionIndex(
     audioTracks: List<TrackInfo>,
     targets: List<String>,
     currentSelectedIndex: Int,
+    originalLanguage: String? = null,
     capabilitySupport: StartupAudioCapabilitySupport = StartupAudioCapabilitySupport()
 ): Int {
     val bestIndex = findBestStartupAudioTrackIndex(
         audioTracks = audioTracks,
         targets = targets,
+        originalLanguage = originalLanguage,
         capabilitySupport = capabilitySupport
     )
     if (bestIndex < 0) {
@@ -59,7 +71,7 @@ internal fun resolveStartupAudioSelectionIndex(
     }
 
     val currentTrack = audioTracks[currentSelectedIndex]
-    return if (targets.any { target -> audioTrackMatchesLanguage(currentTrack, target) } &&
+    return if (targets.any { target -> audioTrackMatchesLanguage(currentTrack, target, originalLanguage) } &&
         currentSelectedIndex == bestIndex
     ) {
         currentSelectedIndex
@@ -70,7 +82,8 @@ internal fun resolveStartupAudioSelectionIndex(
 
 private data class StartupAudioTrackScore(
     val supportedRank: Int,
-    val commentaryRank: Int,
+    val primaryRank: Int,
+    val dubbedRank: Int,
     val originalRank: Int,
     val codecRank: Int,
     val channelRank: Int
@@ -78,16 +91,33 @@ private data class StartupAudioTrackScore(
 
 private fun startupAudioTrackScore(
     track: TrackInfo,
+    target: String,
+    originalLanguage: String?,
     capabilitySupport: StartupAudioCapabilitySupport
 ): StartupAudioTrackScore {
     val haystack = listOfNotNull(track.name, track.language, track.trackId, track.codec)
         .joinToString(" ")
         .lowercase(Locale.ROOT)
+    val trackTypes = PlayerAudioTrackNamingConventions.trackTypes(track)
+    val normalizedTarget = PlayerSubtitleUtils.normalizeLanguageCode(target)
+    val normalizedOriginalLanguage = originalLanguage
+        ?.takeIf { it.isNotBlank() }
+        ?.let(PlayerSubtitleUtils::normalizeLanguageCode)
+    val targetingOriginalLanguage =
+        normalizedOriginalLanguage != null && normalizedTarget == normalizedOriginalLanguage
 
     fun containsAny(vararg terms: String): Boolean = terms.any { haystack.contains(it) }
 
-    val commentaryPenalty = if (containsAny("commentary", "director", "writers", "design team")) 0 else 1
-    val originalBoost = if (containsAny("original", "main", "default")) 1 else 0
+    val primaryRank = if (trackTypes.any { it in NON_PRIMARY_AUDIO_TRACK_TYPES }) 0 else 1
+    val dubbedRank = if (targetingOriginalLanguage && AudioTrackType.DUBBED in trackTypes) 0 else 1
+    val originalBoost = if (
+        targetingOriginalLanguage &&
+        (AudioTrackType.ORIGINAL in trackTypes || containsAny("main", "default"))
+    ) {
+        1
+    } else {
+        0
+    }
     val codecRank = when {
         containsAny("truehd", "true hd", "mlp") -> 5
         containsAny("dts-hd ma", "dts hd ma", "dtshd-ma") -> 4
@@ -112,42 +142,39 @@ private fun startupAudioTrackScore(
 
     return StartupAudioTrackScore(
         supportedRank = supportedRank,
-        commentaryRank = commentaryPenalty,
+        primaryRank = primaryRank,
+        dubbedRank = dubbedRank,
         originalRank = originalBoost,
         codecRank = codecRank,
         channelRank = channelRank
     )
 }
 
-internal fun audioTrackMatchesLanguage(track: TrackInfo, target: String): Boolean {
+internal fun audioTrackMatchesLanguage(
+    track: TrackInfo,
+    target: String,
+    originalLanguage: String? = null
+): Boolean {
     if (PlayerSubtitleUtils.matchesLanguageCode(track.language, target)) {
         return true
     }
     val normalizedTarget = PlayerSubtitleUtils.normalizeLanguageCode(target)
-    val haystack = listOfNotNull(track.name, track.language, track.trackId)
-        .joinToString(" ")
-        .lowercase(Locale.ROOT)
-    if (haystack.isBlank()) return false
-    val expectedTerms = languageMatchTerms(normalizedTarget)
-    return expectedTerms.any { term -> haystack.contains(term) }
-}
+    val normalizedOriginalLanguage = originalLanguage
+        ?.takeIf { it.isNotBlank() }
+        ?.let(PlayerSubtitleUtils::normalizeLanguageCode)
+    val inferredMatch = PlayerAudioTrackNamingConventions.inferredLanguageCodes(track).any { code ->
+        code == normalizedTarget ||
+            code.startsWith("$normalizedTarget-") ||
+            code.startsWith("${normalizedTarget}_")
+    }
+    if (inferredMatch) {
+        return true
+    }
 
-private fun languageMatchTerms(normalizedTarget: String): Set<String> {
-    val codeTerms = setOf(
-        normalizedTarget,
-        normalizedTarget.replace('-', ' '),
-        normalizedTarget.replace('-', '_')
-    )
-    val nameTerms = AVAILABLE_SUBTITLE_LANGUAGES
-        .firstOrNull { PlayerSubtitleUtils.normalizeLanguageCode(it.code) == normalizedTarget }
-        ?.let { language ->
-            setOf(
-                language.name.lowercase(Locale.ROOT),
-                language.name.substringBefore(" (").lowercase(Locale.ROOT)
-            )
-        }
-        .orEmpty()
-    return codeTerms + nameTerms
+    return normalizedOriginalLanguage != null &&
+        normalizedTarget == normalizedOriginalLanguage &&
+        isUndeterminedAudioTrackLanguage(track.language) &&
+        isLikelyOriginalLanguageTrack(track)
 }
 
 internal sealed interface StartupSubtitleAutoSelectionDecision {
@@ -170,6 +197,7 @@ internal fun decideStartupSubtitleAutoSelection(
     secondaryLanguage: String?,
     hasScannedTextTracksOnce: Boolean,
     playerReady: Boolean,
+    addonSubtitleDiscoveryPending: Boolean = false,
     aiTranslationConfigured: Boolean,
     startupPhase: Boolean
 ): StartupSubtitleAutoSelectionDecision {
@@ -229,6 +257,10 @@ internal fun decideStartupSubtitleAutoSelection(
             subtitle = addonPreferred,
             enableAiTranslation = false
         )
+    }
+
+    if (addonSubtitleDiscoveryPending) {
+        return StartupSubtitleAutoSelectionDecision.DeferAddonFallback
     }
 
     val internalSecondary = findInternal(normalizedSecondary)
@@ -343,4 +375,37 @@ private fun subtitleHasAnyTagForStartup(track: TrackInfo, tags: List<String>): B
         .joinToString(" ")
         .lowercase(Locale.ROOT)
     return tags.any { tag -> haystack.contains(tag) }
+}
+
+private val NON_PRIMARY_AUDIO_TRACK_TYPES = setOf(
+    AudioTrackType.COMMENTARY,
+    AudioTrackType.DESCRIPTIVE_AUDIO,
+    AudioTrackType.ISOLATED_SCORE,
+    AudioTrackType.VOICEOVER
+)
+
+private fun isUndeterminedAudioTrackLanguage(language: String?): Boolean {
+    if (language.isNullOrBlank()) return true
+    val normalized = language.trim().lowercase(Locale.ROOT)
+    return normalized == "und" || normalized == "undetermined"
+}
+
+private fun isLikelyOriginalLanguageTrack(track: TrackInfo): Boolean {
+    val trackTypes = PlayerAudioTrackNamingConventions.trackTypes(track)
+    if (trackTypes.any { it in NON_PRIMARY_AUDIO_TRACK_TYPES || it == AudioTrackType.DUBBED }) {
+        return false
+    }
+
+    if (AudioTrackType.ORIGINAL in trackTypes) {
+        return true
+    }
+
+    if (isUndeterminedAudioTrackLanguage(track.language)) {
+        return true
+    }
+
+    val haystack = listOfNotNull(track.name, track.trackId)
+        .joinToString(" ")
+        .lowercase(Locale.ROOT)
+    return Regex("""\b(main|default)\b""").containsMatchIn(haystack)
 }

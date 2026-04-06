@@ -307,7 +307,7 @@ data class StreamSelectionSettings(
 
 @Serializable
 data class AudioSettings(
-    val preferredAudioLanguage: String = "device",
+    val preferredAudioLanguage: String = "original",
     val secondaryPreferredAudioLanguage: String? = null,
     val skipSilence: Boolean = false,
     val decoderPriority: Int = 1,

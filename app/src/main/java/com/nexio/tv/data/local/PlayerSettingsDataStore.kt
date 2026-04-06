@@ -170,7 +170,7 @@ data class PlayerSettings(
     val decoderPriority: Int = 1, // EXTENSION_RENDERER_MODE_ON (0=off, 1=on, 2=prefer)
     val tunnelingEnabled: Boolean = false,
     val skipSilence: Boolean = false,
-    val preferredAudioLanguage: String = AudioLanguageOption.DEVICE,
+    val preferredAudioLanguage: String = AudioLanguageOption.ORIGINAL,
     val secondaryPreferredAudioLanguage: String? = null,
     val loadingOverlayEnabled: Boolean = true,
     val pauseOverlayEnabled: Boolean = true,
@@ -276,6 +276,10 @@ private val useParallelConnectionsMigrationKey =
     booleanPreferencesKey("use_parallel_connections")
 private val parallelConnectionCountMigrationKey =
     intPreferencesKey("parallel_connection_count")
+private val migrationPreferredAudioOriginalEnabledKey =
+    booleanPreferencesKey("migration_preferred_audio_original_enabled")
+private val preferredAudioLanguageMigrationKey =
+    stringPreferencesKey("preferred_audio_language")
 
 internal fun applyPlayerSettingsMigrations(prefs: MutablePreferences) {
     val streamSelectionDefaultsEnabled =
@@ -291,6 +295,12 @@ internal fun applyPlayerSettingsMigrations(prefs: MutablePreferences) {
         prefs[migrationStreamSelectionDefaultsV2EnabledKey] = true
     } else if (prefs[groupStreamsAcrossAddonsEnabledMigrationKey] != true) {
         prefs[groupStreamsAcrossAddonsEnabledMigrationKey] = true
+    }
+
+    val preferredAudioOriginalEnabled = prefs[migrationPreferredAudioOriginalEnabledKey] ?: false
+    if (!preferredAudioOriginalEnabled) {
+        prefs[preferredAudioLanguageMigrationKey] = AudioLanguageOption.ORIGINAL
+        prefs[migrationPreferredAudioOriginalEnabledKey] = true
     }
 }
 
@@ -655,7 +665,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 tunnelingEnabled = prefs[tunnelingEnabledKey] ?: false,
                 skipSilence = prefs[skipSilenceKey] ?: false,
                 preferredAudioLanguage = normalizeSelectableLanguageCode(
-                    prefs[preferredAudioLanguageKey] ?: AudioLanguageOption.DEVICE
+                    prefs[preferredAudioLanguageKey] ?: AudioLanguageOption.ORIGINAL
                 ),
                 secondaryPreferredAudioLanguage = prefs[secondaryPreferredAudioLanguageKey]
                     ?.let(::normalizeSecondaryAudioLanguageCode),
@@ -855,7 +865,7 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setPreferredAudioLanguage(language: String) {
         store().edit { prefs ->
             prefs[preferredAudioLanguageKey] = normalizeSelectableLanguageCode(
-                language.ifBlank { AudioLanguageOption.DEVICE }
+                language.ifBlank { AudioLanguageOption.ORIGINAL }
             )
         }
     }

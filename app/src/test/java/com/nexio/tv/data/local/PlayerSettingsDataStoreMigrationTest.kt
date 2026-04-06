@@ -3,6 +3,7 @@ package com.nexio.tv.data.local
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.mutablePreferencesOf
+import androidx.datastore.preferences.core.stringPreferencesKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -63,5 +64,35 @@ class PlayerSettingsDataStoreMigrationTest {
         )
 
         assertTrue(uniformStreamFormattingEnabledFromPreferences(prefs))
+    }
+
+    @Test
+    fun `audio preference migration rewrites existing preference to original once`() {
+        val prefs = mutablePreferencesOf(
+            booleanPreferencesKey("migration_preferred_audio_original_enabled") to false,
+            stringPreferencesKey("preferred_audio_language") to "en"
+        )
+
+        applyPlayerSettingsMigrations(prefs)
+
+        assertTrue(prefs[booleanPreferencesKey("migration_preferred_audio_original_enabled")] == true)
+        assertEquals("original", prefs[stringPreferencesKey("preferred_audio_language")])
+    }
+
+    @Test
+    fun `audio preference migration is idempotent after first upgrade`() {
+        val prefs = mutablePreferencesOf(
+            booleanPreferencesKey("migration_preferred_audio_original_enabled") to true,
+            stringPreferencesKey("preferred_audio_language") to "en"
+        )
+
+        applyPlayerSettingsMigrations(prefs)
+
+        assertEquals("en", prefs[stringPreferencesKey("preferred_audio_language")])
+    }
+
+    @Test
+    fun `player settings default audio preference is original`() {
+        assertEquals(AudioLanguageOption.ORIGINAL, PlayerSettings().preferredAudioLanguage)
     }
 }
