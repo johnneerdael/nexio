@@ -902,8 +902,8 @@ class TrailerService(
         }
     }
 
-    private suspend fun getPreferredTmdbTrailerLanguage(): String {
-        return normalizeTmdbTrailerLanguage(tmdbMetadataService.currentTmdbLanguageTag())
+    private fun getPreferredTmdbTrailerLanguage(): String {
+        return TMDB_TRAILER_FALLBACK_LANGUAGE
     }
 
     private suspend fun requireTmdbApiKey(): String? {
