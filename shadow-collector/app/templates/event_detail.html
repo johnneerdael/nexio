@@ -440,43 +440,6 @@
     ══════════════════════════════════════════════════════════ -->
     <aside class="detail-rail">
 
-      <!-- Rail Card 1: Event Timeline -->
-      <div class="rail-card">
-        <h3>Event timeline</h3>
-        <div class="timeline">
-          <div class="tl-row">
-            <div>
-              <div class="tl-dot"></div>
-            </div>
-            <div>
-              <div class="tl-label">Sent</div>
-              <div class="tl-value">{{ event.sent_time.time }}</div>
-              <div class="tl-label" style="font-size:.75rem;">{{ event.sent_time.date }}</div>
-            </div>
-          </div>
-          <div class="tl-line"></div>
-          <div class="tl-row">
-            <div>
-              <div class="tl-dot" style="background:var(--success,#3ba55c);"></div>
-            </div>
-            <div>
-              <div class="tl-label">Received</div>
-              <div class="tl-value">{{ event.event_time.time }}</div>
-              <div class="tl-label" style="font-size:.75rem;">{{ event.event_time.date }}</div>
-            </div>
-          </div>
-          <div class="tl-line"></div>
-          <div class="tl-row">
-            <div>
-              <div class="tl-dot" style="background:var(--text-muted,#888);width:6px;height:6px;margin-top:6px;"></div>
-            </div>
-            <div>
-              <div class="tl-label">Latency</div>
-              <div class="tl-value">{{ event.latency.latency_label }}</div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       <!-- Rail Card 2: Playback Context -->
       <div class="rail-card">
