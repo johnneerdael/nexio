@@ -80,7 +80,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
     }
 }
 
-private suspend fun HomeViewModel.enrichContinueWatchingItems(
+internal suspend fun HomeViewModel.enrichContinueWatchingItems(
     items: List<ContinueWatchingItem>,
     settings: TmdbSettings
 ): List<ContinueWatchingItem> = coroutineScope {
@@ -91,7 +91,7 @@ private suspend fun HomeViewModel.enrichContinueWatchingItems(
     }.awaitAll()
 }
 
-private suspend fun HomeViewModel.enrichContinueWatchingNextUpItems(
+internal suspend fun HomeViewModel.enrichContinueWatchingNextUpItems(
     items: List<ContinueWatchingItem.NextUp>,
     settings: TmdbSettings
 ): List<ContinueWatchingItem.NextUp> = coroutineScope {
@@ -102,7 +102,7 @@ private suspend fun HomeViewModel.enrichContinueWatchingNextUpItems(
     }.awaitAll()
 }
 
-private suspend fun HomeViewModel.enrichContinueWatchingItemWithTmdb(
+internal suspend fun HomeViewModel.enrichContinueWatchingItemWithTmdb(
     item: ContinueWatchingItem,
     settings: TmdbSettings
 ): ContinueWatchingItem {
@@ -453,4 +453,28 @@ private fun parseTraktIdsForContinueWatching(contentId: String): TraktIdsDto {
 
 private fun TraktIdsDto.hasAnyId(): Boolean {
     return trakt != null || !imdb.isNullOrBlank() || tmdb != null || tvdb != null || !slug.isNullOrBlank()
+}
+
+internal fun HomeViewModel.enrichContinueWatchingWithCurrentSettings() {
+    val settings = currentTmdbSettings
+    if (!settings.isActive || !settings.useBasicInfo) return
+    val currentItems = _uiState.value.continueWatchingItems
+    val currentTraktItems = _uiState.value.traktUpNextItems
+    if (currentItems.isEmpty() && currentTraktItems.isEmpty()) return
+
+    continueWatchingEnrichmentJob?.cancel()
+    continueWatchingEnrichmentJob = viewModelScope.launch {
+        try {
+            val enrichedItems = enrichContinueWatchingItems(currentItems, settings)
+            val enrichedTraktItems = enrichContinueWatchingNextUpItems(currentTraktItems, settings)
+            _uiState.update { state ->
+                state.copy(
+                    continueWatchingItems = enrichedItems,
+                    traktUpNextItems = enrichedTraktItems
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(HomeViewModel.TAG, "Continue watching TMDB enrichment failed: ${e.message}")
+        }
+    }
 }

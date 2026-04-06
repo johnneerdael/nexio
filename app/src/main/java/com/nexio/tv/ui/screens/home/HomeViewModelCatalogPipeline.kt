@@ -336,6 +336,7 @@ internal fun HomeViewModel.observeTmdbSettingsPipeline() {
             .collectLatest { settings ->
                 currentTmdbSettings = settings
                 scheduleUpdateCatalogRows()
+                enrichContinueWatchingWithCurrentSettings()
             }
     }
 }

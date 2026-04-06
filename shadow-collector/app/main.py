@@ -6,9 +6,9 @@ import secrets
 import sqlite3
 import logging
 import time
-from collections import Counter
+from collections import Counter, defaultdict
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
@@ -267,6 +267,245 @@ def titleize_slug(value: str) -> str:
     return value.replace("_", " ").replace("-", " ").strip().title() if value else "—"
 
 
+def build_quality_profile(candidate: dict[str, Any]) -> str:
+    parts = []
+    res = candidate.get("resolution")
+    if res and res != "—":
+        parts.append(res)
+    quality = candidate.get("quality")
+    if quality and quality != "—":
+        parts.append(quality)
+    hdr = candidate.get("hdr")
+    if hdr and hdr not in ("—", "none"):
+        parts.append(hdr)
+    audio = candidate.get("audio")
+    if audio and audio not in ("—", "none"):
+        parts.append(audio)
+    return " \u2022 ".join(parts) if parts else "Unknown"
+
+
+def build_normalized_label(candidate: dict[str, Any]) -> str:
+    parts = []
+    res = candidate.get("resolution")
+    if res and res != "—":
+        parts.append(res)
+    quality = candidate.get("quality")
+    if quality and quality != "—":
+        parts.append(quality)
+    hdr = candidate.get("hdr")
+    if hdr and hdr not in ("—", "none"):
+        parts.append(hdr)
+    audio = candidate.get("audio")
+    if audio and audio not in ("—", "none"):
+        parts.append(audio)
+    size = candidate.get("size_label")
+    if size and size != "—":
+        parts.append(size)
+    provider = candidate.get("provider")
+    if provider and provider != "—":
+        parts.append(provider)
+    return " \u2022 ".join(parts) if parts else candidate.get("file") or "Unknown"
+
+
+ARTIFACT_PATTERNS = {"rarbg", "etrg", "sample", "trailer", "subs", "subtitle"}
+
+
+def categorize_rejection(candidate: dict[str, Any]) -> str:
+    reasons = candidate.get("reasons") or []
+    reasons_lower = [r.lower() for r in reasons]
+    file_name = (candidate.get("file") or "").lower()
+    file_base = file_name.rsplit(".", 1)[0] if "." in file_name else file_name
+    size_bytes = candidate.get("size_bytes")
+    bitrate = candidate.get("bitrate_mbps")
+    score = candidate.get("score")
+    hdr = candidate.get("hdr") or ""
+
+    if any(p in file_base for p in ARTIFACT_PATTERNS) or (size_bytes and size_bytes < 10_000_000):
+        return "Artifact / non-media"
+    if "ai" in hdr.lower() or any("upscal" in r for r in reasons_lower):
+        return "AI upscale deprioritized"
+    if bitrate is not None and bitrate <= 0:
+        return "Missing metadata"
+    if score is None and not reasons:
+        return "Missing metadata"
+    if any("lower" in r or "rank" in r for r in reasons_lower):
+        return "Lower-ranked"
+    if reasons:
+        return titleize_slug(reasons[0])
+    return "Lower-ranked"
+
+
+def build_decision_narrative(event: dict[str, Any]) -> str:
+    selected = event.get("selected")
+    if not selected:
+        winner_count = event.get("winner_count") or 0
+        rejected_count = event.get("rejected_count") or 0
+        return f"No stream was chosen for playback. {winner_count} viable candidate(s) and {rejected_count} rejected candidate(s) were evaluated."
+
+    provider = selected.get("provider") or "unknown"
+    profile = selected.get("quality_profile") or "unknown quality"
+    score = selected.get("score")
+    best_alt = event.get("best_alternative")
+
+    parts = [f"Chosen for playback: {provider} {profile}."]
+    if best_alt and score is not None:
+        alt_score = best_alt.get("score")
+        if alt_score is not None and alt_score == score:
+            parts.append("It tied the top score, passed autoplay constraints, and was selected by the deterministic tie-break rule.")
+        elif alt_score is not None:
+            parts.append(f"It scored {score} against the next-best candidate's {alt_score}.")
+        else:
+            parts.append(f"It scored {score} and was the top-ranked candidate.")
+    elif score is not None:
+        parts.append(f"It scored {score} with no viable alternatives.")
+
+    return " ".join(parts)
+
+
+def compute_event_latency(event: dict[str, Any]) -> dict[str, Any]:
+    sent = event.get("sent_at_ms")
+    received = event.get("received_at_ms")
+    if not sent or not received:
+        return {"latency_ms": None, "latency_label": "—"}
+    latency = received - sent
+    if latency < 1000:
+        label = f"{latency}ms"
+    else:
+        label = f"{latency / 1000:.1f}s"
+    return {"latency_ms": latency, "latency_label": label}
+
+
+def format_event_time(epoch_ms: Optional[int]) -> dict[str, str]:
+    if not epoch_ms:
+        return {"time": "—", "date": "—", "full": "—", "relative": "—"}
+    dt = datetime.fromtimestamp(epoch_ms / 1000, tz=timezone.utc).astimezone()
+    now = datetime.now(tz=dt.tzinfo)
+    today = now.date()
+    event_date = dt.date()
+
+    time_str = dt.strftime("%H:%M")
+    full_str = dt.strftime("%a %-d %b %Y, %H:%M:%S")
+    date_str = dt.strftime("%a %-d %b %Y")
+
+    if event_date == today:
+        relative = "Today"
+    elif event_date == today - timedelta(days=1):
+        relative = "Yesterday"
+    else:
+        delta = (today - event_date).days
+        if delta < 7:
+            relative = f"{delta} days ago"
+        else:
+            relative = date_str
+
+    return {"time": time_str, "date": date_str, "full": full_str, "relative": relative}
+
+
+def format_runtime_human(minutes: Optional[int]) -> str:
+    if not minutes or minutes <= 0:
+        return "—"
+    hours, mins = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h {mins}m"
+    return f"{mins}m"
+
+
+def compute_rejection_summary(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counts: dict[str, int] = Counter()
+    for c in candidates:
+        if c.get("status") == "Rejected":
+            category = c.get("rejection_category") or "Other"
+            counts[category] += 1
+    return [{"reason": reason, "count": count} for reason, count in sorted(counts.items(), key=lambda x: -x[1])]
+
+
+def compute_dashboard_kpis(events: list[dict[str, Any]]) -> dict[str, Any]:
+    total = len(events)
+    if total == 0:
+        return {
+            "events_analyzed": 0,
+            "clean_selections_pct": "—",
+            "needs_review": 0,
+            "benchmark_coverage_pct": "—",
+            "avg_candidate_pool": "—",
+        }
+    has_selected = sum(1 for e in events if e.get("selected"))
+    clean_pct = round(has_selected / total * 100) if total else 0
+    needs_review = sum(
+        1 for e in events
+        if not e.get("selected")
+        or (e.get("selected", {}).get("score") is not None and e["selected"]["score"] <= 2)
+    )
+    has_benchmark = sum(1 for e in events if e.get("benchmarks_used"))
+    bench_pct = round(has_benchmark / total * 100) if total else 0
+    candidate_counts = [
+        (e.get("winner_count") or 0) + (e.get("rejected_count") or 0)
+        for e in events
+    ]
+    avg_pool = round(sum(candidate_counts) / len(candidate_counts), 1) if candidate_counts else 0
+
+    return {
+        "events_analyzed": total,
+        "clean_selections_pct": f"{clean_pct}%",
+        "needs_review": needs_review,
+        "benchmark_coverage_pct": f"{bench_pct}%",
+        "avg_candidate_pool": avg_pool,
+    }
+
+
+def group_events_by_date(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not events:
+        return []
+    now = datetime.now(tz=timezone.utc).astimezone()
+    today = now.date()
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    date_keys: list[str] = []
+
+    for event in events:
+        epoch_ms = event.get("received_at_ms")
+        if epoch_ms:
+            dt = datetime.fromtimestamp(epoch_ms / 1000, tz=timezone.utc).astimezone()
+            event_date = dt.date()
+        else:
+            event_date = today
+
+        if event_date == today:
+            key = "Today"
+        elif event_date == today - timedelta(days=1):
+            key = "Yesterday"
+        else:
+            key = event_date.strftime("%a %-d %b %Y")
+
+        if key not in groups:
+            date_keys.append(key)
+        groups[key].append(event)
+
+    result = []
+    for key in date_keys:
+        group_events = groups[key]
+        has_selected = sum(1 for e in group_events if e.get("selected"))
+        needs_review = sum(
+            1 for e in group_events
+            if not e.get("selected")
+            or (e.get("selected", {}).get("score") is not None and e["selected"]["score"] <= 2)
+        )
+        has_benchmark = sum(1 for e in group_events if e.get("benchmarks_used"))
+        bench_pct = round(has_benchmark / len(group_events) * 100) if group_events else 0
+        provider_counts = Counter(
+            e["selected"]["provider"] for e in group_events if e.get("selected") and e["selected"].get("provider")
+        )
+        dominant_provider = provider_counts.most_common(1)[0][0] if provider_counts else "—"
+        result.append({
+            "label": key,
+            "count": len(group_events),
+            "needs_review": needs_review,
+            "benchmark_coverage_pct": bench_pct,
+            "dominant_provider": dominant_provider,
+            "events": group_events,
+        })
+    return result
+
+
 def primary_hdr_label(hdr_tags: list[str], visual_tags: list[str]) -> str:
     tags = [tag for tag in hdr_tags if tag] + [tag for tag in visual_tags if tag]
     return tags[0] if tags else "none"
@@ -341,6 +580,12 @@ def parse_stream_candidate(item: dict[str, Any] | None, status_label: str, reaso
         "runtime_source": parsed.get("runtimeSource") or "—",
     }
     candidate["bitrate_label"] = format_bitrate_mbps(candidate["bitrate_mbps"])
+    candidate["quality_profile"] = build_quality_profile(candidate)
+    candidate["normalized_label"] = build_normalized_label(candidate)
+    if status_label == "Rejected":
+        candidate["rejection_category"] = categorize_rejection(candidate)
+    else:
+        candidate["rejection_category"] = None
     candidate["summary_line"] = build_stream_summary(candidate)
     candidate["search_blob"] = " ".join(
         str(part)
@@ -505,6 +750,15 @@ def build_event_view(row: dict[str, Any]) -> dict[str, Any]:
     result_line = selected["summary_line"] if selected else f"winner=none eligible={len(normalized_winners)} rejected={len(rejected)}"
     title = first_non_blank(row.get("title"), request_data.get("title"), row.get("video_id"), f"Event {row.get('id')}") or "Untitled"
 
+    best_alternative = None
+    selected_key = selected.get("stream_key") if selected else None
+    for w in normalized_winners:
+        if w["stream_key"] != selected_key:
+            best_alternative = w
+            break
+
+    runtime_minutes = request_data.get("runtimeMinutes")
+
     event = {
         "id": row.get("id"),
         "title": title,
@@ -536,13 +790,23 @@ def build_event_view(row: dict[str, Any]) -> dict[str, Any]:
         "timings_ms": payload.get("timingsMs"),
         "result_line": result_line,
         "raw_json_pretty": json.dumps(envelope, indent=2),
+        "best_alternative": best_alternative,
+        "rejection_summary": compute_rejection_summary(candidates),
+        "event_time": format_event_time(row.get("received_at_ms")),
+        "sent_time": format_event_time(row.get("sent_at_ms")),
+        "latency": compute_event_latency({
+            "sent_at_ms": row.get("sent_at_ms"),
+            "received_at_ms": row.get("received_at_ms"),
+        }),
+        "runtime_minutes": runtime_minutes,
+        "runtime_human": format_runtime_human(runtime_minutes),
         "request_cards": [
             {"label": "Request ID", "value": row.get("request_id") or request_data.get("requestId") or "—"},
             {"label": "Video ID", "value": row.get("video_id") or request_data.get("videoId") or "—"},
             {"label": "Content Type", "value": row.get("content_type") or request_data.get("contentType") or "—"},
             {"label": "Season", "value": request_data.get("season") or "—"},
             {"label": "Episode", "value": request_data.get("episode") or "—"},
-            {"label": "Runtime", "value": f"{request_data.get('runtimeMinutes')}m" if request_data.get("runtimeMinutes") else "—"},
+            {"label": "Runtime", "value": format_runtime_human(runtime_minutes)},
         ],
         "client_cards": [
             {"label": "App Version", "value": row.get("client_app_version") or client_data.get("appVersion") or "—"},
@@ -554,6 +818,7 @@ def build_event_view(row: dict[str, Any]) -> dict[str, Any]:
             {"label": "Sent", "value": format_timestamp(row.get("sent_at_ms"))},
         ],
     }
+    event["decision_narrative"] = build_decision_narrative(event)
     event["search_blob"] = " ".join(
         part.lower()
         for part in [
@@ -951,19 +1216,21 @@ def dashboard(
     sorted_events = sort_events(filtered_events, sort, direction)
     rows = sorted_events[:limit]
 
-    selected_scores = [event["selected"]["score"] for event in rows if event.get("selected") and event["selected"].get("score") is not None]
+    kpis = compute_dashboard_kpis(filtered_events)
+    date_groups = group_events_by_date(rows)
+
     provider_counts = Counter(event["selected"]["provider"] for event in events if event.get("selected"))
     top_provider = provider_counts.most_common(1)[0][0] if provider_counts else "—"
 
     context = {
         "rows": rows,
+        "date_groups": date_groups,
         "total": total,
         "visible_total": len(filtered_events),
+        "kpis": kpis,
         "stats": {
             "shown": len(rows),
-            "average_score": round(sum(selected_scores) / len(selected_scores), 1) if selected_scores else "—",
             "top_provider": top_provider,
-            "unique_titles": len({event['title'] for event in filtered_events}),
         },
         "filters": {
             "q": q,
@@ -995,8 +1262,13 @@ def public_dashboard(
             public_not_found()
         rows = [build_public_event_view(row) for row in fetch_shadow_rows(conn, android_id=android_id)]
 
+    date_groups = group_events_by_date(rows)
+    kpis = compute_dashboard_kpis(rows)
+
     context = {
         "rows": rows,
+        "date_groups": date_groups,
+        "kpis": kpis,
         "token": token,
         "public_rows": len(rows),
     }
