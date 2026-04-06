@@ -19,7 +19,6 @@ internal class PagedFrontierBuffer(
 
     companion object {
         const val PAGE_SIZE = 128 * 1024 // 128KB
-        private const val SUB_BLOCK_SIZE = 4 * 1024 // 4KB sub-blocks for completion tracking
     }
 
     // Page index → page data
@@ -32,11 +31,11 @@ internal class PagedFrontierBuffer(
     private val pagePool = ConcurrentLinkedDeque<ByteArray>()
     private val maxPoolSize: Int = 32
 
-    // Sub-block completion tracking per page. Each page is divided into SUB_BLOCK_SIZE
-    // blocks. A BitSet tracks which sub-blocks have been written. This correctly handles
-    // both overlapping writes (bootstrap + chunk) and out-of-order writes (chunk N+1
-    // arriving before chunk N within the same page).
-    private val pageSubBlocks = ConcurrentHashMap<Int, BitSet>()
+    // Per-page fill tracking. Tracks contiguous bytes from page start (lowWater) plus
+    // one pending out-of-order range. Handles overlapping writes (bootstrap + download),
+    // out-of-order writes (chunk N+1 before chunk N), and partial reads correctly.
+    private class PageFill(var lowWater: Int = 0, var pendingStart: Int = -1, var pendingEnd: Int = -1)
+    private val pageFills = ConcurrentHashMap<Int, PageFill>()
 
     // Total length, used so partial last-page can be marked complete
     private var totalLength: Long = -1L
@@ -87,20 +86,31 @@ internal class PagedFrontierBuffer(
             val spaceInPage = pageSize - offsetInPage
             val toCopy = minOf(remaining, spaceInPage)
 
-            val pageBuf = pages.getOrPut(pageIndex) { acquirePage() }
-            System.arraycopy(data, srcOffset, pageBuf, offsetInPage, toCopy)
-
             synchronized(this) {
-                val subBlocks = pageSubBlocks.getOrPut(pageIndex) {
-                    BitSet(pageSize / SUB_BLOCK_SIZE + 1)
+                val pageBuf = pages.getOrPut(pageIndex) { acquirePage() }
+                System.arraycopy(data, srcOffset, pageBuf, offsetInPage, toCopy)
+
+                val fill = pageFills.getOrPut(pageIndex) { PageFill() }
+                val writeEnd = offsetInPage + toCopy
+                if (offsetInPage <= fill.lowWater) {
+                    fill.lowWater = maxOf(fill.lowWater, writeEnd)
+                    if (fill.pendingStart >= 0 && fill.lowWater >= fill.pendingStart) {
+                        fill.lowWater = maxOf(fill.lowWater, fill.pendingEnd)
+                        fill.pendingStart = -1
+                        fill.pendingEnd = -1
+                    }
+                } else {
+                    if (fill.pendingStart < 0) {
+                        fill.pendingStart = offsetInPage
+                        fill.pendingEnd = writeEnd
+                    } else {
+                        fill.pendingStart = minOf(fill.pendingStart, offsetInPage)
+                        fill.pendingEnd = maxOf(fill.pendingEnd, writeEnd)
+                    }
                 }
-                val firstSubBlock = offsetInPage / SUB_BLOCK_SIZE
-                val lastSubBlock = (offsetInPage + toCopy - 1) / SUB_BLOCK_SIZE
-                subBlocks.set(firstSubBlock, lastSubBlock + 1)
 
                 val expectedPageBytes = expectedBytesForPage(pageIndex)
-                val requiredSubBlocks = (expectedPageBytes + SUB_BLOCK_SIZE - 1) / SUB_BLOCK_SIZE
-                if (subBlocks.cardinality() >= requiredSubBlocks) {
+                if (fill.lowWater >= expectedPageBytes) {
                     completedPages.set(pageIndex)
                     advanceFrontier()
                 }
@@ -131,38 +141,33 @@ internal class PagedFrontierBuffer(
     fun read(position: Long, dest: ByteArray, destOffset: Int, length: Int): Int {
         synchronized(this) {
             if (contiguousFrontierBytes <= position) return 0
+
+            var totalCopied = 0
+            var currentPos = position
+            var destPos = destOffset
+
+            while (totalCopied < length) {
+                val pageIndex = (currentPos / pageSize).toInt()
+                if (!completedPages[pageIndex]) break
+                if (currentPos >= contiguousFrontierBytes) break
+
+                val pageBuf = pages[pageIndex] ?: break
+                val offsetInPage = (currentPos % pageSize).toInt()
+                val availableInPage = minOf(
+                    pageBuf.size - offsetInPage,
+                    (contiguousFrontierBytes - currentPos).toInt()
+                )
+                val toCopy = minOf(length - totalCopied, availableInPage)
+                if (toCopy <= 0) break
+
+                System.arraycopy(pageBuf, offsetInPage, dest, destPos, toCopy)
+                totalCopied += toCopy
+                currentPos += toCopy
+                destPos += toCopy
+            }
+
+            return totalCopied
         }
-
-        var totalCopied = 0
-        var currentPos = position
-        var destPos = destOffset
-
-        while (totalCopied < length) {
-            val pageIndex = (currentPos / pageSize).toInt()
-
-            val isComplete = synchronized(this) { completedPages[pageIndex] }
-            if (!isComplete) break
-
-            // Check that we haven't gone past the frontier (handles edge at last page)
-            val frontierSnapshot = synchronized(this) { contiguousFrontierBytes }
-            if (currentPos >= frontierSnapshot) break
-
-            val pageBuf = pages[pageIndex] ?: break
-            val offsetInPage = (currentPos % pageSize).toInt()
-            val availableInPage = minOf(
-                pageBuf.size - offsetInPage,
-                (frontierSnapshot - currentPos).toInt()
-            )
-            val toCopy = minOf(length - totalCopied, availableInPage)
-            if (toCopy <= 0) break
-
-            System.arraycopy(pageBuf, offsetInPage, dest, destPos, toCopy)
-            totalCopied += toCopy
-            currentPos += toCopy
-            destPos += toCopy
-        }
-
-        return totalCopied
     }
 
     /**
@@ -177,7 +182,7 @@ internal class PagedFrontierBuffer(
                 iter.remove()
                 releasePage(entry.value)
                 synchronized(this) {
-                    pageSubBlocks.remove(entry.key)
+                    pageFills.remove(entry.key)
                 }
             }
         }
@@ -191,7 +196,7 @@ internal class PagedFrontierBuffer(
             pages.values.forEach { releasePage(it) }
             pages.clear()
             completedPages.clear()
-            pageSubBlocks.clear()
+            pageFills.clear()
             contiguousFrontierBytes = 0L
             basePosition = 0L
             totalLength = -1L
