@@ -390,13 +390,14 @@ class WatchProgressRepositoryImpl @Inject constructor(
         // 3. Atomic optimistic update — remove from CW
         snapshotServiceProvider.get().applyEpisodesMarked(episodeRefs)
 
-        // 4. Resolve Trakt episode IDs in parallel
+        // 4. Resolve Trakt episode IDs in parallel — map<episodeNumber, TraktEpisodeRef>
         val episodeNumbers = episodes.mapNotNull { it.episodeNumber }
-        val traktRefs = traktProgressService.resolveSeasonEpisodeTraktIds(
+        val epNumToTraktRef = traktProgressService.resolveSeasonEpisodeTraktIds(
             showContentId = showContentId,
             season = seasonNumber,
             episodeNumbers = episodeNumbers
         )
+        val traktRefs = epNumToTraktRef.values.toList()
 
         // 5. One batched POST via SeasonMarkBatcher
         val result = try {
@@ -410,15 +411,10 @@ class WatchProgressRepositoryImpl @Inject constructor(
         // 6. Partial rollback for not_found episodes
         if (result.notFound.isNotEmpty()) {
             val notFoundIds = result.notFound.map { it.traktId }.toSet()
-            // We can't map traktId back to episodeNumber directly, so we rollback
-            // only the episodes whose episode numbers correspond to unresolved refs.
-            // Build a traktId → episodeNumber map from the resolution result.
-            val traktIdToEpNum: Map<Int, Int> = buildMap {
-                traktRefs.forEachIndexed { index, ref ->
-                    val epNum = episodeNumbers.getOrNull(index) ?: return@forEachIndexed
-                    put(ref.traktId, epNum)
-                }
-            }
+            // Invert epNumToTraktRef to map traktId → episodeNumber for rollback lookup
+            val traktIdToEpNum: Map<Int, Int> = epNumToTraktRef
+                .entries
+                .associate { (epNum, ref) -> ref.traktId to epNum }
             val notFoundEpNums = notFoundIds.mapNotNull { traktIdToEpNum[it] }.toSet()
             val notFoundProgress = optimisticallyRemoved.filter { progress ->
                 progress.episode != null && notFoundEpNums.contains(progress.episode)

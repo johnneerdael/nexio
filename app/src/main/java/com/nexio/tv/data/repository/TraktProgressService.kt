@@ -1394,7 +1394,9 @@ class TraktProgressService @Inject constructor(
     /**
      * Resolve Trakt integer episode IDs for all (season, episode-number) pairs in [episodeNumbers].
      * Calls [fetchEpisodeSummary] in parallel (one request per episode).
-     * Episodes whose Trakt ID cannot be resolved are omitted from the result.
+     *
+     * Returns a map from episode-number to [TraktEpisodeRef]. Episodes whose Trakt ID cannot be
+     * resolved are absent from the map.
      *
      * @param showContentId the content ID of the show (e.g. "tt1234567" or "trakt:12345")
      * @param season the season number
@@ -1404,18 +1406,24 @@ class TraktProgressService @Inject constructor(
         showContentId: String,
         season: Int,
         episodeNumbers: List<Int>
-    ): List<com.nexio.tv.data.repository.trakt.TraktEpisodeRef> {
-        if (episodeNumbers.isEmpty()) return emptyList()
+    ): Map<Int, com.nexio.tv.data.repository.trakt.TraktEpisodeRef> {
+        if (episodeNumbers.isEmpty()) return emptyMap()
         val pathId = toTraktPathId(showContentId)
         return coroutineScope {
             episodeNumbers.map { epNumber ->
                 async {
-                    runCatching { fetchEpisodeSummary(pathId, season, epNumber) }
+                    val traktId = runCatching { fetchEpisodeSummary(pathId, season, epNumber) }
                         .getOrNull()
                         ?.ids?.trakt
-                        ?.let { traktId -> com.nexio.tv.data.repository.trakt.TraktEpisodeRef(traktId) }
+                    if (traktId != null) {
+                        epNumber to com.nexio.tv.data.repository.trakt.TraktEpisodeRef(traktId)
+                    } else {
+                        null
+                    }
                 }
-            }.awaitAll().filterNotNull()
+            }.awaitAll()
+                .filterNotNull()
+                .toMap()
         }
     }
 
