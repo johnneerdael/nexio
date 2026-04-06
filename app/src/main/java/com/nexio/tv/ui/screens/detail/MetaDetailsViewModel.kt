@@ -17,12 +17,14 @@ import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktCommentItemDto
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.trailer.TrailerService
+import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.data.repository.hasAnyId
+import com.nexio.tv.data.repository.AirDateGate
 import com.nexio.tv.data.repository.parseContentIds
 import com.nexio.tv.data.repository.toTraktIds
 import com.nexio.tv.domain.model.ContentType
@@ -108,6 +110,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val episodeRatingsSelectionRepository: EpisodeRatingsSelectionRepository,
     private val libraryRepository: LibraryRepository,
     private val watchProgressRepository: WatchProgressRepository,
+    private val continueWatchingSnapshotService: ContinueWatchingSnapshotService,
     private val addonRepository: AddonRepository,
     private val traktScrobbleService: TraktScrobbleService,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
@@ -1838,39 +1841,34 @@ class MetaDetailsViewModel @Inject constructor(
     private fun markSeasonWatched(season: Int) {
         val meta = _uiState.value.meta ?: return
         viewModelScope.launch {
-            val episodes = meta.videos.filter { it.season == season && it.episode != null }
-            val unwatched = episodes.filter { video ->
-                val s = video.season!!
-                val e = video.episode!!
-                val isWatched = _uiState.value.episodeProgressMap[s to e]?.isCompleted() == true
-                    || _uiState.value.watchedEpisodes.contains(s to e)
-                !isWatched
-            }
-            if (unwatched.isEmpty()) {
-                showMessage(context.getString(R.string.detail_all_episodes_watched))
-                return@launch
-            }
-
-            val pendingKeys = unwatched.map { episodePendingKey(it) }.toSet()
-            _uiState.update {
-                it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys + pendingKeys)
-            }
-
-            var marked = 0
-            for (video in unwatched) {
-                val key = episodePendingKey(video)
-                runCatching {
-                    watchProgressRepository.markAsCompleted(buildCompletedEpisodeProgress(meta, video))
-                    marked++
-                }.onFailure { error ->
-                    Log.w(TAG, "Failed to mark S${video.season}E${video.episode} as watched: ${error.message}")
+            try {
+                val nowMs = System.currentTimeMillis()
+                val tmdbContentType = resolveTmdbContentType(meta)
+                val tmdbIdStr = tmdbService.ensureTmdbId(meta.id, tmdbContentType.toApiString())
+                val tvId = tmdbIdStr?.toIntOrNull()
+                    ?: parseContentIds(meta.id).tmdb
+                    ?: run {
+                        showMessage(
+                            message = context.getString(R.string.detail_marked_episodes_watched, 0),
+                            isError = true
+                        )
+                        return@launch
+                    }
+                val episodes = tmdbMetadataService.fetchSeasonEpisodes(tvId, season, null)
+                    .filter { ep -> AirDateGate.isAired(0L, ep.airDate, nowMs) }
+                if (episodes.isEmpty()) {
+                    showMessage(context.getString(R.string.detail_all_episodes_watched))
+                    return@launch
                 }
-                _uiState.update {
-                    it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys - key)
-                }
+                watchProgressRepository.markAsCompletedBatch(meta, season, episodes)
+                showMessage(context.getString(R.string.detail_marked_episodes_watched, episodes.size))
+            } catch (e: Exception) {
+                Log.w(TAG, "markSeasonWatched failed for season=$season: ${e.message}")
+                showMessage(
+                    message = e.message ?: context.getString(R.string.detail_marked_episodes_watched, 0),
+                    isError = true
+                )
             }
-
-            showMessage(context.getString(R.string.detail_marked_episodes_watched, marked))
         }
     }
 
@@ -2430,10 +2428,19 @@ class MetaDetailsViewModel @Inject constructor(
             _uiState.update {
                 it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys + pendingKey)
             }
+            // Capture for rollback before the optimistic removal.
+            val captured = _uiState.value.episodeProgressMap[season to episode]
+            // Optimistically remove from rawSnapshotState so the next-up appears within one tick.
+            continueWatchingSnapshotService.removeResumeEntry(video.id)
             runCatching {
                 watchProgressRepository.removeFromHistory(itemId, season, episode)
                 showMessage(context.getString(R.string.cw_action_clear_progress))
+                continueWatchingSnapshotService.ensureFresh(force = true)
             }.onFailure { error ->
+                // Roll back the optimistic removal on Trakt failure.
+                if (captured != null) {
+                    continueWatchingSnapshotService.reinsertResumeEntry(captured)
+                }
                 showMessage(
                     message = error.message ?: "Failed to clear episode progress",
                     isError = true

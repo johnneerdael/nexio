@@ -7,9 +7,11 @@ import com.nexio.tv.data.repository.MetaRepositoryImpl
 import com.nexio.tv.data.repository.StreamRepositoryImpl
 import com.nexio.tv.data.repository.SubtitleRepositoryImpl
 import com.nexio.tv.data.repository.SyncRepositoryImpl
+import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.repository.WatchProgressRepositoryImpl
 import com.nexio.tv.data.repository.servicewrap.DebridAvailabilityResolver
 import com.nexio.tv.data.repository.servicewrap.ServiceWrapResolver
+import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.LibraryRepository
@@ -20,8 +22,10 @@ import com.nexio.tv.domain.repository.SyncRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import dagger.Binds
 import dagger.Module
+import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.Dispatchers
 import javax.inject.Singleton
 
 @Module
@@ -63,4 +67,12 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindServiceWrapResolver(impl: DebridAvailabilityResolver): ServiceWrapResolver
+
+    companion object {
+        @Provides
+        @Singleton
+        fun provideSeasonMarkBatcher(traktProgressService: TraktProgressService): SeasonMarkBatcher {
+            return SeasonMarkBatcher(traktProgressService, Dispatchers.IO)
+        }
+    }
 }

@@ -595,10 +595,9 @@ private fun ClassicHomeRoute(
         onCheckInContinueWatching = { item ->
             viewModel.checkInContinueWatching(item)
         },
-        onManageListsContinueWatching = if (uiState.librarySourceMode == LibrarySourceMode.TRAKT) {
-            { item -> viewModel.openContinueWatchingListPicker(item) }
-        } else {
-            null
+        cwWatchlistMembership = uiState.posterLibraryMembership,
+        onToggleContinueWatchingLibrary = { item ->
+            viewModel.toggleContinueWatchingLibrary(item)
         },
         isCatalogItemWatched = isCatalogItemWatched,
         onCatalogItemLongPress = onCatalogItemLongPress,
@@ -642,10 +641,9 @@ private fun GridHomeRoute(
         onCheckInContinueWatching = { item ->
             viewModel.checkInContinueWatching(item)
         },
-        onManageListsContinueWatching = if (uiState.librarySourceMode == LibrarySourceMode.TRAKT) {
-            { item -> viewModel.openContinueWatchingListPicker(item) }
-        } else {
-            null
+        cwWatchlistMembership = uiState.posterLibraryMembership,
+        onToggleContinueWatchingLibrary = { item ->
+            viewModel.toggleContinueWatchingLibrary(item)
         },
         isCatalogItemWatched = isCatalogItemWatched,
         onCatalogItemLongPress = onCatalogItemLongPress,
@@ -755,14 +753,8 @@ private fun ModernHomeRoute(
             viewModel.checkInContinueWatching(item)
         }
     }
-    val manageListsContinueWatching = remember(viewModel, uiState.librarySourceMode) {
-        if (uiState.librarySourceMode == LibrarySourceMode.TRAKT) {
-            { item: ContinueWatchingItem ->
-                viewModel.openContinueWatchingListPicker(item)
-            }
-        } else {
-            null
-        }
+    val toggleContinueWatchingLibrary = remember(viewModel) {
+        { item: ContinueWatchingItem -> viewModel.toggleContinueWatchingLibrary(item) }
     }
     val saveModernFocusState = remember(viewModel) {
         { vi: Int, vo: Int, ri: Int, ii: Int, m: Map<String, Int> ->
@@ -782,7 +774,8 @@ private fun ModernHomeRoute(
         onRemoveContinueWatching = removeContinueWatching,
         onMarkContinueWatchingWatched = markContinueWatchingWatched,
         onCheckInContinueWatching = checkInContinueWatching,
-        onManageListsContinueWatching = manageListsContinueWatching,
+        cwWatchlistMembership = uiState.posterLibraryMembership,
+        onToggleContinueWatchingLibrary = toggleContinueWatchingLibrary,
         isCatalogItemWatched = isCatalogItemWatched,
         onCatalogItemLongPress = onCatalogItemLongPress,
         onItemFocus = remember(viewModel) { { item -> viewModel.onItemFocus(item) } },

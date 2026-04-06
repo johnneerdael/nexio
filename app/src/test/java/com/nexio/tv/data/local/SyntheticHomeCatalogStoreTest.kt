@@ -18,8 +18,9 @@ class SyntheticHomeCatalogStoreTest {
     @Test
     fun `read restores persisted synthetic rows for current language epoch`() {
         val prefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
         var epoch = 7
-        val context = mockContext(prefs, "synthetic_home_catalogs")
+        val context = mockContext(prefs, "synthetic_home_catalogs", localePrefs)
         val metadataStore = mockk<MetadataDiskCacheStore>()
         every { metadataStore.currentLanguageEpoch() } answers { epoch }
         val store = SyntheticHomeCatalogStore(context, metadataStore)
@@ -48,9 +49,34 @@ class SyntheticHomeCatalogStoreTest {
     }
 
     @Test
+    fun `read rejects persisted synthetic rows when app language changes`() {
+        val prefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val context = mockContext(prefs, "synthetic_home_catalogs", localePrefs)
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 7
+        val store = SyntheticHomeCatalogStore(context, metadataStore)
+
+        store.write(
+            SyntheticHomeCatalogStore.Snapshot(
+                traktGroups = listOf(
+                    PersistedSyntheticCatalogGroup(
+                        orderKey = "trakt_up_next",
+                        rows = listOf(sampleRow("trakt", "up_next"))
+                    )
+                )
+            )
+        )
+
+        localePrefs.edit().putString("locale_tag", "nl").apply()
+
+        assertNull(store.read())
+    }
+
+    @Test
     fun `write persists canonical group keys`() {
         val prefs = InMemorySharedPreferences()
-        val context = mockContext(prefs, "synthetic_home_catalogs")
+        val context = mockContext(prefs, "synthetic_home_catalogs", localePrefs("en"))
         val metadataStore = mockk<MetadataDiskCacheStore>()
         every { metadataStore.currentLanguageEpoch() } returns 7
         val store = SyntheticHomeCatalogStore(context, metadataStore)
@@ -99,9 +125,25 @@ class SyntheticHomeCatalogStoreTest {
         )
     }
 
-    private fun mockContext(prefs: InMemorySharedPreferences, expectedName: String): Context {
+    private fun localePrefs(tag: String): InMemorySharedPreferences {
+        return InMemorySharedPreferences().also { prefs ->
+            prefs.edit().putString("locale_tag", tag).apply()
+        }
+    }
+
+    private fun mockContext(
+        prefs: InMemorySharedPreferences,
+        expectedName: String,
+        localePrefs: InMemorySharedPreferences
+    ): Context {
         return mockk {
-            every { getSharedPreferences(expectedName, Context.MODE_PRIVATE) } returns prefs
+            every { getSharedPreferences(any(), Context.MODE_PRIVATE) } answers {
+                when (firstArg<String>()) {
+                    expectedName -> prefs
+                    "app_locale" -> localePrefs
+                    else -> throw IllegalArgumentException("Unexpected prefs ${firstArg<String>()}")
+                }
+            }
         }
     }
 }

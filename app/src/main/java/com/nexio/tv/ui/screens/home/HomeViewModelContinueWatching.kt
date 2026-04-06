@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.repository.ContinueWatchingNextUpRef
 import com.nexio.tv.data.repository.ContinueWatchingResumeRef
+import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.ContinueWatchingTimelineRow
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.buildMixedContinueWatchingTimeline
@@ -230,17 +231,36 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
         }
         return
     }
+    // For InProgress items: find the matching resume entry for optimistic removal + rollback.
+    val capturedProgress = _uiState.value.continueWatchingItems
+        .filterIsInstance<ContinueWatchingItem.InProgress>()
+        .firstOrNull { item ->
+            item.progress.contentId == contentId &&
+                (season == null || item.progress.season == season) &&
+                (episode == null || item.progress.episode == episode)
+        }?.progress
     viewModelScope.launch {
         Log.d(
             HomeViewModel.TAG,
             "removeContinueWatching requested contentId=$contentId season=$season episode=$episode isNextUp=$isNextUp"
         )
-        watchProgressRepository.removeProgress(
-            contentId = contentId,
-            season = season,
-            episode = episode
-        )
-        continueWatchingSnapshotService.ensureFresh(force = true)
+        if (capturedProgress != null) {
+            continueWatchingSnapshotService.removeResumeEntry(capturedProgress.videoId)
+        }
+        runCatching {
+            watchProgressRepository.removeProgress(
+                contentId = contentId,
+                season = season,
+                episode = episode
+            )
+            continueWatchingSnapshotService.ensureFresh(force = true)
+        }.onFailure { error ->
+            if (capturedProgress != null) {
+                runCatching { continueWatchingSnapshotService.reinsertResumeEntry(capturedProgress) }
+                    .onFailure { Log.w(HomeViewModel.TAG, "Failed to rollback removeResumeEntry", it) }
+            }
+            Log.w(HomeViewModel.TAG, "Failed to remove continue watching progress for $contentId", error)
+        }
     }
 }
 
@@ -261,7 +281,24 @@ internal fun HomeViewModel.markContinueWatchingAsWatchedPipeline(item: ContinueW
         continueWatchingSnapshotService.removeShowOptimistically(targetId)
     }
 
+    val episodeRef = when (item) {
+        is ContinueWatchingItem.InProgress -> {
+            val p = item.progress
+            if (p.season != null && p.episode != null) {
+                listOf(ContinueWatchingSnapshotService.EpisodeRef(p.contentId, p.season, p.episode))
+            } else emptyList()
+        }
+        is ContinueWatchingItem.NextUp -> {
+            val info = item.info
+            listOf(ContinueWatchingSnapshotService.EpisodeRef(info.contentId, info.season, info.episode))
+        }
+    }
+    val capturedProgress = (item as? ContinueWatchingItem.InProgress)?.progress
+
     viewModelScope.launch {
+        if (episodeRef.isNotEmpty()) {
+            continueWatchingSnapshotService.applyEpisodesMarked(episodeRef)
+        }
         try {
             val now = System.currentTimeMillis()
             val progress = when (item) {
@@ -286,6 +323,11 @@ internal fun HomeViewModel.markContinueWatchingAsWatchedPipeline(item: ContinueW
             watchProgressRepository.markAsCompleted(progress)
         } catch (error: Throwable) {
             Log.w(HomeViewModel.TAG, "Failed to mark continue-watching item as watched", error)
+            if (episodeRef.isNotEmpty()) {
+                val rollback = listOfNotNull(capturedProgress)
+                runCatching { continueWatchingSnapshotService.rollbackEpisodes(rollback) }
+                    .onFailure { Log.w(HomeViewModel.TAG, "Failed to rollback applyEpisodesMarked", it) }
+            }
         } finally {
             runCatching {
                 continueWatchingSnapshotService.ensureFresh(force = true)

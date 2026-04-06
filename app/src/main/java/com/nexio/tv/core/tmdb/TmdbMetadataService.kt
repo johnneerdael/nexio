@@ -339,6 +339,27 @@ class TmdbMetadataService @Inject constructor(
             }
         }
 
+    /**
+     * Fetches the raw episode list for a single season from TMDB.
+     * Returns episodes in season order with [TmdbEpisode.airDate] populated so
+     * callers can apply [com.nexio.tv.data.repository.AirDateGate.isAired].
+     */
+    suspend fun fetchSeasonEpisodes(
+        tvId: Int,
+        seasonNumber: Int,
+        language: String? = null
+    ): List<TmdbEpisode> = withContext(Dispatchers.IO) {
+        val normalizedLanguage = normalizeTmdbLanguage(language ?: currentTmdbLanguageTag())
+        val apiKey = requireApiKey() ?: return@withContext emptyList()
+        try {
+            tmdbApi.getTvSeasonDetails(tvId, seasonNumber, apiKey, normalizedLanguage)
+                .body()?.episodes.orEmpty()
+        } catch (e: Exception) {
+            Log.w(TAG, "fetchSeasonEpisodes failed for tvId=$tvId season=$seasonNumber: ${e.message}")
+            emptyList()
+        }
+    }
+
     suspend fun fetchEpisodeEnrichment(
         tmdbId: String,
         seasonNumbers: List<Int>,

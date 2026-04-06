@@ -58,6 +58,7 @@ import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Text
 import androidx.compose.ui.window.Dialog
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
+import com.nexio.tv.ui.screens.home.contentId
 import com.nexio.tv.ui.screens.home.shouldPromoteModernHomeHeroTrailerToFullscreen
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
@@ -81,7 +82,8 @@ fun ContinueWatchingSection(
     onRemoveItem: (ContinueWatchingItem) -> Unit,
     onMarkAsWatched: (ContinueWatchingItem) -> Unit = {},
     onCheckIn: ((ContinueWatchingItem) -> Unit)? = null,
-    onManageLists: ((ContinueWatchingItem) -> Unit)? = null,
+    cwWatchlistMembership: Map<String, Boolean> = emptyMap(),
+    onToggleLibrary: ((ContinueWatchingItem) -> Unit)? = null,
     onStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     modifier: Modifier = Modifier,
     focusedItemIndex: Int = -1,
@@ -205,7 +207,8 @@ fun ContinueWatchingSection(
                     optionsItem = null
                 }
             },
-            onManageLists = onManageLists?.let { callback ->
+            isInWatchlist = cwWatchlistMembership[menuItem.contentId()] == true,
+            onToggleLibrary = onToggleLibrary?.let { callback ->
                 {
                     callback(menuItem)
                     optionsItem = null
@@ -507,7 +510,8 @@ fun ContinueWatchingOptionsDialog(
     onMarkAsWatched: () -> Unit,
     onDetails: () -> Unit,
     onCheckIn: (() -> Unit)? = null,
-    onManageLists: (() -> Unit)? = null,
+    isInWatchlist: Boolean = false,
+    onToggleLibrary: (() -> Unit)? = null,
     onStartFromBeginning: () -> Unit = {}
 ) {
     val title = when (item) {
@@ -576,16 +580,16 @@ fun ContinueWatchingOptionsDialog(
             }
         }
 
-        onManageLists?.let { onManageListsAction ->
+        onToggleLibrary?.let { onToggleLibraryAction ->
             Button(
-                onClick = onManageListsAction,
+                onClick = onToggleLibraryAction,
                 colors = ButtonDefaults.colors(
                     containerColor = NexioColors.BackgroundCard,
                     contentColor = NexioColors.TextPrimary
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(stringResource(R.string.library_manage_lists))
+                Text(stringResource(if (isInWatchlist) R.string.cw_remove_from_library else R.string.cw_add_to_library))
             }
         }
 

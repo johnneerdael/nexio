@@ -6,6 +6,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.domain.model.WatchProgress
@@ -24,7 +25,7 @@ class ContinueWatchingSnapshotStore @Inject constructor(
         private const val TAG = "ContinueWatchingStore"
         private const val PREFS_NAME = "continue_watching_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
-        private const val SCHEMA_VERSION = 3
+        private const val SCHEMA_VERSION = 4
     }
 
     private val gson = Gson()
@@ -46,6 +47,7 @@ class ContinueWatchingSnapshotStore @Inject constructor(
             val payload = JsonObject().apply {
                 addProperty("schemaVersion", SCHEMA_VERSION)
                 addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
+                addProperty("languageTag", currentLanguageTag())
                 add("resumeItems", gson.toJsonTree(snapshot.resumeItems))
                 add("nextUpItems", encodeNextUpItems(snapshot.nextUpItems))
                 add("traktUpNextItems", encodeNextUpItems(snapshot.traktUpNextItems))
@@ -70,11 +72,15 @@ class ContinueWatchingSnapshotStore @Inject constructor(
     private fun decode(raw: String): ContinueWatchingSnapshot? {
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
         val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
-        if (schemaVersion > SCHEMA_VERSION) {
+        if (schemaVersion != SCHEMA_VERSION) {
             return null
         }
         val languageEpoch = root.get("languageEpoch")?.asInt ?: metadataDiskCacheStore.currentLanguageEpoch()
-        if (schemaVersion >= SCHEMA_VERSION && languageEpoch != metadataDiskCacheStore.currentLanguageEpoch()) {
+        if (languageEpoch != metadataDiskCacheStore.currentLanguageEpoch()) {
+            return null
+        }
+        val languageTag = root.get("languageTag")?.asString?.trim().orEmpty()
+        if (languageTag.isBlank() || languageTag != currentLanguageTag()) {
             return null
         }
         val canonical = ContinueWatchingSnapshot(
@@ -175,6 +181,10 @@ class ContinueWatchingSnapshotStore @Inject constructor(
         val obj = root.getAsJsonObject(key) ?: return emptyMap()
         val type = object : TypeToken<Map<String, HomeDisplayMetadata>>() {}.type
         return gson.fromJson<Map<String, HomeDisplayMetadata>>(obj, type) ?: emptyMap()
+    }
+
+    private fun currentLanguageTag(): String {
+        return AppLocaleResolver.resolveEffectiveAppLanguageTag(context)
     }
 
     private fun decodeNextUpItemObject(

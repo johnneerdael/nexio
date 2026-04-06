@@ -800,9 +800,10 @@ class ShadowCollectorDashboardTest(unittest.TestCase):
             json=benchmark_payload,
         )
         self.assertEqual(response.status_code, 200)
+        benchmark_id = response.json()["id"]
 
         token = self.token_for_android_id("android-id-shadow-1")
-        response = self.client.get(f"/public/{token}/benchmarks/latest/download")
+        response = self.client.get(f"/public/{token}/benchmarks/{benchmark_id}/download")
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -818,7 +819,7 @@ class ShadowCollectorDashboardTest(unittest.TestCase):
 
     def test_public_benchmark_download_rejects_invalid_token(self):
         token = self.token_for_android_id("android-id-does-not-exist")
-        response = self.client.get(f"/public/{token}/benchmarks/latest/download")
+        response = self.client.get(f"/public/{token}/benchmarks/999999/download")
         self.assertEqual(response.status_code, 404)
 
 

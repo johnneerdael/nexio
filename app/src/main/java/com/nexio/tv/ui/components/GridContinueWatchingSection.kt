@@ -29,6 +29,7 @@ import androidx.tv.material3.Text
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
+import com.nexio.tv.ui.screens.home.contentId
 import com.nexio.tv.ui.theme.NexioColors
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
@@ -40,7 +41,8 @@ fun GridContinueWatchingSection(
     onRemoveItem: (ContinueWatchingItem) -> Unit,
     onMarkAsWatched: (ContinueWatchingItem) -> Unit = {},
     onCheckIn: ((ContinueWatchingItem) -> Unit)? = null,
-    onManageLists: ((ContinueWatchingItem) -> Unit)? = null,
+    cwWatchlistMembership: Map<String, Boolean> = emptyMap(),
+    onToggleLibrary: ((ContinueWatchingItem) -> Unit)? = null,
     onStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
     modifier: Modifier = Modifier,
     focusedItemIndex: Int = -1
@@ -159,7 +161,8 @@ fun GridContinueWatchingSection(
                     optionsItem = null
                 }
             },
-            onManageLists = onManageLists?.let { callback ->
+            isInWatchlist = cwWatchlistMembership[menuItem.contentId()] == true,
+            onToggleLibrary = onToggleLibrary?.let { callback ->
                 {
                     callback(menuItem)
                     optionsItem = null

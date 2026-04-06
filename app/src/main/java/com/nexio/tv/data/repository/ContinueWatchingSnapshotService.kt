@@ -17,7 +17,9 @@ import com.nexio.tv.domain.repository.WatchProgressRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -40,7 +43,9 @@ data class ContinueWatchingSnapshot(
     val nextUpItems: List<TraktProgressService.NextUpEntry> = emptyList(),
     val traktUpNextItems: List<TraktProgressService.NextUpEntry> = emptyList(),
     val displayMetadataByItemKey: Map<String, HomeDisplayMetadata> = emptyMap(),
-    val updatedAtMs: Long = 0L
+    val updatedAtMs: Long = 0L,
+    /** Entries excluded from rails because their air date has not yet passed. */
+    val scheduledReemit: List<TraktProgressService.NextUpEntry> = emptyList()
 )
 
 @Singleton
@@ -62,6 +67,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private val minRefreshIntervalMs = 30_000L
     @Volatile
     private var hasSeenAuthenticatedSession = false
+    private var reemitJob: Job? = null
+    private var currentTimerTargetMs: Long? = null
 
     init {
         scope.launch {
@@ -107,6 +114,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
                             snapshotStore.clear()
                             metadataDiskCacheStore.replaceHomeFeedReferences(feedKey = "continue_watching", itemKeys = emptySet())
                             lastRefreshRequestMs = 0L
+                            reemitJob?.cancel()
+                            reemitJob = null
+                            currentTimerTargetMs = null
                         }
                         hasSeenAuthenticatedSession = false
                         flowOf<ContinueWatchingSnapshot?>(null)
@@ -167,6 +177,113 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
     }
 
+    // ── Synchronous rawSnapshotState mutation helpers (Phase 3) ───────────────
+
+    /**
+     * Uniquely identifies a resume entry: the videoId is the per-episode key
+     * (contentId:season:episode for series, or the raw videoId for movies).
+     */
+    data class EpisodeRef(val showId: String, val seasonNumber: Int, val episodeNumber: Int)
+
+    /**
+     * Remove a single resume entry by its [videoId] under [refreshMutex].
+     * This is the symmetric counterpart to [reinsertResumeEntry].
+     */
+    suspend fun removeResumeEntry(videoId: String) {
+        refreshMutex.withLock {
+            rawSnapshotState.update { current ->
+                current.copy(
+                    resumeItems = current.resumeItems.filterNot { it.videoId == videoId }
+                )
+            }
+        }
+    }
+
+    /**
+     * Remove every resume entry whose [WatchProgress.contentId] matches [showId] under [refreshMutex].
+     */
+    suspend fun removeAllForShow(showId: String) {
+        refreshMutex.withLock {
+            rawSnapshotState.update { current ->
+                current.copy(
+                    resumeItems = current.resumeItems.filterNot { it.contentId == showId }
+                )
+            }
+        }
+    }
+
+    /**
+     * Re-insert a previously removed [WatchProgress] entry, preserving descending-lastWatched order.
+     */
+    suspend fun reinsertResumeEntry(entry: WatchProgress) {
+        refreshMutex.withLock {
+            rawSnapshotState.update { current ->
+                val merged = (current.resumeItems + entry)
+                    .sortedByDescending { it.lastWatched }
+                    .distinctBy { it.videoId }
+                current.copy(resumeItems = merged)
+            }
+        }
+    }
+
+    /**
+     * Returns the current resume items from the raw snapshot for use as a rollback baseline.
+     * Must be called before [applyEpisodesMarked] to capture the pre-mutation state.
+     */
+    fun snapshotForRollback(): List<WatchProgress> = rawSnapshotState.value.resumeItems
+
+    /**
+     * Remove all resume entries and next-up entries that match any of the given [episodes].
+     * Matches on showId + seasonNumber + episodeNumber.
+     */
+    suspend fun applyEpisodesMarked(episodes: List<EpisodeRef>) {
+        if (episodes.isEmpty()) return
+        refreshMutex.withLock {
+            rawSnapshotState.update { current ->
+                current.copy(
+                    resumeItems = current.resumeItems.filterNot { progress ->
+                        episodes.any { ref ->
+                            progress.contentId == ref.showId &&
+                                progress.season == ref.seasonNumber &&
+                                progress.episode == ref.episodeNumber
+                        }
+                    },
+                    nextUpItems = current.nextUpItems.filterNot { entry ->
+                        episodes.any { ref ->
+                            entry.contentId == ref.showId &&
+                                entry.season == ref.seasonNumber &&
+                                entry.episode == ref.episodeNumber
+                        }
+                    },
+                    traktUpNextItems = current.traktUpNextItems.filterNot { entry ->
+                        episodes.any { ref ->
+                            entry.contentId == ref.showId &&
+                                entry.season == ref.seasonNumber &&
+                                entry.episode == ref.episodeNumber
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    /**
+     * Restore resume entries that were optimistically removed by [applyEpisodesMarked].
+     */
+    suspend fun rollbackEpisodes(episodes: List<WatchProgress>) {
+        if (episodes.isEmpty()) return
+        refreshMutex.withLock {
+            rawSnapshotState.update { current ->
+                val merged = (current.resumeItems + episodes)
+                    .sortedByDescending { it.lastWatched }
+                    .distinctBy { it.videoId }
+                current.copy(resumeItems = merged)
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+
     fun removeShowOptimistically(contentId: String) {
         val target = contentId.trim()
         if (target.isBlank()) return
@@ -191,6 +308,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         nextUpEntries: List<TraktProgressService.NextUpEntry>,
         traktUpNextEntries: List<TraktProgressService.NextUpEntry>
     ): ContinueWatchingSnapshot {
+        val nowMs = System.currentTimeMillis()
         val resumeItems = allProgress
             .asSequence()
             .filter(::shouldTreatAsResumeForContinueWatching)
@@ -208,7 +326,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             resumes = resumeItems.map(::resumeRefForProgress),
             nextUpItems = normalizedNextUpItems,
             nextUpRef = ::nextUpRefForEntry,
-            nowMs = System.currentTimeMillis()
+            nowMs = nowMs
         ).mainFeedItems
         val normalizedTraktUpNextItems = traktUpNextEntries
             .asSequence()
@@ -216,18 +334,31 @@ class ContinueWatchingSnapshotService @Inject constructor(
             .sortedByDescending { it.activityAtMs }
             .distinctBy { it.contentId }
             .toList()
-        val traktUpNextItems = splitNextUpCandidatesForContinueWatching(
+        val syntheticRailCandidates = splitNextUpCandidatesForContinueWatching(
             resumes = resumeItems.map(::resumeRefForProgress),
             nextUpItems = normalizedTraktUpNextItems,
             nextUpRef = ::nextUpRefForEntry,
-            nowMs = System.currentTimeMillis()
+            nowMs = nowMs
         ).syntheticRailItems
+        val traktUpNextItems = syntheticRailCandidates.filter { entry ->
+            AirDateGate.isAired(firstAiredMs = entry.firstAiredMs, tmdbAirDate = entry.firstAired, nowMs = nowMs)
+        }
+
+        val scheduledReemit = buildList {
+            addAll(normalizedNextUpItems.filter { entry ->
+                !AirDateGate.isAired(firstAiredMs = entry.firstAiredMs, tmdbAirDate = entry.firstAired, nowMs = nowMs)
+            })
+            addAll(syntheticRailCandidates.filter { entry ->
+                !AirDateGate.isAired(firstAiredMs = entry.firstAiredMs, tmdbAirDate = entry.firstAired, nowMs = nowMs)
+            })
+        }
 
         return ContinueWatchingSnapshot(
             resumeItems = resumeItems,
             nextUpItems = nextUpItems,
             traktUpNextItems = traktUpNextItems,
-            updatedAtMs = System.currentTimeMillis()
+            updatedAtMs = nowMs,
+            scheduledReemit = scheduledReemit
         )
     }
 
@@ -331,6 +462,32 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private fun updateSnapshot(snapshot: ContinueWatchingSnapshot) {
         persistRawSnapshot(snapshot)
+        scheduleReemitIfNeeded(snapshot.scheduledReemit, snapshot.updatedAtMs)
+    }
+
+    private fun scheduleReemitIfNeeded(
+        scheduledReemit: List<TraktProgressService.NextUpEntry>,
+        nowMs: Long
+    ) {
+        val soonestMs = AirDateGate.soonestPendingMs(
+            entries = scheduledReemit,
+            firstAiredMsSelector = { it.firstAiredMs },
+            tmdbAirDateSelector = { it.firstAired },
+            nowMs = nowMs
+        )
+        if (soonestMs == currentTimerTargetMs) return
+        reemitJob?.cancel()
+        currentTimerTargetMs = soonestMs
+        if (soonestMs != null) {
+            val delayMs = (soonestMs - nowMs).coerceAtLeast(0L)
+            reemitJob = scope.launch {
+                delay(delayMs)
+                runCatching { ensureFresh(force = true) }
+                    .onFailure { error ->
+                        Log.w("ContinueWatching", "Re-emit refresh failed", error)
+                    }
+            }
+        }
     }
 
     private fun hydrateSnapshotMetadata(

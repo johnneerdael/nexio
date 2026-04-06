@@ -56,6 +56,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
+import retrofit2.Response
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -1390,6 +1391,34 @@ class TraktProgressService @Inject constructor(
         )
     }
 
+    /**
+     * Resolve Trakt integer episode IDs for all (season, episode-number) pairs in [episodeNumbers].
+     * Calls [fetchEpisodeSummary] in parallel (one request per episode).
+     * Episodes whose Trakt ID cannot be resolved are omitted from the result.
+     *
+     * @param showContentId the content ID of the show (e.g. "tt1234567" or "trakt:12345")
+     * @param season the season number
+     * @param episodeNumbers the list of episode numbers to resolve
+     */
+    suspend fun resolveSeasonEpisodeTraktIds(
+        showContentId: String,
+        season: Int,
+        episodeNumbers: List<Int>
+    ): List<com.nexio.tv.data.repository.trakt.TraktEpisodeRef> {
+        if (episodeNumbers.isEmpty()) return emptyList()
+        val pathId = toTraktPathId(showContentId)
+        return coroutineScope {
+            episodeNumbers.map { epNumber ->
+                async {
+                    runCatching { fetchEpisodeSummary(pathId, season, epNumber) }
+                        .getOrNull()
+                        ?.ids?.trakt
+                        ?.let { traktId -> com.nexio.tv.data.repository.trakt.TraktEpisodeRef(traktId) }
+                }
+            }.awaitAll().filterNotNull()
+        }
+    }
+
     private suspend fun fetchEpisodeSummary(
         pathId: String,
         season: Int,
@@ -2009,5 +2038,14 @@ class TraktProgressService @Inject constructor(
             }
         }
         return null
+    }
+
+    suspend fun addHistoryBatch(
+        episodes: List<TraktHistoryEpisodeAddDto>
+    ): Response<TraktHistoryAddResponseDto> {
+        val body = TraktHistoryAddRequestDto(episodes = episodes)
+        return traktAuthService.executeAuthorizedWriteRequest { authHeader ->
+            traktApi.addHistory(authHeader, body)
+        } ?: throw IllegalStateException("Trakt authorized request returned null")
     }
 }

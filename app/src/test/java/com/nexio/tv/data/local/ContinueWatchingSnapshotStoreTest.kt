@@ -19,8 +19,9 @@ class ContinueWatchingSnapshotStoreTest {
     @Test
     fun `read restores persisted display metadata for current language epoch`() {
         val prefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
         var epoch = 3
-        val context = mockContext(prefs, "continue_watching_snapshot")
+        val context = mockContext(prefs, "continue_watching_snapshot", localePrefs)
         val metadataStore = mockk<MetadataDiskCacheStore>()
         every { metadataStore.currentLanguageEpoch() } answers { epoch }
         val store = ContinueWatchingSnapshotStore(context, metadataStore)
@@ -44,9 +45,35 @@ class ContinueWatchingSnapshotStoreTest {
     }
 
     @Test
+    fun `read rejects persisted continue watching snapshot when app language changes`() {
+        val prefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val context = mockContext(prefs, "continue_watching_snapshot", localePrefs)
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 3
+        val store = ContinueWatchingSnapshotStore(context, metadataStore)
+
+        store.write(
+            ContinueWatchingSnapshot(
+                displayMetadataByItemKey = mapOf(
+                    "movie:tt123" to HomeDisplayMetadata(
+                        title = "Localized Movie",
+                        description = "Overview"
+                    )
+                ),
+                updatedAtMs = 100L
+            )
+        )
+
+        localePrefs.edit().putString("locale_tag", "nl").apply()
+
+        assertNull(store.read())
+    }
+
+    @Test
     fun `write persists generic resumes and next up activity timestamps`() {
         val prefs = InMemorySharedPreferences()
-        val context = mockContext(prefs, "continue_watching_snapshot")
+        val context = mockContext(prefs, "continue_watching_snapshot", localePrefs("en"))
         val metadataStore = mockk<MetadataDiskCacheStore>()
         every { metadataStore.currentLanguageEpoch() } returns 1
         val store = ContinueWatchingSnapshotStore(context, metadataStore)
@@ -108,9 +135,9 @@ class ContinueWatchingSnapshotStoreTest {
     }
 
     @Test
-    fun `read decodes legacy movieProgressItems field into resumeItems`() {
+    fun `read rejects legacy snapshot payloads from before language-aware versioning`() {
         val prefs = InMemorySharedPreferences()
-        val context = mockContext(prefs, "continue_watching_snapshot")
+        val context = mockContext(prefs, "continue_watching_snapshot", localePrefs("en"))
         val metadataStore = mockk<MetadataDiskCacheStore>()
         every { metadataStore.currentLanguageEpoch() } returns 1
         val store = ContinueWatchingSnapshotStore(context, metadataStore)
@@ -148,14 +175,28 @@ class ContinueWatchingSnapshotStoreTest {
 
         prefs.edit().putString("snapshot", legacyPayload.toString()).apply()
 
-        val restored = store.read()
-        assertEquals(listOf("movie-a"), restored?.resumeItems?.map { it.contentId })
-        assertTrue(restored?.nextUpItems?.isEmpty() == true)
+        assertNull(store.read())
     }
 
-    private fun mockContext(prefs: InMemorySharedPreferences, expectedName: String): Context {
+    private fun localePrefs(tag: String): InMemorySharedPreferences {
+        return InMemorySharedPreferences().also { prefs ->
+            prefs.edit().putString("locale_tag", tag).apply()
+        }
+    }
+
+    private fun mockContext(
+        prefs: InMemorySharedPreferences,
+        expectedName: String,
+        localePrefs: InMemorySharedPreferences
+    ): Context {
         return mockk {
-            every { getSharedPreferences(expectedName, Context.MODE_PRIVATE) } returns prefs
+            every { getSharedPreferences(any(), Context.MODE_PRIVATE) } answers {
+                when (firstArg<String>()) {
+                    expectedName -> prefs
+                    "app_locale" -> localePrefs
+                    else -> throw IllegalArgumentException("Unexpected prefs ${firstArg<String>()}")
+                }
+            }
         }
     }
 }

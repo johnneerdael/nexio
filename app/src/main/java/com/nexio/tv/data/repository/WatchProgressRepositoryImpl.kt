@@ -3,9 +3,13 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.WatchProgressPreferences
+import com.nexio.tv.data.remote.api.TmdbEpisode
+import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher
+import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
+import javax.inject.Provider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -33,7 +37,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
     private val watchProgressPreferences: WatchProgressPreferences,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktProgressService: TraktProgressService,
-    private val metaRepository: MetaRepository
+    private val metaRepository: MetaRepository,
+    private val seasonMarkBatcher: SeasonMarkBatcher,
+    // Provider<> breaks the DI cycle: ContinueWatchingSnapshotService → WatchProgressRepository
+    //   → WatchProgressRepositoryImpl → ContinueWatchingSnapshotService
+    private val snapshotServiceProvider: Provider<ContinueWatchingSnapshotService>
 ) : WatchProgressRepository {
     private data class EpisodeMetadata(
         val title: String?,
@@ -347,6 +355,81 @@ class WatchProgressRepositoryImpl @Inject constructor(
     override suspend fun clearAll() {
         traktProgressService.clearOptimistic()
         watchProgressPreferences.clearAll()
+    }
+
+    override suspend fun markAsCompletedBatch(
+        meta: Meta,
+        seasonNumber: Int,
+        episodes: List<TmdbEpisode>
+    ) {
+        if (!traktAuthDataStore.isEffectivelyAuthenticated.first()) return
+        if (episodes.isEmpty()) return
+
+        val showContentId = meta.id
+
+        // 1. Map TmdbEpisodes → EpisodeRef for optimistic CW update
+        val episodeRefs = episodes.mapNotNull { ep ->
+            val epNum = ep.episodeNumber ?: return@mapNotNull null
+            ContinueWatchingSnapshotService.EpisodeRef(
+                showId = showContentId,
+                seasonNumber = seasonNumber,
+                episodeNumber = epNum
+            )
+        }
+
+        // 2. Capture the current resume entries that match these episodes (for rollback)
+        val snapshot = snapshotServiceProvider.get().snapshotForRollback()
+        val optimisticallyRemoved = snapshot.filter { progress ->
+            episodeRefs.any { ref ->
+                progress.contentId == ref.showId &&
+                    progress.season == ref.seasonNumber &&
+                    progress.episode == ref.episodeNumber
+            }
+        }
+
+        // 3. Atomic optimistic update — remove from CW
+        snapshotServiceProvider.get().applyEpisodesMarked(episodeRefs)
+
+        // 4. Resolve Trakt episode IDs in parallel
+        val episodeNumbers = episodes.mapNotNull { it.episodeNumber }
+        val traktRefs = traktProgressService.resolveSeasonEpisodeTraktIds(
+            showContentId = showContentId,
+            season = seasonNumber,
+            episodeNumbers = episodeNumbers
+        )
+
+        // 5. One batched POST via SeasonMarkBatcher
+        val result = try {
+            seasonMarkBatcher.markSeasonWatched(traktRefs)
+        } catch (e: Exception) {
+            // Hard failure: full rollback then rethrow
+            snapshotServiceProvider.get().rollbackEpisodes(optimisticallyRemoved)
+            throw e
+        }
+
+        // 6. Partial rollback for not_found episodes
+        if (result.notFound.isNotEmpty()) {
+            val notFoundIds = result.notFound.map { it.traktId }.toSet()
+            // We can't map traktId back to episodeNumber directly, so we rollback
+            // only the episodes whose episode numbers correspond to unresolved refs.
+            // Build a traktId → episodeNumber map from the resolution result.
+            val traktIdToEpNum: Map<Int, Int> = buildMap {
+                traktRefs.forEachIndexed { index, ref ->
+                    val epNum = episodeNumbers.getOrNull(index) ?: return@forEachIndexed
+                    put(ref.traktId, epNum)
+                }
+            }
+            val notFoundEpNums = notFoundIds.mapNotNull { traktIdToEpNum[it] }.toSet()
+            val notFoundProgress = optimisticallyRemoved.filter { progress ->
+                progress.episode != null && notFoundEpNums.contains(progress.episode)
+            }
+            if (notFoundProgress.isNotEmpty()) {
+                snapshotServiceProvider.get().rollbackEpisodes(notFoundProgress)
+            }
+        }
+
+        // 7. Force snapshot refresh
+        snapshotServiceProvider.get().ensureFresh(force = true)
     }
 
     private fun progressKey(progress: WatchProgress): String {
