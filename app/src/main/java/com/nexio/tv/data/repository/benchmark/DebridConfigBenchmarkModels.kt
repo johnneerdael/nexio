@@ -72,7 +72,8 @@ data class DebridConfigBenchmarkSessionSummary(
     val failedProfileCount: Int,
     val unsupportedProfileCount: Int,
     val totalElapsedMs: Long? = null,
-    val bestProfile: DebridConfigBenchmarkProfileResult? = null
+    val bestProfile: DebridConfigBenchmarkProfileResult? = null,
+    val capabilityEnvelope: CapabilityEnvelope? = null
 ) {
     val totalProfiles: Int
         get() = totalProfileCount
@@ -115,6 +116,23 @@ data class DebridConfigBenchmarkOutcome(
     val result: DebridConfigBenchmarkResult? = null
 )
 
+fun DebridConfigBenchmarkSessionSummary.toCapabilityEnvelope(measuredAtMs: Long): CapabilityEnvelope? {
+    val best = bestProfile ?: return null
+    if (best.status != DebridConfigBenchmarkStatus.SUCCESS) return null
+    val throughput = best.averageThroughputMbps ?: return null
+
+    return CapabilityEnvelope(
+        maxSafeUrgentWorkers = minOf(best.parallelConnectionCount, 3),
+        maxSafePrefetchWorkers = 1,
+        maxSafeUrgentChunkBytes = minOf(best.chunkSizeMb.toLong(), 8L) * 1024L * 1024L,
+        maxSafePrefetchChunkBytes = best.chunkSizeMb.toLong() * 1024L * 1024L,
+        sustainedThroughputMbps = throughput,
+        stabilityPenalty = 0.0,
+        measuredAtMs = measuredAtMs,
+        legacyBestProfile = best
+    )
+}
+
 internal fun DebridConfigBenchmarkResult.toJsonObject(): JsonObject {
     return JsonObject().apply {
         addProperty("provider", provider.storageKey)
@@ -136,6 +154,7 @@ private fun DebridConfigBenchmarkSessionSummary.toJsonObject(): JsonObject {
         addProperty("unsupportedProfiles", unsupportedProfiles)
         totalElapsedMs?.let { addProperty("totalElapsedMs", it) }
         bestProfile?.let { add("bestProfile", it.toJsonObject()) }
+        capabilityEnvelope?.let { add("capabilityEnvelope", com.google.gson.JsonParser.parseString(it.toJson())) }
     }
 }
 

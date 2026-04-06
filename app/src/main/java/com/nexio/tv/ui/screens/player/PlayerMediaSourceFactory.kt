@@ -32,6 +32,7 @@ import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.VodCacheSizeMode
+import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
@@ -78,6 +79,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     private val prefetchExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "Nexio-vod-prefetch").apply { isDaemon = true }
     }
+    private val stableCacheKeyFactory = StableCacheKeyFactory()
     var useParallelConnections: Boolean = PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS
     var parallelConnectionCount: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT
     var parallelChunkSizeMb: Int = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB
@@ -89,6 +91,8 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             }
         }
     var vodCacheSizeMb: Int = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB
+    @Volatile var capabilityEnvelope: CapabilityEnvelope? = null
+    @Volatile var transportPolicyProvider: () -> TransportPolicy? = { null }
 
     fun configureSubtitleParsing(
         extractorsFactory: ExtractorsFactory?,
@@ -154,20 +158,24 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         activeReadBytePosition.set(0L)
         val progressiveUpstreamFactory: DataSource.Factory = when {
             !usesHttpUpstream(url) -> baseDataSourceFactory
-            useParallelConnections && !isHls && !isDash -> ParallelRangeDataSource.Factory(
-                okHttpFactory,
-                parallelConnectionCount,
-                parallelChunkSizeMb.toLong() * 1024L * 1024L,
-                shouldAllowBackgroundPrefetch = { parallelStartupPrefetchUnlocked.get() },
-                onResolvedUri = { resolved ->
-                    currentVodCacheResolvedUrl = resolved?.toString()
-                },
-                onReadPositionAdvanced = { position ->
-                    activeReadBytePosition.accumulateAndGet(position) { current, next ->
-                        if (next > current) next else current
-                    }
-                }
-            )
+            useParallelConnections && !isHls && !isDash -> {
+                val envelope = capabilityEnvelope
+                ParallelRangeDataSource.Factory(
+                    okHttpFactory,
+                    envelope?.maxSafeUrgentWorkers ?: parallelConnectionCount,
+                    (envelope?.maxSafeUrgentChunkBytes ?: (parallelChunkSizeMb.toLong() * 1024L * 1024L)),
+                    shouldAllowBackgroundPrefetch = { parallelStartupPrefetchUnlocked.get() },
+                    onResolvedUri = { resolved ->
+                        currentVodCacheResolvedUrl = resolved?.toString()
+                    },
+                    onReadPositionAdvanced = { position ->
+                        activeReadBytePosition.accumulateAndGet(position) { current, next ->
+                            if (next > current) next else current
+                        }
+                    },
+                    transportPolicyProvider = transportPolicyProvider
+                )
+            }
             else -> okHttpFactory
         }
         val useVodCache = ENABLE_VOD_CACHE &&
@@ -598,6 +606,14 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         clearVodCacheInternal(context)
     }
 
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    fun clearVodCacheForContent(contentKey: String) {
+        val cache = getAnySimpleCache() ?: return
+        runCatching {
+            cache.removeResource(contentKey)
+        }.onFailure { Log.w(TAG, "Failed to clear VOD cache for key: $contentKey", it) }
+    }
+
     private fun getOrCreateOkHttpClient(): OkHttpClient {
         val dispatcher = Dispatcher().apply {
             maxRequests = 64
@@ -720,7 +736,9 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         while (!prefetchStop.get() && !Thread.currentThread().isInterrupted) {
             val liveUrl = currentVodCacheResolvedUrl ?: currentVodCacheUrl ?: streamUrl
             val prefetchUri = runCatching { Uri.parse(liveUrl) }.getOrElse { Uri.parse(streamUrl) }
-            val cacheKey = prefetchUri.toString()
+            val cacheKey = stableCacheKeyFactory.buildCacheKey(
+                DataSpec.Builder().setUri(prefetchUri).build()
+            )
             val cachedFrontier = contiguousCachedPrefix(cache, cacheKey, effectiveCapBytes)
             if (cachedFrontier > activeReadBytePosition.get()) {
                 activeReadBytePosition.set(cachedFrontier)
@@ -835,6 +853,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         }
         return CacheDataSource.Factory()
             .setCache(cache)
+            .setCacheKeyFactory(stableCacheKeyFactory)
             .setCacheWriteDataSinkFactory(dataSinkFactory)
             .setUpstreamDataSourceFactory(upstreamFactory)
             .setFlags(flags)

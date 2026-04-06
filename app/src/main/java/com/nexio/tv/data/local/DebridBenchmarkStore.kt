@@ -85,10 +85,62 @@ class DebridBenchmarkStore internal constructor(
     }
 
     suspend fun saveLatest(result: DebridBenchmarkResult) {
-        require(result.isCompletedAndValid()) { "Invalid DebridBenchmarkResult" }
+        if (!result.isCompletedAndValid()) {
+            Log.e(TAG, buildValidationDiagnostic(result))
+            return
+        }
         dataStore.edit { preferences ->
             preferences[latestResultKey(result.provider)] = result.toJsonObject().toString()
         }
+    }
+
+    private fun buildValidationDiagnostic(result: DebridBenchmarkResult): String {
+        val checks = mutableListOf<String>()
+        if (result.terminationReason != DebridBenchmarkTerminationReason.COMPLETED) {
+            checks += "terminationReason=${result.terminationReason}"
+        }
+        if (result.measuredAtMs <= 0L) checks += "measuredAtMs=${result.measuredAtMs}"
+        result.summary.let { s ->
+            if (s.startupTimeMs == null) checks += "summary.startupTimeMs=null"
+            if (s.sustainedThroughputMbps == null) checks += "summary.sustainedThroughputMbps=null"
+        }
+        result.optimized?.let { profile ->
+            profile.startup.let { su ->
+                if (su.initialTtfbMs == null) checks += "startup.initialTtfbMs=null"
+                if (su.startupFailureRate == null) checks += "startup.startupFailureRate=null"
+            }
+            profile.sustained.let { su ->
+                if (su.averageThroughputMbps == null) checks += "sustained.avgThroughput=null"
+                if (su.p10ThroughputMbps == null) checks += "sustained.p10=null"
+                if (su.p50ThroughputMbps == null) checks += "sustained.p50=null"
+                if (su.peakThroughputMbps == null) checks += "sustained.peak=null"
+                if (su.throughputStddevMbps == null) checks += "sustained.stddev=null"
+                if (su.throughputCv == null) checks += "sustained.cv=null"
+                if (su.stallCount == null) checks += "sustained.stallCount=null"
+                if (su.maxReadGapMs == null) checks += "sustained.maxReadGap=null"
+                if (su.bytesTransferred == null) checks += "sustained.bytesTransferred=null"
+                if (su.elapsedMs == null) checks += "sustained.elapsedMs=null"
+                su.averageThroughputMbps?.let { if (!it.isFinite() || it < 0.0) checks += "sustained.avgThroughput=$it" }
+                su.throughputCv?.let { if (!it.isFinite() || it < 0.0) checks += "sustained.cv=$it" }
+            }
+            profile.seek.let { sk ->
+                if (sk.seekTtfbP50Ms == null) checks += "seek.p50=null"
+                if (sk.seekTtfbP95Ms == null) checks += "seek.p95=null"
+                if (sk.seekTtfbP99Ms == null) checks += "seek.p99=null"
+                if (sk.seekTtfbStddevMs == null) checks += "seek.stddev=null"
+                if (sk.seekFailRate == null) checks += "seek.failRate=null"
+            }
+            profile.configSnapshot?.let { cs ->
+                if (cs.useParallelConnections == null) checks += "config.useParallel=null"
+            }
+            profile.rawSamples.throughputBuckets.forEachIndexed { i, b ->
+                if (!b.throughputMbps.isFinite() || b.throughputMbps < 0.0) {
+                    checks += "bucket[$i].throughput=${b.throughputMbps}"
+                }
+                if (b.durationMs <= 0L) checks += "bucket[$i].duration=${b.durationMs}"
+            }
+        }
+        return "Invalid DebridBenchmarkResult: [${checks.joinToString(", ")}]"
     }
 
     suspend fun clear(provider: DebridBenchmarkProvider) {

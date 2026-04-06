@@ -113,12 +113,12 @@ class ParallelRangeDataSourceTest {
             chunkSize = 64 * 1024L,
             transientFailuresByChunkIndex = mutableMapOf()
         )
-        val transportBytes = mutableListOf<Long>()
+        val transportBytesTotal = java.util.concurrent.atomic.AtomicLong(0L)
 
         fixture.use { server ->
             val dataSource = server.createDataSource(
                 onTransportBytesDownloaded = { bytesRead, _ ->
-                    transportBytes += bytesRead
+                    transportBytesTotal.addAndGet(bytesRead)
                 }
             )
 
@@ -128,7 +128,7 @@ class ParallelRangeDataSourceTest {
             assertEquals(
                 "Bootstrap reads should contribute transport bytes",
                 content.size.toLong(),
-                transportBytes.sum()
+                transportBytesTotal.get()
             )
         }
     }
