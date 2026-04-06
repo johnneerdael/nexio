@@ -28,14 +28,15 @@ internal fun interface BenchmarkReadableSourceFactory {
     fun createSource(): BenchmarkReadableSource
 }
 
-internal fun interface OptimizedBenchmarkDataSourceFactoryBuilder {
+internal interface OptimizedBenchmarkDataSourceFactoryBuilder {
     fun create(
         candidate: DebridBenchmarkCandidate,
         configSnapshot: DebridBenchmarkTransportConfigSnapshot,
         chunkWaitTimeoutMs: Long,
         allowStartupBootstrapReuse: Boolean,
         transportSampleTimeMs: () -> Long,
-        onTransportBytesDownloaded: (Long, Long) -> Unit
+        onTransportBytesDownloaded: (Long, Long) -> Unit,
+        onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit = { _, _, _, _, _ -> }
     ): BenchmarkReadableSourceFactory
 }
 
@@ -104,6 +105,9 @@ class OptimizedBenchmarkTransport internal constructor(
             transportSampleTimeMs = { nanosToMillis(nanoTimeNs()) },
             onTransportBytesDownloaded = { bytesRead, sampleAtMs ->
                 collector.recordTransportBytesRead(bytesRead = bytesRead, sampleAtMs = sampleAtMs)
+            },
+            onChunkBytesDownloaded = { chunkIndex, chunkSize, offsetInChunk, bytesRead, sampleAtMs ->
+                collector.recordFrontierProgress(chunkIndex, chunkSize, offsetInChunk, bytesRead, sampleAtMs)
             }
         )
         val seekReadableSourceFactory = factoryBuilder.create(
@@ -165,6 +169,9 @@ class OptimizedBenchmarkTransport internal constructor(
             transportSampleTimeMs = { nanosToMillis(nanoTimeNs()) },
             onTransportBytesDownloaded = { bytesRead, sampleAtMs ->
                 collector.recordTransportBytesRead(bytesRead = bytesRead, sampleAtMs = sampleAtMs)
+            },
+            onChunkBytesDownloaded = { chunkIndex, chunkSize, offsetInChunk, bytesRead, sampleAtMs ->
+                collector.recordFrontierProgress(chunkIndex, chunkSize, offsetInChunk, bytesRead, sampleAtMs)
             }
         )
         val sustainedPhase = runStartupAndSustainedPhase(
@@ -638,7 +645,8 @@ private class DefaultOptimizedBenchmarkDataSourceFactoryBuilder(
         chunkWaitTimeoutMs: Long,
         allowStartupBootstrapReuse: Boolean,
         transportSampleTimeMs: () -> Long,
-        onTransportBytesDownloaded: (Long, Long) -> Unit
+        onTransportBytesDownloaded: (Long, Long) -> Unit,
+        onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
     ): BenchmarkReadableSourceFactory {
         val upstreamFactory = OkHttpDataSource.Factory(okHttpClient).apply {
             setDefaultRequestProperties(candidate.headers)
@@ -655,6 +663,7 @@ private class DefaultOptimizedBenchmarkDataSourceFactoryBuilder(
                 chunkWaitTimeoutMs = chunkWaitTimeoutMs,
                 transportSampleTimeMs = transportSampleTimeMs,
                 onTransportBytesDownloaded = onTransportBytesDownloaded,
+                onChunkBytesDownloaded = onChunkBytesDownloaded,
                 allowStartupBootstrapReuse = allowStartupBootstrapReuse
             )
         }

@@ -46,6 +46,7 @@ class DebridBenchmarkMetricsCollector(
     private var transportThroughputWindowAccumulatedBytes = 0.0
     private val seekSamples = mutableListOf<DebridBenchmarkSeekSample>()
     private val transportStateLock = Any()
+    private val frontierTracker = FrontierTracker()
 
     fun recordStartup(
         requestStartedAtMs: Long,
@@ -137,6 +138,16 @@ class DebridBenchmarkMetricsCollector(
         }
     }
 
+    fun recordFrontierProgress(
+        chunkIndex: Long,
+        chunkSize: Long,
+        offsetInChunk: Long,
+        bytesRead: Int,
+        tMs: Long
+    ) {
+        frontierTracker.onBytesDownloaded(chunkIndex, chunkSize, offsetInChunk, bytesRead, tMs)
+    }
+
     fun recordSeekSample(sample: DebridBenchmarkSeekSample) {
         seekSamples += sample
     }
@@ -224,7 +235,8 @@ class DebridBenchmarkMetricsCollector(
             cacheDrainingDeficitCount = cacheEvidence.drainingDeficitCount,
             estimatedMinCacheHeadroomMs = cacheEvidence.minHeadroomMs,
             bytesTransferred = completedBytesTransferred,
-            elapsedMs = completedElapsedMs
+            elapsedMs = completedElapsedMs,
+            frontierMetrics = frontierTracker.computeFrontierMetrics(completedElapsedMs)
         )
     }
 
@@ -251,7 +263,8 @@ class DebridBenchmarkMetricsCollector(
         return DebridBenchmarkRawSamples(
             throughputWindowsMbps = effectiveBuckets.map { it.throughputMbps },
             throughputBuckets = effectiveBuckets,
-            seekSamples = seekSamples.toList()
+            seekSamples = seekSamples.toList(),
+            frontierEvents = frontierTracker.frontierEvents()
         )
     }
 

@@ -65,3 +65,4 @@ shadow-collector/
 ffbuild/
 third_party/mbedtls-src/
 third_party/mbedtls-prebuilt/
+regression/

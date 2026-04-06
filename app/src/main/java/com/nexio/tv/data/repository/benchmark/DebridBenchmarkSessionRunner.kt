@@ -58,7 +58,11 @@ class DebridBenchmarkSessionRunner internal constructor(
             observer = observer,
             seekTargets = seekTargets
         )
-        val optimizedProfile = optimizedResult.profile.withDerivedDecisionMetrics(optimizedResult.summary)
+        val optimizedProfile = optimizedResult.profile.withDerivedDecisionMetrics(
+            summary = optimizedResult.summary,
+            bufferForPlaybackMs = playerSettings.bufferSettings.bufferForPlaybackMs.toLong(),
+            maxBufferMs = playerSettings.bufferSettings.maxBufferMs.toLong()
+        )
         if (optimizedResult.terminationReason != DebridBenchmarkTerminationReason.COMPLETED) {
             return DebridBenchmarkSessionResult(
                 summary = optimizedResult.summary,
@@ -115,7 +119,7 @@ class DebridBenchmarkSessionRunner internal constructor(
         optimizedElapsedMs: Long
     ): DebridBenchmarkSessionMetadata {
         return DebridBenchmarkSessionMetadata(
-            benchmarkVersion = 3,
+            benchmarkVersion = 4,
             executionOrder = DEFAULT_EXECUTION_ORDER,
             totalElapsedMs = optimizedElapsedMs
         )
@@ -144,16 +148,44 @@ class DebridBenchmarkSessionRunner internal constructor(
     }
 }
 
+private const val FRONTIER_EVENT_MINIMUM = 10
+
 private fun DebridBenchmarkTransportProfile.withDerivedDecisionMetrics(
-    summary: DebridBenchmarkSummary
+    summary: DebridBenchmarkSummary,
+    bufferForPlaybackMs: Long = 3_000L,
+    maxBufferMs: Long = 50_000L
 ): DebridBenchmarkTransportProfile {
     val startupBudgetMbps = if (sustained.actionable) {
         sustained.p10ThroughputMbps?.times(0.85)
     } else {
         null
     }
-    val steadyStateBudgetMbps = if (sustained.actionable) {
+    // Legacy budget (always computed for telemetry comparison)
+    val legacyBudgetMbps = if (sustained.actionable) {
         deriveSteadyStateBudgetMbps(this, startupBudgetMbps, summary.elapsedMs)
+    } else {
+        null
+    }
+    // Shadow player simulation (primary path when sufficient frontier data)
+    val frontierEvents = rawSamples.frontierEvents
+    val shadowResult = if (frontierEvents.size >= FRONTIER_EVENT_MINIMUM) {
+        ShadowPlayerSimulation(
+            startupBufferMs = bufferForPlaybackMs,
+            maxBufferMs = maxBufferMs
+        ).findMaxSustainableBitrate(frontierEvents)
+    } else {
+        if (frontierEvents.isEmpty() && sustained.actionable) {
+            android.util.Log.w(
+                "BenchmarkDecision",
+                "Benchmark completed but no frontier events — onChunkBytesDownloaded callback may not be wired"
+            )
+        }
+        null
+    }
+    // Use shadow player budget as primary, fall back to legacy
+    val steadyStateBudgetMbps = shadowResult?.safeBudgetMbps ?: legacyBudgetMbps
+    val divergenceRatio = if (shadowResult != null && legacyBudgetMbps != null && legacyBudgetMbps > 0.0) {
+        shadowResult.safeBudgetMbps / legacyBudgetMbps
     } else {
         null
     }
@@ -162,7 +194,10 @@ private fun DebridBenchmarkTransportProfile.withDerivedDecisionMetrics(
             safeSustainedBudgetMbps = steadyStateBudgetMbps,
             startupSafeBudgetMbps = startupBudgetMbps,
             steadyStateSafeBudgetMbps = steadyStateBudgetMbps,
-            actionable = sustained.actionable
+            actionable = sustained.actionable,
+            shadowPlayerResult = shadowResult,
+            legacyBudgetMbps = legacyBudgetMbps,
+            budgetDivergenceRatio = divergenceRatio
         )
     )
 }

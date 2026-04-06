@@ -50,6 +50,7 @@ private const val TRAILER_SCREENSAVER_BRANDING_VISIBLE_MS = 20_000L
 private const val TRAILER_SCREENSAVER_BRANDING_FADE_MS = 1_500
 private const val TRAILER_SCREENSAVER_OPEN_GUARD_MS = 180L
 private const val TRAILER_SCREENSAVER_FIRST_FRAME_TIMEOUT_MS = 5_000L
+private const val TRAILER_SCREENSAVER_STALL_TIMEOUT_MS = 8_000L
 private const val TRAILER_SCREENSAVER_BRANDING_WIDTH_DP = 360
 
 internal data class IdleTrailerBrandingPresentationSpec(
@@ -95,6 +96,7 @@ internal fun IdleTrailerScreensaverOverlay(
     var pendingOpen by remember(sessionId) { mutableStateOf<IdleTrailerScreensaverCandidate?>(null) }
     var failedPlaybackKeys by remember(sessionId) { mutableStateOf<Set<String>>(emptySet()) }
     var hasRenderedFirstFrame by remember(sessionId, currentPlayback.index, currentPlayback.trailerId) { mutableStateOf(false) }
+    var lastProgressMs by remember(sessionId, currentPlayback.index, currentPlayback.trailerId) { mutableStateOf(-1L) }
     var advanceSignal by remember(sessionId) { mutableIntStateOf(0) }
     val brandingSpec = remember { idleTrailerBrandingPresentationSpec() }
     val brandingAlpha = remember(sessionId) { Animatable(1f) }
@@ -122,7 +124,7 @@ internal fun IdleTrailerScreensaverOverlay(
         )
     }
 
-    LaunchedEffect(sessionId, currentPlayback.index, currentPlayback.trailerId, sessionStart.candidates) {
+    LaunchedEffect(sessionId, currentPlayback.index, currentPlayback.trailerId, sessionStart.candidates, failedPlaybackKeys) {
         preparedNextPlayback = resolveNextIdleTrailerPlayback(
             candidates = sessionStart.candidates,
             currentIndex = currentPlayback.index,
@@ -155,14 +157,55 @@ internal fun IdleTrailerScreensaverOverlay(
         }
     }
 
+    LaunchedEffect(
+        sessionId,
+        currentPlayback.index,
+        currentPlayback.trailerId,
+        hasRenderedFirstFrame,
+        failedPlaybackKeys
+    ) {
+        if (!hasRenderedFirstFrame) return@LaunchedEffect
+        val playbackKey = idleTrailerPlaybackKey(
+            candidate = currentPlayback.candidate,
+            trailerId = currentPlayback.trailerId
+        )
+        if (playbackKey in failedPlaybackKeys) return@LaunchedEffect
+        lastProgressMs = -1L
+        var previousProgress = -1L
+        while (true) {
+            delay(TRAILER_SCREENSAVER_STALL_TIMEOUT_MS)
+            val currentProgress = lastProgressMs
+            if (currentProgress < 0L) {
+                previousProgress = -1L
+                continue
+            }
+            if (currentProgress == previousProgress) {
+                failedPlaybackKeys = failedPlaybackKeys + playbackKey
+                preparedNextPlayback = null
+                advanceSignal += 1
+                break
+            }
+            previousProgress = currentProgress
+        }
+    }
+
     LaunchedEffect(advanceSignal) {
         if (advanceSignal == 0) return@LaunchedEffect
-        val nextPlayback = preparedNextPlayback ?: resolveNextIdleTrailerPlayback(
+        var nextPlayback = preparedNextPlayback ?: resolveNextIdleTrailerPlayback(
             candidates = sessionStart.candidates,
             currentIndex = currentPlayback.index,
             skippedPlaybackKeys = failedPlaybackKeys,
             resolvePlayback = currentResolvePlayback
         )
+        if (nextPlayback == null && failedPlaybackKeys.isNotEmpty()) {
+            failedPlaybackKeys = emptySet()
+            nextPlayback = resolveNextIdleTrailerPlayback(
+                candidates = sessionStart.candidates,
+                currentIndex = currentPlayback.index,
+                skippedPlaybackKeys = emptySet(),
+                resolvePlayback = currentResolvePlayback
+            )
+        }
         if (nextPlayback == null) {
             currentOnDismiss()
             return@LaunchedEffect
@@ -251,6 +294,22 @@ internal fun IdleTrailerScreensaverOverlay(
             muted = sessionMuted,
             onEnded = { advanceSignal += 1 },
             onFirstFrameRendered = { hasRenderedFirstFrame = true },
+            onError = {
+                val playbackKey = idleTrailerPlaybackKey(
+                    candidate = currentPlayback.candidate,
+                    trailerId = currentPlayback.trailerId
+                )
+                if (playbackKey !in failedPlaybackKeys) {
+                    failedPlaybackKeys = failedPlaybackKeys + playbackKey
+                    preparedNextPlayback = null
+                    advanceSignal += 1
+                }
+            },
+            onProgressChanged = { positionMs, _ ->
+                if (hasRenderedFirstFrame) {
+                    lastProgressMs = positionMs
+                }
+            },
             onRemoteKey = { keyCode, action, _ ->
                 if (pendingOpen != null) {
                     true

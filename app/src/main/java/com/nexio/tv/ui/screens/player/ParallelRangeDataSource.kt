@@ -43,6 +43,7 @@ internal class ParallelRangeDataSource(
     private val shouldAllowBackgroundPrefetch: () -> Boolean = { true },
     private val transportSampleTimeMs: () -> Long = { SystemClock.elapsedRealtime() },
     private val onTransportBytesDownloaded: (Long, Long) -> Unit = { _, _ -> },
+    private val onChunkBytesDownloaded: (chunkIndex: Long, chunkSize: Long, offsetInChunk: Long, bytesRead: Int, sampleTimeMs: Long) -> Unit = { _, _, _, _, _ -> },
     private val onResolvedUri: (Uri?) -> Unit = {},
     private val onReadPositionAdvanced: (Long) -> Unit = {},
     private val consumeBootstrapCache: (DataSpec) -> BootstrapCacheEntry? = { null },
@@ -434,8 +435,11 @@ internal class ParallelRangeDataSource(
                             }
                             throw EOFException("Unexpected end of chunk $chunkIndex after $totalRead / $expectedBytes bytes")
                         }
+                        val offsetInChunk = totalRead.toLong()
                         totalRead += read
-                        onTransportBytesDownloaded(read.toLong(), transportSampleTimeMs())
+                        val sampleTime = transportSampleTimeMs()
+                        onTransportBytesDownloaded(read.toLong(), sampleTime)
+                        onChunkBytesDownloaded(chunkIndex, chunkSize, offsetInChunk, read, sampleTime)
                     }
                     ds.close()
                 } catch (e: Exception) {
@@ -643,6 +647,7 @@ internal class ParallelRangeDataSource(
         private val shouldAllowBackgroundPrefetch: () -> Boolean = { true },
         private val transportSampleTimeMs: () -> Long = { SystemClock.elapsedRealtime() },
         private val onTransportBytesDownloaded: (Long, Long) -> Unit = { _, _ -> },
+        private val onChunkBytesDownloaded: (chunkIndex: Long, chunkSize: Long, offsetInChunk: Long, bytesRead: Int, sampleTimeMs: Long) -> Unit = { _, _, _, _, _ -> },
         private val onResolvedUri: (Uri?) -> Unit = {},
         private val onReadPositionAdvanced: (Long) -> Unit = {},
         private val allowStartupBootstrapReuse: Boolean = true
@@ -659,6 +664,7 @@ internal class ParallelRangeDataSource(
                 shouldAllowBackgroundPrefetch = shouldAllowBackgroundPrefetch,
                 transportSampleTimeMs = transportSampleTimeMs,
                 onTransportBytesDownloaded = onTransportBytesDownloaded,
+                onChunkBytesDownloaded = onChunkBytesDownloaded,
                 onResolvedUri = onResolvedUri,
                 onReadPositionAdvanced = onReadPositionAdvanced,
                 consumeBootstrapCache = { dataSpec ->

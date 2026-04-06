@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screensaver
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -89,6 +90,80 @@ class IdleTrailerScreensaverSessionTest {
         assertEquals("movie-3", playback.candidate.slide.itemId)
         assertEquals("ghi789jkl01", playback.trailerId)
         assertEquals(2, playback.index)
+    }
+
+    @Test
+    fun `shouldAdvanceIdleTrailerPlaybackAfterFirstFrameTimeout returns true when no first frame and not yet failed`() {
+        assertTrue(
+            shouldAdvanceIdleTrailerPlaybackAfterFirstFrameTimeout(
+                hasRenderedFirstFrame = false,
+                playbackKey = "movie:m1:abc",
+                failedPlaybackKeys = emptySet()
+            )
+        )
+    }
+
+    @Test
+    fun `shouldAdvanceIdleTrailerPlaybackAfterFirstFrameTimeout returns false when first frame rendered`() {
+        assertFalse(
+            shouldAdvanceIdleTrailerPlaybackAfterFirstFrameTimeout(
+                hasRenderedFirstFrame = true,
+                playbackKey = "movie:m1:abc",
+                failedPlaybackKeys = emptySet()
+            )
+        )
+    }
+
+    @Test
+    fun `shouldAdvanceIdleTrailerPlaybackAfterFirstFrameTimeout returns false when already in failed set`() {
+        assertFalse(
+            shouldAdvanceIdleTrailerPlaybackAfterFirstFrameTimeout(
+                hasRenderedFirstFrame = false,
+                playbackKey = "movie:m1:abc",
+                failedPlaybackKeys = setOf("movie:m1:abc")
+            )
+        )
+    }
+
+    @Test
+    fun `resolveNextIdleTrailerPlayback returns null when all candidates are skipped`() = runBlocking {
+        val candidates = listOf(
+            buildCandidate("movie-1", listOf("abc123def45")),
+            buildCandidate("movie-2", listOf("def456ghi78"))
+        )
+        val allSkipped = candidates.flatMap { c ->
+            c.trailerYtIds.map { id -> idleTrailerPlaybackKey(c, id) }
+        }.toSet()
+
+        val playback = resolveNextIdleTrailerPlayback(
+            candidates = candidates,
+            currentIndex = 0,
+            skippedPlaybackKeys = allSkipped
+        ) { _, trailerId ->
+            TrailerPlaybackSource(videoUrl = "https://video.example.com/$trailerId.mp4")
+        }
+
+        assertNull(playback)
+    }
+
+    @Test
+    fun `resolveNextIdleTrailerPlayback with empty skip set loops back to first candidate`() = runBlocking {
+        val candidates = listOf(
+            buildCandidate("movie-1", listOf("abc123def45")),
+            buildCandidate("movie-2", listOf("def456ghi78"))
+        )
+
+        val playback = resolveNextIdleTrailerPlayback(
+            candidates = candidates,
+            currentIndex = 1,
+            skippedPlaybackKeys = emptySet()
+        ) { _, trailerId ->
+            TrailerPlaybackSource(videoUrl = "https://video.example.com/$trailerId.mp4")
+        }
+
+        requireNotNull(playback)
+        assertEquals("movie-1", playback.candidate.slide.itemId)
+        assertEquals(0, playback.index)
     }
 
     @Test

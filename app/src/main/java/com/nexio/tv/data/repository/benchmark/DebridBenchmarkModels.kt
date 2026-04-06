@@ -255,7 +255,8 @@ data class DebridBenchmarkSustainedMetrics(
     val cacheDrainingDeficitCount: Int? = null,
     val estimatedMinCacheHeadroomMs: Long? = null,
     val bytesTransferred: Long? = null,
-    val elapsedMs: Long? = null
+    val elapsedMs: Long? = null,
+    val frontierMetrics: FrontierMetrics? = null
 )
 
 data class DebridBenchmarkSeekMetrics(
@@ -285,7 +286,10 @@ data class DebridBenchmarkTransportDecisionMetrics(
     val safeSustainedBudgetMbps: Double? = null,
     val startupSafeBudgetMbps: Double? = null,
     val steadyStateSafeBudgetMbps: Double? = null,
-    val actionable: Boolean = true
+    val actionable: Boolean = true,
+    val shadowPlayerResult: ShadowPlayerSimulationResult? = null,
+    val legacyBudgetMbps: Double? = null,
+    val budgetDivergenceRatio: Double? = null
 )
 
 data class DebridBenchmarkSeekSample(
@@ -297,7 +301,8 @@ data class DebridBenchmarkSeekSample(
 data class DebridBenchmarkRawSamples(
     val throughputWindowsMbps: List<Double> = emptyList(),
     val throughputBuckets: List<DebridBenchmarkThroughputBucketSample> = emptyList(),
-    val seekSamples: List<DebridBenchmarkSeekSample> = emptyList()
+    val seekSamples: List<DebridBenchmarkSeekSample> = emptyList(),
+    val frontierEvents: List<FrontierEvent> = emptyList()
 )
 
 data class DebridBenchmarkTransportProfile(

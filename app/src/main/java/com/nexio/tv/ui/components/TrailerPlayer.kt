@@ -75,6 +75,7 @@ fun TrailerPlayer(
     isPlaying: Boolean,
     onEnded: () -> Unit,
     onFirstFrameRendered: () -> Unit = {},
+    onError: () -> Unit = {},
     muted: Boolean = false,
     seekRequestToken: Int = 0,
     seekDeltaMs: Long = 0L,
@@ -96,6 +97,7 @@ fun TrailerPlayer(
     val currentTrailerAudioUrl by rememberUpdatedState(trailerAudioUrl)
     val currentOnEnded by rememberUpdatedState(onEnded)
     val currentOnFirstFrameRendered by rememberUpdatedState(onFirstFrameRendered)
+    val currentOnError by rememberUpdatedState(onError)
     val currentOnProgressChanged by rememberUpdatedState(onProgressChanged)
     val currentOnRemoteKey by rememberUpdatedState(onRemoteKey)
     val zoomScale = if (cropToFill) overscanZoom.coerceAtLeast(1f) else 1f
@@ -221,6 +223,7 @@ fun TrailerPlayer(
                         "video=${currentTrailerUrl.orEmpty()} audio=${currentTrailerAudioUrl.orEmpty()}",
                     error
                 )
+                currentOnError()
             }
 
             override fun onRenderedFirstFrame() {
