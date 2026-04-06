@@ -120,6 +120,10 @@ internal class ParallelRangeDataSource(
     // Propagate download failures to the reader thread
     @Volatile private var lastDownloadError: Exception? = null
 
+    // Bootstrap coverage: downloads must start AFTER this to avoid overlapping writes
+    // from different CDN connections that may return slightly different bytes
+    @Volatile private var bootstrapCoverageEnd: Long = 0L
+
     private var bootstrapPrefetchDeferred: Boolean = false
     private var bootstrapStartPosition: Long = C.TIME_UNSET
     private var continuationSource: OkHttpDataSource? = null
@@ -146,6 +150,7 @@ internal class ParallelRangeDataSource(
         frontierBuffer.reset()
         scheduledRanges.clear()
         lastDownloadError = null
+        bootstrapCoverageEnd = 0L
 
         // Signal any thread that might be blocked in read() so it can observe closed state
         readLock.lock()
@@ -163,6 +168,7 @@ internal class ParallelRangeDataSource(
             if (cached.startPosition > 0L) frontierBuffer.setBasePosition(cached.startPosition)
             frontierBuffer.setTotalLength(totalFileLength)
             frontierBuffer.onBytesWritten(cached.startPosition, cached.bootstrapData, 0, cached.bootstrapSize)
+            bootstrapCoverageEnd = cached.startPosition + cached.bootstrapSize
 
             // Fire onChunkBytesDownloaded for cached bootstrap data
             val cachedSampleTime = transportSampleTimeMs()
@@ -235,8 +241,10 @@ internal class ParallelRangeDataSource(
         frontierBuffer.setTotalLength(totalFileLength)
         scheduler = DualLaneScheduler(parallelConnections, 1)
 
-        Log.d(TAG, "Parallel mode: ${parallelConnections} connections, ${chunkSize / 1024 / 1024}MB chunks, " +
-                "file=${totalFileLength / 1024 / 1024}MB, resolved=${resolvedUri?.host}")
+        System.err.println("DIAG open() ${parallelConnections}conn ${chunkSize / 1024 / 1024}MB chunks " +
+                "file=${totalFileLength / 1024 / 1024}MB pos=${position / 1024 / 1024}MB " +
+                "bootstrap=${minOf(minOf(chunkSize, BOOTSTRAP_READ_BYTES), bytesRemaining).toInt() / 1024}KB " +
+                "host=${resolvedUri?.host}")
 
         // Reuse a small probe window immediately for both startup and large seek reopens.
         val firstChunkIndex = position / chunkSize
@@ -247,6 +255,7 @@ internal class ParallelRangeDataSource(
 
             // Write bootstrap data into frontier buffer
             frontierBuffer.onBytesWritten(position, bootstrapData, 0, bootstrapSize)
+            bootstrapCoverageEnd = position + bootstrapSize
 
             // Fire onChunkBytesDownloaded for bootstrap data so FrontierTracker (benchmark)
             // receives events for all downloaded bytes, not just background-fetched chunks
@@ -375,8 +384,14 @@ internal class ParallelRangeDataSource(
         }
 
         // Try to read from frontier buffer
+        System.err.println("DIAG pre-read pos=$position frontier=${frontierBuffer.frontier} remaining=$bytesRemaining cont=${continuationSource != null} contEnd=$continuationEndPositionExclusive bsDeferred=$bootstrapPrefetchDeferred prefetchOk=${shouldAllowBackgroundPrefetch()}")
         val bytesRead = frontierBuffer.read(position, buffer, offset, toRead)
         if (bytesRead > 0) {
+            if (position < 2L * 1024L * 1024L || (totalFileLength > 0 && position > totalFileLength - 2L * 1024L * 1024L)) {
+                val preview = ByteArray(minOf(16, bytesRead))
+                System.arraycopy(buffer, offset, preview, 0, preview.size)
+                System.err.println("DIAG read() pos=$position len=$bytesRead frontier=${frontierBuffer.frontier} first16=${preview.joinToString(",") { (it.toInt() and 0xFF).toString(16) }}")
+            }
             position += bytesRead
             bytesRemaining -= bytesRead
             onReadPositionAdvanced(position)
@@ -447,8 +462,9 @@ internal class ParallelRangeDataSource(
             submitRange(sched, currentChunkIdx, urgentStart, urgentEnd, urgent = true)
         }
 
-        // Ahead chunks are gated by shouldAllowBackgroundPrefetch (startup lock)
-        if (!shouldAllowBackgroundPrefetch()) return
+        // No gate on ahead chunks — first frame can't render until ExoPlayer parses
+        // header + Cues, which requires reading from this DataSource. Gating ahead chunks
+        // on first frame creates a deadlock.
 
         val maxAhead = parallelConnections + 1
         val policy = transportPolicyProvider()
@@ -496,7 +512,12 @@ internal class ParallelRangeDataSource(
 
     private fun downloadRange(start: Long, end: Long) {
         val chunkIndex = start / chunkSize
-        val expectedBytes = (end - start).coerceAtLeast(0L).toInt()
+        // Skip bootstrap-covered bytes to avoid overlapping writes from different CDN
+        // connections that may return slightly different bytes for the same range.
+        // bootstrapCoverageEnd is set once in open() and never changes — no race condition.
+        val effectiveStart = maxOf(start, bootstrapCoverageEnd)
+        if (effectiveStart >= end) return
+        val expectedBytes = (end - effectiveStart).coerceAtLeast(0L).toInt()
         val readBuffer = ByteArray(READ_BUFFER_SIZE)
         var totalRead = 0
         var lastException: Exception? = null
@@ -509,7 +530,7 @@ internal class ParallelRangeDataSource(
                 val uri = resolvedUri ?: originalDataSpec?.uri ?: throw IOException("No URI available")
                 val spec = DataSpec.Builder()
                     .setUri(uri)
-                    .setPosition(start + totalRead)
+                    .setPosition(effectiveStart + totalRead)
                     .setLength((expectedBytes - totalRead).toLong())
                     .build()
 
@@ -522,9 +543,9 @@ internal class ParallelRangeDataSource(
                         if (totalRead >= expectedBytes) break
                         throw EOFException("Unexpected end of range $chunkIndex after $totalRead / $expectedBytes bytes")
                     }
-                    val offsetInChunk = totalRead.toLong()
+                    val offsetInChunk = (effectiveStart - start) + totalRead.toLong()
                     // Write into frontier buffer as bytes arrive (streaming)
-                    frontierBuffer.onBytesWritten(start + totalRead.toLong(), readBuffer, 0, read)
+                    frontierBuffer.onBytesWritten(effectiveStart + totalRead.toLong(), readBuffer, 0, read)
                     totalRead += read
                     val sampleTime = transportSampleTimeMs()
                     onTransportBytesDownloaded(read.toLong(), sampleTime)
