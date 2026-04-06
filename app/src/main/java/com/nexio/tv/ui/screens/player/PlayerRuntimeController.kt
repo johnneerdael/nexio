@@ -24,6 +24,7 @@ import com.nexio.tv.data.repository.SkipInterval
 import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.TraktScrobbleService
+import com.nexio.tv.data.local.DebridConfigBenchmarkStore
 import com.nexio.tv.debug.passthrough.TransportValidationRuntimeCollector
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
@@ -59,6 +60,7 @@ class PlayerRuntimeController(
     internal val geminiSubtitleTranslationService: GeminiSubtitleTranslationService,
     internal val playbackIdleGateState: PlaybackIdleGateState,
     internal val transportValidationRuntimeCollector: TransportValidationRuntimeCollector,
+    internal val debridConfigBenchmarkStore: DebridConfigBenchmarkStore,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {
@@ -106,6 +108,7 @@ class PlayerRuntimeController(
     internal val rememberedAudioLanguage: String? = navigationArgs.rememberedAudioLanguage
     internal val rememberedAudioName: String? = navigationArgs.rememberedAudioName
     internal val mediaSourceFactory = PlayerMediaSourceFactory(context.applicationContext)
+    internal var transportPolicyController: TransportPolicyController? = null
 
     internal var currentVideoHash: String? = navigationArgs.videoHash
     internal var currentVideoSize: Long? = navigationArgs.videoSize
@@ -124,7 +127,7 @@ class PlayerRuntimeController(
         endDisplayModeSessionForExit()
         Dv5HardwareToneMapRpuTap.setEnabledForPlayback(enabled = false, streamUrl = currentStreamUrl)
         releasePlayer()
-        mediaSourceFactory.clearVodCache()
+        mediaSourceFactory.stopVodWarmAhead()
     }
 
     internal var currentVideoId: String? = videoId

@@ -9,6 +9,7 @@ import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.data.local.DebridConfigBenchmarkStore
 import com.nexio.tv.debug.passthrough.TransportValidationRuntimeCollector
 import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
 import com.nexio.tv.data.repository.SkipIntroRepository
@@ -41,6 +42,7 @@ class PlayerViewModel @Inject constructor(
     private val geminiSubtitleTranslationService: GeminiSubtitleTranslationService,
     private val playbackIdleGateState: PlaybackIdleGateState,
     private val transportValidationRuntimeCollector: TransportValidationRuntimeCollector,
+    private val debridConfigBenchmarkStore: DebridConfigBenchmarkStore,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val controller = PlayerRuntimeController(
@@ -60,6 +62,7 @@ class PlayerViewModel @Inject constructor(
         geminiSubtitleTranslationService = geminiSubtitleTranslationService,
         playbackIdleGateState = playbackIdleGateState,
         transportValidationRuntimeCollector = transportValidationRuntimeCollector,
+        debridConfigBenchmarkStore = debridConfigBenchmarkStore,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope
     )

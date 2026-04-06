@@ -9,6 +9,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.analytics.PlaybackStats
 import androidx.media3.exoplayer.analytics.PlaybackStatsListener
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -303,6 +304,22 @@ class TransportValidationRuntimeCollector @Inject constructor() {
         )
     }
 
+    fun onRangeTtfb(ttfbMs: Long) { activeSession?.perRangeTtfbSamples?.add(ttfbMs) }
+
+    fun onNoProgressGap(gapMs: Long) { activeSession?.noProgressGapMs?.add(gapMs) }
+
+    fun onCanceledSpeculativeBytes(bytes: Long) { activeSession?.canceledSpeculativeBytes?.addAndGet(bytes) }
+
+    fun onPeakTransportMemory(bytes: Long) {
+        activeSession?.peakTransportMemoryBytes?.accumulateAndGet(bytes) { current, new -> maxOf(current, new) }
+    }
+
+    fun onCacheHit() { activeSession?.cacheHitCount?.incrementAndGet() }
+
+    fun onCacheMiss() { activeSession?.cacheMissCount?.incrementAndGet() }
+
+    fun updateCachedAheadSeconds(seconds: Double) { activeSession?.cachedAheadSeconds = seconds }
+
     fun clearSession() {
         val session = activeSession ?: return
         session.detach()
@@ -362,6 +379,14 @@ class TransportValidationRuntimeCollector @Inject constructor() {
         var playbackStatsListener: PlaybackStatsListener? = null,
         var lastPlaybackStatsSummary: TransportValidationPlaybackStatsSummary? = null,
         var positionPollJob: Job? = null,
+        // Transport telemetry (optional, populated by ParallelRangeDataSource and RollingHorizonManager)
+        val perRangeTtfbSamples: MutableList<Long> = mutableListOf(),
+        val noProgressGapMs: MutableList<Long> = mutableListOf(),
+        val canceledSpeculativeBytes: AtomicLong = AtomicLong(0L),
+        val peakTransportMemoryBytes: AtomicLong = AtomicLong(0L),
+        val cacheHitCount: AtomicLong = AtomicLong(0L),
+        val cacheMissCount: AtomicLong = AtomicLong(0L),
+        @Volatile var cachedAheadSeconds: Double = 0.0,
     ) {
         fun matches(streamUrl: String): Boolean =
             streamUrl.endsWith(sourceAssetPath) || streamUrl.endsWith("/$sourceAssetPath")

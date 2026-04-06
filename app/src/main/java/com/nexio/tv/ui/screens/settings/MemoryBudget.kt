@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.settings
 
 import androidx.media3.common.util.UnstableApi
 import com.nexio.tv.data.local.BufferSettings
+import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
 
 /**
  * Shared memory budget constants and helpers for buffer + parallel connection settings.
@@ -13,6 +14,8 @@ object MemoryBudget {
 
     /** Fraction of max heap reserved for buffer + parallel download memory */
     private const val BUDGET_RATIO = 0.70
+
+    private const val PAGE_SIZE_BYTES = 128 * 1024 // 128KB, matches PagedFrontierBuffer
 
     /** ParallelRangeDataSource schedules maxAhead = parallelConnections + 1 chunks concurrently */
     private const val BUFFER_OVERHEAD = 1
@@ -72,5 +75,23 @@ object MemoryBudget {
         val newBufferMb = ((budgetMb - buffers * MIN_CHUNK_MB) / BUFFER_STEP_MB * BUFFER_STEP_MB)
             .coerceAtLeast(MIN_BUFFER_MB)
         return newBufferMb to MIN_CHUNK_MB
+    }
+
+    /**
+     * Calculates peak transport memory for the new paged transport model.
+     *
+     * Components:
+     * - Urgent lane: urgentWorkers * (urgentChunkBytes / PAGE_SIZE) * PAGE_SIZE (pages being filled)
+     * - Prefetch lane: prefetchWorkers * prefetchChunkBytes
+     * - Overlap buffer: pages being served while new ones download (~2 chunks worth of pages)
+     * - ExoPlayer buffer: the configured buffer size
+     */
+    fun peakTransportMemoryMb(envelope: CapabilityEnvelope, exoPlayerBufferMb: Int = defaultBufferSizeMb): Int {
+        val urgentPageBufferBytes = envelope.maxSafeUrgentWorkers.toLong() * envelope.maxSafeUrgentChunkBytes
+        val prefetchBufferBytes = envelope.maxSafePrefetchWorkers.toLong() * envelope.maxSafePrefetchChunkBytes
+        val overlapBytes = 2L * envelope.maxSafeUrgentChunkBytes // 2 chunks of overlap for page serving
+        val peakTransportBytes = urgentPageBufferBytes + prefetchBufferBytes + overlapBytes
+        val peakTransportMb = ((peakTransportBytes + 1024L * 1024L - 1L) / (1024L * 1024L)).toInt()
+        return peakTransportMb + exoPlayerBufferMb
     }
 }

@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkCandidateMetadata
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportConfigSnapshot
@@ -119,7 +120,10 @@ private fun parseSummary(summaryJson: JsonObject): DebridConfigBenchmarkSessionS
         failedProfileCount = summaryJson.strictIntegralIntOrThrow("failedProfiles"),
         unsupportedProfileCount = summaryJson.strictIntegralIntOrThrow("unsupportedProfiles"),
         totalElapsedMs = summaryJson.optionalStrictIntegralLongOrNull("totalElapsedMs"),
-        bestProfile = summaryJson.optionalObject("bestProfile")?.let(::parseProfileResult)
+        bestProfile = summaryJson.optionalObject("bestProfile")?.let(::parseProfileResult),
+        capabilityEnvelope = summaryJson.optionalObject("capabilityEnvelope")?.let { envelopeJson ->
+            CapabilityEnvelope.fromJson(envelopeJson.toString())
+        }
     )
 }
 

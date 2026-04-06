@@ -52,6 +52,9 @@ import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.domain.model.Subtitle
 import io.github.peerless2012.ass.media.type.AssRenderType
+import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
+import com.nexio.tv.data.repository.benchmark.toCapabilityEnvelope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -204,6 +207,22 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             mediaSourceFactory.parallelChunkSizeMb = playerSettings.parallelChunkSizeMb
             mediaSourceFactory.vodCacheSizeMode = playerSettings.vodCacheSizeMode
             mediaSourceFactory.vodCacheSizeMb = playerSettings.vodCacheSizeMb
+            // Load CapabilityEnvelope from the most recent benchmark result (any provider)
+            val envelope = DebridBenchmarkProvider.entries.firstNotNullOfOrNull { provider ->
+                runCatching {
+                    debridConfigBenchmarkStore.latestResult(provider).first()
+                }.getOrNull()?.let { result ->
+                    result.summary.capabilityEnvelope
+                        ?: result.summary.toCapabilityEnvelope(result.measuredAtMs)
+                }
+            }
+            if (envelope != null) {
+                mediaSourceFactory.capabilityEnvelope = envelope
+                transportPolicyController = TransportPolicyController(envelope)
+            } else {
+                transportPolicyController = TransportPolicyController()
+            }
+            mediaSourceFactory.transportPolicyProvider = { transportPolicyController?.currentPolicy }
             if (kodiCustomAudioSinkEnabled) {
                 safeAudioForcedStreamUrls.remove(url)
                 audioDisabledForcedStreamUrls.remove(url)
@@ -526,6 +545,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             )
                         }
 
+                        if (playbackState == Player.STATE_BUFFERING && hasRenderedFirstFrame) {
+                            transportPolicyController?.onRebuffer()
+                        }
                         if (playbackState == Player.STATE_BUFFERING && !hasRenderedFirstFrame) {
                             _uiState.update { state ->
                                 if (state.loadingOverlayEnabled && !state.showLoadingOverlay) {
@@ -634,6 +656,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     override fun onRenderedFirstFrame() {
                         if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
                         cancelFirstFrameWatchdog()
+                        transportPolicyController?.onFirstFrame()
                         mediaSourceFactory.notifyPlaybackFirstFrameRendered()
                         val startupMs = (System.currentTimeMillis() - playerInitializationStartedAtMs)
                             .coerceAtLeast(0L)

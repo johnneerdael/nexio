@@ -12,16 +12,13 @@ import java.io.InterruptedIOException
 import java.io.IOException
 import java.net.ProtocolException
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentLinkedDeque
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeoutException
 import java.util.concurrent.TimeUnit
 import com.nexio.tv.data.local.PlayerSettings
 import java.util.concurrent.atomic.AtomicBoolean
 import android.os.SystemClock
 import java.io.EOFException
 import java.net.SocketException
+import java.util.concurrent.locks.ReentrantLock
 
 /**
  * A DataSource that downloads progressive files using multiple parallel HTTP range requests.
@@ -30,7 +27,8 @@ import java.net.SocketException
  * or Java/Okio networking overhead). By downloading different byte ranges in parallel across
  * multiple connections, we can multiply the effective throughput (e.g., 3 connections ≈ 300 Mbps).
  *
- * Uses a buffer pool to reuse ByteArrays and avoid GC churn from large object allocations.
+ * Uses a PagedFrontierBuffer for page-level streaming reads (no head-of-line blocking on full
+ * chunk boundaries) and a DualLaneScheduler to prioritize urgent playback ranges over prefetch.
  *
  * Only used for progressive downloads (MKV, MP4). HLS/DASH already handle chunked parallel downloads.
  */
@@ -47,7 +45,8 @@ internal class ParallelRangeDataSource(
     private val onResolvedUri: (Uri?) -> Unit = {},
     private val onReadPositionAdvanced: (Long) -> Unit = {},
     private val consumeBootstrapCache: (DataSpec) -> BootstrapCacheEntry? = { null },
-    private val updateBootstrapCache: (BootstrapCacheEntry?) -> Unit = {}
+    private val updateBootstrapCache: (BootstrapCacheEntry?) -> Unit = {},
+    private val transportPolicyProvider: () -> TransportPolicy? = { null }
 ) : DataSource {
 
     internal open class ChunkTransferException(
@@ -81,16 +80,10 @@ internal class ParallelRangeDataSource(
         private const val READ_BUFFER_SIZE = 512 * 1024 // 512KB read buffer for chunk downloads
         private const val BOOTSTRAP_READ_BYTES = 1L * 1024L * 1024L
         internal const val DEFAULT_CHUNK_WAIT_TIMEOUT_MS = 60_000L
-        private const val MAX_CHUNK_WAIT_RETRIES = 3
         private const val MAX_TRANSIENT_CHUNK_ATTEMPTS = 4
         private const val MAX_NON_TRANSIENT_CHUNK_ATTEMPTS = 2
+        internal const val USE_PAGED_TRANSPORT = true // Feature flag for rollback
     }
-
-    /**
-     * A downloaded chunk: a pooled byte array plus the actual number of bytes written.
-     * The array may be larger than [size] (it's from the pool).
-     */
-    private class DownloadedChunk(val data: ByteArray, val size: Int)
 
     internal data class BootstrapCacheEntry(
         val requestUri: Uri,
@@ -110,20 +103,24 @@ internal class ParallelRangeDataSource(
     private var bytesRemaining: Long = C.LENGTH_UNSET.toLong()
     private val closed = AtomicBoolean(false)
 
-    // Chunk download state
-    private val chunks = ConcurrentHashMap<Long, CompletableFuture<DownloadedChunk>>()
-    private var executor = Executors.newFixedThreadPool(parallelConnections)
+    // Page-level frontier buffer — replaces the old chunk/future map
+    private var frontierBuffer = PagedFrontierBuffer()
+    private var scheduler: DualLaneScheduler? = null
 
-    // Buffer pool: lock-free deque to reuse byte arrays and avoid GC churn
-    private val bufferPool = ConcurrentLinkedDeque<ByteArray>()
-    private val maxPoolSize = parallelConnections + 2
+    // Condition for readers waiting on data to arrive
+    private val readLock = ReentrantLock()
+    private val dataAvailable = readLock.newCondition()
 
-    // Current chunk being served to ExoPlayer
-    private var currentChunk: DownloadedChunk? = null
-    private var currentChunkIndex: Long = -1
-    private var currentChunkReadOffset: Int = 0
+    // Keep ~2 chunks behind the current position for backward seeks within the same open
+    private val keepBehindBytes = 2L * chunkSize
+
+    // Tracks which chunk ranges have already been submitted (keyed by chunkIndex = start / chunkSize)
+    private val scheduledRanges = ConcurrentHashMap<Long, Boolean>()
+
+    // Propagate download failures to the reader thread
+    @Volatile private var lastDownloadError: Exception? = null
+
     private var bootstrapPrefetchDeferred: Boolean = false
-    private var bootstrapChunk: DownloadedChunk? = null
     private var bootstrapStartPosition: Long = C.TIME_UNSET
     private var continuationSource: OkHttpDataSource? = null
     private var continuationEndPositionExclusive: Long = C.TIME_UNSET
@@ -138,28 +135,64 @@ internal class ParallelRangeDataSource(
         originalDataSpec = dataSpec
         position = dataSpec.position
         bootstrapPrefetchDeferred = false
-        bootstrapChunk = null
         bootstrapStartPosition = C.TIME_UNSET
         continuationSource?.close()
         continuationSource = null
         continuationEndPositionExclusive = C.TIME_UNSET
 
-        // Cancel any in-flight chunks from a previous open (e.g., after seek)
-        cancelAllChunks()
+        // Cancel any in-flight work from a previous open (e.g., after seek)
+        scheduler?.cancelAll()
+        scheduler = null
+        frontierBuffer.reset()
+        scheduledRanges.clear()
+        lastDownloadError = null
 
-        // Recreate executor if it was shut down by a previous close()
-        if (executor.isShutdown) {
-            executor = Executors.newFixedThreadPool(parallelConnections)
-        }
+        // Signal any thread that might be blocked in read() so it can observe closed state
+        readLock.lock()
+        try { dataAvailable.signalAll() } finally { readLock.unlock() }
 
         consumeBootstrapCache(dataSpec)?.let { cached ->
             resolvedUri = cached.resolvedUri
             onResolvedUri(resolvedUri)
             totalFileLength = cached.totalFileLength
             bytesRemaining = cached.openLength
-            bootstrapChunk = DownloadedChunk(cached.bootstrapData, cached.bootstrapSize)
             bootstrapStartPosition = cached.startPosition
+
+            // Write bootstrap data into frontier buffer immediately
+            frontierBuffer = PagedFrontierBuffer()
+            if (cached.startPosition > 0L) frontierBuffer.setBasePosition(cached.startPosition)
+            frontierBuffer.setTotalLength(totalFileLength)
+            frontierBuffer.onBytesWritten(cached.startPosition, cached.bootstrapData, 0, cached.bootstrapSize)
+
+            // Fire onChunkBytesDownloaded for cached bootstrap data
+            val cachedSampleTime = transportSampleTimeMs()
+            var cachedReportOffset = 0
+            while (cachedReportOffset < cached.bootstrapSize) {
+                val bci = (cached.startPosition + cachedReportOffset) / chunkSize
+                val chunkStart = bci * chunkSize
+                val offsetInChunk = (cached.startPosition + cachedReportOffset) - chunkStart
+                val chunkEnd = chunkStart + chunkSize
+                val reportSize = minOf(
+                    cached.bootstrapSize - cachedReportOffset,
+                    (chunkEnd - (cached.startPosition + cachedReportOffset)).toInt()
+                )
+                onChunkBytesDownloaded(bci, chunkSize, offsetInChunk, reportSize, cachedSampleTime)
+                cachedReportOffset += reportSize
+            }
+
+            // Mark bootstrap chunks as scheduled ONLY if fully covered
+            val bootstrapEndPos = cached.startPosition + cached.bootstrapSize
+            var ci = cached.startPosition / chunkSize
+            while (ci * chunkSize < bootstrapEndPos) {
+                val chunkEnd = (ci + 1) * chunkSize
+                if (chunkEnd <= bootstrapEndPos) {
+                    scheduledRanges[ci] = true
+                }
+                ci++
+            }
+
             bootstrapPrefetchDeferred = true
+            scheduler = DualLaneScheduler(parallelConnections, 1)
             Log.d(
                 TAG,
                 "Reusing bootstrap window for immediate reopen at ${cached.startPosition}, " +
@@ -197,6 +230,11 @@ internal class ParallelRangeDataSource(
         totalFileLength = position + openLength
         bytesRemaining = openLength
 
+        frontierBuffer = PagedFrontierBuffer()
+        if (position > 0L) frontierBuffer.setBasePosition(position)
+        frontierBuffer.setTotalLength(totalFileLength)
+        scheduler = DualLaneScheduler(parallelConnections, 1)
+
         Log.d(TAG, "Parallel mode: ${parallelConnections} connections, ${chunkSize / 1024 / 1024}MB chunks, " +
                 "file=${totalFileLength / 1024 / 1024}MB, resolved=${resolvedUri?.host}")
 
@@ -204,9 +242,42 @@ internal class ParallelRangeDataSource(
         val firstChunkIndex = position / chunkSize
         if (openLength > 0L) {
             val bootstrapBytes = minOf(minOf(chunkSize, BOOTSTRAP_READ_BYTES), openLength).toInt()
-            val chunk = readBootstrapChunk(probeSource, bootstrapBytes)
-            bootstrapChunk = chunk
+            val (bootstrapData, bootstrapSize) = readBootstrapChunk(probeSource, bootstrapBytes)
             bootstrapStartPosition = position
+
+            // Write bootstrap data into frontier buffer
+            frontierBuffer.onBytesWritten(position, bootstrapData, 0, bootstrapSize)
+
+            // Fire onChunkBytesDownloaded for bootstrap data so FrontierTracker (benchmark)
+            // receives events for all downloaded bytes, not just background-fetched chunks
+            val bootstrapSampleTime = transportSampleTimeMs()
+            var bootstrapReportOffset = 0
+            while (bootstrapReportOffset < bootstrapSize) {
+                val ci = (position + bootstrapReportOffset) / chunkSize
+                val chunkStart = ci * chunkSize
+                val offsetInChunk = (position + bootstrapReportOffset) - chunkStart
+                val chunkEnd = chunkStart + chunkSize
+                val reportSize = minOf(
+                    bootstrapSize - bootstrapReportOffset,
+                    (chunkEnd - (position + bootstrapReportOffset)).toInt()
+                )
+                onChunkBytesDownloaded(ci, chunkSize, offsetInChunk, reportSize, bootstrapSampleTime)
+                bootstrapReportOffset += reportSize
+            }
+
+            // Mark bootstrap chunks as already scheduled ONLY if fully covered by bootstrap.
+            // If bootstrap only partially covers a chunk (e.g., 1MB bootstrap in an 8MB chunk),
+            // the chunk must still be scheduled so downloadRange fetches the remaining bytes.
+            val bootstrapEndPos = position + bootstrapSize
+            var bci = position / chunkSize
+            while (bci * chunkSize < bootstrapEndPos) {
+                val chunkEnd = (bci + 1) * chunkSize
+                if (chunkEnd <= bootstrapEndPos) {
+                    scheduledRanges[bci] = true
+                }
+                bci++
+            }
+
             // Avoid startup churn from immediate background fetches during repeated startup opens,
             // but do not redownload the active seek chunk from its start.
             bootstrapPrefetchDeferred = true
@@ -218,8 +289,8 @@ internal class ParallelRangeDataSource(
                         resolvedUri = resolvedUri,
                         openLength = openLength,
                         totalFileLength = totalFileLength,
-                        bootstrapData = chunk.data,
-                        bootstrapSize = chunk.size,
+                        bootstrapData = bootstrapData,
+                        bootstrapSize = bootstrapSize,
                         createdAtUptimeMs = SystemClock.uptimeMillis()
                     )
                 )
@@ -256,31 +327,29 @@ internal class ParallelRangeDataSource(
 
         val toRead = minOf(length.toLong(), bytesRemaining).toInt()
 
-        val chunkIndex = position / chunkSize
-        val bootstrap = bootstrapChunk
-        if (currentChunk == null &&
-            bootstrap != null &&
-            position >= bootstrapStartPosition &&
-            position < bootstrapStartPosition + bootstrap.size
-        ) {
-            currentChunk = bootstrap
-            currentChunkIndex = chunkIndex
-            currentChunkReadOffset = (position - bootstrapStartPosition).toInt()
-        }
-
-        if (bootstrapPrefetchDeferred && shouldAllowBackgroundPrefetch() && currentChunk == null) {
+        if (bootstrapPrefetchDeferred && shouldAllowBackgroundPrefetch()) {
             bootstrapPrefetchDeferred = false
             scheduleChunks()
         }
 
         continuationSource?.let { source ->
+            val bootstrapEnd = if (bootstrapStartPosition != C.TIME_UNSET) {
+                // frontier already includes bootstrap bytes; use frontier as the boundary
+                frontierBuffer.frontier
+            } else {
+                0L
+            }
             if (position < continuationEndPositionExclusive &&
                 bytesRemaining > 0L &&
-                (bootstrap == null || position >= bootstrapStartPosition + bootstrap.size)
+                position >= bootstrapEnd
             ) {
                 val read = source.read(buffer, offset, toRead)
                 if (read > 0) {
                     onTransportBytesDownloaded(read.toLong(), transportSampleTimeMs())
+                    // Also write into frontier buffer so frontier advances for later reads
+                    frontierBuffer.onBytesWritten(position, buffer, offset, read)
+                    readLock.lock()
+                    try { dataAvailable.signalAll() } finally { readLock.unlock() }
                     position += read
                     bytesRemaining -= read
                     onReadPositionAdvanced(position)
@@ -305,198 +374,214 @@ internal class ParallelRangeDataSource(
             }
         }
 
-        // Load the chunk for the current position
-        if (currentChunkIndex != chunkIndex || currentChunk == null) {
-            ensureChunkScheduled(chunkIndex)
-            val future = chunks[chunkIndex] ?: return C.RESULT_END_OF_INPUT
-            try {
-                currentChunk = awaitChunkWithRecovery(chunkIndex, future)
-            } catch (e: TimeoutException) {
-                if (closed.get()) return C.RESULT_END_OF_INPUT
-                throw ChunkWaitTimeoutException(
-                    chunkIndex = chunkIndex,
-                    timeoutMs = chunkWaitTimeoutMs,
-                    cause = e
-                )
-            } catch (e: Exception) {
-                if (closed.get()) return C.RESULT_END_OF_INPUT
-                throw ChunkDownloadException(
-                    chunkIndex = chunkIndex,
-                    message = "Failed to download chunk $chunkIndex",
-                    cause = e
-                )
-            }
-            currentChunkIndex = chunkIndex
-            currentChunkReadOffset = (position % chunkSize).toInt()
-
-            // Clean up old chunks (returns buffers to pool) and schedule new ones
-            cleanupOldChunks(chunkIndex)
+        // Try to read from frontier buffer
+        val bytesRead = frontierBuffer.read(position, buffer, offset, toRead)
+        if (bytesRead > 0) {
+            position += bytesRead
+            bytesRemaining -= bytesRead
+            onReadPositionAdvanced(position)
+            frontierBuffer.evictBefore(position - keepBehindBytes)
             scheduleChunks()
+            return bytesRead
         }
 
-        val chunk = currentChunk ?: return C.RESULT_END_OF_INPUT
-        val available = chunk.size - currentChunkReadOffset
-        if (available <= 0) {
-            // Current chunk exhausted, move to next
-            if (chunk === bootstrapChunk) {
-                bootstrapChunk = null
-                bootstrapStartPosition = C.TIME_UNSET
+        // No data available — ensure downloads are scheduled and wait
+        scheduleChunks()
+        readLock.lock()
+        try {
+            val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(chunkWaitTimeoutMs)
+            while (!closed.get()) {
+                // Check for download errors
+                lastDownloadError?.let { error ->
+                    lastDownloadError = null
+                    throw error
+                }
+                val available = frontierBuffer.read(position, buffer, offset, toRead)
+                if (available > 0) {
+                    position += available
+                    bytesRemaining -= available
+                    onReadPositionAdvanced(position)
+                    frontierBuffer.evictBefore(position - keepBehindBytes)
+                    return available
+                }
+                val remaining = deadline - System.nanoTime()
+                if (remaining <= 0) {
+                    throw ChunkWaitTimeoutException(
+                        chunkIndex = position / chunkSize,
+                        timeoutMs = chunkWaitTimeoutMs
+                    )
+                }
+                // Re-schedule: prefetch may have been rejected by admission control earlier
+                readLock.unlock()
+                try { scheduleChunks() } finally { readLock.lock() }
+                dataAvailable.awaitNanos(remaining)
             }
-            currentChunk = null
-            return read(buffer, offset, length)
+        } finally {
+            readLock.unlock()
         }
-
-        val readSize = minOf(toRead, available)
-        System.arraycopy(chunk.data, currentChunkReadOffset, buffer, offset, readSize)
-        currentChunkReadOffset += readSize
-        position += readSize
-        bytesRemaining -= readSize
-        onReadPositionAdvanced(position)
-
-        return readSize
+        return C.RESULT_END_OF_INPUT
     }
 
     private fun scheduleChunks() {
-        if (!shouldAllowBackgroundPrefetch()) return
-        val currentChunkIdx =
+        val sched = scheduler ?: return
+
+        val currentPos =
             if (continuationSource != null && continuationEndPositionExclusive != C.TIME_UNSET && position < continuationEndPositionExclusive) {
-                continuationEndPositionExclusive / chunkSize
+                continuationEndPositionExclusive
             } else {
-                position / chunkSize
+                position
             }
-        val maxAhead = parallelConnections + 1
 
-        for (i in 0 until maxAhead) {
-            val ci = currentChunkIdx + i
-            if (totalFileLength != C.LENGTH_UNSET.toLong() && ci * chunkSize >= totalFileLength) break
-            ensureChunkScheduled(ci)
-        }
-    }
+        val currentChunkIdx = currentPos / chunkSize
 
-    private fun awaitChunkWithRecovery(
-        chunkIndex: Long,
-        initialFuture: CompletableFuture<DownloadedChunk>
-    ): DownloadedChunk {
-        var future = initialFuture
-        repeat(MAX_CHUNK_WAIT_RETRIES) { attempt ->
-            try {
-                return future.get(chunkWaitTimeoutMs, TimeUnit.MILLISECONDS)
-            } catch (timeout: TimeoutException) {
-                if (closed.get()) throw timeout
-                Log.w(TAG, "Chunk $chunkIndex wait timed out (attempt ${attempt + 1}/$MAX_CHUNK_WAIT_RETRIES), restarting worker")
-                future.cancel(true)
-                chunks.remove(chunkIndex, future)
-                ensureChunkScheduled(chunkIndex)
-                future = chunks[chunkIndex] ?: throw timeout
-            }
-        }
-        return future.get(chunkWaitTimeoutMs, TimeUnit.MILLISECONDS)
-    }
-
-    private fun ensureChunkScheduled(chunkIndex: Long) {
-        chunks.computeIfAbsent(chunkIndex) {
-            CompletableFuture.supplyAsync({ downloadChunk(chunkIndex) }, executor)
-        }
-    }
-
-    private fun downloadChunk(chunkIndex: Long): DownloadedChunk {
-        val start = chunkIndex * chunkSize
-        val end = if (totalFileLength != C.LENGTH_UNSET.toLong()) {
-            minOf(start + chunkSize, totalFileLength)
+        // ALWAYS schedule the chunk at the current read position (urgent).
+        // This ensures read() never blocks waiting for data that was never requested.
+        // The old code called ensureChunkScheduled() for the current chunk unconditionally.
+        val urgentStart = currentChunkIdx * chunkSize
+        val urgentEnd = if (totalFileLength != C.LENGTH_UNSET.toLong()) {
+            minOf(urgentStart + chunkSize, totalFileLength)
         } else {
-            start + chunkSize
+            urgentStart + chunkSize
         }
+        if (urgentStart < urgentEnd) {
+            submitRange(sched, currentChunkIdx, urgentStart, urgentEnd, urgent = true)
+        }
+
+        // Ahead chunks are gated by shouldAllowBackgroundPrefetch (startup lock)
+        if (!shouldAllowBackgroundPrefetch()) return
+
+        val maxAhead = parallelConnections + 1
+        val policy = transportPolicyProvider()
+        val urgentCount = policy?.urgentWorkers ?: maxAhead
+
+        for (i in 1 until maxAhead) {
+            val ci = currentChunkIdx + i
+            val start = ci * chunkSize
+            if (totalFileLength != C.LENGTH_UNSET.toLong() && start >= totalFileLength) break
+            val end = if (totalFileLength != C.LENGTH_UNSET.toLong()) {
+                minOf(start + chunkSize, totalFileLength)
+            } else {
+                start + chunkSize
+            }
+            submitRange(sched, ci, start, end, urgent = i < urgentCount)
+        }
+    }
+
+    private fun submitRange(
+        sched: DualLaneScheduler,
+        chunkIndex: Long,
+        start: Long,
+        end: Long,
+        urgent: Boolean
+    ) {
+        // Skip if this range has already been scheduled
+        if (scheduledRanges.putIfAbsent(chunkIndex, true) != null) return
+        // Skip if the frontier has already passed this range
+        if (frontierBuffer.frontier >= end) return
+
+        if (urgent) {
+            sched.submitUrgent(start until end) { range ->
+                downloadRange(range.first, range.last + 1)
+            }
+        } else {
+            val submitted = sched.submitPrefetch(start until end) { range ->
+                downloadRange(range.first, range.last + 1)
+            }
+            if (submitted == null) {
+                // Prefetch was back-pressure dropped; allow re-scheduling later
+                scheduledRanges.remove(chunkIndex)
+            }
+        }
+    }
+
+    private fun downloadRange(start: Long, end: Long) {
+        val chunkIndex = start / chunkSize
         val expectedBytes = (end - start).coerceAtLeast(0L).toInt()
-        val buffer = acquireBuffer()
+        val readBuffer = ByteArray(READ_BUFFER_SIZE)
         var totalRead = 0
         var lastException: Exception? = null
         var transientAttemptNumber = 0
         var nonTransientAttemptNumber = 0
 
-        try {
-            while (!closed.get() && totalRead < expectedBytes) {
-                val ds = upstreamFactory.createDataSource()
-                try {
-                    val uri = resolvedUri ?: originalDataSpec?.uri ?: throw IOException("No URI available")
-                    val spec = DataSpec.Builder()
-                        .setUri(uri)
-                        .setPosition(start + totalRead)
-                        .setLength((expectedBytes - totalRead).toLong())
-                        .build()
+        while (!closed.get() && totalRead < expectedBytes) {
+            val ds = upstreamFactory.createDataSource()
+            try {
+                val uri = resolvedUri ?: originalDataSpec?.uri ?: throw IOException("No URI available")
+                val spec = DataSpec.Builder()
+                    .setUri(uri)
+                    .setPosition(start + totalRead)
+                    .setLength((expectedBytes - totalRead).toLong())
+                    .build()
 
-                    ds.open(spec)
-                    while (!closed.get() && totalRead < expectedBytes) {
-                        val maxRead = minOf(expectedBytes - totalRead, READ_BUFFER_SIZE)
-                        if (maxRead <= 0) break
-                        val read = ds.read(buffer, totalRead, maxRead)
-                        if (read == C.RESULT_END_OF_INPUT) {
-                            if (totalRead >= expectedBytes) {
-                                break
-                            }
-                            throw EOFException("Unexpected end of chunk $chunkIndex after $totalRead / $expectedBytes bytes")
-                        }
-                        val offsetInChunk = totalRead.toLong()
-                        totalRead += read
-                        val sampleTime = transportSampleTimeMs()
-                        onTransportBytesDownloaded(read.toLong(), sampleTime)
-                        onChunkBytesDownloaded(chunkIndex, chunkSize, offsetInChunk, read, sampleTime)
+                ds.open(spec)
+                while (!closed.get() && totalRead < expectedBytes) {
+                    val maxRead = minOf(expectedBytes - totalRead, READ_BUFFER_SIZE)
+                    if (maxRead <= 0) break
+                    val read = ds.read(readBuffer, 0, maxRead)
+                    if (read == C.RESULT_END_OF_INPUT) {
+                        if (totalRead >= expectedBytes) break
+                        throw EOFException("Unexpected end of range $chunkIndex after $totalRead / $expectedBytes bytes")
                     }
-                    ds.close()
-                } catch (e: Exception) {
-                    runCatching { ds.close() }
-                    if (closed.get()) throw IOException("DataSource closed")
-                    lastException = e
-                    val recoverable = e.isRecoverableChunkFailure()
-                    if (!recoverable) {
-                        nonTransientAttemptNumber += 1
-                        if (nonTransientAttemptNumber >= MAX_NON_TRANSIENT_CHUNK_ATTEMPTS) {
-                            break
-                        }
-                    } else {
-                        transientAttemptNumber += 1
-                        if (transientAttemptNumber >= MAX_TRANSIENT_CHUNK_ATTEMPTS) {
-                            break
-                        }
-                    }
-                    val allowedAttempts = if (recoverable) MAX_TRANSIENT_CHUNK_ATTEMPTS else MAX_NON_TRANSIENT_CHUNK_ATTEMPTS
-                    val attemptNumber = if (recoverable) transientAttemptNumber else nonTransientAttemptNumber
-                    val resumeOffset = totalRead
-                    if (e.isTransientInterruption()) {
-                        Log.d(TAG, "Chunk $chunkIndex interrupted during prefetch at $resumeOffset bytes (attempt $attemptNumber), retrying")
-                    } else {
-                        Log.w(
-                            TAG,
-                            "Chunk $chunkIndex download failed at $resumeOffset / $expectedBytes bytes (attempt $attemptNumber/$allowedAttempts), retrying: ${e.message}"
-                        )
-                    }
-                    val delayMs = retryBackoffMs(attemptNumber, madeProgress = resumeOffset > 0)
-                    if (delayMs > 0L) {
-                        try {
-                            Thread.sleep(delayMs)
-                        } catch (_: InterruptedException) {
-                        }
-                    }
-                    continue
+                    val offsetInChunk = totalRead.toLong()
+                    // Write into frontier buffer as bytes arrive (streaming)
+                    frontierBuffer.onBytesWritten(start + totalRead.toLong(), readBuffer, 0, read)
+                    totalRead += read
+                    val sampleTime = transportSampleTimeMs()
+                    onTransportBytesDownloaded(read.toLong(), sampleTime)
+                    onChunkBytesDownloaded(chunkIndex, chunkSize, offsetInChunk, read, sampleTime)
+                    // Signal any waiting readers
+                    readLock.lock()
+                    try { dataAvailable.signalAll() } finally { readLock.unlock() }
                 }
+                ds.close()
+            } catch (e: Exception) {
+                runCatching { ds.close() }
+                if (closed.get()) return
+                lastException = e
+                val recoverable = e.isRecoverableChunkFailure()
+                if (!recoverable) {
+                    nonTransientAttemptNumber += 1
+                    if (nonTransientAttemptNumber >= MAX_NON_TRANSIENT_CHUNK_ATTEMPTS) break
+                } else {
+                    transientAttemptNumber += 1
+                    if (transientAttemptNumber >= MAX_TRANSIENT_CHUNK_ATTEMPTS) break
+                }
+                val allowedAttempts = if (recoverable) MAX_TRANSIENT_CHUNK_ATTEMPTS else MAX_NON_TRANSIENT_CHUNK_ATTEMPTS
+                val attemptNumber = if (recoverable) transientAttemptNumber else nonTransientAttemptNumber
+                val resumeOffset = totalRead
+                if (e.isTransientInterruption()) {
+                    Log.d(TAG, "Range $chunkIndex interrupted during prefetch at $resumeOffset bytes (attempt $attemptNumber), retrying")
+                } else {
+                    Log.w(
+                        TAG,
+                        "Range $chunkIndex download failed at $resumeOffset / $expectedBytes bytes (attempt $attemptNumber/$allowedAttempts), retrying: ${e.message}"
+                    )
+                }
+                val delayMs = retryBackoffMs(attemptNumber, madeProgress = resumeOffset > 0)
+                if (delayMs > 0L) {
+                    try { Thread.sleep(delayMs) } catch (_: InterruptedException) { }
+                }
+                continue
             }
-
-            if (closed.get()) {
-                throw IOException("DataSource closed")
-            }
-            if (totalRead >= expectedBytes) {
-                return DownloadedChunk(buffer, totalRead)
-            }
-        } catch (e: Exception) {
-            releaseBuffer(buffer)
-            throw e
         }
 
-        releaseBuffer(buffer)
-        throw ChunkDownloadException(
-            chunkIndex = chunkIndex,
-            message = "Failed to download chunk $chunkIndex after retries",
-            cause = lastException
-        )
+        if (!closed.get() && totalRead < expectedBytes && lastException != null) {
+            // Propagate error to waiting reader
+            lastDownloadError = ChunkDownloadException(
+                chunkIndex = chunkIndex,
+                message = "Failed to download range $chunkIndex after retries",
+                cause = lastException
+            )
+            readLock.lock()
+            try { dataAvailable.signalAll() } finally { readLock.unlock() }
+            Log.e(TAG, "Range $chunkIndex failed to download completely after retries: ${lastException.message}")
+        }
+
+        // After completing a range, schedule more work (prefetch may have been rejected earlier
+        // by admission control while urgent was pending — now that this range is done, retry)
+        if (!closed.get()) {
+            scheduleChunks()
+        }
     }
 
     private fun Exception.isTransientInterruption(): Boolean {
@@ -537,15 +622,15 @@ internal class ParallelRangeDataSource(
         }
     }
 
-    /** Read only a small startup window from an already-opened DataSource. */
-    private fun readBootstrapChunk(ds: DataSource, maxBytes: Int): DownloadedChunk {
-        val buffer = ByteArray(maxBytes)
+    /** Read only a small startup window from an already-opened DataSource. Returns data + size. */
+    private fun readBootstrapChunk(ds: DataSource, maxBytes: Int): Pair<ByteArray, Int> {
+        val buf = ByteArray(maxBytes)
         var totalRead = 0
         try {
-            while (!closed.get() && totalRead < buffer.size) {
-                val maxRead = minOf(buffer.size - totalRead, READ_BUFFER_SIZE)
+            while (!closed.get() && totalRead < buf.size) {
+                val maxRead = minOf(buf.size - totalRead, READ_BUFFER_SIZE)
                 if (maxRead <= 0) break
-                val read = ds.read(buffer, totalRead, maxRead)
+                val read = ds.read(buf, totalRead, maxRead)
                 if (read == C.RESULT_END_OF_INPUT) break
                 totalRead += read
                 onTransportBytesDownloaded(read.toLong(), transportSampleTimeMs())
@@ -554,63 +639,8 @@ internal class ParallelRangeDataSource(
             if (closed.get()) throw IOException("DataSource closed")
             throw e
         }
-        if (closed.get()) {
-            throw IOException("DataSource closed")
-        }
-        return DownloadedChunk(buffer, totalRead)
-    }
-
-    private fun acquireBuffer(): ByteArray {
-        return bufferPool.pollLast() ?: ByteArray(chunkSize.toInt())
-    }
-
-    /**
-     *   maxPoolSize in releaseBuffer only caps how many idle/recycled buffers are kept in the pool.
-     *   If the pool is full, the released buffer is GC'd instead of recycled. It does NOT
-     *   determine how many buffers exist simultaneously. The actual peak concurrent buffers
-     *   is driven by maxAhead.
-     */
-    private fun releaseBuffer(buffer: ByteArray) {
-        if (bufferPool.size < maxPoolSize) {
-            bufferPool.offerLast(buffer)
-        }
-        // else: let it be GC'd (pool is full)
-    }
-
-    private fun cleanupOldChunks(currentChunkIndex: Long) {
-        val iter = chunks.entries.iterator()
-        while (iter.hasNext()) {
-            val entry = iter.next()
-            if (entry.key < currentChunkIndex) {
-                val future = entry.value
-                if (future.isDone && !future.isCancelled) {
-                    try { releaseBuffer(future.get().data) } catch (_: Exception) {}
-                }
-                future.cancel(true)
-                iter.remove()
-            }
-        }
-    }
-
-    /** Cancel and clean up all in-flight chunks, returning buffers to the pool. */
-    private fun cancelAllChunks() {
-        currentChunk?.let {
-            if (it !== bootstrapChunk) {
-                releaseBuffer(it.data)
-            }
-        }
-        currentChunk = null
-        currentChunkIndex = -1
-        bootstrapChunk = null
-        bootstrapStartPosition = C.TIME_UNSET
-
-        chunks.values.forEach { future ->
-            if (future.isDone && !future.isCancelled) {
-                try { releaseBuffer(future.get().data) } catch (_: Exception) {}
-            }
-            future.cancel(true)
-        }
-        chunks.clear()
+        if (closed.get()) throw IOException("DataSource closed")
+        return Pair(buf, totalRead)
     }
 
     override fun close() {
@@ -621,10 +651,14 @@ internal class ParallelRangeDataSource(
         continuationSource = null
         continuationEndPositionExclusive = C.TIME_UNSET
 
-        cancelAllChunks()
-        executor.shutdownNow()
+        scheduler?.cancelAll()
+        scheduler = null
+        frontierBuffer.reset()
+        scheduledRanges.clear()
 
-        bufferPool.clear()
+        // Signal any waiting readers
+        readLock.lock()
+        try { dataAvailable.signalAll() } finally { readLock.unlock() }
     }
 
     override fun addTransferListener(transferListener: TransferListener) {
@@ -650,7 +684,8 @@ internal class ParallelRangeDataSource(
         private val onChunkBytesDownloaded: (chunkIndex: Long, chunkSize: Long, offsetInChunk: Long, bytesRead: Int, sampleTimeMs: Long) -> Unit = { _, _, _, _, _ -> },
         private val onResolvedUri: (Uri?) -> Unit = {},
         private val onReadPositionAdvanced: (Long) -> Unit = {},
-        private val allowStartupBootstrapReuse: Boolean = true
+        private val allowStartupBootstrapReuse: Boolean = true,
+        private val transportPolicyProvider: () -> TransportPolicy? = { null }
     ) : DataSource.Factory {
         @Volatile
         private var startupBootstrapCache: BootstrapCacheEntry? = null
@@ -667,6 +702,7 @@ internal class ParallelRangeDataSource(
                 onChunkBytesDownloaded = onChunkBytesDownloaded,
                 onResolvedUri = onResolvedUri,
                 onReadPositionAdvanced = onReadPositionAdvanced,
+                transportPolicyProvider = transportPolicyProvider,
                 consumeBootstrapCache = { dataSpec ->
                     if (!allowStartupBootstrapReuse) {
                         return@ParallelRangeDataSource null

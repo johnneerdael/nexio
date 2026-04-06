@@ -43,6 +43,12 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                     )
                 }
             }
+            // Feed buffer-ahead into TransportPolicyController for stable/steady transitions
+            _exoPlayer?.let { player ->
+                val bufferAheadMs = (player.bufferedPosition - player.currentPosition).coerceAtLeast(0L)
+                transportPolicyController?.onStable(bufferAheadMs)
+                transportPolicyController?.onSteady(bufferAheadMs)
+            }
             if (nowUptime - lastSkipIntervalEvaluationUptimeMs >= 1_000L) {
                 lastSkipIntervalEvaluationUptimeMs = nowUptime
                 updateActiveSkipInterval(pos)
