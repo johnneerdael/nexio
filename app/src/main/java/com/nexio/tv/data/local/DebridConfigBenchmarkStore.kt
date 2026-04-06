@@ -18,6 +18,7 @@ import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkProfileResult
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkResult
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkSessionSummary
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkStatus
+import com.nexio.tv.data.repository.benchmark.RuntimeTransportHintsV2
 import com.nexio.tv.data.repository.benchmark.toJsonObject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
@@ -123,6 +124,22 @@ private fun parseSummary(summaryJson: JsonObject): DebridConfigBenchmarkSessionS
         bestProfile = summaryJson.optionalObject("bestProfile")?.let(::parseProfileResult),
         capabilityEnvelope = summaryJson.optionalObject("capabilityEnvelope")?.let { envelopeJson ->
             CapabilityEnvelope.fromJson(envelopeJson.toString())
+        },
+        runtimeTransportHints = summaryJson.optionalObject("runtimeTransportHints")?.let { hintsJson ->
+            RuntimeTransportHintsV2(
+                artifactVersion = hintsJson.strictIntegralIntOrThrow("artifactVersion"),
+                serviceKey = hintsJson.stringOrNull("serviceKey")
+                    ?: throw InvalidDebridConfigBenchmarkPayload(),
+                measuredAtMs = hintsJson.strictIntegralLongOrNull("measuredAtMs")
+                    ?.takeIf { it > 0L }
+                    ?: throw InvalidDebridConfigBenchmarkPayload(),
+                observedTransportClass = hintsJson.stringOrNull("observedTransportClass"),
+                observedHostScope = hintsJson.stringOrNull("observedHostScope"),
+                recommendedUrgentChunkBytes = hintsJson.optionalStrictIntegralLongOrNull("recommendedUrgentChunkBytes"),
+                recommendedUrgentWorkers = hintsJson.optionalStrictIntegralIntOrNull("recommendedUrgentWorkers"),
+                connectionBudgetHint = hintsJson.optionalStrictIntegralIntOrNull("connectionBudgetHint"),
+                retryMode = hintsJson.stringOrNull("retryMode")
+            )
         }
     )
 }
@@ -180,10 +197,21 @@ private fun DebridConfigBenchmarkSessionSummary.isValidFor(
     if (bestProfile != null && (bestProfile !in profiles || bestProfile.status != DebridConfigBenchmarkStatus.SUCCESS)) {
         return false
     }
+    if (runtimeTransportHints?.let { it.isValid() } == false) return false
     return totalProfileCount == profiles.size &&
         successfulProfileCount == profiles.count { it.status == DebridConfigBenchmarkStatus.SUCCESS } &&
         failedProfileCount == profiles.count { it.status == DebridConfigBenchmarkStatus.FAILED } &&
         unsupportedProfileCount == profiles.count { it.status == DebridConfigBenchmarkStatus.UNSUPPORTED }
+}
+
+private fun RuntimeTransportHintsV2.isValid(): Boolean {
+    if (artifactVersion <= 0) return false
+    if (serviceKey.isBlank()) return false
+    if (measuredAtMs <= 0L) return false
+    if (recommendedUrgentChunkBytes?.let { it <= 0L } == true) return false
+    if (recommendedUrgentWorkers?.let { it <= 0 } == true) return false
+    if (connectionBudgetHint?.let { it <= 0 } == true) return false
+    return true
 }
 
 private fun DebridConfigBenchmarkProfileResult.isValid(): Boolean {

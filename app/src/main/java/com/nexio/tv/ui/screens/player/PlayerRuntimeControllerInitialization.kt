@@ -207,22 +207,53 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             mediaSourceFactory.parallelChunkSizeMb = playerSettings.parallelChunkSizeMb
             mediaSourceFactory.vodCacheSizeMode = playerSettings.vodCacheSizeMode
             mediaSourceFactory.vodCacheSizeMb = playerSettings.vodCacheSizeMb
-            // Load CapabilityEnvelope from the most recent benchmark result (any provider)
-            val envelope = DebridBenchmarkProvider.entries.firstNotNullOfOrNull { provider ->
+            currentRuntimeTransportObservation = null
+            currentRuntimeTransportSpecializationStatus = null
+            val latestResultsByProvider = DebridBenchmarkProvider.entries.associateWith { provider ->
                 runCatching {
                     debridConfigBenchmarkStore.latestResult(provider).first()
-                }.getOrNull()?.let { result ->
-                    result.summary.capabilityEnvelope
-                        ?: result.summary.toCapabilityEnvelope(result.measuredAtMs)
-                }
+                }.getOrNull()
             }
+            val selectedTransportBenchmark = selectTransportBenchmarkForServiceKey(
+                serviceKey = currentStreamServiceKey,
+                latestResults = latestResultsByProvider
+            )
+            currentRuntimeTransportHints = selectedTransportBenchmark?.runtimeTransportHints
+            val envelope = selectedTransportBenchmark?.capabilityEnvelope
             if (envelope != null) {
                 mediaSourceFactory.capabilityEnvelope = envelope
                 transportPolicyController = TransportPolicyController(envelope)
             } else {
+                mediaSourceFactory.capabilityEnvelope = null
                 transportPolicyController = TransportPolicyController()
             }
-            mediaSourceFactory.transportPolicyProvider = { transportPolicyController?.currentPolicy }
+            mediaSourceFactory.onTransportObservation = { observation ->
+                currentRuntimeTransportObservation = observation
+                val transition = nextRuntimeTransportSpecializationTransition(
+                    previousStatus = currentRuntimeTransportSpecializationStatus,
+                    enabled = runtimeTransportSpecializationEnabled,
+                    activeServiceKey = currentStreamServiceKey,
+                    runtimeHints = currentRuntimeTransportHints,
+                    observation = observation
+                )
+                currentRuntimeTransportSpecializationStatus = transition.status
+                transition.events.forEach { event ->
+                    Log.d(PlayerRuntimeController.TAG, "RUNTIME_TRANSPORT ${event.type} ${event.detail}")
+                    transportValidationRuntimeCollector.onTransportSpecializationEvent(
+                        type = event.type,
+                        detail = event.detail
+                    )
+                }
+            }
+            mediaSourceFactory.transportPolicyProvider = {
+                effectiveRuntimeTransportPolicy(
+                    basePolicy = transportPolicyController?.currentPolicy,
+                    enabled = runtimeTransportSpecializationEnabled,
+                    activeServiceKey = currentStreamServiceKey,
+                    runtimeHints = currentRuntimeTransportHints,
+                    observation = currentRuntimeTransportObservation
+                )
+            }
             if (kodiCustomAudioSinkEnabled) {
                 safeAudioForcedStreamUrls.remove(url)
                 audioDisabledForcedStreamUrls.remove(url)

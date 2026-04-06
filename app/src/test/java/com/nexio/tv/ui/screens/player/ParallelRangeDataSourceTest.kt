@@ -7,6 +7,7 @@ import java.io.IOException
 import java.net.SocketException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicReference
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -59,12 +60,15 @@ class ParallelRangeDataSourceTest {
         }
     }
 
-    @Test(timeout = 5_000L)
+    @Test(timeout = 10_000L)
     fun `parallel range datasource reproduces repeated chunk resets locally`() {
+        // Frontier-blocking chunks get MAX_FRONTIER_PROMOTIONS re-queues, each with fresh
+        // retry budgets. Total transient attempts = MAX_TRANSIENT(4) * (1 + MAX_PROMOTIONS(2)) = 12.
+        // Use 13 failures to exceed the full promotion budget.
         val fixture = RangeServerFixture(
             content = ByteArray(512 * 1024) { (it % 251).toByte() },
             chunkSize = 64 * 1024L,
-            transientFailuresByChunkIndex = mutableMapOf(3L to 8)
+            transientFailuresByChunkIndex = mutableMapOf(3L to 13)
         )
 
         fixture.use { server ->
@@ -133,6 +137,30 @@ class ParallelRangeDataSourceTest {
         }
     }
 
+    @Test(timeout = 5_000L)
+    fun `parallel range datasource reports runtime transport observation from probe response`() {
+        val fixture = RangeServerFixture(
+            content = ByteArray(256 * 1024) { (it % 251).toByte() },
+            chunkSize = 64 * 1024L,
+            transientFailuresByChunkIndex = mutableMapOf(),
+            connectionHeader = "close"
+        )
+        val observationRef = AtomicReference<RuntimeTransportObservation?>(null)
+
+        fixture.use { server ->
+            val dataSource = server.createDataSource(
+                onTransportObservation = { observationRef.set(it) }
+            )
+
+            readAll(dataSource, server.dataSpec())
+
+            val observation = observationRef.get()
+            assertNotNull(observation)
+            assertEquals("host:localhost", observation?.hostScope)
+            assertEquals("connection_close", observation?.transportClass)
+        }
+    }
+
     private fun readAll(
         dataSource: ParallelRangeDataSource,
         dataSpec: DataSpec
@@ -158,7 +186,8 @@ class ParallelRangeDataSourceTest {
         val content: ByteArray,
         private val chunkSize: Long,
         private val transientFailuresByChunkIndex: MutableMap<Long, Int>,
-        private val transientFailureBytesByChunkIndex: MutableMap<Long, Int> = mutableMapOf()
+        private val transientFailureBytesByChunkIndex: MutableMap<Long, Int> = mutableMapOf(),
+        private val connectionHeader: String = "keep-alive"
     ) : AutoCloseable {
         private val server = MockWebServer()
         private val chunkRequestCounts = ConcurrentHashMap<Long, Int>()
@@ -179,7 +208,8 @@ class ParallelRangeDataSourceTest {
         }
 
         fun createDataSource(
-            onTransportBytesDownloaded: (Long, Long) -> Unit = { _, _ -> }
+            onTransportBytesDownloaded: (Long, Long) -> Unit = { _, _ -> },
+            onTransportObservation: (RuntimeTransportObservation) -> Unit = {}
         ): ParallelRangeDataSource {
             val upstreamFactory = OkHttpDataSource.Factory(
                 OkHttpClient.Builder()
@@ -192,7 +222,8 @@ class ParallelRangeDataSourceTest {
                 upstreamFactory = upstreamFactory,
                 parallelConnections = 4,
                 chunkSize = chunkSize,
-                onTransportBytesDownloaded = onTransportBytesDownloaded
+                onTransportBytesDownloaded = onTransportBytesDownloaded,
+                onTransportObservation = onTransportObservation
             )
         }
 
@@ -216,6 +247,7 @@ class ParallelRangeDataSourceTest {
             return MockResponse()
                 .setResponseCode(200)
                 .setHeader("Accept-Ranges", "bytes")
+                .setHeader("Connection", connectionHeader)
                 .setHeader("Content-Length", content.size)
                 .setBody(Buffer().write(content))
         }
@@ -242,6 +274,7 @@ class ParallelRangeDataSourceTest {
                 return MockResponse()
                     .setResponseCode(206)
                     .setHeader("Accept-Ranges", "bytes")
+                    .setHeader("Connection", connectionHeader)
                     .setHeader("Content-Range", "bytes $start-${endExclusive - 1}/${content.size}")
                     .setHeader("Content-Length", length)
                     .setBody(partialBuffer)
@@ -251,6 +284,7 @@ class ParallelRangeDataSourceTest {
             return MockResponse()
                 .setResponseCode(206)
                 .setHeader("Accept-Ranges", "bytes")
+                .setHeader("Connection", connectionHeader)
                 .setHeader("Content-Range", "bytes $start-${endExclusive - 1}/${content.size}")
                 .setHeader("Content-Length", length)
                 .setBody(Buffer().write(content, start.toInt(), length))

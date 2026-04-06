@@ -25,6 +25,7 @@ import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.data.local.DebridConfigBenchmarkStore
+import com.nexio.tv.data.repository.benchmark.RuntimeTransportHintsV2
 import com.nexio.tv.debug.passthrough.TransportValidationRuntimeCollector
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
@@ -92,6 +93,7 @@ class PlayerRuntimeController(
     internal val initialStreamUrl: String = navigationArgs.streamUrl
     internal val title: String = navigationArgs.title
     internal val streamName: String? = navigationArgs.streamName
+    internal var currentStreamServiceKey: String? = navigationArgs.serviceKey
     internal val year: String? = navigationArgs.year
     internal val headersJson: String? = navigationArgs.headersJson
     internal val contentId: String? = navigationArgs.contentId
@@ -109,6 +111,10 @@ class PlayerRuntimeController(
     internal val rememberedAudioName: String? = navigationArgs.rememberedAudioName
     internal val mediaSourceFactory = PlayerMediaSourceFactory(context.applicationContext)
     internal var transportPolicyController: TransportPolicyController? = null
+    internal var currentRuntimeTransportHints: RuntimeTransportHintsV2? = null
+    internal var currentRuntimeTransportObservation: RuntimeTransportObservation? = null
+    internal var currentRuntimeTransportSpecializationStatus: RuntimeTransportSpecializationStatus? = null
+    internal var runtimeTransportSpecializationEnabled: Boolean = true
 
     internal var currentVideoHash: String? = navigationArgs.videoHash
     internal var currentVideoSize: Long? = navigationArgs.videoSize

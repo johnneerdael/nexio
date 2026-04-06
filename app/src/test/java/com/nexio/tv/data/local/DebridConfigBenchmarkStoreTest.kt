@@ -12,6 +12,7 @@ import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkProfileResult
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkResult
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkSessionSummary
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkStatus
+import com.nexio.tv.data.repository.benchmark.RuntimeTransportHintsV2
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -162,7 +163,20 @@ class DebridConfigBenchmarkStoreTest {
                 successfulProfileCount = orderedProfileResults.count { it.status == DebridConfigBenchmarkStatus.SUCCESS },
                 failedProfileCount = orderedProfileResults.count { it.status == DebridConfigBenchmarkStatus.FAILED },
                 unsupportedProfileCount = orderedProfileResults.count { it.status == DebridConfigBenchmarkStatus.UNSUPPORTED },
-                bestProfile = bestProfile
+                bestProfile = bestProfile,
+                runtimeTransportHints = RuntimeTransportHintsV2(
+                    artifactVersion = 2,
+                    serviceKey = when (provider) {
+                        DebridBenchmarkProvider.REAL_DEBRID -> "RD"
+                        DebridBenchmarkProvider.PREMIUMIZE -> "PM"
+                        DebridBenchmarkProvider.TORBOX -> "TB"
+                        DebridBenchmarkProvider.EASY_DEBRID -> "ED"
+                    },
+                    measuredAtMs = measuredAtMs,
+                    observedHostScope = "host:file",
+                    recommendedUrgentChunkBytes = 8L * 1024L * 1024L,
+                    recommendedUrgentWorkers = 3
+                )
             ),
             profiles = orderedProfileResults
         )

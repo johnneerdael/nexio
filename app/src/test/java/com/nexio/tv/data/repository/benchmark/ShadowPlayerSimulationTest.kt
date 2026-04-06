@@ -217,4 +217,40 @@ class ShadowPlayerSimulationTest {
         val expectedSafe = result.maxSustainableBitrateMbps * 0.85
         assertEquals(expectedSafe, result.safeBudgetMbps, 0.2)
     }
+
+    @Test
+    fun `tail drain helper appends zero delta event at run end`() {
+        val events = listOf(
+            FrontierEvent(tMs = 1_000L, contiguousFrontierBytes = 1_000_000L, deltaContiguousBytes = 1_000_000L),
+            FrontierEvent(tMs = 5_000L, contiguousFrontierBytes = 5_000_000L, deltaContiguousBytes = 4_000_000L)
+        )
+
+        val adjusted = appendTailDrainFrontierEvent(events, runEndMs = 30_000L)
+
+        assertEquals(3, adjusted.size)
+        assertEquals(30_000L, adjusted.last().tMs)
+        assertEquals(5_000_000L, adjusted.last().contiguousFrontierBytes)
+        assertEquals(0L, adjusted.last().deltaContiguousBytes)
+    }
+
+    @Test
+    fun `tail drain lowers safe budget when frontier stops long before run end`() {
+        val bytesPerMs = 100.0 * 1_000_000 / 8.0 / 1_000.0
+        val events = (1..10).map { i ->
+            val tMs = i * 500L
+            val deltaBytes = (bytesPerMs * 500).toLong()
+            FrontierEvent(
+                tMs = tMs,
+                contiguousFrontierBytes = i.toLong() * deltaBytes,
+                deltaContiguousBytes = deltaBytes
+            )
+        }
+
+        val raw = simulation.findMaxSustainableBitrate(events)
+        val adjusted = simulation.findMaxSustainableBitrate(
+            appendTailDrainFrontierEvent(events, runEndMs = 30_000L)
+        )
+
+        assertTrue(adjusted.safeBudgetMbps < raw.safeBudgetMbps)
+    }
 }

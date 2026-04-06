@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.player
 
 import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
+import com.nexio.tv.data.repository.benchmark.RuntimeTransportHintsV2
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -128,5 +129,195 @@ class TransportPolicyControllerTest {
         assertTrue(steadyPolicy.urgentChunkBytes > 0)
         assertTrue(steadyPolicy.prefetchChunkBytes > 0)
         assertTrue(steadyPolicy.warmAheadEnabled)
+    }
+
+    @Test
+    fun `unconfirmed runtime hints keep policy on generic safe baseline`() {
+        val basePolicy = TransportPolicy(
+            urgentWorkers = 3,
+            prefetchWorkers = 1,
+            urgentChunkBytes = 16L * 1024L * 1024L,
+            prefetchChunkBytes = 32L * 1024L * 1024L,
+            warmAheadEnabled = false
+        )
+
+        val effective = basePolicy.applyRuntimeTransportSpecialization(
+            specialization = RuntimeTransportSpecialization(),
+            runtimeHints = hints()
+        )
+
+        assertEquals(8L * 1024L * 1024L, effective.urgentChunkBytes)
+        assertEquals(null, effective.connectionBudgetHint)
+        assertEquals(RuntimeTransportRetryMode.DEFAULT, effective.retryMode)
+    }
+
+    @Test
+    fun `confirmed runtime hints activate chunk budget and retry overrides together`() {
+        val basePolicy = TransportPolicy(
+            urgentWorkers = 3,
+            prefetchWorkers = 1,
+            urgentChunkBytes = 8L * 1024L * 1024L,
+            prefetchChunkBytes = 32L * 1024L * 1024L,
+            warmAheadEnabled = false
+        )
+
+        val effective = basePolicy.applyRuntimeTransportSpecialization(
+            specialization = RuntimeTransportSpecialization(
+                allowUrgentChunkAbove8MiB = true,
+                connectionBudgetHint = 8,
+                retryMode = RuntimeTransportRetryMode.CONNECTION_CLOSE
+            ),
+            runtimeHints = hints()
+        )
+
+        assertEquals(16L * 1024L * 1024L, effective.urgentChunkBytes)
+        assertEquals(8, effective.connectionBudgetHint)
+        assertEquals(RuntimeTransportRetryMode.CONNECTION_CLOSE, effective.retryMode)
+    }
+
+    @Test
+    fun `RD confirmed specialization sets urgentWorkers 2 prefetchWorkers 1 with connection budget`() {
+        val basePolicy = TransportPolicy(
+            urgentWorkers = 3,
+            prefetchWorkers = 2,
+            urgentChunkBytes = 8L * 1024L * 1024L,
+            prefetchChunkBytes = 16L * 1024L * 1024L,
+            warmAheadEnabled = true
+        )
+
+        val rdSpecialization = RuntimeTransportSpecialization(
+            allowUrgentChunkAbove8MiB = true,
+            connectionBudgetHint = 8,
+            retryMode = RuntimeTransportRetryMode.CONNECTION_CLOSE,
+            recommendedPrefetchWorkers = 1,
+            recommendedPrefetchChunkBytes = 32L * 1024L * 1024L
+        )
+
+        val effective = basePolicy.applyRuntimeTransportSpecialization(
+            specialization = rdSpecialization,
+            runtimeHints = rdHints()
+        )
+
+        assertEquals(2, effective.urgentWorkers)
+        assertEquals(1, effective.prefetchWorkers)
+        assertEquals(16L * 1024L * 1024L, effective.urgentChunkBytes)
+        assertEquals(32L * 1024L * 1024L, effective.prefetchChunkBytes)
+        assertEquals(8, effective.connectionBudgetHint)
+        assertEquals(RuntimeTransportRetryMode.CONNECTION_CLOSE, effective.retryMode)
+        assertEquals(1, effective.warmAheadBudgetMax)
+    }
+
+    @Test
+    fun `PM confirmed specialization sets urgentWorkers 3 prefetchWorkers 1 without connection budget`() {
+        val basePolicy = TransportPolicy(
+            urgentWorkers = 2,
+            prefetchWorkers = 2,
+            urgentChunkBytes = 8L * 1024L * 1024L,
+            prefetchChunkBytes = 16L * 1024L * 1024L,
+            warmAheadEnabled = true
+        )
+
+        val pmSpecialization = RuntimeTransportSpecialization(
+            allowUrgentChunkAbove8MiB = true,
+            connectionBudgetHint = null,
+            retryMode = RuntimeTransportRetryMode.DEFAULT,
+            recommendedPrefetchWorkers = 1,
+            recommendedPrefetchChunkBytes = 32L * 1024L * 1024L
+        )
+
+        val effective = basePolicy.applyRuntimeTransportSpecialization(
+            specialization = pmSpecialization,
+            runtimeHints = pmHints()
+        )
+
+        assertEquals(3, effective.urgentWorkers)
+        assertEquals(1, effective.prefetchWorkers)
+        assertEquals(16L * 1024L * 1024L, effective.urgentChunkBytes)
+        assertEquals(32L * 1024L * 1024L, effective.prefetchChunkBytes)
+        assertEquals(null, effective.connectionBudgetHint)
+        assertEquals(RuntimeTransportRetryMode.DEFAULT, effective.retryMode)
+        assertEquals(null, effective.warmAheadBudgetMax)
+    }
+
+    @Test
+    fun `revocation atomically resets all specialized knobs to baseline`() {
+        val basePolicy = TransportPolicy(
+            urgentWorkers = 3,
+            prefetchWorkers = 2,
+            urgentChunkBytes = 16L * 1024L * 1024L,
+            prefetchChunkBytes = 32L * 1024L * 1024L,
+            warmAheadEnabled = true
+        )
+
+        // Unconfirmed specialization (revocation) — all knobs reset
+        val effective = basePolicy.applyRuntimeTransportSpecialization(
+            specialization = RuntimeTransportSpecialization(),
+            runtimeHints = rdHints()
+        )
+
+        assertEquals(3, effective.urgentWorkers) // unchanged from base
+        assertEquals(2, effective.prefetchWorkers) // unchanged from base
+        assertEquals(8L * 1024L * 1024L, effective.urgentChunkBytes) // clamped to 8MiB
+        assertEquals(32L * 1024L * 1024L, effective.prefetchChunkBytes) // unchanged
+        assertEquals(null, effective.connectionBudgetHint)
+        assertEquals(RuntimeTransportRetryMode.DEFAULT, effective.retryMode)
+        assertEquals(null, effective.warmAheadBudgetMax)
+    }
+
+    @Test
+    fun `specialization with prefetch overrides applies prefetch workers and chunk bytes`() {
+        val basePolicy = TransportPolicy(
+            urgentWorkers = 3,
+            prefetchWorkers = 2,
+            urgentChunkBytes = 8L * 1024L * 1024L,
+            prefetchChunkBytes = 16L * 1024L * 1024L,
+            warmAheadEnabled = false
+        )
+
+        val specialization = RuntimeTransportSpecialization(
+            allowUrgentChunkAbove8MiB = true,
+            recommendedPrefetchWorkers = 1,
+            recommendedPrefetchChunkBytes = 32L * 1024L * 1024L
+        )
+
+        val effective = basePolicy.applyRuntimeTransportSpecialization(
+            specialization = specialization,
+            runtimeHints = rdHints()
+        )
+
+        assertEquals(1, effective.prefetchWorkers)
+        assertEquals(32L * 1024L * 1024L, effective.prefetchChunkBytes)
+    }
+
+    private fun hints(): RuntimeTransportHintsV2 {
+        return rdHints()
+    }
+
+    private fun rdHints(): RuntimeTransportHintsV2 {
+        return RuntimeTransportHintsV2(
+            artifactVersion = 2,
+            serviceKey = "RD",
+            measuredAtMs = 42L,
+            observedTransportClass = "CONNECTION_CLOSE",
+            observedHostScope = "host:localhost",
+            recommendedUrgentChunkBytes = 16L * 1024L * 1024L,
+            recommendedUrgentWorkers = 2,
+            connectionBudgetHint = 8,
+            retryMode = "CONNECTION_CLOSE"
+        )
+    }
+
+    private fun pmHints(): RuntimeTransportHintsV2 {
+        return RuntimeTransportHintsV2(
+            artifactVersion = 2,
+            serviceKey = "PM",
+            measuredAtMs = 42L,
+            observedTransportClass = "KEEP_ALIVE",
+            observedHostScope = "host:pm-cdn.example.com",
+            recommendedUrgentChunkBytes = 16L * 1024L * 1024L,
+            recommendedUrgentWorkers = 3,
+            connectionBudgetHint = null,
+            retryMode = "DEFAULT"
+        )
     }
 }

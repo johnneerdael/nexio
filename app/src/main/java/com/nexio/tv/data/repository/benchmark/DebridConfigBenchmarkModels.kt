@@ -73,7 +73,8 @@ data class DebridConfigBenchmarkSessionSummary(
     val unsupportedProfileCount: Int,
     val totalElapsedMs: Long? = null,
     val bestProfile: DebridConfigBenchmarkProfileResult? = null,
-    val capabilityEnvelope: CapabilityEnvelope? = null
+    val capabilityEnvelope: CapabilityEnvelope? = null,
+    val runtimeTransportHints: RuntimeTransportHintsV2? = null
 ) {
     val totalProfiles: Int
         get() = totalProfileCount
@@ -85,12 +86,116 @@ data class DebridConfigBenchmarkSessionSummary(
         get() = unsupportedProfileCount
 }
 
+enum class TransportClass(val wireKey: String) {
+    KEEP_ALIVE("KEEP_ALIVE"),
+    CONNECTION_CLOSE("CONNECTION_CLOSE"),
+    UNKNOWN("UNKNOWN");
+
+    companion object {
+        private val byWireKey = entries.associateBy { it.wireKey }
+
+        fun fromWireKey(wireKey: String?): TransportClass? =
+            wireKey?.let { byWireKey[it.uppercase().trim()] }
+
+        fun fromWireKeyOrUnknown(wireKey: String?): TransportClass =
+            fromWireKey(wireKey) ?: UNKNOWN
+    }
+}
+
+enum class TransportRetryMode(val wireKey: String) {
+    DEFAULT("DEFAULT"),
+    CONNECTION_CLOSE("CONNECTION_CLOSE");
+
+    companion object {
+        private val byWireKey = entries.associateBy { it.wireKey }
+
+        fun fromWireKey(wireKey: String?): TransportRetryMode =
+            wireKey?.let { byWireKey[it.uppercase().trim()] } ?: DEFAULT
+    }
+}
+
+enum class HintFreshness {
+    FRESH,
+    STALE,
+    EXPIRED;
+
+    companion object {
+        private const val FRESH_THRESHOLD_MS = 7L * 24L * 60L * 60L * 1000L
+        private const val STALE_THRESHOLD_MS = 30L * 24L * 60L * 60L * 1000L
+
+        fun of(measuredAtMs: Long, nowMs: Long = System.currentTimeMillis()): HintFreshness {
+            val ageMs = nowMs - measuredAtMs
+            return when {
+                ageMs <= FRESH_THRESHOLD_MS -> FRESH
+                ageMs <= STALE_THRESHOLD_MS -> STALE
+                else -> EXPIRED
+            }
+        }
+    }
+}
+
+data class RuntimeTransportHintsV2(
+    val artifactVersion: Int,
+    val serviceKey: String,
+    val measuredAtMs: Long,
+    val observedTransportClass: String? = null,
+    val observedHostScope: String? = null,
+    val recommendedUrgentChunkBytes: Long? = null,
+    val recommendedUrgentWorkers: Int? = null,
+    val connectionBudgetHint: Int? = null,
+    val retryMode: String? = null
+) {
+    val typedTransportClass: TransportClass
+        get() = TransportClass.fromWireKeyOrUnknown(observedTransportClass)
+
+    val typedRetryMode: TransportRetryMode
+        get() = TransportRetryMode.fromWireKey(retryMode)
+
+    fun freshness(nowMs: Long = System.currentTimeMillis()): HintFreshness =
+        HintFreshness.of(measuredAtMs, nowMs)
+
+    val isV2: Boolean get() = artifactVersion >= 2
+
+    val isLegacyUnconfirmed: Boolean get() = artifactVersion < 2
+
+    fun isEligibleForSpecialization(nowMs: Long = System.currentTimeMillis()): Boolean =
+        isV2 && freshness(nowMs) == HintFreshness.FRESH
+
+    companion object {
+        const val CURRENT_ARTIFACT_VERSION = 2
+
+        const val GENERIC_SAFE_URGENT_CHUNK_BYTES = 8L * 1024L * 1024L
+
+        fun genericSafeDefaults(serviceKey: String, measuredAtMs: Long): RuntimeTransportHintsV2 =
+            RuntimeTransportHintsV2(
+                artifactVersion = CURRENT_ARTIFACT_VERSION,
+                serviceKey = serviceKey,
+                measuredAtMs = measuredAtMs,
+                observedTransportClass = TransportClass.UNKNOWN.wireKey,
+                recommendedUrgentChunkBytes = GENERIC_SAFE_URGENT_CHUNK_BYTES,
+                recommendedUrgentWorkers = 2,
+                connectionBudgetHint = null,
+                retryMode = TransportRetryMode.DEFAULT.wireKey
+            )
+    }
+}
+
+data class BenchmarkTransportCharacteristics(
+    val negotiatedProtocol: String? = null,
+    val connectionBehavior: String? = null,
+    val connectionReuseDetected: Boolean? = null,
+    val requestsPerConnection: Double? = null,
+    val maxConnectionsPerSecond: Double? = null,
+    val newConnectionRateTolerance: Double? = null
+)
+
 data class DebridConfigBenchmarkResult(
     val provider: DebridBenchmarkProvider,
     val measuredAtMs: Long,
     val candidate: DebridBenchmarkCandidateMetadata = DebridBenchmarkCandidateMetadata(),
     val summary: DebridConfigBenchmarkSessionSummary,
-    val profiles: List<DebridConfigBenchmarkProfileResult>
+    val profiles: List<DebridConfigBenchmarkProfileResult>,
+    val transportCharacteristics: BenchmarkTransportCharacteristics? = null
 ) {
     val orderedProfileResults: List<DebridConfigBenchmarkProfileResult>
         get() = profiles
@@ -143,6 +248,16 @@ internal fun DebridConfigBenchmarkResult.toJsonObject(): JsonObject {
             orderedProfileResults.forEach { add(it.toJsonObject()) }
         })
         bestProfile?.let { add("bestProfile", it.toJsonObject()) }
+        transportCharacteristics?.let { chars ->
+            add("transportCharacteristics", JsonObject().apply {
+                chars.negotiatedProtocol?.let { addProperty("negotiatedProtocol", it) }
+                chars.connectionBehavior?.let { addProperty("connectionBehavior", it) }
+                chars.connectionReuseDetected?.let { addProperty("connectionReuseDetected", it) }
+                chars.requestsPerConnection?.let { addProperty("requestsPerConnection", it) }
+                chars.maxConnectionsPerSecond?.let { addProperty("maxConnectionsPerSecond", it) }
+                chars.newConnectionRateTolerance?.let { addProperty("newConnectionRateTolerance", it) }
+            })
+        }
     }
 }
 
@@ -155,6 +270,19 @@ private fun DebridConfigBenchmarkSessionSummary.toJsonObject(): JsonObject {
         totalElapsedMs?.let { addProperty("totalElapsedMs", it) }
         bestProfile?.let { add("bestProfile", it.toJsonObject()) }
         capabilityEnvelope?.let { add("capabilityEnvelope", com.google.gson.JsonParser.parseString(it.toJson())) }
+        runtimeTransportHints?.let { hints ->
+            add("runtimeTransportHints", JsonObject().apply {
+                addProperty("artifactVersion", hints.artifactVersion)
+                addProperty("serviceKey", hints.serviceKey)
+                addProperty("measuredAtMs", hints.measuredAtMs)
+                hints.observedTransportClass?.let { addProperty("observedTransportClass", it) }
+                hints.observedHostScope?.let { addProperty("observedHostScope", it) }
+                hints.recommendedUrgentChunkBytes?.let { addProperty("recommendedUrgentChunkBytes", it) }
+                hints.recommendedUrgentWorkers?.let { addProperty("recommendedUrgentWorkers", it) }
+                hints.connectionBudgetHint?.let { addProperty("connectionBudgetHint", it) }
+                hints.retryMode?.let { addProperty("retryMode", it) }
+            })
+        }
     }
 }
 

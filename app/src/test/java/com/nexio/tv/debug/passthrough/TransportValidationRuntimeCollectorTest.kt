@@ -213,6 +213,33 @@ class TransportValidationRuntimeCollectorTest {
         assertEquals(expectedStats, retainedSnapshot?.playbackStats)
     }
 
+    @Test
+    fun `transport specialization events are exported in analytics snapshot`() {
+        val collector = TransportValidationRuntimeCollector()
+        collector.beginSession(
+            sample = sample(),
+            settings = TransportValidationSettings(runtimeValidationEnabled = true),
+        )
+
+        collector.onTransportSpecializationEvent(
+            type = "transport_specialization_confirmed",
+            detail = "streamServiceKey=RD hintServiceKey=RD reason=confirmed"
+        )
+        collector.onTransportSpecializationEvent(
+            type = "transport_specialization_revoked",
+            detail = "streamServiceKey=RD hintServiceKey=RD reason=confirmation_lost"
+        )
+
+        val snapshot = collector.snapshot()
+
+        assertNotNull(snapshot)
+        assertEquals(
+            listOf("transport_specialization_confirmed", "transport_specialization_revoked"),
+            snapshot?.analyticsEvents?.takeLast(2)?.map { it.type }
+        )
+        assertTrue(snapshot?.analyticsEvents?.last()?.detail?.contains("reason=confirmation_lost") == true)
+    }
+
     private fun positionSample(
         elapsedRealtimeMs: Long,
         positionMs: Long,

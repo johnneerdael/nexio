@@ -42,9 +42,10 @@ class DebridConfigBenchmarkServiceTest {
         assertTrue(service.start(DebridBenchmarkProvider.REAL_DEBRID))
         val result = persisted.await()
 
-        assertEquals(12, executedCandidates.size)
+        val expectedMatrixSize = DebridConfigBenchmarkService.certificationMatrixForProvider(DebridBenchmarkProvider.REAL_DEBRID).size
+        assertEquals(expectedMatrixSize, executedCandidates.size)
         assertTrue(executedCandidates.all { it.directUrl == candidate.directUrl })
-        assertEquals(12, result.profiles.size)
+        assertEquals(expectedMatrixSize, result.profiles.size)
     }
 
     @Test
@@ -61,7 +62,7 @@ class DebridConfigBenchmarkServiceTest {
             scope = backgroundScope,
             runProfile = { _, snapshot, _ ->
                 when {
-                    snapshot.parallelConnectionCount == 4 && snapshot.parallelChunkSizeMb == 16 ->
+                    snapshot.parallelConnectionCount == 3 && snapshot.parallelChunkSizeMb == 24 ->
                         successTransportResult(700.0)
                     else ->
                         successTransportResult(400.0)
@@ -72,8 +73,22 @@ class DebridConfigBenchmarkServiceTest {
         assertTrue(service.start(DebridBenchmarkProvider.REAL_DEBRID))
         val result = persisted.await()
 
-        assertEquals(4, result.summary.bestProfile?.parallelConnectionCount)
-        assertEquals(16, result.summary.bestProfile?.chunkSizeMb)
+        assertEquals(3, result.summary.bestProfile?.parallelConnectionCount)
+        assertEquals(24, result.summary.bestProfile?.chunkSizeMb)
+        assertEquals(42L, result.summary.capabilityEnvelope?.measuredAtMs)
+        assertEquals(3, result.summary.capabilityEnvelope?.maxSafeUrgentWorkers)
+        assertEquals(8L * 1024L * 1024L, result.summary.capabilityEnvelope?.maxSafeUrgentChunkBytes)
+        assertEquals(2, result.summary.runtimeTransportHints?.artifactVersion)
+        assertEquals("RD", result.summary.runtimeTransportHints?.serviceKey)
+        assertEquals(42L, result.summary.runtimeTransportHints?.measuredAtMs)
+        assertEquals("host:host", result.summary.runtimeTransportHints?.observedHostScope)
+        assertEquals("keep_alive", result.summary.runtimeTransportHints?.observedTransportClass)
+        // Hints use the best profile's actual chunk size, not the envelope's capped value
+        assertEquals(
+            24L * 1024L * 1024L,
+            result.summary.runtimeTransportHints?.recommendedUrgentChunkBytes
+        )
+        assertEquals(3, result.summary.runtimeTransportHints?.recommendedUrgentWorkers)
     }
 
     @Test
@@ -97,7 +112,8 @@ class DebridConfigBenchmarkServiceTest {
 
         assertNull(result.summary.bestProfile)
         assertEquals(0, result.summary.successfulProfileCount)
-        assertEquals(12, result.profiles.size)
+        val expectedMatrixSize = DebridConfigBenchmarkService.certificationMatrixForProvider(DebridBenchmarkProvider.REAL_DEBRID).size
+        assertEquals(expectedMatrixSize, result.profiles.size)
     }
 
     @Test
@@ -115,7 +131,7 @@ class DebridConfigBenchmarkServiceTest {
             scope = backgroundScope,
             runProfile = { _, snapshot, _ ->
                 executedSnapshots += snapshot
-                if (snapshot.parallelConnectionCount == 4 && snapshot.parallelChunkSizeMb == 8) {
+                if (snapshot.parallelConnectionCount == 3 && snapshot.parallelChunkSizeMb == 16) {
                     failedTransportResult("connection reset")
                 } else {
                     successTransportResult(400.0)
@@ -126,11 +142,12 @@ class DebridConfigBenchmarkServiceTest {
         assertTrue(service.start(DebridBenchmarkProvider.REAL_DEBRID))
         val result = persisted.await()
 
-        assertEquals(12, executedSnapshots.size)
-        assertEquals(12, result.profiles.size)
+        val expectedMatrixSize = DebridConfigBenchmarkService.certificationMatrixForProvider(DebridBenchmarkProvider.REAL_DEBRID).size
+        assertEquals(expectedMatrixSize, executedSnapshots.size)
+        assertEquals(expectedMatrixSize, result.profiles.size)
         assertEquals(
             DebridConfigBenchmarkStatus.FAILED,
-            result.profiles.first { it.parallelConnectionCount == 4 && it.chunkSizeMb == 8 }.status
+            result.profiles.first { it.parallelConnectionCount == 3 && it.chunkSizeMb == 16 }.status
         )
         assertTrue(result.profiles.count { it.status == DebridConfigBenchmarkStatus.SUCCESS } >= 1)
     }
@@ -221,7 +238,9 @@ class DebridConfigBenchmarkServiceTest {
                 parallelConnectionCount = 2,
                 parallelChunkSizeMb = 8
             ),
-            terminationReason = DebridBenchmarkTerminationReason.COMPLETED
+            terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
+            observedHostScope = "host:host",
+            observedTransportClass = "keep_alive"
         )
     }
 

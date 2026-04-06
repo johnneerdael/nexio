@@ -7,6 +7,7 @@ internal data class PlayerNavigationArgs(
     val streamUrl: String,
     val title: String,
     val streamName: String?,
+    val serviceKey: String?,
     val year: String?,
     val headersJson: String?,
     val contentId: String?,
@@ -41,6 +42,7 @@ internal data class PlayerNavigationArgs(
                 streamUrl = decodedOrNull("streamUrl") ?: "",
                 title = decodedOrNull("title") ?: "",
                 streamName = decodedOrNull("streamName"),
+                serviceKey = decodedOrNull("serviceKey"),
                 year = decodedOrNull("year"),
                 headersJson = decodedOrNull("headers"),
                 // NavController already decodes these IDs.
