@@ -65,10 +65,11 @@ class DebridConfigBenchmarkService internal constructor(
         return runMutex.withLock {
             if (activeJob?.isActive == true) return false
             if (!executionGate.tryAcquire()) return false
+            val matrix = certificationMatrixForProvider(provider)
             _activeState.value = DebridConfigBenchmarkRuntimeState.Running(
                 provider = provider,
                 completedProfiles = 0,
-                totalProfiles = DEFAULT_MATRIX.size,
+                totalProfiles = matrix.size,
                 summary = null
             )
             activeJob = scope.launch {
@@ -148,13 +149,15 @@ class DebridConfigBenchmarkService internal constructor(
         candidate: DebridBenchmarkCandidate
     ): DebridConfigBenchmarkResult {
         val profileResults = mutableListOf<DebridConfigBenchmarkProfileResult>()
+        var bestSuccessfulTransportResult: DebridConfigBenchmarkTransportResult? = null
+        val matrix = certificationMatrixForProvider(provider)
 
-        DEFAULT_MATRIX.forEachIndexed { index, profile ->
+        matrix.forEachIndexed { index, profile ->
             _activeState.value = DebridConfigBenchmarkRuntimeState.Running(
                 provider = provider,
                 currentProfile = profile,
                 completedProfiles = index,
-                totalProfiles = DEFAULT_MATRIX.size,
+                totalProfiles = matrix.size,
                 summary = null
             )
             when (val gateDecision = memoryGate.evaluate(profile.parallelConnectionCount, profile.chunkSizeMb)) {
@@ -173,7 +176,7 @@ class DebridConfigBenchmarkService internal constructor(
                                 provider = provider,
                                 currentProfile = profile,
                                 completedProfiles = index,
-                                totalProfiles = DEFAULT_MATRIX.size,
+                                totalProfiles = matrix.size,
                                 summary = summary
                             )
                         }
@@ -188,6 +191,12 @@ class DebridConfigBenchmarkService internal constructor(
                             elapsedMs = transportResult.elapsedMs,
                             configSnapshot = snapshot
                         )
+                        val currentBestMbps = bestSuccessfulTransportResult?.averageThroughputMbps
+                            ?: Double.NEGATIVE_INFINITY
+                        val candidateMbps = transportResult.averageThroughputMbps ?: Double.NEGATIVE_INFINITY
+                        if (candidateMbps > currentBestMbps) {
+                            bestSuccessfulTransportResult = transportResult
+                        }
                     } else {
                         val failureReason = transportResult.failure?.message
                             ?: transportResult.terminationReason.wireKey
@@ -210,28 +219,79 @@ class DebridConfigBenchmarkService internal constructor(
             }
         }
 
-        val bestProfile = profileResults
-            .filter { it.status == DebridConfigBenchmarkStatus.SUCCESS }
-            .maxByOrNull { it.averageThroughputMbps ?: Double.NEGATIVE_INFINITY }
+        val bestProfile = selectBestProfile(profileResults, provider)
+
+        val measuredAtMs = nowMs()
+        val summary = DebridConfigBenchmarkSessionSummary(
+            totalProfileCount = profileResults.size,
+            successfulProfileCount = profileResults.count { it.status == DebridConfigBenchmarkStatus.SUCCESS },
+            failedProfileCount = profileResults.count { it.status == DebridConfigBenchmarkStatus.FAILED },
+            unsupportedProfileCount = profileResults.count { it.status == DebridConfigBenchmarkStatus.UNSUPPORTED },
+            totalElapsedMs = profileResults.sumOf { it.elapsedMs ?: 0L },
+            bestProfile = bestProfile
+        )
+        val capabilityEnvelope = summary.toCapabilityEnvelope(measuredAtMs)
+        val observedTransportClass = bestSuccessfulTransportResult?.observedTransportClass
+        val isConnectionClose = observedTransportClass == "connection_close"
+        val runtimeTransportHints = capabilityEnvelope?.let { envelope ->
+            val bestChunkBytes = bestProfile?.chunkSizeMb?.toLong()?.times(1024L * 1024L)
+                ?: envelope.maxSafeUrgentChunkBytes
+            RuntimeTransportHintsV2(
+                artifactVersion = RuntimeTransportHintsV2.CURRENT_ARTIFACT_VERSION,
+                serviceKey = serviceKeyForBenchmarkProvider(provider),
+                measuredAtMs = measuredAtMs,
+                observedTransportClass = observedTransportClass,
+                observedHostScope = bestSuccessfulTransportResult?.observedHostScope,
+                recommendedUrgentChunkBytes = bestChunkBytes,
+                recommendedUrgentWorkers = bestProfile?.parallelConnectionCount
+                    ?: envelope.maxSafeUrgentWorkers,
+                connectionBudgetHint = if (isConnectionClose) {
+                    (bestProfile?.parallelConnectionCount ?: envelope.maxSafeUrgentWorkers)
+                        .coerceAtLeast(2) * 2
+                } else null,
+                retryMode = if (isConnectionClose) {
+                    TransportRetryMode.CONNECTION_CLOSE.wireKey
+                } else {
+                    TransportRetryMode.DEFAULT.wireKey
+                }
+            )
+        }
+
+        val transportCharacteristics = bestSuccessfulTransportResult?.let { best ->
+            val successCount = profileResults.count { it.status == DebridConfigBenchmarkStatus.SUCCESS }
+            val totalElapsedSec = (profileResults.sumOf { it.elapsedMs ?: 0L }).coerceAtLeast(1L) / 1000.0
+            BenchmarkTransportCharacteristics(
+                negotiatedProtocol = best.negotiatedProtocol,
+                connectionBehavior = best.connectionHeader ?: best.observedTransportClass,
+                connectionReuseDetected = !isConnectionClose,
+                requestsPerConnection = if (!isConnectionClose && successCount > 0) {
+                    successCount.toDouble()
+                } else {
+                    1.0
+                },
+                maxConnectionsPerSecond = if (isConnectionClose) {
+                    successCount.toDouble() / totalElapsedSec
+                } else {
+                    null
+                }
+            )
+        }
 
         return DebridConfigBenchmarkResult(
             provider = provider,
-            measuredAtMs = nowMs(),
+            measuredAtMs = measuredAtMs,
             candidate = DebridBenchmarkCandidateMetadata(
                 filename = candidate.filename,
                 sizeBytes = candidate.sourceSizeBytes,
                 host = runCatching { java.net.URI(candidate.directUrl).host }.getOrNull(),
                 directUrlFingerprint = null
             ),
-            summary = DebridConfigBenchmarkSessionSummary(
-                totalProfileCount = profileResults.size,
-                successfulProfileCount = profileResults.count { it.status == DebridConfigBenchmarkStatus.SUCCESS },
-                failedProfileCount = profileResults.count { it.status == DebridConfigBenchmarkStatus.FAILED },
-                unsupportedProfileCount = profileResults.count { it.status == DebridConfigBenchmarkStatus.UNSUPPORTED },
-                totalElapsedMs = profileResults.sumOf { it.elapsedMs ?: 0L },
-                bestProfile = bestProfile
+            summary = summary.copy(
+                capabilityEnvelope = capabilityEnvelope,
+                runtimeTransportHints = runtimeTransportHints
             ),
-            profiles = profileResults
+            profiles = profileResults,
+            transportCharacteristics = transportCharacteristics
         )
     }
 
@@ -252,22 +312,129 @@ class DebridConfigBenchmarkService internal constructor(
         )
     }
 
-    private companion object {
-        private const val CONFIG_MEASUREMENT_DURATION_MS = 30_000L
+    internal companion object {
+        internal const val CONFIG_MEASUREMENT_DURATION_MS = 30_000L
 
-        private val DEFAULT_MATRIX = listOf(
-            DebridConfigBenchmarkProfileMetadata(2, 8),
+        /** Real-Debrid: connection-close provider with rate-limited connection churn. */
+        internal val RD_CERTIFICATION_MATRIX = listOf(
+            DebridConfigBenchmarkProfileMetadata(2, 16),
+            DebridConfigBenchmarkProfileMetadata(2, 24),
+            DebridConfigBenchmarkProfileMetadata(2, 32),
+            DebridConfigBenchmarkProfileMetadata(3, 16),
+            DebridConfigBenchmarkProfileMetadata(3, 24)
+        )
+
+        /** Real-Debrid diagnostic profiles — run only for telemetry, not certification. */
+        internal val RD_DIAGNOSTIC_MATRIX = listOf(
             DebridConfigBenchmarkProfileMetadata(3, 8),
             DebridConfigBenchmarkProfileMetadata(4, 8),
+            DebridConfigBenchmarkProfileMetadata(4, 16)
+        )
+
+        /** Premiumize: keep-alive provider with strong connection reuse. */
+        internal val PM_CERTIFICATION_MATRIX = listOf(
             DebridConfigBenchmarkProfileMetadata(2, 16),
             DebridConfigBenchmarkProfileMetadata(3, 16),
-            DebridConfigBenchmarkProfileMetadata(4, 16),
             DebridConfigBenchmarkProfileMetadata(2, 24),
-            DebridConfigBenchmarkProfileMetadata(3, 24),
-            DebridConfigBenchmarkProfileMetadata(4, 24),
-            DebridConfigBenchmarkProfileMetadata(2, 32),
-            DebridConfigBenchmarkProfileMetadata(3, 32),
-            DebridConfigBenchmarkProfileMetadata(4, 32)
+            DebridConfigBenchmarkProfileMetadata(3, 24)
         )
+
+        /** Premiumize diagnostic profiles — 4-worker only if stall-free. */
+        internal val PM_DIAGNOSTIC_MATRIX = listOf(
+            DebridConfigBenchmarkProfileMetadata(4, 16)
+        )
+
+        /** Fallback matrix for providers without measured behavior (TB, ED). */
+        internal val GENERIC_MATRIX = listOf(
+            DebridConfigBenchmarkProfileMetadata(2, 8),
+            DebridConfigBenchmarkProfileMetadata(3, 8),
+            DebridConfigBenchmarkProfileMetadata(2, 16),
+            DebridConfigBenchmarkProfileMetadata(3, 16),
+            DebridConfigBenchmarkProfileMetadata(2, 24)
+        )
+
+        internal fun certificationMatrixForProvider(provider: DebridBenchmarkProvider): List<DebridConfigBenchmarkProfileMetadata> {
+            return when (provider) {
+                DebridBenchmarkProvider.REAL_DEBRID -> RD_CERTIFICATION_MATRIX
+                DebridBenchmarkProvider.PREMIUMIZE -> PM_CERTIFICATION_MATRIX
+                else -> GENERIC_MATRIX
+            }
+        }
+
+        internal fun diagnosticMatrixForProvider(provider: DebridBenchmarkProvider): List<DebridConfigBenchmarkProfileMetadata> {
+            return when (provider) {
+                DebridBenchmarkProvider.REAL_DEBRID -> RD_DIAGNOSTIC_MATRIX
+                DebridBenchmarkProvider.PREMIUMIZE -> PM_DIAGNOSTIC_MATRIX
+                else -> emptyList()
+            }
+        }
+    }
+}
+
+/**
+ * Multi-factor profile scoring. Considers throughput, failure shape, and provider fitness.
+ * Replaces throughput-only maxByOrNull selection.
+ */
+internal fun selectBestProfile(
+    profileResults: List<DebridConfigBenchmarkProfileResult>,
+    provider: DebridBenchmarkProvider
+): DebridConfigBenchmarkProfileResult? {
+    val successful = profileResults.filter { it.status == DebridConfigBenchmarkStatus.SUCCESS }
+    if (successful.isEmpty()) return null
+
+    val totalProfiles = profileResults.size.coerceAtLeast(1)
+    val failedCount = profileResults.count { it.status == DebridConfigBenchmarkStatus.FAILED }
+    val failureRatio = failedCount.toDouble() / totalProfiles
+
+    return successful.maxByOrNull { profile ->
+        scoreBenchmarkProfile(profile, failureRatio, provider)
+    }
+}
+
+internal fun scoreBenchmarkProfile(
+    profile: DebridConfigBenchmarkProfileResult,
+    sessionFailureRatio: Double,
+    provider: DebridBenchmarkProvider
+): Double {
+    val throughput = profile.averageThroughputMbps ?: return Double.NEGATIVE_INFINITY
+
+    // Throughput normalized to 0-1 range (1000 Mbps ceiling)
+    val throughputScore = (throughput / 1000.0).coerceIn(0.0, 1.0)
+
+    // Stability: penalize sessions with high failure rates
+    val stabilityScore = 1.0 - sessionFailureRatio
+
+    // Provider fitness: prefer profiles matching known-good configurations
+    val fitnessScore = providerFitnessScore(profile, provider)
+
+    // Weighted: throughput 50%, stability 30%, fitness 20%
+    return throughputScore * 0.50 + stabilityScore * 0.30 + fitnessScore * 0.20
+}
+
+private fun providerFitnessScore(
+    profile: DebridConfigBenchmarkProfileResult,
+    provider: DebridBenchmarkProvider
+): Double {
+    val workers = profile.parallelConnectionCount
+    val chunkMb = profile.chunkSizeMb
+    return when (provider) {
+        DebridBenchmarkProvider.REAL_DEBRID -> when {
+            workers == 2 && chunkMb in 16..24 -> 1.0
+            workers == 2 && chunkMb == 32 -> 0.9
+            workers == 3 && chunkMb >= 16 -> 0.7
+            else -> 0.4
+        }
+        DebridBenchmarkProvider.PREMIUMIZE -> when {
+            workers == 3 && chunkMb == 16 -> 1.0
+            workers == 2 && chunkMb == 16 -> 0.9
+            workers == 3 && chunkMb == 24 -> 0.8
+            workers == 2 && chunkMb == 24 -> 0.7
+            else -> 0.4
+        }
+        else -> when {
+            workers <= 2 && chunkMb <= 16 -> 0.8
+            workers <= 3 && chunkMb <= 16 -> 0.7
+            else -> 0.5
+        }
     }
 }

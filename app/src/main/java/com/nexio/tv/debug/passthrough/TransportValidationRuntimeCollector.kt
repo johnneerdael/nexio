@@ -320,6 +320,21 @@ class TransportValidationRuntimeCollector @Inject constructor() {
 
     fun updateCachedAheadSeconds(seconds: Double) { activeSession?.cachedAheadSeconds = seconds }
 
+    fun onTransportSpecializationEvent(
+        type: String,
+        detail: String,
+        value: Long? = null
+    ) {
+        val session = activeSession ?: return
+        session.analyticsEvents +=
+            TransportValidationRuntimeAnalyticsEvent(
+                elapsedRealtimeMs = SystemClock.elapsedRealtime(),
+                type = type,
+                value = value,
+                detail = detail
+            )
+    }
+
     fun clearSession() {
         val session = activeSession ?: return
         session.detach()

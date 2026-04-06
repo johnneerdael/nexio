@@ -14,6 +14,7 @@ import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.SyncedFormatterTemplateSettings
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
+import com.nexio.tv.data.repository.benchmark.normalizedBenchmarkServiceKey
 import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.ui.components.SourceChipItem
@@ -376,6 +377,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
 
     currentStreamUrl = url
     currentHeaders = newHeaders
+    currentStreamServiceKey = normalizedBenchmarkServiceKey(stream.wrappedProviderId)
     currentStreamBingeGroup = StreamBingeGroupResolver.resolve(stream)
     currentVideoHash = stream.behaviorHints?.videoHash
     currentVideoSize = stream.behaviorHints?.videoSize
@@ -682,6 +684,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
 
     currentStreamUrl = url
     currentHeaders = newHeaders
+    currentStreamServiceKey = normalizedBenchmarkServiceKey(stream.wrappedProviderId)
     currentStreamBingeGroup = StreamBingeGroupResolver.resolve(stream)
     currentVideoHash = stream.behaviorHints?.videoHash
     currentVideoSize = stream.behaviorHints?.videoSize

@@ -146,6 +146,37 @@ class StreamScreenShadowSelectionTest {
     }
 
     @Test
+    fun `shared CDN host still distinguishes candidates by service key`() {
+        val coordinator = ShadowAutoPlayReplayCoordinator(scorer)
+        val benchmarks = mapOf(
+            DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(
+                provider = DebridBenchmarkProvider.REAL_DEBRID,
+                optimizedP10Mbps = 120.0
+            ),
+            DebridBenchmarkProvider.PREMIUMIZE to benchmarkResult(
+                provider = DebridBenchmarkProvider.PREMIUMIZE,
+                optimizedP10Mbps = 260.0
+            )
+        )
+
+        coordinator.updateCandidates(
+            request(),
+            listOf(
+                streamCard(streamKey = "rd_same_host", providerId = "RD"),
+                streamCard(streamKey = "pm_same_host", providerId = "PM")
+            ),
+            DebridBenchmarkTransportMode.OPTIMIZED,
+            isFinalPass = true,
+            allowEarlyFinishTerminal = true
+        )
+
+        val event = coordinator.buildEventIfReady(benchmarks)
+
+        assertEquals("pm_same_host", event?.selected?.streamKey)
+        assertEquals(DebridBenchmarkTransportMode.OPTIMIZED, event?.selected?.transport)
+    }
+
+    @Test
     fun `coordinator clear drops stale candidates`() {
         val coordinator = ShadowAutoPlayReplayCoordinator(scorer)
         coordinator.updateCandidates(

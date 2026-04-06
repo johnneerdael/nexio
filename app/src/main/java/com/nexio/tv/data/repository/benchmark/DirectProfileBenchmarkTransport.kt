@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository.benchmark
 
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import com.nexio.tv.ui.screens.player.RuntimeTransportObservation
 import javax.inject.Inject
 import javax.inject.Named
 import okhttp3.OkHttpClient
@@ -61,7 +62,8 @@ private class DefaultDirectBenchmarkReadableSourceFactoryBuilder(
         allowStartupBootstrapReuse: Boolean,
         transportSampleTimeMs: () -> Long,
         onTransportBytesDownloaded: (Long, Long) -> Unit,
-        onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
+        onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit,
+        onTransportObservation: (RuntimeTransportObservation) -> Unit
     ): BenchmarkReadableSourceFactory {
         val upstreamFactory = OkHttpDataSource.Factory(okHttpClient).apply {
             setDefaultRequestProperties(candidate.headers)

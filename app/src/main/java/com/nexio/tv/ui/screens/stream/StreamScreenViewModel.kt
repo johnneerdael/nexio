@@ -33,6 +33,7 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode
 import com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionLogger
 import com.nexio.tv.data.repository.benchmark.ShadowRequestContext
+import com.nexio.tv.data.repository.benchmark.normalizedBenchmarkServiceKey
 import com.nexio.tv.domain.model.AddonStreams
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.Stream
@@ -928,6 +929,7 @@ class StreamScreenViewModel @Inject constructor(
             url = stream.getStreamUrl(),
             title = _uiState.value.title,
             streamName = stream.name ?: stream.addonName,
+            serviceKey = normalizedBenchmarkServiceKey(stream.wrappedProviderId),
             year = year,
             isExternal = stream.isExternal(),
             isTorrent = stream.isTorrent(),
@@ -1117,6 +1119,7 @@ class StreamScreenViewModel @Inject constructor(
             url = stream.getStreamUrl(),
             title = _uiState.value.title,
             streamName = stream.name ?: stream.addonName,
+            serviceKey = normalizedBenchmarkServiceKey(item.parsed.serviceId, stream.wrappedProviderId),
             year = year,
             isExternal = stream.isExternal(),
             isTorrent = stream.isTorrent(),
@@ -1633,6 +1636,7 @@ data class StreamPlaybackInfo(
     val url: String?,
     val title: String,
     val streamName: String,
+    val serviceKey: String? = null,
     val playerBackend: PlayerPreference = PlayerPreference.INTERNAL,
     val year: String?,
     val isExternal: Boolean,

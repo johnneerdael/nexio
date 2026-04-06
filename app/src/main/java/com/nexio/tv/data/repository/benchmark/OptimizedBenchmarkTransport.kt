@@ -6,6 +6,7 @@ import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.ui.screens.player.ParallelRangeDataSource
+import com.nexio.tv.ui.screens.player.RuntimeTransportObservation
 import java.io.EOFException
 import java.io.InterruptedIOException
 import java.net.SocketException
@@ -36,7 +37,8 @@ internal interface OptimizedBenchmarkDataSourceFactoryBuilder {
         allowStartupBootstrapReuse: Boolean,
         transportSampleTimeMs: () -> Long,
         onTransportBytesDownloaded: (Long, Long) -> Unit,
-        onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit = { _, _, _, _, _ -> }
+        onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit = { _, _, _, _, _ -> },
+        onTransportObservation: (RuntimeTransportObservation) -> Unit = {}
     ): BenchmarkReadableSourceFactory
 }
 
@@ -47,7 +49,11 @@ data class DebridConfigBenchmarkTransportResult(
     val sustained: DebridBenchmarkSustainedMetrics,
     val configSnapshot: DebridBenchmarkTransportConfigSnapshot,
     val terminationReason: DebridBenchmarkTerminationReason,
-    val failure: DebridBenchmarkTransportFailure? = null
+    val failure: DebridBenchmarkTransportFailure? = null,
+    val observedHostScope: String? = null,
+    val observedTransportClass: String? = null,
+    val negotiatedProtocol: String? = null,
+    val connectionHeader: String? = null
 ) {
     val averageThroughputMbps: Double?
         get() = sustained.averageThroughputMbps
@@ -161,6 +167,7 @@ class OptimizedBenchmarkTransport internal constructor(
             requiredTransferredBytes = 1L,
             requiredElapsedMs = measurementDurationMs
         )
+        var observedTransportObservation: RuntimeTransportObservation? = null
         val sustainedReadableSourceFactory = factoryBuilder.create(
             candidate = candidate,
             configSnapshot = effectiveConfigSnapshot,
@@ -172,6 +179,11 @@ class OptimizedBenchmarkTransport internal constructor(
             },
             onChunkBytesDownloaded = { chunkIndex, chunkSize, offsetInChunk, bytesRead, sampleAtMs ->
                 collector.recordFrontierProgress(chunkIndex, chunkSize, offsetInChunk, bytesRead, sampleAtMs)
+            },
+            onTransportObservation = { observation ->
+                if (observedTransportObservation == null) {
+                    observedTransportObservation = observation
+                }
             }
         )
         val sustainedPhase = runStartupAndSustainedPhase(
@@ -188,7 +200,11 @@ class OptimizedBenchmarkTransport internal constructor(
             ),
             configSnapshot = effectiveConfigSnapshot,
             terminationReason = sustainedPhase.terminationReason,
-            failure = sustainedPhase.failure
+            failure = sustainedPhase.failure,
+            observedHostScope = observedTransportObservation?.hostScope,
+            observedTransportClass = observedTransportObservation?.transportClass,
+            negotiatedProtocol = observedTransportObservation?.negotiatedProtocol,
+            connectionHeader = observedTransportObservation?.connectionHeader
         )
     }
 
@@ -646,7 +662,8 @@ private class DefaultOptimizedBenchmarkDataSourceFactoryBuilder(
         allowStartupBootstrapReuse: Boolean,
         transportSampleTimeMs: () -> Long,
         onTransportBytesDownloaded: (Long, Long) -> Unit,
-        onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
+        onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit,
+        onTransportObservation: (RuntimeTransportObservation) -> Unit
     ): BenchmarkReadableSourceFactory {
         val upstreamFactory = OkHttpDataSource.Factory(okHttpClient).apply {
             setDefaultRequestProperties(candidate.headers)
@@ -664,6 +681,7 @@ private class DefaultOptimizedBenchmarkDataSourceFactoryBuilder(
                 transportSampleTimeMs = transportSampleTimeMs,
                 onTransportBytesDownloaded = onTransportBytesDownloaded,
                 onChunkBytesDownloaded = onChunkBytesDownloaded,
+                onTransportObservation = onTransportObservation,
                 allowStartupBootstrapReuse = allowStartupBootstrapReuse
             )
         }

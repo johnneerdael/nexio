@@ -167,7 +167,10 @@ private fun DebridBenchmarkTransportProfile.withDerivedDecisionMetrics(
         null
     }
     // Shadow player simulation (primary path when sufficient frontier data)
-    val frontierEvents = rawSamples.frontierEvents
+    val frontierEvents = appendTailDrainFrontierEvent(
+        events = rawSamples.frontierEvents,
+        runEndMs = summary.elapsedMs
+    )
     val shadowResult = if (frontierEvents.size >= FRONTIER_EVENT_MINIMUM) {
         ShadowPlayerSimulation(
             startupBufferMs = bufferForPlaybackMs,

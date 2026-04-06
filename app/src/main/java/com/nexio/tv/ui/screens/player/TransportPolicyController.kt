@@ -7,7 +7,10 @@ internal data class TransportPolicy(
     val prefetchWorkers: Int,
     val urgentChunkBytes: Long,
     val prefetchChunkBytes: Long,
-    val warmAheadEnabled: Boolean
+    val warmAheadEnabled: Boolean,
+    val connectionBudgetHint: Int? = null,
+    val retryMode: RuntimeTransportRetryMode = RuntimeTransportRetryMode.DEFAULT,
+    val warmAheadBudgetMax: Int? = null
 )
 
 internal enum class TransportState {
@@ -80,4 +83,48 @@ internal class TransportPolicyController(
             warmAheadEnabled = true
         )
     }
+}
+
+internal fun TransportPolicy.applyRuntimeTransportSpecialization(
+    specialization: RuntimeTransportSpecialization,
+    runtimeHints: com.nexio.tv.data.repository.benchmark.RuntimeTransportHintsV2?
+): TransportPolicy {
+    val baselineUrgentChunkBytes = minOf(urgentChunkBytes, 8L * 1024L * 1024L)
+    if (!specialization.allowUrgentChunkAbove8MiB) {
+        return copy(
+            urgentChunkBytes = baselineUrgentChunkBytes,
+            connectionBudgetHint = null,
+            retryMode = RuntimeTransportRetryMode.DEFAULT
+        )
+    }
+
+    val specializedUrgentChunkBytes = runtimeHints?.recommendedUrgentChunkBytes
+        ?.takeIf { it > 8L * 1024L * 1024L }
+        ?: urgentChunkBytes
+
+    val specializedUrgentWorkers = runtimeHints?.recommendedUrgentWorkers
+        ?.takeIf { it > 0 }
+        ?: urgentWorkers
+
+    val specializedPrefetchWorkers = specialization.recommendedPrefetchWorkers
+        ?.takeIf { it > 0 }
+        ?: prefetchWorkers
+
+    val specializedPrefetchChunkBytes = specialization.recommendedPrefetchChunkBytes
+        ?.takeIf { it > 0L }
+        ?: prefetchChunkBytes
+
+    // RD (has connection budget): warm-ahead max 1, counted against budget
+    // PM (no budget): warm-ahead follows existing policy
+    val warmAheadMax = if (specialization.connectionBudgetHint != null) 1 else null
+
+    return copy(
+        urgentWorkers = specializedUrgentWorkers,
+        prefetchWorkers = specializedPrefetchWorkers,
+        urgentChunkBytes = specializedUrgentChunkBytes,
+        prefetchChunkBytes = specializedPrefetchChunkBytes,
+        connectionBudgetHint = specialization.connectionBudgetHint,
+        retryMode = specialization.retryMode,
+        warmAheadBudgetMax = warmAheadMax
+    )
 }

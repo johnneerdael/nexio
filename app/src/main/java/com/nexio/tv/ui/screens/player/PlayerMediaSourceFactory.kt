@@ -94,6 +94,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     var vodCacheSizeMb: Int = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB
     @Volatile var capabilityEnvelope: CapabilityEnvelope? = null
     @Volatile var transportPolicyProvider: () -> TransportPolicy? = { null }
+    @Volatile var onTransportObservation: (RuntimeTransportObservation) -> Unit = {}
 
     fun configureSubtitleParsing(
         extractorsFactory: ExtractorsFactory?,
@@ -170,6 +171,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                     onResolvedUri = { resolved ->
                         currentVodCacheResolvedUrl = resolved?.toString()
                     },
+                    onTransportObservation = onTransportObservation,
                     onReadPositionAdvanced = { position ->
                         activeReadBytePosition.accumulateAndGet(position) { current, next ->
                             if (next > current) next else current
@@ -702,6 +704,11 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         if (!ENABLE_VOD_CACHE || isVodCacheDisabled) return
         if (vodCacheSizeMode != VodCacheSizeMode.ON) return
         if (!currentProgressiveIsEligibleForWarmAhead || !currentVodCacheActive) return
+
+        // Respect transport policy warm-ahead gate: disabled during startup/recovery/weak-buffer
+        val policy = transportPolicyProvider()
+        if (policy != null && !policy.warmAheadEnabled) return
+
         val streamUrl = currentVodCacheUrl ?: return
         val upstreamFactory = currentWarmAheadUpstreamFactory ?: return
         val capBytes = resolveVodCacheMaxBytes(context)

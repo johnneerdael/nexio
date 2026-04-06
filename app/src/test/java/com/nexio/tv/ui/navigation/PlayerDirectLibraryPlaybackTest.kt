@@ -37,6 +37,31 @@ class PlayerDirectLibraryPlaybackTest {
     }
 
     @Test
+    fun `player route preserves and decodes service key`() {
+        val route = Screen.Player.createRoute(
+            streamUrl = "https://cdn.test/video.mkv",
+            title = "Direct Play",
+            serviceKey = "RD",
+            launchSource = PlayerLaunchSource.STREAM
+        )
+
+        assertTrue(route.contains("serviceKey=RD"))
+
+        val args = PlayerNavigationArgs.from(
+            SavedStateHandle(
+                mapOf(
+                    "streamUrl" to "https%3A%2F%2Fcdn.test%2Fvideo.mkv",
+                    "title" to "Direct%20Play",
+                    "serviceKey" to "RD",
+                    "launchSource" to "stream"
+                )
+            )
+        )
+
+        assertEquals("RD", args.serviceKey)
+    }
+
+    @Test
     fun `debrid library content id still returns to library when launch source is missing`() {
         assertTrue(
             shouldReturnDirectLibraryPlaybackToLibrary(
