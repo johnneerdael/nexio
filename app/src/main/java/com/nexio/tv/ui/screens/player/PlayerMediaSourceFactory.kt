@@ -70,6 +70,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     @Volatile private var currentVodCacheResolvedUrl: String? = null
     @Volatile private var currentVodCacheActive: Boolean = false
     @Volatile private var currentProgressiveUpstreamFactory: DataSource.Factory? = null
+    @Volatile private var currentWarmAheadUpstreamFactory: DataSource.Factory? = null
     @Volatile private var currentProgressiveIsEligibleForWarmAhead: Boolean = false
     private val parallelStartupPrefetchUnlocked = AtomicBoolean(true)
     private val activeReadBytePosition = AtomicLong(0L)
@@ -146,6 +147,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             currentVodCacheResolvedUrl = null
             currentVodCacheActive = false
             currentProgressiveUpstreamFactory = null
+            currentWarmAheadUpstreamFactory = null
             currentProgressiveIsEligibleForWarmAhead = false
             return createBlurayMediaSource(
                 source = blurayLocalSource,
@@ -188,6 +190,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         currentVodCacheResolvedUrl = null
         currentVodCacheActive = false
         currentProgressiveUpstreamFactory = progressiveUpstreamFactory
+        currentWarmAheadUpstreamFactory = okHttpFactory // single-connection for warm-ahead
         currentProgressiveIsEligibleForWarmAhead = useVodCache
         val vodCacheMaxBytes = resolveVodCacheMaxBytes(context)
         if (useVodCache && !isVodCacheDisabled) {
@@ -258,6 +261,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             if (remoteBluraySource != null) {
                 currentVodCacheActive = false
                 currentProgressiveUpstreamFactory = null
+                currentWarmAheadUpstreamFactory = null
                 currentProgressiveIsEligibleForWarmAhead = false
                 return createBlurayMediaSource(
                     playlistName = remoteBluraySource.playlistName,
@@ -699,7 +703,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         if (vodCacheSizeMode != VodCacheSizeMode.ON) return
         if (!currentProgressiveIsEligibleForWarmAhead || !currentVodCacheActive) return
         val streamUrl = currentVodCacheUrl ?: return
-        val upstreamFactory = currentProgressiveUpstreamFactory ?: return
+        val upstreamFactory = currentWarmAheadUpstreamFactory ?: return
         val capBytes = resolveVodCacheMaxBytes(context)
         val cache = getAnySimpleCache() ?: return
 
