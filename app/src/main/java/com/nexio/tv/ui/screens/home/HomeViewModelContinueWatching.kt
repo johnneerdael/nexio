@@ -8,9 +8,15 @@ import com.nexio.tv.data.repository.ContinueWatchingResumeRef
 import com.nexio.tv.data.repository.ContinueWatchingTimelineRow
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.buildMixedContinueWatchingTimeline
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.homeDisplayItemKey
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -51,7 +57,109 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     )
                 }
             }
+
+            val settings = currentTmdbSettings
+            if (settings.isActive && settings.useBasicInfo) {
+                continueWatchingEnrichmentJob?.cancel()
+                continueWatchingEnrichmentJob = viewModelScope.launch {
+                    try {
+                        val enrichedItems = enrichContinueWatchingItems(items, settings)
+                        val enrichedTraktItems = enrichContinueWatchingNextUpItems(traktUpNextItems, settings)
+                        _uiState.update { state ->
+                            state.copy(
+                                continueWatchingItems = enrichedItems,
+                                traktUpNextItems = enrichedTraktItems
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Log.w(HomeViewModel.TAG, "Continue watching TMDB enrichment failed: ${e.message}")
+                    }
+                }
+            }
         }
+    }
+}
+
+private suspend fun HomeViewModel.enrichContinueWatchingItems(
+    items: List<ContinueWatchingItem>,
+    settings: TmdbSettings
+): List<ContinueWatchingItem> = coroutineScope {
+    items.map { item ->
+        async(Dispatchers.IO) {
+            enrichContinueWatchingItemWithTmdb(item, settings)
+        }
+    }.awaitAll()
+}
+
+private suspend fun HomeViewModel.enrichContinueWatchingNextUpItems(
+    items: List<ContinueWatchingItem.NextUp>,
+    settings: TmdbSettings
+): List<ContinueWatchingItem.NextUp> = coroutineScope {
+    items.map { item ->
+        async(Dispatchers.IO) {
+            enrichContinueWatchingItemWithTmdb(item, settings) as? ContinueWatchingItem.NextUp ?: item
+        }
+    }.awaitAll()
+}
+
+private suspend fun HomeViewModel.enrichContinueWatchingItemWithTmdb(
+    item: ContinueWatchingItem,
+    settings: TmdbSettings
+): ContinueWatchingItem {
+    val contentId = when (item) {
+        is ContinueWatchingItem.InProgress -> item.progress.contentId
+        is ContinueWatchingItem.NextUp -> item.info.contentId
+    }
+    val contentType = when (item) {
+        is ContinueWatchingItem.InProgress -> item.progress.contentType
+        is ContinueWatchingItem.NextUp -> item.info.contentType
+    }
+    return try {
+        val tmdbId = tmdbService.ensureTmdbId(contentId, contentType) ?: return item
+        val enrichment = tmdbMetadataService.fetchEnrichment(
+            tmdbId = tmdbId,
+            contentType = ContentType.fromString(contentType)
+        ) ?: return item
+
+        val existing = when (item) {
+            is ContinueWatchingItem.InProgress -> item.displayMetadata
+            is ContinueWatchingItem.NextUp -> item.info.displayMetadata
+        }
+
+        val enrichedMetadata = HomeDisplayMetadata(
+            title = enrichment.localizedTitle ?: existing?.title,
+            description = enrichment.description ?: existing?.description,
+            genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else existing?.genres.orEmpty(),
+            imdbRating = enrichment.rating?.toFloat() ?: existing?.imdbRating,
+            poster = if (settings.useArtwork) enrichment.poster ?: existing?.poster else existing?.poster,
+            backdrop = if (settings.useArtwork) enrichment.backdrop ?: existing?.backdrop else existing?.backdrop,
+            logo = if (settings.useArtwork) enrichment.logo ?: existing?.logo else existing?.logo,
+            releaseInfo = if (settings.useDetails) enrichment.releaseInfo ?: existing?.releaseInfo else existing?.releaseInfo,
+            runtime = existing?.runtime,
+            tomatoesRating = existing?.tomatoesRating
+        )
+
+        when (item) {
+            is ContinueWatchingItem.InProgress -> item.copy(
+                displayMetadata = enrichedMetadata,
+                genres = enrichedMetadata.genres.ifEmpty { item.genres },
+                releaseInfo = enrichedMetadata.releaseInfo ?: item.releaseInfo
+            )
+            is ContinueWatchingItem.NextUp -> item.copy(
+                info = item.info.copy(
+                    displayMetadata = enrichedMetadata,
+                    name = enrichedMetadata.title?.takeIf { it.isNotBlank() } ?: item.info.name,
+                    poster = enrichedMetadata.poster ?: item.info.poster,
+                    backdrop = enrichedMetadata.backdrop ?: item.info.backdrop,
+                    logo = enrichedMetadata.logo ?: item.info.logo,
+                    genres = enrichedMetadata.genres.ifEmpty { item.info.genres },
+                    releaseInfo = enrichedMetadata.releaseInfo ?: item.info.releaseInfo
+                )
+            )
+        }
+    } catch (e: Exception) {
+        Log.w(HomeViewModel.TAG, "TMDB enrichment failed for continue watching item $contentId: ${e.message}")
+        item
     }
 }
 

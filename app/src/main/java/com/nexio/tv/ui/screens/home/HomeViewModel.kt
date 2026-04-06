@@ -173,6 +173,7 @@ class HomeViewModel @Inject constructor(
     internal var persistedTraktSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var persistedMDBListSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var heroEnrichmentJob: Job? = null
+    internal var continueWatchingEnrichmentJob: Job? = null
     internal var lastHeroEnrichmentSignature: String? = null
     internal var lastHeroEnrichedItems: List<MetaPreview> = emptyList()
     internal val trailerPreviewLoadingIds = mutableStateMapOf<String, Boolean>()

@@ -60,7 +60,8 @@ private class DefaultDirectBenchmarkReadableSourceFactoryBuilder(
         chunkWaitTimeoutMs: Long,
         allowStartupBootstrapReuse: Boolean,
         transportSampleTimeMs: () -> Long,
-        onTransportBytesDownloaded: (Long, Long) -> Unit
+        onTransportBytesDownloaded: (Long, Long) -> Unit,
+        onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
     ): BenchmarkReadableSourceFactory {
         val upstreamFactory = OkHttpDataSource.Factory(okHttpClient).apply {
             setDefaultRequestProperties(candidate.headers)

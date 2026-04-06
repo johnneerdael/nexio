@@ -276,7 +276,7 @@ class DebridBenchmarkStore internal constructor(
     }
 
     private fun DebridBenchmarkSessionMetadata.isValid(): Boolean {
-        return benchmarkVersion > 0 &&
+        return benchmarkVersion >= MINIMUM_BENCHMARK_VERSION &&
             totalElapsedMs?.let { it >= 0L } != false &&
             executionOrder.all { it.isValid() }
     }
@@ -814,6 +814,7 @@ class DebridBenchmarkStore internal constructor(
     }
 
     companion object {
+        private const val MINIMUM_BENCHMARK_VERSION = 4
         private const val TAG = "DebridBenchmarkStore"
         private val INTEGRAL_NUMBER_REGEX = Regex("^-?\\d+$")
     }
