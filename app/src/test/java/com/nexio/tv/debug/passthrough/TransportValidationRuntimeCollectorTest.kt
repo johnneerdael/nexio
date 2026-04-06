@@ -3,9 +3,7 @@ package com.nexio.tv.debug.passthrough
 import android.os.SystemClock
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.analytics.PlaybackStats
-import androidx.media3.exoplayer.analytics.PlaybackStatsListener
 import io.mockk.every
-import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import kotlinx.coroutines.Dispatchers
@@ -195,14 +193,11 @@ class TransportValidationRuntimeCollectorTest {
             settings = TransportValidationSettings(runtimeValidationEnabled = true),
         )
         val session = activeSession(collector)
-        val playbackStats = PlaybackStats.EMPTY
-        val playbackStatsListener = mockk<PlaybackStatsListener>()
-        every { playbackStatsListener.getCombinedPlaybackStats() } returns playbackStats
-        setPrivateField(session, "playbackStatsListener", playbackStatsListener)
+        val expectedStats =
+            TransportValidationRuntimeVerdictCalculator.playbackStatsSummary(PlaybackStats.EMPTY)
+        setPrivateField(session, "lastPlaybackStatsSummary", expectedStats)
 
         val initialSnapshot = collector.snapshot()
-        val expectedStats =
-            TransportValidationRuntimeVerdictCalculator.playbackStatsSummary(playbackStats)
         assertNotNull(initialSnapshot?.playbackStats)
         assertEquals(expectedStats, initialSnapshot?.playbackStats)
 

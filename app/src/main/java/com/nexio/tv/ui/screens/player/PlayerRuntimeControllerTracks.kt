@@ -143,6 +143,7 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                             index = audioTracks.size,
                             name = displayName,
                             language = format.language,
+                            trackId = format.id,
                             codec = codecName,
                             channelCount = format.channelCount.takeIf { it > 0 },
                             isSelected = isSelected
@@ -460,6 +461,7 @@ internal fun PlayerRuntimeController.maybeApplyStartupPreferredAudioSelection(
         audioTracks = audioTracks,
         targets = preferredAudioLanguages,
         currentSelectedIndex = currentSelectedIndex,
+        originalLanguage = originalLanguage,
         capabilitySupport = detectStartupAudioCapabilitySupport()
     )
     autoAudioSelected = true
@@ -892,6 +894,8 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
         secondaryLanguage = state.subtitleStyle.secondaryPreferredLanguage,
         hasScannedTextTracksOnce = hasScannedTextTracksOnce,
         playerReady = backendIsReady(),
+        addonSubtitleDiscoveryPending =
+            state.isLoadingAddonSubtitles || startupSubtitlePreparationJob?.isActive == true,
         aiTranslationConfigured = geminiEnabled && geminiApiKey.isNotBlank(),
         startupPhase = !hasRenderedFirstFrame
     )

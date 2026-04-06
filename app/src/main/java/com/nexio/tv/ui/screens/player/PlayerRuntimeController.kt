@@ -237,7 +237,7 @@ class PlayerRuntimeController(
     internal var lastActiveSkipType: String? = null
     internal var autoSubtitleSelected: Boolean = false
     internal var autoAudioSelected: Boolean = false
-    internal var lastPreferredAudioLanguage: String = AudioLanguageOption.DEVICE
+    internal var lastPreferredAudioLanguage: String = AudioLanguageOption.ORIGINAL
     internal var lastSecondaryPreferredAudioLanguage: String? = null
     internal var lastSubtitlePreferredLanguage: String? = null
     internal var lastSubtitleSecondaryLanguage: String? = null

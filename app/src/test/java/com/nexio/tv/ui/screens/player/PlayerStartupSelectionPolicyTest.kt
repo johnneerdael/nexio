@@ -33,6 +33,58 @@ class PlayerStartupSelectionPolicyTest {
     }
 
     @Test
+    fun `startup audio selection keeps original language ahead of higher quality foreign track`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "eng (AAC Stereo)", language = "eng", codec = "AAC", channelCount = 2),
+            TrackInfo(index = 1, name = "ita (AC-3 5.1)", language = "ita", codec = "AC-3", channelCount = 6)
+        )
+
+        val index = findBestStartupAudioTrackIndex(
+            audioTracks = tracks,
+            targets = listOf("en"),
+            originalLanguage = "en"
+        )
+
+        assertEquals(0, index)
+    }
+
+    @Test
+    fun `startup audio selection infers original language track from original alias when metadata is und`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "Original Audio (AC-3 5.1)", language = "und", codec = "AC-3", channelCount = 6),
+            TrackInfo(index = 1, name = "English Dub (TrueHD 7.1)", language = "en", codec = "TrueHD", channelCount = 8)
+        )
+
+        val index = findBestStartupAudioTrackIndex(
+            audioTracks = tracks,
+            targets = listOf("ja"),
+            originalLanguage = "ja",
+            capabilitySupport = StartupAudioCapabilitySupport(
+                ac3Supported = true,
+                truehdSupported = true
+            )
+        )
+
+        assertEquals(0, index)
+    }
+
+    @Test
+    fun `startup audio selection infers language from csv aliases when tags are missing`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "Italiano (AC-3 5.1)", language = null, codec = "AC-3", channelCount = 6),
+            TrackInfo(index = 1, name = "English (AAC Stereo)", language = null, codec = "AAC", channelCount = 2)
+        )
+
+        val index = findBestStartupAudioTrackIndex(
+            audioTracks = tracks,
+            targets = listOf("en"),
+            originalLanguage = "en"
+        )
+
+        assertEquals(1, index)
+    }
+
+    @Test
     fun `startup audio selection prefers higher quality original track among same language matches`() {
         val tracks = listOf(
             TrackInfo(index = 0, name = "Dubbed (DTS-HD 7ch)", language = "ru"),
@@ -45,6 +97,7 @@ class PlayerStartupSelectionPolicyTest {
         val index = findBestStartupAudioTrackIndex(
             tracks,
             listOf("en"),
+            originalLanguage = "en",
             capabilitySupport = StartupAudioCapabilitySupport(
                 ac3Supported = true,
                 truehdSupported = true
@@ -61,7 +114,7 @@ class PlayerStartupSelectionPolicyTest {
             TrackInfo(index = 1, name = "Original (AC-3 5.1)", language = "en", codec = "AC-3", channelCount = 6)
         )
 
-        val index = findBestStartupAudioTrackIndex(tracks, listOf("en"))
+        val index = findBestStartupAudioTrackIndex(tracks, listOf("en"), originalLanguage = "en")
 
         assertEquals(1, index)
     }
@@ -78,6 +131,7 @@ class PlayerStartupSelectionPolicyTest {
             audioTracks = tracks,
             targets = listOf("en"),
             currentSelectedIndex = 1,
+            originalLanguage = "en",
             capabilitySupport = StartupAudioCapabilitySupport(
                 ac3Supported = true,
                 truehdSupported = true
@@ -99,6 +153,7 @@ class PlayerStartupSelectionPolicyTest {
             audioTracks = tracks,
             targets = listOf("en"),
             currentSelectedIndex = 1,
+            originalLanguage = "en",
             capabilitySupport = StartupAudioCapabilitySupport(
                 ac3Supported = true,
                 truehdSupported = true
@@ -118,6 +173,7 @@ class PlayerStartupSelectionPolicyTest {
         val index = findBestStartupAudioTrackIndex(
             audioTracks = tracks,
             targets = listOf("en"),
+            originalLanguage = "en",
             capabilitySupport = StartupAudioCapabilitySupport(
                 ac3Supported = true,
                 truehdSupported = false
@@ -138,6 +194,7 @@ class PlayerStartupSelectionPolicyTest {
             audioTracks = tracks,
             targets = listOf("en"),
             currentSelectedIndex = 0,
+            originalLanguage = "en",
             capabilitySupport = StartupAudioCapabilitySupport(
                 ac3Supported = true,
                 truehdSupported = false
@@ -169,6 +226,7 @@ class PlayerStartupSelectionPolicyTest {
             secondaryLanguage = "en",
             hasScannedTextTracksOnce = true,
             playerReady = true,
+            addonSubtitleDiscoveryPending = false,
             aiTranslationConfigured = true,
             startupPhase = true
         )
@@ -191,6 +249,7 @@ class PlayerStartupSelectionPolicyTest {
             secondaryLanguage = "en",
             hasScannedTextTracksOnce = true,
             playerReady = true,
+            addonSubtitleDiscoveryPending = false,
             aiTranslationConfigured = true,
             startupPhase = true
         )
@@ -214,6 +273,7 @@ class PlayerStartupSelectionPolicyTest {
             secondaryLanguage = "en",
             hasScannedTextTracksOnce = true,
             playerReady = true,
+            addonSubtitleDiscoveryPending = false,
             aiTranslationConfigured = true,
             startupPhase = false
         )
@@ -222,5 +282,26 @@ class PlayerStartupSelectionPolicyTest {
             StartupSubtitleAutoSelectionDecision.Internal(index = 0, enableAiTranslation = false),
             decision
         )
+    }
+
+    @Test
+    fun `startup subtitle selection defers secondary internal fallback while addon discovery is pending`() {
+        val internalTracks = listOf(
+            TrackInfo(index = 0, name = "English", language = "en")
+        )
+
+        val decision = decideStartupSubtitleAutoSelection(
+            subtitleTracks = internalTracks,
+            addonSubtitles = emptyList(),
+            preferredLanguage = "nl",
+            secondaryLanguage = "en",
+            hasScannedTextTracksOnce = true,
+            playerReady = true,
+            addonSubtitleDiscoveryPending = true,
+            aiTranslationConfigured = true,
+            startupPhase = true
+        )
+
+        assertEquals(StartupSubtitleAutoSelectionDecision.DeferAddonFallback, decision)
     }
 }
