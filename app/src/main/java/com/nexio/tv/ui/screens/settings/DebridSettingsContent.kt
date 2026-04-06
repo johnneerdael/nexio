@@ -2181,9 +2181,11 @@ internal class DebridSettingsViewModel @Inject internal constructor(
         val transportBenchmarkActive = benchmarkActive as? DebridBenchmarkRuntimeState.Running
         val blockedByActiveRun =
             (activeRun != null && activeRun.provider != provider) || transportBenchmarkActive != null
+        // Config benchmark is superseded by the frontier-based transport benchmark.
+        // CapabilityEnvelope now derives worker counts and chunk sizes automatically.
         return DebridProviderConfigBenchmarkUi(
-            isVisible = isVisible,
-            canRun = isVisible && !isRunning && !blockedByActiveRun,
+            isVisible = false,
+            canRun = false,
             isRunning = isRunning,
             blockedByActiveRun = blockedByActiveRun,
             latestResult = latestResult,
