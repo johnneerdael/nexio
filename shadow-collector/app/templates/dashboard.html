@@ -6,21 +6,23 @@
   <title>Shadow Autoplay Dashboard</title>
   <link rel="stylesheet" href="/static/styles.css">
   <style>
-    /* Explorer layout */
+    /* Explorer layout - 2-column grid */
     .explorer-layout {
       display: grid;
-      grid-template-columns: 220px 1fr 280px;
+      grid-template-columns: 260px 1fr;
       gap: 0;
       min-height: 0;
-      flex: 1;
     }
 
     /* Filter rail */
     .filter-rail {
-      border-right: 1px solid var(--border, #e2e8f0);
+      border-right: 1px solid var(--border);
       padding: 1rem;
+      position: sticky;
+      top: 0;
+      height: calc(100vh - 200px);
       overflow-y: auto;
-      background: var(--surface-alt, #f8fafc);
+      background: var(--panel);
     }
     .filter-rail form {
       display: flex;
@@ -32,7 +34,7 @@
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: var(--text-muted, #94a3b8);
+      color: var(--muted);
       margin-bottom: 0.25rem;
       margin-top: 0.25rem;
     }
@@ -44,17 +46,17 @@
     .filter-rail .field span {
       font-size: 0.7rem;
       font-weight: 600;
-      color: var(--text-muted, #64748b);
+      color: var(--muted);
     }
     .filter-rail input,
     .filter-rail select {
       width: 100%;
       font-size: 0.8rem;
       padding: 0.35rem 0.5rem;
-      border: 1px solid var(--border, #e2e8f0);
+      border: 1px solid var(--border);
       border-radius: 4px;
-      background: var(--surface, #fff);
-      color: var(--text, #1e293b);
+      background: var(--bg);
+      color: var(--text);
       box-sizing: border-box;
     }
     .filter-rail .field-actions {
@@ -95,9 +97,9 @@
       font-weight: 500;
       padding: 0.2rem 0.55rem;
       border-radius: 9999px;
-      background: var(--accent-light, #eff6ff);
-      color: var(--accent, #3b82f6);
-      border: 1px solid var(--accent-border, #bfdbfe);
+      background: rgba(104, 163, 255, 0.08);
+      color: var(--accent);
+      border: 1px solid rgba(104, 163, 255, 0.18);
     }
 
     /* Date group header */
@@ -105,14 +107,18 @@
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      padding: 0.4rem 0;
-      margin: 0.5rem 0 0.25rem;
+      padding: 0.4rem 0.5rem;
+      margin: 0.5rem 0 0;
       font-size: 0.7rem;
       font-weight: 700;
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      color: var(--text-muted, #64748b);
-      border-bottom: 1px solid var(--border, #e2e8f0);
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      background: rgba(22, 34, 57, 0.6);
+      position: sticky;
+      top: 0;
+      z-index: 5;
     }
     .date-group-header .dg-sep {
       opacity: 0.4;
@@ -123,16 +129,16 @@
       font-weight: 600;
       padding: 0.1rem 0.45rem;
       border-radius: 9999px;
-      background: var(--surface-alt, #f1f5f9);
-      color: var(--text-muted, #64748b);
+      background: var(--panel-soft);
+      color: var(--muted);
     }
     .date-group-badge.needs-review {
-      background: #fef9c3;
-      color: #854d0e;
+      background: rgba(255, 209, 102, 0.16);
+      color: var(--warning);
     }
 
     /* Event rows */
-    .event-row {
+    a.event-row {
       display: grid;
       grid-template-columns: 52px 1fr 130px 160px 160px 90px;
       gap: 0.5rem;
@@ -142,34 +148,37 @@
       cursor: pointer;
       border: 1px solid transparent;
       transition: background 0.1s, border-color 0.1s;
+      text-decoration: none;
+      color: inherit;
+      tabindex: 0;
     }
-    .event-row:hover {
-      background: var(--surface-alt, #f8fafc);
-      border-color: var(--border, #e2e8f0);
+    a.event-row:hover {
+      background: rgba(255, 255, 255, 0.03);
+      border-color: var(--border);
     }
-    .event-row.event-row-active {
-      background: var(--accent-light, #eff6ff);
-      border-color: var(--accent-border, #bfdbfe);
+    a.event-row:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
     }
 
     .er-time {
       font-size: 0.72rem;
       font-variant-numeric: tabular-nums;
-      color: var(--text-muted, #64748b);
+      color: var(--muted);
       padding-top: 0.1rem;
     }
     .er-content {}
     .er-title {
       font-size: 0.82rem;
       font-weight: 600;
-      color: var(--text, #1e293b);
+      color: var(--text);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
     .er-meta {
       font-size: 0.68rem;
-      color: var(--text-muted, #94a3b8);
+      color: var(--muted);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -185,135 +194,56 @@
       letter-spacing: 0.04em;
     }
     .chip-chosen {
-      background: #dcfce7;
-      color: #166534;
+      background: rgba(126, 240, 200, 0.16);
+      color: var(--accent-2);
     }
     .chip-review {
-      background: #fef9c3;
-      color: #854d0e;
+      background: rgba(255, 209, 102, 0.16);
+      color: var(--warning);
     }
     .er-quality {
       font-size: 0.68rem;
-      color: var(--text-muted, #64748b);
+      color: var(--muted);
       margin-top: 0.2rem;
     }
     .er-decision {
       font-size: 0.72rem;
-      color: var(--text-muted, #475569);
+      color: var(--muted);
       line-height: 1.4;
     }
     .er-decision .score {
       font-weight: 600;
-      color: var(--text, #1e293b);
+      color: var(--text);
     }
     .er-client {
       font-size: 0.68rem;
-      color: var(--text-muted, #94a3b8);
+      color: var(--muted);
       line-height: 1.4;
     }
     .er-flags {
       font-size: 0.68rem;
-      color: var(--text-muted, #94a3b8);
+      color: var(--muted);
       text-align: right;
     }
     .er-flags .viable {
-      color: #16a34a;
+      color: var(--accent-2);
       font-weight: 600;
     }
     .er-flags .rejected {
-      color: #dc2626;
+      color: var(--danger);
     }
 
     /* Empty state */
     .empty-explorer {
       padding: 3rem 1rem;
       text-align: center;
-      color: var(--text-muted, #94a3b8);
+      color: var(--muted);
       font-size: 0.85rem;
     }
 
-    /* Preview pane */
+    /* Preview pane - hidden for now */
     .preview-pane {
-      border-left: 1px solid var(--border, #e2e8f0);
-      padding: 1rem;
-      overflow-y: auto;
-      background: var(--surface, #fff);
-    }
-    .preview-empty {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      color: var(--text-muted, #94a3b8);
-      font-size: 0.8rem;
-      text-align: center;
-      gap: 0.5rem;
-    }
-    .preview-empty svg {
-      opacity: 0.25;
-    }
-    .preview-content {
       display: none;
-    }
-    .preview-content.visible {
-      display: block;
-    }
-    .preview-title {
-      font-size: 0.85rem;
-      font-weight: 700;
-      color: var(--text, #1e293b);
-      margin-bottom: 0.2rem;
-    }
-    .preview-id {
-      font-size: 0.68rem;
-      color: var(--text-muted, #94a3b8);
-      margin-bottom: 0.75rem;
-    }
-    .preview-section {
-      margin-bottom: 0.75rem;
-    }
-    .preview-section-label {
-      font-size: 0.62rem;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--text-muted, #94a3b8);
-      margin-bottom: 0.35rem;
-    }
-    .preview-kv {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 0.2rem 0.6rem;
-      font-size: 0.72rem;
-    }
-    .preview-kv dt {
-      color: var(--text-muted, #64748b);
-      white-space: nowrap;
-    }
-    .preview-kv dd {
-      margin: 0;
-      color: var(--text, #1e293b);
-      font-weight: 500;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .preview-narrative {
-      font-size: 0.72rem;
-      color: var(--text-muted, #475569);
-      line-height: 1.5;
-      margin-bottom: 0.75rem;
-    }
-    .preview-link {
-      display: inline-block;
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: var(--accent, #3b82f6);
-      text-decoration: none;
-    }
-    .preview-link:hover {
-      text-decoration: underline;
     }
 
     /* KPI band */
@@ -321,11 +251,12 @@
       display: grid;
       grid-template-columns: repeat(5, 1fr);
       gap: 0;
-      border-bottom: 1px solid var(--border, #e2e8f0);
+      border-bottom: 1px solid var(--border);
     }
     .kpi-card {
       padding: 0.85rem 1.1rem;
-      border-right: 1px solid var(--border, #e2e8f0);
+      background: var(--panel);
+      border-right: 1px solid var(--border);
     }
     .kpi-card:last-child {
       border-right: none;
@@ -333,19 +264,19 @@
     .kpi-value {
       font-size: 1.5rem;
       font-weight: 700;
-      color: var(--text, #1e293b);
+      color: var(--text);
       line-height: 1.1;
       font-variant-numeric: tabular-nums;
     }
     .kpi-label {
       font-size: 0.68rem;
       font-weight: 600;
-      color: var(--text-muted, #64748b);
+      color: var(--muted);
       margin-top: 0.2rem;
     }
     .kpi-sub {
       font-size: 0.62rem;
-      color: var(--text-muted, #94a3b8);
+      color: var(--muted);
       margin-top: 0.1rem;
     }
 
@@ -355,42 +286,23 @@
       align-items: center;
       justify-content: space-between;
       padding: 0.75rem 1.25rem;
-      border-bottom: 1px solid var(--border, #e2e8f0);
-      background: var(--surface, #fff);
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
     }
     .page-header-left .page-title {
       font-size: 0.95rem;
       font-weight: 700;
-      color: var(--text, #1e293b);
+      color: var(--text);
       margin: 0;
     }
     .page-header-left .page-sub {
       font-size: 0.7rem;
-      color: var(--text-muted, #94a3b8);
+      color: var(--muted);
       margin: 0;
     }
     .header-actions {
       display: flex;
       gap: 0.5rem;
-    }
-
-    /* Shell override for three-pane layout */
-    body {
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      overflow: hidden;
-    }
-    .shell {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-height: 0;
-      overflow: hidden;
-    }
-    .explorer-layout {
-      flex: 1;
-      min-height: 0;
     }
   </style>
 </head>
@@ -462,36 +374,6 @@
           <label class="field">
             <span>Search</span>
             <input type="search" name="q" value="{{ filters.q }}" placeholder="Title, provider, file, audio…">
-          </label>
-
-          <label class="field">
-            <span>Provider</span>
-            <select name="provider">
-              <option value="">All providers</option>
-              {% for value in options.providers %}
-                <option value="{{ value }}" {% if filters.provider == value %}selected{% endif %}>{{ value }}</option>
-              {% endfor %}
-            </select>
-          </label>
-
-          <label class="field">
-            <span>Content type</span>
-            <select name="content_type">
-              <option value="">All types</option>
-              {% for value in options.content_types %}
-                <option value="{{ value }}" {% if filters.content_type == value %}selected{% endif %}>{{ value }}</option>
-              {% endfor %}
-            </select>
-          </label>
-
-          <label class="field">
-            <span>Transport</span>
-            <select name="transport">
-              <option value="">All transports</option>
-              {% for value in options.transports %}
-                <option value="{{ value }}" {% if filters.transport == value %}selected{% endif %}>{{ value }}</option>
-              {% endfor %}
-            </select>
           </label>
 
           <label class="field">
@@ -586,32 +468,9 @@
               {% for row in group.events %}
                 {% set selected = row.selected %}
                 {% set client = row.client %}
-                <div class="event-row"
-                  data-event-id="{{ row.id }}"
-                  data-title="{{ row.title | e }}"
-                  data-time="{{ row.event_time.full | e }}"
-                  data-relative="{{ row.event_time.relative | e }}"
-                  data-provider="{{ selected.provider if selected else '' }}"
-                  data-service="{{ selected.service if selected else '' }}"
-                  data-score="{{ selected.score if selected and selected.score is not none else '' }}"
-                  data-ratio="{{ selected.ratio_label if selected else '' }}"
-                  data-resolution="{{ selected.resolution if selected else '' }}"
-                  data-hdr="{{ selected.hdr if selected else '' }}"
-                  data-audio="{{ selected.audio if selected else '' }}"
-                  data-transport="{{ selected.transport if selected else '' }}"
-                  data-bitrate="{{ selected.bitrate_label if selected else '' }}"
-                  data-size="{{ selected.size_label if selected else '' }}"
-                  data-quality="{{ selected.quality_profile if selected else '' }}"
-                  data-normalized="{{ selected.normalized_label if selected else '' }}"
-                  data-device="{{ client.deviceModel if client else '' }}"
-                  data-app-version="{{ client.appVersion if client else '' }}"
-                  data-sdk="{{ client.sdkInt if client else '' }}"
-                  data-winners="{{ row.winner_count }}"
-                  data-rejected="{{ row.rejected_count }}"
-                  data-narrative="{{ row.decision_narrative | e if row.decision_narrative else '' }}"
-                  data-runtime="{{ row.runtime_human }}"
-                  data-content-type="{{ row.content_type }}"
-                  onclick="selectEvent(this, {{ row.id }})"
+                <a class="event-row"
+                  href="/events/{{ row.id }}"
+                  tabindex="0"
                 >
                   <!-- Col 1: time -->
                   <div class="er-time">{{ row.event_time.time }}</div>
@@ -642,7 +501,7 @@
                       <br>{{ selected.bitrate_label if selected.bitrate_label else '—' }}
                       &bull; {{ selected.size_label if selected.size_label else '—' }}
                     {% else %}
-                      <span style="color: var(--text-muted, #94a3b8)">No selection</span>
+                      <span style="color: var(--muted)">No selection</span>
                     {% endif %}
                   </div>
 
@@ -661,7 +520,7 @@
                     <span class="viable">{{ row.winner_count }}</span> viable<br>
                     <span class="rejected">{{ row.rejected_count }}</span> rejected
                   </div>
-                </div>
+                </a>
               {% endfor %}
               {% endif %}
             {% endfor %}

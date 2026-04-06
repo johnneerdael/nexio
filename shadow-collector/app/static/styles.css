@@ -26,6 +26,12 @@ body {
 a { color: #b7d0ff; text-decoration: none; }
 a:hover { color: #ffffff; }
 
+a.event-row {
+  text-decoration: none;
+  color: inherit;
+  display: grid;
+}
+
 /* ─── Base Utilities ──────────────────────────────────── */
 
 .mono { font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace; }
@@ -192,6 +198,7 @@ select {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 16px;
+  padding: 20px 32px;
   margin-bottom: 24px;
 }
 
@@ -226,6 +233,26 @@ select {
   margin-top: 6px;
 }
 
+.kpi-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.kpi-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 8px;
+}
+
+.kpi-sub {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-top: 4px;
+}
+
 /* ─── Legacy Stats Grid ───────────────────────────────── */
 
 .stats-grid,
@@ -244,10 +271,15 @@ select {
 .filter-rail {
   width: 260px;
   position: sticky;
-  top: 32px;
+  top: 0;
+  height: calc(100vh - 200px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 20px;
 }
 
 .filter-rail-section {
@@ -291,20 +323,20 @@ select {
 .filter-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
 .filter-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px 3px 10px;
-  border-radius: 999px;
-  background: rgba(104, 163, 255, 0.14);
-  border: 1px solid rgba(104, 163, 255, 0.2);
+  gap: 6px;
   font-size: 0.78rem;
-  color: var(--text);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(104, 163, 255, 0.12);
+  color: var(--accent);
+  border: 1px solid rgba(104, 163, 255, 0.18);
 }
 
 .filter-chip-remove {
@@ -332,18 +364,18 @@ select {
 }
 
 .date-group-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--panel-soft);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
   position: sticky;
   top: 0;
-  z-index: 2;
-  display: grid;
-  grid-template-columns: 1fr auto auto auto;
-  gap: 16px;
-  align-items: center;
-  padding: 12px 16px;
-  background: rgba(18, 28, 50, 0.97);
-  border-bottom: 1px solid var(--border);
-  font-weight: 600;
-  backdrop-filter: blur(8px);
+  z-index: 5;
 }
 
 .date-group-header .date-label {
@@ -358,16 +390,25 @@ select {
 
 .event-row {
   display: grid;
-  grid-template-columns: 80px 1fr 180px 200px 180px 120px;
-  gap: 0;
-  align-items: center;
-  padding: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  grid-template-columns: 70px 1fr 160px 200px 160px 100px;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  border-radius: 12px;
   cursor: pointer;
-  transition: background 0.1s ease;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
 }
 
-.event-row:hover { background: rgba(255, 255, 255, 0.03); }
+.event-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--border);
+}
+
+.event-row:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 
 .event-row > * {
   padding: 14px 12px;
@@ -403,6 +444,115 @@ select {
 .event-row .ev-decision { font-size: 0.85rem; }
 .event-row .ev-client { font-size: 0.82rem; color: var(--muted); }
 .event-row .ev-flags { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* ─── Explorer Layout ────────────────────────────────── */
+
+.explorer-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 0;
+}
+
+/* ─── Event Row Zones ─────────────────────────────────── */
+
+.er-time {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.er-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.er-meta {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.er-quality {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.er-decision {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.er-decision .score {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.er-client {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.er-flags {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-align: right;
+}
+
+.er-flags .viable { color: var(--accent-2); font-weight: 600; }
+.er-flags .rejected { color: var(--danger); }
+
+/* ─── Status Chips ────────────────────────────────────── */
+
+.er-status-chip {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chip-chosen {
+  background: rgba(126, 240, 200, 0.16);
+  color: var(--accent-2);
+  border: 1px solid rgba(126, 240, 200, 0.2);
+}
+
+.chip-review {
+  background: rgba(255, 209, 102, 0.16);
+  color: var(--warning);
+  border: 1px solid rgba(255, 209, 102, 0.2);
+}
+
+/* ─── Filter Section Label ────────────────────────────── */
+
+.filter-section-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 8px 0 4px;
+}
+
+/* ─── Date Group Badge ────────────────────────────────── */
+
+.date-group-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+}
+
+.date-group-badge.needs-review {
+  background: rgba(255, 209, 102, 0.16);
+  color: var(--warning);
+}
 
 /* ─── Preview Pane ────────────────────────────────────── */
 
@@ -1135,6 +1285,9 @@ pre {
   .filter-rail {
     position: static;
     width: 100%;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
   }
 
   .preview-pane {
@@ -1159,8 +1312,20 @@ pre {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .explorer-layout {
+    grid-template-columns: 1fr;
+  }
+
   .kpi-band {
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  .event-row {
+    grid-template-columns: 70px 1fr 140px;
+  }
+
+  .er-decision, .er-client, .er-flags {
+    display: none;
   }
 }
 
@@ -1191,13 +1356,17 @@ pre {
   .data-table { min-width: 1120px; }
 
   .event-row {
-    grid-template-columns: 60px 1fr 120px;
+    grid-template-columns: 60px 1fr;
   }
 
   .event-row .ev-outcome,
   .event-row .ev-decision,
   .event-row .ev-client,
   .event-row .ev-flags {
+    display: none;
+  }
+
+  .er-outcome {
     display: none;
   }
 

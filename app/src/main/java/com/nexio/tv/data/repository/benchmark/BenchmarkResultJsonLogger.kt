@@ -410,6 +410,15 @@ private fun DebridBenchmarkTransportProfile.toJsonObject(): JsonObject {
             sustained.estimatedMinCacheHeadroomMs?.let { addProperty("estimatedMinCacheHeadroomMs", it) }
             sustained.bytesTransferred?.let { addProperty("bytesTransferred", it) }
             sustained.elapsedMs?.let { addProperty("elapsedMs", it) }
+            sustained.frontierMetrics?.let { fm ->
+                add("frontierMetrics", JsonObject().apply {
+                    addProperty("totalFrontierEvents", fm.totalFrontierEvents)
+                    addProperty("finalFrontierBytes", fm.finalFrontierBytes)
+                    fm.frontierAdvanceRateMbps?.let { addProperty("frontierAdvanceRateMbps", it) }
+                    addProperty("frontierStallCount", fm.frontierStallCount)
+                    addProperty("maxFrontierStallMs", fm.maxFrontierStallMs)
+                })
+            }
         })
         add("seek", JsonObject().apply {
             seek.seekTtfbP50Ms?.let { addProperty("seekTtfbP50Ms", it) }
@@ -424,6 +433,18 @@ private fun DebridBenchmarkTransportProfile.toJsonObject(): JsonObject {
                 decision.startupSafeBudgetMbps?.let { addProperty("startupSafeBudgetMbps", it) }
                 decision.steadyStateSafeBudgetMbps?.let { addProperty("steadyStateSafeBudgetMbps", it) }
                 addProperty("actionable", decision.actionable)
+                decision.legacyBudgetMbps?.let { addProperty("legacyBudgetMbps", it) }
+                decision.budgetDivergenceRatio?.let { addProperty("budgetDivergenceRatio", it) }
+                decision.shadowPlayerResult?.let { spr ->
+                    add("shadowPlayerResult", JsonObject().apply {
+                        addProperty("maxSustainableBitrateMbps", spr.maxSustainableBitrateMbps)
+                        addProperty("safeBudgetMbps", spr.safeBudgetMbps)
+                        addProperty("searchIterations", spr.searchIterations)
+                        addProperty("startupBufferMs", spr.startupBufferMs)
+                        addProperty("maxBufferMs", spr.maxBufferMs)
+                        addProperty("simulatedRebufferCount", spr.simulatedRebufferCount)
+                    })
+                }
             })
         }
         configSnapshot?.let { config ->
@@ -458,6 +479,17 @@ private fun DebridBenchmarkTransportProfile.toJsonObject(): JsonObject {
                     })
                 }
             })
+            if (rawSamples.frontierEvents.isNotEmpty()) {
+                add("frontierEvents", JsonArray().apply {
+                    rawSamples.frontierEvents.forEach { event ->
+                        add(JsonObject().apply {
+                            addProperty("tMs", event.tMs)
+                            addProperty("contiguousFrontierBytes", event.contiguousFrontierBytes)
+                            addProperty("deltaContiguousBytes", event.deltaContiguousBytes)
+                        })
+                    }
+                })
+            }
         })
     }
 }
