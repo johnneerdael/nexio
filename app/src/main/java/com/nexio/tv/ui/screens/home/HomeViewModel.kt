@@ -475,6 +475,9 @@ class HomeViewModel @Inject constructor(
     fun openContinueWatchingListPicker(item: ContinueWatchingItem) =
         openContinueWatchingListPickerPipeline(item)
 
+    fun toggleContinueWatchingLibrary(item: ContinueWatchingItem) =
+        toggleContinueWatchingLibraryPipeline(item)
+
     private fun observeInstalledAddons() = observeInstalledAddonsPipeline()
 
     private suspend fun loadAllCatalogs(addons: List<Addon>, forceReload: Boolean = false) =

@@ -981,6 +981,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             episodeRatingsSelectionRepository = episodeRatingsSelectionRepository,
             libraryRepository = libraryRepository,
             watchProgressRepository = watchProgressRepository,
+            continueWatchingSnapshotService = mockk(relaxed = true),
             addonRepository = addonRepository,
             traktScrobbleService = traktScrobbleService,
             layoutPreferenceDataStore = layoutPreferenceDataStore,

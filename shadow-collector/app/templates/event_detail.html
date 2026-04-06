@@ -495,12 +495,14 @@
       <!-- Rail Card 4: Benchmarks -->
       <div class="rail-card">
         <h3>Benchmarks</h3>
-        {% if latest_benchmark %}
-          <dl class="rail-dl">
-            <dt>Provider</dt><dd>{{ latest_benchmark.provider }}</dd>
-            <dt>Measured</dt><dd>{{ latest_benchmark.measured_at_label }}</dd>
-          </dl>
-          <a class="button" style="display:block; margin-top:.6rem; font-size:.82rem;" href="/benchmarks/{{ latest_benchmark.id }}/download">Download benchmark JSON</a>
+        {% if benchmarks %}
+          {% for bm in benchmarks %}
+            <dl class="rail-dl" {% if not loop.first %}style="margin-top:.8rem; padding-top:.8rem; border-top:1px solid var(--border,#333);"{% endif %}>
+              <dt>Provider</dt><dd>{{ bm.provider }}</dd>
+              <dt>Measured</dt><dd>{{ bm.measured_at_label }}</dd>
+            </dl>
+            <a class="button" style="display:block; margin-top:.6rem; font-size:.82rem;" href="/benchmarks/{{ bm.id }}/download">Download {{ bm.provider }} benchmark</a>
+          {% endfor %}
         {% elif event.benchmarks_used %}
           <ul style="list-style:none; padding:0; margin:0; font-size:.85rem; display:flex; flex-direction:column; gap:.35rem;">
             {% for benchmark in event.benchmarks_used %}

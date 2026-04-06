@@ -107,8 +107,12 @@ internal class ParallelRangeDataSource(
     private val closed = AtomicBoolean(false)
     private var activeChunkSize: Long = chunkSize
 
-    // Page-level frontier buffer — replaces the old chunk/future map
-    private var frontierBuffer = PagedFrontierBuffer()
+    // Page-level frontier buffer — wrapped behind an AbsoluteByteStore façade (Phase 2).
+    // The underlying PagedFrontierBuffer is unchanged; `store` is the seam that Phase 3
+    // will route producers through.
+    private var store: AbsoluteByteStore = PagedFrontierByteStore()
+    private var openSession: OpenSession? = null
+    private var cursor: SequentialReadCursor? = null
     private var scheduler: DualLaneScheduler? = null
 
     // Condition for readers waiting on data to arrive
@@ -157,7 +161,10 @@ internal class ParallelRangeDataSource(
         // Cancel any in-flight work from a previous open (e.g., after seek)
         scheduler?.cancelAll()
         scheduler = null
-        frontierBuffer.reset()
+        cursor?.close()
+        cursor = null
+        openSession = null
+        store.reset()
         scheduledRanges.clear()
         frontierPromotionCounts.clear()
         lastDownloadError = null
@@ -175,10 +182,10 @@ internal class ParallelRangeDataSource(
             bootstrapStartPosition = cached.startPosition
 
             // Write bootstrap data into frontier buffer immediately
-            frontierBuffer = PagedFrontierBuffer()
-            if (cached.startPosition > 0L) frontierBuffer.setBasePosition(cached.startPosition)
-            frontierBuffer.setTotalLength(totalFileLength)
-            frontierBuffer.onBytesWritten(cached.startPosition, cached.bootstrapData, 0, cached.bootstrapSize)
+            store = PagedFrontierByteStore()
+            if (cached.startPosition > 0L) store.setBasePosition(cached.startPosition)
+            store.setTotalLength(totalFileLength)
+            store.writeAt(cached.startPosition, cached.bootstrapData, 0, cached.bootstrapSize)
             bootstrapCoverageEnd = cached.startPosition + cached.bootstrapSize
 
             // Fire onChunkBytesDownloaded for cached bootstrap data
@@ -210,6 +217,23 @@ internal class ParallelRangeDataSource(
 
             bootstrapPrefetchDeferred = true
             scheduler = DualLaneScheduler(parallelConnections, 1)
+            openSession = OpenSession(
+                requestSpec = dataSpec,
+                resolvedUri = resolvedUri,
+                startPosition = cached.startPosition,
+                openLength = cached.openLength,
+                totalFileLength = totalFileLength,
+                acceptsRanges = true,
+                responseHeaders = emptyMap()
+            )
+            cursor = DefaultSequentialReadCursor(
+                session = openSession!!,
+                store = store,
+                waitForBytes = ::waitForBytesAt,
+                onPositionAdvanced = onReadPositionAdvanced,
+                keepBehindBytes = keepBehindBytes,
+                chunkWaitTimeoutMs = chunkWaitTimeoutMs
+            )
             Log.d(
                 TAG,
                 "Reusing bootstrap window for immediate reopen at ${cached.startPosition}, " +
@@ -249,9 +273,9 @@ internal class ParallelRangeDataSource(
         totalFileLength = position + openLength
         bytesRemaining = openLength
 
-        frontierBuffer = PagedFrontierBuffer()
-        if (position > 0L) frontierBuffer.setBasePosition(position)
-        frontierBuffer.setTotalLength(totalFileLength)
+        store = PagedFrontierByteStore()
+        if (position > 0L) store.setBasePosition(position)
+        store.setTotalLength(totalFileLength)
         scheduler = DualLaneScheduler(parallelConnections, 1)
 
         System.err.println("DIAG open() ${parallelConnections}conn ${activeChunkSize / 1024 / 1024}MB chunks " +
@@ -267,7 +291,7 @@ internal class ParallelRangeDataSource(
             bootstrapStartPosition = position
 
             // Write bootstrap data into frontier buffer
-            frontierBuffer.onBytesWritten(position, bootstrapData, 0, bootstrapSize)
+            store.writeAt(position, bootstrapData, 0, bootstrapSize)
             bootstrapCoverageEnd = position + bootstrapSize
 
             // Fire onChunkBytesDownloaded for bootstrap data so FrontierTracker (benchmark)
@@ -325,7 +349,45 @@ internal class ParallelRangeDataSource(
             probeSource.close()
         }
 
+        openSession = OpenSession(
+            requestSpec = dataSpec,
+            resolvedUri = resolvedUri,
+            startPosition = position,
+            openLength = openLength,
+            totalFileLength = totalFileLength,
+            acceptsRanges = acceptsRanges,
+            responseHeaders = responseHeaders
+        )
+        cursor = DefaultSequentialReadCursor(
+            session = openSession!!,
+            store = store,
+            waitForBytes = ::waitForBytesAt,
+            onPositionAdvanced = onReadPositionAdvanced,
+            keepBehindBytes = keepBehindBytes,
+            chunkWaitTimeoutMs = chunkWaitTimeoutMs
+        )
         return openLength
+    }
+
+    /**
+     * Phase 2 stub: cursor's wait-for-bytes hook. Not routed through `read()` yet — installed
+     * only so [DefaultSequentialReadCursor] can be constructed. The real sequential-read path
+     * is still the inline loop inside [read]. Phase 3 will consolidate them.
+     */
+    private fun waitForBytesAt(position: Long, deadlineNanos: Long): WaitOutcome {
+        readLock.lock()
+        try {
+            if (closed.get()) return WaitOutcome.CLOSED
+            lastDownloadError?.let { return WaitOutcome.ERROR }
+            val remaining = deadlineNanos - System.nanoTime()
+            if (remaining <= 0L) return WaitOutcome.TIMEOUT
+            dataAvailable.awaitNanos(remaining)
+            if (closed.get()) return WaitOutcome.CLOSED
+            if (lastDownloadError != null) return WaitOutcome.ERROR
+            return WaitOutcome.DATA_AVAILABLE
+        } finally {
+            readLock.unlock()
+        }
     }
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
@@ -357,7 +419,7 @@ internal class ParallelRangeDataSource(
         continuationSource?.let { source ->
             val bootstrapEnd = if (bootstrapStartPosition != C.TIME_UNSET) {
                 // frontier already includes bootstrap bytes; use frontier as the boundary
-                frontierBuffer.frontier
+                store.frontier
             } else {
                 0L
             }
@@ -369,7 +431,7 @@ internal class ParallelRangeDataSource(
                 if (read > 0) {
                     onTransportBytesDownloaded(read.toLong(), transportSampleTimeMs())
                     // Also write into frontier buffer so frontier advances for later reads
-                    frontierBuffer.onBytesWritten(position, buffer, offset, read)
+                    store.writeAt(position, buffer, offset, read)
                     readLock.lock()
                     try { dataAvailable.signalAll() } finally { readLock.unlock() }
                     position += read
@@ -397,18 +459,18 @@ internal class ParallelRangeDataSource(
         }
 
         // Try to read from frontier buffer
-        System.err.println("DIAG pre-read pos=$position frontier=${frontierBuffer.frontier} remaining=$bytesRemaining cont=${continuationSource != null} contEnd=$continuationEndPositionExclusive bsDeferred=$bootstrapPrefetchDeferred prefetchOk=${shouldAllowBackgroundPrefetch()}")
-        val bytesRead = frontierBuffer.read(position, buffer, offset, toRead)
+        System.err.println("DIAG pre-read pos=$position frontier=${store.frontier} remaining=$bytesRemaining cont=${continuationSource != null} contEnd=$continuationEndPositionExclusive bsDeferred=$bootstrapPrefetchDeferred prefetchOk=${shouldAllowBackgroundPrefetch()}")
+        val bytesRead = store.read(position, buffer, offset, toRead)
         if (bytesRead > 0) {
             if (position < 2L * 1024L * 1024L || (totalFileLength > 0 && position > totalFileLength - 2L * 1024L * 1024L)) {
                 val preview = ByteArray(minOf(16, bytesRead))
                 System.arraycopy(buffer, offset, preview, 0, preview.size)
-                System.err.println("DIAG read() pos=$position len=$bytesRead frontier=${frontierBuffer.frontier} first16=${preview.joinToString(",") { (it.toInt() and 0xFF).toString(16) }}")
+                System.err.println("DIAG read() pos=$position len=$bytesRead frontier=${store.frontier} first16=${preview.joinToString(",") { (it.toInt() and 0xFF).toString(16) }}")
             }
             position += bytesRead
             bytesRemaining -= bytesRead
             onReadPositionAdvanced(position)
-            frontierBuffer.evictBefore(position - keepBehindBytes)
+            store.evictBefore(position - keepBehindBytes)
             scheduleChunks()
             return bytesRead
         }
@@ -424,12 +486,12 @@ internal class ParallelRangeDataSource(
                     lastDownloadError = null
                     throw error
                 }
-                val available = frontierBuffer.read(position, buffer, offset, toRead)
+                val available = store.read(position, buffer, offset, toRead)
                 if (available > 0) {
                     position += available
                     bytesRemaining -= available
                     onReadPositionAdvanced(position)
-                    frontierBuffer.evictBefore(position - keepBehindBytes)
+                    store.evictBefore(position - keepBehindBytes)
                     return available
                 }
                 val remaining = deadline - System.nanoTime()
@@ -506,7 +568,7 @@ internal class ParallelRangeDataSource(
         // Skip if this range has already been scheduled
         if (scheduledRanges.putIfAbsent(chunkIndex, true) != null) return
         // Skip if the frontier has already passed this range
-        if (frontierBuffer.frontier >= end) return
+        if (store.frontier >= end) return
 
         if (urgent) {
             sched.submitUrgent(start until end) { range ->
@@ -560,7 +622,7 @@ internal class ParallelRangeDataSource(
                     }
                     val offsetInChunk = (effectiveStart - start) + totalRead.toLong()
                     // Write into frontier buffer as bytes arrive (streaming)
-                    frontierBuffer.onBytesWritten(effectiveStart + totalRead.toLong(), readBuffer, 0, read)
+                    store.writeAt(effectiveStart + totalRead.toLong(), readBuffer, 0, read)
                     totalRead += read
                     val sampleTime = transportSampleTimeMs()
                     onTransportBytesDownloaded(read.toLong(), sampleTime)
@@ -606,7 +668,7 @@ internal class ParallelRangeDataSource(
             // If so, re-promote it for urgent requeue instead of immediately failing playback.
             val chunkStart = chunkIndex * activeChunkSize
             val chunkEnd = chunkStart + activeChunkSize
-            val currentFrontier = frontierBuffer.frontier
+            val currentFrontier = store.frontier
             // A chunk is frontier-blocking if the contiguous frontier sits inside this
             // chunk's range — meaning this chunk must complete to advance the frontier.
             val isFrontierBlocking = currentFrontier >= chunkStart && currentFrontier < chunkEnd
@@ -743,6 +805,9 @@ internal class ParallelRangeDataSource(
 
     override fun close() {
         closed.set(true)
+        cursor?.close()
+        cursor = null
+        openSession = null
         fallbackSource?.close()
         fallbackSource = null
         continuationSource?.close()
@@ -751,7 +816,7 @@ internal class ParallelRangeDataSource(
 
         scheduler?.cancelAll()
         scheduler = null
-        frontierBuffer.reset()
+        store.reset()
         scheduledRanges.clear()
         frontierPromotionCounts.clear()
 
@@ -764,10 +829,14 @@ internal class ParallelRangeDataSource(
         transferListeners.add(transferListener)
     }
 
-    override fun getUri(): Uri? = resolvedUri ?: fallbackSource?.uri
+    override fun getUri(): Uri? =
+        openSession?.resolvedUri ?: resolvedUri ?: fallbackSource?.uri
 
-    override fun getResponseHeaders(): Map<String, List<String>> =
-        fallbackSource?.responseHeaders ?: emptyMap()
+    override fun getResponseHeaders(): Map<String, List<String>> {
+        val sessionHeaders = openSession?.responseHeaders
+        if (sessionHeaders != null && sessionHeaders.isNotEmpty()) return sessionHeaders
+        return fallbackSource?.responseHeaders ?: emptyMap()
+    }
 
     private fun emitTransportObservation(responseHeaders: Map<String, List<String>>, uri: Uri?) {
         val host = uri?.host?.takeIf { it.isNotBlank() } ?: return

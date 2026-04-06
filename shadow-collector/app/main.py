@@ -2,6 +2,7 @@ import json
 import os
 import base64
 import hashlib
+import re
 import secrets
 import sqlite3
 import logging
@@ -1059,6 +1060,32 @@ def latest_benchmark_for_android_id(
     return dict(row) if row is not None else None
 
 
+def latest_benchmarks_per_provider_for_android_id(
+    conn: sqlite3.Connection,
+    android_id: Optional[str],
+) -> list[dict[str, Any]]:
+    if not android_id:
+        return []
+    rows = conn.execute(
+        """
+        SELECT id, received_at_ms, sent_at_ms, provider, measured_at_ms,
+               termination_reason, client_app_version, client_build_type,
+               client_device_model, client_sdk_int, client_android_id,
+               device_model, device_manufacturer, raw_json
+        FROM (
+            SELECT *, ROW_NUMBER() OVER (
+                PARTITION BY provider ORDER BY measured_at_ms DESC, id DESC
+            ) AS rn
+            FROM debrid_benchmark_events
+            WHERE client_android_id = ?
+        ) WHERE rn = 1
+        ORDER BY provider
+        """,
+        (android_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def public_not_found() -> None:
     LOGGER.info("Public collector route lookup failed for unresolved token or mismatched scope")
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -1292,19 +1319,17 @@ def public_event_detail(request: Request, token: str, event_id: int):
         if not event_android_id or event_android_id != android_id:
             public_not_found()
 
-        latest_benchmark_row = latest_benchmark_for_android_id(conn, android_id)
+        benchmark_rows = latest_benchmarks_per_provider_for_android_id(conn, android_id)
 
     event = build_public_event_view(dict(row))
-    latest_benchmark = (
-        build_benchmark_view(latest_benchmark_row) if latest_benchmark_row else None
-    )
+    benchmarks = [build_benchmark_view(r) for r in benchmark_rows]
     return TEMPLATES.TemplateResponse(
         request,
         "public_event_detail.html",
         {
             "event": event,
             "token": token,
-            "latest_benchmark": latest_benchmark,
+            "benchmarks": benchmarks,
         },
     )
 
@@ -1314,39 +1339,42 @@ def event_detail(request: Request, event_id: int):
     require_session(request)
     with closing(db()) as conn:
         row = conn.execute("SELECT * FROM shadow_autoplay_events WHERE id = ?", (event_id,)).fetchone()
-        latest_benchmark_row = latest_benchmark_for_android_id(
-            conn,
-            dict(row).get("client_android_id") if row is not None else None,
-        )
-    if row is None:
-        raise HTTPException(status_code=404, detail="Not found")
+        if row is None:
+            raise HTTPException(status_code=404, detail="Not found")
+        android_id = dict(row).get("client_android_id")
+        benchmark_rows = latest_benchmarks_per_provider_for_android_id(conn, android_id)
     event = build_event_view(dict(row))
-    latest_benchmark = build_benchmark_view(latest_benchmark_row) if latest_benchmark_row else None
+    benchmarks = [build_benchmark_view(r) for r in benchmark_rows]
     return TEMPLATES.TemplateResponse(
         request,
         "event_detail.html",
         {
             "event": event,
-            "latest_benchmark": latest_benchmark,
+            "benchmarks": benchmarks,
         },
     )
 
 
-@app.get("/public/{token}/benchmarks/latest/download")
-def public_benchmark_download(request: Request, token: str):
+@app.get("/public/{token}/benchmarks/{benchmark_id}/download")
+def public_benchmark_download_by_id(request: Request, token: str, benchmark_id: int):
     with closing(db()) as conn:
         android_id = resolve_public_token_android_id(conn, token)
         if android_id is None:
             public_not_found()
 
-        row = latest_benchmark_for_android_id(conn, android_id)
+        row = conn.execute(
+            "SELECT * FROM debrid_benchmark_events WHERE id = ? AND client_android_id = ?",
+            (benchmark_id, android_id),
+        ).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="Not found")
 
-    payload = build_public_benchmark_download_payload(row)
+    row_dict = dict(row)
+    payload = build_public_benchmark_download_payload(row_dict)
+    provider = re.sub(r'[^a-zA-Z0-9_-]', '_', row_dict.get("provider") or "unknown")
     return JSONResponse(
         payload,
-        headers={"Content-Disposition": 'attachment; filename="benchmark-latest.json"'},
+        headers={"Content-Disposition": f'attachment; filename="benchmark-{provider}.json"'},
     )
 
 

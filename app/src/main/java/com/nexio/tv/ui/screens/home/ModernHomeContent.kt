@@ -273,7 +273,8 @@ internal fun ModernHomeContent(
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
     onMarkContinueWatchingWatched: (ContinueWatchingItem) -> Unit = {},
     onCheckInContinueWatching: ((ContinueWatchingItem) -> Unit)? = null,
-    onManageListsContinueWatching: ((ContinueWatchingItem) -> Unit)? = null,
+    cwWatchlistMembership: Map<String, Boolean> = emptyMap(),
+    onToggleContinueWatchingLibrary: ((ContinueWatchingItem) -> Unit)? = null,
     isCatalogItemWatched: (MetaPreview) -> Boolean = { false },
     onCatalogItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
     onItemFocus: (MetaPreview) -> Unit = {},
@@ -1432,7 +1433,8 @@ internal fun ModernHomeContent(
                     optionsItem = null
                 }
             },
-            onManageLists = onManageListsContinueWatching?.let { callback ->
+            isInWatchlist = cwWatchlistMembership[selectedOptionsItem.contentId()] == true,
+            onToggleLibrary = onToggleContinueWatchingLibrary?.let { callback ->
                 {
                     callback(selectedOptionsItem)
                     optionsItem = null

@@ -72,7 +72,8 @@ fun GridHomeContent(
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
     onMarkContinueWatchingWatched: (ContinueWatchingItem) -> Unit = {},
     onCheckInContinueWatching: ((ContinueWatchingItem) -> Unit)? = null,
-    onManageListsContinueWatching: ((ContinueWatchingItem) -> Unit)? = null,
+    cwWatchlistMembership: Map<String, Boolean> = emptyMap(),
+    onToggleContinueWatchingLibrary: ((ContinueWatchingItem) -> Unit)? = null,
     isCatalogItemWatched: (MetaPreview) -> Boolean = { false },
     onCatalogItemLongPress: (MetaPreview, String) -> Unit = { _, _ -> },
     posterCardStyle: PosterCardStyle = PosterCardDefaults.Style,
@@ -231,7 +232,8 @@ fun GridHomeContent(
                                     onStartFromBeginning = onContinueWatchingStartFromBeginning,
                                     onMarkAsWatched = onMarkContinueWatchingWatched,
                                     onCheckIn = onCheckInContinueWatching,
-                                    onManageLists = onManageListsContinueWatching,
+                                    cwWatchlistMembership = cwWatchlistMembership,
+                                    onToggleLibrary = onToggleContinueWatchingLibrary,
                                     onDetailsClick = { item ->
                                         onNavigateToDetail(
                                             when (item) {
@@ -377,7 +379,8 @@ fun GridHomeContent(
                         onStartFromBeginning = onContinueWatchingStartFromBeginning,
                         onMarkAsWatched = onMarkContinueWatchingWatched,
                         onCheckIn = onCheckInContinueWatching,
-                        onManageLists = onManageListsContinueWatching,
+                        cwWatchlistMembership = cwWatchlistMembership,
+                        onToggleLibrary = onToggleContinueWatchingLibrary,
                         onDetailsClick = { item ->
                             onNavigateToDetail(
                                 when (item) {

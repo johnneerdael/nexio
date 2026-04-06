@@ -6,6 +6,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.domain.model.CatalogRow
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -26,7 +27,7 @@ class SyntheticHomeCatalogStore @Inject constructor(
         private const val TAG = "SyntheticHomeCatalog"
         private const val PREFS_NAME = "synthetic_home_catalogs"
         private const val SNAPSHOT_KEY = "snapshot"
-        private const val SCHEMA_VERSION = 2
+        private const val SCHEMA_VERSION = 3
     }
 
     private val gson = Gson()
@@ -53,6 +54,7 @@ class SyntheticHomeCatalogStore @Inject constructor(
             val payload = JsonObject().apply {
                 addProperty("schemaVersion", SCHEMA_VERSION)
                 addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
+                addProperty("languageTag", currentLanguageTag())
                 add("traktGroups", encodeGroups(snapshot.traktGroups))
                 add("mdbListGroups", encodeGroups(snapshot.mdbListGroups))
             }
@@ -81,10 +83,18 @@ class SyntheticHomeCatalogStore @Inject constructor(
         if (languageEpoch != metadataDiskCacheStore.currentLanguageEpoch()) {
             return null
         }
+        val languageTag = root.get("languageTag")?.asString?.trim().orEmpty()
+        if (languageTag.isBlank() || languageTag != currentLanguageTag()) {
+            return null
+        }
         return Snapshot(
             traktGroups = decodeGroups(root.getAsJsonArray("traktGroups")),
             mdbListGroups = decodeGroups(root.getAsJsonArray("mdbListGroups"))
         )
+    }
+
+    private fun currentLanguageTag(): String {
+        return AppLocaleResolver.resolveEffectiveAppLanguageTag(context)
     }
 
     private fun decodeGroups(array: JsonArray?): List<PersistedSyntheticCatalogGroup> {

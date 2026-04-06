@@ -136,6 +136,17 @@ fun HomeViewModel.openPosterListPicker(item: MetaPreview, addonBaseUrl: String?)
     }
 }
 
+fun HomeViewModel.toggleContinueWatchingLibraryPipeline(item: ContinueWatchingItem) {
+    viewModelScope.launch {
+        runCatching {
+            val input = item.toLibraryEntryInput()
+            libraryRepository.toggleDefault(input)
+        }.onFailure { error ->
+            Log.w(HomeViewModel.TAG, "Failed to toggle CW library: ${error.message}")
+        }
+    }
+}
+
 fun HomeViewModel.openContinueWatchingListPickerPipeline(item: ContinueWatchingItem) {
     if (_uiState.value.librarySourceMode != LibrarySourceMode.TRAKT) return
     val input = item.toLibraryEntryInput()

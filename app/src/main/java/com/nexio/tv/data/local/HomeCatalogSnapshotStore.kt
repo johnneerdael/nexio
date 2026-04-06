@@ -5,6 +5,7 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -21,7 +22,7 @@ class HomeCatalogSnapshotStore @Inject constructor(
         private const val TAG = "HomeCatalogSnapshot"
         private const val PREFS_NAME = "home_catalog_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
-        private const val SCHEMA_VERSION = 3
+        private const val SCHEMA_VERSION = 4
     }
 
     private val gson = Gson()
@@ -50,6 +51,7 @@ class HomeCatalogSnapshotStore @Inject constructor(
             val payload = JsonObject().apply {
                 addProperty("schemaVersion", SCHEMA_VERSION)
                 addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
+                addProperty("languageTag", currentLanguageTag())
                 add("catalogRows", gson.toJsonTree(snapshot.catalogRows))
                 add("fullCatalogRows", gson.toJsonTree(snapshot.fullCatalogRows))
                 add("heroItems", gson.toJsonTree(snapshot.heroItems))
@@ -73,11 +75,15 @@ class HomeCatalogSnapshotStore @Inject constructor(
     private fun decodeSnapshot(raw: String): Snapshot? {
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
         val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
-        if (schemaVersion in 1 until SCHEMA_VERSION) {
+        if (schemaVersion != SCHEMA_VERSION) {
             return null
         }
         val languageEpoch = root.get("languageEpoch")?.asInt ?: metadataDiskCacheStore.currentLanguageEpoch()
-        if (schemaVersion >= SCHEMA_VERSION && languageEpoch != metadataDiskCacheStore.currentLanguageEpoch()) {
+        if (languageEpoch != metadataDiskCacheStore.currentLanguageEpoch()) {
+            return null
+        }
+        val languageTag = root.get("languageTag")?.asString?.trim().orEmpty()
+        if (languageTag.isBlank() || languageTag != currentLanguageTag()) {
             return null
         }
         val canonical = Snapshot(
@@ -100,6 +106,10 @@ class HomeCatalogSnapshotStore @Inject constructor(
         val array = root.getAsJsonArray(key) ?: return emptyList()
         val type = object : TypeToken<List<T>>() {}.type
         return gson.fromJson<List<T>>(array, type) ?: emptyList()
+    }
+
+    private fun currentLanguageTag(): String {
+        return AppLocaleResolver.resolveEffectiveAppLanguageTag(context)
     }
 
     private fun Snapshot.sanitize(): Snapshot {
