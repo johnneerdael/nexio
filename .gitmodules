@@ -10,3 +10,6 @@
 	path = nexio-web
 	url = https://github.com/johnneerdael/nexio-web.git
 	branch = main
+[submodule "tools/frontiersimulator"]
+	path = tools/frontiersimulator
+	url = https://github.com/johnneerdael/frontiersimulator.git
