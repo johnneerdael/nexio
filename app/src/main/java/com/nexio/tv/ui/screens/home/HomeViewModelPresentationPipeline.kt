@@ -218,11 +218,6 @@ internal fun HomeViewModel.refreshTrailerMetadataAvailabilityPipeline(rows: List
 
     catalogItems.forEach { item ->
         val availabilityKey = homeTrailerAvailabilityKey(item.id, item.apiType)
-        if (item.trailerYtIds.any { it.isNotBlank() }) {
-            trailerMetadataAvailableState[availabilityKey] = true
-            trailerMetadataAvailabilityInFlightKeys.remove(availabilityKey)
-            return@forEach
-        }
         if (trailerMetadataAvailableState.containsKey(availabilityKey)) {
             return@forEach
         }
@@ -556,23 +551,11 @@ private fun HomeViewModel.flushMetadataEnrichmentPipeline() {
     catalogsMap.forEach { (key, row) ->
         var mutableItems: MutableList<MetaPreview>? = null
         row.items.forEachIndexed { index, currentItem ->
-            val incomingTrailerYtIds = metaByItemId[currentItem.id]?.trailerYtIds.orEmpty()
             val mergedItem = mergeFocusedItemEnrichment(
                 currentItem = currentItem,
                 tmdbEnrichment = tmdbByItemId[currentItem.id],
                 externalMeta = metaByItemId[currentItem.id]
             )
-            if (incomingTrailerYtIds.isNotEmpty() &&
-                !trailerPreviewUrlsState.containsKey(currentItem.id) &&
-                !trailerPreviewExternalUrlsState.containsKey(currentItem.id)
-            ) {
-                trailerMetadataAvailableState[homeTrailerAvailabilityKey(currentItem.id, currentItem.apiType)] = true
-                trailerPreviewNegativeCache.remove(currentItem.id)
-                if (activeTrailerPreviewItemId == currentItem.id) {
-                    trailerPreviewRequestVersion++
-                    requestTrailerPreviewPipeline(mergedItem)
-                }
-            }
             if (mergedItem != currentItem) {
                 val updatedItems = mutableItems ?: row.items.toMutableList().also { mutableItems = it }
                 updatedItems[index] = mergedItem

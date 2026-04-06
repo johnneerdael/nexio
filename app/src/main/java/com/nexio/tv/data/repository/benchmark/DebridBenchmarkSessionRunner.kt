@@ -174,12 +174,6 @@ private fun DebridBenchmarkTransportProfile.withDerivedDecisionMetrics(
             maxBufferMs = maxBufferMs
         ).findMaxSustainableBitrate(frontierEvents)
     } else {
-        if (frontierEvents.isEmpty() && sustained.actionable) {
-            android.util.Log.w(
-                "BenchmarkDecision",
-                "Benchmark completed but no frontier events — onChunkBytesDownloaded callback may not be wired"
-            )
-        }
         null
     }
     // Use shadow player budget as primary, fall back to legacy

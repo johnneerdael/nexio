@@ -405,11 +405,10 @@ class ShadowCollectorDashboardTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         html = response.text
         self.assertIn("name=\"q\"", html)
-        self.assertIn("<th>Service</th>", html)
-        self.assertIn("<th>File</th>", html)
-        self.assertIn("<th>HDR</th>", html)
-        self.assertIn("Invincible.2021.S04E02.1080p.AMZN.WEB-DL", html)
-        self.assertIn("winner=real_debrid optimized service=RD", html)
+        self.assertIn("Invincible", html)
+        self.assertIn("kpi-card", html)
+        self.assertIn("event-row", html)
+        self.assertIn("date-group-header", html)
 
     def test_detail_renders_bitrate_section_and_candidate_table(self):
         event_id = self.ingest_sample()
@@ -417,11 +416,8 @@ class ShadowCollectorDashboardTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         html = response.text
-        self.assertIn("Bitrate comparison", html)
+        self.assertIn("Bitrate landscape", html)
         self.assertIn("Candidate comparison", html)
-        self.assertIn("Debrid", html)
-        self.assertIn("Res.", html)
-        self.assertNotIn("Insufficient Transport Budget", html)
         self.assertIn("DD+", html)
 
     def test_completed_benchmark_result_can_be_ingested_and_exported(self):
@@ -683,7 +679,7 @@ class ShadowCollectorDashboardTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         html = response.text
-        self.assertIn("Latest device benchmark", html)
+        self.assertIn("Benchmarks", html)
         self.assertIn("/benchmarks/", html)
         self.assertIn("/download", html)
 

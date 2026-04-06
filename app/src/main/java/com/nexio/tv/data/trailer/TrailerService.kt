@@ -246,10 +246,6 @@ class TrailerService(
     ): Boolean = withContext(Dispatchers.IO) {
         val fallbackYtCount = fallbackYtIds.count { it.isNotBlank() }
         trailerDebugLog("getTitleMediaAvailability start tmdbId=$tmdbId type=$type contentId=$contentId fallbackYtIds=$fallbackYtCount")
-        if (fallbackYtCount > 0) {
-            trailerDebugLog("getTitleMediaAvailability resolved via fallbackYtIds contentId=$contentId")
-            return@withContext true
-        }
 
         val numericTmdbId = tmdbId?.toIntOrNull()
         val mediaType = normalizeTmdbMediaType(type)
@@ -271,9 +267,18 @@ class TrailerService(
 
         val streailerCandidate = fetchStreailerStreams(contentId = contentId, type = type)
             ?.let(::selectStreailerTrailerCandidate)
-        val available = hasInternalStreailerCandidate(streailerCandidate)
-        trailerDebugLog("getTitleMediaAvailability fallback result contentId=$contentId streailerCandidate=${streailerCandidate != null} available=$available")
-        available
+        if (hasInternalStreailerCandidate(streailerCandidate)) {
+            trailerDebugLog("getTitleMediaAvailability resolved via streailer contentId=$contentId")
+            return@withContext true
+        }
+
+        if (fallbackYtCount > 0) {
+            trailerDebugLog("getTitleMediaAvailability resolved via fallbackYtIds contentId=$contentId")
+            return@withContext true
+        }
+
+        trailerDebugLog("getTitleMediaAvailability not available contentId=$contentId")
+        false
     }
 
     internal suspend fun getSeasonTrailerPlaybackSource(

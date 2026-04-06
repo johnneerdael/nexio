@@ -56,9 +56,9 @@ class ShadowPlayerSimulation(
         }
 
         return SimulationRun(
-            survived = rebufferCount == 0,
+            survived = started && rebufferCount == 0,
             rebufferCount = rebufferCount,
-            minBufferMs = minBufferMs
+            minBufferMs = if (started) minBufferMs else 0L
         )
     }
 

@@ -3,16 +3,414 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Nexio Shadow Collector</title>
+  <title>Shadow Autoplay Dashboard</title>
   <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    /* Explorer layout */
+    .explorer-layout {
+      display: grid;
+      grid-template-columns: 220px 1fr 280px;
+      gap: 0;
+      min-height: 0;
+      flex: 1;
+    }
+
+    /* Filter rail */
+    .filter-rail {
+      border-right: 1px solid var(--border, #e2e8f0);
+      padding: 1rem;
+      overflow-y: auto;
+      background: var(--surface-alt, #f8fafc);
+    }
+    .filter-rail form {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .filter-section-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted, #94a3b8);
+      margin-bottom: 0.25rem;
+      margin-top: 0.25rem;
+    }
+    .filter-rail .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .filter-rail .field span {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--text-muted, #64748b);
+    }
+    .filter-rail input,
+    .filter-rail select {
+      width: 100%;
+      font-size: 0.8rem;
+      padding: 0.35rem 0.5rem;
+      border: 1px solid var(--border, #e2e8f0);
+      border-radius: 4px;
+      background: var(--surface, #fff);
+      color: var(--text, #1e293b);
+      box-sizing: border-box;
+    }
+    .filter-rail .field-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin-top: 0.25rem;
+    }
+    .filter-rail .button {
+      width: 100%;
+      text-align: center;
+      font-size: 0.8rem;
+      padding: 0.45rem 0.5rem;
+    }
+
+    /* Event explorer */
+    .event-explorer {
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .explorer-inner {
+      padding: 0.75rem 1rem;
+    }
+
+    /* Filter chips */
+    .filter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-bottom: 0.75rem;
+    }
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.7rem;
+      font-weight: 500;
+      padding: 0.2rem 0.55rem;
+      border-radius: 9999px;
+      background: var(--accent-light, #eff6ff);
+      color: var(--accent, #3b82f6);
+      border: 1px solid var(--accent-border, #bfdbfe);
+    }
+
+    /* Date group header */
+    .date-group-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0;
+      margin: 0.5rem 0 0.25rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-muted, #64748b);
+      border-bottom: 1px solid var(--border, #e2e8f0);
+    }
+    .date-group-header .dg-sep {
+      opacity: 0.4;
+    }
+    .date-group-badge {
+      display: inline-block;
+      font-size: 0.65rem;
+      font-weight: 600;
+      padding: 0.1rem 0.45rem;
+      border-radius: 9999px;
+      background: var(--surface-alt, #f1f5f9);
+      color: var(--text-muted, #64748b);
+    }
+    .date-group-badge.needs-review {
+      background: #fef9c3;
+      color: #854d0e;
+    }
+
+    /* Event rows */
+    .event-row {
+      display: grid;
+      grid-template-columns: 52px 1fr 130px 160px 160px 90px;
+      gap: 0.5rem;
+      align-items: start;
+      padding: 0.55rem 0.5rem;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .event-row:hover {
+      background: var(--surface-alt, #f8fafc);
+      border-color: var(--border, #e2e8f0);
+    }
+    .event-row.event-row-active {
+      background: var(--accent-light, #eff6ff);
+      border-color: var(--accent-border, #bfdbfe);
+    }
+
+    .er-time {
+      font-size: 0.72rem;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-muted, #64748b);
+      padding-top: 0.1rem;
+    }
+    .er-content {}
+    .er-title {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text, #1e293b);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .er-meta {
+      font-size: 0.68rem;
+      color: var(--text-muted, #94a3b8);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .er-outcome {}
+    .er-status-chip {
+      display: inline-block;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.15rem 0.5rem;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .chip-chosen {
+      background: #dcfce7;
+      color: #166534;
+    }
+    .chip-review {
+      background: #fef9c3;
+      color: #854d0e;
+    }
+    .er-quality {
+      font-size: 0.68rem;
+      color: var(--text-muted, #64748b);
+      margin-top: 0.2rem;
+    }
+    .er-decision {
+      font-size: 0.72rem;
+      color: var(--text-muted, #475569);
+      line-height: 1.4;
+    }
+    .er-decision .score {
+      font-weight: 600;
+      color: var(--text, #1e293b);
+    }
+    .er-client {
+      font-size: 0.68rem;
+      color: var(--text-muted, #94a3b8);
+      line-height: 1.4;
+    }
+    .er-flags {
+      font-size: 0.68rem;
+      color: var(--text-muted, #94a3b8);
+      text-align: right;
+    }
+    .er-flags .viable {
+      color: #16a34a;
+      font-weight: 600;
+    }
+    .er-flags .rejected {
+      color: #dc2626;
+    }
+
+    /* Empty state */
+    .empty-explorer {
+      padding: 3rem 1rem;
+      text-align: center;
+      color: var(--text-muted, #94a3b8);
+      font-size: 0.85rem;
+    }
+
+    /* Preview pane */
+    .preview-pane {
+      border-left: 1px solid var(--border, #e2e8f0);
+      padding: 1rem;
+      overflow-y: auto;
+      background: var(--surface, #fff);
+    }
+    .preview-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted, #94a3b8);
+      font-size: 0.8rem;
+      text-align: center;
+      gap: 0.5rem;
+    }
+    .preview-empty svg {
+      opacity: 0.25;
+    }
+    .preview-content {
+      display: none;
+    }
+    .preview-content.visible {
+      display: block;
+    }
+    .preview-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text, #1e293b);
+      margin-bottom: 0.2rem;
+    }
+    .preview-id {
+      font-size: 0.68rem;
+      color: var(--text-muted, #94a3b8);
+      margin-bottom: 0.75rem;
+    }
+    .preview-section {
+      margin-bottom: 0.75rem;
+    }
+    .preview-section-label {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted, #94a3b8);
+      margin-bottom: 0.35rem;
+    }
+    .preview-kv {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.2rem 0.6rem;
+      font-size: 0.72rem;
+    }
+    .preview-kv dt {
+      color: var(--text-muted, #64748b);
+      white-space: nowrap;
+    }
+    .preview-kv dd {
+      margin: 0;
+      color: var(--text, #1e293b);
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .preview-narrative {
+      font-size: 0.72rem;
+      color: var(--text-muted, #475569);
+      line-height: 1.5;
+      margin-bottom: 0.75rem;
+    }
+    .preview-link {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--accent, #3b82f6);
+      text-decoration: none;
+    }
+    .preview-link:hover {
+      text-decoration: underline;
+    }
+
+    /* KPI band */
+    .kpi-band {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0;
+      border-bottom: 1px solid var(--border, #e2e8f0);
+    }
+    .kpi-card {
+      padding: 0.85rem 1.1rem;
+      border-right: 1px solid var(--border, #e2e8f0);
+    }
+    .kpi-card:last-child {
+      border-right: none;
+    }
+    .kpi-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text, #1e293b);
+      line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi-label {
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: var(--text-muted, #64748b);
+      margin-top: 0.2rem;
+    }
+    .kpi-sub {
+      font-size: 0.62rem;
+      color: var(--text-muted, #94a3b8);
+      margin-top: 0.1rem;
+    }
+
+    /* Page header */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1.25rem;
+      border-bottom: 1px solid var(--border, #e2e8f0);
+      background: var(--surface, #fff);
+    }
+    .page-header-left .page-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text, #1e293b);
+      margin: 0;
+    }
+    .page-header-left .page-sub {
+      font-size: 0.7rem;
+      color: var(--text-muted, #94a3b8);
+      margin: 0;
+    }
+    .header-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    /* Shell override for three-pane layout */
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .shell {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .explorer-layout {
+      flex: 1;
+      min-height: 0;
+    }
+  </style>
 </head>
 <body>
   <main class="shell">
+
+    <!-- Header bar -->
     <header class="page-header">
-      <div>
-        <p class="eyebrow">Shadow autoplay telemetry</p>
-        <h1>Shadow Autoplay Dashboard</h1>
-        <p class="lede">User-friendly telemetry for autoplay decisions, candidate quality, and transport fitness.</p>
+      <div class="page-header-left">
+        <h1 class="page-title">Shadow Autoplay Dashboard</h1>
+        <p class="page-sub">
+          {% set active_filters = [] %}
+          {% if filters.q %}{% set active_filters = active_filters + ['q'] %}{% endif %}
+          {% if filters.provider %}{% set active_filters = active_filters + ['provider'] %}{% endif %}
+          {% if filters.content_type %}{% set active_filters = active_filters + ['content_type'] %}{% endif %}
+          {% if filters.transport %}{% set active_filters = active_filters + ['transport'] %}{% endif %}
+          {% if filters.android_id %}{% set active_filters = active_filters + ['android_id'] %}{% endif %}
+          {% if active_filters %}Filtered by {{ active_filters | join(', ') }} &bull; {% endif %}
+          {{ kpis.events_analyzed }} events
+        </p>
       </div>
       <div class="header-actions">
         <form method="post" action="/admin/clear" onsubmit="return confirm('Clear all collected data?');">
@@ -24,163 +422,373 @@
       </div>
     </header>
 
-    <section class="stats-grid">
-      <article class="stat-card">
-        <span class="stat-label">Collected events</span>
-        <strong class="stat-value">{{ total }}</strong>
-      </article>
-      <article class="stat-card">
-        <span class="stat-label">Visible after filters</span>
-        <strong class="stat-value">{{ visible_total }}</strong>
-      </article>
-      <article class="stat-card">
-        <span class="stat-label">Average winner score</span>
-        <strong class="stat-value">{{ stats.average_score }}</strong>
-      </article>
-      <article class="stat-card">
-        <span class="stat-label">Top provider</span>
-        <strong class="stat-value">{{ stats.top_provider }}</strong>
-      </article>
-    </section>
-
-    <section class="panel">
-      <form method="get" class="filters-grid">
-        <label class="field field-search">
-          <span>Search</span>
-          <input type="search" name="q" value="{{ filters.q }}" placeholder="Title, request id, Android ID, file, provider, service, HDR, audio…">
-        </label>
-        <label class="field">
-          <span>Provider</span>
-          <select name="provider">
-            <option value="">All providers</option>
-            {% for value in options.providers %}
-              <option value="{{ value }}" {% if filters.provider == value %}selected{% endif %}>{{ value }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label class="field">
-          <span>Content type</span>
-          <select name="content_type">
-            <option value="">All types</option>
-            {% for value in options.content_types %}
-              <option value="{{ value }}" {% if filters.content_type == value %}selected{% endif %}>{{ value }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label class="field">
-          <span>Transport</span>
-          <select name="transport">
-            <option value="">All transports</option>
-            {% for value in options.transports %}
-              <option value="{{ value }}" {% if filters.transport == value %}selected{% endif %}>{{ value }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label class="field">
-          <span>Android ID</span>
-          <input type="search" name="android_id" value="{{ filters.android_id }}" placeholder="Optional device id">
-        </label>
-        <label class="field">
-          <span>Sort by</span>
-          <select name="sort">
-            <option value="received" {% if filters.sort == 'received' %}selected{% endif %}>Newest</option>
-            <option value="score" {% if filters.sort == 'score' %}selected{% endif %}>Winner score</option>
-            <option value="ratio" {% if filters.sort == 'ratio' %}selected{% endif %}>Suitability ratio</option>
-            <option value="size" {% if filters.sort == 'size' %}selected{% endif %}>File size</option>
-            <option value="bitrate" {% if filters.sort == 'bitrate' %}selected{% endif %}>Bitrate</option>
-            <option value="provider" {% if filters.sort == 'provider' %}selected{% endif %}>Provider</option>
-            <option value="title" {% if filters.sort == 'title' %}selected{% endif %}>Title</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Direction</span>
-          <select name="direction">
-            <option value="desc" {% if filters.direction == 'desc' %}selected{% endif %}>Descending</option>
-            <option value="asc" {% if filters.direction == 'asc' %}selected{% endif %}>Ascending</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Rows</span>
-          <select name="limit">
-            {% for value in [25, 50, 100, 200, 500] %}
-              <option value="{{ value }}" {% if filters.limit == value %}selected{% endif %}>{{ value }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <div class="field-actions">
-          <button class="button" type="submit">Apply</button>
-          <a class="button button-secondary" href="/">Reset</a>
-        </div>
-      </form>
-    </section>
-
-    <section class="panel table-panel">
-      <div class="panel-heading">
-        <div>
-          <h2>Decision feed</h2>
-          <p>{{ rows|length }} shown · separate columns mirror the ADB winner summary fields.</p>
-        </div>
+    <!-- KPI band -->
+    <div class="kpi-band">
+      <div class="kpi-card">
+        <div class="kpi-value">{{ kpis.events_analyzed }}</div>
+        <div class="kpi-label">Events analyzed</div>
+        <div class="kpi-sub">in selected range</div>
       </div>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Event</th>
-              <th>When</th>
-              <th>Title</th>
-              <th>Provider</th>
-              <th>Service</th>
-              <th>File</th>
-              <th>Size</th>
-              <th>Score</th>
-              <th>Ratio</th>
-              <th>Resolution</th>
-              <th>HDR</th>
-              <th>Audio</th>
-              <th>Transport</th>
-              <th>W/R</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% if rows %}
-              {% for row in rows %}
-                {% set selected = row.selected %}
-                <tr>
-                  <td>
-                    <a class="event-link" href="/events/{{ row.id }}">#{{ row.id }}</a>
-                    <div class="subtle">{{ row.request_id }}</div>
-                    <div class="subtle">{{ row.video_id }}</div>
-                  </td>
-                  <td>
-                    <div>{{ row.received_at_label }}</div>
-                    <div class="subtle">sent {{ row.sent_at_label }}</div>
-                  </td>
-                  <td>
-                    <div class="title-cell">{{ row.title }}</div>
-                    <div class="summary-line">{{ row.result_line }}</div>
-                  </td>
-                  <td><span class="pill">{{ selected.provider if selected else 'none' }}</span></td>
-                  <td>{{ selected.service if selected else '—' }}</td>
-                  <td class="file-cell" title="{{ selected.file if selected else '' }}">{{ selected.file if selected else '—' }}</td>
-                  <td>{{ selected.size_label if selected else '—' }}</td>
-                  <td>{{ selected.score if selected and selected.score is not none else '—' }}</td>
-                  <td>{{ selected.ratio_label if selected else '—' }}</td>
-                  <td>{{ selected.resolution if selected else '—' }}</td>
-                  <td>{{ selected.hdr if selected else '—' }}</td>
-                  <td>{{ selected.audio if selected else '—' }}</td>
-                  <td>{{ selected.transport if selected else '—' }}</td>
-                  <td>{{ row.winner_count }}/{{ row.rejected_count }}</td>
-                </tr>
+      <div class="kpi-card">
+        <div class="kpi-value">{{ kpis.clean_selections_pct }}</div>
+        <div class="kpi-label">Clean selections</div>
+        <div class="kpi-sub">with chosen stream</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">{{ kpis.needs_review }}</div>
+        <div class="kpi-label">Needs review</div>
+        <div class="kpi-sub">low-confidence decisions</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">{{ kpis.benchmark_coverage_pct }}</div>
+        <div class="kpi-label">Benchmark coverage</div>
+        <div class="kpi-sub">with benchmark context</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">{{ kpis.avg_candidate_pool }}</div>
+        <div class="kpi-label">Avg candidate pool</div>
+        <div class="kpi-sub">streams per event</div>
+      </div>
+    </div>
+
+    <!-- Three-zone explorer -->
+    <div class="explorer-layout">
+
+      <!-- Left: Filter rail -->
+      <aside class="filter-rail">
+        <form method="get">
+          <div class="filter-section-label">Filters</div>
+
+          <label class="field">
+            <span>Search</span>
+            <input type="search" name="q" value="{{ filters.q }}" placeholder="Title, provider, file, audio…">
+          </label>
+
+          <label class="field">
+            <span>Provider</span>
+            <select name="provider">
+              <option value="">All providers</option>
+              {% for value in options.providers %}
+                <option value="{{ value }}" {% if filters.provider == value %}selected{% endif %}>{{ value }}</option>
               {% endfor %}
-            {% else %}
-              <tr>
-                <td colspan="14" class="empty-state">No events match the current filters.</td>
-              </tr>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Content type</span>
+            <select name="content_type">
+              <option value="">All types</option>
+              {% for value in options.content_types %}
+                <option value="{{ value }}" {% if filters.content_type == value %}selected{% endif %}>{{ value }}</option>
+              {% endfor %}
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Transport</span>
+            <select name="transport">
+              <option value="">All transports</option>
+              {% for value in options.transports %}
+                <option value="{{ value }}" {% if filters.transport == value %}selected{% endif %}>{{ value }}</option>
+              {% endfor %}
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Android ID</span>
+            <input type="search" name="android_id" value="{{ filters.android_id }}" placeholder="Optional device id">
+          </label>
+
+          <div class="filter-section-label">Sort / Display</div>
+
+          <label class="field">
+            <span>Sort by</span>
+            <select name="sort">
+              <option value="received" {% if filters.sort == 'received' %}selected{% endif %}>Newest</option>
+              <option value="score" {% if filters.sort == 'score' %}selected{% endif %}>Winner score</option>
+              <option value="ratio" {% if filters.sort == 'ratio' %}selected{% endif %}>Suitability ratio</option>
+              <option value="size" {% if filters.sort == 'size' %}selected{% endif %}>File size</option>
+              <option value="bitrate" {% if filters.sort == 'bitrate' %}selected{% endif %}>Bitrate</option>
+              <option value="provider" {% if filters.sort == 'provider' %}selected{% endif %}>Provider</option>
+              <option value="title" {% if filters.sort == 'title' %}selected{% endif %}>Title</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Direction</span>
+            <select name="direction">
+              <option value="desc" {% if filters.direction == 'desc' %}selected{% endif %}>Descending</option>
+              <option value="asc" {% if filters.direction == 'asc' %}selected{% endif %}>Ascending</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Rows</span>
+            <select name="limit">
+              {% for value in [25, 50, 100, 200, 500] %}
+                <option value="{{ value }}" {% if filters.limit == value %}selected{% endif %}>{{ value }}</option>
+              {% endfor %}
+            </select>
+          </label>
+
+          <div class="field-actions">
+            <button class="button" type="submit">Apply</button>
+            <a class="button button-secondary" href="/">Reset</a>
+          </div>
+        </form>
+      </aside>
+
+      <!-- Center: Event explorer -->
+      <section class="event-explorer">
+        <div class="explorer-inner">
+
+          <!-- Active filter chips -->
+          {% set has_filters = filters.q or filters.provider or filters.content_type or filters.transport or filters.android_id %}
+          {% if has_filters %}
+          <div class="filter-chips">
+            {% if filters.q %}
+              <span class="filter-chip">search: {{ filters.q }}</span>
             {% endif %}
-          </tbody>
-        </table>
-      </div>
-    </section>
+            {% if filters.provider %}
+              <span class="filter-chip">provider: {{ filters.provider }}</span>
+            {% endif %}
+            {% if filters.content_type %}
+              <span class="filter-chip">type: {{ filters.content_type }}</span>
+            {% endif %}
+            {% if filters.transport %}
+              <span class="filter-chip">transport: {{ filters.transport }}</span>
+            {% endif %}
+            {% if filters.android_id %}
+              <span class="filter-chip">device: {{ filters.android_id }}</span>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          <!-- Date groups -->
+          {% if date_groups %}
+            {% for group in date_groups %}
+              {% if group.events %}
+              <div class="date-group-header">
+                <span>{{ group.label }}</span>
+                <span class="dg-sep">•</span>
+                <span class="date-group-badge">{{ group.count }} events</span>
+                {% if group.needs_review %}
+                  <span class="date-group-badge needs-review">{{ group.needs_review }} review</span>
+                {% endif %}
+                <span class="dg-sep">•</span>
+                <span>benchmark {{ group.benchmark_coverage_pct }}%</span>
+                {% if group.dominant_provider %}
+                  <span class="dg-sep">•</span>
+                  <span>{{ group.dominant_provider }}</span>
+                {% endif %}
+              </div>
+
+              {% for row in group.events %}
+                {% set selected = row.selected %}
+                {% set client = row.client %}
+                <div class="event-row"
+                  data-event-id="{{ row.id }}"
+                  data-title="{{ row.title | e }}"
+                  data-time="{{ row.event_time.full | e }}"
+                  data-relative="{{ row.event_time.relative | e }}"
+                  data-provider="{{ selected.provider if selected else '' }}"
+                  data-service="{{ selected.service if selected else '' }}"
+                  data-score="{{ selected.score if selected and selected.score is not none else '' }}"
+                  data-ratio="{{ selected.ratio_label if selected else '' }}"
+                  data-resolution="{{ selected.resolution if selected else '' }}"
+                  data-hdr="{{ selected.hdr if selected else '' }}"
+                  data-audio="{{ selected.audio if selected else '' }}"
+                  data-transport="{{ selected.transport if selected else '' }}"
+                  data-bitrate="{{ selected.bitrate_label if selected else '' }}"
+                  data-size="{{ selected.size_label if selected else '' }}"
+                  data-quality="{{ selected.quality_profile if selected else '' }}"
+                  data-normalized="{{ selected.normalized_label if selected else '' }}"
+                  data-device="{{ client.deviceModel if client else '' }}"
+                  data-app-version="{{ client.appVersion if client else '' }}"
+                  data-sdk="{{ client.sdkInt if client else '' }}"
+                  data-winners="{{ row.winner_count }}"
+                  data-rejected="{{ row.rejected_count }}"
+                  data-narrative="{{ row.decision_narrative | e if row.decision_narrative else '' }}"
+                  data-runtime="{{ row.runtime_human }}"
+                  data-content-type="{{ row.content_type }}"
+                  onclick="selectEvent(this, {{ row.id }})"
+                >
+                  <!-- Col 1: time -->
+                  <div class="er-time">{{ row.event_time.time }}</div>
+
+                  <!-- Col 2: content -->
+                  <div class="er-content">
+                    <div class="er-title">{{ row.title }}</div>
+                    <div class="er-meta">{{ row.content_type }}{% if row.runtime_human %} &bull; {{ row.runtime_human }}{% endif %} &bull; #{{ row.id }}</div>
+                  </div>
+
+                  <!-- Col 3: outcome -->
+                  <div class="er-outcome">
+                    {% if selected %}
+                      <span class="er-status-chip chip-chosen">Chosen</span>
+                    {% else %}
+                      <span class="er-status-chip chip-review">Review</span>
+                    {% endif %}
+                    {% if selected and selected.quality_profile %}
+                      <div class="er-quality">{{ selected.quality_profile }}</div>
+                    {% endif %}
+                  </div>
+
+                  <!-- Col 4: decision -->
+                  <div class="er-decision">
+                    {% if selected %}
+                      <span class="score">{{ selected.score if selected.score is not none else '—' }}</span> score
+                      &bull; {{ selected.ratio_label if selected.ratio_label else '—' }}
+                      <br>{{ selected.bitrate_label if selected.bitrate_label else '—' }}
+                      &bull; {{ selected.size_label if selected.size_label else '—' }}
+                    {% else %}
+                      <span style="color: var(--text-muted, #94a3b8)">No selection</span>
+                    {% endif %}
+                  </div>
+
+                  <!-- Col 5: client -->
+                  <div class="er-client">
+                    {% if client %}
+                      {{ client.deviceModel if client.deviceModel else '—' }}<br>
+                      app {{ client.appVersion if client.appVersion else '—' }} &bull; SDK {{ client.sdkInt if client.sdkInt else '—' }}
+                    {% else %}
+                      —
+                    {% endif %}
+                  </div>
+
+                  <!-- Col 6: flags -->
+                  <div class="er-flags">
+                    <span class="viable">{{ row.winner_count }}</span> viable<br>
+                    <span class="rejected">{{ row.rejected_count }}</span> rejected
+                  </div>
+                </div>
+              {% endfor %}
+              {% endif %}
+            {% endfor %}
+          {% else %}
+            <div class="empty-explorer">
+              <div>No events match the current filters.</div>
+              <a href="/">Clear filters</a>
+            </div>
+          {% endif %}
+
+        </div>
+      </section>
+
+      <!-- Right: Preview pane -->
+      <aside class="preview-pane" id="previewPane">
+        <div class="preview-empty" id="previewEmpty">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <path d="M9 9h6M9 12h6M9 15h4"/>
+          </svg>
+          <span>Select an event to preview</span>
+        </div>
+        <div class="preview-content" id="previewContent">
+          <div class="preview-title" id="pvTitle"></div>
+          <div class="preview-id" id="pvId"></div>
+
+          <div class="preview-section">
+            <div class="preview-section-label">Selection</div>
+            <dl class="preview-kv" id="pvSelection"></dl>
+          </div>
+
+          <div class="preview-section">
+            <div class="preview-section-label">Client</div>
+            <dl class="preview-kv" id="pvClient"></dl>
+          </div>
+
+          <div class="preview-section" id="pvNarrativeSection">
+            <div class="preview-section-label">Decision narrative</div>
+            <div class="preview-narrative" id="pvNarrative"></div>
+          </div>
+
+          <a class="preview-link" id="pvLink" href="#">View details &rarr;</a>
+        </div>
+      </aside>
+
+    </div>
   </main>
+
+  <script>
+    let activeRow = null;
+
+    function selectEvent(el, eventId) {
+      // Deselect previous
+      if (activeRow) activeRow.classList.remove('event-row-active');
+      el.classList.add('event-row-active');
+      activeRow = el;
+
+      const d = el.dataset;
+
+      // Toggle visibility
+      document.getElementById('previewEmpty').style.display = 'none';
+      const content = document.getElementById('previewContent');
+      content.classList.add('visible');
+
+      // Title / id
+      document.getElementById('pvTitle').textContent = d.title || '(untitled)';
+      document.getElementById('pvId').textContent = 'Event #' + eventId + ' \u2022 ' + (d.relative || d.time || '');
+
+      // Selection KVs
+      const selKv = document.getElementById('pvSelection');
+      selKv.innerHTML = '';
+      const selFields = [
+        ['Provider', d.provider],
+        ['Service', d.service],
+        ['Score', d.score],
+        ['Ratio', d.ratio],
+        ['Resolution', d.resolution],
+        ['HDR', d.hdr],
+        ['Audio', d.audio],
+        ['Transport', d.transport],
+        ['Bitrate', d.bitrate],
+        ['Size', d.size],
+        ['Profile', d.quality],
+        ['Normalised', d.normalized],
+      ];
+      selFields.forEach(function(pair) {
+        if (pair[1]) {
+          selKv.innerHTML += '<dt>' + pair[0] + '</dt><dd>' + escHtml(pair[1]) + '</dd>';
+        }
+      });
+
+      // Client KVs
+      const cliKv = document.getElementById('pvClient');
+      cliKv.innerHTML = '';
+      const cliFields = [
+        ['Device', d.device],
+        ['App version', d.appVersion],
+        ['SDK', d.sdk],
+      ];
+      cliFields.forEach(function(pair) {
+        if (pair[1]) {
+          cliKv.innerHTML += '<dt>' + pair[0] + '</dt><dd>' + escHtml(pair[1]) + '</dd>';
+        }
+      });
+
+      // Narrative
+      const narrativeSection = document.getElementById('pvNarrativeSection');
+      const narrative = document.getElementById('pvNarrative');
+      if (d.narrative) {
+        narrativeSection.style.display = '';
+        narrative.textContent = d.narrative;
+      } else {
+        narrativeSection.style.display = 'none';
+      }
+
+      // Link
+      const link = document.getElementById('pvLink');
+      link.href = '/events/' + eventId;
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+  </script>
 </body>
 </html>

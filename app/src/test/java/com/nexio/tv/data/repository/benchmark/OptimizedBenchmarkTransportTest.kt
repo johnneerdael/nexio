@@ -58,7 +58,8 @@ class OptimizedBenchmarkTransportTest {
                     chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
-                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                    onTransportBytesDownloaded: (Long, Long) -> Unit,
+                    onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
                 ): BenchmarkReadableSourceFactory {
                     observedChunkWaitTimeout = chunkWaitTimeoutMs
                     return BenchmarkReadableSourceFactory {
@@ -92,7 +93,8 @@ class OptimizedBenchmarkTransportTest {
                 chunkWaitTimeoutMs: Long,
                 allowStartupBootstrapReuse: Boolean,
                 transportSampleTimeMs: () -> Long,
-                onTransportBytesDownloaded: (Long, Long) -> Unit
+                onTransportBytesDownloaded: (Long, Long) -> Unit,
+                onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
             ): BenchmarkReadableSourceFactory {
                 observedChunkWaitTimeout = chunkWaitTimeoutMs
                 return BenchmarkReadableSourceFactory {
@@ -191,7 +193,8 @@ class OptimizedBenchmarkTransportTest {
                     chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
-                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                    onTransportBytesDownloaded: (Long, Long) -> Unit,
+                    onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
                 ): BenchmarkReadableSourceFactory {
                     return BenchmarkReadableSourceFactory {
                         object : BenchmarkReadableSource {
@@ -240,7 +243,8 @@ class OptimizedBenchmarkTransportTest {
                 chunkWaitTimeoutMs: Long,
                 allowStartupBootstrapReuse: Boolean,
                 transportSampleTimeMs: () -> Long,
-                onTransportBytesDownloaded: (Long, Long) -> Unit
+                onTransportBytesDownloaded: (Long, Long) -> Unit,
+                onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
             ): BenchmarkReadableSourceFactory {
                 return BenchmarkReadableSourceFactory {
                     object : BenchmarkReadableSource {
@@ -293,7 +297,8 @@ class OptimizedBenchmarkTransportTest {
                     chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
-                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                    onTransportBytesDownloaded: (Long, Long) -> Unit,
+                    onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
                 ): BenchmarkReadableSourceFactory {
                     return BenchmarkReadableSourceFactory {
                         object : BenchmarkReadableSource {
@@ -367,7 +372,8 @@ class OptimizedBenchmarkTransportTest {
                     chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
-                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                    onTransportBytesDownloaded: (Long, Long) -> Unit,
+                    onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
                 ): BenchmarkReadableSourceFactory {
                     return BenchmarkReadableSourceFactory {
                         RecoveringBenchmarkDataSource(clock, failedOnce)
@@ -404,7 +410,8 @@ class OptimizedBenchmarkTransportTest {
                 chunkWaitTimeoutMs: Long,
                 allowStartupBootstrapReuse: Boolean,
                 transportSampleTimeMs: () -> Long,
-                onTransportBytesDownloaded: (Long, Long) -> Unit
+                onTransportBytesDownloaded: (Long, Long) -> Unit,
+                onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
             ): BenchmarkReadableSourceFactory {
                 return BenchmarkReadableSourceFactory {
                     object : BenchmarkReadableSource {
@@ -476,7 +483,8 @@ class OptimizedBenchmarkTransportTest {
                     chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
-                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                    onTransportBytesDownloaded: (Long, Long) -> Unit,
+                    onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
                 ): BenchmarkReadableSourceFactory {
                     return BenchmarkReadableSourceFactory {
                         RecoveringBenchmarkDataSource(clock, failedOnce)
@@ -525,7 +533,8 @@ class OptimizedBenchmarkTransportTest {
                     chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
-                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                    onTransportBytesDownloaded: (Long, Long) -> Unit,
+                    onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
                 ): BenchmarkReadableSourceFactory {
                     return BenchmarkReadableSourceFactory {
                         object : BenchmarkReadableSource {
@@ -595,7 +604,8 @@ class OptimizedBenchmarkTransportTest {
                     chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
-                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                    onTransportBytesDownloaded: (Long, Long) -> Unit,
+                    onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
                 ): BenchmarkReadableSourceFactory {
                     return BenchmarkReadableSourceFactory {
                         object : BenchmarkReadableSource {
@@ -668,7 +678,8 @@ class OptimizedBenchmarkTransportTest {
                 chunkWaitTimeoutMs: Long,
                 allowStartupBootstrapReuse: Boolean,
                 transportSampleTimeMs: () -> Long,
-                onTransportBytesDownloaded: (Long, Long) -> Unit
+                onTransportBytesDownloaded: (Long, Long) -> Unit,
+                onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
             ): BenchmarkReadableSourceFactory {
                 return BenchmarkReadableSourceFactory {
                     object : BenchmarkReadableSource {
@@ -739,7 +750,8 @@ class OptimizedBenchmarkTransportTest {
                     chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
-                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                    onTransportBytesDownloaded: (Long, Long) -> Unit,
+                    onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
                 ): BenchmarkReadableSourceFactory {
                     return BenchmarkReadableSourceFactory {
                         object : BenchmarkReadableSource {
@@ -808,7 +820,8 @@ class OptimizedBenchmarkTransportTest {
                     chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
-                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                    onTransportBytesDownloaded: (Long, Long) -> Unit,
+                    onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
                 ): BenchmarkReadableSourceFactory {
                     return BenchmarkReadableSourceFactory {
                         object : BenchmarkReadableSource {
@@ -867,7 +880,8 @@ class OptimizedBenchmarkTransportTest {
                     chunkWaitTimeoutMs: Long,
                     allowStartupBootstrapReuse: Boolean,
                     transportSampleTimeMs: () -> Long,
-                    onTransportBytesDownloaded: (Long, Long) -> Unit
+                    onTransportBytesDownloaded: (Long, Long) -> Unit,
+                    onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
                 ): BenchmarkReadableSourceFactory {
                     return BenchmarkReadableSourceFactory {
                         object : BenchmarkReadableSource {
@@ -968,7 +982,8 @@ class OptimizedBenchmarkTransportTest {
             chunkWaitTimeoutMs: Long,
             allowStartupBootstrapReuse: Boolean,
             transportSampleTimeMs: () -> Long,
-            onTransportBytesDownloaded: (Long, Long) -> Unit
+            onTransportBytesDownloaded: (Long, Long) -> Unit,
+            onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
         ): BenchmarkReadableSourceFactory {
             recordedConfigSnapshot = configSnapshot
             bootstrapReuseFlags += allowStartupBootstrapReuse
