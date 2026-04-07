@@ -280,6 +280,12 @@ class AccountConfigSyncContractTest {
                     parserPreset = "torrentio",
                     enabled = true,
                     sortOrder = 2
+                ),
+                AccountAddonPayload(
+                    url = BUILTIN_SUBTITLE_ADDON_PUBLIC_BASE_URL,
+                    parserPreset = "generic",
+                    enabled = true,
+                    sortOrder = 3
                 )
             )
         )

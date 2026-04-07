@@ -7,6 +7,7 @@ import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.network.safeApiCall
+import com.nexio.tv.core.sync.isBuiltinSubtitleAddonUrl
 import com.nexio.tv.core.sync.buildAddonRequestUrl
 import com.nexio.tv.core.sync.normalizeAddonInstallUrl
 import com.nexio.tv.data.local.AddonPreferences
@@ -210,13 +211,26 @@ class AddonRepositoryImpl @Inject constructor(
     override suspend fun addAddon(url: String, parserPreset: AddonParserPreset) {
         val cleanUrl = canonicalizeUrl(url)
         preferences.addAddon(cleanUrl, parserPreset)
+        if (isBuiltinSubtitleAddonUrl(cleanUrl)) {
+            pruneBuiltinSubtitleAddonManifestCache(currentUrl = cleanUrl)
+            return
+        }
         triggerRemoteSync()
     }
 
     override suspend fun removeAddon(url: String) {
         val cleanUrl = canonicalizeUrl(url)
         manifestCache.remove(cleanUrl)
-        preferences.removeAddon(cleanUrl)
+        if (isBuiltinSubtitleAddonUrl(cleanUrl)) {
+            pruneBuiltinSubtitleAddonManifestCache(currentUrl = null)
+        }
+        preferences.removeAddon(
+            url = cleanUrl,
+            markBuiltinSubtitleAddonRemoved = !isSyncingFromRemote
+        )
+        if (isBuiltinSubtitleAddonUrl(cleanUrl)) {
+            return
+        }
         triggerRemoteSync()
     }
 
@@ -233,6 +247,20 @@ class AddonRepositoryImpl @Inject constructor(
             persistManifestCacheToDisk()
         }
         triggerRemoteSync()
+    }
+
+    suspend fun syncBuiltinSubtitleAddon(targetUrl: String) {
+        val cleanUrl = canonicalizeUrl(targetUrl)
+        val mutation = preferences.syncBuiltinSubtitleAddon(cleanUrl)
+        if (!mutation.changed) {
+            return
+        }
+
+        pruneBuiltinSubtitleAddonManifestCache(currentUrl = cleanUrl)
+        mutation.previousUrl
+            ?.takeUnless { it.equals(cleanUrl, ignoreCase = true) }
+            ?.let(manifestCache::remove)
+        persistManifestCacheToDisk()
     }
 
     suspend fun reconcileWithRemoteAddonConfigs(
@@ -260,7 +288,7 @@ class AddonRepositoryImpl @Inject constructor(
 
         if (shouldRemoveMissingLocal) {
             initialLocalAddons
-                .filter { normalizeUrl(it.url) !in remoteSet }
+                .filter { !isBuiltinSubtitleAddonUrl(it.url) && normalizeUrl(it.url) !in remoteSet }
                 .forEach { removeAddon(it.url) }
         }
 
@@ -278,11 +306,21 @@ class AddonRepositoryImpl @Inject constructor(
                 currentByNormalizedUrl[normalizeUrl(remote.url)]?.copy(parserPreset = remote.parserPreset)
                     ?: remote
             }
+        val builtinAddons = currentAddons
+            .map { it.copy(url = canonicalizeUrl(it.url)) }
+            .filter { isBuiltinSubtitleAddonUrl(it.url) }
         val extras = currentAddons
             .map { it.copy(url = canonicalizeUrl(it.url)) }
-            .filter { normalizeUrl(it.url) !in remoteSet }
+            .filter { !isBuiltinSubtitleAddonUrl(it.url) && normalizeUrl(it.url) !in remoteSet }
 
-        val reordered = if (shouldRemoveMissingLocal) remoteOrdered else remoteOrdered + extras
+        val reordered = buildList {
+            addAll(if (shouldRemoveMissingLocal) remoteOrdered else remoteOrdered + extras)
+            builtinAddons.forEach { builtin ->
+                if (none { it.url.equals(builtin.url, ignoreCase = true) }) {
+                    add(builtin)
+                }
+            }
+        }
         if (reordered != currentAddons.map { it.copy(url = canonicalizeUrl(it.url)) }) {
             preferences.setAddonConfigs(reordered)
         }
@@ -308,5 +346,18 @@ class AddonRepositoryImpl @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun pruneBuiltinSubtitleAddonManifestCache(currentUrl: String?) {
+        val normalizedCurrent = currentUrl?.let(::canonicalizeUrl)
+        val keysToRemove = manifestCache.keys.filter { cachedUrl ->
+            isBuiltinSubtitleAddonUrl(cachedUrl) &&
+                (normalizedCurrent == null || !cachedUrl.equals(normalizedCurrent, ignoreCase = true))
+        }
+        if (keysToRemove.isEmpty()) {
+            return
+        }
+        keysToRemove.forEach(manifestCache::remove)
+        persistManifestCacheToDisk()
     }
 }
