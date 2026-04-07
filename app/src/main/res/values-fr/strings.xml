@@ -40,6 +40,7 @@
   <string name="episodes_mark_season_unwatched">Marquer la saison comme non vue</string>
   <string name="episodes_mark_previous_watched">Marquer les épisodes précédents comme vus</string>
   <string name="episodes_play">Lire</string>
+  <string name="play_with_manual_stream_selection">Lire avec sélection manuelle du flux</string>
   <string name="episodes_season_actions">Actions de la saison</string>
   <string name="detail_tab_cast">Créateur et casting</string>
   <string name="detail_tab_ratings">Notes</string>

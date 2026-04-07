@@ -83,6 +83,10 @@ import java.util.TimeZone
 private const val EPISODE_CARD_CONTENT_TYPE = "episode_card"
 private const val EPISODE_SCROLL_REPEAT_THROTTLE_MS = 80L
 
+internal fun shouldShowEpisodeManualStreamSelection(
+    deterministicAutoplayEnabled: Boolean
+): Boolean = deterministicAutoplayEnabled
+
 @OptIn(ExperimentalTvMaterial3Api::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun SeasonTabs(
@@ -242,7 +246,9 @@ fun EpisodesRow(
     watchedEpisodes: Set<Pair<Int, Int>> = emptySet(),
     episodeWatchedPendingKeys: Set<String> = emptySet(),
     blurUnwatchedEpisodes: Boolean = false,
+    showManualStreamSelection: Boolean = false,
     onEpisodeClick: (Video) -> Unit,
+    onPlayWithManualStreamSelection: (Video) -> Unit = {},
     onToggleEpisodeWatched: (Video) -> Unit,
     onClearEpisodeProgress: (Video) -> Unit = {},
     onCheckInEpisode: (Video) -> Unit = {},
@@ -389,11 +395,16 @@ fun EpisodesRow(
 
         EpisodeOptionsDialog(
             episode = selectedEpisode,
+            showManualStreamSelection = showManualStreamSelection,
             isWatched = selectedWatched,
             isPending = isPending,
             isSeasonFullyWatched = isSeasonFullyWatched,
             hasPreviousEpisodes = hasPreviousEpisodes,
             onDismiss = { optionsEpisode = null },
+            onPlayWithManualStreamSelection = {
+                onPlayWithManualStreamSelection(selectedEpisode)
+                optionsEpisode = null
+            },
             onPlay = {
                 onEpisodeClick(selectedEpisode)
                 optionsEpisode = null
@@ -798,11 +809,13 @@ private fun EpisodeCard(
 @Composable
 private fun EpisodeOptionsDialog(
     episode: Video,
+    showManualStreamSelection: Boolean,
     isWatched: Boolean,
     isPending: Boolean,
     isSeasonFullyWatched: Boolean = false,
     hasPreviousEpisodes: Boolean = false,
     onDismiss: () -> Unit,
+    onPlayWithManualStreamSelection: () -> Unit,
     onPlay: () -> Unit,
     onToggleWatched: () -> Unit,
     onClearProgress: () -> Unit = {},
@@ -822,12 +835,31 @@ private fun EpisodeOptionsDialog(
         title = episode.title,
         subtitle = stringResource(R.string.episodes_dialog_subtitle)
     ) {
+        if (showManualStreamSelection) {
+            Button(
+                onClick = onPlayWithManualStreamSelection,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(primaryFocusRequester),
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.play_with_manual_stream_selection))
+            }
+        }
+
         Button(
             onClick = onToggleWatched,
             enabled = !isPending,
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(primaryFocusRequester),
+            modifier = if (showManualStreamSelection) {
+                Modifier.fillMaxWidth()
+            } else {
+                Modifier
+                    .fillMaxWidth()
+                    .focusRequester(primaryFocusRequester)
+            },
             colors = ButtonDefaults.colors(
                 containerColor = NexioColors.BackgroundCard,
                 contentColor = NexioColors.TextPrimary

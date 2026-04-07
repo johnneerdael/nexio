@@ -35,6 +35,7 @@
     <string name="cw_remove_from_library">Remove from Library</string>
     <string name="cw_dialog_subtitle">Choose what you want to do with this item.</string>
     <string name="home_poster_dialog_subtitle">Title actions</string>
+    <string name="play_with_manual_stream_selection">Play with manual stream selection</string>
 
     <!-- CatalogRowSection -->
     <string name="catalog_from_addon">from %1$s</string>
