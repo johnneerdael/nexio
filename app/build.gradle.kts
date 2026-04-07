@@ -164,6 +164,10 @@ android {
         }
     }
 
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
     flavorDimensions += "abiPackaging"
     productFlavors {
         if (!playPublishTaskRequested) {

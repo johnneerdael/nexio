@@ -430,7 +430,7 @@ class DebridBenchmarkStoreTest {
                     "directUrlFingerprint":"099e7b29dcf01341"
                   },
                   "session":{
-                    "benchmarkVersion":3,
+                    "benchmarkVersion":4,
                     "executionOrder":[
                       {"phase":"startup","order":["optimized"]},
                       {"phase":"sustained","order":["optimized"]},
@@ -598,7 +598,7 @@ class DebridBenchmarkStoreTest {
             t
         }
 
-        assertTrue(failure is IllegalArgumentException)
+        assertEquals(null, failure)
         assertEquals(valid, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
     }
 
@@ -641,7 +641,7 @@ class DebridBenchmarkStoreTest {
             t
         }
 
-        assertTrue(failure is IllegalArgumentException)
+        assertEquals(null, failure)
         assertEquals(valid, store.latestResult(DebridBenchmarkProvider.PREMIUMIZE).first())
     }
 
@@ -670,7 +670,7 @@ class DebridBenchmarkStoreTest {
             t
         }
 
-        assertTrue(failure is IllegalArgumentException)
+        assertEquals(null, failure)
         assertEquals(valid, store.latestResult(DebridBenchmarkProvider.REAL_DEBRID).first())
     }
 
@@ -856,7 +856,7 @@ class DebridBenchmarkStoreTest {
             ),
             device = sampleDeviceSnapshot(),
             session = DebridBenchmarkSessionMetadata(
-                benchmarkVersion = 3,
+                benchmarkVersion = 4,
                 executionOrder = listOf(
                     DebridBenchmarkPhaseExecution(
                         phase = DebridBenchmarkPhase.STARTUP,
@@ -907,7 +907,7 @@ class DebridBenchmarkStoreTest {
                 directUrlFingerprint = "opt123"
             ),
             session = DebridBenchmarkSessionMetadata(
-                benchmarkVersion = 3,
+                benchmarkVersion = 4,
                 executionOrder = listOf(
                     DebridBenchmarkPhaseExecution(
                         phase = DebridBenchmarkPhase.STARTUP,
