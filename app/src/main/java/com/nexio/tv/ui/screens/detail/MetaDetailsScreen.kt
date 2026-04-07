@@ -1823,6 +1823,7 @@ private fun MetaDetailsContent(
                                     cast = normalCastMembers,
                                     title = if (hasPeopleTabs) "" else strTabCast,
                                     leadingCast = directorWriterMembers,
+                                    enableFocus = lowerContentFocusEnabled,
                                     upFocusRequester = if (hasPeopleTabs) castTabFocusRequester else peopleSectionUpFocusRequester,
                                     restorePersonId = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) pendingRestoreCastPersonId else null,
                                     restoreFocusToken = if (pendingRestoreType == RestoreTarget.CAST_MEMBER) restoreFocusToken else 0,

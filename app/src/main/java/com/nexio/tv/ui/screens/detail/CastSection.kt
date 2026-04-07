@@ -57,6 +57,7 @@ fun CastSection(
     modifier: Modifier = Modifier,
     title: String = "Cast",
     leadingCast: List<MetaCastMember> = emptyList(),
+    enableFocus: Boolean = true,
     upFocusRequester: FocusRequester? = null,
     restorePersonId: Int? = null,
     restoreFocusToken: Int = 0,
@@ -95,10 +96,11 @@ fun CastSection(
     val itemWidth = 150.dp
     val cardSize = 100.dp
     val hasTitle = title.isNotBlank()
-    val upFocusModifier = if (upFocusRequester != null) {
-        Modifier.focusProperties { up = upFocusRequester }
-    } else {
-        Modifier
+    val itemFocusPropertiesModifier = Modifier.focusProperties {
+        canFocus = enableFocus
+        if (upFocusRequester != null) {
+            up = upFocusRequester
+        }
     }
 
     Column(
@@ -150,7 +152,7 @@ fun CastSection(
                             member = member,
                             modifier = Modifier
                                 .focusRequester(focusRequester)
-                                .then(upFocusModifier),
+                                .then(itemFocusPropertiesModifier),
                             itemWidth = itemWidth,
                             cardSize = cardSize,
                             onFocused = {
@@ -205,7 +207,7 @@ fun CastSection(
                         member = member,
                         modifier = Modifier
                             .focusRequester(focusRequester)
-                            .then(upFocusModifier),
+                            .then(itemFocusPropertiesModifier),
                         itemWidth = itemWidth,
                         cardSize = cardSize,
                         onFocused = {
