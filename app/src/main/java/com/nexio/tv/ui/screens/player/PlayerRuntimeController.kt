@@ -24,8 +24,10 @@ import com.nexio.tv.data.repository.SkipInterval
 import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.TraktScrobbleService
+import com.nexio.tv.data.local.DebridBenchmarkStore
 import com.nexio.tv.data.local.DebridConfigBenchmarkStore
 import com.nexio.tv.data.repository.benchmark.RuntimeTransportHintsV2
+import okhttp3.OkHttpClient
 import com.nexio.tv.debug.passthrough.TransportValidationRuntimeCollector
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
@@ -62,6 +64,8 @@ class PlayerRuntimeController(
     internal val playbackIdleGateState: PlaybackIdleGateState,
     internal val transportValidationRuntimeCollector: TransportValidationRuntimeCollector,
     internal val debridConfigBenchmarkStore: DebridConfigBenchmarkStore,
+    internal val debridBenchmarkStore: DebridBenchmarkStore,
+    internal val playbackOkHttpClient: OkHttpClient,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {
@@ -109,7 +113,11 @@ class PlayerRuntimeController(
     internal val initialEpisodeTitle: String? = navigationArgs.initialEpisodeTitle
     internal val rememberedAudioLanguage: String? = navigationArgs.rememberedAudioLanguage
     internal val rememberedAudioName: String? = navigationArgs.rememberedAudioName
-    internal val mediaSourceFactory = PlayerMediaSourceFactory(context.applicationContext)
+    internal val mediaSourceFactory = PlayerMediaSourceFactory(context.applicationContext, playbackOkHttpClient).apply {
+        // WP3 — wire collector binding so its rebuffer/decode events
+        // share the same playback-trace sessionId as the JSONL writer.
+        playbackTraceSessionBinder = { sid -> transportValidationRuntimeCollector.bindSession(sid) }
+    }
     internal var transportPolicyController: TransportPolicyController? = null
     internal var currentRuntimeTransportHints: RuntimeTransportHintsV2? = null
     internal var currentRuntimeTransportObservation: RuntimeTransportObservation? = null
@@ -121,6 +129,16 @@ class PlayerRuntimeController(
     internal var currentFilename: String? = navigationArgs.filename
         ?: initialStreamUrl.substringBefore('?').substringAfterLast('/', "")
             .takeIf { it.isNotBlank() && it.contains('.') }
+    /**
+     * Parsed release metadata for the currently-playing file. Reused by the
+     * subtitle scorer to pick the best-matching addon subtitle without
+     * re-parsing the stream filename for every candidate. Populated from
+     * [currentFilename] via [com.nexio.tv.core.stream.AioStrictFileParser]
+     * at every site that updates [currentFilename] (cold-start, stream
+     * selection, stream switch).
+     */
+    internal var currentParsedRelease: com.nexio.tv.core.stream.AioStrictParsedFile? =
+        currentFilename?.let { com.nexio.tv.core.stream.AioStrictFileParser.parse(it) }
     internal var currentStreamUrl: String = initialStreamUrl
     internal var currentHeaders: Map<String, String> =
         PlayerMediaSourceFactory.sanitizeHeaders(PlayerMediaSourceFactory.parseHeaders(headersJson))
@@ -368,6 +386,10 @@ class PlayerRuntimeController(
         endDisplayModeSessionForExit()
         releasePlayer()
         vodTelemetryJob?.cancel()
+        // WP3 — close the playback-trace MediaSourceSession (emits
+        // playback_session_ended + tracer_overflow_summary and flushes the
+        // JSONL writer) before the factory shuts down.
+        mediaSourceFactory.endPlaybackTraceSession()
         mediaSourceFactory.shutdown()
         sourceChipErrorDismissJob?.cancel()
     }

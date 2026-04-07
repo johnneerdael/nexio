@@ -139,7 +139,10 @@ class DebridConfigBenchmarkMatrixScoringTest {
             unsupportedProfileCount = 0,
             bestProfile = profiles.first()
         )
-        val envelope = summary.toCapabilityEnvelope(measuredAtMs = 42L)
+        val envelope = summary.toCapabilityEnvelope(
+            provider = DebridBenchmarkProvider.REAL_DEBRID.storageKey,
+            measuredAtMs = 42L
+        )
         assertNotNull("envelope should be created from successful profiles", envelope)
 
         // Verify that shadow player simulation gates on frontier event count

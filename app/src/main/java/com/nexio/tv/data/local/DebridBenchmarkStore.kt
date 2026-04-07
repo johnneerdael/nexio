@@ -43,6 +43,7 @@ import com.nexio.tv.data.repository.benchmark.DeviceHdrType
 import com.nexio.tv.data.repository.benchmark.DeviceVideoDecoderEvidence
 import com.nexio.tv.data.repository.benchmark.DeviceVideoDecodeCapabilities
 import com.nexio.tv.data.repository.benchmark.VideoDecoderEvidence
+import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
 import com.nexio.tv.data.repository.benchmark.toJsonObject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
@@ -183,6 +184,9 @@ class DebridBenchmarkStore internal constructor(
             val optimized = root.optionalObject("optimized")?.let(::parseTransportProfile)
             val comparison = root.optionalObject("comparison")?.let(::parseComparisonSummary)
 
+            val capabilityEnvelope = root.optionalObject("capabilityEnvelope")?.let { envJson ->
+                CapabilityEnvelope.fromJson(envJson.toString())
+            }
             val parsed = DebridBenchmarkResult(
                 provider = parsedProvider,
                 measuredAtMs = measuredAtMs,
@@ -193,7 +197,8 @@ class DebridBenchmarkStore internal constructor(
                 session = session,
                 direct = direct,
                 optimized = optimized,
-                comparison = comparison
+                comparison = comparison,
+                capabilityEnvelope = capabilityEnvelope
             )
             if (!parsed.isCompletedAndValid()) {
                 logWarning(

@@ -33,6 +33,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.Cache
+import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
@@ -91,6 +92,70 @@ object NetworkModule {
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
+
+    /**
+     * Call timeout for playback OkHttp requests (ms).
+     *
+     * Chosen to survive a 64 MiB prefetch chunk on a slow link:
+     *   64 MiB ÷ 5 Mbps ≈ 102 s → rounded up to 120 s with margin.
+     *
+     * Overridable by injecting a different value in tests via a test Hilt module.
+     */
+    @Provides
+    @Named("playback.callTimeoutMs")
+    fun providePlaybackCallTimeoutMs(): Long = 120_000L
+
+    /**
+     * Shared OkHttpClient for all playback and benchmark traffic.
+     *
+     * Both playback ([PlayerMediaSourceFactory]) and benchmark transports derive their clients
+     * from this instance via [OkHttpClient.newBuilder], which means they share the same
+     * [ConnectionPool] and [Dispatcher] — connection pool reuse is the key win.
+     *
+     * [Dispatcher.maxRequestsPerHost] is set to 12 (the playback value) rather than the
+     * OkHttp default of 5. The locked-envelope work verified that 12 concurrent connections
+     * per host does not break RD/PM CDN behaviour; keeping it at 5 for benchmark would
+     * have undersold per-host concurrency and made benchmark numbers incomparable to playback.
+     */
+    @Provides
+    @Singleton
+    @Named("playback")
+    fun providePlaybackOkHttpClient(
+        @ApplicationContext context: Context,
+        @Named("playback.callTimeoutMs") callTimeoutMs: Long
+    ): OkHttpClient {
+        // Shared dispatcher: maxRequestsPerHost=12 proved safe by locked-envelope work.
+        val dispatcher = Dispatcher().apply {
+            maxRequests = 64
+            maxRequestsPerHost = 12
+        }
+        // Shared connection pool: 5 idle connections, 5-minute keep-alive.
+        val connectionPool = ConnectionPool(5, 5, TimeUnit.MINUTES)
+        return OkHttpClient.Builder()
+            .dispatcher(dispatcher)
+            .connectionPool(connectionPool)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(45, TimeUnit.SECONDS)
+            .writeTimeout(45, TimeUnit.SECONDS)
+            .callTimeout(callTimeoutMs, TimeUnit.MILLISECONDS)
+            .retryOnConnectionFailure(true)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .addInterceptor { chain ->
+                val originalRequest = chain.request()
+                val response = chain.proceed(originalRequest)
+                if (response.isRedirect) {
+                    val location = response.header("Location") ?: return@addInterceptor response
+                    val newRequest = originalRequest.newBuilder()
+                        .url(location)
+                        .build()
+                    response.close()
+                    return@addInterceptor chain.proceed(newRequest)
+                }
+                response
+            }
+            .build()
+    }
 
     @Provides
     @Singleton
@@ -185,12 +250,17 @@ object NetworkModule {
         )
         .build()
 
+    /**
+     * Benchmark OkHttpClient — derives from the shared playback client via [newBuilder] so that
+     * both benchmark and playback share the same [ConnectionPool] and [Dispatcher]. Only the
+     * benchmark-specific call timeout (4 min) and cache bypass are applied on top.
+     */
     @Provides
     @Singleton
     @Named("benchmark")
     fun provideBenchmarkOkHttpClient(
-        okHttpClient: OkHttpClient
-    ): OkHttpClient = okHttpClient.newBuilder()
+        @Named("playback") playbackClient: OkHttpClient
+    ): OkHttpClient = playbackClient.newBuilder()
         .disableDiskCacheForGetRequests()
         .callTimeout(4, TimeUnit.MINUTES)
         .readTimeout(30, TimeUnit.SECONDS)

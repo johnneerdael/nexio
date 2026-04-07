@@ -138,7 +138,23 @@ internal data class DebridUiState(
     val torBoxPlan: String? = null,
     val easyDebridConnected: Boolean = false,
     val easyDebridUserId: String? = null,
-    val easyDebridPaidUntil: String? = null
+    val easyDebridPaidUntil: String? = null,
+    // WP2 — playback diagnostics trace (gated by PLAYBACK_TRACE_UI_ENABLED)
+    val playbackTraceEnabled: Boolean = false,
+    val lastTraceSummary: TraceFileSummary? = null
+)
+
+/**
+ * WP2 — small read-only summary of the most recent playback trace file shown
+ * under the debrid diagnostics section. Lifetime-tied to a single `sessionId`
+ * so the UI can render "Last session: <sid> · <size> · <event count>" after
+ * the writer thread finalizes the JSONL.
+ */
+internal data class TraceFileSummary(
+    val sessionId: String,
+    val path: String,
+    val sizeBytes: Long,
+    val eventCount: Int
 )
 
 internal data class DebridProviderBenchmarkUi(
@@ -636,6 +652,21 @@ internal fun DebridSettingsContent(
                                 }
                             )
                         }
+                    }
+                }
+                // WP2 — playback diagnostics trace. Compile-time elided until
+                // WP9 flips PLAYBACK_TRACE_UI_ENABLED to true.
+                @Suppress("KotlinConstantConditions")
+                if (com.nexio.tv.instrumentation.PLAYBACK_TRACE_UI_ENABLED) {
+                    item(key = "playback_diagnostics") {
+                        PlaybackDiagnosticsSection(
+                            enabled = uiState.playbackTraceEnabled,
+                            lastTraceSummary = uiState.lastTraceSummary,
+                            onToggle = { /* wired in WP9 */ },
+                            onExportLast = { /* wired in WP9 */ },
+                            onExportAll = { /* wired in WP9 */ },
+                            onCopyToDownloads = { /* wired in WP9 */ },
+                        )
                     }
                 }
             }
@@ -1623,8 +1654,37 @@ internal class DebridSettingsViewModel @Inject internal constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val collectorPublicDashboardLinkProvider: CollectorPublicDashboardLinkProvider,
     private val debridBenchmarkService: DebridBenchmarkService,
-    private val debridConfigBenchmarkService: DebridConfigBenchmarkService
+    private val debridConfigBenchmarkService: DebridConfigBenchmarkService,
+    private val playbackTraceToggle: com.nexio.tv.instrumentation.PlaybackTraceToggle
 ) : ViewModel() {
+
+    // WP2 — playback diagnostics trace plumbing. Flow + actions are exposed
+    // here so the UI can wire them when WP9 flips PLAYBACK_TRACE_UI_ENABLED to
+    // true. No callers exist in production code yet — the composable section
+    // in DebridSettingsContent is compile-time elided until then.
+    internal val playbackTraceEnabled: kotlinx.coroutines.flow.Flow<Boolean> =
+        playbackTraceToggle.enabledFlow
+
+    internal fun setPlaybackTraceEnabled(value: Boolean) {
+        viewModelScope.launch {
+            playbackTraceToggle.setEnabled(value)
+        }
+    }
+
+    internal fun exportLastSession() {
+        // WP9 wires the FileProvider ACTION_SEND share intent here.
+    }
+
+    internal fun exportAllSessions() {
+        // WP9 wires the cacheDir zip + FileProvider ACTION_SEND here.
+    }
+
+    internal fun copyLastTraceToDownloads(target: android.net.Uri) {
+        // WP9 wires the SAF ACTION_CREATE_DOCUMENT byte copy here.
+        @Suppress("UNUSED_PARAMETER")
+        val _u = target
+    }
+
     private val _uiState = MutableStateFlow(DebridUiState())
     private val benchmarkResultDialog = MutableStateFlow<DebridBenchmarkResultDialogUi?>(null)
     private val configBenchmarkResultDialog = MutableStateFlow<DebridConfigBenchmarkResultDialogUi?>(null)

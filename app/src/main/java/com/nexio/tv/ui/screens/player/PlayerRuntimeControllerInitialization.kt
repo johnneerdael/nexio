@@ -54,6 +54,7 @@ import com.nexio.tv.domain.model.Subtitle
 import io.github.peerless2012.ass.media.type.AssRenderType
 import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
+import com.nexio.tv.data.repository.benchmark.benchmarkProviderForServiceKey
 import com.nexio.tv.data.repository.benchmark.toCapabilityEnvelope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -214,15 +215,34 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     debridConfigBenchmarkStore.latestResult(provider).first()
                 }.getOrNull()
             }
+            val fallbackResultsByProvider = DebridBenchmarkProvider.entries.associateWith { provider ->
+                runCatching {
+                    debridBenchmarkStore.latestResult(provider).first()
+                }.getOrNull()
+            }
             val selectedTransportBenchmark = selectTransportBenchmarkForServiceKey(
                 serviceKey = currentStreamServiceKey,
-                latestResults = latestResultsByProvider
+                latestResults = latestResultsByProvider,
+                fallbackResults = fallbackResultsByProvider
             )
             currentRuntimeTransportHints = selectedTransportBenchmark?.runtimeTransportHints
+            // For providers with a locked shape (RD, PM), always resolve via lockedFor so
+            // the no-arg TransportPolicyController() fallback is unreachable on these paths.
+            val providerStorageKey = benchmarkProviderForServiceKey(currentStreamServiceKey)?.storageKey
+            val lockedEnvelope = providerStorageKey?.let { CapabilityEnvelope.lockedFor(it) }
             val envelope = selectedTransportBenchmark?.capabilityEnvelope
+                ?: lockedEnvelope
             if (envelope != null) {
+                // For providers with a locked shape, assert the merged envelope matches before
+                // constructing the controller. This is the one-shot init site — guards here are
+                // safe; they must never be placed on the DataSource.open/read call stacks.
+                if (lockedEnvelope != null) {
+                    require(lockedEnvelope.matchesLockedShape(envelope)) {
+                        "CapabilityEnvelope shape drift for provider=$providerStorageKey"
+                    }
+                }
                 mediaSourceFactory.capabilityEnvelope = envelope
-                transportPolicyController = TransportPolicyController(envelope)
+                transportPolicyController = TransportPolicyController(envelope, providerStorageKey)
             } else {
                 mediaSourceFactory.capabilityEnvelope = null
                 transportPolicyController = TransportPolicyController()
@@ -582,7 +602,18 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         }
                         if (playbackState == Player.STATE_BUFFERING && !hasRenderedFirstFrame) {
                             _uiState.update { state ->
-                                if (state.loadingOverlayEnabled && !state.showLoadingOverlay) {
+                                // Suppress the full-screen loading overlay
+                                // while we're in the middle of an addon
+                                // subtitle swap. The setMediaSource + prepare
+                                // pair from the slow-path triggers a transient
+                                // STATE_BUFFERING — without this guard, an
+                                // auto-pick at startup (before first frame)
+                                // would flash the backdrop overlay over the
+                                // surface and look like a screen recompose.
+                                if (state.loadingOverlayEnabled &&
+                                    !state.showLoadingOverlay &&
+                                    !state.isSwappingAddonSubtitle
+                                ) {
                                     state.copy(showLoadingOverlay = true, showControls = false)
                                 } else {
                                     state
@@ -600,6 +631,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     
                         
                         if (playbackState == Player.STATE_READY) {
+                            if (_uiState.value.isSwappingAddonSubtitle) {
+                                _uiState.update { it.copy(isSwappingAddonSubtitle = false) }
+                            }
                             if (
                                 pendingSeekTelemetryRequestedAtMs > 0L &&
                                     pendingSeekTelemetryReadyAtMs <= 0L
@@ -1056,18 +1090,26 @@ internal fun resolvePreferredAudioLanguages(
     originalLanguage: String?
 ): List<String> {
     fun normalize(language: String?): String? {
-        val normalized = language
+        val raw = language
             ?.trim()
             ?.lowercase()
             ?.takeIf { it.isNotBlank() }
             ?: return null
-        return when (normalized) {
-            AudioLanguageOption.DEFAULT,
-            AudioLanguageOption.DEVICE,
-            AudioLanguageOption.ORIGINAL,
-            SUBTITLE_LANGUAGE_FORCED -> null
-            else -> normalized
+        // Reject sentinel preference strings before hitting the language
+        // normalizer (they are not real languages).
+        if (raw == AudioLanguageOption.DEFAULT ||
+            raw == AudioLanguageOption.DEVICE ||
+            raw == AudioLanguageOption.ORIGINAL ||
+            raw == SUBTITLE_LANGUAGE_FORCED
+        ) {
+            return null
         }
+        // Route through the ISO normalizer so full display names
+        // ("English"), ISO-3 codes ("eng"), and region-tagged tags
+        // ("en-us") collapse to the canonical ISO-2 form the audio
+        // track matcher expects.
+        return PlayerSubtitleUtils.normalizeLanguageCode(raw)
+            .takeIf { it.isNotBlank() }
     }
 
     return when (preferredAudioLanguage.trim().lowercase()) {

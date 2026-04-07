@@ -9,6 +9,7 @@ import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
+import com.nexio.tv.data.local.DebridBenchmarkStore
 import com.nexio.tv.data.local.DebridConfigBenchmarkStore
 import com.nexio.tv.debug.passthrough.TransportValidationRuntimeCollector
 import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
@@ -22,7 +23,9 @@ import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.StateFlow
+import okhttp3.OkHttpClient
 import javax.inject.Inject
+import javax.inject.Named
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
@@ -43,6 +46,8 @@ class PlayerViewModel @Inject constructor(
     private val playbackIdleGateState: PlaybackIdleGateState,
     private val transportValidationRuntimeCollector: TransportValidationRuntimeCollector,
     private val debridConfigBenchmarkStore: DebridConfigBenchmarkStore,
+    private val debridBenchmarkStore: DebridBenchmarkStore,
+    @Named("playback") private val playbackOkHttpClient: OkHttpClient,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val controller = PlayerRuntimeController(
@@ -63,6 +68,8 @@ class PlayerViewModel @Inject constructor(
         playbackIdleGateState = playbackIdleGateState,
         transportValidationRuntimeCollector = transportValidationRuntimeCollector,
         debridConfigBenchmarkStore = debridConfigBenchmarkStore,
+        debridBenchmarkStore = debridBenchmarkStore,
+        playbackOkHttpClient = playbackOkHttpClient,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope
     )

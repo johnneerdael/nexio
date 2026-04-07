@@ -562,13 +562,30 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             pendingAddonSubtitleLanguage = null
             pendingAddonSubtitleTrackId = null
             pendingAudioSelectionAfterSubtitleRefresh = null
+            // If the user manually picked an internal track that is already
+            // in their primary subtitle language, AI translation would be a
+            // no-op and would leave the picker showing two simultaneously
+            // "selected" entries. Clear the AI flag silently first.
+            val pickedTrack = _uiState.value.subtitleTracks.getOrNull(event.index)
+            val pickedLang = pickedTrack?.language?.let(PlayerSubtitleUtils::normalizeLanguageCode)
+            val primaryLang = PlayerSubtitleUtils.normalizeLanguageCode(
+                _uiState.value.subtitleStyle.preferredLanguage
+            )
+            val pickedIsPrimaryLang = !pickedLang.isNullOrBlank() &&
+                primaryLang.isNotBlank() &&
+                pickedLang == primaryLang
+            if (pickedIsPrimaryLang &&
+                (_uiState.value.aiSubtitlesEnabled || _uiState.value.isAiSubtitleTranslating)
+            ) {
+                clearAiTranslationStateSilently()
+            }
             selectSubtitleTrack(event.index)
-            _uiState.update { 
+            _uiState.update {
                 it.copy(
                     showSubtitleDialog = false,
                     showSubtitleDelayOverlay = false,
-                    selectedAddonSubtitle = null 
-                ) 
+                    selectedAddonSubtitle = null
+                )
             }
             refreshBuiltInAiOverlayState()
             if (_uiState.value.aiSubtitlesEnabled) {

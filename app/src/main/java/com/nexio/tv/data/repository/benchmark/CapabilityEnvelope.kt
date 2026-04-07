@@ -27,6 +27,49 @@ data class CapabilityEnvelope(
             measuredAtMs = 0L
         )
 
+        /**
+         * Locked shape for Real Debrid. Benchmarks may only refresh
+         * sustainedThroughputMbps, stabilityPenalty, and measuredAtMs —
+         * the structural shape (workers, chunk sizes, supportsRangeRequests) is immutable.
+         */
+        val LOCKED_REAL_DEBRID = CapabilityEnvelope(
+            maxSafeUrgentWorkers = 1,
+            maxSafePrefetchWorkers = 1,
+            maxSafeUrgentChunkBytes = 33_554_432L,
+            maxSafePrefetchChunkBytes = 67_108_864L,
+            sustainedThroughputMbps = 0.0,
+            stabilityPenalty = 0.0,
+            supportsRangeRequests = true,
+            measuredAtMs = 0L
+        )
+
+        /**
+         * Locked shape for Premiumize. Benchmarks may only refresh
+         * sustainedThroughputMbps, stabilityPenalty, and measuredAtMs —
+         * the structural shape (workers, chunk sizes, supportsRangeRequests) is immutable.
+         */
+        val LOCKED_PREMIUMIZE = CapabilityEnvelope(
+            maxSafeUrgentWorkers = 2,
+            maxSafePrefetchWorkers = 1,
+            maxSafeUrgentChunkBytes = 16_777_216L,
+            maxSafePrefetchChunkBytes = 16_777_216L,
+            sustainedThroughputMbps = 0.0,
+            stabilityPenalty = 0.0,
+            supportsRangeRequests = true,
+            measuredAtMs = 0L
+        )
+
+        /**
+         * Returns the locked [CapabilityEnvelope] for the given provider key, or null if the
+         * provider has no locked shape. Provider keys match DebridConfigBenchmarkStore storage
+         * keys: "real_debrid", "premiumize", "torbox", "easy_debrid".
+         */
+        fun lockedFor(provider: String): CapabilityEnvelope? = when (provider) {
+            "real_debrid" -> LOCKED_REAL_DEBRID
+            "premiumize" -> LOCKED_PREMIUMIZE
+            else -> null
+        }
+
         fun fromJson(json: String): CapabilityEnvelope? {
             return try {
                 val obj = JsonParser.parseString(json).asJsonObject
@@ -76,4 +119,16 @@ data class CapabilityEnvelope(
     val totalWorkers: Int get() = maxSafeUrgentWorkers + maxSafePrefetchWorkers
 
     val isMeasured: Boolean get() = measuredAtMs > 0L
+
+    /**
+     * Returns true if [other] has the same structural shape as this envelope.
+     * Only compares shape fields (workers, chunk sizes, supportsRangeRequests);
+     * measurement fields (sustainedThroughputMbps, stabilityPenalty, measuredAtMs) are ignored.
+     */
+    fun matchesLockedShape(other: CapabilityEnvelope): Boolean =
+        maxSafeUrgentWorkers == other.maxSafeUrgentWorkers &&
+        maxSafePrefetchWorkers == other.maxSafePrefetchWorkers &&
+        maxSafeUrgentChunkBytes == other.maxSafeUrgentChunkBytes &&
+        maxSafePrefetchChunkBytes == other.maxSafePrefetchChunkBytes &&
+        supportsRangeRequests == other.supportsRangeRequests
 }

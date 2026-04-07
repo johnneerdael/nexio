@@ -35,14 +35,14 @@ class TransportPolicyControllerTest {
     }
 
     @Test
-    fun `seek from steady resets to startup with no prefetch workers`() {
+    fun `seek from steady transitions to SEEK state with no prefetch workers`() {
         val controller = TransportPolicyController()
         controller.onFirstFrame()
         controller.onSteady(20000)
         assertEquals(TransportState.STEADY, controller.state)
 
         controller.onSeek()
-        assertEquals(TransportState.STARTUP, controller.state)
+        assertEquals(TransportState.SEEK, controller.state)
         assertEquals(0, controller.currentPolicy.prefetchWorkers)
     }
 

@@ -71,7 +71,22 @@ class GeminiSubtitleTranslationService @Inject constructor(
                     apiKey = trimmedKey
                 )
                 translatedFile.parentFile?.mkdirs()
-                translatedFile.writeText(document.render(translatedBlocks), StandardCharsets.UTF_8)
+                // Write + fsync so the file URI we hand back to the player is
+                // safe to read immediately. Without this, Media3 can race the
+                // pending write and stall on a partially-written file.
+                val payload = document.render(translatedBlocks).toByteArray(StandardCharsets.UTF_8)
+                java.io.FileOutputStream(translatedFile).use { fos ->
+                    fos.write(payload)
+                    fos.flush()
+                    try {
+                        fos.fd.sync()
+                    } catch (_: Throwable) {
+                        // sync may be unsupported on some filesystems; ignore.
+                    }
+                }
+                if (!translatedFile.exists() || translatedFile.length() == 0L) {
+                    throw IllegalStateException("Translated subtitle file write failed.")
+                }
             }
 
             val translatedSubtitle = sourceSubtitle.copy(

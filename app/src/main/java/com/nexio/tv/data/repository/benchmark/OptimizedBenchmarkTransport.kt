@@ -672,12 +672,19 @@ private class DefaultOptimizedBenchmarkDataSourceFactoryBuilder(
         val dataSourceFactory: DataSource.Factory = if (configSnapshot.useParallelConnections == false) {
             upstreamFactory
         } else {
+            val benchmarkConnections = (configSnapshot.parallelConnectionCount
+                ?: PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT).coerceAtLeast(2)
+            val benchmarkChunkBytes = (configSnapshot.parallelChunkSizeMb
+                ?: PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB).toLong() * 1024L * 1024L
+            val benchmarkEnvelope = CapabilityEnvelope.DEFAULT.copy(
+                maxSafeUrgentWorkers = benchmarkConnections,
+                maxSafeUrgentChunkBytes = benchmarkChunkBytes,
+                maxSafePrefetchChunkBytes = benchmarkChunkBytes
+            )
             ParallelRangeDataSource.Factory(
                 upstreamFactory = upstreamFactory,
-                parallelConnections = (configSnapshot.parallelConnectionCount
-                    ?: PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT).coerceAtLeast(2),
-                chunkSize = (configSnapshot.parallelChunkSizeMb
-                    ?: PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB).toLong() * 1024L * 1024L,
+                envelope = benchmarkEnvelope,
+                chunkSize = benchmarkChunkBytes,
                 chunkWaitTimeoutMs = chunkWaitTimeoutMs,
                 transportSampleTimeMs = transportSampleTimeMs,
                 onTransportBytesDownloaded = onTransportBytesDownloaded,

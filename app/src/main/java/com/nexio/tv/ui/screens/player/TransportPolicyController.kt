@@ -13,6 +13,11 @@ internal data class TransportPolicy(
     val warmAheadBudgetMax: Int? = null
 )
 
+/** 2 MiB — STARTUP clamp. Urgent chunk is small here because seek TTFB is unknown and
+ *  over-committing a large chunk before the CDN confirms the range wastes bandwidth.
+ *  Post-seek the envelope's full urgent chunk is used via the SEEK preset. */
+internal const val STARTUP_URGENT_CHUNK_BYTES = 2L * 1024L * 1024L
+
 internal enum class TransportState {
     STARTUP,
     SEEK,
@@ -22,8 +27,18 @@ internal enum class TransportState {
 }
 
 internal class TransportPolicyController(
-    private var envelope: CapabilityEnvelope = CapabilityEnvelope.DEFAULT
+    private var envelope: CapabilityEnvelope = CapabilityEnvelope.DEFAULT,
+    provider: String? = null
 ) {
+    init {
+        if (provider != null) {
+            val locked = CapabilityEnvelope.lockedFor(provider)
+            if (locked != null && !locked.matchesLockedShape(envelope)) {
+                throw IllegalStateException("CapabilityEnvelope shape drift for provider=$provider")
+            }
+        }
+    }
+
     var state: TransportState = TransportState.STARTUP
         private set
 
@@ -37,7 +52,12 @@ internal class TransportPolicyController(
     }
 
     fun onSeek() {
-        state = TransportState.STARTUP
+        val prev = state
+        state = TransportState.SEEK
+        PlayerTransportTelemetry.log(
+            "tpc.policy",
+            mapOf("from" to prev.name, "to" to TransportState.SEEK.name, "trigger" to "seek")
+        )
     }
 
     fun onRebuffer() {
@@ -61,10 +81,21 @@ internal class TransportPolicyController(
     }
 
     private fun policyForState(state: TransportState): TransportPolicy = when (state) {
-        TransportState.STARTUP, TransportState.SEEK, TransportState.REBUFFER -> TransportPolicy(
+        TransportState.STARTUP, TransportState.REBUFFER -> TransportPolicy(
             urgentWorkers = envelope.maxSafeUrgentWorkers,
             prefetchWorkers = 0,
-            urgentChunkBytes = minOf(envelope.maxSafeUrgentChunkBytes, 2L * 1024L * 1024L),
+            urgentChunkBytes = minOf(envelope.maxSafeUrgentChunkBytes, STARTUP_URGENT_CHUNK_BYTES),
+            prefetchChunkBytes = 0L,
+            warmAheadEnabled = false
+        )
+        // Post-seek: use the full envelope urgent chunk so throughput recovers immediately on
+        // reopen. Prefetch is suppressed (prefetchWorkers=0) so urgent ranges run without
+        // contention until onFirstFrame() transitions us to STABILIZING. The next open()
+        // latches activeChunkSize from this policy's urgentChunkBytes — no reconfigure needed.
+        TransportState.SEEK -> TransportPolicy(
+            urgentWorkers = envelope.maxSafeUrgentWorkers,
+            prefetchWorkers = 0,
+            urgentChunkBytes = envelope.maxSafeUrgentChunkBytes,
             prefetchChunkBytes = 0L,
             warmAheadEnabled = false
         )

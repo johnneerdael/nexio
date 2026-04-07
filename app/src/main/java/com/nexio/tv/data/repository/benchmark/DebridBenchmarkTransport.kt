@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository.benchmark
 
+import com.nexio.tv.ui.screens.player.PlayerTransportTelemetry
 import java.io.InterruptedIOException
 import javax.inject.Inject
 import javax.inject.Named
@@ -54,6 +55,14 @@ class DirectDiscardBenchmarkTransport @Inject constructor(
             }
             .build()
         val call = okHttpClient.newCall(request)
+        // Throttled dispatcher depth snapshot — mirrors the okhttp.depth.playback site in
+        // PlayerMediaSourceFactory so both transports emit comparable telemetry under the
+        // same "nexio.transport" tag. Rate-limited to ≤1/sec to avoid hot-path overhead.
+        PlayerTransportTelemetry.logThrottled("okhttp.depth.benchmark", 1000L, mapOf(
+            "maxRequestsPerHost" to okHttpClient.dispatcher.maxRequestsPerHost,
+            "queued" to okHttpClient.dispatcher.queuedCallsCount(),
+            "running" to okHttpClient.dispatcher.runningCallsCount()
+        ))
         val cancellationRegistration = coroutineContext[Job]?.invokeOnCompletion { cause ->
             if (cause != null) {
                 call.cancel()

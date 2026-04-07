@@ -259,6 +259,7 @@ internal fun DebridBenchmarkResult.toJsonObject(): JsonObject {
                 comparison.stabilityWinner?.let { addProperty("stabilityWinner", it.wireKey) }
             })
         }
+        capabilityEnvelope?.let { add("capabilityEnvelope", com.google.gson.JsonParser.parseString(it.toJson())) }
     }
 }
 

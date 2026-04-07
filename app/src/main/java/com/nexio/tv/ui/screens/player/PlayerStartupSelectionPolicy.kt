@@ -1,5 +1,8 @@
 package com.nexio.tv.ui.screens.player
 
+import android.util.Log
+import com.nexio.tv.core.stream.AioStrictFileParser
+import com.nexio.tv.core.stream.AioStrictParsedFile
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.domain.model.Subtitle
 import java.util.Locale
@@ -199,7 +202,8 @@ internal fun decideStartupSubtitleAutoSelection(
     playerReady: Boolean,
     addonSubtitleDiscoveryPending: Boolean = false,
     aiTranslationConfigured: Boolean,
-    startupPhase: Boolean
+    startupPhase: Boolean,
+    videoRelease: AioStrictParsedFile? = null
 ): StartupSubtitleAutoSelectionDecision {
     val normalizedPreferred = PlayerSubtitleUtils.normalizeLanguageCode(preferredLanguage)
         .takeIf { it.isNotBlank() && !it.equals("none", ignoreCase = true) }
@@ -238,9 +242,11 @@ internal fun decideStartupSubtitleAutoSelection(
         if (!hasScannedTextTracksOnce || !playerReady) {
             return null
         }
-        return addonSubtitles.firstOrNull { subtitle ->
+        val matches = addonSubtitles.filter { subtitle ->
             PlayerSubtitleUtils.matchesLanguageCode(subtitle.lang, language)
         }
+        if (matches.isEmpty()) return null
+        return pickBestAddonSubtitleByRelease(matches, videoRelease)
     }
 
     val internalPreferred = findInternal(normalizedPreferred)
@@ -261,6 +267,51 @@ internal fun decideStartupSubtitleAutoSelection(
 
     if (addonSubtitleDiscoveryPending) {
         return StartupSubtitleAutoSelectionDecision.DeferAddonFallback
+    }
+
+    // findAddon() returns null both when no addon match exists AND when the
+    // readiness gate (!hasScannedTextTracksOnce || !playerReady) blocks it.
+    // Without this defer, the AI translation tier below would intercept any
+    // window where the addon list has loaded but the player's internal text
+    // tracks haven't been scanned yet — auto-translating an English internal
+    // track even though primary-language addon subs are sitting right there.
+    if (!hasScannedTextTracksOnce || !playerReady) {
+        return StartupSubtitleAutoSelectionDecision.DeferAddonFallback
+    }
+
+    // AI-translation tier (the "third primary tier"):
+    // No primary-language subtitle exists anywhere, so use Gemini to bridge
+    // a different-language source into the user's primary language. The
+    // translation source is chosen by this rule:
+    //   1. If the stream has any text-based internal subtitle, translate
+    //      that one (no extra network fetch). Prefer the user's secondary
+    //      language, then English, then any other text-based track.
+    //   2. Otherwise (only bitmap internal subs, or no internal subs at
+    //      all — bitmap subs cannot be translated), fall back to the best-
+    //      match addon subtitle in the secondary language and translate it.
+    // This tier only fires when the user has both a primary preference and
+    // an AI translation backend configured. If either is missing we drop
+    // through to the pre-existing untranslated secondary fallback below.
+    val aiTranslationAllowed =
+        startupPhase && aiTranslationConfigured && normalizedPreferred != null
+    if (aiTranslationAllowed) {
+        val translatableInternalIndex = pickTranslatableInternalSubtitle(
+            subtitleTracks = subtitleTracks,
+            secondaryLanguage = normalizedSecondary
+        )
+        if (translatableInternalIndex >= 0) {
+            return StartupSubtitleAutoSelectionDecision.Internal(
+                index = translatableInternalIndex,
+                enableAiTranslation = true
+            )
+        }
+        val addonForTranslation = findAddon(normalizedSecondary)
+        if (addonForTranslation != null) {
+            return StartupSubtitleAutoSelectionDecision.Addon(
+                subtitle = addonForTranslation,
+                enableAiTranslation = true
+            )
+        }
     }
 
     val internalSecondary = findInternal(normalizedSecondary)
@@ -284,6 +335,261 @@ internal fun decideStartupSubtitleAutoSelection(
     } else {
         StartupSubtitleAutoSelectionDecision.None
     }
+}
+
+/**
+ * Rule-based scorer that picks the addon subtitle most likely to be in sync
+ * with the playing release. Reuses [AioStrictFileParser] (the same parser
+ * the stream-list pipeline already runs over every stream) so the candidate
+ * is parsed once and the video-side parse is supplied pre-computed by the
+ * caller — no duplicate parsing.
+ *
+ * Scoring (additive; the highest total wins):
+ *   - Title  / Year mismatch  → -1000 (effective rule-out)
+ *   - Source class incompatible (CAM/TS/TC/SCR vs retail) → -1000
+ *   - Source class match (e.g. WEB-DL ↔ WEB-DL)          → +50
+ *   - Source class soft mismatch (WEB-DL ↔ WEBRip)       → +10
+ *   - Service / network match (e.g. AMZN ↔ AMZN)         → +30
+ *   - Release group match (e.g. NatusVincere)            → +40
+ *   - Visual tag match per tag (DV, HDR10+, …)           → +10
+ *   - Audio tag match per tag (Atmos, DDP5.1, …)         → +5
+ *   - Resolution match (2160p ↔ 2160p)                   → +5
+ *   - "Early Release" / leak penalty                     → -15
+ */
+internal fun pickBestAddonSubtitleByRelease(
+    candidates: List<Subtitle>,
+    videoRelease: AioStrictParsedFile?
+): Subtitle {
+    if (candidates.size == 1) return candidates.first()
+    if (videoRelease == null) return candidates.first()
+
+    val scored = candidates.map { subtitle ->
+        val parseInput = listOfNotNull(
+            subtitle.id.takeIf { it.isNotBlank() },
+            subtitle.url.substringAfterLast('/').takeIf { it.isNotBlank() }
+        ).joinToString(" ")
+        val candidateRelease = AioStrictFileParser.parse(parseInput)
+        val score = scoreSubtitleAgainstRelease(candidateRelease, videoRelease)
+        Triple(subtitle, candidateRelease, score)
+    }
+
+    val best = scored.maxByOrNull { it.third } ?: return candidates.first()
+    Log.i(
+        PlayerRuntimeController.TAG,
+        "ADDON_SUB: auto-pick scores=" + scored.joinToString(", ") {
+            "${it.first.id.take(40)}=${it.third}"
+        } + " → ${best.first.id.take(80)} (score=${best.third})"
+    )
+    // Only commit to a winner when at least one positive signal beat the
+    // baseline; otherwise fall back to the first candidate (which is the
+    // existing pre-fix behavior, so we never regress).
+    return if (best.third > 0) best.first else candidates.first()
+}
+
+private const val SUBTITLE_RULE_OUT_SCORE: Int = -1000
+
+private val INCOMPATIBLE_SOURCE_CLASSES: Set<String> = setOf(
+    "CAM", "TS", "TC", "SCR"
+)
+
+private val RETAIL_SOURCE_CLASSES: Set<String> = setOf(
+    "BluRay REMUX", "BluRay", "WEB-DL", "WEBRip", "HDRip", "DVDRip", "HDTV"
+)
+
+private fun scoreSubtitleAgainstRelease(
+    candidate: AioStrictParsedFile,
+    video: AioStrictParsedFile
+): Int {
+    // Hard rule-out: title mismatch (when both sides have a parseable title)
+    val candidateTitle = candidate.title?.lowercase(Locale.ROOT)?.trim()
+    val videoTitle = video.title?.lowercase(Locale.ROOT)?.trim()
+    if (!candidateTitle.isNullOrBlank() && !videoTitle.isNullOrBlank()) {
+        // Soft title compare: token Jaccard >= 0.5 OR one fully contains the
+        // other. Stricter equality would reject e.g. "Avatar Fire And Ash"
+        // vs "Avatar.Fire.and.Ash" purely on punctuation.
+        if (!titlesMatchLoosely(candidateTitle, videoTitle)) {
+            return SUBTITLE_RULE_OUT_SCORE
+        }
+    }
+
+    // Hard rule-out: year mismatch (only when both sides have a year)
+    if (!candidate.year.isNullOrBlank() && !video.year.isNullOrBlank() &&
+        candidate.year != video.year
+    ) {
+        return SUBTITLE_RULE_OUT_SCORE
+    }
+
+    // Hard rule-out: incompatible source class (cinema cap vs retail digital).
+    // Subtitles from these sources will never sync with a retail stream
+    // because the cuts, frame rates, and idents differ.
+    val videoQuality = video.quality
+    val candidateQuality = candidate.quality
+    if (videoQuality in RETAIL_SOURCE_CLASSES && candidateQuality in INCOMPATIBLE_SOURCE_CLASSES) {
+        return SUBTITLE_RULE_OUT_SCORE
+    }
+    if (videoQuality in INCOMPATIBLE_SOURCE_CLASSES && candidateQuality in RETAIL_SOURCE_CLASSES) {
+        return SUBTITLE_RULE_OUT_SCORE
+    }
+
+    var score = 0
+
+    // Source class match — the single biggest signal for sync compatibility.
+    when {
+        videoQuality == null || candidateQuality == null -> Unit
+        videoQuality == candidateQuality -> score += 50
+        // WEB-DL ↔ WEBRip: not a perfect match (WEBRip is a re-capture and
+        // can drift), but usually serviceable when no exact match exists.
+        (videoQuality == "WEB-DL" && candidateQuality == "WEBRip") ||
+            (videoQuality == "WEBRip" && candidateQuality == "WEB-DL") -> score += 10
+        // BluRay ↔ BluRay REMUX share the same master, treat as near-match.
+        (videoQuality == "BluRay" && candidateQuality == "BluRay REMUX") ||
+            (videoQuality == "BluRay REMUX" && candidateQuality == "BluRay") -> score += 30
+    }
+
+    // Service / network match (AMZN, NF, ATVP, MA, …). Soft signal: even
+    // when the network differs, two retail digital sources usually share
+    // the same master, so we score this lower than the source class match.
+    if (!video.network.isNullOrBlank() && !candidate.network.isNullOrBlank() &&
+        video.network.equals(candidate.network, ignoreCase = true)
+    ) {
+        score += 30
+    }
+
+    // Release group match — when both sides came from the same scene/p2p
+    // group the subtitle was almost certainly demuxed from the same master.
+    if (!video.releaseGroup.isNullOrBlank() && !candidate.releaseGroup.isNullOrBlank() &&
+        video.releaseGroup.equals(candidate.releaseGroup, ignoreCase = true)
+    ) {
+        score += 40
+    }
+
+    // Visual tag overlap (DV, HDR10, HDR10+, …). Each shared tag implies
+    // the subtitle was extracted from a master sharing the same colour
+    // pipeline as our stream, which strongly implies same-master origin.
+    val visualOverlap = candidate.visualTags.toSet()
+        .intersect(video.visualTags.toSet())
+    score += visualOverlap.size * 10
+
+    // Audio tag overlap (Atmos, DDP5.1, TrueHD, …). Weaker than visual but
+    // still a same-master indicator.
+    val audioTagOverlap = candidate.audioTags.toSet()
+        .intersect(video.audioTags.toSet())
+    score += audioTagOverlap.size * 5
+
+    // Audio channel layout overlap.
+    val channelOverlap = candidate.audioChannels.toSet()
+        .intersect(video.audioChannels.toSet())
+    score += channelOverlap.size * 3
+
+    // Resolution match — small tiebreaker; resolution doesn't affect sync
+    // but matches usually correlate with same-master.
+    if (!video.resolution.isNullOrBlank() && !candidate.resolution.isNullOrBlank() &&
+        video.resolution.equals(candidate.resolution, ignoreCase = true)
+    ) {
+        score += 5
+    }
+
+    // Edition / cut match (Director's Cut, Extended, IMAX, …). Different
+    // cuts have different runtimes and will desync.
+    val editionOverlap = candidate.editions.toSet()
+        .intersect(video.editions.toSet())
+    score += editionOverlap.size * 15
+    // Edition mismatch penalty: if both sides declare editions and they
+    // share none, that's a real sync risk.
+    if (candidate.editions.isNotEmpty() && video.editions.isNotEmpty() && editionOverlap.isEmpty()) {
+        score -= 20
+    }
+
+    // Repack / Proper match (small bonus when both are the corrected release).
+    if (candidate.repack && video.repack) score += 5
+
+    // Early release / leak penalty: leaked variants often have different
+    // cuts, missing scenes, or hardcoded subs and rarely sync with retail.
+    val candidateBlob = listOfNotNull(candidate.title, candidate.releaseGroup)
+        .joinToString(" ")
+        .lowercase(Locale.ROOT)
+    if (Regex("""\b(early[ ._-]?release|leaked?|kor[ ._-]?sub|hc[ ._-]?subs?)\b""").containsMatchIn(candidateBlob)) {
+        score -= 15
+    }
+
+    return score
+}
+
+private fun titlesMatchLoosely(a: String, b: String): Boolean {
+    val tokensA = titleTokens(a)
+    val tokensB = titleTokens(b)
+    if (tokensA.isEmpty() || tokensB.isEmpty()) return true // can't judge → don't rule out
+    if (tokensA == tokensB) return true
+    val intersect = tokensA.intersect(tokensB).size
+    val union = tokensA.union(tokensB).size
+    val jaccard = intersect.toDouble() / union.toDouble()
+    return jaccard >= 0.5
+}
+
+private fun titleTokens(value: String): Set<String> {
+    return value
+        .lowercase(Locale.ROOT)
+        .replace(Regex("[^a-z0-9 ]"), " ")
+        .split(Regex("\\s+"))
+        .map { it.trim() }
+        .filter { it.length >= 2 && it !in TITLE_STOPWORDS }
+        .toSet()
+}
+
+private val TITLE_STOPWORDS: Set<String> = setOf(
+    "the", "a", "an", "and", "of", "in", "on", "to", "for", "with", "from"
+)
+
+/**
+ * Picks the best internal subtitle track to use as a translation source for
+ * the AI-translation tier. Bitmap subtitles (PGS / VobSub / DVB) are
+ * filtered out — they cannot be translated because the cue payload is
+ * pixels, not text. Among text-based candidates, prefers (in order):
+ *   1. The secondary language (the user's translation hint).
+ *   2. English (highest-quality NMT corpus, statistically most likely to
+ *      produce a good translation).
+ *   3. Any other text-based track.
+ * Returns -1 when no text-based internal subtitle exists.
+ */
+internal fun pickTranslatableInternalSubtitle(
+    subtitleTracks: List<TrackInfo>,
+    secondaryLanguage: String?
+): Int {
+    if (subtitleTracks.isEmpty()) return -1
+    val textTracks = subtitleTracks
+        .mapIndexedNotNull { index, track ->
+            if (isBitmapSubtitleMimeType(track.mimeType)) null else index
+        }
+    if (textTracks.isEmpty()) return -1
+
+    if (!secondaryLanguage.isNullOrBlank()) {
+        val secondaryMatch = textTracks.firstOrNull { index ->
+            PlayerSubtitleUtils.matchesLanguageCode(subtitleTracks[index].language, secondaryLanguage)
+        }
+        if (secondaryMatch != null) return secondaryMatch
+    }
+    val englishMatch = textTracks.firstOrNull { index ->
+        PlayerSubtitleUtils.matchesLanguageCode(subtitleTracks[index].language, "en")
+    }
+    if (englishMatch != null) return englishMatch
+    return textTracks.first()
+}
+
+/**
+ * Returns true when the supplied Media3 sample MIME type names a bitmap
+ * subtitle codec (PGS / VobSub / DVB). Bitmap subs cannot be passed through
+ * Gemini for translation because the cue payload is rasterized image data,
+ * not Unicode text. Unknown / null MIME types are treated as text so we
+ * never silently drop a translatable track.
+ */
+internal fun isBitmapSubtitleMimeType(mimeType: String?): Boolean {
+    if (mimeType.isNullOrBlank()) return false
+    val normalized = mimeType.lowercase(Locale.ROOT)
+    return normalized == "application/pgs" ||
+        normalized == "application/x-pgs" ||
+        normalized == "application/vobsub" ||
+        normalized == "application/dvbsubs" ||
+        normalized == "application/x-subpic"
 }
 
 internal fun findBestInternalSubtitleTrackIndexForStartup(

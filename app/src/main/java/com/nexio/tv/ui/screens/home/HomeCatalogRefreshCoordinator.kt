@@ -7,7 +7,10 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.tmdb.TmdbMetadataService
+import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.MetadataDiskCacheStore
+import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
@@ -58,8 +61,40 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     private val metaRepository: MetaRepository,
     private val mdbListRepository: MDBListRepository,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
+    private val tmdbService: TmdbService,
+    private val tmdbMetadataService: TmdbMetadataService,
+    private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     @ApplicationContext private val appContext: Context
 ) {
+    /**
+     * Overlay TMDB-localized title/description/genres on top of the
+     * addon-sourced MetaPreview. This ensures every item on Modern Home
+     * respects the app display language (addons ship English-only text).
+     * The fetchEnrichment call populates a language-keyed disk cache that
+     * the Detail screen will later hit, so this does not introduce duplicate
+     * TMDB API traffic — it reuses the same cache.
+     */
+    private suspend fun overlayTmdbLocalizedMetadata(item: MetaPreview): MetaPreview {
+        return try {
+            val apiKey = tmdbSettingsDataStore.settings.first().apiKey.trim()
+            if (apiKey.isEmpty()) return item
+            val tmdbId = tmdbService.ensureTmdbId(item.id, item.apiType) ?: return item
+            val enrichment = tmdbMetadataService.fetchEnrichment(
+                tmdbId = tmdbId,
+                contentType = item.type
+            ) ?: return item
+            item.copy(
+                name = enrichment.localizedTitle?.takeIf { it.isNotBlank() } ?: item.name,
+                description = enrichment.description?.takeIf { it.isNotBlank() } ?: item.description,
+                genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else item.genres,
+                releaseInfo = enrichment.releaseInfo ?: item.releaseInfo,
+                imdbRating = enrichment.rating?.toFloat() ?: item.imdbRating
+            )
+        } catch (_: Throwable) {
+            item
+        }
+    }
+
     private val refreshMutex = Mutex()
 
     internal suspend fun hydrateAndPrefetchRows(
@@ -116,7 +151,8 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                     persistedFallback = persistedFallback,
                     externalMeta = externalMeta
                 )
-                mdbListRepository.enrichPreview(merged)
+                val localized = overlayTmdbLocalizedMetadata(merged)
+                mdbListRepository.enrichPreview(localized)
             }
             row.copy(items = hydratedItems)
         }
@@ -245,7 +281,8 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                                 persistedFallback = persistedFallback,
                                 externalMeta = externalMeta
                             )
-                            mdbListRepository.enrichPreview(merged)
+                            val localized = overlayTmdbLocalizedMetadata(merged)
+                            mdbListRepository.enrichPreview(localized)
                         }
                         val refreshedHydrated = refreshed.copy(items = hydratedItems)
                         onLog(

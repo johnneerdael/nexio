@@ -335,6 +335,9 @@ dependencies {
     // DataStore
     implementation(libs.datastore.preferences)
 
+    // Lock-free queues for playback instrumentation
+    implementation(libs.jctools.core)
+
     // ViewModel
     implementation(libs.lifecycle.viewmodel.compose)
 

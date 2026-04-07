@@ -16,11 +16,44 @@ internal fun PlayerRuntimeController.toggleAiSubtitles() {
 }
 
 internal fun PlayerRuntimeController.selectAddonSubtitleRespectingAi(subtitle: Subtitle) {
-    if (_uiState.value.aiSubtitlesEnabled) {
+    if (_uiState.value.aiSubtitlesEnabled && !addonSubtitleIsAlreadyInPrimaryLanguage(subtitle)) {
         translateAndSelectAddonSubtitle(subtitle)
-    } else {
-        selectAddonSubtitle(subtitle)
+        return
     }
+    // Manual pick of a primary-language sub: AI translation would be a no-op
+    // (Dutch → Dutch). Clear the AI flag silently so the picker shows only
+    // one selected source instead of both the AI toggle and the addon entry.
+    if (_uiState.value.aiSubtitlesEnabled || _uiState.value.isAiSubtitleTranslating) {
+        clearAiTranslationStateSilently()
+    }
+    selectAddonSubtitle(subtitle)
+}
+
+private fun PlayerRuntimeController.addonSubtitleIsAlreadyInPrimaryLanguage(
+    subtitle: Subtitle
+): Boolean {
+    val normalizedSubLang = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)
+    val normalizedPrimary = PlayerSubtitleUtils.normalizeLanguageCode(
+        _uiState.value.subtitleStyle.preferredLanguage
+    )
+    return normalizedSubLang.isNotBlank() &&
+        normalizedPrimary.isNotBlank() &&
+        normalizedSubLang == normalizedPrimary
+}
+
+internal fun PlayerRuntimeController.clearAiTranslationStateSilently() {
+    aiTranslationSelectionGeneration += 1L
+    aiSubtitleTranslationJob?.cancel()
+    aiSubtitleTranslationJob = null
+    _uiState.update {
+        it.copy(
+            aiSubtitlesEnabled = false,
+            isAiSubtitleTranslating = false,
+            aiSubtitleError = null,
+            translatedBuiltInCues = emptyList()
+        )
+    }
+    refreshBuiltInAiOverlayState()
 }
 
 internal fun PlayerRuntimeController.enableAiSubtitles() {

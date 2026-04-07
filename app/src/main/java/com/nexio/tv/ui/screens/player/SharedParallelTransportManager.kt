@@ -7,6 +7,7 @@ import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
 import java.io.EOFException
 import java.io.IOException
 import java.io.InterruptedIOException
@@ -36,15 +37,24 @@ import java.util.concurrent.atomic.AtomicBoolean
 @UnstableApi
 internal class SharedParallelTransportManager(
     private val upstreamFactory: OkHttpDataSource.Factory,
-    private val parallelConnections: Int,
+    private val envelope: CapabilityEnvelope,
     private val transportSampleTimeMs: () -> Long,
     private val onTransportBytesDownloaded: (Long, Long) -> Unit,
     private val onChunkBytesDownloaded: (chunkIndex: Long, chunkSize: Long, offsetInChunk: Long, bytesRead: Int, sampleTimeMs: Long) -> Unit,
     private val onTransportObservation: (RuntimeTransportObservation) -> Unit,
     private val transportPolicyProvider: () -> TransportPolicy?,
     private val onTerminalError: (ChunkDownloadException) -> Unit,
-    private val signalDataAvailable: () -> Unit
+    private val signalDataAvailable: () -> Unit,
+    private val provider: String? = null
 ) {
+    init {
+        if (provider != null) {
+            val locked = CapabilityEnvelope.lockedFor(provider)
+            if (locked != null && !locked.matchesLockedShape(envelope)) {
+                throw IllegalStateException("CapabilityEnvelope shape drift for provider=$provider")
+            }
+        }
+    }
 
     companion object {
         private const val TAG = "SharedParallelXport"
@@ -89,7 +99,14 @@ internal class SharedParallelTransportManager(
             scheduledRanges[ci] = true
         }
         scheduler?.cancelAll()
-        scheduler = DualLaneScheduler(parallelConnections, 1)
+        scheduler = DualLaneScheduler(envelope.maxSafeUrgentWorkers, envelope.maxSafePrefetchWorkers)
+        PlayerTransportTelemetry.log("sptm.attach", mapOf(
+            "prefetchChunk" to envelope.maxSafePrefetchChunkBytes,
+            "prefetchWorkers" to envelope.maxSafePrefetchWorkers,
+            "providerGuard" to (provider != null),
+            "urgentChunk" to envelope.maxSafeUrgentChunkBytes,
+            "urgentWorkers" to envelope.maxSafeUrgentWorkers
+        ))
     }
 
     fun detach() {
@@ -148,7 +165,7 @@ internal class SharedParallelTransportManager(
             readerPosition = readerPosition,
             activeChunkSize = chunkSize,
             totalFileLength = totalFileLength,
-            parallelConnections = parallelConnections,
+            envelope = envelope,
             policy = transportPolicyProvider()
         ) { chunkIndex, start, end, urgent ->
             submitRange(sched, chunkIndex, start, end, urgent)
@@ -164,11 +181,21 @@ internal class SharedParallelTransportManager(
         readerPosition: Long,
         activeChunkSize: Long,
         totalFileLength: Long,
-        parallelConnections: Int,
+        envelope: CapabilityEnvelope,
         policy: TransportPolicy?,
         submit: (chunkIndex: Long, start: Long, end: Long, urgent: Boolean) -> Unit
     ) {
         val currentChunkIdx = readerPosition / activeChunkSize
+        val chunksPerPageForLog = ((PagedFrontierBuffer.PAGE_SIZE + activeChunkSize - 1L) / activeChunkSize).toInt()
+        val maxAheadForLog = maxOf(envelope.maxSafeUrgentWorkers + 1, chunksPerPageForLog + 1)
+        val urgentCountForLog = policy?.urgentWorkers ?: envelope.maxSafeUrgentWorkers
+        PlayerTransportTelemetry.logThrottled("sptm.promote", 1000L, mapOf(
+            "maxAhead" to maxAheadForLog,
+            "policy" to (policy?.javaClass?.simpleName ?: "null"),
+            "prefetchWorkers" to envelope.maxSafePrefetchWorkers,
+            "urgentCount" to urgentCountForLog,
+            "urgentWorkers" to envelope.maxSafeUrgentWorkers
+        ))
 
         val urgentStart = currentChunkIdx * activeChunkSize
         val urgentEnd = if (totalFileLength != C.LENGTH_UNSET.toLong()) {
@@ -181,13 +208,13 @@ internal class SharedParallelTransportManager(
         }
 
         // `PagedFrontierBuffer` only exposes bytes once the page covering them is fully
-        // written, so if `chunkSize * (parallelConnections + 1)` < page size the reader
+        // written, so if `chunkSize * (urgentWorkers + 1)` < page size the reader
         // can deadlock: it can't advance past the current page until every chunk in that
         // page completes, and scheduling is position-driven. Always schedule enough chunks
         // to cover the current page plus one read-ahead chunk.
         val chunksPerPage = ((PagedFrontierBuffer.PAGE_SIZE + activeChunkSize - 1L) / activeChunkSize).toInt()
-        val maxAhead = maxOf(parallelConnections + 1, chunksPerPage + 1)
-        val urgentCount = policy?.urgentWorkers ?: maxAhead
+        val maxAhead = maxOf(envelope.maxSafeUrgentWorkers + 1, chunksPerPage + 1)
+        val urgentCount = policy?.urgentWorkers ?: envelope.maxSafeUrgentWorkers
 
         for (i in 1 until maxAhead) {
             val ci = currentChunkIdx + i
@@ -218,11 +245,11 @@ internal class SharedParallelTransportManager(
                 downloadRange(range.first, range.last + 1)
             }
         } else {
-            val submitted = sched.submitPrefetch(start until end) { range ->
-                downloadRange(range.first, range.last + 1)
-            }
-            if (submitted == null) {
-                scheduledRanges.remove(chunkIndex)
+            val prefetchChunkSize = transportPolicyProvider()?.prefetchChunkBytes
+                ?.takeIf { it > 0L }
+                ?: activeChunkSize
+            sched.submitPrefetch(start until end, chunkSize = prefetchChunkSize) { handle ->
+                downloadRangeIntoScratch(handle)
             }
         }
     }
@@ -333,6 +360,132 @@ internal class SharedParallelTransportManager(
         // The façade re-drives scheduleForReaderPosition() on every successful read(),
         // so the manager does NOT recurse here. The only self-reschedule that remains is
         // the frontier-promotion requeue above, which is required for correctness.
+    }
+
+    /**
+     * Prefetch download path: mirrors [downloadRange] but accumulates bytes into
+     * [handle.scratch] instead of streaming them directly into the store.
+     *
+     * On preemption ([PrefetchTaskHandle.preempted] set by [DualLaneScheduler.submitUrgent]):
+     * - Throws [PreemptedException] to exit the download loop immediately.
+     * - Does NOT increment the retry counter — preemption is not an error.
+     * - [handle.totalRead] is preserved so the scheduler can re-issue a Range request
+     *   at effectiveStart + totalRead for a byte-identical resume.
+     *
+     * On chunk completion, calls [AbsoluteByteStore.publishCompleteChunk] so the entire
+     * chunk becomes visible to readers atomically (PagedFrontierBuffer invariant).
+     */
+    private fun downloadRangeIntoScratch(handle: PrefetchTaskHandle) {
+        val s = store ?: return
+        val chunkSize = activeChunkSize
+        if (chunkSize <= 0L) return
+        val start = handle.range.first
+        val end = handle.range.last + 1
+        val chunkIndex = start / chunkSize
+        val effectiveStart = maxOf(start, bootstrapCoverageEnd)
+        if (effectiveStart >= end) return
+        val expectedBytes = (end - effectiveStart).coerceAtLeast(0L).toInt()
+        val readBuffer = ByteArray(READ_BUFFER_SIZE)
+        var lastException: Exception? = null
+        var transientAttemptNumber = 0
+        var nonTransientAttemptNumber = 0
+
+        while (!closed.get() && handle.totalRead < expectedBytes) {
+            if (handle.preempted.get()) throw PreemptedException()
+            val ds = upstreamFactory.createDataSource()
+            try {
+                awaitConnectionBudgetIfNeeded()
+                if (handle.preempted.get()) throw PreemptedException()
+                val uri = resolvedUri ?: fallbackUri ?: throw IOException("No URI available")
+                val spec = DataSpec.Builder()
+                    .setUri(uri)
+                    .setPosition(effectiveStart + handle.totalRead)
+                    .setLength((expectedBytes - handle.totalRead).toLong())
+                    .build()
+
+                ds.open(spec)
+                emitTransportObservation(ds.responseHeaders, ds.uri)
+                while (!closed.get() && handle.totalRead < expectedBytes) {
+                    if (handle.preempted.get()) throw PreemptedException()
+                    val maxRead = minOf(expectedBytes - handle.totalRead, READ_BUFFER_SIZE)
+                    if (maxRead <= 0) break
+                    val read = ds.read(readBuffer, 0, maxRead)
+                    if (read == C.RESULT_END_OF_INPUT) {
+                        if (handle.totalRead >= expectedBytes) break
+                        throw EOFException("Unexpected end of range $chunkIndex after ${handle.totalRead} / $expectedBytes bytes")
+                    }
+                    System.arraycopy(readBuffer, 0, handle.scratch, handle.totalRead, read)
+                    val offsetInChunk = (effectiveStart - start) + handle.totalRead.toLong()
+                    handle.totalRead += read
+                    val sampleTime = transportSampleTimeMs()
+                    onTransportBytesDownloaded(read.toLong(), sampleTime)
+                    onChunkBytesDownloaded(chunkIndex, chunkSize, offsetInChunk, read, sampleTime)
+                }
+                ds.close()
+            } catch (e: PreemptedException) {
+                runCatching { ds.close() }
+                throw e  // Propagate without incrementing retry counters.
+            } catch (e: Exception) {
+                runCatching { ds.close() }
+                if (handle.preempted.get()) throw PreemptedException()
+                if (closed.get()) return
+                lastException = e
+                val recoverable = e.isRecoverableChunkFailure()
+                if (!recoverable) {
+                    nonTransientAttemptNumber += 1
+                    if (nonTransientAttemptNumber >= MAX_NON_TRANSIENT_CHUNK_ATTEMPTS) break
+                } else {
+                    transientAttemptNumber += 1
+                    if (transientAttemptNumber >= MAX_TRANSIENT_CHUNK_ATTEMPTS) break
+                }
+                val allowedAttempts = if (recoverable) MAX_TRANSIENT_CHUNK_ATTEMPTS else MAX_NON_TRANSIENT_CHUNK_ATTEMPTS
+                val attemptNumber = if (recoverable) transientAttemptNumber else nonTransientAttemptNumber
+                val resumeOffset = handle.totalRead
+                if (e.isTransientInterruption()) {
+                    Log.d(TAG, "Prefetch range $chunkIndex interrupted at $resumeOffset bytes (attempt $attemptNumber), retrying")
+                } else {
+                    Log.w(
+                        TAG,
+                        "Prefetch range $chunkIndex download failed at $resumeOffset / $expectedBytes bytes (attempt $attemptNumber/$allowedAttempts), retrying: ${e.message}"
+                    )
+                }
+                val delayMs = retryBackoffMs(attemptNumber, madeProgress = resumeOffset > 0)
+                if (delayMs > 0L) {
+                    try { Thread.sleep(delayMs) } catch (_: InterruptedException) { }
+                }
+                continue
+            }
+        }
+
+        if (!closed.get() && handle.totalRead >= expectedBytes) {
+            // Chunk complete — publish atomically so no reader observes partial state.
+            s.publishCompleteChunk(effectiveStart, handle.scratch, handle.totalRead)
+            signalDataAvailable()
+        } else if (!closed.get() && handle.totalRead < expectedBytes && lastException != null) {
+            val chunkStart = chunkIndex * chunkSize
+            val chunkEnd = chunkStart + chunkSize
+            val currentFrontier = s.frontier
+            val isFrontierBlocking = currentFrontier >= chunkStart && currentFrontier < chunkEnd
+            val promotionCount = frontierPromotionCounts[chunkIndex] ?: 0
+
+            if (isFrontierBlocking && promotionCount < MAX_FRONTIER_PROMOTIONS) {
+                frontierPromotionCounts[chunkIndex] = promotionCount + 1
+                scheduledRanges.remove(chunkIndex)
+                Log.w(TAG, "Prefetch range $chunkIndex is frontier-blocking (frontier=$currentFrontier), " +
+                    "re-promoting for urgent requeue (promotion ${promotionCount + 1}/$MAX_FRONTIER_PROMOTIONS)")
+                signalDataAvailable()
+                scheduleForReaderPosition(currentFrontier)
+            } else {
+                val error = ChunkDownloadException(
+                    chunkIndex = chunkIndex,
+                    message = "Failed to download prefetch range $chunkIndex after retries",
+                    cause = lastException
+                )
+                onTerminalError(error)
+                signalDataAvailable()
+                Log.e(TAG, "Prefetch range $chunkIndex failed to download completely after retries: ${lastException.message}")
+            }
+        }
     }
 
     private fun Exception.isTransientInterruption(): Boolean {
