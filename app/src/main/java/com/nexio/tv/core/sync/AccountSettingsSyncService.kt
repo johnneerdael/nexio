@@ -805,6 +805,39 @@ class AccountSettingsSyncService @Inject constructor(
             return
         }
 
+        // Trakt rotates the refresh token on every refresh — once we've used a
+        // refresh token, the previous pair is dead at the auth server. If local
+        // has a *newer* token pair than what's stored in Supabase (which can
+        // happen when an earlier refresh push was skipped — e.g. because the
+        // sync session wasn't yet hydrated when refreshTokenIfNeeded fired), we
+        // must NOT overwrite local with the stale remote pair: doing so makes
+        // the next API call hit 401 → force-refresh against the already-rotated
+        // remote refresh token → invalid_grant → clearAuth(). That's the
+        // upgrade-time logout. Instead, keep local and shove it back upstream
+        // so both sides converge.
+        val localState = traktAuthDataStore.state.first()
+        val localCreatedAt = localState.createdAt ?: 0L
+        val remoteCreatedAt = accessPayload?.createdAt ?: 0L
+        val localHasTokens = !localState.accessToken.isNullOrBlank() &&
+            !localState.refreshToken.isNullOrBlank()
+        if (localHasTokens && localCreatedAt >= remoteCreatedAt) {
+            Log.w(
+                TAG,
+                "applyRemoteTraktSecrets: local token (createdAt=$localCreatedAt) is newer " +
+                    "than remote (createdAt=$remoteCreatedAt); preserving local and pushing upstream"
+            )
+            runCatching { syncTraktSecretsToRemote() }
+                .onFailure { e -> Log.w(TAG, "Failed to push local Trakt tokens after stale-remote detection", e) }
+            traktAuthDataStore.saveUser(
+                username = settings.integrations.traktAuth.username.takeIf { it.isNotBlank() },
+                userSlug = settings.integrations.traktAuth.userSlug.takeIf { it.isNotBlank() }
+            )
+            if (!settings.integrations.traktAuth.pending) {
+                traktAuthDataStore.clearDeviceFlow()
+            }
+            return
+        }
+
         traktAuthDataStore.saveToken(
             TraktTokenResponseDto(
                 accessToken = accessToken,
