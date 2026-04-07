@@ -1409,21 +1409,40 @@ class TraktProgressService @Inject constructor(
     ): Map<Int, com.nexio.tv.data.repository.trakt.TraktEpisodeRef> {
         if (episodeNumbers.isEmpty()) return emptyMap()
         val pathId = toTraktPathId(showContentId)
-        return coroutineScope {
-            episodeNumbers.map { epNumber ->
-                async {
-                    val traktId = runCatching { fetchEpisodeSummary(pathId, season, epNumber) }
-                        .getOrNull()
-                        ?.ids?.trakt
-                    if (traktId != null) {
-                        epNumber to com.nexio.tv.data.repository.trakt.TraktEpisodeRef(traktId)
-                    } else {
-                        null
-                    }
-                }
-            }.awaitAll()
-                .filterNotNull()
-                .toMap()
+        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+            traktApi.getSeasonEpisodes(
+                authorization = authHeader,
+                id = pathId,
+                season = season,
+                extended = "full"
+            )
+        }
+        val seasonEpisodes: List<TraktEpisodeSummaryDto> = response
+            ?.takeIf { it.isSuccessful }
+            ?.body()
+            .orEmpty()
+
+        val byNumber: Map<Int, Int> = seasonEpisodes
+            .mapNotNull { dto ->
+                val n = dto.number ?: return@mapNotNull null
+                val tid = dto.ids?.trakt ?: return@mapNotNull null
+                n to tid
+            }
+            .toMap()
+
+        val requested = episodeNumbers.toSet()
+        val resolved = byNumber.filterKeys { it in requested }
+        val unresolvedEpisodes = requested - resolved.keys
+        if (unresolvedEpisodes.isNotEmpty()) {
+            Log.w(
+                "TraktProgressService",
+                "resolveSeasonEpisodeTraktIds: unable to resolve trakt ids for showId=$showContentId " +
+                    "season=$season episodes=$unresolvedEpisodes"
+            )
+        }
+
+        return resolved.mapValues { (_, traktId) ->
+            com.nexio.tv.data.repository.trakt.TraktEpisodeRef(traktId)
         }
     }
 

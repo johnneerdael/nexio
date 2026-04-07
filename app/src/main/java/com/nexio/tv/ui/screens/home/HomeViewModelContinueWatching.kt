@@ -41,11 +41,11 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
             val items = timeline.map { row ->
                 when (row) {
                     is ContinueWatchingTimelineRow.Resume -> row.value.toContinueWatchingInProgress(snapshot.displayMetadataByItemKey)
-                    is ContinueWatchingTimelineRow.NextUp -> row.value.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey)
+                    is ContinueWatchingTimelineRow.NextUp -> row.value.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, System.currentTimeMillis())
                 }
             }
             val traktUpNextItems = snapshot.traktUpNextItems.map { entry ->
-                entry.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey)
+                entry.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, System.currentTimeMillis())
             }
 
             _uiState.update { state ->
@@ -220,8 +220,8 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
                 }
             )
         }
-        continueWatchingSnapshotService.removeShowOptimistically(targetId)
         viewModelScope.launch {
+            continueWatchingSnapshotService.removeShowOptimistically(targetId)
             runCatching {
                 watchProgressRepository.clearShowProgress(targetId)
                 continueWatchingSnapshotService.ensureFresh(force = true)
@@ -265,7 +265,7 @@ internal fun HomeViewModel.removeContinueWatchingPipeline(
 }
 
 internal fun HomeViewModel.markContinueWatchingAsWatchedPipeline(item: ContinueWatchingItem) {
-    if (item is ContinueWatchingItem.NextUp) {
+    val nextUpTargetId: String? = if (item is ContinueWatchingItem.NextUp) {
         val targetId = nextUpDismissKey(item.info.contentId)
         _uiState.update { state ->
             state.copy(
@@ -278,7 +278,9 @@ internal fun HomeViewModel.markContinueWatchingAsWatchedPipeline(item: ContinueW
                 }
             )
         }
-        continueWatchingSnapshotService.removeShowOptimistically(targetId)
+        targetId
+    } else {
+        null
     }
 
     val episodeRef = when (item) {
@@ -296,6 +298,9 @@ internal fun HomeViewModel.markContinueWatchingAsWatchedPipeline(item: ContinueW
     val capturedProgress = (item as? ContinueWatchingItem.InProgress)?.progress
 
     viewModelScope.launch {
+        if (nextUpTargetId != null) {
+            continueWatchingSnapshotService.removeShowOptimistically(nextUpTargetId)
+        }
         if (episodeRef.isNotEmpty()) {
             continueWatchingSnapshotService.applyEpisodesMarked(episodeRef)
         }
@@ -432,10 +437,11 @@ private fun WatchProgress.toContinueWatchingInProgress(
 }
 
 private fun com.nexio.tv.data.repository.TraktProgressService.NextUpEntry.toContinueWatchingNextUp(
-    displayMetadataByItemKey: Map<String, HomeDisplayMetadata>
+    displayMetadataByItemKey: Map<String, HomeDisplayMetadata>,
+    nowMs: Long
 ): ContinueWatchingItem.NextUp {
-    val releaseDate = parseEpisodeReleaseDate(firstAired)
-    val hasAired = releaseDate?.let { !it.isAfter(LocalDate.now(ZoneId.systemDefault())) } ?: true
+    val hasAired = com.nexio.tv.data.repository.AirDateGate.isAired(firstAiredMs, firstAired, nowMs)
+    val releaseDate = if (!hasAired) parseEpisodeReleaseDate(firstAired) else null
     val displayMetadata = displayMetadataByItemKey[homeDisplayItemKey(contentType, contentId)]
     return ContinueWatchingItem.NextUp(
         NextUpInfo(
@@ -454,9 +460,7 @@ private fun com.nexio.tv.data.repository.TraktProgressService.NextUpEntry.toCont
             thumbnail = null,
             released = firstAired,
             hasAired = hasAired,
-            airDateLabel = releaseDate
-                ?.takeIf { !hasAired }
-                ?.let(::formatEpisodeAirDateLabel),
+            airDateLabel = releaseDate?.let(::formatEpisodeAirDateLabel),
             lastWatched = activityAtMs,
             imdbRating = displayMetadata?.imdbRating,
             genres = displayMetadata?.genres.orEmpty(),

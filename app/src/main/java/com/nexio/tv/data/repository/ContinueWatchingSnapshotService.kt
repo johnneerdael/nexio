@@ -31,7 +31,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -71,6 +70,10 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private var currentTimerTargetMs: Long? = null
 
     init {
+        scope.coroutineContext[Job]?.invokeOnCompletion {
+            reemitJob = null
+            currentTimerTargetMs = null
+        }
         scope.launch {
             snapshotStore.read()?.let { persisted ->
                 val normalized = sanitizeSnapshot(persisted)
@@ -177,13 +180,28 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
     }
 
+    /**
+     * Current raw resume entries (pre dismissal/next-up filtering). Used by callers that need
+     * to look up the exact [WatchProgress] for rollback of an optimistic mutation.
+     */
+    fun currentRawResumeItems(): List<WatchProgress> = rawSnapshotState.value.resumeItems
+
     // ── Synchronous rawSnapshotState mutation helpers (Phase 3) ───────────────
 
     /**
-     * Uniquely identifies a resume entry: the videoId is the per-episode key
-     * (contentId:season:episode for series, or the raw videoId for movies).
+     * Uniquely identifies a resume entry by canonical show/season/episode coordinates.
      */
     data class EpisodeRef(val showId: String, val seasonNumber: Int, val episodeNumber: Int)
+
+    /**
+     * Snapshot of entries removed by an optimistic season-mark mutation.
+     * Used for rollback of resume + next-up rails if the batched call fails.
+     */
+    data class EpisodeRollbackState(
+        val resumeItems: List<WatchProgress> = emptyList(),
+        val nextUpItems: List<TraktProgressService.NextUpEntry> = emptyList(),
+        val traktUpNextItems: List<TraktProgressService.NextUpEntry> = emptyList()
+    )
 
     /**
      * Remove a single resume entry by its [videoId] under [refreshMutex].
@@ -227,10 +245,16 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     /**
-     * Returns the current resume items from the raw snapshot for use as a rollback baseline.
+     * Returns the current snapshot data from the raw state for use as a rollback baseline.
      * Must be called before [applyEpisodesMarked] to capture the pre-mutation state.
      */
-    fun snapshotForRollback(): List<WatchProgress> = rawSnapshotState.value.resumeItems
+    fun snapshotForRollback(): EpisodeRollbackState = rawSnapshotState.value.let { snapshot ->
+        EpisodeRollbackState(
+            resumeItems = snapshot.resumeItems,
+            nextUpItems = snapshot.nextUpItems,
+            traktUpNextItems = snapshot.traktUpNextItems
+        )
+    }
 
     /**
      * Remove all resume entries and next-up entries that match any of the given [episodes].
@@ -268,39 +292,75 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     /**
-     * Restore resume entries that were optimistically removed by [applyEpisodesMarked].
+     * Restore entries that were optimistically removed by [applyEpisodesMarked].
      */
-    suspend fun rollbackEpisodes(episodes: List<WatchProgress>) {
-        if (episodes.isEmpty()) return
+    suspend fun rollbackEpisodes(state: EpisodeRollbackState) {
+        if (state.resumeItems.isEmpty() && state.nextUpItems.isEmpty() && state.traktUpNextItems.isEmpty()) {
+            return
+        }
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
-                val merged = (current.resumeItems + episodes)
+                val rollbackResume = current.resumeItems
+                    .associateByTo(LinkedHashMap<String, WatchProgress>()) { it.videoId }
+                    .also { existing ->
+                        state.resumeItems.forEach { entry -> existing.putIfAbsent(entry.videoId, entry) }
+                    }
+                    .values
+                    .toList()
                     .sortedByDescending { it.lastWatched }
-                    .distinctBy { it.videoId }
-                current.copy(resumeItems = merged)
+
+                val rollbackNextUp = (current.nextUpItems + state.nextUpItems)
+                    .distinctBy {
+                        "${it.contentId}|${it.season}|${it.episode}"
+                    }
+                    .sortedByDescending { it.activityAtMs }
+
+                val rollbackTraktUpNext = (current.traktUpNextItems + state.traktUpNextItems)
+                    .distinctBy {
+                        "${it.contentId}|${it.season}|${it.episode}"
+                    }
+                    .sortedByDescending { it.activityAtMs }
+
+                current.copy(
+                    resumeItems = rollbackResume,
+                    nextUpItems = rollbackNextUp,
+                    traktUpNextItems = rollbackTraktUpNext
+                )
             }
         }
     }
 
+    suspend fun rollbackEpisodes(episodes: List<WatchProgress>) {
+        rollbackEpisodes(
+            EpisodeRollbackState(
+                resumeItems = episodes
+            )
+        )
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
 
-    fun removeShowOptimistically(contentId: String) {
+    suspend fun removeShowOptimistically(contentId: String) {
         val target = contentId.trim()
         if (target.isBlank()) return
-        val updated = rawSnapshotState.value.copy(
-            nextUpItems = rawSnapshotState.value.nextUpItems.filterNot { it.contentId == target },
-            traktUpNextItems = rawSnapshotState.value.traktUpNextItems.filterNot { it.contentId == target },
-            updatedAtMs = System.currentTimeMillis()
-        )
-        persistRawSnapshot(updated)
+        refreshMutex.withLock {
+            rawSnapshotState.update { current ->
+                current.copy(
+                    nextUpItems = current.nextUpItems.filterNot { it.contentId == target },
+                    traktUpNextItems = current.traktUpNextItems.filterNot { it.contentId == target }
+                )
+            }
+        }
     }
 
     fun invalidateLocalizedMetadata() {
         traktProgressService.invalidateLocalizedMetadata()
         snapshotStore.clear()
         metadataDiskCacheStore.replaceHomeFeedReferences(feedKey = "continue_watching", itemKeys = emptySet())
-        rawSnapshotState.value = rawSnapshotState.value.copy(displayMetadataByItemKey = emptyMap())
-        snapshotState.value = snapshotState.value.copy(displayMetadataByItemKey = emptyMap())
+        scope.launch {
+            rawSnapshotState.update { it.copy(displayMetadataByItemKey = emptyMap()) }
+            snapshotState.value = rawSnapshotState.value
+        }
     }
 
     private fun buildRawSnapshot(
@@ -320,19 +380,22 @@ class ContinueWatchingSnapshotService @Inject constructor(
             .asSequence()
             .mapNotNull(::normalizeNextUpEntry)
             .sortedByDescending { it.activityAtMs }
-            .distinctBy { it.contentId }
+            .distinctBy { "${it.contentId}|${it.season}|${it.episode}" }
             .toList()
-        val nextUpItems = splitNextUpCandidatesForContinueWatching(
+        val nextUpMainCandidates = splitNextUpCandidatesForContinueWatching(
             resumes = resumeItems.map(::resumeRefForProgress),
             nextUpItems = normalizedNextUpItems,
             nextUpRef = ::nextUpRefForEntry,
             nowMs = nowMs
         ).mainFeedItems
+        val nextUpItems = nextUpMainCandidates.filter { entry ->
+            AirDateGate.isAired(firstAiredMs = entry.firstAiredMs, tmdbAirDate = entry.firstAired, nowMs = nowMs)
+        }
         val normalizedTraktUpNextItems = traktUpNextEntries
             .asSequence()
             .mapNotNull(::normalizeNextUpEntry)
             .sortedByDescending { it.activityAtMs }
-            .distinctBy { it.contentId }
+            .distinctBy { "${it.contentId}|${it.season}|${it.episode}" }
             .toList()
         val syntheticRailCandidates = splitNextUpCandidatesForContinueWatching(
             resumes = resumeItems.map(::resumeRefForProgress),
@@ -344,8 +407,16 @@ class ContinueWatchingSnapshotService @Inject constructor(
             AirDateGate.isAired(firstAiredMs = entry.firstAiredMs, tmdbAirDate = entry.firstAired, nowMs = nowMs)
         }
 
+        // Resume items carry no air-date data; running them through AirDateGate keeps all
+        // three rails on a single uniform gate site. With firstAiredMs=0 and tmdbAirDate=null,
+        // isAired() returns true — so this is a no-op for resumes today, but preserves the
+        // contract that every rail participates in gating.
+        val gatedResumeItems = resumeItems.filter {
+            AirDateGate.isAired(firstAiredMs = 0L, tmdbAirDate = null, nowMs = nowMs)
+        }
+
         val scheduledReemit = buildList {
-            addAll(normalizedNextUpItems.filter { entry ->
+            addAll(nextUpMainCandidates.filter { entry ->
                 !AirDateGate.isAired(firstAiredMs = entry.firstAiredMs, tmdbAirDate = entry.firstAired, nowMs = nowMs)
             })
             addAll(syntheticRailCandidates.filter { entry ->
@@ -354,7 +425,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
 
         return ContinueWatchingSnapshot(
-            resumeItems = resumeItems,
+            resumeItems = gatedResumeItems,
             nextUpItems = nextUpItems,
             traktUpNextItems = traktUpNextItems,
             updatedAtMs = nowMs,
@@ -410,7 +481,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
             nextUpItems = mainFeedNextUpItems,
             traktUpNextItems = sanitizedTraktUpNextItems,
             displayMetadataByItemKey = snapshot.displayMetadataByItemKey.filterKeys { it in activeItemKeys },
-            updatedAtMs = updatedAtMs
+            updatedAtMs = updatedAtMs,
+            scheduledReemit = snapshot.scheduledReemit
         )
     }
 
@@ -433,7 +505,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
     }
 
-    private fun persistRawSnapshot(snapshot: ContinueWatchingSnapshot) {
+    private suspend fun persistRawSnapshot(snapshot: ContinueWatchingSnapshot) {
         val normalized = sanitizeSnapshot(snapshot)
         val hydrated = hydrateSnapshotMetadata(
             snapshot = normalized,
@@ -460,7 +532,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         lastRefreshRequestMs = hydrated.updatedAtMs
     }
 
-    private fun updateSnapshot(snapshot: ContinueWatchingSnapshot) {
+    private suspend fun updateSnapshot(snapshot: ContinueWatchingSnapshot) {
         persistRawSnapshot(snapshot)
         scheduleReemitIfNeeded(snapshot.scheduledReemit, snapshot.updatedAtMs)
     }
@@ -490,7 +562,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
     }
 
-    private fun hydrateSnapshotMetadata(
+    private suspend fun hydrateSnapshotMetadata(
         snapshot: ContinueWatchingSnapshot,
         fallbackMetadata: Map<String, HomeDisplayMetadata>
     ): ContinueWatchingSnapshot {
@@ -528,7 +600,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         return snapshot.copy(displayMetadataByItemKey = hydratedMetadata)
     }
 
-    private fun fetchHomeDisplayMetadata(
+    private suspend fun fetchHomeDisplayMetadata(
         contentType: String,
         contentId: String,
         snapshot: ContinueWatchingSnapshot
@@ -558,11 +630,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                         origin = "continue_watching_snapshot"
                     )
                 }.getOrNull() ?: return@forEach
-                val resolved = runCatching {
-                    runBlocking {
-                        result.first { it !is NetworkResult.Loading }
-                    }
-                }.getOrNull()
+                val resolved = runCatching { result.first { it !is NetworkResult.Loading } }.getOrNull()
                 val meta = (resolved as? NetworkResult.Success<*>)?.data as? Meta ?: return@forEach
                 return buildHomeDisplayMetadata(
                     meta = meta,

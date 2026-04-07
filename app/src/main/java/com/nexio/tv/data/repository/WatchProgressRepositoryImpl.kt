@@ -3,9 +3,9 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.WatchProgressPreferences
-import com.nexio.tv.data.remote.api.TmdbEpisode
 import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher
 import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.domain.model.SeasonEpisodeMark
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
@@ -360,7 +360,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
     override suspend fun markAsCompletedBatch(
         meta: Meta,
         seasonNumber: Int,
-        episodes: List<TmdbEpisode>
+        episodes: List<SeasonEpisodeMark>
     ) {
         if (!traktAuthDataStore.isEffectivelyAuthenticated.first()) return
         if (episodes.isEmpty()) return
@@ -377,9 +377,9 @@ class WatchProgressRepositoryImpl @Inject constructor(
             )
         }
 
-        // 2. Capture the current resume entries that match these episodes (for rollback)
+        // 2. Capture the current snapshot (resume + next-up rails) that match these episodes.
         val snapshot = snapshotServiceProvider.get().snapshotForRollback()
-        val optimisticallyRemoved = snapshot.filter { progress ->
+        val optimisticallyRemoved = snapshot.resumeItems.filter { progress ->
             episodeRefs.any { ref ->
                 progress.contentId == ref.showId &&
                     progress.season == ref.seasonNumber &&
@@ -397,30 +397,75 @@ class WatchProgressRepositoryImpl @Inject constructor(
             season = seasonNumber,
             episodeNumbers = episodeNumbers
         )
+        val initialNotFoundEpisodeNumbers = episodeNumbers.toSet() - epNumToTraktRef.keys
         val traktRefs = epNumToTraktRef.values.toList()
+
+        if (traktRefs.isEmpty()) {
+            if (initialNotFoundEpisodeNumbers.isNotEmpty()) {
+                val unresolvedRefs = episodeRefs.filter { it.episodeNumber in initialNotFoundEpisodeNumbers }
+                val unresolvedProgress = optimisticallyRemoved.filter { progress ->
+                    progress.episode != null && unresolvedRefs.any { it.episodeNumber == progress.episode }
+                }
+                if (unresolvedProgress.isNotEmpty()) {
+                    snapshotServiceProvider.get().rollbackEpisodes(
+                        ContinueWatchingSnapshotService.EpisodeRollbackState(resumeItems = unresolvedProgress)
+                    )
+                }
+            }
+            snapshotServiceProvider.get().ensureFresh(force = true)
+            return
+        }
 
         // 5. One batched POST via SeasonMarkBatcher
         val result = try {
             seasonMarkBatcher.markSeasonWatched(traktRefs)
         } catch (e: Exception) {
-            // Hard failure: full rollback then rethrow
-            snapshotServiceProvider.get().rollbackEpisodes(optimisticallyRemoved)
+            // Hard failure: restore the pre-mutation snapshot and force a full rebuild so
+            // continuation rails remain aligned with remote state.
+            snapshotServiceProvider.get().rollbackEpisodes(snapshot)
+            snapshotServiceProvider.get().ensureFresh(force = true)
             throw e
         }
 
         // 6. Partial rollback for not_found episodes
-        if (result.notFound.isNotEmpty()) {
+        val fromResponseNotFound: Set<Int> = if (result.notFound.isNotEmpty()) {
             val notFoundIds = result.notFound.map { it.traktId }.toSet()
             // Invert epNumToTraktRef to map traktId → episodeNumber for rollback lookup
             val traktIdToEpNum: Map<Int, Int> = epNumToTraktRef
                 .entries
                 .associate { (epNum, ref) -> ref.traktId to epNum }
-            val notFoundEpNums = notFoundIds.mapNotNull { traktIdToEpNum[it] }.toSet()
+            notFoundIds.mapNotNull { traktIdToEpNum[it] }.toSet()
+        } else emptySet()
+
+        val notFoundEpisodeNumbers = initialNotFoundEpisodeNumbers + fromResponseNotFound
+
+        if (notFoundEpisodeNumbers.isNotEmpty()) {
+            val notFoundRefs = episodeRefs.filter { ref -> notFoundEpisodeNumbers.contains(ref.episodeNumber) }
             val notFoundProgress = optimisticallyRemoved.filter { progress ->
-                progress.episode != null && notFoundEpNums.contains(progress.episode)
+                progress.episode != null && notFoundEpisodeNumbers.contains(progress.episode)
             }
             if (notFoundProgress.isNotEmpty()) {
-                snapshotServiceProvider.get().rollbackEpisodes(notFoundProgress)
+                val notFoundNextUp = snapshot.nextUpItems.filter { entry ->
+                    notFoundRefs.any { ref ->
+                        entry.contentId == ref.showId &&
+                            entry.season == ref.seasonNumber &&
+                            entry.episode == ref.episodeNumber
+                    }
+                }
+                val notFoundTraktUpNext = snapshot.traktUpNextItems.filter { entry ->
+                    notFoundRefs.any { ref ->
+                        entry.contentId == ref.showId &&
+                            entry.season == ref.seasonNumber &&
+                            entry.episode == ref.episodeNumber
+                    }
+                }
+                snapshotServiceProvider.get().rollbackEpisodes(
+                    ContinueWatchingSnapshotService.EpisodeRollbackState(
+                        resumeItems = notFoundProgress,
+                        nextUpItems = notFoundNextUp,
+                        traktUpNextItems = notFoundTraktUpNext
+                    )
+                )
             }
         }
 
