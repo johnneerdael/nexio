@@ -153,6 +153,7 @@ internal suspend fun buildRemoteAddonInstallConfigs(
                     )
                 }
         }
+        .filterNot { addon -> isBuiltinSubtitleAddonUrl(addon.url) }
 }
 
 internal suspend fun buildImdbSyncSettings(
