@@ -4,21 +4,15 @@ import android.net.Uri
 import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.BaseDataSource
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
-import androidx.media3.datasource.TransferListener
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
-import java.io.InterruptedIOException
 import java.io.IOException
-import java.net.ProtocolException
-import java.util.ArrayDeque
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.TimeUnit
 import com.nexio.tv.data.local.PlayerSettings
 import java.util.concurrent.atomic.AtomicBoolean
 import android.os.SystemClock
-import java.io.EOFException
-import java.net.SocketException
 import java.util.concurrent.locks.ReentrantLock
 
 /**
@@ -49,43 +43,13 @@ internal class ParallelRangeDataSource(
     private val consumeBootstrapCache: (DataSpec) -> BootstrapCacheEntry? = { null },
     private val updateBootstrapCache: (BootstrapCacheEntry?) -> Unit = {},
     private val transportPolicyProvider: () -> TransportPolicy? = { null }
-) : DataSource {
-
-    internal open class ChunkTransferException(
-        val chunkIndex: Long,
-        message: String,
-        cause: Throwable? = null
-    ) : IOException(message, cause)
-
-    internal class ChunkWaitTimeoutException(
-        chunkIndex: Long,
-        timeoutMs: Long,
-        cause: Throwable? = null
-    ) : ChunkTransferException(
-        chunkIndex = chunkIndex,
-        message = "Timed out waiting ${timeoutMs}ms for chunk $chunkIndex",
-        cause = cause
-    )
-
-    internal class ChunkDownloadException(
-        chunkIndex: Long,
-        message: String,
-        cause: Throwable? = null
-    ) : ChunkTransferException(
-        chunkIndex = chunkIndex,
-        message = message,
-        cause = cause
-    )
+) : BaseDataSource(/* isNetwork = */ true) {
 
     companion object {
         private const val TAG = "ParallelRangeDS"
         private const val READ_BUFFER_SIZE = 512 * 1024 // 512KB read buffer for chunk downloads
         private const val BOOTSTRAP_READ_BYTES = 1L * 1024L * 1024L
         internal const val DEFAULT_CHUNK_WAIT_TIMEOUT_MS = 60_000L
-        private const val MAX_TRANSIENT_CHUNK_ATTEMPTS = 4
-        private const val MAX_NON_TRANSIENT_CHUNK_ATTEMPTS = 2
-        internal const val USE_PAGED_TRANSPORT = true // Feature flag for rollback
-        internal const val MAX_FRONTIER_PROMOTIONS = 2
     }
 
     internal data class BootstrapCacheEntry(
@@ -107,13 +71,12 @@ internal class ParallelRangeDataSource(
     private val closed = AtomicBoolean(false)
     private var activeChunkSize: Long = chunkSize
 
-    // Page-level frontier buffer — wrapped behind an AbsoluteByteStore façade (Phase 2).
-    // The underlying PagedFrontierBuffer is unchanged; `store` is the seam that Phase 3
-    // will route producers through.
+    // Page-level frontier buffer wrapped behind an AbsoluteByteStore façade. All byte
+    // producers (bootstrap reuse, continuation pump, fallback pump, parallel range workers)
+    // publish through `store`; the sequential read cursor is the sole reader.
     private var store: AbsoluteByteStore = PagedFrontierByteStore()
     private var openSession: OpenSession? = null
     private var cursor: SequentialReadCursor? = null
-    private var scheduler: DualLaneScheduler? = null
 
     // Condition for readers waiting on data to arrive
     private val readLock = ReentrantLock()
@@ -123,14 +86,71 @@ internal class ParallelRangeDataSource(
     private val keepBehindBytes: Long
         get() = 2L * activeChunkSize
 
-    // Tracks which chunk ranges have already been submitted (keyed by chunkIndex = start / chunkSize)
-    private val scheduledRanges = ConcurrentHashMap<Long, Boolean>()
-
-    // Tracks how many times a frontier-blocking chunk has been re-promoted after terminal failure
-    private val frontierPromotionCounts = ConcurrentHashMap<Long, Int>()
-
     // Propagate download failures to the reader thread
     @Volatile private var lastDownloadError: Exception? = null
+
+    // Parallel transport engine (scheduling / retries / backoff / connection budget /
+    // frontier promotion) lives here. PRDS keeps only the Media3 façade + bootstrap/pumps.
+    private val transportManager = SharedParallelTransportManager(
+        upstreamFactory = upstreamFactory,
+        parallelConnections = parallelConnections,
+        transportSampleTimeMs = transportSampleTimeMs,
+        onTransportBytesDownloaded = onTransportBytesDownloaded,
+        onChunkBytesDownloaded = onChunkBytesDownloaded,
+        onTransportObservation = onTransportObservation,
+        transportPolicyProvider = transportPolicyProvider,
+        onTerminalError = { err ->
+            // Producer errors land in `lastDownloadError` so `readInternal()` can surface
+            // them to Media3 as the typed `ChunkDownloadException` instead of the cursor's
+            // generic wait-error wrapper.
+            lastDownloadError = err
+        },
+        signalDataAvailable = {
+            readLock.lock()
+            try { dataAvailable.signalAll() } finally { readLock.unlock() }
+        }
+    )
+
+    /**
+     * Translates the reader's current position into a transport scheduling hint.
+     * Skips while the continuation pump is active by reporting the pump's leading
+     * edge instead of the reader position — that way, urgent ranges queue past the
+     * pump's tail, not on top of it.
+     */
+    private fun scheduleFromCursor() {
+        if (!transportManager.isAttached()) return
+        val currentPos = if (continuationSource != null &&
+            continuationEndPositionExclusive != C.TIME_UNSET &&
+            position < continuationEndPositionExclusive) {
+            continuationEndPositionExclusive
+        } else {
+            position
+        }
+        transportManager.scheduleForReaderPosition(currentPos)
+    }
+
+    /**
+     * Reports a contiguous run of `[startPosition, startPosition + size)` bytes to
+     * `onChunkBytesDownloaded`, splitting the report on chunk boundaries so the
+     * benchmark frontier tracker sees one event per chunk segment.
+     */
+    private fun reportBootstrapChunkBytes(startPosition: Long, size: Int) {
+        if (size <= 0) return
+        val sampleTime = transportSampleTimeMs()
+        var offset = 0
+        while (offset < size) {
+            val ci = (startPosition + offset) / activeChunkSize
+            val chunkStart = ci * activeChunkSize
+            val offsetInChunk = (startPosition + offset) - chunkStart
+            val chunkEnd = chunkStart + activeChunkSize
+            val reportSize = minOf(
+                size - offset,
+                (chunkEnd - (startPosition + offset)).toInt()
+            )
+            onChunkBytesDownloaded(ci, activeChunkSize, offsetInChunk, reportSize, sampleTime)
+            offset += reportSize
+        }
+    }
 
     // Bootstrap coverage: downloads must start AFTER this to avoid overlapping writes
     // from different CDN connections that may return slightly different bytes
@@ -141,32 +161,74 @@ internal class ParallelRangeDataSource(
     private var continuationSource: OkHttpDataSource? = null
     private var continuationEndPositionExclusive: Long = C.TIME_UNSET
 
-    private val transferListeners = mutableListOf<TransferListener>()
-    private val connectionOpenTimestamps = ArrayDeque<Long>()
-
     // Fallback: if parallel mode fails, use a single upstream DataSource
     private var fallbackSource: OkHttpDataSource? = null
 
+    // Background producer pumps that translate sequential upstream bytes into store writes.
+    private var continuationPumpThread: Thread? = null
+    private var fallbackPumpThread: Thread? = null
+
+    // BaseDataSource.transferStarted() fans out to all registered TransferListeners on
+    // every call with no internal dedup, so calling it twice would double-fire listeners.
+    // open() has several successful return paths (bootstrap reuse, 416 zero-length,
+    // fallback-single-connection, parallel-range happy path), and we want at-most-once
+    // start/end semantics per open() regardless of which path ran.
+    private var transferStartedFired: Boolean = false
+
+    private fun fireTransferStarted(dataSpec: DataSpec) {
+        if (transferStartedFired) return
+        transferStartedFired = true
+        transferStarted(dataSpec)
+    }
+
+    private fun parseContentRangeTotal(headers: Map<String, List<String>>): Long? {
+        val contentRange = headers.entries
+            .firstOrNull { it.key.equals("Content-Range", ignoreCase = true) }
+            ?.value
+            ?.firstOrNull()
+            ?: return null
+        // Accepts both `bytes N-M/<total>` and the unsatisfied-range `bytes */<total>` form
+        // (the latter is what OkHttpDataSource hands us when it transparently turns a 416
+        // with `position == documentSize` into a zero-length successful open).
+        val match = Regex("""bytes\s+(?:\d+-\d+|\*)/(\d+|\*)""", RegexOption.IGNORE_CASE).find(contentRange)
+            ?: return null
+        val totalText = match.groupValues[1]
+        return if (totalText == "*") null else totalText.toLongOrNull()
+    }
+
     override fun open(dataSpec: DataSpec): Long {
+        // Reset listener-fire latch first: open() may throw before close() runs, and the
+        // caller is allowed to retry. If the latch stayed `true` from a prior open(),
+        // fireTransferStarted() would no-op on the retry and listeners would never see
+        // a start.
+        transferStartedFired = false
         closed.set(false)
         originalDataSpec = dataSpec
         position = dataSpec.position
         activeChunkSize = chunkSize
         bootstrapPrefetchDeferred = false
         bootstrapStartPosition = C.TIME_UNSET
+        // Defensive: ensure getUri() returns the requested URI on any throw before
+        // a success path overwrites this with the resolved (post-redirect) URI.
+        resolvedUri = dataSpec.uri
+        totalFileLength = C.LENGTH_UNSET.toLong()
+        bytesRemaining = C.LENGTH_UNSET.toLong()
+        stopPumps()
+        fallbackSource?.close()
+        fallbackSource = null
         continuationSource?.close()
         continuationSource = null
         continuationEndPositionExclusive = C.TIME_UNSET
 
+        // Media3 transfer-listener contract: notify lifecycle for our DataSource (not just upstream).
+        transferInitializing(dataSpec)
+
         // Cancel any in-flight work from a previous open (e.g., after seek)
-        scheduler?.cancelAll()
-        scheduler = null
+        transportManager.detach()
         cursor?.close()
         cursor = null
         openSession = null
         store.reset()
-        scheduledRanges.clear()
-        frontierPromotionCounts.clear()
         lastDownloadError = null
         bootstrapCoverageEnd = 0L
 
@@ -189,34 +251,30 @@ internal class ParallelRangeDataSource(
             bootstrapCoverageEnd = cached.startPosition + cached.bootstrapSize
 
             // Fire onChunkBytesDownloaded for cached bootstrap data
-            val cachedSampleTime = transportSampleTimeMs()
-            var cachedReportOffset = 0
-            while (cachedReportOffset < cached.bootstrapSize) {
-                val bci = (cached.startPosition + cachedReportOffset) / activeChunkSize
-                val chunkStart = bci * activeChunkSize
-                val offsetInChunk = (cached.startPosition + cachedReportOffset) - chunkStart
-                val chunkEnd = chunkStart + activeChunkSize
-                val reportSize = minOf(
-                    cached.bootstrapSize - cachedReportOffset,
-                    (chunkEnd - (cached.startPosition + cachedReportOffset)).toInt()
-                )
-                onChunkBytesDownloaded(bci, activeChunkSize, offsetInChunk, reportSize, cachedSampleTime)
-                cachedReportOffset += reportSize
-            }
+            reportBootstrapChunkBytes(cached.startPosition, cached.bootstrapSize)
 
             // Mark bootstrap chunks as scheduled ONLY if fully covered
             val bootstrapEndPos = cached.startPosition + cached.bootstrapSize
+            val preScheduled = mutableListOf<Long>()
             var ci = cached.startPosition / activeChunkSize
             while (ci * activeChunkSize < bootstrapEndPos) {
                 val chunkEnd = (ci + 1) * activeChunkSize
                 if (chunkEnd <= bootstrapEndPos) {
-                    scheduledRanges[ci] = true
+                    preScheduled.add(ci)
                 }
                 ci++
             }
 
             bootstrapPrefetchDeferred = true
-            scheduler = DualLaneScheduler(parallelConnections, 1)
+            transportManager.attachSession(
+                store = store,
+                resolvedUri = resolvedUri,
+                fallbackUri = dataSpec.uri,
+                totalFileLength = totalFileLength,
+                activeChunkSize = activeChunkSize,
+                bootstrapCoverageEnd = bootstrapCoverageEnd,
+                preScheduledChunkIndexes = preScheduled
+            )
             openSession = OpenSession(
                 requestSpec = dataSpec,
                 resolvedUri = resolvedUri,
@@ -239,44 +297,180 @@ internal class ParallelRangeDataSource(
                 "Reusing bootstrap window for immediate reopen at ${cached.startPosition}, " +
                     "file=${totalFileLength / 1024 / 1024}MB, resolved=${resolvedUri?.host}"
             )
+            fireTransferStarted(dataSpec)
             return cached.openLength
         }
 
         // Open first connection to determine total length and capture the resolved (redirected) URL
         val probeSource: OkHttpDataSource = upstreamFactory.createDataSource()
-        transferListeners.forEach { probeSource.addTransferListener(it) }
 
-        val openLength: Long
+        val rawOpenLength: Long
         try {
-            openLength = probeSource.open(dataSpec)
+            rawOpenLength = probeSource.open(dataSpec)
             resolvedUri = probeSource.uri // Final URL after redirects (CDN URL)
             onResolvedUri(resolvedUri)
+        } catch (e: HttpDataSource.InvalidResponseCodeException) {
+            probeSource.close()
+            // 416 Range Not Satisfiable: position is at or past EOF. Per Media3
+            // DataSource contract, position == length is a valid open that immediately
+            // reads EOF, while position > length must throw POSITION_OUT_OF_RANGE.
+            // Follow up with a zero-position probe to learn the actual file length.
+            if (e.responseCode == 416) {
+                val sizingProbe = upstreamFactory.createDataSource()
+                val actualLength = try {
+                    sizingProbe.open(
+                        dataSpec.buildUpon()
+                            .setPosition(0L)
+                            .setLength(C.LENGTH_UNSET.toLong())
+                            .build()
+                    )
+                } catch (sizingError: Exception) {
+                    Log.w(TAG, "416 sizing-probe failed; surfacing original 416: ${sizingError.message}")
+                    sizingProbe.close()
+                    throw e
+                }
+                sizingProbe.close()
+                if (dataSpec.position > actualLength) {
+                    throw androidx.media3.datasource.DataSourceException(
+                        e,
+                        androidx.media3.datasource.DataSourceException.POSITION_OUT_OF_RANGE
+                    )
+                }
+                resolvedUri = dataSpec.uri
+                onResolvedUri(resolvedUri)
+                totalFileLength = actualLength
+                bytesRemaining = 0L
+                openSession = OpenSession(
+                    requestSpec = dataSpec,
+                    resolvedUri = resolvedUri,
+                    startPosition = dataSpec.position,
+                    openLength = 0L,
+                    totalFileLength = totalFileLength,
+                    acceptsRanges = true,
+                    responseHeaders = emptyMap()
+                )
+                store = PagedFrontierByteStore()
+                if (dataSpec.position > 0L) store.setBasePosition(dataSpec.position)
+                if (totalFileLength != C.LENGTH_UNSET.toLong()) store.setTotalLength(totalFileLength)
+                cursor = DefaultSequentialReadCursor(
+                    session = openSession!!,
+                    store = store,
+                    waitForBytes = ::waitForBytesAt,
+                    onPositionAdvanced = onReadPositionAdvanced,
+                    keepBehindBytes = keepBehindBytes,
+                    chunkWaitTimeoutMs = chunkWaitTimeoutMs
+                )
+                fireTransferStarted(dataSpec)
+                return if (dataSpec.length != C.LENGTH_UNSET.toLong()) dataSpec.length else 0L
+            }
+            // 404 / other error: contract requires getUri() to surface the requested URI.
+            resolvedUri = dataSpec.uri
+            throw e
         } catch (e: Exception) {
             probeSource.close()
+            // Contract: getUri() after a failed open must return the requested URI.
+            resolvedUri = dataSpec.uri
             throw e
         }
 
         // Check if we can do parallel range requests
         val responseHeaders = probeSource.responseHeaders
-        emitTransportObservation(responseHeaders, resolvedUri)
+        transportManager.emitTransportObservation(responseHeaders, resolvedUri)
         activeChunkSize = transportPolicyProvider()?.urgentChunkBytes ?: chunkSize
         val acceptsRanges = responseHeaders["Accept-Ranges"]?.any { it.contains("bytes") } == true ||
                 responseHeaders["Content-Range"]?.isNotEmpty() == true
 
-        if (openLength == C.LENGTH_UNSET.toLong() || !acceptsRanges) {
-            // Can't determine length or server doesn't support ranges — reuse probe as single connection
-            Log.w(TAG, "Falling back to single connection (length=${openLength}, acceptsRanges=$acceptsRanges)")
-            fallbackSource = probeSource
-            return openLength
+        // Parse Content-Range to recover the authoritative total file size. OkHttpDataSource
+        // can return openLength == requested dataSpec.length even when the server clamped the
+        // response (e.g. requested length past EOF), which would otherwise cause chunk workers
+        // to request bytes past EOF and receive 416. When Content-Range is absent or has an
+        // unknown total (`bytes N-M/*`), `parseContentRangeTotal` returns null and the clamp
+        // below becomes a no-op — `clampedOpenLength` falls back to `rawOpenLength`.
+        val totalFromContentRange = parseContentRangeTotal(responseHeaders)
+        val authoritativeTotal = totalFromContentRange ?: C.LENGTH_UNSET.toLong()
+        val clampedOpenLength = if (authoritativeTotal != C.LENGTH_UNSET.toLong() && rawOpenLength != C.LENGTH_UNSET.toLong()) {
+            minOf(rawOpenLength, (authoritativeTotal - position).coerceAtLeast(0L))
+        } else {
+            rawOpenLength
         }
 
-        totalFileLength = position + openLength
-        bytesRemaining = openLength
+        if (clampedOpenLength == C.LENGTH_UNSET.toLong() || !acceptsRanges) {
+            // Can't determine length or server doesn't support ranges — reuse probe as single
+            // connection. Pump its bytes into the store so the cursor remains the sole reader.
+            Log.w(TAG, "Falling back to single connection (length=${clampedOpenLength}, acceptsRanges=$acceptsRanges)")
+            fallbackSource = probeSource
+            totalFileLength = if (clampedOpenLength != C.LENGTH_UNSET.toLong()) {
+                position + clampedOpenLength
+            } else {
+                C.LENGTH_UNSET.toLong()
+            }
+            bytesRemaining = clampedOpenLength
+            fireTransferStarted(dataSpec)
+
+            store = PagedFrontierByteStore()
+            if (position > 0L) store.setBasePosition(position)
+            if (totalFileLength != C.LENGTH_UNSET.toLong()) store.setTotalLength(totalFileLength)
+
+            openSession = OpenSession(
+                requestSpec = dataSpec,
+                resolvedUri = resolvedUri,
+                startPosition = position,
+                openLength = clampedOpenLength,
+                totalFileLength = totalFileLength,
+                acceptsRanges = false,
+                responseHeaders = responseHeaders
+            )
+            cursor = DefaultSequentialReadCursor(
+                session = openSession!!,
+                store = store,
+                waitForBytes = ::waitForBytesAt,
+                onPositionAdvanced = onReadPositionAdvanced,
+                keepBehindBytes = keepBehindBytes,
+                chunkWaitTimeoutMs = chunkWaitTimeoutMs
+            )
+            startFallbackPump(probeSource, position)
+            return if (dataSpec.length != C.LENGTH_UNSET.toLong()) dataSpec.length else clampedOpenLength
+        }
+
+        totalFileLength = if (authoritativeTotal != C.LENGTH_UNSET.toLong()) authoritativeTotal else position + clampedOpenLength
+        bytesRemaining = clampedOpenLength
+
+        // OkHttpDataSource quietly turns a 416 with `position == documentSize` into a
+        // zero-length successful open (returning `dataSpec.length`). Detect that here so
+        // we don't attach a transport session and schedule a chunk worker that would
+        // immediately EOF past the end of the file.
+        if (clampedOpenLength == 0L) {
+            probeSource.close()
+            store = PagedFrontierByteStore()
+            if (position > 0L) store.setBasePosition(position)
+            if (totalFileLength != C.LENGTH_UNSET.toLong()) store.setTotalLength(totalFileLength)
+            openSession = OpenSession(
+                requestSpec = dataSpec,
+                resolvedUri = resolvedUri,
+                startPosition = position,
+                openLength = 0L,
+                totalFileLength = totalFileLength,
+                acceptsRanges = acceptsRanges,
+                responseHeaders = responseHeaders
+            )
+            cursor = DefaultSequentialReadCursor(
+                session = openSession!!,
+                store = store,
+                waitForBytes = ::waitForBytesAt,
+                onPositionAdvanced = onReadPositionAdvanced,
+                keepBehindBytes = keepBehindBytes,
+                chunkWaitTimeoutMs = chunkWaitTimeoutMs
+            )
+            fireTransferStarted(dataSpec)
+            return if (dataSpec.length != C.LENGTH_UNSET.toLong()) dataSpec.length else 0L
+        }
+
+        fireTransferStarted(dataSpec)
 
         store = PagedFrontierByteStore()
         if (position > 0L) store.setBasePosition(position)
         store.setTotalLength(totalFileLength)
-        scheduler = DualLaneScheduler(parallelConnections, 1)
+        val preScheduledFromBootstrap = mutableListOf<Long>()
 
         System.err.println("DIAG open() ${parallelConnections}conn ${activeChunkSize / 1024 / 1024}MB chunks " +
                 "file=${totalFileLength / 1024 / 1024}MB pos=${position / 1024 / 1024}MB " +
@@ -285,8 +479,8 @@ internal class ParallelRangeDataSource(
 
         // Reuse a small probe window immediately for both startup and large seek reopens.
         val firstChunkIndex = position / activeChunkSize
-        if (openLength > 0L) {
-            val bootstrapBytes = minOf(minOf(activeChunkSize, BOOTSTRAP_READ_BYTES), openLength).toInt()
+        if (clampedOpenLength > 0L) {
+            val bootstrapBytes = minOf(minOf(activeChunkSize, BOOTSTRAP_READ_BYTES), clampedOpenLength).toInt()
             val (bootstrapData, bootstrapSize) = readBootstrapChunk(probeSource, bootstrapBytes)
             bootstrapStartPosition = position
 
@@ -296,20 +490,7 @@ internal class ParallelRangeDataSource(
 
             // Fire onChunkBytesDownloaded for bootstrap data so FrontierTracker (benchmark)
             // receives events for all downloaded bytes, not just background-fetched chunks
-            val bootstrapSampleTime = transportSampleTimeMs()
-            var bootstrapReportOffset = 0
-            while (bootstrapReportOffset < bootstrapSize) {
-                val ci = (position + bootstrapReportOffset) / activeChunkSize
-                val chunkStart = ci * activeChunkSize
-                val offsetInChunk = (position + bootstrapReportOffset) - chunkStart
-                val chunkEnd = chunkStart + activeChunkSize
-                val reportSize = minOf(
-                    bootstrapSize - bootstrapReportOffset,
-                    (chunkEnd - (position + bootstrapReportOffset)).toInt()
-                )
-                onChunkBytesDownloaded(ci, activeChunkSize, offsetInChunk, reportSize, bootstrapSampleTime)
-                bootstrapReportOffset += reportSize
-            }
+            reportBootstrapChunkBytes(position, bootstrapSize)
 
             // Mark bootstrap chunks as already scheduled ONLY if fully covered by bootstrap.
             // If bootstrap only partially covers a chunk (e.g., 1MB bootstrap in an 8MB chunk),
@@ -319,7 +500,7 @@ internal class ParallelRangeDataSource(
             while (bci * activeChunkSize < bootstrapEndPos) {
                 val chunkEnd = (bci + 1) * activeChunkSize
                 if (chunkEnd <= bootstrapEndPos) {
-                    scheduledRanges[bci] = true
+                    preScheduledFromBootstrap.add(bci)
                 }
                 bci++
             }
@@ -333,7 +514,7 @@ internal class ParallelRangeDataSource(
                         requestUri = dataSpec.uri,
                         startPosition = dataSpec.position,
                         resolvedUri = resolvedUri,
-                        openLength = openLength,
+                        openLength = clampedOpenLength,
                         totalFileLength = totalFileLength,
                         bootstrapData = bootstrapData,
                         bootstrapSize = bootstrapSize,
@@ -349,11 +530,21 @@ internal class ParallelRangeDataSource(
             probeSource.close()
         }
 
+        transportManager.attachSession(
+            store = store,
+            resolvedUri = resolvedUri,
+            fallbackUri = dataSpec.uri,
+            totalFileLength = totalFileLength,
+            activeChunkSize = activeChunkSize,
+            bootstrapCoverageEnd = bootstrapCoverageEnd,
+            preScheduledChunkIndexes = preScheduledFromBootstrap
+        )
+
         openSession = OpenSession(
             requestSpec = dataSpec,
             resolvedUri = resolvedUri,
             startPosition = position,
-            openLength = openLength,
+            openLength = clampedOpenLength,
             totalFileLength = totalFileLength,
             acceptsRanges = acceptsRanges,
             responseHeaders = responseHeaders
@@ -366,19 +557,33 @@ internal class ParallelRangeDataSource(
             keepBehindBytes = keepBehindBytes,
             chunkWaitTimeoutMs = chunkWaitTimeoutMs
         )
-        return openLength
+        continuationSource?.let { src ->
+            startContinuationPump(src, bootstrapCoverageEnd, continuationEndPositionExclusive)
+        }
+        // Contract: open() must return dataSpec.length when it's set, even if the implementation
+        // knows fewer bytes will actually be read.
+        return if (dataSpec.length != C.LENGTH_UNSET.toLong()) dataSpec.length else clampedOpenLength
     }
 
     /**
-     * Phase 2 stub: cursor's wait-for-bytes hook. Not routed through `read()` yet — installed
-     * only so [DefaultSequentialReadCursor] can be constructed. The real sequential-read path
-     * is still the inline loop inside [read]. Phase 3 will consolidate them.
+     * Cursor wait hook: blocks the reader thread on the shared [dataAvailable] condition
+     * until a producer signals new bytes, the source is closed, a producer reports a
+     * terminal error, or the caller's deadline elapses. The return value tells the
+     * [DefaultSequentialReadCursor] how to resume: retry the store read, EOF, throw a
+     * typed wait error, or throw a timeout.
      */
     private fun waitForBytesAt(position: Long, deadlineNanos: Long): WaitOutcome {
         readLock.lock()
         try {
             if (closed.get()) return WaitOutcome.CLOSED
             lastDownloadError?.let { return WaitOutcome.ERROR }
+            // Re-check the store *while holding the lock* to close the missed-wakeup race
+            // between the cursor's last `store.read()` and our await. A producer that wrote
+            // bytes + signaled in that window would otherwise be lost: the signal fires
+            // when no thread is waiting, then we enter awaitNanos and never wake. Worker
+            // signals also acquire `readLock` before calling signalAll, so any write that
+            // races with us is either visible here or arrives as a signal after we await.
+            if (store.readableContiguousBytesFrom(position) > 0L) return WaitOutcome.DATA_AVAILABLE
             val remaining = deadlineNanos - System.nanoTime()
             if (remaining <= 0L) return WaitOutcome.TIMEOUT
             dataAvailable.awaitNanos(remaining)
@@ -391,396 +596,55 @@ internal class ParallelRangeDataSource(
     }
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
-        // Fallback mode: delegate to single upstream
-        fallbackSource?.let {
-            val read = it.read(buffer, offset, length)
-            if (read > 0) {
-                onTransportBytesDownloaded(read.toLong(), transportSampleTimeMs())
-                position += read
-                bytesRemaining = if (bytesRemaining == C.LENGTH_UNSET.toLong()) {
-                    C.LENGTH_UNSET.toLong()
-                } else {
-                    bytesRemaining - read
-                }
-                onReadPositionAdvanced(position)
-            }
-            return read
+        val result = readInternal(buffer, offset, length)
+        if (result > 0) {
+            bytesTransferred(result)
         }
+        return result
+    }
 
-        if (bytesRemaining == 0L) return C.RESULT_END_OF_INPUT
+    private fun readInternal(buffer: ByteArray, offset: Int, length: Int): Int {
+        if (length == 0) return 0
 
-        val toRead = minOf(length.toLong(), bytesRemaining).toInt()
-
+        // Trigger deferred bootstrap prefetch on the first post-open read.
         if (bootstrapPrefetchDeferred && shouldAllowBackgroundPrefetch()) {
             bootstrapPrefetchDeferred = false
-            scheduleChunks()
+            scheduleFromCursor()
         }
 
-        continuationSource?.let { source ->
-            val bootstrapEnd = if (bootstrapStartPosition != C.TIME_UNSET) {
-                // frontier already includes bootstrap bytes; use frontier as the boundary
-                store.frontier
-            } else {
-                0L
-            }
-            if (position < continuationEndPositionExclusive &&
-                bytesRemaining > 0L &&
-                position >= bootstrapEnd
-            ) {
-                val read = source.read(buffer, offset, toRead)
-                if (read > 0) {
-                    onTransportBytesDownloaded(read.toLong(), transportSampleTimeMs())
-                    // Also write into frontier buffer so frontier advances for later reads
-                    store.writeAt(position, buffer, offset, read)
-                    readLock.lock()
-                    try { dataAvailable.signalAll() } finally { readLock.unlock() }
-                    position += read
-                    bytesRemaining -= read
-                    onReadPositionAdvanced(position)
-                    if (position >= continuationEndPositionExclusive) {
-                        source.close()
-                        continuationSource = null
-                        continuationEndPositionExclusive = C.TIME_UNSET
-                        scheduleChunks()
-                    }
-                    return read
-                }
-                if (read == C.RESULT_END_OF_INPUT || position >= continuationEndPositionExclusive) {
-                    source.close()
-                    continuationSource = null
-                    continuationEndPositionExclusive = C.TIME_UNSET
-                    scheduleChunks()
-                }
-            } else if (position >= continuationEndPositionExclusive || bytesRemaining <= 0L) {
-                source.close()
-                continuationSource = null
-                continuationEndPositionExclusive = C.TIME_UNSET
-            }
+        // Ensure work is scheduled (no-op when fallback or fully covered).
+        scheduleFromCursor()
+
+        // Surface any producer error to the reader thread.
+        lastDownloadError?.let { error ->
+            lastDownloadError = null
+            throw error
         }
 
-        // Try to read from frontier buffer
-        System.err.println("DIAG pre-read pos=$position frontier=${store.frontier} remaining=$bytesRemaining cont=${continuationSource != null} contEnd=$continuationEndPositionExclusive bsDeferred=$bootstrapPrefetchDeferred prefetchOk=${shouldAllowBackgroundPrefetch()}")
-        val bytesRead = store.read(position, buffer, offset, toRead)
-        if (bytesRead > 0) {
-            if (position < 2L * 1024L * 1024L || (totalFileLength > 0 && position > totalFileLength - 2L * 1024L * 1024L)) {
-                val preview = ByteArray(minOf(16, bytesRead))
-                System.arraycopy(buffer, offset, preview, 0, preview.size)
-                System.err.println("DIAG read() pos=$position len=$bytesRead frontier=${store.frontier} first16=${preview.joinToString(",") { (it.toInt() and 0xFF).toString(16) }}")
+        // All bytes flow through the cursor, which reads from AbsoluteByteStore.
+        // Producers (bootstrap reuse, continuation pump, fallback pump, range workers)
+        // write into the store underneath; the cursor is the sole reader.
+        val cursor = this.cursor ?: return C.RESULT_END_OF_INPUT
+        val read = try {
+            cursor.read(buffer, offset, length)
+        } catch (e: IOException) {
+            // If a producer failed mid-wait, surface its typed error (e.g. ChunkDownloadException)
+            // instead of the cursor's generic wait-error wrapper.
+            val producerError = lastDownloadError
+            if (producerError != null) {
+                lastDownloadError = null
+                throw producerError
             }
-            position += bytesRead
-            bytesRemaining -= bytesRead
-            onReadPositionAdvanced(position)
-            store.evictBefore(position - keepBehindBytes)
-            scheduleChunks()
-            return bytesRead
+            throw e
         }
-
-        // No data available — ensure downloads are scheduled and wait
-        scheduleChunks()
-        readLock.lock()
-        try {
-            val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(chunkWaitTimeoutMs)
-            while (!closed.get()) {
-                // Check for download errors
-                lastDownloadError?.let { error ->
-                    lastDownloadError = null
-                    throw error
-                }
-                val available = store.read(position, buffer, offset, toRead)
-                if (available > 0) {
-                    position += available
-                    bytesRemaining -= available
-                    onReadPositionAdvanced(position)
-                    store.evictBefore(position - keepBehindBytes)
-                    return available
-                }
-                val remaining = deadline - System.nanoTime()
-                if (remaining <= 0) {
-                    throw ChunkWaitTimeoutException(
-                        chunkIndex = position / activeChunkSize,
-                        timeoutMs = chunkWaitTimeoutMs
-                    )
-                }
-                // Re-schedule: prefetch may have been rejected by admission control earlier
-                readLock.unlock()
-                try { scheduleChunks() } finally { readLock.lock() }
-                dataAvailable.awaitNanos(remaining)
-            }
-        } finally {
-            readLock.unlock()
+        if (read > 0) {
+            position = cursor.position
+            bytesRemaining = cursor.bytesRemaining
+            scheduleFromCursor()
         }
-        return C.RESULT_END_OF_INPUT
+        return read
     }
 
-    private fun scheduleChunks() {
-        val sched = scheduler ?: return
-
-        val currentPos =
-            if (continuationSource != null && continuationEndPositionExclusive != C.TIME_UNSET && position < continuationEndPositionExclusive) {
-                continuationEndPositionExclusive
-            } else {
-                position
-            }
-
-        val currentChunkIdx = currentPos / activeChunkSize
-
-        // ALWAYS schedule the chunk at the current read position (urgent).
-        // This ensures read() never blocks waiting for data that was never requested.
-        // The old code called ensureChunkScheduled() for the current chunk unconditionally.
-        val urgentStart = currentChunkIdx * activeChunkSize
-        val urgentEnd = if (totalFileLength != C.LENGTH_UNSET.toLong()) {
-            minOf(urgentStart + activeChunkSize, totalFileLength)
-        } else {
-            urgentStart + activeChunkSize
-        }
-        if (urgentStart < urgentEnd) {
-            submitRange(sched, currentChunkIdx, urgentStart, urgentEnd, urgent = true)
-        }
-
-        // No gate on ahead chunks — first frame can't render until ExoPlayer parses
-        // header + Cues, which requires reading from this DataSource. Gating ahead chunks
-        // on first frame creates a deadlock.
-
-        val maxAhead = parallelConnections + 1
-        val policy = transportPolicyProvider()
-        val urgentCount = policy?.urgentWorkers ?: maxAhead
-
-        for (i in 1 until maxAhead) {
-            val ci = currentChunkIdx + i
-            val start = ci * activeChunkSize
-            if (totalFileLength != C.LENGTH_UNSET.toLong() && start >= totalFileLength) break
-            val end = if (totalFileLength != C.LENGTH_UNSET.toLong()) {
-                minOf(start + activeChunkSize, totalFileLength)
-            } else {
-                start + activeChunkSize
-            }
-            submitRange(sched, ci, start, end, urgent = i < urgentCount)
-        }
-    }
-
-    private fun submitRange(
-        sched: DualLaneScheduler,
-        chunkIndex: Long,
-        start: Long,
-        end: Long,
-        urgent: Boolean
-    ) {
-        // Skip if this range has already been scheduled
-        if (scheduledRanges.putIfAbsent(chunkIndex, true) != null) return
-        // Skip if the frontier has already passed this range
-        if (store.frontier >= end) return
-
-        if (urgent) {
-            sched.submitUrgent(start until end) { range ->
-                downloadRange(range.first, range.last + 1)
-            }
-        } else {
-            val submitted = sched.submitPrefetch(start until end) { range ->
-                downloadRange(range.first, range.last + 1)
-            }
-            if (submitted == null) {
-                // Prefetch was back-pressure dropped; allow re-scheduling later
-                scheduledRanges.remove(chunkIndex)
-            }
-        }
-    }
-
-    private fun downloadRange(start: Long, end: Long) {
-        val chunkIndex = start / activeChunkSize
-        // Skip bootstrap-covered bytes to avoid overlapping writes from different CDN
-        // connections that may return slightly different bytes for the same range.
-        // bootstrapCoverageEnd is set once in open() and never changes — no race condition.
-        val effectiveStart = maxOf(start, bootstrapCoverageEnd)
-        if (effectiveStart >= end) return
-        val expectedBytes = (end - effectiveStart).coerceAtLeast(0L).toInt()
-        val readBuffer = ByteArray(READ_BUFFER_SIZE)
-        var totalRead = 0
-        var lastException: Exception? = null
-        var transientAttemptNumber = 0
-        var nonTransientAttemptNumber = 0
-
-        while (!closed.get() && totalRead < expectedBytes) {
-            val ds = upstreamFactory.createDataSource()
-            try {
-                awaitConnectionBudgetIfNeeded()
-                val uri = resolvedUri ?: originalDataSpec?.uri ?: throw IOException("No URI available")
-                val spec = DataSpec.Builder()
-                    .setUri(uri)
-                    .setPosition(effectiveStart + totalRead)
-                    .setLength((expectedBytes - totalRead).toLong())
-                    .build()
-
-                ds.open(spec)
-                emitTransportObservation(ds.responseHeaders, ds.uri)
-                while (!closed.get() && totalRead < expectedBytes) {
-                    val maxRead = minOf(expectedBytes - totalRead, READ_BUFFER_SIZE)
-                    if (maxRead <= 0) break
-                    val read = ds.read(readBuffer, 0, maxRead)
-                    if (read == C.RESULT_END_OF_INPUT) {
-                        if (totalRead >= expectedBytes) break
-                        throw EOFException("Unexpected end of range $chunkIndex after $totalRead / $expectedBytes bytes")
-                    }
-                    val offsetInChunk = (effectiveStart - start) + totalRead.toLong()
-                    // Write into frontier buffer as bytes arrive (streaming)
-                    store.writeAt(effectiveStart + totalRead.toLong(), readBuffer, 0, read)
-                    totalRead += read
-                    val sampleTime = transportSampleTimeMs()
-                    onTransportBytesDownloaded(read.toLong(), sampleTime)
-                    onChunkBytesDownloaded(chunkIndex, activeChunkSize, offsetInChunk, read, sampleTime)
-                    // Signal any waiting readers
-                    readLock.lock()
-                    try { dataAvailable.signalAll() } finally { readLock.unlock() }
-                }
-                ds.close()
-            } catch (e: Exception) {
-                runCatching { ds.close() }
-                if (closed.get()) return
-                lastException = e
-                val recoverable = e.isRecoverableChunkFailure()
-                if (!recoverable) {
-                    nonTransientAttemptNumber += 1
-                    if (nonTransientAttemptNumber >= MAX_NON_TRANSIENT_CHUNK_ATTEMPTS) break
-                } else {
-                    transientAttemptNumber += 1
-                    if (transientAttemptNumber >= MAX_TRANSIENT_CHUNK_ATTEMPTS) break
-                }
-                val allowedAttempts = if (recoverable) MAX_TRANSIENT_CHUNK_ATTEMPTS else MAX_NON_TRANSIENT_CHUNK_ATTEMPTS
-                val attemptNumber = if (recoverable) transientAttemptNumber else nonTransientAttemptNumber
-                val resumeOffset = totalRead
-                if (e.isTransientInterruption()) {
-                    Log.d(TAG, "Range $chunkIndex interrupted during prefetch at $resumeOffset bytes (attempt $attemptNumber), retrying")
-                } else {
-                    Log.w(
-                        TAG,
-                        "Range $chunkIndex download failed at $resumeOffset / $expectedBytes bytes (attempt $attemptNumber/$allowedAttempts), retrying: ${e.message}"
-                    )
-                }
-                val delayMs = retryBackoffMs(attemptNumber, madeProgress = resumeOffset > 0)
-                if (delayMs > 0L) {
-                    try { Thread.sleep(delayMs) } catch (_: InterruptedException) { }
-                }
-                continue
-            }
-        }
-
-        if (!closed.get() && totalRead < expectedBytes && lastException != null) {
-            // Check if this failed chunk is blocking the contiguous frontier.
-            // If so, re-promote it for urgent requeue instead of immediately failing playback.
-            val chunkStart = chunkIndex * activeChunkSize
-            val chunkEnd = chunkStart + activeChunkSize
-            val currentFrontier = store.frontier
-            // A chunk is frontier-blocking if the contiguous frontier sits inside this
-            // chunk's range — meaning this chunk must complete to advance the frontier.
-            val isFrontierBlocking = currentFrontier >= chunkStart && currentFrontier < chunkEnd
-            val promotionCount = frontierPromotionCounts[chunkIndex] ?: 0
-
-            if (isFrontierBlocking && promotionCount < MAX_FRONTIER_PROMOTIONS) {
-                frontierPromotionCounts[chunkIndex] = promotionCount + 1
-                scheduledRanges.remove(chunkIndex)
-                Log.w(TAG, "Range $chunkIndex is frontier-blocking (frontier=$currentFrontier), " +
-                    "re-promoting for urgent requeue (promotion ${promotionCount + 1}/$MAX_FRONTIER_PROMOTIONS)")
-                // Signal waiting readers and re-schedule so the chunk gets re-submitted as urgent
-                readLock.lock()
-                try { dataAvailable.signalAll() } finally { readLock.unlock() }
-                scheduleChunks()
-            } else {
-                // Propagate error to waiting reader
-                lastDownloadError = ChunkDownloadException(
-                    chunkIndex = chunkIndex,
-                    message = "Failed to download range $chunkIndex after retries",
-                    cause = lastException
-                )
-                readLock.lock()
-                try { dataAvailable.signalAll() } finally { readLock.unlock() }
-                Log.e(TAG, "Range $chunkIndex failed to download completely after retries: ${lastException.message}")
-            }
-        }
-
-        // After completing a range, schedule more work (prefetch may have been rejected earlier
-        // by admission control while urgent was pending — now that this range is done, retry)
-        if (!closed.get()) {
-            scheduleChunks()
-        }
-    }
-
-    private fun Exception.isTransientInterruption(): Boolean {
-        if (this is InterruptedIOException || this is InterruptedException) return true
-        val cause = cause
-        return cause is InterruptedIOException || cause is InterruptedException
-    }
-
-    private fun Exception.isRecoverableChunkFailure(): Boolean {
-        if (isTransientInterruption()) return true
-        if (this is SocketException || this is EOFException || this is ProtocolException) return true
-        val messageText = message.orEmpty()
-        if (messageText.contains("connection reset", ignoreCase = true) ||
-            messageText.contains("connection closed", ignoreCase = true) ||
-            messageText.contains("unexpected end of stream", ignoreCase = true) ||
-            messageText.contains("broken pipe", ignoreCase = true)
-        ) {
-            return true
-        }
-        val cause = cause as? Exception ?: return false
-        return cause.isRecoverableChunkFailure()
-    }
-
-    private fun retryBackoffMs(attemptNumber: Int, madeProgress: Boolean = false): Long {
-        val connectionCloseMode = transportPolicyProvider()?.retryMode == RuntimeTransportRetryMode.CONNECTION_CLOSE
-        if (connectionCloseMode) {
-            return if (madeProgress) {
-                when (attemptNumber) {
-                    1 -> 250L
-                    2 -> 500L
-                    3 -> 1_000L
-                    else -> 2_000L
-                }
-            } else {
-                when (attemptNumber) {
-                    1 -> 500L
-                    2 -> 1_000L
-                    3 -> 2_000L
-                    else -> 4_000L
-                }
-            }
-        }
-        if (madeProgress) {
-            return when (attemptNumber) {
-                1 -> 0L
-                2 -> 25L
-                3 -> 50L
-                else -> 100L
-            }
-        }
-        return when (attemptNumber) {
-            1 -> 50L
-            2 -> 100L
-            3 -> 200L
-            else -> 250L
-        }
-    }
-
-    private fun awaitConnectionBudgetIfNeeded() {
-        val maxConnectionsPerSecond = transportPolicyProvider()?.connectionBudgetHint ?: return
-        if (maxConnectionsPerSecond <= 0) return
-
-        while (!closed.get()) {
-            val now = SystemClock.elapsedRealtime()
-            synchronized(connectionOpenTimestamps) {
-                while (connectionOpenTimestamps.isNotEmpty() && now - connectionOpenTimestamps.first() >= 1_000L) {
-                    connectionOpenTimestamps.removeFirst()
-                }
-                if (connectionOpenTimestamps.size < maxConnectionsPerSecond) {
-                    connectionOpenTimestamps.addLast(now)
-                    return
-                }
-            }
-            try {
-                Thread.sleep(25L)
-            } catch (_: InterruptedException) {
-                return
-            }
-        }
-    }
 
     /** Read only a small startup window from an already-opened DataSource. Returns data + size. */
     private fun readBootstrapChunk(ds: DataSource, maxBytes: Int): Pair<ByteArray, Int> {
@@ -803,30 +667,131 @@ internal class ParallelRangeDataSource(
         return Pair(buf, totalRead)
     }
 
+    private fun startFallbackPump(source: OkHttpDataSource, startPosition: Long) {
+        val thread = Thread({
+            val buf = ByteArray(READ_BUFFER_SIZE)
+            var pumpPos = startPosition
+            try {
+                while (!closed.get()) {
+                    val read = try {
+                        source.read(buf, 0, buf.size)
+                    } catch (e: Exception) {
+                        if (closed.get()) return@Thread
+                        lastDownloadError = e
+                        readLock.lock()
+                        try { dataAvailable.signalAll() } finally { readLock.unlock() }
+                        return@Thread
+                    }
+                    if (read == C.RESULT_END_OF_INPUT) {
+                        // Mark EOF by tightening totalLength so the cursor terminates.
+                        if (totalFileLength == C.LENGTH_UNSET.toLong()) {
+                            totalFileLength = pumpPos
+                            store.setTotalLength(pumpPos)
+                        }
+                        readLock.lock()
+                        try { dataAvailable.signalAll() } finally { readLock.unlock() }
+                        return@Thread
+                    }
+                    if (read > 0) {
+                        store.writeAt(pumpPos, buf, 0, read)
+                        pumpPos += read
+                        onTransportBytesDownloaded(read.toLong(), transportSampleTimeMs())
+                        readLock.lock()
+                        try { dataAvailable.signalAll() } finally { readLock.unlock() }
+                    }
+                }
+            } finally {
+                runCatching { source.close() }
+            }
+        }, "PRDS-FallbackPump")
+        thread.isDaemon = true
+        fallbackPumpThread = thread
+        thread.start()
+    }
+
+    private fun startContinuationPump(
+        source: OkHttpDataSource,
+        startPosition: Long,
+        endPositionExclusive: Long
+    ) {
+        if (startPosition >= endPositionExclusive) {
+            runCatching { source.close() }
+            continuationSource = null
+            continuationEndPositionExclusive = C.TIME_UNSET
+            return
+        }
+        val thread = Thread({
+            val buf = ByteArray(READ_BUFFER_SIZE)
+            var pumpPos = startPosition
+            try {
+                while (!closed.get() && pumpPos < endPositionExclusive) {
+                    val maxRead = minOf(buf.size.toLong(), endPositionExclusive - pumpPos).toInt()
+                    val read = try {
+                        source.read(buf, 0, maxRead)
+                    } catch (e: Exception) {
+                        if (closed.get()) return@Thread
+                        // Continuation failure is non-fatal; range workers will fill the gap.
+                        Log.w(TAG, "Continuation pump aborted at $pumpPos: ${e.message}")
+                        return@Thread
+                    }
+                    if (read == C.RESULT_END_OF_INPUT) return@Thread
+                    if (read > 0) {
+                        store.writeAt(pumpPos, buf, 0, read)
+                        pumpPos += read
+                        onTransportBytesDownloaded(read.toLong(), transportSampleTimeMs())
+                        readLock.lock()
+                        try { dataAvailable.signalAll() } finally { readLock.unlock() }
+                    }
+                }
+            } finally {
+                runCatching { source.close() }
+                synchronized(this@ParallelRangeDataSource) {
+                    if (continuationSource === source) {
+                        continuationSource = null
+                        continuationEndPositionExclusive = C.TIME_UNSET
+                    }
+                }
+                if (!closed.get()) scheduleFromCursor()
+            }
+        }, "PRDS-ContinuationPump")
+        thread.isDaemon = true
+        continuationPumpThread = thread
+        thread.start()
+    }
+
+    private fun stopPumps() {
+        continuationPumpThread?.interrupt()
+        continuationPumpThread = null
+        fallbackPumpThread?.interrupt()
+        fallbackPumpThread = null
+    }
+
     override fun close() {
+        val wasStarted = transferStartedFired
+        transferStartedFired = false
         closed.set(true)
+        stopPumps()
         cursor?.close()
         cursor = null
         openSession = null
+        resolvedUri = null
         fallbackSource?.close()
         fallbackSource = null
         continuationSource?.close()
         continuationSource = null
         continuationEndPositionExclusive = C.TIME_UNSET
 
-        scheduler?.cancelAll()
-        scheduler = null
+        transportManager.detach()
         store.reset()
-        scheduledRanges.clear()
-        frontierPromotionCounts.clear()
 
         // Signal any waiting readers
         readLock.lock()
         try { dataAvailable.signalAll() } finally { readLock.unlock() }
-    }
 
-    override fun addTransferListener(transferListener: TransferListener) {
-        transferListeners.add(transferListener)
+        if (wasStarted) {
+            transferEnded()
+        }
+        originalDataSpec = null
     }
 
     override fun getUri(): Uri? =
@@ -836,36 +801,6 @@ internal class ParallelRangeDataSource(
         val sessionHeaders = openSession?.responseHeaders
         if (sessionHeaders != null && sessionHeaders.isNotEmpty()) return sessionHeaders
         return fallbackSource?.responseHeaders ?: emptyMap()
-    }
-
-    private fun emitTransportObservation(responseHeaders: Map<String, List<String>>, uri: Uri?) {
-        val host = uri?.host?.takeIf { it.isNotBlank() } ?: return
-        val connectionHeader = responseHeaders.entries
-            .firstOrNull { it.key.equals("Connection", ignoreCase = true) }
-            ?.value
-            ?.firstOrNull()
-            ?.lowercase()
-        val transportClass = if (connectionHeader?.contains("close") == true) {
-            "connection_close"
-        } else {
-            "keep_alive"
-        }
-        val negotiatedProtocol = responseHeaders.entries
-            .firstOrNull { it.key.equals("X-Android-Selected-Protocol", ignoreCase = true) }
-            ?.value
-            ?.firstOrNull()
-            ?: responseHeaders.entries
-                .firstOrNull { it.key.equals("OkHttp-Selected-Protocol", ignoreCase = true) }
-                ?.value
-                ?.firstOrNull()
-        onTransportObservation(
-            RuntimeTransportObservation(
-                hostScope = "host:$host",
-                transportClass = transportClass,
-                negotiatedProtocol = negotiatedProtocol,
-                connectionHeader = connectionHeader
-            )
-        )
     }
 
     /**

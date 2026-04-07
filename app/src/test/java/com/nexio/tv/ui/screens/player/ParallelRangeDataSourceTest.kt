@@ -80,7 +80,7 @@ class ParallelRangeDataSourceTest {
                 error
             }
 
-            assertTrue(error is ParallelRangeDataSource.ChunkDownloadException)
+            assertTrue(error is ChunkDownloadException)
             assertNotNull(error)
             assertTrue(server.requestsForChunk(3L) >= 2)
         }

@@ -578,6 +578,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
 
                         if (playbackState == Player.STATE_BUFFERING && hasRenderedFirstFrame) {
                             transportPolicyController?.onRebuffer()
+                            mediaSourceFactory.notifyRebuffer()
                         }
                         if (playbackState == Player.STATE_BUFFERING && !hasRenderedFirstFrame) {
                             _uiState.update { state ->

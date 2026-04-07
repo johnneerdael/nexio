@@ -5,6 +5,7 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import com.nexio.tv.data.local.PlayerSettings
+import com.nexio.tv.ui.screens.player.ChunkTransferException
 import com.nexio.tv.ui.screens.player.ParallelRangeDataSource
 import com.nexio.tv.ui.screens.player.RuntimeTransportObservation
 import java.io.EOFException
@@ -553,7 +554,7 @@ class OptimizedBenchmarkTransport internal constructor(
         val wrapper = unwrapTransportCause()
         val root = deepestCause(wrapper)
         val chunkIndex = causesIncludingSelf(wrapper)
-            .filterIsInstance<ParallelRangeDataSource.ChunkTransferException>()
+            .filterIsInstance<ChunkTransferException>()
             .firstOrNull()
             ?.chunkIndex
         return DebridBenchmarkTransportFailure(
@@ -573,7 +574,7 @@ class OptimizedBenchmarkTransport internal constructor(
             val next = when {
                 current is ExecutionException && current.cause != null -> current.cause
                 current.cause != null &&
-                    current !is ParallelRangeDataSource.ChunkTransferException &&
+                    current !is ChunkTransferException &&
                     current !is InterruptedIOException -> current.cause
                 else -> null
             } ?: return current
