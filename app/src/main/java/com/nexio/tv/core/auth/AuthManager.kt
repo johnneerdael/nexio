@@ -78,10 +78,24 @@ class AuthManager @Inject constructor(
                                 try {
                                     auth.refreshCurrentSession()
                                 } catch (e: Exception) {
-                                    _sessionUserId.value = null
-                                    cachedEffectiveUserId = null
-                                    cachedEffectiveUserSourceUserId = null
-                                    _authState.value = AuthState.SignedOut
+                                    // Only sign the user out if the refresh token was
+                                    // *authoritatively* rejected by the server. Transient
+                                    // failures (network down, DNS warm-up after an upgrade,
+                                    // 5xx, timeouts) must NOT clear the session — the SDK
+                                    // or the next sync attempt will retry.
+                                    if (e.isAuthoritativeRefreshRejection()) {
+                                        Log.w(TAG, "Refresh token rejected; signing out", e)
+                                        _sessionUserId.value = null
+                                        cachedEffectiveUserId = null
+                                        cachedEffectiveUserSourceUserId = null
+                                        _authState.value = AuthState.SignedOut
+                                    } else {
+                                        Log.w(
+                                            TAG,
+                                            "Transient session refresh failure; keeping current auth state",
+                                            e
+                                        )
+                                    }
                                 }
                             }
                         } else {
@@ -349,6 +363,37 @@ private fun Throwable.isJwtExpiredError(): Boolean {
     var current: Throwable? = this
     while (current != null) {
         if (current.message?.contains("jwt expired", ignoreCase = true) == true) return true
+        current = current.cause
+    }
+    return false
+}
+
+/**
+ * Returns true only if this exception represents the auth server *authoritatively*
+ * rejecting the refresh token (so the user really must sign in again). Network /
+ * transport / 5xx errors are NOT authoritative — they should be retried, not used
+ * as grounds to drop the session. Bug history: post-upgrade cold-starts hit a
+ * brief network gap and we used to log users out on the resulting IOException.
+ */
+private fun Throwable.isAuthoritativeRefreshRejection(): Boolean {
+    var current: Throwable? = this
+    while (current != null) {
+        if (current is java.io.IOException) return false
+        val message = current.message?.lowercase().orEmpty()
+        if (message.isNotBlank()) {
+            if (
+                message.contains("invalid_grant") ||
+                message.contains("invalid refresh token") ||
+                message.contains("refresh token not found") ||
+                message.contains("refresh_token_not_found") ||
+                message.contains("user not found") ||
+                message.contains("user_not_found") ||
+                message.contains("token has been revoked") ||
+                message.contains("already used")
+            ) {
+                return true
+            }
+        }
         current = current.cause
     }
     return false

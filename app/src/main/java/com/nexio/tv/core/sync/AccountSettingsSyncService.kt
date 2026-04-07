@@ -709,17 +709,21 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private suspend fun applyRemoteSecrets(settings: AccountConfigSyncPayload) {
-        tmdbSettingsDataStore.setApiKey(resolveApiKeySecret(TMDB_SECRET_TYPE, TMDB_SECRET_REF))
-        mdbListSettingsDataStore.setApiKey(resolveApiKeySecret(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF))
-        omdbSettingsDataStore.setApiKey(resolveApiKeySecret(OMDB_SECRET_TYPE, OMDB_SECRET_REF))
-        imdbSettingsDataStore.setApiKey(resolveApiKeySecret(IMDB_SECRET_TYPE, IMDB_SECRET_REF))
+        // Each helper returns null when the resolve RPC fails transiently (network,
+        // JWT, decode). Only overwrite the local API key when we have an authoritative
+        // response from the server — otherwise we'd wipe valid local credentials on
+        // every flaky upgrade-time sync.
+        resolveApiKeySecretOrNull(TMDB_SECRET_TYPE, TMDB_SECRET_REF)?.let { tmdbSettingsDataStore.setApiKey(it) }
+        resolveApiKeySecretOrNull(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF)?.let { mdbListSettingsDataStore.setApiKey(it) }
+        resolveApiKeySecretOrNull(OMDB_SECRET_TYPE, OMDB_SECRET_REF)?.let { omdbSettingsDataStore.setApiKey(it) }
+        resolveApiKeySecretOrNull(IMDB_SECRET_TYPE, IMDB_SECRET_REF)?.let { imdbSettingsDataStore.setApiKey(it) }
         imdbSettingsDataStore.setBaseUrl(settings.integrations.imdb.baseUrl)
-        geminiSettingsDataStore.setApiKey(resolveApiKeySecret(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF))
-        posterRatingsSettingsDataStore.setRpdbApiKey(resolveApiKeySecret(RPDB_SECRET_TYPE, RPDB_SECRET_REF))
-        posterRatingsSettingsDataStore.setTopPostersApiKey(resolveApiKeySecret(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF))
-        premiumizeSettingsDataStore.setApiKey(resolveApiKeySecret(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF))
-        torBoxSettingsDataStore.setApiKey(resolveApiKeySecret(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF))
-        easyDebridSettingsDataStore.setApiKey(resolveApiKeySecret(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF))
+        resolveApiKeySecretOrNull(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF)?.let { geminiSettingsDataStore.setApiKey(it) }
+        resolveApiKeySecretOrNull(RPDB_SECRET_TYPE, RPDB_SECRET_REF)?.let { posterRatingsSettingsDataStore.setRpdbApiKey(it) }
+        resolveApiKeySecretOrNull(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF)?.let { posterRatingsSettingsDataStore.setTopPostersApiKey(it) }
+        resolveApiKeySecretOrNull(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF)?.let { premiumizeSettingsDataStore.setApiKey(it) }
+        resolveApiKeySecretOrNull(TORBOX_SECRET_TYPE, TORBOX_SECRET_REF)?.let { torBoxSettingsDataStore.setApiKey(it) }
+        resolveApiKeySecretOrNull(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF)?.let { easyDebridSettingsDataStore.setApiKey(it) }
         premiumizeService.refreshAccountState()
         torBoxService.refreshAccountState()
         easyDebridService.refreshAccountState()
@@ -728,7 +732,16 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private suspend fun resolveApiKeySecret(secretType: String, secretRef: String): String {
-        val payload = runCatching {
+        return resolveApiKeySecretOrNull(secretType, secretRef).orEmpty()
+    }
+
+    /**
+     * Returns null if the resolve RPC failed (network/JWT/decode) so callers can
+     * leave local credentials untouched. Returns the trimmed key (possibly empty)
+     * when the server authoritatively responded.
+     */
+    private suspend fun resolveApiKeySecretOrNull(secretType: String, secretRef: String): String? {
+        val result = runCatching {
             withJwtRefreshRetry {
                 postgrest.rpc(
                     "sync_resolve_account_secret",
@@ -739,12 +752,13 @@ class AccountSettingsSyncService @Inject constructor(
                     }
                 ).decodeAs<AccountSecretApiKeyPayload>()
             }
-        }.getOrNull()
-        return payload?.apiKey?.trim().orEmpty()
+        }
+        if (result.isFailure) return null
+        return result.getOrNull()?.apiKey?.trim().orEmpty()
     }
 
     private suspend fun applyRemoteTraktSecrets(settings: AccountConfigSyncPayload) {
-        val accessPayload = runCatching {
+        val accessResult = runCatching {
             withJwtRefreshRetry {
                 postgrest.rpc(
                     "sync_resolve_account_secret",
@@ -755,9 +769,9 @@ class AccountSettingsSyncService @Inject constructor(
                     }
                 ).decodeAs<AccountTraktAccessSecretPayload>()
             }
-        }.getOrNull()
+        }
 
-        val refreshPayload = runCatching {
+        val refreshResult = runCatching {
             withJwtRefreshRetry {
                 postgrest.rpc(
                     "sync_resolve_account_secret",
@@ -768,12 +782,26 @@ class AccountSettingsSyncService @Inject constructor(
                     }
                 ).decodeAs<AccountTraktRefreshSecretPayload>()
             }
-        }.getOrNull()
+        }
 
+        // If either secret RPC failed (network/JWT/decode), do NOT touch local auth.
+        // Clearing on transient failure is what was logging the user out on every upgrade.
+        if (accessResult.isFailure || refreshResult.isFailure) {
+            return
+        }
+
+        val accessPayload = accessResult.getOrNull()
+        val refreshPayload = refreshResult.getOrNull()
         val accessToken = accessPayload?.accessToken?.trim().orEmpty()
         val refreshToken = refreshPayload?.refreshToken?.trim().orEmpty()
+
         if (accessToken.isBlank() || refreshToken.isBlank()) {
-            traktAuthDataStore.clearAuth()
+            // Only clear local auth when the remote authoritatively says Trakt is
+            // not connected (and not in a pending device-flow). Mirrors RD's logic.
+            val remote = settings.integrations.traktAuth
+            if (!remote.connected && !remote.pending) {
+                traktAuthDataStore.clearAuth()
+            }
             return
         }
 
@@ -796,7 +824,7 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private suspend fun applyRemoteRealDebridSecrets(settings: AccountConfigSyncPayload) {
-        val accessPayload = runCatching {
+        val accessResult = runCatching {
             withJwtRefreshRetry {
                 postgrest.rpc(
                     "sync_resolve_account_secret",
@@ -807,9 +835,9 @@ class AccountSettingsSyncService @Inject constructor(
                     }
                 ).decodeAs<AccountRealDebridAccessSecretPayload>()
             }
-        }.getOrNull()
+        }
 
-        val refreshPayload = runCatching {
+        val refreshResult = runCatching {
             withJwtRefreshRetry {
                 postgrest.rpc(
                     "sync_resolve_account_secret",
@@ -820,8 +848,16 @@ class AccountSettingsSyncService @Inject constructor(
                     }
                 ).decodeAs<AccountRealDebridRefreshSecretPayload>()
             }
-        }.getOrNull()
+        }
 
+        // If either secret RPC failed (network/JWT/decode), do NOT touch local auth.
+        // Same upgrade-time logout class of bug as the Trakt path used to have.
+        if (accessResult.isFailure || refreshResult.isFailure) {
+            return
+        }
+
+        val accessPayload = accessResult.getOrNull()
+        val refreshPayload = refreshResult.getOrNull()
         val accessToken = accessPayload?.accessToken?.trim().orEmpty()
         val refreshToken = refreshPayload?.refreshToken?.trim().orEmpty()
         val userClientId = accessPayload?.userClientId?.trim().orEmpty()
