@@ -1,7 +1,7 @@
 package com.nexio.tv.domain.repository
 
-import com.nexio.tv.data.remote.api.TmdbEpisode
 import com.nexio.tv.domain.model.Meta
+import com.nexio.tv.domain.model.SeasonEpisodeMark
 import com.nexio.tv.domain.model.WatchProgress
 import kotlinx.coroutines.flow.Flow
 
@@ -71,7 +71,7 @@ interface WatchProgressRepository {
      * Applies an atomic optimistic CW update, handles partial not_found rollback, and forces a
      * snapshot refresh on success.
      */
-    suspend fun markAsCompletedBatch(meta: Meta, seasonNumber: Int, episodes: List<TmdbEpisode>)
+    suspend fun markAsCompletedBatch(meta: Meta, seasonNumber: Int, episodes: List<SeasonEpisodeMark>)
     
     /**
      * Clear all watch progress

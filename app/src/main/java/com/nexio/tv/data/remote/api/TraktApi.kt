@@ -193,6 +193,14 @@ interface TraktApi {
         @Query("limit") limit: Int = 100
     ): Response<List<TraktHiddenItemDto>>
 
+    @GET("shows/{id}/seasons/{season}")
+    suspend fun getSeasonEpisodes(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String,
+        @Path("season") season: Int,
+        @Query("extended") extended: String? = null
+    ): Response<List<TraktEpisodeSummaryDto>>
+
     @GET("shows/{id}/seasons/{season}/episodes/{episode}")
     suspend fun getEpisodeSummary(
         @Header("Authorization") authorization: String,

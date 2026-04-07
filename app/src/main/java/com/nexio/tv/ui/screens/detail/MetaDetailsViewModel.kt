@@ -1854,11 +1854,20 @@ class MetaDetailsViewModel @Inject constructor(
                         )
                         return@launch
                     }
-                val episodes = tmdbMetadataService.fetchSeasonEpisodes(tvId, season, null)
+                // Passing null language: TmdbMetadataService.fetchSeasonEpisodes falls back to
+                // currentTmdbLanguageTag() internally, and MetaDetailsViewModel has no locale
+                // source of its own to override that.
+                val tmdbEpisodes = tmdbMetadataService.fetchSeasonEpisodes(tvId, season, null)
                     .filter { ep -> AirDateGate.isAired(0L, ep.airDate, nowMs) }
-                if (episodes.isEmpty()) {
+                if (tmdbEpisodes.isEmpty()) {
                     showMessage(context.getString(R.string.detail_all_episodes_watched))
                     return@launch
+                }
+                val episodes = tmdbEpisodes.map { ep ->
+                    com.nexio.tv.domain.model.SeasonEpisodeMark(
+                        episodeNumber = ep.episodeNumber,
+                        airDate = ep.airDate
+                    )
                 }
                 watchProgressRepository.markAsCompletedBatch(meta, season, episodes)
                 showMessage(context.getString(R.string.detail_marked_episodes_watched, episodes.size))
@@ -2428,10 +2437,14 @@ class MetaDetailsViewModel @Inject constructor(
             _uiState.update {
                 it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys + pendingKey)
             }
-            // Capture for rollback before the optimistic removal.
-            val captured = _uiState.value.episodeProgressMap[season to episode]
-            // Optimistically remove from rawSnapshotState so the next-up appears within one tick.
-            continueWatchingSnapshotService.removeResumeEntry(video.id)
+            // Capture the actual resume entry (keyed by contentId+season+episode, not video.id)
+            // so rollback restores the same instance that was removed.
+            val captured = continueWatchingSnapshotService.currentRawResumeItems()
+                .firstOrNull { it.contentId == itemId && it.season == season && it.episode == episode }
+            // Only optimistically remove if there's actually an entry to remove.
+            if (captured != null) {
+                continueWatchingSnapshotService.removeResumeEntry(captured.videoId)
+            }
             runCatching {
                 watchProgressRepository.removeFromHistory(itemId, season, episode)
                 showMessage(context.getString(R.string.cw_action_clear_progress))

@@ -40,7 +40,7 @@ internal fun <T> splitNextUpCandidatesForContinueWatching(
     val mainFeedItems = nextUpItems.filter { candidate ->
         val ref = nextUpRef(candidate)
         ref.contentId.trim() !in pausedShowIds &&
-            (ref.firstAiredMs <= 0L || ref.firstAiredMs <= nowMs)
+            AirDateGate.isAired(firstAiredMs = ref.firstAiredMs, tmdbAirDate = null, nowMs = nowMs)
     }
 
     return ContinueWatchingNextUpSelection(

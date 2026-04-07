@@ -589,7 +589,7 @@ fun ContinueWatchingOptionsDialog(
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(stringResource(if (isInWatchlist) R.string.cw_remove_from_library else R.string.cw_add_to_library))
+                Text(stringResource(cwLibraryLabelResId(isInWatchlist)))
             }
         }
 
@@ -605,6 +605,13 @@ fun ContinueWatchingOptionsDialog(
         }
     }
 }
+
+/**
+ * Pure helper that resolves the correct string resource ID for the library toggle button label.
+ * Extracted so the label-selection logic can be tested without a Compose runtime.
+ */
+fun cwLibraryLabelResId(isInWatchlist: Boolean): Int =
+    if (isInWatchlist) R.string.cw_remove_from_library else R.string.cw_add_to_library
 
 private fun isSelectKey(keyCode: Int): Boolean {
     return keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
