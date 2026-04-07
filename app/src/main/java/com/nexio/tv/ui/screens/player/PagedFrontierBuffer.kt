@@ -40,10 +40,8 @@ internal class PagedFrontierBuffer(
     // Total length, used so partial last-page can be marked complete
     private var totalLength: Long = -1L
 
-    // Base position for non-zero opens (e.g., seek to 50GB starts frontier at 50GB)
-    private var basePosition: Long = 0L
-
-    // Tracks the contiguous frontier in bytes (absolute position, starts at basePosition)
+    // Tracks the contiguous frontier in bytes (absolute position, starts at the basePosition
+    // passed to setBasePosition, or 0 for zero-position opens).
     private var contiguousFrontierBytes: Long = 0L
 
     val frontier: Long
@@ -55,6 +53,9 @@ internal class PagedFrontierBuffer(
      */
     fun setTotalLength(length: Long) {
         synchronized(this) {
+            require(totalLength < 0L || totalLength == length) {
+                "setTotalLength contradicts a prior value: was=$totalLength new=$length"
+            }
             totalLength = length
         }
     }
@@ -65,8 +66,16 @@ internal class PagedFrontierBuffer(
      */
     fun setBasePosition(position: Long) {
         synchronized(this) {
-            basePosition = position
+            require(pages.isEmpty()) { "setBasePosition must be called before any writes" }
             contiguousFrontierBytes = position
+            // If basePosition is not page-aligned, pre-initialize the first page's lowWater
+            // to the in-page offset so writes that begin exactly at basePosition extend the
+            // contiguous fill (rather than landing in the pending range and never completing).
+            val firstPageIndex = (position / pageSize).toInt()
+            val offsetInFirstPage = (position % pageSize).toInt()
+            if (offsetInFirstPage > 0) {
+                pageFills.getOrPut(firstPageIndex) { PageFill() }.lowWater = offsetInFirstPage
+            }
         }
     }
 
@@ -198,7 +207,6 @@ internal class PagedFrontierBuffer(
             completedPages.clear()
             pageFills.clear()
             contiguousFrontierBytes = 0L
-            basePosition = 0L
             totalLength = -1L
         }
     }
@@ -209,8 +217,10 @@ internal class PagedFrontierBuffer(
         while (true) {
             val nextPageIndex = (contiguousFrontierBytes / pageSize).toInt()
             if (!completedPages[nextPageIndex]) break
-            val expectedBytes = expectedBytesForPage(nextPageIndex)
-            contiguousFrontierBytes += expectedBytes
+            val pageEnd = (nextPageIndex.toLong() + 1L) * pageSize
+            val newFrontier = if (totalLength in 0..pageEnd) totalLength else pageEnd
+            if (newFrontier <= contiguousFrontierBytes) break
+            contiguousFrontierBytes = newFrontier
         }
     }
 

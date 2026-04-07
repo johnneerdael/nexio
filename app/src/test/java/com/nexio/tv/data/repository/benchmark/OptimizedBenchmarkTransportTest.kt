@@ -1,6 +1,8 @@
 package com.nexio.tv.data.repository.benchmark
 
 import androidx.media3.common.C
+import com.nexio.tv.ui.screens.player.ChunkDownloadException
+import com.nexio.tv.ui.screens.player.ChunkWaitTimeoutException
 import com.nexio.tv.ui.screens.player.ParallelRangeDataSource
 import com.nexio.tv.ui.screens.player.RuntimeTransportObservation
 import java.io.EOFException
@@ -259,7 +261,7 @@ class OptimizedBenchmarkTransportTest {
                         }
 
                         override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
-                            throw ParallelRangeDataSource.ChunkWaitTimeoutException(
+                            throw ChunkWaitTimeoutException(
                                 chunkIndex = 8L,
                                 timeoutMs = 60_000L,
                                 cause = TimeoutException()
@@ -325,7 +327,7 @@ class OptimizedBenchmarkTransportTest {
                             override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
                                 if (!timedOutOnce.get() && position >= failureOffsetBytes) {
                                     timedOutOnce.set(true)
-                                    throw ParallelRangeDataSource.ChunkWaitTimeoutException(
+                                    throw ChunkWaitTimeoutException(
                                         chunkIndex = 2L,
                                         timeoutMs = 1_000L,
                                         cause = TimeoutException()
@@ -1065,7 +1067,7 @@ class OptimizedBenchmarkTransportTest {
         override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
             if (!failedOnce.get() && position >= FAILURE_OFFSET_BYTES) {
                 failedOnce.set(true)
-                throw ParallelRangeDataSource.ChunkDownloadException(
+                throw ChunkDownloadException(
                     chunkIndex = 2L,
                     message = "Failed to download chunk 2",
                     cause = IllegalStateException("connection reset")

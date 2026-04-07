@@ -157,6 +157,47 @@ class PagedFrontierBufferTest {
     // -------------------------------------------------------------------------
     // 6. readableContiguousBytesFrom returns correct count
     // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // P1-7 regression pins for Phase 3 buffer fixes
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `setBasePosition seeds first page lowWater for non-page-aligned base`() {
+        val buffer = PagedFrontierBuffer()
+        // basePosition lands halfway through page 5
+        val base = 5L * PAGE_SIZE + (PAGE_SIZE / 2)
+        buffer.setTotalLength(8L * PAGE_SIZE)
+        buffer.setBasePosition(base)
+
+        // Frontier starts at the basePosition
+        assertEquals(base, buffer.frontier)
+
+        // Write the second half of page 5 starting exactly at basePosition.
+        val tail = ByteArray(PAGE_SIZE / 2) { 0x5A }
+        buffer.onBytesWritten(base, tail, 0, tail.size)
+
+        // The first page completes and the frontier snaps to the next absolute boundary.
+        val expectedNextBoundary = 6L * PAGE_SIZE
+        assertEquals(expectedNextBoundary, buffer.frontier)
+    }
+
+    @Test
+    fun `advanceFrontier snaps to absolute page boundary not additive pageSize`() {
+        val buffer = PagedFrontierBuffer()
+        val base = 5L * PAGE_SIZE + 1024L  // non-zero, non-page-aligned
+        buffer.setTotalLength(8L * PAGE_SIZE)
+        buffer.setBasePosition(base)
+
+        val tailLength = PAGE_SIZE - 1024
+        val tail = ByteArray(tailLength) { 0x33 }
+        buffer.onBytesWritten(base, tail, 0, tailLength)
+
+        val absoluteNextBoundary = ((base / PAGE_SIZE) + 1L) * PAGE_SIZE
+        assertEquals(absoluteNextBoundary, buffer.frontier)
+        // Sanity: this MUST NOT be base + pageSize (the additive bug).
+        org.junit.Assert.assertNotEquals(base + PAGE_SIZE, buffer.frontier)
+    }
+
     @Test
     fun `readableContiguousBytesFrom reflects frontier relative to position`() {
         val buffer = PagedFrontierBuffer()

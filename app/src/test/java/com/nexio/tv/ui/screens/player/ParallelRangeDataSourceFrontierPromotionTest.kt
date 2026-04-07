@@ -70,7 +70,7 @@ class ParallelRangeDataSourceFrontierPromotionTest {
             }
 
             assertNotNull("Should have propagated error after exhausting promotions", error)
-            assertTrue(error is ParallelRangeDataSource.ChunkDownloadException)
+            assertTrue(error is ChunkDownloadException)
             assertTrue(
                 "Chunk 1 should have been requested across multiple promotion cycles",
                 server.requestsForChunk(1L) > 4

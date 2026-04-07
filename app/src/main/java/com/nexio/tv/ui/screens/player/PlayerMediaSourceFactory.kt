@@ -73,6 +73,12 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     @Volatile private var currentWarmAheadUpstreamFactory: DataSource.Factory? = null
     @Volatile private var currentProgressiveIsEligibleForWarmAhead: Boolean = false
     private val parallelStartupPrefetchUnlocked = AtomicBoolean(true)
+    // Last rebuffer event uptime, in `SystemClock.elapsedRealtime` ms. Set by the runtime
+    // controller via `notifyRebuffer()` whenever the player drops to STATE_BUFFERING after
+    // first frame. The PRDS `shouldAllowBackgroundPrefetch` gate consults this so background
+    // chunk prefetch pauses for `REBUFFER_PREFETCH_PAUSE_MS` after each rebuffer, freeing up
+    // urgent connection slots and bandwidth for the playhead recovery.
+    private val lastRebufferUptimeMs = AtomicLong(Long.MIN_VALUE / 2)
     private val activeReadBytePosition = AtomicLong(0L)
     private val prefetchStop = AtomicBoolean(false)
     private var prefetchFuture: Future<*>? = null
@@ -167,7 +173,14 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
                     okHttpFactory,
                     envelope?.maxSafeUrgentWorkers ?: parallelConnectionCount,
                     (envelope?.maxSafeUrgentChunkBytes ?: (parallelChunkSizeMb.toLong() * 1024L * 1024L)),
-                    shouldAllowBackgroundPrefetch = { parallelStartupPrefetchUnlocked.get() },
+                    shouldAllowBackgroundPrefetch = {
+                        if (!parallelStartupPrefetchUnlocked.get()) {
+                            false
+                        } else {
+                            val sinceRebuffer = android.os.SystemClock.elapsedRealtime() - lastRebufferUptimeMs.get()
+                            sinceRebuffer >= REBUFFER_PREFETCH_PAUSE_MS
+                        }
+                    },
                     onResolvedUri = { resolved ->
                         currentVodCacheResolvedUrl = resolved?.toString()
                     },
@@ -663,6 +676,16 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         startVodWarmAheadIfEligible()
     }
 
+    /**
+     * Called by the runtime controller when the player drops back to STATE_BUFFERING after
+     * the first frame has rendered. Pauses background chunk prefetch in [ParallelRangeDataSource]
+     * for [REBUFFER_PREFETCH_PAUSE_MS] so urgent connection slots and bandwidth go to the
+     * playhead recovery rather than speculative warm-ahead.
+     */
+    fun notifyRebuffer() {
+        lastRebufferUptimeMs.set(android.os.SystemClock.elapsedRealtime())
+    }
+
     fun getVodCacheLogState(currentStreamUrl: String? = null): String {
         if (!ENABLE_VOD_CACHE) return "vod=off"
         if (vodCacheSizeMode != VodCacheSizeMode.ON) return "vod=off"
@@ -912,6 +935,10 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         private const val PREFETCH_BLOCK_BYTES = 16L * 1024L * 1024L
         private const val PREFETCH_ACTIVE_GUARD_BYTES = 8L * 1024L * 1024L
         private const val PREFETCH_REBASE_SLEEP_MS = 100L
+        // After a rebuffer event, pause background chunk prefetch in PRDS for this many ms.
+        // Mirrors `RollingHorizonManager.HEALTH_NO_REBUFFER_MS` so the warm-ahead writer and
+        // the parallel-range prefetch lane gate on the same recovery window.
+        private const val REBUFFER_PREFETCH_PAUSE_MS = 10_000L
         private const val PREFETCH_IDLE_SLEEP_MS = 250L
         private const val PREFETCH_MAX_IDLE_CYCLES = 20
         @Volatile private var sharedSimpleCache: SimpleCache? = null
