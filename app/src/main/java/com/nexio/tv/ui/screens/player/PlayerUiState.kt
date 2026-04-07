@@ -19,6 +19,7 @@ import com.nexio.tv.ui.components.SourceChipItem
 data class PlayerUiState(
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = true,
+    val isSwappingAddonSubtitle: Boolean = false,
     val playbackEnded: Boolean = false,
     val currentPosition: Long = 0L,
     val duration: Long = 0L,
@@ -145,7 +146,14 @@ data class TrackInfo(
     val codec: String? = null,
     val channelCount: Int? = null,
     val isForced: Boolean = false,
-    val isSelected: Boolean = false
+    val isSelected: Boolean = false,
+    /**
+     * Sample MIME type from Media3 (e.g. `application/x-subrip`, `text/vtt`,
+     * `application/pgs`). For internal subtitle tracks the policy uses this
+     * to distinguish text-based subs (translatable) from bitmap subs
+     * (PGS / VobSub / DVB — cannot be auto-translated).
+     */
+    val mimeType: String? = null
 )
 
 data class NextEpisodeInfo(

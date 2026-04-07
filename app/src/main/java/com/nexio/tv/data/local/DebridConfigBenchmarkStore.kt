@@ -92,16 +92,35 @@ class DebridConfigBenchmarkStore internal constructor(
                 parseProfileResult(element.asJsonObject)
             }
 
+            val migratedSummary = migrateEnvelopeIfNeeded(summary, provider)
             DebridConfigBenchmarkResult(
                 provider = provider,
                 measuredAtMs = measuredAtMs,
                 candidate = candidate,
-                summary = summary,
+                summary = migratedSummary,
                 profiles = profiles
             ).takeIf { it.isValid() }
         } catch (_: InvalidDebridConfigBenchmarkPayload) {
             null
         }
+    }
+}
+
+/**
+ * For RD/PM: if the persisted [CapabilityEnvelope] has a shape that diverges from the locked
+ * constants (e.g., a legacy 8 MiB urgent value), silently discard it. The cold-start locked
+ * shape will be synthesised by [toCapabilityEnvelope] on the next read. Does NOT throw.
+ */
+private fun migrateEnvelopeIfNeeded(
+    summary: DebridConfigBenchmarkSessionSummary,
+    provider: DebridBenchmarkProvider
+): DebridConfigBenchmarkSessionSummary {
+    val stored = summary.capabilityEnvelope ?: return summary
+    val locked = CapabilityEnvelope.lockedFor(provider.storageKey) ?: return summary
+    return if (locked.matchesLockedShape(stored)) {
+        summary
+    } else {
+        summary.copy(capabilityEnvelope = null)
     }
 }
 

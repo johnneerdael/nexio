@@ -29,6 +29,34 @@ internal object PlayerSubtitleUtils {
             return "pt"
         }
 
+        // Normalize full display-name language strings that some Stremio addons
+        // emit in Meta.language (e.g. "English", "Polish") to ISO-639-1 codes
+        // so they are usable as startup audio-selection targets.
+        when {
+            containsAny("english") -> return "en"
+            containsAny("spanish", "espanol", "castellano") -> return "es"
+            containsAny("french", "francais") -> return "fr"
+            containsAny("german", "deutsch") -> return "de"
+            containsAny("italian", "italiano") -> return "it"
+            containsAny("russian") -> return "ru"
+            containsAny("japanese") -> return "ja"
+            containsAny("korean") -> return "ko"
+            containsAny("chinese", "mandarin") -> return "zh"
+            containsAny("arabic") -> return "ar"
+            containsAny("hindi") -> return "hi"
+            containsAny("dutch", "nederlands") -> return "nl"
+            containsAny("polish", "polski") -> return "pl"
+            containsAny("turkish", "turkce") -> return "tr"
+            containsAny("swedish") -> return "sv"
+            containsAny("norwegian") -> return "no"
+            containsAny("danish") -> return "da"
+            containsAny("finnish") -> return "fi"
+            containsAny("czech", "cesky") -> return "cs"
+            containsAny("hungarian") -> return "hu"
+            containsAny("romanian") -> return "ro"
+            containsAny("ukrainian") -> return "uk"
+        }
+
         return when (code) {
             "pt-br", "pt_br", "br", "pob" -> "pt-br"
             "pt", "pt-pt", "pt_pt", "por" -> "pt"
@@ -108,16 +136,27 @@ internal object PlayerSubtitleUtils {
     }
 
     fun mimeTypeFromUrl(url: String): String {
-        val normalizedPath = url
-            .substringBefore('#')
-            .substringBefore('?')
-            .lowercase()
+        val lowered = url.lowercase()
+        val pathOnly = lowered.substringBefore('#').substringBefore('?')
+        // Some addon URLs embed the file extension mid-path with a trailing
+        // slash before query args (e.g. ".../sub.vtt/?lang_code=nl"). Inspect
+        // every path segment so we don't misclassify VTT as SRT.
+        val segments = pathOnly.trim('/').split('/')
+        fun hasExtensionIn(haystack: List<String>, vararg exts: String): Boolean {
+            return haystack.any { segment -> exts.any { ext -> segment.endsWith(ext) } }
+        }
 
         return when {
-            normalizedPath.endsWith(".srt") -> MimeTypes.APPLICATION_SUBRIP
-            normalizedPath.endsWith(".vtt") || normalizedPath.endsWith(".webvtt") -> MimeTypes.TEXT_VTT
-            normalizedPath.endsWith(".ass") || normalizedPath.endsWith(".ssa") -> MimeTypes.TEXT_SSA
-            normalizedPath.endsWith(".ttml") || normalizedPath.endsWith(".dfxp") -> MimeTypes.APPLICATION_TTML
+            hasExtensionIn(segments, ".srt") -> MimeTypes.APPLICATION_SUBRIP
+            hasExtensionIn(segments, ".vtt", ".webvtt") -> MimeTypes.TEXT_VTT
+            hasExtensionIn(segments, ".ass", ".ssa") -> MimeTypes.TEXT_SSA
+            hasExtensionIn(segments, ".ttml", ".dfxp") -> MimeTypes.APPLICATION_TTML
+            // Last resort: scan the full URL (covers query params like
+            // ?file=foo.vtt or ?format=vtt that some addons emit).
+            lowered.contains(".vtt") || lowered.contains("format=vtt") -> MimeTypes.TEXT_VTT
+            lowered.contains(".srt") || lowered.contains("format=srt") -> MimeTypes.APPLICATION_SUBRIP
+            lowered.contains(".ass") || lowered.contains(".ssa") -> MimeTypes.TEXT_SSA
+            lowered.contains(".ttml") || lowered.contains(".dfxp") -> MimeTypes.APPLICATION_TTML
             else -> MimeTypes.APPLICATION_SUBRIP
         }
     }

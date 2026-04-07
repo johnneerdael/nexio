@@ -10,6 +10,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.Util
 import androidx.media3.common.util.UnstableApi
 import com.nexio.tv.core.player.FrameRateUtils
+import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import kotlinx.coroutines.Dispatchers
@@ -173,7 +174,8 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                             language = format.language,
                             trackId = format.id,
                             isForced = hasForcedFlag || nameHintForced || isSongsAndSigns,
-                            isSelected = isSelected
+                            isSelected = isSelected,
+                            mimeType = format.sampleMimeType
                         )
                     )
                 }
@@ -334,10 +336,21 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
 
     val pendingAddonTrackId = pendingAddonSubtitleTrackId
     if (!pendingAddonTrackId.isNullOrBlank()) {
+        Log.i(
+            PlayerRuntimeController.TAG,
+            "ADDON_SUB: onTracksChanged pendingTrackId=$pendingAddonTrackId " +
+                "internalSubs=${subtitleTracks.size} " +
+                "subTracks=${subtitleTracks.map { "${it.language ?: "und"}|${it.trackId ?: "?"}|${it.name ?: "?"}" }}"
+        )
         if (applyAddonSubtitleOverride(pendingAddonTrackId)) {
-            Log.d(PlayerRuntimeController.TAG, "Selecting pending addon subtitle track id=$pendingAddonTrackId")
+            Log.i(PlayerRuntimeController.TAG, "ADDON_SUB: pending track applied id=$pendingAddonTrackId")
             pendingAddonSubtitleTrackId = null
             pendingAddonSubtitleLanguage = null
+        } else {
+            Log.w(
+                PlayerRuntimeController.TAG,
+                "ADDON_SUB: pending track id=$pendingAddonTrackId not yet present in track list"
+            )
         }
     }
 
@@ -364,6 +377,7 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
         pendingAddonSubtitleLanguage = null
     }
 
+    logStartupAudioDiagnosis(audioTracks, selectedAudioIndex)
     maybeApplyRememberedAudioSelection(audioTracks)
     maybeRestorePendingAudioSelectionAfterSubtitleRefresh(audioTracks)?.let { restoredIndex ->
         selectedAudioIndex = restoredIndex
@@ -431,6 +445,65 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
     maybeAdjustLibassPipelineForTracks(tracks)
 }
 
+/**
+ * Always-on diagnostic that runs on every track refresh, regardless of
+ * whether the startup picker actually does work this round (e.g. when
+ * `hasAppliedRememberedAudioSelection` or `autoAudioSelected` short-circuits
+ * the apply path). It logs:
+ *   - what the user's preference / target list resolves to
+ *   - which track the startup algorithm WOULD pick from scratch (a pure
+ *     simulation, no state mutation)
+ *   - which track is currently actually selected
+ *   - the gating flags so we can see why the picker did or didn't fire
+ *   - the full track list (lang|name) so we can validate inference
+ *
+ * Use `adb logcat | grep AUDIO_STARTUP_EVAL` to spot stale-cache hijacks
+ * (current ≠ wouldPick) and language tagging issues (wouldPick=-1 with
+ * resolvedTargets non-empty means none of our targets matched any track).
+ */
+internal fun PlayerRuntimeController.logStartupAudioDiagnosis(
+    audioTracks: List<TrackInfo>,
+    currentSelectedIndex: Int
+) {
+    if (audioTracks.isEmpty()) return
+    val preferredAudioLanguages = resolvePreferredAudioLanguages(
+        preferredAudioLanguage = lastPreferredAudioLanguage,
+        secondaryPreferredAudioLanguage = lastSecondaryPreferredAudioLanguage,
+        deviceLanguages = run {
+            val localeList = context.resources.configuration.locales
+            List(localeList.size()) { localeList[it].isO3Language }
+        },
+        originalLanguage = originalLanguage
+    )
+    val capability = detectStartupAudioCapabilitySupport()
+    val wouldPickIndex: Int = when {
+        preferredAudioLanguages.isNotEmpty() -> findBestStartupAudioTrackIndex(
+            audioTracks = audioTracks,
+            targets = preferredAudioLanguages,
+            originalLanguage = originalLanguage,
+            capabilitySupport = capability
+        )
+        lastPreferredAudioLanguage.trim().equals(AudioLanguageOption.ORIGINAL, ignoreCase = true) ->
+            findOriginalTrackFallbackIndex(audioTracks)
+        else -> -1
+    }
+    fun describe(index: Int): String {
+        val track = audioTracks.getOrNull(index) ?: return "<none>"
+        return "${track.language ?: "und"}|${track.name}"
+    }
+    Log.i(
+        PlayerRuntimeController.TAG,
+        "AUDIO_STARTUP_EVAL: pref=$lastPreferredAudioLanguage origLang=$originalLanguage " +
+            "targets=$preferredAudioLanguages " +
+            "wouldPick=[$wouldPickIndex]${describe(wouldPickIndex)} " +
+            "current=[$currentSelectedIndex]${describe(currentSelectedIndex)} " +
+            "autoSelected=$autoAudioSelected " +
+            "rememberedApplied=$hasAppliedRememberedAudioSelection " +
+            "rememberedLang=$rememberedAudioLanguage " +
+            "tracks=${audioTracks.mapIndexed { i, t -> "[$i]${t.language ?: "und"}|${t.name}" }}"
+    )
+}
+
 internal fun PlayerRuntimeController.maybeApplyStartupPreferredAudioSelection(
     audioTracks: List<TrackInfo>,
     currentSelectedIndex: Int
@@ -451,8 +524,32 @@ internal fun PlayerRuntimeController.maybeApplyStartupPreferredAudioSelection(
         },
         originalLanguage = originalLanguage
     )
+    Log.i(
+        PlayerRuntimeController.TAG,
+        "AUDIO_STARTUP: pref=$lastPreferredAudioLanguage origLang=$originalLanguage " +
+            "resolvedTargets=$preferredAudioLanguages " +
+            "tracks=${audioTracks.map { "${it.language ?: "und"}|${it.name ?: "?"}" }}"
+    )
 
     if (preferredAudioLanguages.isEmpty()) {
+        // Preference is "Original language" but no usable metadata is
+        // available (addon returned null / display name could not be
+        // normalized). Avoid silently letting Media3 play track 0 (often a
+        // dubbed foreign track) — run an original-track fallback that uses
+        // naming conventions to locate a likely ORIGINAL / non-dubbed track.
+        if (lastPreferredAudioLanguage.trim().equals(AudioLanguageOption.ORIGINAL, ignoreCase = true)) {
+            val fallbackIndex = findOriginalTrackFallbackIndex(audioTracks)
+            if (fallbackIndex >= 0) {
+                autoAudioSelected = true
+                if (fallbackIndex == currentSelectedIndex) return fallbackIndex
+                selectAudioTrack(fallbackIndex)
+                Log.i(
+                    PlayerRuntimeController.TAG,
+                    "AUDIO_STARTUP: Original-language fallback selected trackIndex=$fallbackIndex"
+                )
+                return fallbackIndex
+            }
+        }
         autoAudioSelected = true
         return null
     }
@@ -470,6 +567,49 @@ internal fun PlayerRuntimeController.maybeApplyStartupPreferredAudioSelection(
 
     selectAudioTrack(bestIndex)
     return bestIndex
+}
+
+/**
+ * Last-resort picker used when the user selected "Original language" but no
+ * usable original-language metadata was available. Scores each track for
+ * "looks like an original, not dubbed" signal using the existing naming
+ * convention classifier, and returns the best candidate — or -1 when no
+ * confident choice can be made (in which case we leave selection alone).
+ */
+private fun findOriginalTrackFallbackIndex(audioTracks: List<TrackInfo>): Int {
+    if (audioTracks.isEmpty()) return -1
+
+    data class Scored(val index: Int, val score: Int)
+
+    val scored = audioTracks.mapIndexedNotNull { index, track ->
+        val trackTypes = PlayerAudioTrackNamingConventions.trackTypes(track)
+        // Reject commentary/descriptive/voice-over tracks outright.
+        if (trackTypes.any { it == AudioTrackType.COMMENTARY ||
+                it == AudioTrackType.DESCRIPTIVE_AUDIO ||
+                it == AudioTrackType.ISOLATED_SCORE ||
+                it == AudioTrackType.VOICEOVER }
+        ) {
+            return@mapIndexedNotNull null
+        }
+        var score = 0
+        if (AudioTrackType.ORIGINAL in trackTypes) score += 100
+        if (AudioTrackType.DUBBED in trackTypes) score -= 100
+        val haystack = listOfNotNull(track.name, track.trackId)
+            .joinToString(" ")
+            .lowercase(Locale.ROOT)
+        if (Regex("""\b(main|default|original|orig)\b""").containsMatchIn(haystack)) score += 20
+        if (Regex("""\b(dub|dubbed)\b""").containsMatchIn(haystack)) score -= 40
+        // Prefer English as the statistical original for most addon content
+        // when nothing else distinguishes the tracks. This only kicks in when
+        // all other signals are neutral.
+        if (PlayerSubtitleUtils.normalizeLanguageCode(track.language ?: "") == "en") score += 5
+        Scored(index, score)
+    }
+
+    val best = scored.maxByOrNull { it.score } ?: return -1
+    // Only commit to a fallback when at least one signal fired — otherwise
+    // leave Media3's default in place rather than guess blindly.
+    return if (best.score > 0) best.index else -1
 }
 
 internal fun PlayerRuntimeController.detectStartupAudioCapabilitySupport(): StartupAudioCapabilitySupport {
@@ -663,6 +803,35 @@ internal fun PlayerRuntimeController.maybeApplyRememberedAudioSelection(audioTra
     if (!streamReuseLastLinkEnabled) return
     if (audioTracks.isEmpty()) return
     if (rememberedAudioLanguage.isNullOrBlank() && rememberedAudioName.isNullOrBlank()) return
+
+    // If the user's preference is "Original language", do not let a stale
+    // remembered audio language from a previous session override the original
+    // unless the remembered language actually IS the original. Otherwise a
+    // one-time manual switch (e.g. to Polish) silently hijacks every future
+    // playback, defeating the entire point of the Original-language setting.
+    if (lastPreferredAudioLanguage.trim().equals(AudioLanguageOption.ORIGINAL, ignoreCase = true)) {
+        val normalizedRememberedLang = rememberedAudioLanguage
+            ?.takeIf { it.isNotBlank() }
+            ?.let(PlayerSubtitleUtils::normalizeLanguageCode)
+        val normalizedOriginal = originalLanguage
+            ?.takeIf { it.isNotBlank() }
+            ?.let(PlayerSubtitleUtils::normalizeLanguageCode)
+        if (
+            normalizedRememberedLang != null &&
+            normalizedOriginal != null &&
+            normalizedRememberedLang != normalizedOriginal
+        ) {
+            Log.i(
+                PlayerRuntimeController.TAG,
+                "AUDIO_STARTUP: Skipping remembered audio lang=$normalizedRememberedLang " +
+                    "(does not match original=$normalizedOriginal); " +
+                    "deferring to Original-language preference"
+            )
+            // Leave hasAppliedRememberedAudioSelection = false so the
+            // startup preferred selector runs and picks the original track.
+            return
+        }
+    }
 
     val targetLang = normalizeTrackMatchValue(rememberedAudioLanguage)
     val targetName = normalizeTrackMatchValue(rememberedAudioName)
@@ -897,7 +1066,8 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
         addonSubtitleDiscoveryPending =
             state.isLoadingAddonSubtitles || startupSubtitlePreparationJob?.isActive == true,
         aiTranslationConfigured = geminiEnabled && geminiApiKey.isNotBlank(),
-        startupPhase = !hasRenderedFirstFrame
+        startupPhase = !hasRenderedFirstFrame,
+        videoRelease = currentParsedRelease
     )
     when (startupDecision) {
         is StartupSubtitleAutoSelectionDecision.Internal -> {

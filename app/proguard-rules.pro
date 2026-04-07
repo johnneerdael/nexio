@@ -96,6 +96,13 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 
+# ── Playback instrumentation ──────────────────────────────────────────────────
+# Keep tracer surface so R8 does not strip the @JvmField enabled flag or hot-path inline targets
+-keep class com.nexio.tv.instrumentation.** { *; }
+-keepclassmembers class com.nexio.tv.instrumentation.PlaybackTracer {
+    public static boolean enabled;
+}
+
 # ── General ────────────────────────────────────────────────────────────────────
 # Keep line numbers for crash reports
 -keepattributes SourceFile,LineNumberTable

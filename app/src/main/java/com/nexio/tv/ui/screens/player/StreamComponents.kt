@@ -279,7 +279,8 @@ internal fun AddonFilterChips(
     selectedAddon: String?,
     onAddonSelected: (String?) -> Unit,
     externalFocusRequesters: List<FocusRequester>? = null,
-    externalOrderedNames: List<String>? = null
+    externalOrderedNames: List<String>? = null,
+    onUpKey: (() -> Unit)? = null
 ) {
     val chipMap = sourceChips.associateBy { it.name }
     val orderedNames = externalOrderedNames ?: buildList {
@@ -315,6 +316,10 @@ internal fun AddonFilterChips(
                     }
                     androidx.compose.ui.input.key.Key.DirectionRight -> {
                         if (currentIdx < allOptions.lastIndex) { onAddonSelected(allOptions[currentIdx + 1]); true } else false
+                    }
+                    androidx.compose.ui.input.key.Key.DirectionUp -> {
+                        val cb = onUpKey
+                        if (cb != null) { cb(); true } else false
                     }
                     else -> false
                 }

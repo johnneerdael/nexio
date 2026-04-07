@@ -48,6 +48,10 @@ class SequentialReadCursorTest {
         }
         override fun readableContiguousBytesFrom(position: Long): Long =
             (available - position).coerceAtLeast(0L)
+        override fun publishCompleteChunk(absoluteStart: Long, chunk: ByteArray, length: Int) {
+            System.arraycopy(chunk, 0, content, absoluteStart.toInt(), length)
+            if (absoluteStart + length > available) available = absoluteStart + length
+        }
         override fun setTotalLength(length: Long) {}
         override fun setBasePosition(position: Long) {}
         override fun evictBefore(position: Long) {}

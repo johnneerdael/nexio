@@ -11,6 +11,7 @@ import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import java.io.IOException
 import com.nexio.tv.data.local.PlayerSettings
+import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
 import java.util.concurrent.atomic.AtomicBoolean
 import android.os.SystemClock
 import java.util.concurrent.locks.ReentrantLock
@@ -30,7 +31,8 @@ import java.util.concurrent.locks.ReentrantLock
 @UnstableApi
 internal class ParallelRangeDataSource(
     private val upstreamFactory: OkHttpDataSource.Factory,
-    private val parallelConnections: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
+    private val envelope: CapabilityEnvelope = CapabilityEnvelope.DEFAULT,
+    private val parallelConnections: Int = envelope.maxSafeUrgentWorkers,
     private val chunkSize: Long = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB.toLong() * 1024 * 1024,
     private val chunkWaitTimeoutMs: Long = DEFAULT_CHUNK_WAIT_TIMEOUT_MS,
     private val shouldAllowBackgroundPrefetch: () -> Boolean = { true },
@@ -93,7 +95,7 @@ internal class ParallelRangeDataSource(
     // frontier promotion) lives here. PRDS keeps only the Media3 façade + bootstrap/pumps.
     private val transportManager = SharedParallelTransportManager(
         upstreamFactory = upstreamFactory,
-        parallelConnections = parallelConnections,
+        envelope = envelope,
         transportSampleTimeMs = transportSampleTimeMs,
         onTransportBytesDownloaded = onTransportBytesDownloaded,
         onChunkBytesDownloaded = onChunkBytesDownloaded,
@@ -472,10 +474,15 @@ internal class ParallelRangeDataSource(
         store.setTotalLength(totalFileLength)
         val preScheduledFromBootstrap = mutableListOf<Long>()
 
-        System.err.println("DIAG open() ${parallelConnections}conn ${activeChunkSize / 1024 / 1024}MB chunks " +
-                "file=${totalFileLength / 1024 / 1024}MB pos=${position / 1024 / 1024}MB " +
-                "bootstrap=${minOf(minOf(activeChunkSize, BOOTSTRAP_READ_BYTES), bytesRemaining).toInt() / 1024}KB " +
-                "host=${resolvedUri?.host}")
+        PlayerTransportTelemetry.log("prds.open", mapOf(
+            "activeChunk" to activeChunkSize,
+            "locked" to "n/a",
+            "prefetchChunkBytes" to envelope.maxSafePrefetchChunkBytes,
+            "prefetchWorkers" to envelope.maxSafePrefetchWorkers,
+            "supportsRangeRequests" to envelope.supportsRangeRequests,
+            "urgentChunkBytes" to envelope.maxSafeUrgentChunkBytes,
+            "urgentWorkers" to envelope.maxSafeUrgentWorkers
+        ))
 
         // Reuse a small probe window immediately for both startup and large seek reopens.
         val firstChunkIndex = position / activeChunkSize
@@ -808,7 +815,7 @@ internal class ParallelRangeDataSource(
      */
     class Factory(
         private val upstreamFactory: OkHttpDataSource.Factory,
-        private val parallelConnections: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
+        private val envelope: CapabilityEnvelope = CapabilityEnvelope.DEFAULT,
         private val chunkSize: Long = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB.toLong() * 1024 * 1024,
         private val chunkWaitTimeoutMs: Long = DEFAULT_CHUNK_WAIT_TIMEOUT_MS,
         private val shouldAllowBackgroundPrefetch: () -> Boolean = { true },
@@ -827,7 +834,7 @@ internal class ParallelRangeDataSource(
         override fun createDataSource(): DataSource {
             return ParallelRangeDataSource(
                 upstreamFactory = upstreamFactory,
-                parallelConnections = parallelConnections,
+                envelope = envelope,
                 chunkSize = chunkSize,
                 chunkWaitTimeoutMs = chunkWaitTimeoutMs,
                 shouldAllowBackgroundPrefetch = shouldAllowBackgroundPrefetch,

@@ -29,6 +29,23 @@ class TransportValidationRuntimeCollector @Inject constructor() {
     @Volatile
     private var pendingOperatorObservation: TransportValidationOperatorObservation? = null
 
+    /**
+     * WP3 — playback-trace MediaSourceSession id supplied by
+     * `PlayerMediaSourceFactory.createMediaSource()` immediately after
+     * `PlaybackTracer.beginSession`. Tags every rebuffer / decode event
+     * emitted from this collector with the same id so the JSONL trace can
+     * be correlated session-wide. Null until bound; cleared on player
+     * release.
+     */
+    @Volatile
+    internal var boundPlaybackSessionId: String? = null
+        private set
+
+    /** WP3 — bind the playback-trace session id from the factory. */
+    fun bindSession(sessionId: String?) {
+        boundPlaybackSessionId = sessionId
+    }
+
     fun beginSession(
         sample: TransportValidationSample,
         settings: TransportValidationSettings,

@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security.utils import get_authorization_scheme_param
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.middleware.sessions import SessionMiddleware
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -54,6 +54,38 @@ class DebridBenchmarkEnvelope(BaseModel):
     sentAtMs: int = Field(default_factory=lambda: int(time.time() * 1000))
     client: ClientInfo = Field(default_factory=ClientInfo)
     result: dict[str, Any]
+
+
+class CapabilityEnvelope(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    maxSafeUrgentWorkers: int
+    maxSafePrefetchWorkers: int
+    maxSafeUrgentChunkBytes: int
+    maxSafePrefetchChunkBytes: int
+    sustainedThroughputMbps: float
+    stabilityPenalty: float
+    supportsRangeRequests: bool
+    measuredAtMs: int
+
+
+LOCKED_REAL_DEBRID_SHAPE = {
+    "maxSafeUrgentWorkers": 1,
+    "maxSafePrefetchWorkers": 1,
+    "maxSafeUrgentChunkBytes": 33554432,
+    "maxSafePrefetchChunkBytes": 67108864,
+    "supportsRangeRequests": True,
+}
+LOCKED_PREMIUMIZE_SHAPE = {
+    "maxSafeUrgentWorkers": 2,
+    "maxSafePrefetchWorkers": 1,
+    "maxSafeUrgentChunkBytes": 16777216,
+    "maxSafePrefetchChunkBytes": 16777216,
+    "supportsRangeRequests": True,
+}
+_LOCKED_SHAPES: dict[str, dict[str, Any]] = {
+    "real_debrid": LOCKED_REAL_DEBRID_SHAPE,
+    "premiumize": LOCKED_PREMIUMIZE_SHAPE,
+}
 
 
 def db() -> sqlite3.Connection:
@@ -1144,6 +1176,22 @@ def list_shadow_autoplay_events(
 @app.post("/api/v1/debrid-benchmark-results")
 def ingest_debrid_benchmark_result(request: Request, envelope: DebridBenchmarkEnvelope):
     require_bearer(request, WRITE_TOKEN)
+    # Parse and validate the nested capability envelope if present.
+    # Pydantic gives 422 automatically on type drift / missing required fields.
+    capability_raw = envelope.result.get("capabilityEnvelope")
+    if capability_raw is not None:
+        capability = CapabilityEnvelope.model_validate(capability_raw)
+        # Check locked shape fields for providers we have locked constants for.
+        provider_key = first_non_blank(envelope.result.get("provider"))
+        if provider_key in _LOCKED_SHAPES:
+            locked = _LOCKED_SHAPES[provider_key]
+            capability_dict = capability.model_dump()
+            for field, expected in locked.items():
+                if capability_dict.get(field) != expected:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"shape drift for provider={provider_key}",
+                    )
     row = summarize_benchmark(envelope.result, envelope)
     with closing(db()) as conn:
         conn.execute(

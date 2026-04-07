@@ -104,10 +104,25 @@ fun parseAddonInstallUrl(rawUrl: String): ParsedAddonSyncEntry {
     val parsed = URL(candidate)
     val pathSegments = parsed.path.split('/').filter { it.isNotBlank() }
     val hasManifestPath = pathSegments.lastOrNull()?.equals("manifest.json", ignoreCase = true) == true
-    val pathSecretSegment = if (hasManifestPath) pathSegments.getOrNull(pathSegments.lastIndex - 1) else null
+    // The encoded-config / secret segment normally sits one before the
+    // trailing /manifest.json. After [normalizeAddonInstallUrl] strips the
+    // manifest suffix the secret moves to be the last segment, so we have
+    // to look at the right slot in both shapes — otherwise the matcher
+    // misses every stored URL that has been through canonicalization, and
+    // addons whose config is baked into the path (e.g. OpenSubtitles Pro)
+    // get duplicated on every config change.
+    val pathSecretSegment = when {
+        hasManifestPath -> pathSegments.getOrNull(pathSegments.lastIndex - 1)
+        pathSegments.isNotEmpty() -> pathSegments.last()
+        else -> null
+    }
     val hasPathSecret = pathSecretSegment?.let(::looksSensitivePathSegment) == true
     val publicPathSegments = if (hasPathSecret) {
-        pathSegments.dropLast(2) + "manifest.json"
+        if (hasManifestPath) {
+            pathSegments.dropLast(2) + "manifest.json"
+        } else {
+            pathSegments.dropLast(1)
+        }
     } else {
         pathSegments
     }

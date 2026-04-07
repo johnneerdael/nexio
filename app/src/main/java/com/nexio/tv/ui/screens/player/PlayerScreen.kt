@@ -24,6 +24,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -628,7 +629,7 @@ fun PlayerScreen(
         )
 
         // Buffering indicator
-        if (uiState.isBuffering && !uiState.showLoadingOverlay) {
+        if (uiState.isBuffering && !uiState.showLoadingOverlay && !uiState.isSwappingAddonSubtitle) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -1957,16 +1958,36 @@ internal fun DialogButton(
     text: String,
     onClick: () -> Unit,
     isPrimary: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    prominentFocus: Boolean = false
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
+    val focusedBg = if (isPrimary) {
+        NexioColors.Secondary
+    } else if (prominentFocus) {
+        NexioColors.FocusBackground.copy(alpha = 1f)
+    } else {
+        NexioColors.FocusBackground
+    }
+    val outerModifier = if (prominentFocus && isFocused) {
+        modifier
+            .onFocusChanged { isFocused = it.isFocused }
+            .border(
+                width = 2.dp,
+                color = NexioColors.Primary,
+                shape = RoundedCornerShape(8.dp)
+            )
+    } else {
+        modifier.onFocusChanged { isFocused = it.isFocused }
+    }
+
     Card(
         onClick = onClick,
-        modifier = modifier.onFocusChanged { isFocused = it.isFocused },
+        modifier = outerModifier,
         colors = CardDefaults.colors(
             containerColor = if (isPrimary) NexioColors.Secondary else NexioColors.BackgroundCard,
-            focusedContainerColor = if (isPrimary) NexioColors.Secondary else NexioColors.FocusBackground
+            focusedContainerColor = focusedBg
         ),
         shape = CardDefaults.shape(shape = RoundedCornerShape(8.dp))
     ) {

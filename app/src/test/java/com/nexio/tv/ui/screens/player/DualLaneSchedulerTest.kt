@@ -2,7 +2,6 @@ package com.nexio.tv.ui.screens.player
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.CountDownLatch
@@ -30,7 +29,7 @@ class DualLaneSchedulerTest {
         assertEquals(3, completedUrgent.get())
 
         // Submit prefetch when no urgent is pending — it may or may not complete
-        val prefetchFuture = scheduler.submitPrefetch(range) { _ -> }
+        val prefetchFuture = scheduler.submitPrefetch(range, chunkSize = 1024L) { _ -> }
         assertNotNull("Prefetch should be accepted when no urgent work is pending", prefetchFuture)
 
         scheduler.cancelAll()
@@ -64,7 +63,7 @@ class DualLaneSchedulerTest {
 
         // Submit a prefetch that blocks so we can cancel it mid-flight
         val prefetchBlockLatch = CountDownLatch(1)
-        val prefetchFuture = scheduler.submitPrefetch(range) { _ ->
+        val prefetchFuture = scheduler.submitPrefetch(range, chunkSize = 1024L) { _ ->
             prefetchRunningLatch.countDown()
             prefetchBlockLatch.await()
         }
@@ -81,7 +80,7 @@ class DualLaneSchedulerTest {
     }
 
     @Test(timeout = 10_000L)
-    fun admissionControlRejectsPrefetchWhenUrgentPending() {
+    fun prefetchParkedWhenUrgentPendingThenResumedAfterDrain() {
         val scheduler = DualLaneScheduler(urgentWorkers = 2, prefetchWorkers = 1)
         val blockLatch = CountDownLatch(1)
         val urgentRunningLatch = CountDownLatch(1)
@@ -96,9 +95,10 @@ class DualLaneSchedulerTest {
 
         urgentRunningLatch.await(5, TimeUnit.SECONDS)
 
-        // While urgent is pending, prefetch should be rejected
-        val rejected = scheduler.submitPrefetch(range) { _ -> }
-        assertNull("Prefetch should be rejected while urgent work is pending", rejected)
+        // While urgent is pending, prefetch is now parked (never null) — the old
+        // null-return-on-pending-urgent behaviour was removed in Phase 4.
+        val parked = scheduler.submitPrefetch(range, chunkSize = 1024L) { _ -> }
+        assertNotNull("Prefetch should be accepted (parked) even while urgent work is pending", parked)
 
         // Release the urgent task
         blockLatch.countDown()
@@ -110,8 +110,8 @@ class DualLaneSchedulerTest {
         }
         assertEquals(0, scheduler.pendingUrgentCount)
 
-        // Now prefetch should be accepted
-        val accepted = scheduler.submitPrefetch(range) { _ -> }
+        // Now prefetch should still be accepted (urgent queue is drained)
+        val accepted = scheduler.submitPrefetch(range, chunkSize = 1024L) { _ -> }
         assertNotNull("Prefetch should be accepted once urgent queue is drained", accepted)
 
         scheduler.cancelAll()

@@ -382,6 +382,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     currentVideoHash = stream.behaviorHints?.videoHash
     currentVideoSize = stream.behaviorHints?.videoSize
     currentFilename = stream.behaviorHints?.filename ?: navigationArgs.filename
+    currentParsedRelease = currentFilename?.let { com.nexio.tv.core.stream.AioStrictFileParser.parse(it) }
     trackAfrAppliedForCurrentStream = false
     pendingAddonSubtitleLanguage = null
     pendingAddonSubtitleTrackId = null
@@ -394,6 +395,18 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     hasRetriedCurrentStreamAfter416 = false
     hasRetriedCurrentStreamAfterUnexpectedNpe = false
     hasRetriedCurrentStreamAfterMediaPeriodHolderCrash = false
+    // Mirror the cold-start reset block in initializePlayer so the new
+    // stream's onTracksChanged actually re-runs the auto-pickers. Without
+    // these resets the flags from the previous stream short-circuit every
+    // gate (autoSubtitleSelected, autoAudioSelected, hasScannedTextTracksOnce,
+    // hasAppliedRememberedAudioSelection) and the picker silently does
+    // nothing — leaving the audio on the wrong language and the subtitle
+    // dropdown empty.
+    autoSubtitleSelected = false
+    autoAudioSelected = false
+    hasScannedTextTracksOnce = false
+    hasAppliedRememberedAudioSelection = false
+    hasRenderedFirstFrame = false
     lastSavedPosition = 0L
     resetLoadingOverlayForNewStream()
 
@@ -405,7 +418,12 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
             currentStreamUrl = url,
             audioTracks = emptyList(),
             subtitleTracks = emptyList(),
-            addonSubtitles = emptyList(),
+            // Intentionally do NOT clear addonSubtitles: a stream switch is
+            // a different file of the same content (same TMDB id, same
+            // season/episode), so the previously-fetched addon subtitle
+            // list is still valid and re-fetching them just churns the
+            // dropdown. The auto-pick will re-evaluate against the new
+            // currentParsedRelease via the rule scorer.
             selectedAddonSubtitle = null,
             selectedAudioTrackIndex = -1,
             selectedSubtitleTrackIndex = -1,
@@ -689,6 +707,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     currentVideoHash = stream.behaviorHints?.videoHash
     currentVideoSize = stream.behaviorHints?.videoSize
     currentFilename = stream.behaviorHints?.filename ?: navigationArgs.filename
+    currentParsedRelease = currentFilename?.let { com.nexio.tv.core.stream.AioStrictFileParser.parse(it) }
     trackAfrAppliedForCurrentStream = false
     pendingAddonSubtitleLanguage = null
     pendingAddonSubtitleTrackId = null

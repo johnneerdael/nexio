@@ -11,6 +11,15 @@ internal interface AbsoluteByteStore {
     val frontier: Long
 
     fun writeAt(absoluteOffset: Long, data: ByteArray, dataOffset: Int, length: Int)
+
+    /**
+     * Atomically publishes a fully-fetched prefetch chunk. The entire [length] bytes of
+     * [chunk] starting at [absoluteStart] must be visible to readers in one atomic step —
+     * no partially-filled chunk state may be observable. Used exclusively by the prefetch
+     * lane; the urgent lane continues to use [writeAt].
+     */
+    fun publishCompleteChunk(absoluteStart: Long, chunk: ByteArray, length: Int)
+
     fun read(position: Long, dest: ByteArray, destOffset: Int, length: Int): Int
     fun readableContiguousBytesFrom(position: Long): Long
     fun setTotalLength(length: Long)
@@ -28,6 +37,10 @@ internal class PagedFrontierByteStore(
 
     override fun writeAt(absoluteOffset: Long, data: ByteArray, dataOffset: Int, length: Int) {
         buffer.onBytesWritten(absoluteOffset, data, dataOffset, length)
+    }
+
+    override fun publishCompleteChunk(absoluteStart: Long, chunk: ByteArray, length: Int) {
+        buffer.publishCompleteChunk(absoluteStart, chunk, length)
     }
 
     override fun read(position: Long, dest: ByteArray, destOffset: Int, length: Int): Int =

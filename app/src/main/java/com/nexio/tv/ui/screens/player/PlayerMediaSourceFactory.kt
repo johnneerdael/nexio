@@ -33,8 +33,6 @@ import androidx.media3.extractor.ts.TsExtractor
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.VodCacheSizeMode
 import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
-import okhttp3.ConnectionPool
-import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -44,14 +42,19 @@ import java.net.SocketTimeoutException
 import java.net.URLDecoder
 import java.util.Locale
 import java.util.concurrent.Future
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.Executors
 import kotlin.io.deleteRecursively
 
-internal class PlayerMediaSourceFactory(private val context: Context) {
-    private var okHttpClient: OkHttpClient? = null
+internal class PlayerMediaSourceFactory(
+    private val context: Context,
+    private val sharedOkHttpClient: OkHttpClient
+) {
+    // The shared client is injected from DI (NetworkModule @Named("playback")).
+    // It already has a bounded callTimeout, maxRequestsPerHost=12, and a ConnectionPool
+    // that is shared with the benchmark transports so measurements are comparable to playback.
+    private var okHttpClient: OkHttpClient? = sharedOkHttpClient
     private var customExtractorsFactory: ExtractorsFactory? = null
     private var customSubtitleParserFactory: SubtitleParser.Factory? = null
     private val loadErrorHandlingPolicy = PlayerLoadErrorHandlingPolicy()
@@ -73,12 +76,10 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     @Volatile private var currentWarmAheadUpstreamFactory: DataSource.Factory? = null
     @Volatile private var currentProgressiveIsEligibleForWarmAhead: Boolean = false
     private val parallelStartupPrefetchUnlocked = AtomicBoolean(true)
-    // Last rebuffer event uptime, in `SystemClock.elapsedRealtime` ms. Set by the runtime
-    // controller via `notifyRebuffer()` whenever the player drops to STATE_BUFFERING after
-    // first frame. The PRDS `shouldAllowBackgroundPrefetch` gate consults this so background
-    // chunk prefetch pauses for `REBUFFER_PREFETCH_PAUSE_MS` after each rebuffer, freeing up
-    // urgent connection slots and bandwidth for the playhead recovery.
-    private val lastRebufferUptimeMs = AtomicLong(Long.MIN_VALUE / 2)
+    // Gate used by the warm-ahead loop and PRDS background prefetch to pause during rebuffer
+    // recovery. The TTL matches REBUFFER_PREFETCH_PAUSE_MS so both paths gate on the same
+    // recovery window. Notified by the runtime controller via `notifyRebuffer()`.
+    internal val rebufferGate = RebufferGate(ttlMs = REBUFFER_PREFETCH_PAUSE_MS)
     private val activeReadBytePosition = AtomicLong(0L)
     private val prefetchStop = AtomicBoolean(false)
     private var prefetchFuture: Future<*>? = null
@@ -168,18 +169,13 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         val progressiveUpstreamFactory: DataSource.Factory = when {
             !usesHttpUpstream(url) -> baseDataSourceFactory
             useParallelConnections && !isHls && !isDash -> {
-                val envelope = capabilityEnvelope
+                val envelope = capabilityEnvelope ?: CapabilityEnvelope.DEFAULT
                 ParallelRangeDataSource.Factory(
                     okHttpFactory,
-                    envelope?.maxSafeUrgentWorkers ?: parallelConnectionCount,
-                    (envelope?.maxSafeUrgentChunkBytes ?: (parallelChunkSizeMb.toLong() * 1024L * 1024L)),
+                    envelope,
+                    envelope.maxSafeUrgentChunkBytes,
                     shouldAllowBackgroundPrefetch = {
-                        if (!parallelStartupPrefetchUnlocked.get()) {
-                            false
-                        } else {
-                            val sinceRebuffer = android.os.SystemClock.elapsedRealtime() - lastRebufferUptimeMs.get()
-                            sinceRebuffer >= REBUFFER_PREFETCH_PAUSE_MS
-                        }
+                        parallelStartupPrefetchUnlocked.get() && !rebufferGate.isPaused()
                     },
                     onResolvedUri = { resolved ->
                         currentVodCacheResolvedUrl = resolved?.toString()
@@ -195,11 +191,39 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             }
             else -> okHttpFactory
         }
+        val pmsf_branch = when {
+            !usesHttpUpstream(url) -> "base"
+            useParallelConnections && !isHls && !isDash -> "prds"
+            else -> "okHttp"
+        }
+        val pmsf_envelope = capabilityEnvelope
+        PlayerTransportTelemetry.log("pmsf.create", mapOf(
+            "branch" to pmsf_branch,
+            "capabilityEnvelopePresent" to (pmsf_envelope != null),
+            "urgentChunkBytes" to (if (pmsf_branch == "prds") (pmsf_envelope?.maxSafeUrgentChunkBytes ?: CapabilityEnvelope.DEFAULT.maxSafeUrgentChunkBytes) else null)
+        ))
+        okHttpClient?.let { client ->
+            PlayerTransportTelemetry.logThrottled("okhttp.depth.playback", 1000L, mapOf(
+                "maxRequestsPerHost" to client.dispatcher.maxRequestsPerHost,
+                "queued" to client.dispatcher.queuedCallsCount(),
+                "running" to client.dispatcher.runningCallsCount()
+            ))
+        }
         val useVodCache = ENABLE_VOD_CACHE &&
             vodCacheSizeMode == VodCacheSizeMode.ON &&
             !isHls &&
             !isDash &&
             shouldUseVodCache(url)
+        // WP3 — open a playback-trace MediaSourceSession. Emits
+        // `playback_session_started` with the full header and binds the
+        // sessionId onto the runtime collector so rebuffer/decode events it
+        // emits are correlated with this factory's session.
+        openPlaybackTraceSession(
+            url = url,
+            branch = pmsf_branch,
+            envelope = pmsf_envelope,
+            cacheActive = useVodCache && !isVodCacheDisabled
+        )
         val previousVodCacheActive = currentVodCacheActive
         currentVodCacheUrl = url
         currentVodCacheResolvedUrl = null
@@ -610,13 +634,14 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
 
     fun shutdown() {
         stopVodWarmAhead()
-        okHttpClient?.let { client ->
-            Thread {
-                client.connectionPool.evictAll()
-                client.dispatcher.executorService.shutdown()
-            }.start()
-            okHttpClient = null
-        }
+        // The OkHttpClient is a Hilt-managed singleton (NetworkModule @Named("playback"))
+        // shared with the benchmark client (same Dispatcher + ConnectionPool). We must NOT
+        // call dispatcher.executorService.shutdown() or connectionPool.evictAll() here —
+        // doing so kills the singleton for the entire app and the next playback or
+        // benchmark request fails with InterruptedIOException("executor rejected") from
+        // okhttp3.RealCall wrapping a RejectedExecutionException. The factory no longer
+        // owns the client lifecycle; only the prefetchExecutor below.
+        okHttpClient = null
         prefetchExecutor.shutdownNow()
     }
 
@@ -634,36 +659,10 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     }
 
     private fun getOrCreateOkHttpClient(): OkHttpClient {
-        val dispatcher = Dispatcher().apply {
-            maxRequests = 64
-            maxRequestsPerHost = 12
-        }
-        return okHttpClient ?: OkHttpClient.Builder()
-            .dispatcher(dispatcher)
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(45, TimeUnit.SECONDS)
-            .writeTimeout(45, TimeUnit.SECONDS)
-            .callTimeout(0, TimeUnit.MILLISECONDS)
-            .connectionPool(ConnectionPool(5, 5, TimeUnit.MINUTES))
-            .retryOnConnectionFailure(true)
-            .followRedirects(true)
-            .followSslRedirects(true)
-            .addInterceptor { chain ->
-                val originalRequest = chain.request()
-                val response = chain.proceed(originalRequest)
-
-                if (response.isRedirect) {
-                    val location = response.header("Location") ?: return@addInterceptor response
-                    val newRequest = originalRequest.newBuilder()
-                        .url(location)
-                        .build()
-                    response.close()
-                    return@addInterceptor chain.proceed(newRequest)
-                }
-                response
-            }
-            .build()
-            .also { okHttpClient = it }
+        // Returns the DI-provided shared client (set at construction time).
+        // The redirect-following interceptor, callTimeout, dispatcher, and ConnectionPool
+        // all live on the shared client provided by NetworkModule @Named("playback").
+        return okHttpClient ?: sharedOkHttpClient
     }
 
     fun warmupVodCacheAsync() {
@@ -683,7 +682,18 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
      * playhead recovery rather than speculative warm-ahead.
      */
     fun notifyRebuffer() {
-        lastRebufferUptimeMs.set(android.os.SystemClock.elapsedRealtime())
+        rebufferGate.notifyRebuffer()
+        // WP3 — emit REBUFFER rebuffer_start. Thread identity: call site is
+        // Player.Listener.onPlaybackStateChanged in PlayerRuntimeControllerInitialization
+        // which Media3 guarantees to run on the application main thread. The
+        // emit is non-blocking (MPSC ring enqueue) so it is hot-path-safe even
+        // from the main thread.
+        com.nexio.tv.instrumentation.PlaybackTracer.emit(
+            com.nexio.tv.instrumentation.EventFamily.REBUFFER,
+            "rebuffer_start"
+        ) {
+            putLong("lastReadPos", activeReadBytePosition.get())
+        }
     }
 
     fun getVodCacheLogState(currentStreamUrl: String? = null): String {
@@ -768,6 +778,23 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         var cursor = 0L
         var idleCycles = 0
         while (!prefetchStop.get() && !Thread.currentThread().isInterrupted) {
+            // Pause warm-ahead during rebuffer recovery so urgent connection slots and
+            // bandwidth are fully available for the playhead. Resume automatically once
+            // the rebuffer window expires (TTL-based: gate ttlMs = REBUFFER_PREFETCH_PAUSE_MS).
+            val isPaused = rebufferGate.isPaused()
+            val ageMs = rebufferGate.ageMs()
+            PlayerTransportTelemetry.logThrottled(
+                site = "warmahead.rebuffer",
+                windowMs = 1_000L,
+                pairs = mapOf(
+                    "ageMs" to if (ageMs == Long.MAX_VALUE) -1L else ageMs,
+                    "paused" to isPaused
+                )
+            )
+            if (isPaused) {
+                Thread.sleep(WARM_AHEAD_REBUFFER_POLL_MS)
+                continue
+            }
             val liveUrl = currentVodCacheResolvedUrl ?: currentVodCacheUrl ?: streamUrl
             val prefetchUri = runCatching { Uri.parse(liveUrl) }.getOrElse { Uri.parse(streamUrl) }
             val cacheKey = stableCacheKeyFactory.buildCacheKey(
@@ -925,6 +952,163 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
             .coerceAtMost(hardMaxBytes)
     }
 
+    // WP3 — sessionId of the last-opened MediaSourceSession. Stored so
+    // `endPlaybackTraceSession()` can close the correct writer on player
+    // release without racing a concurrent `createMediaSource()` call.
+    @Volatile
+    private var currentPlaybackTraceSessionId: String? = null
+
+    // WP3 — optional binder injected by the runtime controller so the
+    // collector's rebuffer/decode events can be tagged with the same
+    // sessionId as the playback-trace JSONL. Null until set by the caller.
+    @Volatile
+    var playbackTraceSessionBinder: ((String?) -> Unit)? = null
+
+    /**
+     * WP3 — open a playback-trace MediaSourceSession for this [createMediaSource]
+     * call. Assembles the full [com.nexio.tv.instrumentation.SessionHeader]
+     * (round-3 fields included) and emits `playback_session_started` via
+     * [com.nexio.tv.instrumentation.PlaybackTracer.beginSession]. Best-effort:
+     * any failure is caught and logged — instrumentation must never crash
+     * playback.
+     */
+    private fun openPlaybackTraceSession(
+        url: String,
+        branch: String,
+        envelope: com.nexio.tv.data.repository.benchmark.CapabilityEnvelope?,
+        cacheActive: Boolean
+    ) {
+        if (!com.nexio.tv.instrumentation.PlaybackTracer.enabled) return
+        runCatching {
+            val sessionId = java.util.UUID.randomUUID().toString()
+            val startedAtNanos = android.os.SystemClock.elapsedRealtimeNanos()
+            val assetKeyHash = sha256Hex(url).take(12)
+            val envelopeChunk = envelope?.maxSafeUrgentChunkBytes
+                ?: com.nexio.tv.data.repository.benchmark.CapabilityEnvelope.DEFAULT.maxSafeUrgentChunkBytes
+            val factoryArgs = com.nexio.tv.instrumentation.FactoryArgs(
+                activeChunkBytes = envelopeChunk,
+                parallelConnections = parallelConnectionCount,
+                keepBehindBytes = 0L,
+                bootstrapBytes = 0L
+            )
+            val initialPolicy = com.nexio.tv.instrumentation.PolicySnapshot(
+                urgentWorkers = parallelConnectionCount,
+                prefetchWorkers = 1,
+                urgentChunkBytes = envelopeChunk,
+                prefetchChunkBytes = envelopeChunk,
+                source = if (envelope != null) "envelope" else "fallback"
+            )
+            val clientIdentity = buildClientIdentitySnapshot()
+            val device = buildDeviceProvenance()
+            val header = com.nexio.tv.instrumentation.SessionHeader(
+                sessionId = sessionId,
+                startedAtNanos = startedAtNanos,
+                assetKeyHash = assetKeyHash,
+                serviceKey = null,
+                provider = null,
+                benchmarkResultId = null,
+                benchmarkSource = null,
+                envelopePresent = envelope != null,
+                runtimeHintsPresent = false,
+                specializationState = "baseline",
+                hintServiceKey = null,
+                hintHostScope = null,
+                hintTransportClass = null,
+                hintAgeMs = null,
+                hintFreshnessBand = null,
+                specializationMismatchReason = null,
+                observedHostScope = null,
+                observedTransportClass = null,
+                branch = branch,
+                cacheActive = cacheActive,
+                warmAheadFactory = if (cacheActive) "okHttp" else null,
+                factoryArgs = factoryArgs,
+                initialPolicy = initialPolicy,
+                clientIdentity = clientIdentity,
+                device = device
+            )
+            com.nexio.tv.instrumentation.PlaybackTracer.beginSession(header)
+            currentPlaybackTraceSessionId = sessionId
+            // WP3 — bind the sessionId on the runtime collector so its
+            // rebuffer/decode events can be tagged with the same id.
+            playbackTraceSessionBinder?.invoke(sessionId)
+        }.onFailure { t ->
+            Log.w(TAG, "openPlaybackTraceSession failed", t)
+        }
+    }
+
+    /** WP3 — close the currently-open playback-trace session, if any. */
+    internal fun endPlaybackTraceSession() {
+        val sid = currentPlaybackTraceSessionId ?: return
+        runCatching {
+            com.nexio.tv.instrumentation.PlaybackTracer.endSession(sid)
+        }
+        currentPlaybackTraceSessionId = null
+        playbackTraceSessionBinder?.invoke(null)
+    }
+
+    private fun buildClientIdentitySnapshot(): com.nexio.tv.instrumentation.ClientIdentitySnapshot {
+        val client = okHttpClient
+        return if (client != null) {
+            com.nexio.tv.instrumentation.ClientIdentitySnapshot(
+                playbackClientHash = Integer.toHexString(System.identityHashCode(client)),
+                dispatcherMaxRequests = client.dispatcher.maxRequests,
+                dispatcherMaxRequestsPerHost = client.dispatcher.maxRequestsPerHost,
+                dispatcherQueuedCalls = client.dispatcher.queuedCallsCount(),
+                dispatcherRunningCalls = client.dispatcher.runningCallsCount(),
+                connectionPoolIdleCount = client.connectionPool.idleConnectionCount(),
+                connectionPoolTotalCount = client.connectionPool.connectionCount(),
+                callTimeoutMs = client.callTimeoutMillis.toLong(),
+                readTimeoutMs = client.readTimeoutMillis.toLong(),
+                writeTimeoutMs = client.writeTimeoutMillis.toLong(),
+                connectTimeoutMs = client.connectTimeoutMillis.toLong()
+            )
+        } else {
+            com.nexio.tv.instrumentation.ClientIdentitySnapshot(
+                playbackClientHash = "null",
+                dispatcherMaxRequests = 0,
+                dispatcherMaxRequestsPerHost = 0,
+                dispatcherQueuedCalls = 0,
+                dispatcherRunningCalls = 0,
+                connectionPoolIdleCount = 0,
+                connectionPoolTotalCount = 0,
+                callTimeoutMs = 0L,
+                readTimeoutMs = 0L,
+                writeTimeoutMs = 0L,
+                connectTimeoutMs = 0L
+            )
+        }
+    }
+
+    private fun buildDeviceProvenance(): com.nexio.tv.instrumentation.DeviceProvenance {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+        val pm = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0)
+        }.getOrNull()
+        return com.nexio.tv.instrumentation.DeviceProvenance(
+            deviceModel = android.os.Build.MODEL ?: "unknown",
+            deviceManufacturer = android.os.Build.MANUFACTURER ?: "unknown",
+            androidRelease = android.os.Build.VERSION.RELEASE ?: "unknown",
+            androidSdkInt = android.os.Build.VERSION.SDK_INT,
+            appVersionName = pm?.versionName ?: "unknown",
+            appVersionCode = pm?.longVersionCode ?: 0L,
+            gitSha = null,
+            memoryClass = am?.memoryClass ?: 0,
+            largeMemoryClass = am?.largeMemoryClass ?: 0,
+            isLowRamDevice = am?.isLowRamDevice ?: false,
+            networkType = "unknown",
+            networkTransportHash = null
+        )
+    }
+
+    private fun sha256Hex(input: String): String {
+        return runCatching {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            val bytes = digest.digest(input.toByteArray(Charsets.UTF_8))
+            bytes.joinToString(separator = "") { b -> "%02x".format(b) }
+        }.getOrElse { "00000000" }
+    }
+
     companion object {
         private const val TAG = "PlayerMediaSource"
         private const val ENABLE_VOD_CACHE = true
@@ -941,6 +1125,8 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         private const val REBUFFER_PREFETCH_PAUSE_MS = 10_000L
         private const val PREFETCH_IDLE_SLEEP_MS = 250L
         private const val PREFETCH_MAX_IDLE_CYCLES = 20
+        // How long to sleep between rebuffer-check polls in the warm-ahead loop.
+        private const val WARM_AHEAD_REBUFFER_POLL_MS = 250L
         @Volatile private var sharedSimpleCache: SimpleCache? = null
         @Volatile private var cacheDatabaseProvider: DatabaseProvider? = null
         @Volatile private var configuredVodCacheMaxBytes: Long = -1L

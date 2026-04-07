@@ -357,7 +357,14 @@ data class DebridBenchmarkResult(
     val session: DebridBenchmarkSessionMetadata? = null,
     val direct: DebridBenchmarkTransportProfile? = null,
     val optimized: DebridBenchmarkTransportProfile? = null,
-    val comparison: DebridBenchmarkComparisonSummary? = null
+    val comparison: DebridBenchmarkComparisonSummary? = null,
+    /**
+     * Optional pre-computed [CapabilityEnvelope] attached at benchmark run completion.
+     * For RD/PM this is always built via the merge-only [toCapabilityEnvelope] path so the
+     * locked shape invariant is guaranteed. Non-locked providers (TorBox, EasyDebrid) leave
+     * this null. Legacy stored rows without this field deserialize as null.
+     */
+    val capabilityEnvelope: CapabilityEnvelope? = null
 )
 
 data class DebridBenchmarkOutcome(

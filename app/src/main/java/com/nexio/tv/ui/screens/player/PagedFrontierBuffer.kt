@@ -180,6 +180,67 @@ internal class PagedFrontierBuffer(
     }
 
     /**
+     * Atomically publishes a fully-fetched prefetch chunk into the buffer.
+     *
+     * The entire [length] bytes of [chunk] starting at [absoluteStart] are written under a
+     * single [synchronized] block, so a concurrent reader on [read] or [frontier] can never
+     * observe a partially-filled chunk state. This is the required publish path for the
+     * prefetch lane; the urgent lane continues to use [onBytesWritten] for low-latency
+     * byte-by-byte delivery.
+     *
+     * The method respects a non-page-aligned [absoluteStart] (e.g. after [setBasePosition])
+     * by consulting the existing per-page [PageFill.lowWater] state, exactly as
+     * [onBytesWritten] does.
+     */
+    fun publishCompleteChunk(absoluteStart: Long, chunk: ByteArray, length: Int) {
+        if (length <= 0) return
+        var remaining = length
+        var srcOffset = 0
+        var currentAbsOffset = absoluteStart
+
+        synchronized(this) {
+            while (remaining > 0) {
+                val pageIndex = (currentAbsOffset / pageSize).toInt()
+                val offsetInPage = (currentAbsOffset % pageSize).toInt()
+                val spaceInPage = pageSize - offsetInPage
+                val toCopy = minOf(remaining, spaceInPage)
+
+                val pageBuf = pages.getOrPut(pageIndex) { acquirePage() }
+                System.arraycopy(chunk, srcOffset, pageBuf, offsetInPage, toCopy)
+
+                val fill = pageFills.getOrPut(pageIndex) { PageFill() }
+                val writeEnd = offsetInPage + toCopy
+                if (offsetInPage <= fill.lowWater) {
+                    fill.lowWater = maxOf(fill.lowWater, writeEnd)
+                    if (fill.pendingStart >= 0 && fill.lowWater >= fill.pendingStart) {
+                        fill.lowWater = maxOf(fill.lowWater, fill.pendingEnd)
+                        fill.pendingStart = -1
+                        fill.pendingEnd = -1
+                    }
+                } else {
+                    if (fill.pendingStart < 0) {
+                        fill.pendingStart = offsetInPage
+                        fill.pendingEnd = writeEnd
+                    } else {
+                        fill.pendingStart = minOf(fill.pendingStart, offsetInPage)
+                        fill.pendingEnd = maxOf(fill.pendingEnd, writeEnd)
+                    }
+                }
+
+                val expectedPageBytes = expectedBytesForPage(pageIndex)
+                if (fill.lowWater >= expectedPageBytes) {
+                    completedPages.set(pageIndex)
+                }
+
+                currentAbsOffset += toCopy
+                srcOffset += toCopy
+                remaining -= toCopy
+            }
+            advanceFrontier()
+        }
+    }
+
+    /**
      * Releases all pages strictly before [position] back to the pool.
      */
     fun evictBefore(position: Long) {

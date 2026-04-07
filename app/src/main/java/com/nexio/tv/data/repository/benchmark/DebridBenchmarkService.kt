@@ -161,7 +161,16 @@ class DebridBenchmarkService internal constructor(
                 }
             )
 
-            transportResult.result?.let {
+            transportResult.result?.let { rawResult ->
+                // For RD/PM: attach the merged CapabilityEnvelope via the merge-only path so
+                // the locked shape invariant is preserved. Non-locked providers leave it null.
+                val attachedEnvelope = CapabilityEnvelope.lockedFor(provider.storageKey)?.let {
+                    rawResult.summary.toCapabilityEnvelopeForBridge(
+                        provider = provider.storageKey,
+                        measuredAtMs = rawResult.measuredAtMs
+                    )
+                }
+                val it = rawResult.copy(capabilityEnvelope = attachedEnvelope)
                 store.saveLatest(it)
                 collectionUploader.submitIfEnabled(it)
                 benchmarkResultJsonLogger.logCompleted(it)

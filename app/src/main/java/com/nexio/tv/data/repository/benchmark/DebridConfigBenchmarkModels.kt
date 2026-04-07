@@ -221,10 +221,31 @@ data class DebridConfigBenchmarkOutcome(
     val result: DebridConfigBenchmarkResult? = null
 )
 
-fun DebridConfigBenchmarkSessionSummary.toCapabilityEnvelope(measuredAtMs: Long): CapabilityEnvelope? {
-    val best = bestProfile ?: return null
-    if (best.status != DebridConfigBenchmarkStatus.SUCCESS) return null
-    val throughput = best.averageThroughputMbps ?: return null
+fun DebridConfigBenchmarkSessionSummary.toCapabilityEnvelope(
+    provider: String,
+    measuredAtMs: Long
+): CapabilityEnvelope {
+    val locked = CapabilityEnvelope.lockedFor(provider)
+    if (locked != null) {
+        // RD / PM: merge-only path — shape fields come exclusively from the locked constant.
+        val best = bestProfile?.takeIf { it.status == DebridConfigBenchmarkStatus.SUCCESS }
+        val throughput = best?.averageThroughputMbps
+        return if (throughput != null) {
+            locked.copy(
+                sustainedThroughputMbps = throughput,
+                stabilityPenalty = 0.0,
+                measuredAtMs = measuredAtMs
+            )
+        } else {
+            // Cold-start synthesis: locked shape + zeroed measurement.
+            locked
+        }
+    }
+
+    // Legacy synthesis path for TorBox / EasyDebrid — unchanged.
+    val best = bestProfile ?: return CapabilityEnvelope.DEFAULT
+    if (best.status != DebridConfigBenchmarkStatus.SUCCESS) return CapabilityEnvelope.DEFAULT
+    val throughput = best.averageThroughputMbps ?: return CapabilityEnvelope.DEFAULT
 
     return CapabilityEnvelope(
         maxSafeUrgentWorkers = minOf(best.parallelConnectionCount, 3),
@@ -236,6 +257,32 @@ fun DebridConfigBenchmarkSessionSummary.toCapabilityEnvelope(measuredAtMs: Long)
         measuredAtMs = measuredAtMs,
         legacyBestProfile = best
     )
+}
+
+/**
+ * Builds a [CapabilityEnvelope] from a [DebridBenchmarkSummary] for the benchmark-to-playback
+ * bridge (Phase A2). Only callable for locked providers (RD/PM) — callers must guard with
+ * [CapabilityEnvelope.lockedFor] before invoking. Uses the merge-only path: shape fields come
+ * exclusively from the locked constant; only [sustainedThroughputMbps] and [measuredAtMs] are
+ * populated from the measurement.
+ */
+internal fun DebridBenchmarkSummary.toCapabilityEnvelopeForBridge(
+    provider: String,
+    measuredAtMs: Long
+): CapabilityEnvelope {
+    val locked = CapabilityEnvelope.lockedFor(provider)
+        ?: error("toCapabilityEnvelopeForBridge called for non-locked provider: $provider")
+    val throughput = sustainedThroughputMbps
+    return if (throughput != null && throughput.isFinite() && throughput > 0.0) {
+        locked.copy(
+            sustainedThroughputMbps = throughput,
+            stabilityPenalty = 0.0,
+            measuredAtMs = measuredAtMs
+        )
+    } else {
+        // Measurement not actionable — fall back to locked cold-start shape.
+        locked
+    }
 }
 
 internal fun DebridConfigBenchmarkResult.toJsonObject(): JsonObject {

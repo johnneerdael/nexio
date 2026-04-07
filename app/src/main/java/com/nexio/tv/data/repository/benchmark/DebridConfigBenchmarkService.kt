@@ -230,7 +230,7 @@ class DebridConfigBenchmarkService internal constructor(
             totalElapsedMs = profileResults.sumOf { it.elapsedMs ?: 0L },
             bestProfile = bestProfile
         )
-        val capabilityEnvelope = summary.toCapabilityEnvelope(measuredAtMs)
+        val capabilityEnvelope = summary.toCapabilityEnvelope(provider.storageKey, measuredAtMs)
         val observedTransportClass = bestSuccessfulTransportResult?.observedTransportClass
         val isConnectionClose = observedTransportClass == "connection_close"
         val runtimeTransportHints = capabilityEnvelope?.let { envelope ->

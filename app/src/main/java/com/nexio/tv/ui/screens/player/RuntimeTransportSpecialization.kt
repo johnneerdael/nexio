@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.player
 
+import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
 import com.nexio.tv.data.repository.benchmark.RuntimeTransportHintsV2
 import com.nexio.tv.data.repository.benchmark.TransportRetryMode
 import com.nexio.tv.data.repository.benchmark.normalizedBenchmarkServiceKey
@@ -31,7 +32,8 @@ internal fun resolveRuntimeTransportSpecialization(
     activeHostScope: String?,
     activeTransportClass: String?,
     runtimeHints: RuntimeTransportHintsV2?,
-    nowMs: Long = System.currentTimeMillis()
+    nowMs: Long = System.currentTimeMillis(),
+    envelope: CapabilityEnvelope? = null
 ): RuntimeTransportSpecialization {
     if (!enabled || runtimeHints == null) return RuntimeTransportSpecialization()
     if (!runtimeHints.isEligibleForSpecialization(nowMs)) return RuntimeTransportSpecialization()
@@ -49,10 +51,10 @@ internal fun resolveRuntimeTransportSpecialization(
     if (!confirmed) return RuntimeTransportSpecialization()
 
     // Derive prefetch settings from confirmed provider characteristics.
-    // Both RD and PM confirmed paths get prefetchWorkers=1.
     // PM (keep-alive) gets the recommended chunk; RD (connection-close) gets 32MiB prefetch.
+    // prefetchWorkers is read from the envelope when available, falling back to 1.
     val isConnectionClose = runtimeHints.typedRetryMode == TransportRetryMode.CONNECTION_CLOSE
-    val prefetchWorkers = 1
+    val prefetchWorkers = envelope?.maxSafePrefetchWorkers ?: 1
     val prefetchChunkBytes = if (isConnectionClose) {
         32L * 1024L * 1024L
     } else {
