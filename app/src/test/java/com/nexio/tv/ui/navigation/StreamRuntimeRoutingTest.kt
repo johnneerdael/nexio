@@ -105,6 +105,41 @@ class StreamRuntimeRoutingTest {
         assertTrue(route.contains("runtime="))
     }
 
+    @Test
+    fun `manual selection route forces manual mode and disables deterministic autoplay`() {
+        val route = buildManualSelectionStreamRoute(
+            videoId = "tt123",
+            contentType = "movie",
+            title = "Example",
+            contentId = "tt123",
+            contentName = "Example",
+            returnToDetailOnBack = false
+        )
+
+        assertTrue(route.contains("manualSelection=true"))
+        assertTrue(route.contains("deterministicAutoplay=false"))
+        assertTrue(route.contains("returnToDetailOnBack=false"))
+    }
+
+    @Test
+    fun `manual selection route preserves detail return behavior for episodes`() {
+        val route = buildManualSelectionStreamRoute(
+            videoId = "tt123:1:2",
+            contentType = "series",
+            title = "Example",
+            season = 1,
+            episode = 2,
+            episodeName = "Episode",
+            contentId = "tt123",
+            contentName = "Example",
+            returnToDetailOnBack = true
+        )
+
+        assertTrue(route.contains("manualSelection=true"))
+        assertTrue(route.contains("deterministicAutoplay=false"))
+        assertTrue(route.contains("returnToDetailOnBack=true"))
+    }
+
     private fun watchProgress(durationMs: Long): WatchProgress {
         return WatchProgress(
             contentId = "tt123",

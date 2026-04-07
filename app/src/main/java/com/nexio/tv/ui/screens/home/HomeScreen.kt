@@ -77,6 +77,16 @@ private data class HomePosterTrailerPendingResolution(
 
 private const val HOME_STARTUP_CONTENT_TIMEOUT_MS = 5_000L
 
+internal fun shouldShowHomeManualStreamSelection(
+    deterministicAutoplayEnabled: Boolean,
+    homeLayout: HomeLayout,
+    apiType: String
+): Boolean {
+    return deterministicAutoplayEnabled &&
+        homeLayout == HomeLayout.MODERN &&
+        apiType.equals("movie", ignoreCase = true)
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -87,6 +97,7 @@ fun HomeScreen(
     onModernHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit = {},
     onModernHomeTrailerFullscreenActiveChanged: (Boolean) -> Unit = {},
     onNavigateToDetail: (String, String, String) -> Unit,
+    onPlayWithManualStreamSelection: (MetaPreview) -> Unit = {},
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit = { item ->
         onNavigateToDetail(
             when (item) {
@@ -362,10 +373,19 @@ fun HomeScreen(
             isLibraryPending = statusKey in uiState.posterLibraryPending,
             showManageLists = uiState.librarySourceMode == LibrarySourceMode.TRAKT,
             isMovie = isMovie,
+            showManualStreamSelection = shouldShowHomeManualStreamSelection(
+                deterministicAutoplayEnabled = uiState.deterministicAutoplayEnabled,
+                homeLayout = uiState.homeLayout,
+                apiType = item.apiType
+            ),
             isWatched = uiState.movieWatchedStatus[statusKey] == true,
             isWatchedPending = statusKey in uiState.movieWatchedPending,
             showPlayTrailer = hasTrailerAction,
             onDismiss = { posterOptionsTarget = null },
+            onPlayWithManualStreamSelection = {
+                onPlayWithManualStreamSelection(item)
+                posterOptionsTarget = null
+            },
             onDetails = {
                 onNavigateToDetail(item.id, item.apiType, selectedPoster.addonBaseUrl)
                 posterOptionsTarget = null
@@ -797,10 +817,12 @@ private fun HomePosterOptionsDialog(
     isLibraryPending: Boolean,
     showManageLists: Boolean,
     isMovie: Boolean,
+    showManualStreamSelection: Boolean,
     isWatched: Boolean,
     isWatchedPending: Boolean,
     showPlayTrailer: Boolean,
     onDismiss: () -> Unit,
+    onPlayWithManualStreamSelection: () -> Unit,
     onDetails: () -> Unit,
     onPlayTrailer: () -> Unit,
     onToggleLibrary: () -> Unit,
@@ -819,11 +841,30 @@ private fun HomePosterOptionsDialog(
         title = title,
         subtitle = stringResource(R.string.home_poster_dialog_subtitle)
     ) {
+        if (showManualStreamSelection) {
+            Button(
+                onClick = onPlayWithManualStreamSelection,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(primaryFocusRequester),
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.play_with_manual_stream_selection))
+            }
+        }
+
         Button(
             onClick = onDetails,
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(primaryFocusRequester),
+            modifier = if (showManualStreamSelection) {
+                Modifier.fillMaxWidth()
+            } else {
+                Modifier
+                    .fillMaxWidth()
+                    .focusRequester(primaryFocusRequester)
+            },
             colors = ButtonDefaults.colors(
                 containerColor = NexioColors.BackgroundCard,
                 contentColor = NexioColors.TextPrimary

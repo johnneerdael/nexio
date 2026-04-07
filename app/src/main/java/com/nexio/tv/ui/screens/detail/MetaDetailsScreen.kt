@@ -255,7 +255,21 @@ fun MetaDetailsScreen(
         runtime: Int?,
         originalLanguage: String?,
         deterministicAutoplay: Boolean
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> }
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+    onPlayEpisodeWithManualStreamSelection: (
+        videoId: String,
+        contentType: String,
+        contentId: String,
+        title: String,
+        poster: String?,
+        backdrop: String?,
+        logo: String?,
+        season: Int?,
+        episode: Int?,
+        episodeName: String?,
+        runtime: Int?,
+        originalLanguage: String?
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -602,6 +616,7 @@ fun MetaDetailsScreen(
                         episodeRatingsError = uiState.episodeRatingsError,
                         mdbListRatings = uiState.mdbListRatings,
                         showMdbListImdb = uiState.showMdbListImdb,
+                        deterministicAutoplayEnabled = uiState.deterministicAutoplayEnabled,
                         onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
                         onSeasonShortPress = {
                             requestImmediateTrailerTakeover(DetailTrailerTakeoverRequest.SeasonTrailer(it))
@@ -651,6 +666,26 @@ fun MetaDetailsScreen(
                                     null,
                                     meta.language,
                                     uiState.deterministicAutoplayEnabled
+                                )
+                            }
+                        },
+                        onPlayEpisodeWithManualStreamSelection = { video ->
+                            if (uiState.universalStreamerModeEnabled) {
+                                handleUniversalStreamerPlayRequest(meta.name)
+                            } else {
+                                onPlayEpisodeWithManualStreamSelection(
+                                    video.id,
+                                    meta.apiType,
+                                    meta.id,
+                                    meta.name,
+                                    video.thumbnail ?: meta.poster,
+                                    meta.background,
+                                    meta.logo,
+                                    video.season,
+                                    video.episode,
+                                    video.title,
+                                    video.runtime,
+                                    meta.language
                                 )
                             }
                         },
@@ -929,12 +964,14 @@ private fun MetaDetailsContent(
     episodeRatingsError: String?,
     mdbListRatings: MDBListRatings?,
     showMdbListImdb: Boolean,
+    deterministicAutoplayEnabled: Boolean,
     onSeasonSelected: (Int) -> Unit,
     onSeasonShortPress: (Int) -> Unit,
     onSeasonOptionsOpened: (Int) -> Unit,
     onProgrammaticSeasonSelected: (Int) -> Unit,
     onEpisodeClick: (Video) -> Unit,
     onPlayClick: (String) -> Unit,
+    onPlayEpisodeWithManualStreamSelection: (Video) -> Unit,
     onPlayButtonFocused: () -> Unit,
     onToggleLibrary: () -> Unit,
     onLibraryLongPress: () -> Unit,
@@ -1752,7 +1789,11 @@ private fun MetaDetailsContent(
                             watchedEpisodes = watchedEpisodes,
                             episodeWatchedPendingKeys = episodeWatchedPendingKeys,
                             blurUnwatchedEpisodes = blurUnwatchedEpisodes,
+                            showManualStreamSelection = shouldShowEpisodeManualStreamSelection(
+                                deterministicAutoplayEnabled = deterministicAutoplayEnabled
+                            ),
                             onEpisodeClick = episodeClick,
+                            onPlayWithManualStreamSelection = onPlayEpisodeWithManualStreamSelection,
                             onToggleEpisodeWatched = onToggleEpisodeWatched,
                             onClearEpisodeProgress = onClearEpisodeProgress,
                             onCheckInEpisode = onCheckInEpisode,

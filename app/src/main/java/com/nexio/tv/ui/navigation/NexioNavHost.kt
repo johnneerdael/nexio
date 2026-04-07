@@ -154,6 +154,24 @@ fun NexioNavHost(
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     navController.navigate(Screen.Detail.createRoute(itemId, itemType, addonBaseUrl))
                 },
+                onPlayWithManualStreamSelection = { item ->
+                    navController.navigate(
+                        buildManualSelectionStreamRoute(
+                            videoId = item.id,
+                            contentType = item.apiType,
+                            title = item.name,
+                            poster = item.poster,
+                            backdrop = item.background,
+                            logo = item.logo,
+                            contentId = item.id,
+                            contentName = item.name,
+                            genres = item.genres.takeIf { it.isNotEmpty() }?.joinToString(", "),
+                            runtime = parseRuntimeMinutes(item.runtime),
+                            originalLanguage = item.language,
+                            returnToDetailOnBack = false
+                        )
+                    )
+                },
                 onContinueWatchingClick = { item ->
                     homeScope.launch {
                         val route = buildContinueWatchingStreamRouteWithHydration(
@@ -267,6 +285,26 @@ fun NexioNavHost(
                             originalLanguage = originalLanguage,
                             returnToDetailOnBack = deterministicAutoplay || contentType.equals("series", ignoreCase = true),
                             deterministicAutoplay = deterministicAutoplay
+                        )
+                    )
+                },
+                onPlayEpisodeWithManualStreamSelection = { videoId, contentType, contentId, title, poster, backdrop, logo, season, episode, episodeName, runtime, originalLanguage ->
+                    navController.navigate(
+                        buildManualSelectionStreamRoute(
+                            videoId = videoId,
+                            contentType = contentType,
+                            title = title,
+                            poster = poster,
+                            backdrop = backdrop,
+                            logo = logo,
+                            season = season,
+                            episode = episode,
+                            episodeName = episodeName,
+                            contentId = contentId,
+                            contentName = title,
+                            runtime = runtime,
+                            originalLanguage = originalLanguage,
+                            returnToDetailOnBack = true
                         )
                     )
                 }
@@ -1041,6 +1079,46 @@ internal fun continueWatchingRuntimeMinutes(item: ContinueWatchingItem): Int? {
         is ContinueWatchingItem.InProgress -> runtimeMinutesFromDurationMs(item.progress.duration)
         is ContinueWatchingItem.NextUp -> parseRuntimeMinutes(item.info.displayMetadata?.runtime)
     }
+}
+
+internal fun buildManualSelectionStreamRoute(
+    videoId: String,
+    contentType: String,
+    title: String,
+    poster: String? = null,
+    backdrop: String? = null,
+    logo: String? = null,
+    season: Int? = null,
+    episode: Int? = null,
+    episodeName: String? = null,
+    genres: String? = null,
+    year: String? = null,
+    contentId: String? = null,
+    contentName: String? = null,
+    runtime: Int? = null,
+    originalLanguage: String? = null,
+    returnToDetailOnBack: Boolean
+): String {
+    return Screen.Stream.createRoute(
+        videoId = videoId,
+        contentType = contentType,
+        title = title,
+        poster = poster,
+        backdrop = backdrop,
+        logo = logo,
+        season = season,
+        episode = episode,
+        episodeName = episodeName,
+        genres = genres,
+        year = year,
+        contentId = contentId,
+        contentName = contentName,
+        runtime = runtime,
+        originalLanguage = originalLanguage,
+        manualSelection = true,
+        returnToDetailOnBack = returnToDetailOnBack,
+        deterministicAutoplay = false
+    )
 }
 
 internal fun buildContinueWatchingStreamRoute(
