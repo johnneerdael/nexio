@@ -154,6 +154,7 @@
     <string name="settings_integrations_section">Integrations</string>
     <string name="settings_integrations_section_subtitle">Configure external metadata and poster integrations</string>
     <string name="settings_tmdb_subtitle">Metadata enrichment controls</string>
+    <string name="settings_theintrodb_subtitle">Playback intro, recap, credits, and preview controls</string>
     <string name="settings_omdb_subtitle">Configure OMDB on app or web with two-way sync</string>
     <string name="settings_imdb_subtitle">Primary episode ratings via your custom IMDb API</string>
     <string name="settings_mdblist_subtitle">External ratings providers</string>
@@ -224,7 +225,7 @@
     <string name="playback_show_clock_sub">Show current time and end time while controls are visible.</string>
     <string name="playback_osd_clock">OSD Clock</string>
     <string name="playback_skip_intro">Skip Intro</string>
-    <string name="playback_skip_intro_sub">Use introdb.app to detect intros and recaps.</string>
+    <string name="playback_skip_intro_sub">Use configured skip-segment providers during playback.</string>
     <string name="playback_autoplay_trailers">Autoplay Trailers</string>
     <string name="playback_autoplay_trailers_sub">Allow detail and home trailer previews to start automatically after the configured delay.</string>
     <string name="playback_trailer_delay">Trailer Delay</string>
@@ -700,6 +701,43 @@
     <string name="animeskip_invalid_client_id">Invalid Client ID</string>
     <string name="action_clear">Clear</string>
 
+    <!-- TheIntroDB -->
+    <string name="theintrodb_title">TheIntroDB</string>
+    <string name="theintrodb_subtitle">Configure skip and Play Next behavior from TheIntroDB segment data</string>
+    <string name="theintrodb_enable_title">Enable TheIntroDB</string>
+    <string name="theintrodb_enable_subtitle">Use TheIntroDB v2 as the canonical non-anime playback segment provider</string>
+    <string name="theintrodb_api_key_title">API Key</string>
+    <string name="theintrodb_api_key_subtitle">Required personal TheIntroDB API key for playback segment lookups and sync</string>
+    <string name="theintrodb_show_intro_title">Show Skip Intro</string>
+    <string name="theintrodb_show_intro_subtitle">Enable Skip Intro actions when intro segments exist</string>
+    <string name="theintrodb_show_recap_title">Show Skip Recap</string>
+    <string name="theintrodb_show_recap_subtitle">Enable Skip Recap actions when recap segments exist</string>
+    <string name="theintrodb_show_credits_title">Show Skip Credits</string>
+    <string name="theintrodb_show_credits_subtitle">Enable Skip Credits or Play Next actions during credits windows</string>
+    <string name="theintrodb_show_preview_title">Show Skip Preview</string>
+    <string name="theintrodb_show_preview_subtitle">Enable Skip Preview or Play Next actions during preview windows</string>
+    <string name="theintrodb_dialog_title">TheIntroDB API Key</string>
+    <string name="theintrodb_dialog_subtitle">Enter your required personal TheIntroDB API key. It syncs with your Nexio account.</string>
+    <string name="theintrodb_dialog_placeholder">Enter TheIntroDB API key</string>
+    <string name="theintrodb_missing_api_key">TheIntroDB API key is required</string>
+    <string name="theid_title">@string/theintrodb_title</string>
+    <string name="theid_subtitle">@string/theintrodb_subtitle</string>
+    <string name="theid_enable_title">@string/theintrodb_enable_title</string>
+    <string name="theid_enable_subtitle">@string/theintrodb_enable_subtitle</string>
+    <string name="theid_api_key_title">@string/theintrodb_api_key_title</string>
+    <string name="theid_api_key_subtitle">@string/theintrodb_api_key_subtitle</string>
+    <string name="theid_show_intro_title">@string/theintrodb_show_intro_title</string>
+    <string name="theid_show_intro_subtitle">@string/theintrodb_show_intro_subtitle</string>
+    <string name="theid_show_recap_title">@string/theintrodb_show_recap_title</string>
+    <string name="theid_show_recap_subtitle">@string/theintrodb_show_recap_subtitle</string>
+    <string name="theid_show_credits_title">@string/theintrodb_show_credits_title</string>
+    <string name="theid_show_credits_subtitle">@string/theintrodb_show_credits_subtitle</string>
+    <string name="theid_show_preview_title">@string/theintrodb_show_preview_title</string>
+    <string name="theid_show_preview_subtitle">@string/theintrodb_show_preview_subtitle</string>
+    <string name="theid_dialog_title">@string/theintrodb_dialog_title</string>
+    <string name="theid_dialog_subtitle">@string/theintrodb_dialog_subtitle</string>
+    <string name="theid_dialog_placeholder">@string/theintrodb_dialog_placeholder</string>
+
     <!-- TmdbSettingsScreen -->
     <string name="tmdb_title">TMDB Enrichment</string>
     <string name="tmdb_subtitle">Choose which metadata fields should come from TMDB</string>
@@ -1067,6 +1105,8 @@
     <string name="skip_intro">Skip Intro</string>
     <string name="skip_ending">Skip Ending</string>
     <string name="skip_recap">Skip Recap</string>
+    <string name="skip_credits">Skip Credits</string>
+    <string name="skip_preview">Skip Preview</string>
     <string name="skip_generic">Skip</string>
     <string name="display_mode_refresh">Refresh</string>
     <string name="display_mode_resolution">Resolution</string>
@@ -1271,6 +1311,24 @@
     <string name="simkl_awaiting_instruction">Enter this code at simkl.com/pin</string>
     <string name="simkl_retry">Retry polling</string>
     <string name="simkl_sync_now_subtitle">Refresh the SIMKL account profile for this device.</string>
+    <string name="simkl_catalogs_title">SIMKL Catalogs</string>
+    <string name="simkl_catalogs_subtitle">Choose which SIMKL rails appear on Home.</string>
+    <string name="simkl_catalogs_dialog_subtitle">Enable or disable built-in SIMKL discovery rails.</string>
+    <string name="simkl_catalogs_enabled_count">%1$d enabled</string>
+    <string name="simkl_catalog_tv_trending">TV Trending</string>
+    <string name="simkl_catalog_tv_trending_subtitle">Most watched TV shows on SIMKL right now.</string>
+    <string name="simkl_catalog_tv_premieres">TV New</string>
+    <string name="simkl_catalog_tv_premieres_subtitle">Latest TV premieres and newly released shows.</string>
+    <string name="simkl_catalog_tv_best">TV Best</string>
+    <string name="simkl_catalog_tv_best_subtitle">Best-rated TV shows from SIMKL.</string>
+    <string name="simkl_catalog_anime_trending">Anime Trending</string>
+    <string name="simkl_catalog_anime_trending_subtitle">Most watched anime on SIMKL right now.</string>
+    <string name="simkl_catalog_anime_premieres">Anime New</string>
+    <string name="simkl_catalog_anime_premieres_subtitle">Latest anime premieres and newly released anime.</string>
+    <string name="simkl_catalog_anime_best">Anime Best</string>
+    <string name="simkl_catalog_anime_best_subtitle">Best-rated anime from SIMKL.</string>
+    <string name="simkl_catalog_movie_trending">Movie Trending</string>
+    <string name="simkl_catalog_movie_trending_subtitle">Most watched movies on SIMKL right now.</string>
     <string name="playback_tracking_provider">Tracking provider</string>
     <string name="playback_tracking_provider_trakt">Trakt</string>
     <string name="playback_tracking_provider_simkl">SIMKL</string>

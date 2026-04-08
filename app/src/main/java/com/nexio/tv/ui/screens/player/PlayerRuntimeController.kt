@@ -15,6 +15,7 @@ import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
+import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
@@ -22,8 +23,8 @@ import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.SkipInterval
 import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
-import com.nexio.tv.data.repository.TraktScrobbleItem
-import com.nexio.tv.data.repository.TraktScrobbleService
+import com.nexio.tv.data.repository.TrackingScrobbleItem
+import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.local.DebridBenchmarkStore
 import com.nexio.tv.data.local.DebridConfigBenchmarkStore
 import com.nexio.tv.data.repository.benchmark.RuntimeTransportHintsV2
@@ -53,11 +54,12 @@ class PlayerRuntimeController(
     internal val streamRepository: StreamRepository,
     internal val addonRepository: AddonRepository,
     internal val subtitleRepository: com.nexio.tv.domain.repository.SubtitleRepository,
-    internal val traktScrobbleService: TraktScrobbleService,
+    internal val trackingScrobbleService: TrackingScrobbleService,
     internal val skipIntroRepository: SkipIntroRepository,
     internal val playerSettingsDataStore: PlayerSettingsDataStore,
     internal val debugSettingsDataStore: DebugSettingsDataStore,
     internal val geminiSettingsDataStore: GeminiSettingsDataStore,
+    internal val theIntroDbSettingsDataStore: TheIntroDbSettingsDataStore,
     internal val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     internal val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
     internal val geminiSubtitleTranslationService: GeminiSubtitleTranslationService,
@@ -271,6 +273,8 @@ class PlayerRuntimeController(
     internal var nextEpisodeThresholdModeSetting: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
     internal var nextEpisodeThresholdPercentSetting: Float = 98f
     internal var nextEpisodeThresholdMinutesBeforeEndSetting: Float = 2f
+    internal var lastTheIntroDbSettingsSignature: String? = null
+    internal var theIntroDbEnabledSetting: Boolean = true
     internal var sourceStreamFeatureFlags: StreamFeatureFlags = StreamFeatureFlags()
     internal var currentStreamBingeGroup: String? = navigationArgs.bingeGroup
     internal var hasAppliedRememberedAudioSelection: Boolean = false
@@ -338,7 +342,7 @@ class PlayerRuntimeController(
     internal var pendingSeekTelemetryReadyLatencyMs: Long = -1L
     internal var pendingSeekTelemetryAwaitingFirstFrame: Boolean = false
     internal var pendingSeekTelemetryReadyAssumed: Boolean = false
-    internal var currentScrobbleItem: TraktScrobbleItem? = null
+    internal var currentScrobbleItem: TrackingScrobbleItem? = null
     internal var hasSentScrobbleStartForCurrentItem: Boolean = false
     internal var hasRequestedScrobbleStartForCurrentItem: Boolean = false
     internal var scrobbleStartRequestGeneration: Long = 0L
@@ -378,6 +382,7 @@ class PlayerRuntimeController(
         observeDebugSettings()
         observeSubtitleSettings()
         observeGeminiSettings()
+        observeTheIntroDbSettings()
         fetchMetaDetails(contentId, contentType)
         observeBlurUnwatchedEpisodes()
         observeEpisodeWatchProgress()

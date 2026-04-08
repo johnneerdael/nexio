@@ -11,6 +11,22 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 
 object PlayerNextEpisodeRules {
+    fun isTidbManaged(skipIntervals: List<SkipInterval>): Boolean =
+        skipIntervals.any { it.provider == "theintrodb" }
+
+    fun isTidbPlayNextWindow(
+        positionMs: Long,
+        skipIntervals: List<SkipInterval>
+    ): Boolean {
+        val positionSec = positionMs / 1000.0
+        return skipIntervals.any { interval ->
+            interval.provider == "theintrodb" &&
+                (interval.type == "credits" || interval.type == "preview") &&
+                positionSec >= interval.startTime &&
+                positionSec < (interval.endTime - 0.5)
+        }
+    }
+
     fun resolveNextEpisode(
         videos: List<Video>,
         currentSeason: Int,
@@ -34,8 +50,13 @@ object PlayerNextEpisodeRules {
         skipIntervals: List<SkipInterval>,
         thresholdMode: NextEpisodeThresholdMode,
         thresholdPercent: Float,
-        thresholdMinutesBeforeEnd: Float
+        thresholdMinutesBeforeEnd: Float,
+        tidbManagedContent: Boolean = isTidbManaged(skipIntervals)
     ): Boolean {
+        if (tidbManagedContent) {
+            return isTidbPlayNextWindow(positionMs, skipIntervals)
+        }
+
         val outroInterval = skipIntervals.firstOrNull { it.type == "outro" }
         return if (outroInterval != null) {
             positionMs / 1000.0 >= outroInterval.startTime

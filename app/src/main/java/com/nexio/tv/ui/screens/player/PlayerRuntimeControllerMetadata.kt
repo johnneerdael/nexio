@@ -199,13 +199,26 @@ internal fun PlayerRuntimeController.evaluateNextEpisodeCardVisibility(positionM
     if (!hasRenderedFirstFrame) return
 
     val state = _uiState.value
+    val tidbManaged = isTheIntroDbManagedSkipPath()
     if (state.nextEpisode == null || nextEpisodeVideo == null) {
-        if (state.showNextEpisodeCard) {
-            _uiState.update { it.copy(showNextEpisodeCard = false) }
+        if (
+            state.showNextEpisodeCard ||
+            state.nextEpisodeAutoPlaySearching ||
+            state.nextEpisodeAutoPlayCountdownSec != null
+        ) {
+            nextEpisodeAutoPlayJob?.cancel()
+            nextEpisodeAutoPlayJob = null
+            _uiState.update {
+                it.copy(
+                    showNextEpisodeCard = false,
+                    nextEpisodeAutoPlaySearching = false,
+                    nextEpisodeAutoPlaySourceName = null,
+                    nextEpisodeAutoPlayCountdownSec = null
+                )
+            }
         }
         return
     }
-    if (state.showNextEpisodeCard || state.nextEpisodeCardDismissed) return
 
     val effectiveDuration = durationMs.takeIf { it > 0L } ?: lastKnownDuration
     val shouldShow = PlayerNextEpisodeRules.shouldShowNextEpisodeCard(
@@ -214,10 +227,42 @@ internal fun PlayerRuntimeController.evaluateNextEpisodeCardVisibility(positionM
         skipIntervals = skipIntervals,
         thresholdMode = nextEpisodeThresholdModeSetting,
         thresholdPercent = nextEpisodeThresholdPercentSetting,
-        thresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEndSetting
+        thresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEndSetting,
+        tidbManagedContent = tidbManaged
     )
 
-    if (shouldShow) {
+    val shouldDisplayPlayNext = if (tidbManaged) {
+        PlayerSegmentCtaPolicy.shouldShowTidbPlayNextOverlay(
+            hasEpisodeContext = currentSeason != null && currentEpisode != null,
+            hasAiredNextEpisode = state.nextEpisode.hasAired,
+            inTidbPlayNextWindow = shouldShow
+        )
+    } else {
+        shouldShow && state.nextEpisode.hasAired
+    }
+    if (!shouldDisplayPlayNext) {
+        if (
+            state.showNextEpisodeCard ||
+            state.nextEpisodeAutoPlaySearching ||
+            state.nextEpisodeAutoPlayCountdownSec != null
+        ) {
+            nextEpisodeAutoPlayJob?.cancel()
+            nextEpisodeAutoPlayJob = null
+            _uiState.update {
+                it.copy(
+                    showNextEpisodeCard = false,
+                    nextEpisodeAutoPlaySearching = false,
+                    nextEpisodeAutoPlaySourceName = null,
+                    nextEpisodeAutoPlayCountdownSec = null
+                )
+            }
+        }
+        return
+    }
+
+    if (state.showNextEpisodeCard || state.nextEpisodeCardDismissed) return
+
+    if (shouldDisplayPlayNext) {
         _uiState.update { it.copy(showNextEpisodeCard = true) }
         if (
             state.nextEpisode.hasAired &&

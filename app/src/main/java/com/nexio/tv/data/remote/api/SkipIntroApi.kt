@@ -10,31 +10,34 @@ import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 
-// --- IntroDB API ---
+// --- TheIntroDB API ---
 
 interface IntroDbApi {
-    @GET("segments")
-    suspend fun getSegments(
-        @Query("imdb_id") imdbId: String,
-        @Query("season") season: Int,
-        @Query("episode") episode: Int
-    ): Response<IntroDbSegmentsResponse>
+    @GET("media")
+    suspend fun getMedia(
+        @Query("tmdb_id") tmdbId: Int? = null,
+        @Query("imdb_id") imdbId: String? = null,
+        @Query("season") season: Int? = null,
+        @Query("episode") episode: Int? = null,
+        @Header("Authorization") authorization: String? = null
+    ): Response<TheIntroDbMediaResponse>
 }
 
 @JsonClass(generateAdapter = true)
-data class IntroDbSegmentsResponse(
+data class TheIntroDbMediaResponse(
+    @Json(name = "tmdb_id") val tmdbId: Int? = null,
+    @Json(name = "type") val type: String? = null,
     @Json(name = "imdb_id") val imdbId: String? = null,
     @Json(name = "season") val season: Int? = null,
     @Json(name = "episode") val episode: Int? = null,
-    @Json(name = "intro") val intro: IntroDbSegment? = null,
-    @Json(name = "recap") val recap: IntroDbSegment? = null,
-    @Json(name = "outro") val outro: IntroDbSegment? = null
+    @Json(name = "intro") val intro: List<TheIntroDbSegmentTimestamp> = emptyList(),
+    @Json(name = "recap") val recap: List<TheIntroDbSegmentTimestamp> = emptyList(),
+    @Json(name = "credits") val credits: List<TheIntroDbSegmentTimestamp> = emptyList(),
+    @Json(name = "preview") val preview: List<TheIntroDbSegmentTimestamp> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
-data class IntroDbSegment(
-    @Json(name = "start_sec") val startSec: Double? = null,
-    @Json(name = "end_sec") val endSec: Double? = null,
+data class TheIntroDbSegmentTimestamp(
     @Json(name = "start_ms") val startMs: Long? = null,
     @Json(name = "end_ms") val endMs: Long? = null,
     @Json(name = "confidence") val confidence: Double? = null,

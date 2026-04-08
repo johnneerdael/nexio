@@ -11,10 +11,11 @@ import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.DebridBenchmarkStore
 import com.nexio.tv.data.local.DebridConfigBenchmarkStore
+import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.debug.passthrough.TransportValidationRuntimeCollector
 import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
 import com.nexio.tv.data.repository.SkipIntroRepository
-import com.nexio.tv.data.repository.TraktScrobbleService
+import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.StreamRepository
@@ -35,11 +36,12 @@ class PlayerViewModel @Inject constructor(
     private val streamRepository: StreamRepository,
     private val addonRepository: AddonRepository,
     private val subtitleRepository: com.nexio.tv.domain.repository.SubtitleRepository,
-    private val traktScrobbleService: TraktScrobbleService,
+    private val trackingScrobbleService: TrackingScrobbleService,
     private val skipIntroRepository: SkipIntroRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val geminiSettingsDataStore: GeminiSettingsDataStore,
+    private val theIntroDbSettingsDataStore: TheIntroDbSettingsDataStore,
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     private val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
     private val geminiSubtitleTranslationService: GeminiSubtitleTranslationService,
@@ -57,11 +59,12 @@ class PlayerViewModel @Inject constructor(
         streamRepository = streamRepository,
         addonRepository = addonRepository,
         subtitleRepository = subtitleRepository,
-        traktScrobbleService = traktScrobbleService,
-            skipIntroRepository = skipIntroRepository,
-            playerSettingsDataStore = playerSettingsDataStore,
-            debugSettingsDataStore = debugSettingsDataStore,
-            geminiSettingsDataStore = geminiSettingsDataStore,
+        trackingScrobbleService = trackingScrobbleService,
+        skipIntroRepository = skipIntroRepository,
+        playerSettingsDataStore = playerSettingsDataStore,
+        debugSettingsDataStore = debugSettingsDataStore,
+        geminiSettingsDataStore = geminiSettingsDataStore,
+        theIntroDbSettingsDataStore = theIntroDbSettingsDataStore,
         streamLinkCacheDataStore = streamLinkCacheDataStore,
         layoutPreferenceDataStore = layoutPreferenceDataStore,
         geminiSubtitleTranslationService = geminiSubtitleTranslationService,
