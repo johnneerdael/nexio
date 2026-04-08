@@ -1,8 +1,7 @@
 package com.nexio.tv.data.repository.trakt
 
-import com.nexio.tv.data.remote.dto.trakt.TraktHistoryEpisodeAddDto
-import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
-import com.nexio.tv.data.repository.TraktProgressService
+import com.nexio.tv.data.trakt.outbox.TraktMutationLifecycleState
+import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,23 +15,29 @@ import javax.inject.Singleton
  */
 @Singleton
 class SeasonMarkBatcher @Inject constructor(
-    private val traktProgressService: TraktProgressService,
+    private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator,
+    private val traktSeasonMarkMutationAdapter: TraktSeasonMarkMutationAdapter,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    suspend fun markSeasonWatched(episodes: List<TraktEpisodeRef>): SeasonMarkResult =
+    suspend fun markSeasonWatched(
+        showContentId: String,
+        seasonNumber: Int,
+        episodes: List<TraktEpisodeRef>
+    ): SeasonMarkResult =
         withContext(ioDispatcher) {
-            val dtos = episodes.map { ref ->
-                TraktHistoryEpisodeAddDto(ids = TraktIdsDto(trakt = ref.traktId))
+            val settled = traktMutationOutboxCoordinator.enqueueAndAwait(
+                TraktSeasonMarkMutationAdapter.buildEnvelope(
+                    showContentId = showContentId,
+                    seasonNumber = seasonNumber,
+                    episodes = episodes
+                )
+            )
+
+            if (settled.state == TraktMutationLifecycleState.TERMINAL_FAILED) {
+                throw IllegalStateException(settled.lastError ?: "Failed to batch mark season watched")
             }
 
-            val response = traktProgressService.addHistoryBatch(dtos)
-
-            val notFoundIds: Set<Int> = response.body()
-                ?.notFound
-                ?.episodes
-                ?.mapNotNull { it.ids?.trakt }
-                ?.toSet()
-                ?: emptySet()
+            val notFoundIds = traktSeasonMarkMutationAdapter.consumeNotFound(settled.id)
 
             val succeeded = episodes.filter { it.traktId !in notFoundIds }
             val notFound = episodes.filter { it.traktId in notFoundIds }

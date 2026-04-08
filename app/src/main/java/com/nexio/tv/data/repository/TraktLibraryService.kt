@@ -6,7 +6,11 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktLibrarySnapshotStore
+import com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter
 import com.nexio.tv.data.repository.trakt.TraktLibraryMutationExecutor
+import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
+import com.nexio.tv.data.trakt.outbox.TraktMutationLifecycleState
+import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import com.nexio.tv.data.repository.hasAnyId
 import com.nexio.tv.data.repository.normalizeContentId
 import com.nexio.tv.data.repository.parseContentIds
@@ -55,6 +59,8 @@ class TraktLibraryService @Inject constructor(
     private val traktApi: TraktApi,
     private val traktAuthService: TraktAuthService,
     private val traktLibraryMutationExecutor: TraktLibraryMutationExecutor,
+    private val traktLibraryMutationAdapter: TraktLibraryMutationAdapter,
+    private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator,
     private val metaRepository: MetaRepository,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val traktAuthDataStore: TraktAuthDataStore,
@@ -234,20 +240,17 @@ class TraktLibraryService @Inject constructor(
         description: String?,
         privacy: TraktListPrivacy
     ) {
-        val response = traktLibraryMutationExecutor.createUserList(
-            id = ME_PATH,
-            body = TraktCreateOrUpdateListRequestDto(
-                name = name,
-                description = description,
-                privacy = privacy.apiValue
+        val settled = awaitLibraryMutation(
+            TraktLibraryMutationAdapter.buildCreateListEnvelope(
+                TraktCreateOrUpdateListRequestDto(
+                    name = name,
+                    description = description,
+                    privacy = privacy.apiValue
+                )
             )
-        ) ?: throw IllegalStateException("Trakt request failed")
+        )
 
-        if (!response.isSuccessful) {
-            throw IllegalStateException(errorMessageForCode(response.code(), "Failed to create list"))
-        }
-
-        val createdTab = response.body()?.let(::mapListTab)
+        val createdTab = traktLibraryMutationAdapter.consumeCreatedListSummary(settled.id)?.let(::mapListTab)
         if (createdTab == null) {
             refresh(force = true)
             return
@@ -285,19 +288,16 @@ class TraktLibraryService @Inject constructor(
                 rebuildSnapshot(updatedTabs, snapshot.entriesByList)
             }
         ) {
-            val response = traktLibraryMutationExecutor.updateUserList(
-                id = ME_PATH,
-                listId = listId,
-                body = TraktCreateOrUpdateListRequestDto(
-                    name = name,
-                    description = description,
-                    privacy = privacy.apiValue
+            awaitLibraryMutation(
+                TraktLibraryMutationAdapter.buildUpdateListEnvelope(
+                    listId = listId,
+                    body = TraktCreateOrUpdateListRequestDto(
+                        name = name,
+                        description = description,
+                        privacy = privacy.apiValue
+                    )
                 )
-            ) ?: throw IllegalStateException("Trakt request failed")
-
-            if (!response.isSuccessful) {
-                throw IllegalStateException(errorMessageForCode(response.code(), "Failed to update list"))
-            }
+            )
         }
     }
 
@@ -313,14 +313,9 @@ class TraktLibraryService @Inject constructor(
                 rebuildSnapshot(updatedTabs, updatedEntries)
             }
         ) {
-            val response = traktLibraryMutationExecutor.deleteUserList(
-                id = ME_PATH,
-                listId = listId
-            ) ?: throw IllegalStateException("Trakt request failed")
-
-            if (!response.isSuccessful && response.code() != 204) {
-                throw IllegalStateException(errorMessageForCode(response.code(), "Failed to delete list"))
-            }
+            awaitLibraryMutation(
+                TraktLibraryMutationAdapter.buildDeleteListEnvelope(listId)
+            )
         }
     }
 
@@ -345,15 +340,20 @@ class TraktLibraryService @Inject constructor(
                 )
             }
         ) {
-            val response = traktLibraryMutationExecutor.reorderUserLists(
-                id = ME_PATH,
-                body = TraktReorderListsRequestDto(rank = rank)
-            ) ?: throw IllegalStateException("Trakt request failed")
-
-            if (!response.isSuccessful) {
-                throw IllegalStateException(errorMessageForCode(response.code(), "Failed to reorder lists"))
-            }
+            awaitLibraryMutation(
+                TraktLibraryMutationAdapter.buildReorderListsEnvelope(rank)
+            )
         }
+    }
+
+    private suspend fun awaitLibraryMutation(
+        envelope: TraktMutationEnvelope
+    ): TraktMutationEnvelope {
+        val settled = traktMutationOutboxCoordinator.enqueueAndAwait(envelope)
+        if (settled.state == TraktMutationLifecycleState.TERMINAL_FAILED) {
+            throw IllegalStateException(settled.lastError ?: "Trakt request failed")
+        }
+        return settled
     }
 
     suspend fun refreshNow() {
@@ -747,48 +747,44 @@ class TraktLibraryService @Inject constructor(
 
     private suspend fun addToWatchlist(item: LibraryEntryInput) {
         val body = buildMutationBody(item)
-        val response = traktLibraryMutationExecutor.addToWatchlist(body)
-            ?: throw IllegalStateException("Trakt request failed")
-
-        if (!response.isSuccessful || !isSuccessfulAddResponse(response.body())) {
-            throw IllegalStateException(errorMessageForCode(response.code(), "Failed to add to watchlist"))
+        val settled = awaitLibraryMutation(
+            TraktLibraryMutationAdapter.buildWatchlistAddEnvelope(body)
+        )
+        val response = traktLibraryMutationAdapter.consumeListMutationResponse(settled.id)
+        if (!isSuccessfulAddResponse(response)) {
+            throw IllegalStateException("Failed to add to watchlist")
         }
     }
 
     private suspend fun removeFromWatchlist(item: LibraryEntryInput) {
         val body = buildMutationBody(item)
-        val response = traktLibraryMutationExecutor.removeFromWatchlist(body)
-            ?: throw IllegalStateException("Trakt request failed")
-
-        if (!response.isSuccessful) {
-            throw IllegalStateException(errorMessageForCode(response.code(), "Failed to remove from watchlist"))
-        }
+        awaitLibraryMutation(
+            TraktLibraryMutationAdapter.buildWatchlistRemoveEnvelope(body)
+        )
     }
 
     private suspend fun addToPersonalList(listId: String, item: LibraryEntryInput) {
         val body = buildMutationBody(item)
-        val response = traktLibraryMutationExecutor.addUserListItems(
-            id = ME_PATH,
-            listId = listId,
-            body = body
-        ) ?: throw IllegalStateException("Trakt request failed")
-
-        if (!response.isSuccessful || !isSuccessfulAddResponse(response.body())) {
-            throw IllegalStateException(errorMessageForCode(response.code(), "Failed to add to list"))
+        val settled = awaitLibraryMutation(
+            TraktLibraryMutationAdapter.buildListAddEnvelope(
+                listId = listId,
+                body = body
+            )
+        )
+        val response = traktLibraryMutationAdapter.consumeListMutationResponse(settled.id)
+        if (!isSuccessfulAddResponse(response)) {
+            throw IllegalStateException("Failed to add to list")
         }
     }
 
     private suspend fun removeFromPersonalList(listId: String, item: LibraryEntryInput) {
         val body = buildMutationBody(item)
-        val response = traktLibraryMutationExecutor.removeUserListItems(
-            id = ME_PATH,
-            listId = listId,
-            body = body
-        ) ?: throw IllegalStateException("Trakt request failed")
-
-        if (!response.isSuccessful) {
-            throw IllegalStateException(errorMessageForCode(response.code(), "Failed to remove from list"))
-        }
+        awaitLibraryMutation(
+            TraktLibraryMutationAdapter.buildListRemoveEnvelope(
+                listId = listId,
+                body = body
+            )
+        )
     }
 
     private fun buildMutationBody(item: LibraryEntryInput): TraktListItemsMutationRequestDto {

@@ -493,7 +493,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
         // 5. One batched POST via SeasonMarkBatcher
         val result = try {
-            seasonMarkBatcher.markSeasonWatched(traktRefs)
+            seasonMarkBatcher.markSeasonWatched(
+                showContentId = showContentId,
+                seasonNumber = seasonNumber,
+                episodes = traktRefs
+            )
         } catch (e: Exception) {
             // Hard failure: restore the pre-mutation snapshot and force a full rebuild so
             // continuation rails remain aligned with remote state.
