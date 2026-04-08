@@ -266,6 +266,17 @@ internal fun HomeViewModel.observeSimklCatalogPreferencesPipeline() {
             if (prefs == simklCatalogPreferences) return@collectLatest
             simklCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_simkl_prefs")
+            if (shouldRefreshSimklDiscoveryForState(prefs, simklDiscoverySnapshot)) {
+                if (shouldDeferStartupNetworkWork()) {
+                    startupRefreshPending = true
+                    logStartupPerf("catalog_refresh_deferred", "reason=simkl_pref_change")
+                } else {
+                    runCatching { simklDiscoveryService.ensureFresh(force = false) }
+                        .onFailure { error ->
+                            Log.w(HomeViewModel.TAG, "Failed to refresh SIMKL discovery after settings change", error)
+                        }
+                }
+            }
             startupRefreshPending = true
             if (!shouldDeferStartupNetworkWork()) {
                 runSerializedHomeRefreshIfNeeded("simkl_pref_change")
