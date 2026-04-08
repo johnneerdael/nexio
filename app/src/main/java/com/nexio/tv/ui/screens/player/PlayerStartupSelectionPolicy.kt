@@ -355,38 +355,63 @@ internal fun decideStartupSubtitleAutoSelection(
  *   - Audio tag match per tag (Atmos, DDP5.1, …)         → +5
  *   - Resolution match (2160p ↔ 2160p)                   → +5
  *   - "Early Release" / leak penalty                     → -15
+ *
+ * Selection rules:
+ *   - TV releases require an exact parsed release-group match.
+ *   - Zero / negative scores return null so callers can fall through to
+ *     lower-confidence tiers (for example AI translation) instead of
+ *     silently picking the first addon subtitle in list order.
  */
 internal fun pickBestAddonSubtitleByRelease(
     candidates: List<Subtitle>,
     videoRelease: AioStrictParsedFile?
-): Subtitle {
-    if (candidates.size == 1) return candidates.first()
+): Subtitle? {
+    if (candidates.isEmpty()) return null
     if (videoRelease == null) return candidates.first()
 
+    val requireExactReleaseGroup = requiresExactTvSubtitleReleaseGroupMatch(videoRelease)
     val scored = candidates.map { subtitle ->
-        val parseInput = listOfNotNull(
-            subtitle.id.takeIf { it.isNotBlank() },
-            subtitle.url.substringAfterLast('/').takeIf { it.isNotBlank() }
-        ).joinToString(" ")
+        val parseInput = subtitleReleaseParseInput(subtitle)
         val candidateRelease = AioStrictFileParser.parse(parseInput)
         val score = scoreSubtitleAgainstRelease(candidateRelease, videoRelease)
-        Triple(subtitle, candidateRelease, score)
+        ScoredSubtitleCandidate(
+            subtitle = subtitle,
+            score = score,
+            releaseGroupMatched = releaseGroupsMatch(videoRelease, candidateRelease)
+        )
     }
 
-    val best = scored.maxByOrNull { it.third } ?: return candidates.first()
+    val eligible = scored.filter { candidate ->
+        candidate.score > 0 &&
+            (!requireExactReleaseGroup || candidate.releaseGroupMatched)
+    }
+    val best = eligible.maxByOrNull { it.score }
     Log.i(
         PlayerRuntimeController.TAG,
         "ADDON_SUB: auto-pick scores=" + scored.joinToString(", ") {
-            "${it.first.id.take(40)}=${it.third}"
-        } + " → ${best.first.id.take(80)} (score=${best.third})"
+            buildString {
+                append(it.subtitle.id.take(40))
+                append("=")
+                append(it.score)
+                if (requireExactReleaseGroup) {
+                    append(if (it.releaseGroupMatched) "[group]" else "[no-group-match]")
+                }
+            }
+        } + when (best) {
+            null -> " → none (strictTv=$requireExactReleaseGroup)"
+            else -> " → ${best.subtitle.id.take(80)} (score=${best.score}, strictTv=$requireExactReleaseGroup)"
+        }
     )
-    // Only commit to a winner when at least one positive signal beat the
-    // baseline; otherwise fall back to the first candidate (which is the
-    // existing pre-fix behavior, so we never regress).
-    return if (best.third > 0) best.first else candidates.first()
+    return best?.subtitle
 }
 
 private const val SUBTITLE_RULE_OUT_SCORE: Int = -1000
+
+private data class ScoredSubtitleCandidate(
+    val subtitle: Subtitle,
+    val score: Int,
+    val releaseGroupMatched: Boolean
+)
 
 private val INCOMPATIBLE_SOURCE_CLASSES: Set<String> = setOf(
     "CAM", "TS", "TC", "SCR"
@@ -395,6 +420,41 @@ private val INCOMPATIBLE_SOURCE_CLASSES: Set<String> = setOf(
 private val RETAIL_SOURCE_CLASSES: Set<String> = setOf(
     "BluRay REMUX", "BluRay", "WEB-DL", "WEBRip", "HDRip", "DVDRip", "HDTV"
 )
+
+private fun requiresExactTvSubtitleReleaseGroupMatch(release: AioStrictParsedFile): Boolean {
+    return release.seasons.isNotEmpty() || release.episodes.isNotEmpty() || release.seasonPack
+}
+
+private fun releaseGroupsMatch(
+    video: AioStrictParsedFile,
+    candidate: AioStrictParsedFile
+): Boolean {
+    val videoGroup = video.releaseGroup?.trim()?.takeIf { it.isNotBlank() } ?: return false
+    val candidateGroup = candidate.releaseGroup?.trim()?.takeIf { it.isNotBlank() } ?: return false
+    return videoGroup.equals(candidateGroup, ignoreCase = true)
+}
+
+private fun subtitleReleaseParseInput(subtitle: Subtitle): String {
+    val idHint = subtitle.id
+        .substringAfterLast('|')
+        .takeIf(::looksLikeReleaseParseHint)
+    val urlHint = subtitle.url
+        .substringAfterLast('/')
+        .substringBefore('?')
+        .takeIf(::looksLikeReleaseParseHint)
+    return listOfNotNull(idHint, urlHint)
+        .distinct()
+        .joinToString(" ")
+        .ifBlank { subtitle.id }
+}
+
+private fun looksLikeReleaseParseHint(value: String): Boolean {
+    if (value.isBlank()) return false
+    if (value.none { it.isLetter() }) return false
+    return Regex(
+        """(?i)(\b(19|20)\d{2}\b|\bS\d{1,2}E\d{1,2}\b|\b\d{1,2}x\d{1,2}\b|\b(2160|1080|720|480)p\b|WEB[ ._-]DL|WEBRip|BluRay|HDTV)"""
+    ).containsMatchIn(value)
+}
 
 private fun scoreSubtitleAgainstRelease(
     candidate: AioStrictParsedFile,

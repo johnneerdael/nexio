@@ -1,8 +1,10 @@
 package com.nexio.tv.ui.screens.player
 
+import com.nexio.tv.core.stream.AioStrictFileParser
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.domain.model.Subtitle
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -285,6 +287,30 @@ class PlayerStartupSelectionPolicyTest {
     }
 
     @Test
+    fun `startup ai fallback remains allowed after first frame while no subtitle has been selected yet`() {
+        val allowed = shouldAllowStartupSubtitleAiFallback(
+            hasRenderedFirstFrame = true,
+            selectedSubtitleTrackIndex = -1,
+            selectedAddonSubtitle = null,
+            autoSubtitleSelected = false
+        )
+
+        assertTrue(allowed)
+    }
+
+    @Test
+    fun `startup ai fallback stops after a subtitle selection is already resolved`() {
+        val allowed = shouldAllowStartupSubtitleAiFallback(
+            hasRenderedFirstFrame = true,
+            selectedSubtitleTrackIndex = 0,
+            selectedAddonSubtitle = null,
+            autoSubtitleSelected = true
+        )
+
+        assertEquals(false, allowed)
+    }
+
+    @Test
     fun `startup subtitle selection defers secondary internal fallback while addon discovery is pending`() {
         val internalTracks = listOf(
             TrackInfo(index = 0, name = "English", language = "en")
@@ -303,5 +329,132 @@ class PlayerStartupSelectionPolicyTest {
         )
 
         assertEquals(StartupSubtitleAutoSelectionDecision.DeferAddonFallback, decision)
+    }
+
+    @Test
+    fun `tv episode addon auto pick falls through to ai translation when preferred addon group mismatches`() {
+        val internalTracks = listOf(
+            TrackInfo(index = 0, name = "English", language = "en", mimeType = "text/vtt")
+        )
+        val addonSubs = listOf(
+            Subtitle(
+                id = "v3+|13593282|Paradise.2025.S02E03.1080p.HEVC.x265-MeGusta",
+                url = "https://opensubtitles.example/subtitle/Paradise.2025.S02E03.1080p.HEVC.x265-MeGusta.vtt",
+                lang = "nl",
+                addonName = "OpenSubtitles",
+                addonLogo = null
+            )
+        )
+
+        val decision = decideStartupSubtitleAutoSelection(
+            subtitleTracks = internalTracks,
+            addonSubtitles = addonSubs,
+            preferredLanguage = "nl",
+            secondaryLanguage = "en",
+            hasScannedTextTracksOnce = true,
+            playerReady = true,
+            addonSubtitleDiscoveryPending = false,
+            aiTranslationConfigured = true,
+            startupPhase = true,
+            videoRelease = AioStrictFileParser.parse(
+                "Paradise.2025.S02E03.1080p.WEB-DL.DDP5.1.H.264-RAWR.mkv"
+            )
+        )
+
+        assertEquals(
+            StartupSubtitleAutoSelectionDecision.Internal(index = 0, enableAiTranslation = true),
+            decision
+        )
+    }
+
+    @Test
+    fun `tv episode addon auto pick prefers exact release group match`() {
+        val addonSubs = listOf(
+            Subtitle(
+                id = "v3+|13593282|Paradise.2025.S02E03.1080p.HEVC.x265-MeGusta",
+                url = "https://opensubtitles.example/subtitle/Paradise.2025.S02E03.1080p.HEVC.x265-MeGusta.vtt",
+                lang = "nl",
+                addonName = "OpenSubtitles",
+                addonLogo = null
+            ),
+            Subtitle(
+                id = "v3+|13593198|Paradise.2025.S02E03.1080p.WEB-DL.DDP5.1.H.264-RAWR",
+                url = "https://opensubtitles.example/subtitle/Paradise.2025.S02E03.1080p.WEB-DL.DDP5.1.H.264-RAWR.vtt",
+                lang = "nl",
+                addonName = "OpenSubtitles",
+                addonLogo = null
+            )
+        )
+
+        val decision = decideStartupSubtitleAutoSelection(
+            subtitleTracks = emptyList(),
+            addonSubtitles = addonSubs,
+            preferredLanguage = "nl",
+            secondaryLanguage = "en",
+            hasScannedTextTracksOnce = true,
+            playerReady = true,
+            addonSubtitleDiscoveryPending = false,
+            aiTranslationConfigured = true,
+            startupPhase = true,
+            videoRelease = AioStrictFileParser.parse(
+                "Paradise.2025.S02E03.1080p.WEB-DL.DDP5.1.H.264-RAWR.mkv"
+            )
+        )
+
+        assertTrue(decision is StartupSubtitleAutoSelectionDecision.Addon)
+        assertEquals(
+            "v3+|13593198|Paradise.2025.S02E03.1080p.WEB-DL.DDP5.1.H.264-RAWR",
+            (decision as StartupSubtitleAutoSelectionDecision.Addon).subtitle.id
+        )
+    }
+
+    @Test
+    fun `addon subtitle release scoring handles v3 identifiers by parsing release suffix`() {
+        val best = pickBestAddonSubtitleByRelease(
+            candidates = listOf(
+                Subtitle(
+                    id = "v3+|13593282|Paradise.2025.S02E03.1080p.HEVC.x265-MeGusta",
+                    url = "https://opensubtitles.example/subtitle/Paradise.2025.S02E03.1080p.HEVC.x265-MeGusta.vtt",
+                    lang = "nl",
+                    addonName = "OpenSubtitles",
+                    addonLogo = null
+                ),
+                Subtitle(
+                    id = "v3+|13593198|Paradise.2025.S02E03.1080p.WEB-DL.DDP5.1.H.264-RAWR",
+                    url = "https://opensubtitles.example/subtitle/Paradise.2025.S02E03.1080p.WEB-DL.DDP5.1.H.264-RAWR.vtt",
+                    lang = "nl",
+                    addonName = "OpenSubtitles",
+                    addonLogo = null
+                )
+            ),
+            videoRelease = AioStrictFileParser.parse(
+                "Paradise.2025.S02E03.1080p.WEB-DL.DDP5.1.H.264-RAWR.mkv"
+            )
+        )
+
+        assertEquals(
+            "v3+|13593198|Paradise.2025.S02E03.1080p.WEB-DL.DDP5.1.H.264-RAWR",
+            best?.id
+        )
+    }
+
+    @Test
+    fun `addon subtitle release scoring returns null when every candidate is ruled out`() {
+        val best = pickBestAddonSubtitleByRelease(
+            candidates = listOf(
+                Subtitle(
+                    id = "Different.Movie.2024.1080p.WEB-DL.H.264-RAWR",
+                    url = "https://opensubtitles.example/subtitle/Different.Movie.2024.1080p.WEB-DL.H.264-RAWR.srt",
+                    lang = "nl",
+                    addonName = "OpenSubtitles",
+                    addonLogo = null
+                )
+            ),
+            videoRelease = AioStrictFileParser.parse(
+                "Paradise.2025.1080p.WEB-DL.H.264-RAWR.mkv"
+            )
+        )
+
+        assertNull(best)
     }
 }

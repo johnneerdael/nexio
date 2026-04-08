@@ -7,7 +7,6 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
-import com.nexio.tv.core.sync.BuiltinSubtitleAddonSyncService
 import com.nexio.tv.core.sync.StartupSyncService
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -20,7 +19,6 @@ import javax.inject.Inject
 @HiltAndroidApp
 class NexioApplication : Application(), ImageLoaderFactory {
 
-    @Inject lateinit var builtinSubtitleAddonSyncService: BuiltinSubtitleAddonSyncService
     @Inject lateinit var startupSyncService: StartupSyncService
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
