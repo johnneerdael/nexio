@@ -4,11 +4,9 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktLibrarySnapshotStore
-import com.nexio.tv.data.repository.trakt.TraktLibraryMutationExecutor
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemDto
-import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListSummaryDto
 import com.nexio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
@@ -44,8 +42,6 @@ class TraktLibraryServiceTest {
     fun `restored snapshot is returned without observer fetch`() = runTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
-        val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
-        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
@@ -85,8 +81,6 @@ class TraktLibraryServiceTest {
     fun `refresh persists renewed snapshot`() = runTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
-        val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
-        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
@@ -144,8 +138,6 @@ class TraktLibraryServiceTest {
     fun `first uncached refresh stays empty until disk snapshot is written`() = runTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
-        val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
-        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
@@ -210,8 +202,6 @@ class TraktLibraryServiceTest {
     fun `warm cache refresh failure preserves restored snapshot`() = runTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
-        val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
-        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
@@ -345,8 +335,6 @@ class TraktLibraryServiceTest {
     fun `warm refresh keeps showing persisted cache until replacement snapshot is written`() = runTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
-        val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
-        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
@@ -411,8 +399,6 @@ class TraktLibraryServiceTest {
     fun `auth loss preserves restored snapshot and persisted cache`() = runTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
-        val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
-        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
@@ -457,8 +443,6 @@ class TraktLibraryServiceTest {
     fun `startup unauthenticated emission does not wipe restored snapshot before auth settles`() = runTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
-        val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
-        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
@@ -505,8 +489,6 @@ class TraktLibraryServiceTest {
     fun `refresh keeps custom lists and hydrates artwork for watchlist and custom list items`() = runTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
-        val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
-        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
@@ -615,8 +597,6 @@ class TraktLibraryServiceTest {
     fun `refresh hydrates metadata when trakt ids are the only stable ids`() = runTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
-        val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
-        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
         val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
