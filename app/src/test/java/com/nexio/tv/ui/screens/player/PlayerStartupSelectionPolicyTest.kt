@@ -287,27 +287,46 @@ class PlayerStartupSelectionPolicyTest {
     }
 
     @Test
-    fun `startup ai fallback remains allowed after first frame while no subtitle has been selected yet`() {
-        val allowed = shouldAllowStartupSubtitleAiFallback(
-            hasRenderedFirstFrame = true,
-            selectedSubtitleTrackIndex = -1,
-            selectedAddonSubtitle = null,
-            autoSubtitleSelected = false
-        )
-
-        assertTrue(allowed)
+    fun `startup ai fallback remains allowed until auto selection has committed`() {
+        assertTrue(shouldAllowStartupSubtitleAiFallback(autoSubtitleSelected = false))
     }
 
     @Test
-    fun `startup ai fallback stops after a subtitle selection is already resolved`() {
-        val allowed = shouldAllowStartupSubtitleAiFallback(
-            hasRenderedFirstFrame = true,
-            selectedSubtitleTrackIndex = 0,
-            selectedAddonSubtitle = null,
-            autoSubtitleSelected = true
+    fun `startup ai fallback stops after auto selection has committed`() {
+        assertEquals(false, shouldAllowStartupSubtitleAiFallback(autoSubtitleSelected = true))
+    }
+
+    @Test
+    fun `startup ai fallback survives first frame render mid-discovery with english-only internal`() {
+        // Regression: first frame rendered before addon discovery + text-track
+        // scan converged, Media3 had already latched the english internal as
+        // default (selectedSubtitleTrackIndex=0), dutch preferred, english
+        // secondary. Previously startupPhase flipped to false here and the AI
+        // tier was skipped, leaving untranslated english. The gate now only
+        // depends on autoSubtitleSelected, so the AI tier still fires.
+        val internalTracks = listOf(
+            TrackInfo(index = 0, name = "English", language = "en")
         )
 
-        assertEquals(false, allowed)
+        val startupPhase = shouldAllowStartupSubtitleAiFallback(autoSubtitleSelected = false)
+        assertTrue(startupPhase)
+
+        val decision = decideStartupSubtitleAutoSelection(
+            subtitleTracks = internalTracks,
+            addonSubtitles = emptyList(),
+            preferredLanguage = "nl",
+            secondaryLanguage = "en",
+            hasScannedTextTracksOnce = true,
+            playerReady = true,
+            addonSubtitleDiscoveryPending = false,
+            aiTranslationConfigured = true,
+            startupPhase = startupPhase
+        )
+
+        assertEquals(
+            StartupSubtitleAutoSelectionDecision.Internal(index = 0, enableAiTranslation = true),
+            decision
+        )
     }
 
     @Test
