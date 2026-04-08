@@ -3,6 +3,7 @@ package com.nexio.tv.data.repository
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import kotlin.io.path.invariantSeparatorsPathString
 import kotlin.io.path.isRegularFile
 import kotlin.streams.asSequence
 import org.junit.Assert.assertEquals
