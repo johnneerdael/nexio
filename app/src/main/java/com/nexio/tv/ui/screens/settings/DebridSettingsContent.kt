@@ -666,8 +666,6 @@ internal fun DebridSettingsContent(
                 // header comment on [playbackDiagnosticsItems].
                 @Suppress("KotlinConstantConditions")
                 if (com.nexio.tv.instrumentation.PLAYBACK_TRACE_UI_ENABLED) {
-                    val playbackDiagnosticsContext =
-                        androidx.compose.ui.platform.LocalContext.current
                     playbackDiagnosticsItems(
                         enabled = uiState.playbackTraceEnabled,
                         adbControlEnabled = uiState.playbackTraceAdbControlEnabled,
@@ -684,12 +682,12 @@ internal fun DebridSettingsContent(
                         },
                         onExportLast = {
                             viewModel.exportLastSession { intent ->
-                                playbackDiagnosticsContext.startActivity(intent)
+                                context.startActivity(intent)
                             }
                         },
                         onExportAll = {
                             viewModel.exportAllSessions { intent ->
-                                playbackDiagnosticsContext.startActivity(intent)
+                                context.startActivity(intent)
                             }
                         },
                         onCopyToDownloads = { uri ->
