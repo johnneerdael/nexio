@@ -50,7 +50,7 @@ class TraktWriteSurfaceStructureTest {
 
     @Test
     fun trackedTraktWriteHelpersStayInsideDedicatedMutationServices() {
-        val callSites = findCallSites(Regex("""\btraktAuthService\.executeAuthorizedWriteRequest\s*\("""))
+        val callSites = findCallSites(Regex("""\btraktAuthService\.executeAuthorizedWriteRequest\b"""))
 
         assertEquals(
             setOf(
