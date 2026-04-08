@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.Flow
 interface LibraryRepository {
     val sourceMode: Flow<LibrarySourceMode>
     val isSyncing: Flow<Boolean>
-    val hasTraktCache: Flow<Boolean>
+    val hasProviderCache: Flow<Boolean>
     val libraryItems: Flow<List<LibraryEntry>>
     val listTabs: Flow<List<LibraryListTab>>
 
@@ -39,7 +39,7 @@ interface LibraryRepository {
     suspend fun deletePersonalList(listId: String)
     suspend fun reorderPersonalLists(orderedListIds: List<String>)
     suspend fun refreshNow()
-    suspend fun refreshTraktNow()
+    suspend fun refreshProviderNow()
     suspend fun refreshDebridNow()
     suspend fun refreshRealDebridNow()
     suspend fun refreshPremiumizeNow()

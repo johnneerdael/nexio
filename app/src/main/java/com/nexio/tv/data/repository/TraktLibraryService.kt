@@ -557,7 +557,7 @@ class TraktLibraryService @Inject constructor(
             add(
                 LibraryListTab(
                     key = WATCHLIST_KEY,
-                    title = "Watchlist",
+                    title = "Trakt Watchlist",
                     type = LibraryListTab.Type.WATCHLIST,
                     sortBy = "rank",
                     sortHow = "asc"

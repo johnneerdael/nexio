@@ -27,13 +27,14 @@ class SyntheticHomeCatalogStore @Inject constructor(
         private const val TAG = "SyntheticHomeCatalog"
         private const val PREFS_NAME = "synthetic_home_catalogs"
         private const val SNAPSHOT_KEY = "snapshot"
-        private const val SCHEMA_VERSION = 3
+        private const val SCHEMA_VERSION = 4
     }
 
     private val gson = Gson()
 
     data class Snapshot(
         val traktGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
+        val simklGroups: List<PersistedSyntheticCatalogGroup> = emptyList(),
         val mdbListGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     )
 
@@ -56,6 +57,7 @@ class SyntheticHomeCatalogStore @Inject constructor(
                 addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
                 addProperty("languageTag", currentLanguageTag())
                 add("traktGroups", encodeGroups(snapshot.traktGroups))
+                add("simklGroups", encodeGroups(snapshot.simklGroups))
                 add("mdbListGroups", encodeGroups(snapshot.mdbListGroups))
             }
             prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).commit()
@@ -89,6 +91,7 @@ class SyntheticHomeCatalogStore @Inject constructor(
         }
         return Snapshot(
             traktGroups = decodeGroups(root.getAsJsonArray("traktGroups")),
+            simklGroups = decodeGroups(root.getAsJsonArray("simklGroups")),
             mdbListGroups = decodeGroups(root.getAsJsonArray("mdbListGroups"))
         )
     }

@@ -49,6 +49,34 @@ class HomeCatalogSnapshotStoreTest {
         assertNull(store.read())
     }
 
+    @Test
+    fun `read preserves mixed trakt simkl addon ordered group keys`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 7
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore
+        )
+
+        val row = sampleRow("simkl", "simkl_tv_trending_today")
+        val snapshot = HomeCatalogSnapshotStore.Snapshot(
+            catalogRows = listOf(row),
+            fullCatalogRows = listOf(row),
+            heroItems = row.items,
+            orderedGroupKeys = listOf(
+                "trakt_trending_movies",
+                "simkl_tv_trending_today",
+                "cinemeta_movie_popular"
+            )
+        )
+
+        store.write(snapshot)
+
+        assertEquals(snapshot.orderedGroupKeys, store.read()?.orderedGroupKeys)
+    }
+
     private fun sampleSnapshot(): HomeCatalogSnapshotStore.Snapshot {
         val row = sampleRow("addon", "movies")
         return HomeCatalogSnapshotStore.Snapshot(

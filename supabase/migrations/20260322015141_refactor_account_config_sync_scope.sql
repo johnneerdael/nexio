@@ -85,6 +85,13 @@ as $$
         "rpdbEnabled": false,
         "topPostersEnabled": false
       },
+      "simklAuth": {
+        "connected": false,
+        "username": "",
+        "accountId": null,
+        "accountType": "",
+        "pending": false
+      },
       "traktAuth": {
         "connected": false,
         "username": "",
@@ -112,6 +119,7 @@ as $$
         "filterMovieYearMismatchStreamsEnabled": true,
         "streamAutoPlayMode": "MANUAL",
         "streamAutoPlaySource": "ALL_SOURCES",
+        "trackingProvider": "TRAKT",
         "streamAutoPlaySelectedAddons": [],
         "streamAutoPlayRegex": "",
         "streamAutoPlayNextEpisodeEnabled": false,
@@ -314,6 +322,8 @@ begin
           || coalesce(v_payload#>'{integrations,gemini}', '{}'::jsonb),
         'posterRatings', coalesce(v_defaults#>'{integrations,posterRatings}', '{}'::jsonb)
           || coalesce(v_payload#>'{integrations,posterRatings}', '{}'::jsonb),
+        'simklAuth', coalesce(v_defaults#>'{integrations,simklAuth}', '{}'::jsonb)
+          || coalesce(v_payload#>'{integrations,simklAuth}', '{}'::jsonb),
         'traktAuth', coalesce(v_defaults#>'{integrations,traktAuth}', '{}'::jsonb)
           || coalesce(v_payload#>'{integrations,traktAuth}', '{}'::jsonb)
       ),
@@ -354,6 +364,8 @@ begin
         || coalesce(v_payload#>'{integrations,gemini}', '{}'::jsonb),
       'posterRatings', coalesce(v_defaults#>'{integrations,posterRatings}', '{}'::jsonb)
         || coalesce(v_payload#>'{integrations,posterRatings}', '{}'::jsonb),
+      'simklAuth', coalesce(v_defaults#>'{integrations,simklAuth}', '{}'::jsonb)
+        || coalesce(v_payload#>'{integrations,simklAuth}', '{}'::jsonb),
       'traktAuth', coalesce(v_defaults#>'{integrations,traktAuth}', '{}'::jsonb)
         || coalesce(v_payload#>'{integrations,traktAuth}', '{}'::jsonb)
     ),

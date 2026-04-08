@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.IOException
 
 class TraktMutationOutboxCoordinatorTest {
 
@@ -80,11 +81,202 @@ class TraktMutationOutboxCoordinatorTest {
         assertEquals(listOf(envelope.id), adapter.reconciled)
     }
 
+    @Test
+    fun `coordinator resumes persisted SIMKL queued mutations on startup`() = runTest {
+        val store = TraktMutationOutboxStore(context = mockContext(InMemorySharedPreferences()))
+        val envelope = TraktMutationEnvelope(
+            id = "simkl-persisted",
+            adapterKey = "simkl.progress-history",
+            mutationKind = "simkl.progress.history.add",
+            priority = TraktMutationPriorityBucket.WATCHED,
+            collapseKey = "tt1375666",
+            payload = JsonObject(),
+            rollbackPayload = JsonObject(),
+            metadata = JsonObject()
+        )
+        store.write(
+            TraktMutationOutboxSnapshot(items = listOf(envelope))
+        )
+        val adapter = RecordingAdapter(
+            adapterKey = "simkl.progress-history",
+            executionResult = TraktMutationExecutionResult.Success(httpStatusCode = 201)
+        )
+        val worker = TraktMutationOutboxWorker(
+            store = store,
+            policy = TraktMutationOutboxPolicy()
+        )
+
+        val coordinator = TraktMutationOutboxCoordinator(
+            worker = worker,
+            adapters = setOf(adapter)
+        )
+
+        val settled = awaitTerminalState(coordinator, envelope.id)
+
+        assertEquals(TraktMutationLifecycleState.SUCCEEDED, settled.state)
+        assertTrue(adapter.optimisticApplied.isEmpty())
+        assertEquals(listOf(envelope.id), adapter.reconciled)
+    }
+
+    @Test
+    fun `coordinator retries transient SIMKL failures and eventually reconciles success`() = runTest {
+        val adapter = SequencedRecordingAdapter(
+            adapterKey = "simkl.library",
+            executionResults = ArrayDeque(
+                listOf(
+                    TraktMutationExecutionResult.Failure(
+                        reason = "offline",
+                        throwable = IOException("offline")
+                    ),
+                    TraktMutationExecutionResult.Success(httpStatusCode = 200)
+                )
+            )
+        )
+        val coordinator = buildCoordinator(adapter)
+        val envelope = TraktMutationEnvelope(
+            adapterKey = "simkl.library",
+            mutationKind = "simkl.library.addToList",
+            priority = TraktMutationPriorityBucket.WATCHLIST,
+            collapseKey = "simkl.library:plantowatch",
+            payload = JsonObject(),
+            rollbackPayload = JsonObject(),
+            metadata = JsonObject()
+        )
+
+        coordinator.enqueueAndDrain(envelope)
+
+        val settled = awaitTerminalState(coordinator, envelope.id, maxPolls = 900)
+
+        assertEquals(TraktMutationLifecycleState.SUCCEEDED, settled.state)
+        assertEquals(2, adapter.executeCalls)
+        assertEquals(listOf(envelope.id), adapter.reconciled)
+        assertTrue(adapter.rolledBack.isEmpty())
+    }
+
+    @Test
+    fun `coordinator rolls terminal SIMKL failures back to server truth`() = runTest {
+        val adapter = RecordingAdapter(
+            adapterKey = "simkl.library",
+            executionResult = TraktMutationExecutionResult.Failure(
+                httpStatusCode = 404,
+                reason = "missing"
+            )
+        )
+        val coordinator = buildCoordinator(adapter)
+        val envelope = TraktMutationEnvelope(
+            adapterKey = "simkl.library",
+            mutationKind = "simkl.library.addToList",
+            priority = TraktMutationPriorityBucket.WATCHLIST,
+            collapseKey = "simkl.library:plantowatch",
+            payload = JsonObject(),
+            rollbackPayload = JsonObject(),
+            metadata = JsonObject()
+        )
+
+        coordinator.enqueueAndDrain(envelope)
+
+        val settled = awaitTerminalState(coordinator, envelope.id)
+
+        assertEquals(TraktMutationLifecycleState.TERMINAL_FAILED, settled.state)
+        assertEquals(listOf(envelope.id), adapter.optimisticApplied)
+        assertEquals(listOf(envelope.id), adapter.rolledBack)
+        assertTrue(adapter.reconciled.isEmpty())
+    }
+
+    @Test
+    fun `coordinator rolls persisted SIMKL terminal failures back to server truth on startup`() = runTest {
+        val store = TraktMutationOutboxStore(context = mockContext(InMemorySharedPreferences()))
+        val envelope = TraktMutationEnvelope(
+            id = "simkl-persisted-terminal",
+            adapterKey = "simkl.library",
+            mutationKind = "simkl.library.addToList",
+            priority = TraktMutationPriorityBucket.WATCHLIST,
+            collapseKey = "simkl.library:plantowatch",
+            payload = JsonObject(),
+            rollbackPayload = JsonObject(),
+            metadata = JsonObject()
+        )
+        store.write(
+            TraktMutationOutboxSnapshot(items = listOf(envelope))
+        )
+        val adapter = RecordingAdapter(
+            adapterKey = "simkl.library",
+            executionResult = TraktMutationExecutionResult.Failure(
+                httpStatusCode = 404,
+                reason = "missing"
+            )
+        )
+        val worker = TraktMutationOutboxWorker(
+            store = store,
+            policy = TraktMutationOutboxPolicy()
+        )
+
+        val coordinator = TraktMutationOutboxCoordinator(
+            worker = worker,
+            adapters = setOf(adapter)
+        )
+
+        val settled = awaitTerminalState(coordinator, envelope.id)
+
+        assertEquals(TraktMutationLifecycleState.TERMINAL_FAILED, settled.state)
+        assertTrue(adapter.optimisticApplied.isEmpty())
+        assertEquals(listOf(envelope.id), adapter.rolledBack)
+        assertTrue(adapter.reconciled.isEmpty())
+    }
+
+    @Test
+    fun `coordinator retries persisted SIMKL transient failures on startup and eventually reconciles success`() = runTest {
+        val store = TraktMutationOutboxStore(context = mockContext(InMemorySharedPreferences()))
+        val envelope = TraktMutationEnvelope(
+            id = "simkl-persisted-retry",
+            adapterKey = "simkl.progress-history",
+            mutationKind = "simkl.progress.history.add",
+            priority = TraktMutationPriorityBucket.WATCHED,
+            collapseKey = "tt1375666",
+            payload = JsonObject(),
+            rollbackPayload = JsonObject(),
+            metadata = JsonObject()
+        )
+        store.write(
+            TraktMutationOutboxSnapshot(items = listOf(envelope))
+        )
+        val adapter = SequencedRecordingAdapter(
+            adapterKey = "simkl.progress-history",
+            executionResults = ArrayDeque(
+                listOf(
+                    TraktMutationExecutionResult.Failure(
+                        reason = "offline",
+                        throwable = IOException("offline")
+                    ),
+                    TraktMutationExecutionResult.Success(httpStatusCode = 200)
+                )
+            )
+        )
+        val worker = TraktMutationOutboxWorker(
+            store = store,
+            policy = TraktMutationOutboxPolicy()
+        )
+
+        val coordinator = TraktMutationOutboxCoordinator(
+            worker = worker,
+            adapters = setOf(adapter)
+        )
+
+        val settled = awaitTerminalState(coordinator, envelope.id, maxPolls = 900)
+
+        assertEquals(TraktMutationLifecycleState.SUCCEEDED, settled.state)
+        assertTrue(adapter.optimisticApplied.isEmpty())
+        assertEquals(2, adapter.executeCalls)
+        assertEquals(listOf(envelope.id), adapter.reconciled)
+        assertTrue(adapter.rolledBack.isEmpty())
+    }
+
     private suspend fun awaitTerminalState(
         coordinator: TraktMutationOutboxCoordinator,
-        envelopeId: String
+        envelopeId: String,
+        maxPolls: Int = 500
     ): TraktMutationEnvelope {
-        repeat(500) {
+        repeat(maxPolls) {
             val item = coordinator.snapshot().items.firstOrNull { it.id == envelopeId }
                 ?: error("Missing envelope $envelopeId")
             if (item.state == TraktMutationLifecycleState.SUCCEEDED ||
@@ -98,7 +290,7 @@ class TraktMutationOutboxCoordinatorTest {
     }
 
     private fun buildCoordinator(
-        adapter: RecordingAdapter
+        adapter: TraktMutationAdapter
     ): TraktMutationOutboxCoordinator {
         val store = TraktMutationOutboxStore(context = mockContext(InMemorySharedPreferences()))
         val worker = TraktMutationOutboxWorker(
@@ -143,6 +335,37 @@ class TraktMutationOutboxCoordinatorTest {
 
         override suspend fun execute(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
             return executionResult
+        }
+
+        override suspend fun reconcileSuccess(envelope: TraktMutationEnvelope) {
+            reconciled += envelope.id
+        }
+
+        override suspend fun rollbackToServerTruth(
+            envelope: TraktMutationEnvelope,
+            failure: TraktMutationSettlement.TerminalFailure
+        ) {
+            rolledBack += envelope.id
+        }
+    }
+
+    private class SequencedRecordingAdapter(
+        override val adapterKey: String,
+        private val executionResults: ArrayDeque<TraktMutationExecutionResult>
+    ) : TraktMutationAdapter {
+        val optimisticApplied = mutableListOf<String>()
+        val reconciled = mutableListOf<String>()
+        val rolledBack = mutableListOf<String>()
+        var executeCalls: Int = 0
+
+        override suspend fun applyOptimistic(envelope: TraktMutationEnvelope) {
+            optimisticApplied += envelope.id
+        }
+
+        override suspend fun execute(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
+            executeCalls += 1
+            return executionResults.removeFirstOrNull()
+                ?: TraktMutationExecutionResult.Success(httpStatusCode = 200)
         }
 
         override suspend fun reconcileSuccess(envelope: TraktMutationEnvelope) {

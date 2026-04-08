@@ -487,7 +487,7 @@ class AndroidTvFeedCatalogService @Inject constructor(
         )
     }
 
-    private fun com.nexio.tv.data.repository.TraktProgressService.NextUpEntry.toMetaPreview(): MetaPreview {
+    private fun com.nexio.tv.data.repository.TrackingNextUpEntry.toMetaPreview(): MetaPreview {
         val episodeSuffix = buildString {
             append("S")
             append(season)
@@ -526,7 +526,7 @@ class AndroidTvFeedCatalogService @Inject constructor(
     }
 
     private fun nextUpRefForAndroidTvFeed(
-        entry: com.nexio.tv.data.repository.TraktProgressService.NextUpEntry
+        entry: com.nexio.tv.data.repository.TrackingNextUpEntry
     ): ContinueWatchingNextUpRef {
         return ContinueWatchingNextUpRef(
             contentId = entry.contentId,

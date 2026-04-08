@@ -1665,8 +1665,14 @@ class MetaDetailsViewModel @Inject constructor(
             val wasInLibrary = _uiState.value.isInLibrary
             runCatching {
                 libraryRepository.toggleDefault(input)
-                val message = if (_uiState.value.librarySourceMode == LibrarySourceMode.TRAKT) {
-                    if (wasInWatchlist) "Removed from watchlist" else "Added to watchlist"
+                val message = if (_uiState.value.librarySourceMode == LibrarySourceMode.TRAKT || _uiState.value.librarySourceMode == LibrarySourceMode.SIMKL) {
+                    when (_uiState.value.librarySourceMode) {
+                        LibrarySourceMode.TRAKT ->
+                            if (wasInWatchlist) "Removed from Trakt Watchlist" else "Added to Trakt Watchlist"
+                        LibrarySourceMode.SIMKL ->
+                            if (wasInWatchlist) "Removed from SIMKL Watchlist" else "Added to SIMKL Watchlist"
+                        else -> if (wasInWatchlist) "Removed from watchlist" else "Added to watchlist"
+                    }
                 } else {
                     if (wasInLibrary) context.getString(R.string.detail_removed_from_library) else context.getString(R.string.detail_added_to_library)
                 }
@@ -1681,7 +1687,7 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun openListPicker() {
-        if (_uiState.value.librarySourceMode != LibrarySourceMode.TRAKT) return
+        if (_uiState.value.librarySourceMode == LibrarySourceMode.LOCAL || _uiState.value.librarySourceMode == LibrarySourceMode.DEBRID) return
         val meta = _uiState.value.meta ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(pickerPending = true, pickerError = null) }
@@ -1722,7 +1728,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun savePickerMembership() {
         if (_uiState.value.pickerPending) return
-        if (_uiState.value.librarySourceMode != LibrarySourceMode.TRAKT) return
+        if (_uiState.value.librarySourceMode == LibrarySourceMode.LOCAL || _uiState.value.librarySourceMode == LibrarySourceMode.DEBRID) return
         val meta = _uiState.value.meta ?: return
 
         viewModelScope.launch {

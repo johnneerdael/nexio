@@ -10,6 +10,7 @@ import com.nexio.tv.data.local.OmdbSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.local.SimklAuthDataStore
+import com.nexio.tv.data.local.SimklSettingsDataStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -22,6 +23,7 @@ import com.nexio.tv.data.remote.supabase.ImdbSyncSettings
 import com.nexio.tv.data.remote.supabase.MDBListCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.PlaybackConfigSyncSettings
+import com.nexio.tv.data.remote.supabase.SimklCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.StreamSelectionConfigSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktCatalogSyncSettings
 import com.nexio.tv.domain.model.AddonParserPreset
@@ -60,6 +62,7 @@ internal fun observeAccountConfigSyncChanges(
     realDebridState: Flow<Unit>,
     traktAuthState: Flow<Unit>,
     traktCatalogPreferences: Flow<Unit>,
+    simklCatalogPreferences: Flow<Unit>,
     simklAuthState: Flow<Unit>,
     playerSettings: Flow<Unit>
 ): Flow<Unit> {
@@ -86,6 +89,7 @@ internal fun observeAccountConfigSyncChanges(
         realDebridState,
         traktAuthState,
         traktCatalogPreferences,
+        simklCatalogPreferences,
         simklAuthState,
         playerSettings
     )
@@ -99,6 +103,8 @@ internal fun buildAccountConfigSyncPayload(
     traktCatalogEnabledSet: List<String>,
     traktCatalogOrder: List<String>,
     traktSelectedPopularListKeys: List<String>,
+    simklCatalogEnabledSet: List<String>,
+    simklCatalogOrder: List<String>,
     mdbListHiddenPersonalListKeys: List<String>,
     mdbListSelectedTopListKeys: List<String>,
     mdbListCatalogOrder: List<String>,
@@ -118,6 +124,10 @@ internal fun buildAccountConfigSyncPayload(
                 catalogEnabledSet = traktCatalogEnabledSet,
                 catalogOrder = traktCatalogOrder,
                 selectedPopularListKeys = traktSelectedPopularListKeys
+            ),
+            simkl = SimklCatalogSyncSettings(
+                catalogEnabledSet = simklCatalogEnabledSet,
+                catalogOrder = simklCatalogOrder
             ),
             mdblist = MDBListCatalogSyncSettings(
                 hiddenPersonalListKeys = mdbListHiddenPersonalListKeys,
@@ -202,6 +212,7 @@ internal suspend fun applyAccountConfigSyncSettings(
     imdbSettingsDataStore: ImdbSettingsDataStore,
     posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     traktSettingsDataStore: TraktSettingsDataStore,
+    simklSettingsDataStore: SimklSettingsDataStore,
     playerSettingsDataStore: PlayerSettingsDataStore
 ) {
     layoutPreferenceDataStore.setHeroCatalogKeys(settings.catalogs.home.heroCatalogKeys)
@@ -253,6 +264,10 @@ internal suspend fun applyAccountConfigSyncSettings(
         enabledCatalogs = settings.catalogs.trakt.catalogEnabledSet.toSet(),
         catalogOrder = settings.catalogs.trakt.catalogOrder,
         selectedPopularListKeys = settings.catalogs.trakt.selectedPopularListKeys.toSet()
+    )
+    simklSettingsDataStore.setCatalogPreferences(
+        enabledCatalogs = settings.catalogs.simkl.catalogEnabledSet.toSet(),
+        catalogOrder = settings.catalogs.simkl.catalogOrder
     )
 
     playerSettingsDataStore.setTrackingProvider(

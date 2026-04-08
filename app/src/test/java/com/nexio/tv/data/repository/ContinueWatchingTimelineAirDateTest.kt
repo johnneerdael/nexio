@@ -206,8 +206,8 @@ class ContinueWatchingTimelineAirDateTest {
         episode: Int = 1,
         activityAtMs: Long = 1_000L,
         firstAiredMs: Long
-    ): TraktProgressService.NextUpEntry {
-        return TraktProgressService.NextUpEntry(
+    ): TrackingNextUpEntry {
+        return TrackingNextUpEntry(
             contentId = contentId,
             name = contentId,
             season = season,
@@ -220,7 +220,7 @@ class ContinueWatchingTimelineAirDateTest {
         )
     }
 
-    private fun nextUpRef(entry: TraktProgressService.NextUpEntry): ContinueWatchingNextUpRef {
+    private fun nextUpRef(entry: TrackingNextUpEntry): ContinueWatchingNextUpRef {
         return ContinueWatchingNextUpRef(
             contentId = entry.contentId,
             activityAtMs = entry.activityAtMs,

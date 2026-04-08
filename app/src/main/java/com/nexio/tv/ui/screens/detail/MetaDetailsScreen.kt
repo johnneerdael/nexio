@@ -1669,7 +1669,7 @@ private fun MetaDetailsContent(
                 isInLibrary = isInLibrary,
                 onToggleLibrary = onToggleLibrary,
                 onLibraryLongPress = {
-                    if (librarySourceMode == LibrarySourceMode.TRAKT) {
+                    if (librarySourceMode == LibrarySourceMode.TRAKT || librarySourceMode == LibrarySourceMode.SIMKL) {
                         onLibraryLongPress()
                     }
                 },

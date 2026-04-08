@@ -91,6 +91,7 @@ data class CustomFormatterSyncTemplate(
 data class CatalogSyncSettings(
     val home: HomeCatalogSyncSettings = HomeCatalogSyncSettings(),
     val trakt: TraktCatalogSyncSettings = TraktCatalogSyncSettings(),
+    val simkl: SimklCatalogSyncSettings = SimklCatalogSyncSettings(),
     val mdblist: MDBListCatalogSyncSettings = MDBListCatalogSyncSettings()
 )
 
@@ -106,6 +107,12 @@ data class TraktCatalogSyncSettings(
     val catalogEnabledSet: List<String> = emptyList(),
     val catalogOrder: List<String> = emptyList(),
     val selectedPopularListKeys: List<String> = emptyList()
+)
+
+@Serializable
+data class SimklCatalogSyncSettings(
+    val catalogEnabledSet: List<String> = emptyList(),
+    val catalogOrder: List<String> = emptyList()
 )
 
 @Serializable

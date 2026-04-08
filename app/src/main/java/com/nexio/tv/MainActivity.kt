@@ -138,7 +138,7 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkRuntimeState
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkService
 import com.nexio.tv.data.repository.IdleScreensaverRepository
-import com.nexio.tv.data.repository.TraktProgressService
+import com.nexio.tv.data.repository.TrackingProgressService
 import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.domain.model.AppFont
 import com.nexio.tv.domain.model.AppTheme
@@ -240,7 +240,7 @@ class MainActivity : ComponentActivity() {
     lateinit var layoutPreferenceDataStore: LayoutPreferenceDataStore
 
     @Inject
-    lateinit var traktProgressService: TraktProgressService
+    lateinit var trackingProgressService: TrackingProgressService
 
     @Inject
     lateinit var startupSyncService: StartupSyncService
@@ -1168,17 +1168,17 @@ class MainActivity : ComponentActivity() {
             maybeLaunchPendingBrowsableChannelRequest()
             launch {
                 if (diskFirstHomeStartupEnabled) {
-                    logStartupPerf("trakt_refresh_deferred", "reason=disk_first_startup_gate")
+                    logStartupPerf("tracking_refresh_deferred", "reason=disk_first_startup_gate")
                     return@launch
                 }
-                logStartupPerf("trakt_refresh_start")
-                runCatching { traktProgressService.refreshNow() }
+                logStartupPerf("tracking_refresh_start")
+                runCatching { trackingProgressService.refreshNow() }
                     .onFailure { error ->
-                        logStartupPerf("trakt_refresh_failed", "message=${error.message ?: "unknown"}")
-                        Log.w("MainActivity", "Deferred Trakt startup refresh failed", error)
+                        logStartupPerf("tracking_refresh_failed", "message=${error.message ?: "unknown"}")
+                        Log.w("MainActivity", "Deferred tracking startup refresh failed", error)
                     }
                     .onSuccess {
-                        logStartupPerf("trakt_refresh_end")
+                        logStartupPerf("tracking_refresh_end")
                     }
             }
             launch(Dispatchers.IO) {

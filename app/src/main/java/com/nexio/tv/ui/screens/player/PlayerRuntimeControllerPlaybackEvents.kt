@@ -5,10 +5,8 @@ import android.util.Log
 import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.MatroskaDolbyVisionHookInstaller
 import com.nexio.tv.data.local.SubtitleStyleSettings
-import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.extractYear
-import com.nexio.tv.data.repository.parseContentIds
-import com.nexio.tv.data.repository.toTraktIds
+import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.domain.model.WatchProgress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -236,10 +234,8 @@ internal fun PlayerRuntimeController.refreshScrobbleItem() {
     hasSentCompletionScrobbleForCurrentItem = false
 }
 
-internal fun PlayerRuntimeController.buildScrobbleItem(): TraktScrobbleItem? {
+internal fun PlayerRuntimeController.buildScrobbleItem(): TrackingScrobbleItem? {
     val rawContentId = contentId ?: return null
-    val parsedIds = parseContentIds(rawContentId)
-    val ids = toTraktIds(parsedIds)
     val parsedYear = extractYear(year)
     val normalizedType = contentType?.lowercase()
 
@@ -247,19 +243,19 @@ internal fun PlayerRuntimeController.buildScrobbleItem(): TraktScrobbleItem? {
         currentSeason != null && currentEpisode != null
 
     val item = if (isEpisode) {
-        TraktScrobbleItem.Episode(
+        TrackingScrobbleItem.Episode(
+            contentId = rawContentId,
             showTitle = contentName ?: title,
             showYear = parsedYear,
-            showIds = ids,
             season = currentSeason ?: return null,
             number = currentEpisode ?: return null,
             episodeTitle = currentEpisodeTitle
         )
     } else {
-        TraktScrobbleItem.Movie(
+        TrackingScrobbleItem.Movie(
+            contentId = rawContentId,
             title = contentName ?: title,
-            year = parsedYear,
-            ids = ids
+            year = parsedYear
         )
     }
     return item
@@ -275,7 +271,7 @@ internal fun PlayerRuntimeController.emitScrobbleStart() {
     val requestGeneration = ++scrobbleStartRequestGeneration
     scope.launch {
         val progressPercent = currentPlaybackProgressPercent()
-        traktScrobbleService.scrobbleStart(
+        trackingScrobbleService.scrobbleStart(
             item = item,
             progressPercent = progressPercent
         )
@@ -296,7 +292,7 @@ internal fun PlayerRuntimeController.emitScrobbleStop(
 
     val percent = provided ?: currentPlaybackProgressPercent()
     scope.launch {
-        traktScrobbleService.scrobbleStop(
+        trackingScrobbleService.scrobbleStop(
             item = item,
             progressPercent = percent
         )
@@ -359,7 +355,7 @@ private fun PlayerRuntimeController.startScrobbleHeartbeat() {
             if (!isActive || !backendIsPlaying() || !hasRequestedScrobbleStartForCurrentItem) continue
             val progressPercent = currentPlaybackProgressPercent()
             if (progressPercent < 1f || progressPercent >= 95f) continue
-            traktScrobbleService.scrobbleStart(
+            trackingScrobbleService.scrobbleStart(
                 item = item,
                 progressPercent = progressPercent
             )

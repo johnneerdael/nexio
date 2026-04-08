@@ -3,7 +3,7 @@ package com.nexio.tv.data.local
 import android.content.Context
 import com.google.gson.JsonObject
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
-import com.nexio.tv.data.repository.TraktProgressService
+import com.nexio.tv.data.repository.TrackingNextUpEntry
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.testutil.InMemorySharedPreferences
@@ -98,7 +98,7 @@ class ContinueWatchingSnapshotStoreTest {
                 )
             ),
             nextUpItems = listOf(
-                TraktProgressService.NextUpEntry(
+                TrackingNextUpEntry(
                     contentId = "show-b",
                     name = "Show B",
                     season = 2,
@@ -111,7 +111,7 @@ class ContinueWatchingSnapshotStoreTest {
                 )
             ),
             traktUpNextItems = listOf(
-                TraktProgressService.NextUpEntry(
+                TrackingNextUpEntry(
                     contentId = "show-b",
                     name = "Show B",
                     season = 2,

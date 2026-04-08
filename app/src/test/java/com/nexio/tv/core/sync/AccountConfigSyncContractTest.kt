@@ -88,6 +88,8 @@ class AccountConfigSyncContractTest {
             traktCatalogEnabledSet = listOf("trakt_up_next"),
             traktCatalogOrder = listOf("trakt_up_next", "trakt_recommended_movies"),
             traktSelectedPopularListKeys = listOf("popular-a"),
+            simklCatalogEnabledSet = listOf("simkl_tv_trending_today", "simkl_movie_trending_today"),
+            simklCatalogOrder = listOf("simkl_tv_trending_today", "simkl_movie_trending_today"),
             mdbListHiddenPersonalListKeys = listOf("personal-hidden"),
             mdbListSelectedTopListKeys = listOf("top-selected"),
             mdbListCatalogOrder = listOf("mdb-top", "mdb-personal"),
@@ -136,6 +138,8 @@ class AccountConfigSyncContractTest {
             traktCatalogEnabledSet = listOf("trakt_up_next"),
             traktCatalogOrder = listOf("trakt_up_next"),
             traktSelectedPopularListKeys = emptyList(),
+            simklCatalogEnabledSet = emptyList(),
+            simklCatalogOrder = emptyList(),
             mdbListHiddenPersonalListKeys = emptyList(),
             mdbListSelectedTopListKeys = emptyList(),
             mdbListCatalogOrder = emptyList(),
@@ -207,6 +211,7 @@ class AccountConfigSyncContractTest {
         val realDebridState = MutableSharedFlow<Unit>(replay = 1)
         val traktAuthState = MutableSharedFlow<Unit>(replay = 1)
         val traktCatalogPreferences = MutableSharedFlow<Unit>(replay = 1)
+        val simklCatalogPreferences = MutableSharedFlow<Unit>(replay = 1)
 
         val emission = backgroundScope.async(start = CoroutineStart.UNDISPATCHED) {
             observeAccountConfigSyncChanges(
@@ -232,6 +237,7 @@ class AccountConfigSyncContractTest {
                 realDebridState = realDebridState,
                 traktAuthState = traktAuthState,
                 traktCatalogPreferences = traktCatalogPreferences,
+                simklCatalogPreferences = simklCatalogPreferences,
                 simklAuthState = MutableSharedFlow<Unit>(),
                 playerSettings = MutableSharedFlow<Unit>()
             ).first()
@@ -271,6 +277,7 @@ class AccountConfigSyncContractTest {
                 realDebridState = MutableSharedFlow<Unit>(),
                 traktAuthState = MutableSharedFlow<Unit>(),
                 traktCatalogPreferences = MutableSharedFlow<Unit>(),
+                simklCatalogPreferences = MutableSharedFlow<Unit>(),
                 simklAuthState = MutableSharedFlow<Unit>(),
                 playerSettings = MutableSharedFlow<Unit>()
             ).first()
@@ -336,6 +343,7 @@ class AccountConfigSyncContractTest {
         val imdbSettingsDataStore = mockk<ImdbSettingsDataStore>(relaxed = true)
         val posterRatingsSettingsDataStore = mockk<PosterRatingsSettingsDataStore>(relaxed = true)
         val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true)
+        val simklSettingsDataStore = mockk<com.nexio.tv.data.local.SimklSettingsDataStore>(relaxed = true)
 
         val settings = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(
@@ -369,6 +377,8 @@ class AccountConfigSyncContractTest {
             traktCatalogEnabledSet = listOf("trakt_up_next"),
             traktCatalogOrder = listOf("trakt_up_next", "trakt_recommended_movies"),
             traktSelectedPopularListKeys = listOf("popular-a"),
+            simklCatalogEnabledSet = listOf("simkl_tv_trending_today"),
+            simklCatalogOrder = listOf("simkl_tv_trending_today", "simkl_movie_trending_today"),
             mdbListHiddenPersonalListKeys = listOf("personal-hidden"),
             mdbListSelectedTopListKeys = listOf("top-selected"),
             mdbListCatalogOrder = listOf("mdb-top"),
@@ -399,6 +409,7 @@ class AccountConfigSyncContractTest {
             imdbSettingsDataStore = imdbSettingsDataStore,
             posterRatingsSettingsDataStore = posterRatingsSettingsDataStore,
             traktSettingsDataStore = traktSettingsDataStore,
+            simklSettingsDataStore = simklSettingsDataStore,
             playerSettingsDataStore = playerSettingsDataStore
         )
 
@@ -420,6 +431,12 @@ class AccountConfigSyncContractTest {
                 enabledCatalogs = setOf("trakt_up_next"),
                 catalogOrder = listOf("trakt_up_next", "trakt_recommended_movies"),
                 selectedPopularListKeys = setOf("popular-a")
+            )
+        }
+        coVerify(exactly = 1) {
+            simklSettingsDataStore.setCatalogPreferences(
+                enabledCatalogs = setOf("simkl_tv_trending_today"),
+                catalogOrder = listOf("simkl_tv_trending_today", "simkl_movie_trending_today")
             )
         }
         coVerify(exactly = 1) { playerSettingsDataStore.setTrackingProvider(TrackingProvider.SIMKL) }

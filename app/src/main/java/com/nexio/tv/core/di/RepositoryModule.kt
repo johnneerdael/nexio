@@ -7,6 +7,10 @@ import com.nexio.tv.data.repository.MetaRepositoryImpl
 import com.nexio.tv.data.repository.StreamRepositoryImpl
 import com.nexio.tv.data.repository.SubtitleRepositoryImpl
 import com.nexio.tv.data.repository.SyncRepositoryImpl
+import com.nexio.tv.data.repository.DefaultTrackingProgressService
+import com.nexio.tv.data.repository.DefaultTrackingScrobbleService
+import com.nexio.tv.data.repository.TrackingProgressService
+import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.repository.WatchProgressRepositoryImpl
 import com.nexio.tv.data.repository.servicewrap.DebridAvailabilityResolver
 import com.nexio.tv.data.repository.servicewrap.ServiceWrapResolver
@@ -63,6 +67,14 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindWatchProgressRepository(impl: WatchProgressRepositoryImpl): WatchProgressRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindTrackingProgressService(impl: DefaultTrackingProgressService): TrackingProgressService
+
+    @Binds
+    @Singleton
+    abstract fun bindTrackingScrobbleService(impl: DefaultTrackingScrobbleService): TrackingScrobbleService
 
     @Binds
     @Singleton

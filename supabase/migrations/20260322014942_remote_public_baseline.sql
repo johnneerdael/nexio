@@ -959,7 +959,7 @@ CREATE TABLE IF NOT EXISTS "public"."account_secrets" (
     "updated_from" "text" DEFAULT 'web'::"text" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    CONSTRAINT "account_secrets_secret_type_check" CHECK (("secret_type" = ANY (ARRAY['addon_credential'::"text", 'tmdb_api_key'::"text", 'omdb_api_key'::"text", 'mdblist_api_key'::"text", 'premiumize_api_key'::"text", 'gemini_api_key'::"text", 'rpdb_api_key'::"text", 'top_posters_api_key'::"text", 'realdebrid_access_token'::"text", 'realdebrid_refresh_token'::"text", 'trakt_access_token'::"text", 'trakt_refresh_token'::"text"]))),
+    CONSTRAINT "account_secrets_secret_type_check" CHECK (("secret_type" = ANY (ARRAY['addon_credential'::"text", 'tmdb_api_key'::"text", 'omdb_api_key'::"text", 'mdblist_api_key'::"text", 'premiumize_api_key'::"text", 'gemini_api_key'::"text", 'rpdb_api_key'::"text", 'top_posters_api_key'::"text", 'realdebrid_access_token'::"text", 'realdebrid_refresh_token'::"text", 'simkl_access_token'::"text", 'trakt_access_token'::"text", 'trakt_refresh_token'::"text"]))),
     CONSTRAINT "account_secrets_status_check" CHECK (("status" = ANY (ARRAY['configured'::"text", 'missing'::"text", 'error'::"text"])))
 );
 
@@ -1742,5 +1742,4 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 
 
 drop extension if exists "pg_net";
-
 

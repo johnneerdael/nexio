@@ -1,12 +1,15 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.data.local.MDBListCatalogPreferences
+import com.nexio.tv.data.local.SimklCatalogIds
+import com.nexio.tv.data.local.SimklCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.MDBListListOption
 import com.nexio.tv.data.repository.MDBListCustomCatalog
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
+import com.nexio.tv.data.repository.SimklDiscoverySnapshot
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
 import com.nexio.tv.domain.model.CatalogDescriptor
@@ -46,6 +49,7 @@ class HomeCatalogStartupReadinessTest {
             addons = addons,
             disabledHomeCatalogKeys = emptySet(),
             traktPrefs = traktPrefs,
+            simklPrefs = SimklCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
             mdbPrefs = mdbPrefs,
             mdbSnapshot = mdbSnapshot
         )
@@ -57,6 +61,57 @@ class HomeCatalogStartupReadinessTest {
                 "popular:custom-list",
                 "personal:watchlist",
                 "top:top-rated",
+                "cinemeta_movie_popular"
+            ),
+            expected
+        )
+    }
+
+    @Test
+    fun `expected configured home keys include simkl rails in configured order`() {
+        val expected = buildExpectedConfiguredHomeOrderKeys(
+            addons = emptyList(),
+            disabledHomeCatalogKeys = emptySet(),
+            traktPrefs = TraktCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+            simklPrefs = SimklCatalogPreferences(
+                enabledCatalogs = setOf(SimklCatalogIds.ANIME_TRENDING_MONTH, SimklCatalogIds.TV_TRENDING_TODAY),
+                catalogOrder = listOf(SimklCatalogIds.ANIME_TRENDING_MONTH, SimklCatalogIds.TV_TRENDING_TODAY)
+            ),
+            mdbPrefs = MDBListCatalogPreferences(),
+            mdbSnapshot = MDBListDiscoverySnapshot()
+        )
+
+        assertEquals(
+            listOf(SimklCatalogIds.ANIME_TRENDING_MONTH, SimklCatalogIds.TV_TRENDING_TODAY),
+            expected
+        )
+    }
+
+    @Test
+    fun `expected configured home keys preserve combined trakt simkl addon ordering`() {
+        val addons = listOf(
+            addonWithCatalog("cinemeta", "movie", "popular")
+        )
+        val expected = buildExpectedConfiguredHomeOrderKeys(
+            addons = addons,
+            disabledHomeCatalogKeys = emptySet(),
+            traktPrefs = TraktCatalogPreferences(
+                enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES),
+                catalogOrder = TraktCatalogIds.BUILT_IN_ORDER
+            ),
+            simklPrefs = SimklCatalogPreferences(
+                enabledCatalogs = setOf(SimklCatalogIds.MOVIE_TRENDING_TODAY, SimklCatalogIds.TV_TRENDING_TODAY),
+                catalogOrder = listOf(SimklCatalogIds.TV_TRENDING_TODAY, SimklCatalogIds.MOVIE_TRENDING_TODAY)
+            ),
+            mdbPrefs = MDBListCatalogPreferences(),
+            mdbSnapshot = MDBListDiscoverySnapshot()
+        )
+
+        assertEquals(
+            listOf(
+                TraktCatalogIds.TRENDING_MOVIES,
+                SimklCatalogIds.TV_TRENDING_TODAY,
+                SimklCatalogIds.MOVIE_TRENDING_TODAY,
                 "cinemeta_movie_popular"
             ),
             expected
@@ -150,6 +205,8 @@ class HomeCatalogStartupReadinessTest {
             traktPrefs = traktPrefs,
             traktSnapshot = traktSnapshot,
             hasTraktUpNextItems = false,
+            simklPrefs = SimklCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+            simklSnapshot = SimklDiscoverySnapshot(),
             mdbPrefs = mdbPrefs,
             mdbSnapshot = mdbSnapshot
         )
@@ -181,6 +238,8 @@ class HomeCatalogStartupReadinessTest {
                 availableAddonOrderKeys = expectedAddonKeys.toSet(),
                 traktExpectedOrderKeys = expectedTraktKeys,
                 traktObserved = true,
+                simklExpectedOrderKeys = emptyList(),
+                simklObserved = true,
                 mdbExpectedOrderKeys = expectedMdbKeys,
                 mdbObserved = true
             )
@@ -191,9 +250,297 @@ class HomeCatalogStartupReadinessTest {
                 availableAddonOrderKeys = expectedAddonKeys.toSet(),
                 traktExpectedOrderKeys = expectedTraktKeys,
                 traktObserved = false,
+                simklExpectedOrderKeys = emptyList(),
+                simklObserved = true,
                 mdbExpectedOrderKeys = expectedMdbKeys,
                 mdbObserved = true
             )
+        )
+    }
+
+    @Test
+    fun `publish source readiness blocks until simkl source is observed when simkl rails are configured`() {
+        val expectedSimklKeys = listOf(SimklCatalogIds.TV_TRENDING_TODAY, SimklCatalogIds.ANIME_TRENDING_MONTH)
+
+        assertTrue(
+            areConfiguredHomePublishSourcesReady(
+                addonExpectedOrderKeys = emptyList(),
+                availableAddonOrderKeys = emptySet(),
+                traktExpectedOrderKeys = emptyList(),
+                traktObserved = true,
+                simklExpectedOrderKeys = expectedSimklKeys,
+                simklObserved = true,
+                mdbExpectedOrderKeys = emptyList(),
+                mdbObserved = true
+            )
+        )
+        assertFalse(
+            areConfiguredHomePublishSourcesReady(
+                addonExpectedOrderKeys = emptyList(),
+                availableAddonOrderKeys = emptySet(),
+                traktExpectedOrderKeys = emptyList(),
+                traktObserved = true,
+                simklExpectedOrderKeys = expectedSimklKeys,
+                simklObserved = false,
+                mdbExpectedOrderKeys = emptyList(),
+                mdbObserved = true
+            )
+        )
+    }
+
+    @Test
+    fun `source cache readiness blocks when simkl configured rails have no cached content`() {
+        val simklPrefs = SimklCatalogPreferences(
+            enabledCatalogs = setOf(SimklCatalogIds.TV_TRENDING_TODAY, SimklCatalogIds.ANIME_TRENDING_MONTH),
+            catalogOrder = listOf(SimklCatalogIds.TV_TRENDING_TODAY, SimklCatalogIds.ANIME_TRENDING_MONTH)
+        )
+
+        assertFalse(
+            areConfiguredHomeSourceCachesReady(
+                addonExpectedOrderKeys = emptyList(),
+                availableAddonOrderKeys = emptySet(),
+                traktExpectedOrderKeys = emptyList(),
+                traktPrefs = TraktCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+                traktSnapshot = TraktDiscoverySnapshot(),
+                simklExpectedOrderKeys = listOf(SimklCatalogIds.TV_TRENDING_TODAY, SimklCatalogIds.ANIME_TRENDING_MONTH),
+                simklPrefs = simklPrefs,
+                simklSnapshot = SimklDiscoverySnapshot(updatedAtMs = 123L),
+                mdbExpectedOrderKeys = emptyList(),
+                mdbPrefs = MDBListCatalogPreferences(),
+                mdbSnapshot = MDBListDiscoverySnapshot()
+            )
+        )
+    }
+
+    @Test
+    fun `source cache readiness passes when simkl configured rails have cached content`() {
+        val simklPrefs = SimklCatalogPreferences(
+            enabledCatalogs = setOf(SimklCatalogIds.TV_TRENDING_TODAY, SimklCatalogIds.ANIME_TRENDING_MONTH),
+            catalogOrder = listOf(SimklCatalogIds.TV_TRENDING_TODAY, SimklCatalogIds.ANIME_TRENDING_MONTH)
+        )
+        val simklSnapshot = SimklDiscoverySnapshot(
+            itemsByCatalog = mapOf(
+                SimklCatalogIds.TV_TRENDING_TODAY to listOf(samplePreview("tt2000001", ContentType.SERIES, "Trending Show")),
+                SimklCatalogIds.ANIME_TRENDING_MONTH to listOf(samplePreview("tt2000002", ContentType.SERIES, "Best Anime"))
+            ),
+            updatedAtMs = 123L
+        )
+
+        assertTrue(
+            areConfiguredHomeSourceCachesReady(
+                addonExpectedOrderKeys = emptyList(),
+                availableAddonOrderKeys = emptySet(),
+                traktExpectedOrderKeys = emptyList(),
+                traktPrefs = TraktCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+                traktSnapshot = TraktDiscoverySnapshot(),
+                simklExpectedOrderKeys = listOf(SimklCatalogIds.TV_TRENDING_TODAY, SimklCatalogIds.ANIME_TRENDING_MONTH),
+                simklPrefs = simklPrefs,
+                simklSnapshot = simklSnapshot,
+                mdbExpectedOrderKeys = emptyList(),
+                mdbPrefs = MDBListCatalogPreferences(),
+                mdbSnapshot = MDBListDiscoverySnapshot()
+            )
+        )
+    }
+
+    @Test
+    fun `source cache readiness requires both trakt and simkl caches when both are configured`() {
+        val traktPrefs = TraktCatalogPreferences(
+            enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES),
+            catalogOrder = TraktCatalogIds.BUILT_IN_ORDER
+        )
+        val traktSnapshot = TraktDiscoverySnapshot(
+            trendingMovieItems = listOf(samplePreview("tt3000001", ContentType.MOVIE, "Trending Movie")),
+            updatedAtMs = 123L
+        )
+        val simklPrefs = SimklCatalogPreferences(
+            enabledCatalogs = setOf(SimklCatalogIds.TV_TRENDING_TODAY),
+            catalogOrder = listOf(SimklCatalogIds.TV_TRENDING_TODAY)
+        )
+        val simklSnapshot = SimklDiscoverySnapshot(
+            updatedAtMs = 123L
+        )
+
+        assertFalse(
+            areConfiguredHomeSourceCachesReady(
+                addonExpectedOrderKeys = emptyList(),
+                availableAddonOrderKeys = emptySet(),
+                traktExpectedOrderKeys = listOf(TraktCatalogIds.TRENDING_MOVIES),
+                traktPrefs = traktPrefs,
+                traktSnapshot = traktSnapshot,
+                simklExpectedOrderKeys = listOf(SimklCatalogIds.TV_TRENDING_TODAY),
+                simklPrefs = simklPrefs,
+                simklSnapshot = simklSnapshot,
+                mdbExpectedOrderKeys = emptyList(),
+                mdbPrefs = MDBListCatalogPreferences(),
+                mdbSnapshot = MDBListDiscoverySnapshot()
+            )
+        )
+    }
+
+    @Test
+    fun `publishable configured home keys include simkl rails only when snapshot has content`() {
+        val prefs = SimklCatalogPreferences(
+            enabledCatalogs = setOf(SimklCatalogIds.TV_TRENDING_TODAY, SimklCatalogIds.ANIME_TRENDING_MONTH),
+            catalogOrder = listOf(SimklCatalogIds.ANIME_TRENDING_MONTH, SimklCatalogIds.TV_TRENDING_TODAY)
+        )
+        val snapshot = SimklDiscoverySnapshot(
+            itemsByCatalog = mapOf(
+                SimklCatalogIds.TV_TRENDING_TODAY to listOf(
+                    MetaPreview(
+                        id = "tt1000001",
+                        type = ContentType.SERIES,
+                        name = "Trending Show",
+                        poster = null,
+                        posterShape = PosterShape.POSTER,
+                        background = null,
+                        logo = null,
+                        description = null,
+                        releaseInfo = null,
+                        imdbRating = null,
+                        genres = emptyList()
+                    )
+                )
+            ),
+            updatedAtMs = 123L
+        )
+
+        val publishable = buildPublishableConfiguredHomeOrderKeys(
+            addons = emptyList(),
+            disabledHomeCatalogKeys = emptySet(),
+            traktPrefs = TraktCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+            traktSnapshot = TraktDiscoverySnapshot(),
+            hasTraktUpNextItems = false,
+            simklPrefs = prefs,
+            simklSnapshot = snapshot,
+            mdbPrefs = MDBListCatalogPreferences(),
+            mdbSnapshot = MDBListDiscoverySnapshot()
+        )
+
+        assertEquals(listOf(SimklCatalogIds.TV_TRENDING_TODAY), publishable)
+    }
+
+    @Test
+    fun `publishable configured home keys preserve simkl configured order across multiple available rails`() {
+        val prefs = SimklCatalogPreferences(
+            enabledCatalogs = setOf(
+                SimklCatalogIds.ANIME_TRENDING_MONTH,
+                SimklCatalogIds.TV_TRENDING_TODAY,
+                SimklCatalogIds.MOVIE_TRENDING_TODAY
+            ),
+            catalogOrder = listOf(
+                SimklCatalogIds.MOVIE_TRENDING_TODAY,
+                SimklCatalogIds.ANIME_TRENDING_MONTH,
+                SimklCatalogIds.TV_TRENDING_TODAY
+            )
+        )
+        val snapshot = SimklDiscoverySnapshot(
+            itemsByCatalog = mapOf(
+                SimklCatalogIds.TV_TRENDING_TODAY to listOf(samplePreview("tt1000001", ContentType.SERIES, "Trending Show")),
+                SimklCatalogIds.ANIME_TRENDING_MONTH to listOf(samplePreview("tt1000002", ContentType.SERIES, "Best Anime")),
+                SimklCatalogIds.MOVIE_TRENDING_TODAY to listOf(samplePreview("tt1000003", ContentType.MOVIE, "Trending Movie"))
+            ),
+            updatedAtMs = 123L
+        )
+
+        val publishable = buildPublishableConfiguredHomeOrderKeys(
+            addons = emptyList(),
+            disabledHomeCatalogKeys = emptySet(),
+            traktPrefs = TraktCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+            traktSnapshot = TraktDiscoverySnapshot(),
+            hasTraktUpNextItems = false,
+            simklPrefs = prefs,
+            simklSnapshot = snapshot,
+            mdbPrefs = MDBListCatalogPreferences(),
+            mdbSnapshot = MDBListDiscoverySnapshot()
+        )
+
+        assertEquals(
+            listOf(
+                SimklCatalogIds.MOVIE_TRENDING_TODAY,
+                SimklCatalogIds.ANIME_TRENDING_MONTH,
+                SimklCatalogIds.TV_TRENDING_TODAY
+            ),
+            publishable
+        )
+    }
+
+    @Test
+    fun `publishable configured home keys preserve combined trakt simkl addon order`() {
+        val addons = listOf(
+            addonWithCatalog("cinemeta", "movie", "popular")
+        )
+        val traktPrefs = TraktCatalogPreferences(
+            enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES),
+            catalogOrder = TraktCatalogIds.BUILT_IN_ORDER
+        )
+        val traktSnapshot = TraktDiscoverySnapshot(
+            trendingMovieItems = listOf(samplePreview("tt4000001", ContentType.MOVIE, "Trakt Movie")),
+            updatedAtMs = 123L
+        )
+        val simklPrefs = SimklCatalogPreferences(
+            enabledCatalogs = setOf(SimklCatalogIds.TV_TRENDING_TODAY, SimklCatalogIds.MOVIE_TRENDING_TODAY),
+            catalogOrder = listOf(SimklCatalogIds.TV_TRENDING_TODAY, SimklCatalogIds.MOVIE_TRENDING_TODAY)
+        )
+        val simklSnapshot = SimklDiscoverySnapshot(
+            itemsByCatalog = mapOf(
+                SimklCatalogIds.TV_TRENDING_TODAY to listOf(samplePreview("tt4000002", ContentType.SERIES, "SIMKL Show")),
+                SimklCatalogIds.MOVIE_TRENDING_TODAY to listOf(samplePreview("tt4000003", ContentType.MOVIE, "SIMKL Movie"))
+            ),
+            updatedAtMs = 123L
+        )
+
+        val publishable = buildPublishableConfiguredHomeOrderKeys(
+            addons = addons,
+            disabledHomeCatalogKeys = emptySet(),
+            traktPrefs = traktPrefs,
+            traktSnapshot = traktSnapshot,
+            hasTraktUpNextItems = false,
+            simklPrefs = simklPrefs,
+            simklSnapshot = simklSnapshot,
+            mdbPrefs = MDBListCatalogPreferences(),
+            mdbSnapshot = MDBListDiscoverySnapshot()
+        )
+
+        assertEquals(
+            listOf(
+                TraktCatalogIds.TRENDING_MOVIES,
+                SimklCatalogIds.TV_TRENDING_TODAY,
+                SimklCatalogIds.MOVIE_TRENDING_TODAY,
+                "cinemeta_movie_popular"
+            ),
+            publishable
+        )
+    }
+
+    @Test
+    fun `configured home completeness fails when simkl expected key is missing`() {
+        val expectedKeys = listOf(
+            SimklCatalogIds.TV_TRENDING_TODAY,
+            "cinemeta_movie_popular"
+        )
+
+        assertFalse(
+            isConfiguredHomeSnapshotComplete(
+                snapshotOrderedGroupKeys = listOf("cinemeta_movie_popular"),
+                expectedConfiguredOrderKeys = expectedKeys
+            )
+        )
+    }
+
+    @Test
+    fun `serialized simkl refresh treats empty built in snapshot as not ready even after a prior timestamp`() {
+        val prefs = SimklCatalogPreferences(
+            enabledCatalogs = setOf(SimklCatalogIds.TV_TRENDING_WEEK, SimklCatalogIds.ANIME_TRENDING_MONTH),
+            catalogOrder = listOf(SimklCatalogIds.TV_TRENDING_WEEK, SimklCatalogIds.ANIME_TRENDING_MONTH)
+        )
+        val snapshot = SimklDiscoverySnapshot(
+            updatedAtMs = 123L
+        )
+
+        assertTrue(
+            "Configured SIMKL built-in rails should still be considered not ready when the cached snapshot is empty",
+            shouldRefreshSimklDiscoveryForState(prefs, snapshot)
         )
     }
 
@@ -224,6 +571,25 @@ class HomeCatalogStartupReadinessTest {
 
         assertFalse(shouldRefreshTraktDiscoveryForState(prefs, snapshot))
         assertTrue(shouldAttemptSerializedTraktDiscoveryRefresh(prefs))
+    }
+
+    @Test
+    fun `serialized trakt refresh treats empty built in snapshot as not ready even after a prior timestamp`() {
+        val prefs = TraktCatalogPreferences(
+            enabledCatalogs = setOf(TraktCatalogIds.RECOMMENDED_MOVIES, TraktCatalogIds.RECOMMENDED_SHOWS),
+            catalogOrder = TraktCatalogIds.BUILT_IN_ORDER
+        )
+        val snapshot = TraktDiscoverySnapshot(
+            // Reproduces the bad state seen on device: discovery has a timestamp, but none of the
+            // configured built-in rails have content yet, so modern home should keep refreshing
+            // rather than treating Trakt as ready and dropping the rails.
+            updatedAtMs = 123L
+        )
+
+        assertTrue(
+            "Configured Trakt built-in rails should still be considered not ready when the cached snapshot is empty",
+            shouldRefreshTraktDiscoveryForState(prefs, snapshot)
+        )
     }
 
     @Test
@@ -260,6 +626,26 @@ class HomeCatalogStartupReadinessTest {
             ),
             types = emptyList(),
             resources = emptyList<AddonResource>()
+        )
+    }
+
+    private fun samplePreview(
+        id: String,
+        type: ContentType,
+        name: String
+    ): MetaPreview {
+        return MetaPreview(
+            id = id,
+            type = type,
+            name = name,
+            poster = null,
+            posterShape = PosterShape.POSTER,
+            background = null,
+            logo = null,
+            description = null,
+            releaseInfo = null,
+            imdbRating = null,
+            genres = emptyList()
         )
     }
 

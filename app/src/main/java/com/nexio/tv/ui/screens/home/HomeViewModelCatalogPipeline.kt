@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import android.util.Log
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
+import com.nexio.tv.data.local.SimklCatalogIds
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.TraktCatalogIds
@@ -64,6 +65,21 @@ private const val MDBLIST_RAIL_ADDON_ID = "mdblist"
 private const val MDBLIST_RAIL_ADDON_NAME = "MDBList"
 private const val MDBLIST_RAIL_ADDON_BASE_URL = "https://api.mdblist.com"
 
+private const val SIMKL_RAIL_ADDON_ID = "simkl"
+private const val SIMKL_RAIL_ADDON_NAME = "SIMKL"
+private const val SIMKL_RAIL_ADDON_BASE_URL = "https://data.simkl.in"
+
+private const val SIMKL_ROW_NAME_TV_TRENDING_TODAY = "SIMKL Trending TV (Today)"
+private const val SIMKL_ROW_NAME_TV_TRENDING_WEEK = "SIMKL Trending TV (Week)"
+private const val SIMKL_ROW_NAME_TV_TRENDING_MONTH = "SIMKL Trending TV (Month)"
+private const val SIMKL_ROW_NAME_ANIME_TRENDING_TODAY = "SIMKL Trending Anime (Today)"
+private const val SIMKL_ROW_NAME_ANIME_TRENDING_WEEK = "SIMKL Trending Anime (Week)"
+private const val SIMKL_ROW_NAME_ANIME_TRENDING_MONTH = "SIMKL Trending Anime (Month)"
+private const val SIMKL_ROW_NAME_MOVIE_TRENDING_TODAY = "SIMKL Trending Movies (Today)"
+private const val SIMKL_ROW_NAME_MOVIE_TRENDING_WEEK = "SIMKL Trending Movies (Week)"
+private const val SIMKL_ROW_NAME_MOVIE_TRENDING_MONTH = "SIMKL Trending Movies (Month)"
+private const val SIMKL_ROW_NAME_DVD_RELEASES = "SIMKL Popular DVD Releases"
+
 internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
     viewModelScope.launch(Dispatchers.IO) {
         val snapshot = homeCatalogSnapshotStore.read()
@@ -108,10 +124,12 @@ internal fun HomeViewModel.restorePersistedSyntheticCatalogRowsPipeline() {
         Log.d(
             HomeViewModel.TAG,
             "Restored synthetic snapshot traktGroups=${snapshot.traktGroups.size} traktRows=${snapshot.traktGroups.sumOf { it.rows.size }} " +
+                "simklGroups=${snapshot.simklGroups.size} simklRows=${snapshot.simklGroups.sumOf { it.rows.size }} " +
                 "mdbGroups=${snapshot.mdbListGroups.size} mdbRows=${snapshot.mdbListGroups.sumOf { it.rows.size }}"
         )
         withContext(Dispatchers.Main.immediate) {
             persistedTraktSyntheticGroups = snapshot.traktGroups
+            persistedSimklSyntheticGroups = snapshot.simklGroups
             persistedMDBListSyntheticGroups = snapshot.mdbListGroups
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("restore_synthetic_snapshot")
         }
@@ -121,6 +139,7 @@ internal fun HomeViewModel.restorePersistedSyntheticCatalogRowsPipeline() {
 internal fun HomeViewModel.restorePersistedDiscoverySnapshotsPipeline() {
     viewModelScope.launch(Dispatchers.IO) {
         val traktSnapshot = traktDiscoverySnapshotStore.read()
+        val simklSnapshot = simklDiscoverySnapshotStore.read()
         val mdbSnapshot = mdbListDiscoverySnapshotStore.read()
         Log.d(
             HomeViewModel.TAG,
@@ -133,6 +152,13 @@ internal fun HomeViewModel.restorePersistedDiscoverySnapshotsPipeline() {
                         "popularMovies=${traktSnapshot.popularMovieItems.size} popularShows=${traktSnapshot.popularShowItems.size} " +
                         "recommendMovie=${traktSnapshot.recommendationMovieItems.size} recommendShow=${traktSnapshot.recommendationShowItems.size} " +
                         "calendar=${traktSnapshot.calendarItems.size}"
+                } +
+                " simkl=" +
+                if (simklSnapshot == null) {
+                    "null"
+                } else {
+                    "updated=${simklSnapshot.updatedAtMs} catalogs=${simklSnapshot.itemsByCatalog.size} " +
+                        "nonEmpty=${simklSnapshot.itemsByCatalog.count { it.value.isNotEmpty() }}"
                 } +
                 " mdb=" +
                 if (mdbSnapshot == null) {
@@ -151,6 +177,12 @@ internal fun HomeViewModel.restorePersistedDiscoverySnapshotsPipeline() {
                 persistedTraktDiscoverySnapshot = hydratedTraktSnapshot
                 if (traktDiscoverySnapshot.updatedAtMs <= 0L) {
                     traktDiscoverySnapshot = hydratedTraktSnapshot
+                }
+            }
+            if (simklSnapshot != null) {
+                persistedSimklDiscoverySnapshot = simklSnapshot
+                if (simklDiscoverySnapshot.updatedAtMs <= 0L) {
+                    simklDiscoverySnapshot = simklSnapshot
                 }
             }
             if (mdbSnapshot != null) {
@@ -206,6 +238,37 @@ internal fun HomeViewModel.observeTraktCatalogPreferencesPipeline() {
             startupRefreshPending = true
             if (!shouldDeferStartupNetworkWork()) {
                 runSerializedHomeRefreshIfNeeded("trakt_pref_change")
+            }
+        }
+    }
+}
+
+internal fun HomeViewModel.observeSimklDiscoveryPipeline() {
+    viewModelScope.launch {
+        val autoRefreshOnStart = !shouldDeferStartupNetworkWork()
+        simklDiscoveryService.observeSnapshot(autoRefreshOnStart = autoRefreshOnStart).collectLatest { snapshot ->
+            if (simklDiscoveryObserved && snapshot == simklDiscoverySnapshot) return@collectLatest
+            simklDiscoveryObserved = true
+            simklDiscoverySnapshot = snapshot
+            persistedSimklDiscoverySnapshot = snapshot
+            startupRefreshPending = true
+            applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_simkl_discovery")
+            if (!shouldDeferStartupNetworkWork()) {
+                runSerializedHomeRefreshIfNeeded("simkl_discovery")
+            }
+        }
+    }
+}
+
+internal fun HomeViewModel.observeSimklCatalogPreferencesPipeline() {
+    viewModelScope.launch {
+        simklSettingsDataStore.catalogPreferences.collectLatest { prefs ->
+            if (prefs == simklCatalogPreferences) return@collectLatest
+            simklCatalogPreferences = prefs
+            applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_simkl_prefs")
+            startupRefreshPending = true
+            if (!shouldDeferStartupNetworkWork()) {
+                runSerializedHomeRefreshIfNeeded("simkl_pref_change")
             }
         }
     }
@@ -361,14 +424,16 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
     Log.d(
         HomeViewModel.TAG,
         "Post-startup refresh pipeline begin addons=${addonsCache.size} persistedTraktGroups=${persistedTraktSyntheticGroups.size} " +
+            "persistedSimklGroups=${persistedSimklSyntheticGroups.size} " +
             "persistedMdbGroups=${persistedMDBListSyntheticGroups.size}"
     )
     val beforeTraktSnapshot = traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
+    val beforeSimklSnapshot = simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
     val beforeMdbSnapshot = mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
 
     logStartupPerf(
         "synthetic_refresh_start",
-        "trakt_items=${traktSnapshotItemKeys(beforeTraktSnapshot).size} mdb_items=${mdbSnapshotItemKeys(beforeMdbSnapshot).size}"
+        "trakt_items=${traktSnapshotItemKeys(beforeTraktSnapshot).size} simkl_items=${simklSnapshotItemKeys(beforeSimklSnapshot).size} mdb_items=${mdbSnapshotItemKeys(beforeMdbSnapshot).size}"
     )
 
     if (shouldAttemptSerializedTraktDiscoveryRefresh(traktCatalogPreferences)) {
@@ -387,8 +452,17 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
             }
         Log.d(HomeViewModel.TAG, "Post-startup refresh step end source=mdblist_discovery")
     }
+    if (shouldRefreshSimklDiscoveryForState(simklCatalogPreferences, beforeSimklSnapshot)) {
+        Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=simkl_discovery")
+        runCatching { simklDiscoveryService.ensureFresh(force = false) }
+            .onFailure { error ->
+                Log.w(HomeViewModel.TAG, "Failed synthetic SIMKL refresh in serialized startup pipeline", error)
+            }
+        Log.d(HomeViewModel.TAG, "Post-startup refresh step end source=simkl_discovery")
+    }
 
     val afterTraktSnapshot = traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
+    val afterSimklSnapshot = simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
     val afterMdbSnapshot = mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
     val hydratedAfterTraktSnapshot = applyTomatoesOverridesToTraktSnapshot(
         afterTraktSnapshot,
@@ -400,16 +474,21 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
     )
     val traktBeforeKeys = traktSnapshotItemKeys(beforeTraktSnapshot)
     val traktAfterKeys = traktSnapshotItemKeys(hydratedAfterTraktSnapshot)
+    val simklBeforeKeys = simklSnapshotItemKeys(beforeSimklSnapshot)
+    val simklAfterKeys = simklSnapshotItemKeys(afterSimklSnapshot)
     val mdbBeforeKeys = mdbSnapshotItemKeys(beforeMdbSnapshot)
     val mdbAfterKeys = mdbSnapshotItemKeys(hydratedAfterMdbSnapshot)
     traktDiscoverySnapshot = hydratedAfterTraktSnapshot
     persistedTraktDiscoverySnapshot = hydratedAfterTraktSnapshot
+    simklDiscoverySnapshot = afterSimklSnapshot
+    persistedSimklDiscoverySnapshot = afterSimklSnapshot
     mdbListDiscoverySnapshot = hydratedAfterMdbSnapshot
     persistedMDBListDiscoverySnapshot = hydratedAfterMdbSnapshot
 
     logStartupPerf(
         "synthetic_refresh_end",
         "trakt_total=${traktAfterKeys.size} trakt_added=${(traktAfterKeys - traktBeforeKeys).size} trakt_retained=${(traktAfterKeys intersect traktBeforeKeys).size} " +
+            "simkl_total=${simklAfterKeys.size} simkl_added=${(simklAfterKeys - simklBeforeKeys).size} simkl_retained=${(simklAfterKeys intersect simklBeforeKeys).size} " +
             "mdb_total=${mdbAfterKeys.size} mdb_added=${(mdbAfterKeys - mdbBeforeKeys).size} mdb_retained=${(mdbAfterKeys intersect mdbBeforeKeys).size}"
     )
 
@@ -422,6 +501,15 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
         Log.d(
             HomeViewModel.TAG,
             "Post-startup refresh step end source=trakt_snapshot groups=${persistedTraktSyntheticGroups.size} rows=${persistedTraktSyntheticGroups.sumOf { it.rows.size }}"
+        )
+
+        Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=simkl_snapshot")
+        logStartupPerf("synthetic_refresh_step_start", "source=simkl")
+        renewSimklSyntheticSnapshotPipeline(afterSimklSnapshot)
+        logStartupPerf("synthetic_refresh_step_end", "source=simkl rows=${persistedSimklSyntheticGroups.sumOf { it.rows.size }}")
+        Log.d(
+            HomeViewModel.TAG,
+            "Post-startup refresh step end source=simkl_snapshot groups=${persistedSimklSyntheticGroups.size} rows=${persistedSimklSyntheticGroups.sumOf { it.rows.size }}"
         )
 
         Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=mdblist_snapshot")
@@ -439,6 +527,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
     Log.d(
         HomeViewModel.TAG,
         "Post-startup refresh reloaded synthetic snapshot traktGroups=${persistedTraktSyntheticGroups.size} traktRows=${persistedTraktSyntheticGroups.sumOf { it.rows.size }} " +
+            "simklGroups=${persistedSimklSyntheticGroups.size} simklRows=${persistedSimklSyntheticGroups.sumOf { it.rows.size }} " +
             "mdbGroups=${persistedMDBListSyntheticGroups.size} mdbRows=${persistedMDBListSyntheticGroups.sumOf { it.rows.size }}"
     )
 
@@ -551,6 +640,14 @@ private fun traktSnapshotItemKeys(
     }
 }
 
+private fun simklSnapshotItemKeys(
+    snapshot: com.nexio.tv.data.repository.SimklDiscoverySnapshot
+): Set<String> {
+    return buildSet {
+        snapshot.itemsByCatalog.values.flatten().forEach { add("${it.apiType}:${it.id}") }
+    }
+}
+
 private fun mdbSnapshotItemKeys(
     snapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 ): Set<String> {
@@ -567,6 +664,7 @@ internal suspend fun HomeViewModel.reloadPersistedSyntheticCatalogRowsPipeline()
     }
     withContext(Dispatchers.Main.immediate) {
         persistedTraktSyntheticGroups = snapshot.traktGroups
+        persistedSimklSyntheticGroups = snapshot.simklGroups
         persistedMDBListSyntheticGroups = snapshot.mdbListGroups
     }
 }
@@ -586,6 +684,7 @@ internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
             val existingSnapshot = syntheticHomeCatalogStore.read()
                 ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot(
                     traktGroups = persistedTraktSyntheticGroups,
+                    simklGroups = persistedSimklSyntheticGroups,
                     mdbListGroups = persistedMDBListSyntheticGroups
                 )
             val liveGroups = buildSyntheticTraktRows(
@@ -593,7 +692,7 @@ internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
                 upNextItems = traktUpNextItems,
                 snapshot = snapshot
             )
-            val existingRowsByKey = (existingSnapshot.traktGroups + existingSnapshot.mdbListGroups)
+            val existingRowsByKey = (existingSnapshot.traktGroups + existingSnapshot.simklGroups + existingSnapshot.mdbListGroups)
                 .flatMap { it.rows }
                 .associateBy(::homeCatalogGlobalKey)
             val hydratedRows = homeCatalogRefreshCoordinator.hydrateAndPrefetchRows(
@@ -629,6 +728,61 @@ internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
     }
 }
 
+internal suspend fun HomeViewModel.renewSimklSyntheticSnapshotPipeline(
+    snapshot: com.nexio.tv.data.repository.SimklDiscoverySnapshot
+) {
+    val simklPrefsSnapshot = simklCatalogPreferences
+    val telemetryEnabled = startupPerfTelemetryEnabled
+    var appliedSimklGroups: List<PersistedSyntheticCatalogGroup>? = null
+
+    syntheticCatalogStoreMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val existingSnapshot = syntheticHomeCatalogStore.read()
+                ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot(
+                    traktGroups = persistedTraktSyntheticGroups,
+                    simklGroups = persistedSimklSyntheticGroups,
+                    mdbListGroups = persistedMDBListSyntheticGroups
+                )
+            val liveGroups = buildSyntheticSimklRows(
+                prefs = simklPrefsSnapshot,
+                snapshot = snapshot
+            )
+            val existingRowsByKey = (existingSnapshot.traktGroups + existingSnapshot.simklGroups + existingSnapshot.mdbListGroups)
+                .flatMap { it.rows }
+                .associateBy(::homeCatalogGlobalKey)
+            val hydratedRows = homeCatalogRefreshCoordinator.hydrateAndPrefetchRows(
+                rows = liveGroups.flatMap { it.rows },
+                existingRowsByKey = existingRowsByKey,
+                telemetryEnabled = telemetryEnabled,
+                onLog = { event, details -> logStartupPerf(event, details) }
+            )
+            val renewedSimklGroups = liveGroups
+                .replaceRows(hydratedRows)
+                .toPersistedSyntheticCatalogGroups()
+            val effectiveSimklGroups = if (
+                renewedSimklGroups.isEmpty() &&
+                existingSnapshot.simklGroups.isNotEmpty() &&
+                shouldRefreshSimklDiscoveryForState(simklPrefsSnapshot, snapshot)
+            ) {
+                existingSnapshot.simklGroups
+            } else {
+                renewedSimklGroups
+            }
+            val renewedSnapshot = existingSnapshot.copy(simklGroups = effectiveSimklGroups)
+            if (renewedSnapshot == existingSnapshot) {
+                return@withContext
+            }
+            syntheticHomeCatalogStore.write(renewedSnapshot)
+            appliedSimklGroups = effectiveSimklGroups
+        }
+    }
+    appliedSimklGroups?.let { groups ->
+        withContext(Dispatchers.Main.immediate) {
+            persistedSimklSyntheticGroups = groups
+        }
+    }
+}
+
 internal suspend fun HomeViewModel.renewMDBListSyntheticSnapshotPipeline(
     snapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 ) {
@@ -641,13 +795,14 @@ internal suspend fun HomeViewModel.renewMDBListSyntheticSnapshotPipeline(
             val existingSnapshot = syntheticHomeCatalogStore.read()
                 ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot(
                     traktGroups = persistedTraktSyntheticGroups,
+                    simklGroups = persistedSimklSyntheticGroups,
                     mdbListGroups = persistedMDBListSyntheticGroups
                 )
             val liveGroups = buildSyntheticMDBListRows(
                 prefs = mdbPrefsSnapshot,
                 snapshot = snapshot
             )
-            val existingRowsByKey = (existingSnapshot.traktGroups + existingSnapshot.mdbListGroups)
+            val existingRowsByKey = (existingSnapshot.traktGroups + existingSnapshot.simklGroups + existingSnapshot.mdbListGroups)
                 .flatMap { it.rows }
                 .associateBy(::homeCatalogGlobalKey)
             val hydratedRows = homeCatalogRefreshCoordinator.hydrateAndPrefetchRows(
@@ -719,10 +874,13 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     forceReload: Boolean = false
 ) {
     fun hasSyntheticHomeSourcesConfigured(): Boolean {
-        if (persistedTraktSyntheticGroups.isNotEmpty() || persistedMDBListSyntheticGroups.isNotEmpty()) {
+        if (persistedTraktSyntheticGroups.isNotEmpty() || persistedSimklSyntheticGroups.isNotEmpty() || persistedMDBListSyntheticGroups.isNotEmpty()) {
             return true
         }
         if (traktCatalogPreferences.enabledCatalogs.isNotEmpty()) {
+            return true
+        }
+        if (simklCatalogPreferences.enabledCatalogs.isNotEmpty()) {
             return true
         }
         return mdbListCatalogPreferences.selectedTopListKeys.isNotEmpty() ||
@@ -763,6 +921,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
         val activeRefreshInProgress =
             catalogsLoadInProgress ||
                 traktDiscoveryRefreshInProgress ||
+                simklDiscoveryRefreshInProgress ||
                 mdbListDiscoveryRefreshInProgress
         val refreshInProgress = startupRefreshPending || activeRefreshInProgress
         val shouldPreserveCachedHome =
@@ -1041,11 +1200,13 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val heroSectionEnabled = currentState.heroSectionEnabled
     val traktSnapshot = traktDiscoverySnapshot
     val traktPrefs = traktCatalogPreferences
+    val simklSnapshot = simklDiscoverySnapshot
+    val simklPrefs = simklCatalogPreferences
     val mdbListSnapshot = mdbListDiscoverySnapshot
     val mdbListPrefs = mdbListCatalogPreferences
     val currentVisibleFullRows = _fullCatalogRows.value
     val previousTruncatedRowCache = truncatedRowCache.toMap()
-    val startupHydrationPending = !installedAddonsObserved || !traktDiscoveryObserved || !mdbListDiscoveryObserved
+    val startupHydrationPending = !installedAddonsObserved || !traktDiscoveryObserved || !simklDiscoveryObserved || !mdbListDiscoveryObserved
     val effectiveTraktSnapshot = if (
         traktSnapshot.updatedAtMs > 0L ||
         traktSnapshot.customListCatalogs.isNotEmpty() ||
@@ -1061,6 +1222,14 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     } else {
         persistedTraktDiscoverySnapshot
     }
+    val effectiveSimklSnapshot = if (
+        simklSnapshot.updatedAtMs > 0L ||
+        simklSnapshot.itemsByCatalog.values.any { it.isNotEmpty() }
+    ) {
+        simklSnapshot
+    } else {
+        persistedSimklDiscoverySnapshot
+    }
     val effectiveMDBListSnapshot = if (
         mdbListSnapshot.updatedAtMs > 0L ||
         mdbListSnapshot.customListCatalogs.isNotEmpty() ||
@@ -1072,19 +1241,23 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         persistedMDBListDiscoverySnapshot
     }
     val recommendationRefMap = effectiveTraktSnapshot.recommendationRefsByStatusKey
+    val simklExpectedOrderKeys = buildExpectedConfiguredSimklOrderKeys(simklPrefs)
     val addonExpectedOrderKeys = buildExpectedConfiguredAddonOrderKeys(
         addons = addonsCache,
         disabledHomeCatalogKeys = disabledHomeCatalogKeys
     )
     val traktExpectedOrderKeys = buildExpectedConfiguredTraktOrderKeys(traktPrefs)
     val mdbExpectedOrderKeys = buildExpectedConfiguredMDBListOrderKeys(mdbListPrefs, effectiveMDBListSnapshot)
-    val expectedConfiguredOrderKeys = (traktExpectedOrderKeys + mdbExpectedOrderKeys + addonExpectedOrderKeys).distinct()
+    val expectedConfiguredOrderKeys = (traktExpectedOrderKeys + simklExpectedOrderKeys + mdbExpectedOrderKeys + addonExpectedOrderKeys).distinct()
     val sourceCachesReady = areConfiguredHomeSourceCachesReady(
         addonExpectedOrderKeys = addonExpectedOrderKeys,
         availableAddonOrderKeys = catalogSnapshot.keys,
         traktExpectedOrderKeys = traktExpectedOrderKeys,
         traktPrefs = traktPrefs,
         traktSnapshot = effectiveTraktSnapshot,
+        simklExpectedOrderKeys = simklExpectedOrderKeys,
+        simklPrefs = simklPrefs,
+        simklSnapshot = effectiveSimklSnapshot,
         mdbExpectedOrderKeys = mdbExpectedOrderKeys,
         mdbPrefs = mdbListPrefs,
         mdbSnapshot = effectiveMDBListSnapshot
@@ -1095,6 +1268,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         traktPrefs = traktPrefs,
         traktSnapshot = effectiveTraktSnapshot,
         hasTraktUpNextItems = currentState.traktUpNextItems.isNotEmpty(),
+        simklPrefs = simklPrefs,
+        simklSnapshot = effectiveSimklSnapshot,
         mdbPrefs = mdbListPrefs,
         mdbSnapshot = effectiveMDBListSnapshot
     )
@@ -1103,12 +1278,15 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         availableAddonOrderKeys = catalogSnapshot.keys,
         traktExpectedOrderKeys = traktExpectedOrderKeys,
         traktObserved = traktDiscoveryObserved,
+        simklExpectedOrderKeys = simklExpectedOrderKeys,
+        simklObserved = simklDiscoveryObserved,
         mdbExpectedOrderKeys = mdbExpectedOrderKeys,
         mdbObserved = mdbListDiscoveryObserved
     )
     val activeRefreshInProgress =
         catalogsLoadInProgress ||
             traktDiscoveryRefreshInProgress ||
+            simklDiscoveryRefreshInProgress ||
             mdbListDiscoveryRefreshInProgress
     val refreshInProgress = startupRefreshPending || activeRefreshInProgress
     pendingRestoredCatalogSnapshot?.let { snapshot ->
@@ -1125,6 +1303,9 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             traktSnapshot = effectiveTraktSnapshot,
             traktPrefs = traktPrefs,
             persistedTraktSyntheticGroups = persistedTraktSyntheticGroups,
+            simklSnapshot = effectiveSimklSnapshot,
+            simklPrefs = simklPrefs,
+            persistedSimklSyntheticGroups = persistedSimklSyntheticGroups,
             mdbListSnapshot = effectiveMDBListSnapshot,
             mdbListPrefs = mdbListPrefs,
             persistedMDBListSyntheticGroups = persistedMDBListSyntheticGroups,
@@ -1141,6 +1322,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
 
     val updateResult = withContext(Dispatchers.Default) {
         val syntheticTraktGroups = persistedTraktSyntheticGroups.toSyntheticCatalogOrderGroups()
+        val syntheticSimklGroups = persistedSimklSyntheticGroups.toSyntheticCatalogOrderGroups()
         val syntheticMDBListGroups = persistedMDBListSyntheticGroups.toSyntheticCatalogOrderGroups()
         val rawRowsByKey = orderedKeys
             .mapNotNull { key ->
@@ -1150,7 +1332,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             }
             .toMap(linkedMapOf())
 
-        val syntheticGroups = syntheticTraktGroups + syntheticMDBListGroups
+        val syntheticGroups = syntheticTraktGroups + syntheticSimklGroups + syntheticMDBListGroups
         val syntheticRowsByKey = linkedMapOf<String, List<CatalogRow>>().apply {
             syntheticGroups.forEach { group -> put(group.orderKey, group.rows) }
         }
@@ -1192,6 +1374,10 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             preserveTraktRows = shouldPreserveTraktCachedRows(
                 snapshot = effectiveTraktSnapshot,
                 refreshInProgress = startupHydrationPending || startupRefreshPending || traktDiscoveryRefreshInProgress
+            ),
+            preserveSimklRows = shouldPreserveSimklCachedRows(
+                snapshot = effectiveSimklSnapshot,
+                refreshInProgress = startupHydrationPending || startupRefreshPending || simklDiscoveryRefreshInProgress
             ),
             preserveMDBListRows = shouldPreserveMDBListCachedRows(
                 snapshot = effectiveMDBListSnapshot,
@@ -1448,6 +1634,7 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
     snapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot,
     requireSourceCachesReady: Boolean
 ): Boolean {
+    val simklExpectedOrderKeys = buildExpectedConfiguredSimklOrderKeys(simklCatalogPreferences)
     val addonExpectedOrderKeys = buildExpectedConfiguredAddonOrderKeys(
         addons = addonsCache,
         disabledHomeCatalogKeys = disabledHomeCatalogKeys
@@ -1458,13 +1645,15 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
         mdbListDiscoverySnapshot
     )
     val expectedConfiguredOrderKeys =
-        (traktExpectedOrderKeys + mdbExpectedOrderKeys + addonExpectedOrderKeys).distinct()
+        (traktExpectedOrderKeys + simklExpectedOrderKeys + mdbExpectedOrderKeys + addonExpectedOrderKeys).distinct()
     val publishableExpectedOrderKeys = buildPublishableConfiguredHomeOrderKeys(
         addons = addonsCache,
         disabledHomeCatalogKeys = disabledHomeCatalogKeys,
         traktPrefs = traktCatalogPreferences,
         traktSnapshot = traktDiscoverySnapshot,
         hasTraktUpNextItems = _uiState.value.traktUpNextItems.isNotEmpty(),
+        simklPrefs = simklCatalogPreferences,
+        simklSnapshot = simklDiscoverySnapshot,
         mdbPrefs = mdbListCatalogPreferences,
         mdbSnapshot = mdbListDiscoverySnapshot
     )
@@ -1474,6 +1663,9 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
         traktExpectedOrderKeys = traktExpectedOrderKeys,
         traktPrefs = traktCatalogPreferences,
         traktSnapshot = traktDiscoverySnapshot,
+        simklExpectedOrderKeys = simklExpectedOrderKeys,
+        simklPrefs = simklCatalogPreferences,
+        simklSnapshot = simklDiscoverySnapshot,
         mdbExpectedOrderKeys = mdbExpectedOrderKeys,
         mdbPrefs = mdbListCatalogPreferences,
         mdbSnapshot = mdbListDiscoverySnapshot
@@ -1587,6 +1779,9 @@ private fun buildCatalogComputationSignature(
     traktSnapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot,
     traktPrefs: TraktCatalogPreferences,
     persistedTraktSyntheticGroups: List<PersistedSyntheticCatalogGroup>,
+    simklSnapshot: com.nexio.tv.data.repository.SimklDiscoverySnapshot,
+    simklPrefs: com.nexio.tv.data.local.SimklCatalogPreferences,
+    persistedSimklSyntheticGroups: List<PersistedSyntheticCatalogGroup>,
     mdbListSnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot,
     mdbListPrefs: MDBListCatalogPreferences,
     persistedMDBListSyntheticGroups: List<PersistedSyntheticCatalogGroup>,
@@ -1607,6 +1802,9 @@ private fun buildCatalogComputationSignature(
     signature = (signature * 31) + traktSnapshot.hashCode()
     signature = (signature * 31) + traktPrefs.hashCode()
     signature = (signature * 31) + persistedTraktSyntheticGroups.hashCode()
+    signature = (signature * 31) + simklSnapshot.hashCode()
+    signature = (signature * 31) + simklPrefs.hashCode()
+    signature = (signature * 31) + persistedSimklSyntheticGroups.hashCode()
     signature = (signature * 31) + mdbListSnapshot.hashCode()
     signature = (signature * 31) + mdbListPrefs.hashCode()
     signature = (signature * 31) + persistedMDBListSyntheticGroups.hashCode()
@@ -1620,6 +1818,7 @@ private fun buildCatalogComputationSignature(
 private data class CachedHomePreservationState(
     val preserveAddonRows: Boolean,
     val preserveTraktRows: Boolean,
+    val preserveSimklRows: Boolean,
     val preserveMDBListRows: Boolean,
     val retainUnorderedRows: Boolean
 )
@@ -1640,6 +1839,15 @@ private fun shouldPreserveMDBListCachedRows(
 ): Boolean {
     if (refreshInProgress) return true
     // Only keep stale MDBList rows while hydrating the first discovery snapshot.
+    if (snapshot.updatedAtMs <= 0L) return true
+    return false
+}
+
+private fun shouldPreserveSimklCachedRows(
+    snapshot: com.nexio.tv.data.repository.SimklDiscoverySnapshot,
+    refreshInProgress: Boolean
+): Boolean {
+    if (refreshInProgress) return true
     if (snapshot.updatedAtMs <= 0L) return true
     return false
 }
@@ -1742,6 +1950,13 @@ private fun resolveMergedRowOrderKey(
                 else -> null
             }
         }
+        SIMKL_RAIL_ADDON_ID -> {
+            val prefixedCatalogId = "simkl_${row.catalogId}"
+            when {
+                prefixedCatalogId in orderedGroupKeys -> prefixedCatalogId
+                else -> null
+            }
+        }
         MDBLIST_RAIL_ADDON_ID -> {
             val prefixedCatalogId = "mdblist_${row.catalogId}"
             when {
@@ -1759,6 +1974,7 @@ private fun shouldPreserveCachedRow(
 ): Boolean {
     return when (row.addonId) {
         TRAKT_RAIL_ADDON_ID -> preservationState.preserveTraktRows
+        SIMKL_RAIL_ADDON_ID -> preservationState.preserveSimklRows
         MDBLIST_RAIL_ADDON_ID -> preservationState.preserveMDBListRows
         else -> preservationState.preserveAddonRows
     }
@@ -1848,15 +2064,23 @@ internal fun shouldRefreshTraktDiscoveryForState(
     prefs: TraktCatalogPreferences,
     snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot
 ): Boolean {
-    // Popular list metadata should only gate refresh when custom Trakt popular lists are enabled.
-    if (prefs.selectedPopularListKeys.isEmpty()) {
-        return snapshot.updatedAtMs <= 0L
+    if (snapshot.updatedAtMs <= 0L) {
+        return true
     }
+    if (TraktCatalogIds.TRENDING_MOVIES in prefs.enabledCatalogs && snapshot.trendingMovieItems.isEmpty()) return true
+    if (TraktCatalogIds.TRENDING_SHOWS in prefs.enabledCatalogs && snapshot.trendingShowItems.isEmpty()) return true
+    if (TraktCatalogIds.POPULAR_MOVIES in prefs.enabledCatalogs && snapshot.popularMovieItems.isEmpty()) return true
+    if (TraktCatalogIds.POPULAR_SHOWS in prefs.enabledCatalogs && snapshot.popularShowItems.isEmpty()) return true
+    if (TraktCatalogIds.RECOMMENDED_MOVIES in prefs.enabledCatalogs && snapshot.recommendationMovieItems.isEmpty()) return true
+    if (TraktCatalogIds.RECOMMENDED_SHOWS in prefs.enabledCatalogs && snapshot.recommendationShowItems.isEmpty()) return true
+    if (TraktCatalogIds.CALENDAR in prefs.enabledCatalogs && snapshot.calendarItems.isEmpty()) return true
 
+    if (prefs.selectedPopularListKeys.isEmpty()) {
+        return false
+    }
     if (snapshot.popularLists.isEmpty()) {
         return true
     }
-
     val customKeys = snapshot.customListCatalogs.map { it.key }.toSet()
     return prefs.selectedPopularListKeys.any { it !in customKeys }
 }
@@ -1997,6 +2221,72 @@ private fun buildTraktCatalogRow(
         addonId = TRAKT_RAIL_ADDON_ID,
         addonName = TRAKT_RAIL_ADDON_NAME,
         addonBaseUrl = TRAKT_RAIL_ADDON_BASE_URL,
+        catalogId = catalogId,
+        catalogName = catalogName,
+        type = type,
+        items = items,
+        isLoading = false,
+        hasMore = false,
+        supportsSkip = false
+    )
+}
+
+private fun buildSyntheticSimklRows(
+    prefs: com.nexio.tv.data.local.SimklCatalogPreferences,
+    snapshot: com.nexio.tv.data.repository.SimklDiscoverySnapshot
+): List<SyntheticCatalogOrderGroup> {
+    val builtInRows = linkedMapOf<String, CatalogRow>()
+    prefs.enabledCatalogs.forEach { catalogId ->
+        val items = snapshot.itemsByCatalog[catalogId].orEmpty()
+        if (items.isEmpty()) return@forEach
+        builtInRows[catalogId] = buildSimklCatalogRow(
+            catalogId = catalogId,
+            catalogName = simklCatalogRowName(catalogId),
+            type = simklCatalogContentType(catalogId),
+            items = items
+        )
+    }
+    return prefs.catalogOrder.mapNotNull { id ->
+        builtInRows[id]?.let { row -> SyntheticCatalogOrderGroup(orderKey = id, rows = listOf(row)) }
+    }
+}
+
+private fun simklCatalogRowName(catalogId: String): String {
+    return when (catalogId) {
+        SimklCatalogIds.TV_TRENDING_TODAY -> SIMKL_ROW_NAME_TV_TRENDING_TODAY
+        SimklCatalogIds.TV_TRENDING_WEEK -> SIMKL_ROW_NAME_TV_TRENDING_WEEK
+        SimklCatalogIds.TV_TRENDING_MONTH -> SIMKL_ROW_NAME_TV_TRENDING_MONTH
+        SimklCatalogIds.ANIME_TRENDING_TODAY -> SIMKL_ROW_NAME_ANIME_TRENDING_TODAY
+        SimklCatalogIds.ANIME_TRENDING_WEEK -> SIMKL_ROW_NAME_ANIME_TRENDING_WEEK
+        SimklCatalogIds.ANIME_TRENDING_MONTH -> SIMKL_ROW_NAME_ANIME_TRENDING_MONTH
+        SimklCatalogIds.MOVIE_TRENDING_TODAY -> SIMKL_ROW_NAME_MOVIE_TRENDING_TODAY
+        SimklCatalogIds.MOVIE_TRENDING_WEEK -> SIMKL_ROW_NAME_MOVIE_TRENDING_WEEK
+        SimklCatalogIds.MOVIE_TRENDING_MONTH -> SIMKL_ROW_NAME_MOVIE_TRENDING_MONTH
+        SimklCatalogIds.DVD_RELEASES -> SIMKL_ROW_NAME_DVD_RELEASES
+        else -> catalogId
+    }
+}
+
+private fun simklCatalogContentType(catalogId: String): ContentType {
+    return when (catalogId) {
+        SimklCatalogIds.MOVIE_TRENDING_TODAY,
+        SimklCatalogIds.MOVIE_TRENDING_WEEK,
+        SimklCatalogIds.MOVIE_TRENDING_MONTH,
+        SimklCatalogIds.DVD_RELEASES -> ContentType.MOVIE
+        else -> ContentType.SERIES
+    }
+}
+
+private fun buildSimklCatalogRow(
+    catalogId: String,
+    catalogName: String,
+    type: ContentType,
+    items: List<MetaPreview>
+): CatalogRow {
+    return CatalogRow(
+        addonId = SIMKL_RAIL_ADDON_ID,
+        addonName = SIMKL_RAIL_ADDON_NAME,
+        addonBaseUrl = SIMKL_RAIL_ADDON_BASE_URL,
         catalogId = catalogId,
         catalogName = catalogName,
         type = type,
