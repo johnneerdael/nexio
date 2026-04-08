@@ -100,7 +100,7 @@ class TraktMutationRoutingAuditTest {
             "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:removeUserListItems" to 1,
             "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:reorderUserLists" to 1,
             "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:updateUserList" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt:addHistory" to 1,
+            "app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt:addHistory" to 2,
             "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt:addHistory" to 1,
             "app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt:deletePlayback" to 3,
             "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt:deletePlayback" to 1,
