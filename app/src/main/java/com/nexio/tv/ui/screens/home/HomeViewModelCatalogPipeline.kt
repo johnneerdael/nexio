@@ -254,6 +254,10 @@ internal fun HomeViewModel.observeSimklDiscoveryPipeline() {
             startupRefreshPending = true
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_simkl_discovery")
             if (!shouldDeferStartupNetworkWork()) {
+                runCatching { renewSimklSyntheticSnapshotPipeline(snapshot) }
+                    .onFailure { error ->
+                        Log.w(HomeViewModel.TAG, "Failed to renew SIMKL synthetic snapshot after discovery update", error)
+                    }
                 runSerializedHomeRefreshIfNeeded("simkl_discovery")
             }
         }
