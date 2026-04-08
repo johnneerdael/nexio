@@ -82,6 +82,17 @@ internal fun resolveHeroDownTarget(
     }
 }
 
+internal fun resolveHeroDownScrollIndex(
+    downTarget: HeroDownTarget,
+    hasSeasonSection: Boolean
+): Int? {
+    return when (downTarget) {
+        HeroDownTarget.SEASONS -> if (hasSeasonSection) 1 else null
+        HeroDownTarget.PEOPLE -> if (hasSeasonSection) 3 else 1
+        HeroDownTarget.NONE -> null
+    }
+}
+
 internal fun shouldEnableSectionFocusRestorer(
     hasVisitedSection: Boolean,
     hasActiveRestoreTarget: Boolean
