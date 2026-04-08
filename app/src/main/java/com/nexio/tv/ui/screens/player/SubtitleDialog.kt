@@ -664,7 +664,7 @@ private fun AddonSubtitleItem(
             if (isSelected) {
                 Icon(
                     imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
+                    contentDescription = stringResource(R.string.cd_selected),
                     tint = NexioColors.Secondary,
                     modifier = Modifier.size(20.dp)
                 )
@@ -967,7 +967,7 @@ private fun StyleColorChip(
         shape = IconButtonDefaults.shape(shape = CircleShape)
     ) {
         if (isSelected) {
-            Icon(Icons.Default.Check, "Selected", modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.Check, stringResource(R.string.cd_selected), modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -1043,7 +1043,7 @@ internal fun TrackItem(
             if (isSelected) {
                 Icon(
                     imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
+                    contentDescription = stringResource(R.string.cd_selected),
                     tint = NexioColors.Secondary,
                     modifier = Modifier.size(20.dp)
                 )

@@ -13,7 +13,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.nexio.tv.R
 import com.nexio.tv.instrumentation.TraceStatus
 
 /**
@@ -53,7 +55,7 @@ internal fun LazyListScope.playbackDiagnosticsItems(
     item(key = "playback_diagnostics_header") {
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "Playback diagnostics",
+            text = stringResource(R.string.playback_diagnostics_section_title),
             style = MaterialTheme.typography.titleSmall,
             modifier = Modifier.padding(horizontal = 18.dp),
         )
@@ -70,8 +72,8 @@ internal fun LazyListScope.playbackDiagnosticsItems(
     // way as every other toggle on the screen.
     item(key = "playback_diagnostics_toggle") {
         SettingsToggleRow(
-            title = "Playback diagnostics trace",
-            subtitle = "Records every playback session as a JSONL file you can export for support",
+            title = stringResource(R.string.playback_diagnostics_trace_title),
+            subtitle = stringResource(R.string.playback_diagnostics_trace_subtitle),
             checked = enabled,
             enabled = true,
             onToggle = onToggleEnabled,
@@ -83,8 +85,8 @@ internal fun LazyListScope.playbackDiagnosticsItems(
     // text out for visual feedback).
     item(key = "playback_diagnostics_export_last") {
         SettingsActionRow(
-            title = "Export last session",
-            subtitle = "Share the latest playback-trace JSONL file",
+            title = stringResource(R.string.playback_diagnostics_export_last_title),
+            subtitle = stringResource(R.string.playback_diagnostics_export_last_subtitle),
             value = status.lastSessionFileName?.let { "${status.lastSessionSizeBytes / 1024L} KiB" },
             enabled = status.lastSessionFileName != null,
             onClick = onExportLast,
@@ -93,8 +95,8 @@ internal fun LazyListScope.playbackDiagnosticsItems(
 
     item(key = "playback_diagnostics_export_all") {
         SettingsActionRow(
-            title = "Export all sessions",
-            subtitle = "Bundle every retained session into a .zip and share it",
+            title = stringResource(R.string.playback_diagnostics_export_all_title),
+            subtitle = stringResource(R.string.playback_diagnostics_export_all_subtitle),
             value = if (status.sessionCount > 0) {
                 "${status.sessionCount} · ${"%.1f".format(status.totalBytes / (1024.0 * 1024.0))} MiB"
             } else null,
@@ -115,8 +117,8 @@ internal fun LazyListScope.playbackDiagnosticsItems(
             status.lastSessionFileName ?: "playback-trace.jsonl"
         }
         SettingsActionRow(
-            title = "Copy latest to…",
-            subtitle = "Write the latest session to any storage location (Downloads, USB, cloud)",
+            title = stringResource(R.string.playback_diagnostics_copy_latest_title),
+            subtitle = stringResource(R.string.playback_diagnostics_copy_latest_subtitle),
             enabled = status.lastSessionFileName != null,
             onClick = { createDocumentLauncher.launch(suggestedName) },
         )
@@ -124,8 +126,8 @@ internal fun LazyListScope.playbackDiagnosticsItems(
 
     item(key = "playback_diagnostics_clear") {
         SettingsActionRow(
-            title = "Clear all traces",
-            subtitle = "Delete every retained .jsonl file under playback-traces/",
+            title = stringResource(R.string.playback_diagnostics_clear_title),
+            subtitle = stringResource(R.string.playback_diagnostics_clear_subtitle),
             enabled = status.sessionCount > 0,
             onClick = onClearAll,
         )
@@ -135,8 +137,8 @@ internal fun LazyListScope.playbackDiagnosticsItems(
     // enabled before `am broadcast` commands from adb will do anything.
     item(key = "playback_diagnostics_adb_toggle") {
         SettingsToggleRow(
-            title = "Allow ADB control",
-            subtitle = "Lets workstation ADB commands drive the same tracer operations",
+            title = stringResource(R.string.playback_diagnostics_adb_title),
+            subtitle = stringResource(R.string.playback_diagnostics_adb_subtitle),
             checked = adbControlEnabled,
             enabled = true,
             onToggle = onToggleAdbControl,

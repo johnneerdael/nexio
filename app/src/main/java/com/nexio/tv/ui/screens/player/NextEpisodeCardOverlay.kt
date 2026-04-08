@@ -155,7 +155,7 @@ fun NextEpisodeCardOverlay(
                 ) {
                     AsyncImage(
                         model = nextEpisode.thumbnail,
-                        contentDescription = "Next episode thumbnail",
+                        contentDescription = stringResource(R.string.cd_next_episode_thumbnail),
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
@@ -172,7 +172,7 @@ fun NextEpisodeCardOverlay(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "S${nextEpisode.season}E${nextEpisode.episode} • ${nextEpisode.title}",
+                        text = stringResource(R.string.player_next_episode_label, nextEpisode.season, nextEpisode.episode, nextEpisode.title),
                         color = Color.White,
                         fontSize = 14.sp,
                         maxLines = 1,

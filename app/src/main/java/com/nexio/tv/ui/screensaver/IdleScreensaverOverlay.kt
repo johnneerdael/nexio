@@ -41,6 +41,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -317,7 +318,7 @@ fun IdleScreensaverOverlay(
                 tomatoesModel = tomatoesModel
             )
             Text(
-                text = "Press OK for details",
+                text = stringResource(R.string.screensaver_press_ok_for_details),
                 color = NexioColors.TextSecondary,
                 fontSize = 17.sp,
                 modifier = Modifier.graphicsLayer { alpha = detailsPromptAlpha.value }

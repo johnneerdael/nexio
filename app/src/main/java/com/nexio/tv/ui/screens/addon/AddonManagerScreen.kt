@@ -309,7 +309,7 @@ fun AddonManagerScreen(
                                     ),
                                     shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                                 ) {
-                                    Text(text = "Parser: ${uiState.installParserPreset.label()}")
+                                    Text(text = stringResource(R.string.addon_parser_label, uiState.installParserPreset.label()))
                                 }
                             }
 
@@ -569,7 +569,7 @@ private fun QrCodeOverlay(
             if (qrBitmap != null) {
                 Image(
                     bitmap = qrBitmap.asImageBitmap(),
-                    contentDescription = "QR Code",
+                    contentDescription = stringResource(R.string.cd_qr_code),
                     modifier = Modifier.size(220.dp),
                     contentScale = ContentScale.Fit
                 )
@@ -991,7 +991,7 @@ private fun AddonCardContent(
                         ),
                         shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                     ) {
-                        Icon(imageVector = Icons.Default.ArrowUpward, contentDescription = "Move up")
+                        Icon(imageVector = Icons.Default.ArrowUpward, contentDescription = stringResource(R.string.cd_move_up))
                     }
                     Button(
                         onClick = onMoveDown,
@@ -1004,7 +1004,7 @@ private fun AddonCardContent(
                         ),
                         shape = ButtonDefaults.shape(RoundedCornerShape(12.dp))
                     ) {
-                        Icon(imageVector = Icons.Default.ArrowDownward, contentDescription = "Move down")
+                        Icon(imageVector = Icons.Default.ArrowDownward, contentDescription = stringResource(R.string.cd_move_down))
                     }
                     Button(
                         onClick = { onUpdateParserPreset(addon.parserPreset.next()) },
@@ -1052,7 +1052,7 @@ private fun AddonCardContent(
 
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Parser • ${addon.parserPreset.label()}",
+            text = stringResource(R.string.addon_parser_bullet_label, addon.parserPreset.label()),
             style = MaterialTheme.typography.bodySmall,
             color = NexioColors.TextTertiary
         )

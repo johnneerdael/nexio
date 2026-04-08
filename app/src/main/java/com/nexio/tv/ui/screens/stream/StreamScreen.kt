@@ -497,7 +497,7 @@ private fun LeftContentSection(
             if (isEpisode && season != null && episode != null) {
                 // Episode info
                 Text(
-                    text = "S$season E$episode",
+                    text = stringResource(R.string.stream_episode_label, season, episode),
                     style = MaterialTheme.typography.titleLarge,
                     color = NexioTheme.extendedColors.textSecondary,
                     textAlign = TextAlign.Center
@@ -713,7 +713,7 @@ private fun AddonFilterChips(
     ) {
         item {
             SourceStatusFilterChip(
-                name = "All",
+                name = stringResource(R.string.filter_all),
                 isSelected = selectedAddon == null,
                 status = SourceChipStatus.SUCCESS,
                 isSelectable = true,

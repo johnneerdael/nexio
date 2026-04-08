@@ -1224,7 +1224,7 @@ private fun PlayerControlsOverlay(
                         ControlButton(
                             icon = Icons.Default.ClosedCaption,
                             iconPainter = customSubtitlePainter,
-                            contentDescription = "Subtitles",
+                            contentDescription = stringResource(R.string.cd_subtitles),
                             onClick = onShowSubtitleDialog,
                             upFocusRequester = progressBarFocusRequester,
                             onFocused = onResetHideTimer
@@ -1235,7 +1235,7 @@ private fun PlayerControlsOverlay(
                         ControlButton(
                             icon = Icons.AutoMirrored.Filled.VolumeUp,
                             iconPainter = customAudioPainter,
-                            contentDescription = "Audio tracks",
+                            contentDescription = stringResource(R.string.cd_audio_tracks),
                             onClick = onShowAudioDialog,
                             upFocusRequester = progressBarFocusRequester,
                             onFocused = onResetHideTimer
@@ -1245,7 +1245,7 @@ private fun PlayerControlsOverlay(
                     ControlButton(
                         icon = Icons.Default.SwapHoriz,
                         iconPainter = customSourcePainter,
-                        contentDescription = "Sources",
+                        contentDescription = stringResource(R.string.cd_sources),
                         onClick = onShowSourcesPanel,
                         upFocusRequester = progressBarFocusRequester,
                         onFocused = onResetHideTimer
@@ -1255,7 +1255,7 @@ private fun PlayerControlsOverlay(
                         ControlButton(
                             icon = Icons.AutoMirrored.Filled.List,
                             iconPainter = customEpisodesPainter,
-                            contentDescription = "Episodes",
+                            contentDescription = stringResource(R.string.cd_episodes),
                             onClick = onShowEpisodesPanel,
                             upFocusRequester = progressBarFocusRequester,
                             onFocused = onResetHideTimer
@@ -1279,7 +1279,7 @@ private fun PlayerControlsOverlay(
                         ) {
                             ControlButton(
                                 icon = Icons.Default.Speed,
-                                contentDescription = "Playback speed",
+                                contentDescription = stringResource(R.string.cd_playback_speed),
                                 onClick = {
                                     onShowSpeedDialog()
                                 },
@@ -1289,7 +1289,7 @@ private fun PlayerControlsOverlay(
                             ControlButton(
                                 icon = Icons.Default.AspectRatio,
                                 iconPainter = customAspectPainter,
-                                contentDescription = "Aspect ratio",
+                                contentDescription = stringResource(R.string.cd_aspect_ratio),
                                 onClick = {
                                     onToggleAspectRatio()
                                 },
@@ -1298,7 +1298,7 @@ private fun PlayerControlsOverlay(
                             )
                             ControlButton(
                                 icon = Icons.AutoMirrored.Filled.OpenInNew,
-                                contentDescription = "Open in external player",
+                                contentDescription = stringResource(R.string.cd_open_in_external_player),
                                 onClick = {
                                     onOpenInExternalPlayer()
                                 },
@@ -1945,7 +1945,7 @@ private fun SpeedItem(
             if (isSelected) {
                 Icon(
                     imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
+                    contentDescription = stringResource(R.string.cd_selected),
                     tint = NexioColors.Secondary,
                     modifier = Modifier.size(24.dp)
                 )

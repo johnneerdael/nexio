@@ -392,7 +392,7 @@ internal fun DebridSettingsContent(
 
                 item(key = "debrid_service_wrap") {
                     SettingsToggleRow(
-                        title = "Service Wrap",
+                        title = stringResource(R.string.debrid_service_wrap_title),
                         subtitle = if (uiState.serviceWrapAvailable) {
                             "Only show debrid-wrapped cached links in deterministic playback flows"
                         } else {
@@ -408,7 +408,7 @@ internal fun DebridSettingsContent(
 
                 item(key = "debrid_deterministic_autoplay") {
                     SettingsToggleRow(
-                        title = "Deterministic Autoplay",
+                        title = stringResource(R.string.debrid_deterministic_autoplay_title),
                         subtitle = if (uiState.deterministicAutoplayAvailable) {
                             "Skip stream selection and auto-play the best benchmark-aware match"
                         } else {
@@ -426,8 +426,8 @@ internal fun DebridSettingsContent(
 
                 item(key = "debrid_shadow_data_collection") {
                     SettingsToggleRow(
-                        title = "Shadow Autoplay Data Collection",
-                        subtitle = "Opt in to upload shadow autoplay results to the self-hosted review service",
+                        title = stringResource(R.string.debrid_shadow_autoplay_title),
+                        subtitle = stringResource(R.string.debrid_shadow_autoplay_subtitle),
                         checked = uiState.shadowAutoplayDataCollectionEnabled,
                         enabled = true,
                         onToggle = {
@@ -440,8 +440,8 @@ internal fun DebridSettingsContent(
 
                 item(key = "debrid_benchmark_data_collection") {
                     SettingsToggleRow(
-                        title = "Benchmark Data Collection",
-                        subtitle = "Opt in to upload completed debrid benchmark results to the self-hosted review service",
+                        title = stringResource(R.string.debrid_benchmark_title),
+                        subtitle = stringResource(R.string.debrid_benchmark_subtitle),
                         checked = uiState.debridBenchmarkDataCollectionEnabled,
                         enabled = true,
                         onToggle = {

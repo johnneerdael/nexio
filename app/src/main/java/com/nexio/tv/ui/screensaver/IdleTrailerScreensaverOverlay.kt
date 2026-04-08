@@ -35,6 +35,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.nexio.tv.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -358,7 +360,7 @@ internal fun IdleTrailerScreensaverOverlay(
                 modifier = Modifier.graphicsLayer { alpha = brandingAlpha.value }
             )
             androidx.tv.material3.Text(
-                text = "Press OK for details",
+                text = stringResource(R.string.screensaver_press_ok_for_details),
                 color = NexioColors.TextSecondary,
                 fontSize = 17.sp,
                 textAlign = brandingSpec.promptTextAlign,

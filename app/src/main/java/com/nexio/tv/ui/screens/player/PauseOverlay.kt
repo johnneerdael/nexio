@@ -308,7 +308,7 @@ private fun CastDetailView(
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
+                contentDescription = stringResource(R.string.cd_back),
                 tint = NexioColors.TextSecondary,
                 modifier = Modifier.size(24.dp)
             )

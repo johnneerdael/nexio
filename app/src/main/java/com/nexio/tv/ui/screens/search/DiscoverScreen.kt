@@ -17,11 +17,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.nexio.tv.R
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.components.EmptyScreenState
 import com.nexio.tv.ui.components.PosterCardDefaults
@@ -73,8 +75,8 @@ fun DiscoverScreen(
     ) {
         if (!uiState.discoverEnabled) {
             EmptyScreenState(
-                title = "Discover is disabled",
-                subtitle = "Enable Search Discover in settings",
+                title = stringResource(R.string.discover_disabled_title),
+                subtitle = stringResource(R.string.discover_disabled_subtitle),
                 icon = Icons.Default.Search
             )
         } else {

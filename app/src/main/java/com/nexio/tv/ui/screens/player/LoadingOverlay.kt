@@ -31,11 +31,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
+import com.nexio.tv.R
 import com.nexio.tv.ui.components.LoadingIndicator
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -104,7 +106,7 @@ fun LoadingOverlay(
                             .data(backdropUrl)
                             .crossfade(true)
                             .build(),
-                        contentDescription = "Loading backdrop",
+                        contentDescription = stringResource(R.string.cd_loading_backdrop),
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
@@ -124,7 +126,7 @@ fun LoadingOverlay(
                                 .data(logoUrl)
                                 .crossfade(true)
                                 .build(),
-                            contentDescription = "Loading logo",
+                            contentDescription = stringResource(R.string.cd_loading_logo),
                             onError = { logoLoadFailed = true },
                             modifier = Modifier
                                 .width(320.dp)

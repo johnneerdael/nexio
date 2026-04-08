@@ -234,7 +234,7 @@ private fun CatalogOrderCard(
                 ) {
                     Icon(
                         imageVector = Icons.Default.ArrowUpward,
-                        contentDescription = "Move up"
+                        contentDescription = stringResource(R.string.cd_move_up)
                     )
                 }
 
@@ -257,7 +257,7 @@ private fun CatalogOrderCard(
                 ) {
                     Icon(
                         imageVector = Icons.Default.ArrowDownward,
-                        contentDescription = "Move down"
+                        contentDescription = stringResource(R.string.cd_move_down)
                     )
                 }
 

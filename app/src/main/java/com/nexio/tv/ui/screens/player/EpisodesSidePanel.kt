@@ -568,7 +568,7 @@ private fun EpisodeItem(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Check,
-                            contentDescription = "Current",
+                            contentDescription = stringResource(R.string.cd_current),
                             tint = Color.White,
                             modifier = Modifier.size(14.dp)
                         )

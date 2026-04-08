@@ -185,7 +185,7 @@ private fun AudioTrackItem(
             if (isSelected) {
                 Icon(
                     imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
+                    contentDescription = stringResource(R.string.cd_selected),
                     tint = NexioColors.Secondary,
                     modifier = Modifier.size(20.dp)
                 )

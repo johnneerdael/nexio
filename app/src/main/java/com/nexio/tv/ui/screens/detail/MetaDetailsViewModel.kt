@@ -20,13 +20,11 @@ import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
-import com.nexio.tv.data.repository.TraktAuthService
-import com.nexio.tv.data.repository.TraktScrobbleItem
-import com.nexio.tv.data.repository.TraktScrobbleService
-import com.nexio.tv.data.repository.hasAnyId
+import com.nexio.tv.data.repository.TrackingScrobbleItem
+import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.repository.AirDateGate
 import com.nexio.tv.data.repository.parseContentIds
-import com.nexio.tv.data.repository.toTraktIds
+import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibrarySourceMode
@@ -113,7 +111,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val watchProgressRepository: WatchProgressRepository,
     private val continueWatchingSnapshotService: ContinueWatchingSnapshotService,
     private val addonRepository: AddonRepository,
-    private val traktScrobbleService: TraktScrobbleService,
+    private val trackingScrobbleService: TrackingScrobbleService,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val trailerService: TrailerService,
@@ -2634,28 +2632,18 @@ class MetaDetailsViewModel @Inject constructor(
         val season = video.season ?: return
         val episode = video.episode ?: return
         val meta = _uiState.value.meta ?: return
-        val ids = run {
-            val primary = parseContentIds(itemId)
-            val fallback = parseContentIds(meta.id)
-            val merged = when {
-                primary.trakt != null || !primary.imdb.isNullOrBlank() || primary.tmdb != null -> primary
-                else -> fallback
-            }
-            toTraktIds(merged)
-        }
-        
-        if (!ids.hasAnyId()) {
-            showMessage(message = "Missing Trakt IDs for check-in", isError = true)
+        if (itemId.isBlank()) {
+            showMessage(message = context.getString(R.string.error_missing_tracking_ids), isError = true)
             return
         }
-        
+
         viewModelScope.launch {
             runCatching {
-                traktScrobbleService.checkin(
-                    TraktScrobbleItem.Episode(
+                trackingScrobbleService.checkin(
+                    TrackingScrobbleItem.Episode(
+                        contentId = itemId,
                         showTitle = meta.name,
                         showYear = null,
-                        showIds = ids,
                         season = season,
                         number = episode,
                         episodeTitle = video.title
@@ -2665,11 +2653,11 @@ class MetaDetailsViewModel @Inject constructor(
                 if (success) {
                     showMessage(context.getString(R.string.cw_action_check_in))
                 } else {
-                    showMessage(message = "Trakt check-in failed", isError = true)
+                    showMessage(message = context.getString(R.string.error_tracking_check_in_failed), isError = true)
                 }
             }.onFailure { error ->
                 showMessage(
-                    message = error.message ?: "Trakt check-in failed",
+                    message = error.message ?: context.getString(R.string.error_tracking_check_in_failed),
                     isError = true
                 )
             }

@@ -190,7 +190,7 @@ fun EpisodeRatingsSection(
                             scale = CardDefaults.scale(focusedScale = 1f)
                         ) {
                             Text(
-                                text = "S$season",
+                                text = stringResource(R.string.episode_season_prefix, season),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = NexioColors.TextPrimary,
                                 modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
@@ -244,7 +244,7 @@ fun EpisodeRatingsSection(
                                 verticalArrangement = Arrangement.Center
                             ) {
                                 Text(
-                                    text = "E${episodeRating.episodeNumber}",
+                                    text = stringResource(R.string.episode_number_prefix, episodeRating.episodeNumber),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = episodeRating.chipTextColor
                                 )
