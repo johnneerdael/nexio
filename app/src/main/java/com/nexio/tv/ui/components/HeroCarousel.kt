@@ -38,6 +38,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
+import com.nexio.tv.R
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
@@ -300,7 +302,7 @@ private fun HeroCarouselSlide(
                         }
                         AsyncImage(
                             model = imdbModel,
-                            contentDescription = "IMDB",
+                            contentDescription = stringResource(R.string.cd_imdb_rating),
                             modifier = Modifier.size(30.dp),
                             contentScale = ContentScale.Fit
                         )

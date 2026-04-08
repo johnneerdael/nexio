@@ -39,6 +39,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import com.nexio.tv.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -385,7 +387,7 @@ private fun HeroTitleContent(
                         ) {
                             AsyncImage(
                                 model = imdbLogoModel,
-                                contentDescription = "IMDb",
+                                contentDescription = stringResource(R.string.cd_imdb_rating),
                                 modifier = Modifier.size(30.dp * metaScale),
                                 contentScale = ContentScale.Fit
                             )
@@ -404,7 +406,7 @@ private fun HeroTitleContent(
                         ) {
                             AsyncImage(
                                 model = tomatoesLogoModel,
-                                contentDescription = "Rotten Tomatoes",
+                                contentDescription = stringResource(R.string.cd_rotten_tomatoes),
                                 modifier = Modifier.size(30.dp * metaScale),
                                 contentScale = ContentScale.Fit
                             )

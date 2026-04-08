@@ -222,7 +222,7 @@ fun AuthQrSignInScreen(
                     if (uiState.qrLoginBitmap != null) {
                         Image(
                             bitmap = uiState.qrLoginBitmap!!.asImageBitmap(),
-                            contentDescription = "QR login code",
+                            contentDescription = stringResource(R.string.cd_qr_login_code),
                             modifier = Modifier
                                 .size(200.dp)
                                 .background(Color.White, RoundedCornerShape(12.dp))

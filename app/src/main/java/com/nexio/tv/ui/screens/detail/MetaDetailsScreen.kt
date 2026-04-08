@@ -2379,8 +2379,8 @@ private fun OfficialAppChooserDialog(
 ) {
     NexioDialog(
         onDismiss = onDismiss,
-        title = "Open in an installed streaming app",
-        subtitle = "Choose where to search for $title"
+        title = stringResource(R.string.detail_open_in_streaming_app_title),
+        subtitle = stringResource(R.string.detail_open_in_streaming_app_subtitle, title)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             targets.forEach { target ->
@@ -2412,8 +2412,8 @@ private fun NoOfficialAppDialog(
 ) {
     NexioDialog(
         onDismiss = onDismiss,
-        title = "No supported streaming app found",
-        subtitle = "Install a supported official streaming app on this device or enable your first addon in NEXIO to use the normal playback flow."
+        title = stringResource(R.string.detail_no_streaming_app_title),
+        subtitle = stringResource(R.string.detail_no_streaming_app_subtitle)
     ) {
         Button(
             onClick = onDismiss,

@@ -239,7 +239,7 @@ private fun ReviewSpoilerBadge() {
             .padding(horizontal = 10.dp, vertical = 3.dp)
     ) {
         Text(
-            text = "SPOILER",
+            text = stringResource(R.string.reviews_spoiler_badge),
             style = MaterialTheme.typography.labelSmall,
             color = Color(0xFFFF9A9A)
         )
