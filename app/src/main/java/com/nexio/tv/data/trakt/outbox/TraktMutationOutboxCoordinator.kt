@@ -27,6 +27,17 @@ class TraktMutationOutboxCoordinator @Inject constructor(
     private val drainMutex = Mutex()
     private var drainJob: Job? = null
 
+    init {
+        scope.launch {
+            runCatching {
+                worker.recoverExpiredLeases()
+                requestDrain()
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to bootstrap persisted Trakt outbox drain: ${error.message}")
+            }
+        }
+    }
+
     suspend fun enqueueAndDrain(envelope: TraktMutationEnvelope): TraktMutationEnvelope {
         val adapter = adapterFor(envelope.adapterKey)
         adapter.applyOptimistic(envelope)
