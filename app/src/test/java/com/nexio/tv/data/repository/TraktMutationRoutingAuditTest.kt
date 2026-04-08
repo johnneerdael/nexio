@@ -92,14 +92,14 @@ class TraktMutationRoutingAuditTest {
         )
 
         private val expectedCallSiteCounts = sortedMapOf(
-            "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:addToWatchlist" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:addUserListItems" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:createUserList" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:deleteUserList" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:removeFromWatchlist" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:removeUserListItems" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:reorderUserLists" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:updateUserList" to 1,
+            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:addToWatchlist" to 1,
+            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:addUserListItems" to 1,
+            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:createUserList" to 1,
+            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:deleteUserList" to 1,
+            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:removeFromWatchlist" to 1,
+            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:removeUserListItems" to 1,
+            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:reorderUserLists" to 1,
+            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:updateUserList" to 1,
             "app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt:addHistory" to 2,
             "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt:addHistory" to 1,
             "app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt:deletePlayback" to 3,

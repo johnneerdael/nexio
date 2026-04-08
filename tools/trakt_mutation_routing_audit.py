@@ -27,14 +27,14 @@ EXPECTED_TRACKED_METHODS = {
 }
 
 EXPECTED_CALL_SITE_COUNTS = {
-    "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:addToWatchlist": 1,
-    "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:addUserListItems": 1,
-    "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:createUserList": 1,
-    "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:deleteUserList": 1,
-    "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:removeFromWatchlist": 1,
-    "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:removeUserListItems": 1,
-    "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:reorderUserLists": 1,
-    "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:updateUserList": 1,
+    "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:addToWatchlist": 1,
+    "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:addUserListItems": 1,
+    "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:createUserList": 1,
+    "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:deleteUserList": 1,
+    "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:removeFromWatchlist": 1,
+    "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:removeUserListItems": 1,
+    "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:reorderUserLists": 1,
+    "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt:updateUserList": 1,
     "app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt:addHistory": 2,
     "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt:addHistory": 1,
     "app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt:deletePlayback": 3,
