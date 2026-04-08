@@ -78,6 +78,31 @@
                 <action android:name="com.nexio.tv.DEBUG_PASSTHROUGH_VALIDATION" />
             </intent-filter>
         </receiver>
+
+        <!--
+            Playback-trace diagnostics ADB control plane.
+
+            Exported = true so `adb shell am broadcast` can reach it
+            without a custom permission. Every action is gated at
+            runtime by `PlaybackTraceAdbControlToggle` — the user must
+            explicitly enable "Allow ADB control" in the debrid settings
+            menu before this receiver does anything. Off by default.
+
+            See `docs/instrumentation/collecting-traces.md` for command
+            examples.
+        -->
+        <receiver
+            android:name="com.nexio.tv.instrumentation.PlaybackTraceAdbReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.nexio.tv.action.PLAYBACK_TRACE_ENABLE" />
+                <action android:name="com.nexio.tv.action.PLAYBACK_TRACE_DISABLE" />
+                <action android:name="com.nexio.tv.action.PLAYBACK_TRACE_STATUS" />
+                <action android:name="com.nexio.tv.action.PLAYBACK_TRACE_EXPORT_LAST" />
+                <action android:name="com.nexio.tv.action.PLAYBACK_TRACE_EXPORT_ALL" />
+                <action android:name="com.nexio.tv.action.PLAYBACK_TRACE_CLEAR" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>
