@@ -12,6 +12,8 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import java.io.IOException
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
+import com.nexio.tv.instrumentation.EventFamily
+import com.nexio.tv.instrumentation.PlaybackTracer
 import java.util.concurrent.atomic.AtomicBoolean
 import android.os.SystemClock
 import java.util.concurrent.locks.ReentrantLock
@@ -198,6 +200,123 @@ internal class ParallelRangeDataSource(
         return if (totalText == "*") null else totalText.toLongOrNull()
     }
 
+    private fun emitPrdsOpenStart(dataSpec: DataSpec) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.PRDS, "prds_open_start") {
+            putLong("position", dataSpec.position)
+            putLong("length", dataSpec.length)
+            putString("uriScheme", dataSpec.uri.scheme)
+            putString("uriHost", dataSpec.uri.host)
+            putLong("chunkSize", activeChunkSize)
+            putInt("parallelConnections", parallelConnections)
+        }
+    }
+
+    private fun emitPrdsOpenMode(mode: String, openLength: Long, acceptsRanges: String) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.PRDS, "prds_open_mode") {
+            putString("mode", mode)
+            putLong("openLength", openLength)
+            putString("acceptsRanges", acceptsRanges)
+            putLong("activeChunkSize", activeChunkSize)
+            putLong("bootstrapCoverageEnd", bootstrapCoverageEnd)
+        }
+    }
+
+    private fun emitPrdsOpenResolved(mode: String, openLength: Long, acceptsRanges: String) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.PRDS, "prds_open_resolved") {
+            putString("mode", mode)
+            putString("resolvedScheme", resolvedUri?.scheme)
+            putString("resolvedHost", resolvedUri?.host)
+            putLong("startPosition", position)
+            putLong("openLength", openLength)
+            putLong("totalFileLength", totalFileLength)
+            putLong("bytesRemaining", bytesRemaining)
+            putString("acceptsRanges", acceptsRanges)
+            putLong("activeChunkSize", activeChunkSize)
+            putLong("bootstrapCoverageEnd", bootstrapCoverageEnd)
+        }
+    }
+
+    private fun emitPrdsOpenSuccess(mode: String, openLength: Long, acceptsRanges: String) {
+        if (!PlaybackTracer.enabled) return
+        emitPrdsOpenMode(mode, openLength, acceptsRanges)
+        emitPrdsOpenResolved(mode, openLength, acceptsRanges)
+    }
+
+    private fun emitPrdsOpenError(dataSpec: DataSpec, error: Throwable) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.PRDS, "prds_open_error") {
+            putLong("position", dataSpec.position)
+            putLong("length", dataSpec.length)
+            putString("errorClass", error::class.java.name)
+            putString("errorMessage", error.message)
+        }
+    }
+
+    private fun emitReadWaitStart(waitPosition: Long, deadlineNanos: Long) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.READ_WAIT, "read_wait_start") {
+            putLong("position", waitPosition)
+            putLong("deadlineNanos", deadlineNanos)
+        }
+    }
+
+    private fun emitReadWaitOutcome(waitPosition: Long, outcome: WaitOutcome, startedNanos: Long) {
+        if (!PlaybackTracer.enabled) return
+        val waitedNanos = System.nanoTime() - startedNanos
+        PlaybackTracer.emit(EventFamily.READ_WAIT, "read_wait_end") {
+            putLong("position", waitPosition)
+            putString("outcome", outcome.name)
+            putLong("waitedNanos", waitedNanos)
+        }
+        val event = when (outcome) {
+            WaitOutcome.TIMEOUT -> "read_wait_timeout"
+            WaitOutcome.ERROR -> "read_wait_error"
+            else -> "read_wait_return"
+        }
+        PlaybackTracer.emit(EventFamily.READ_WAIT, event) {
+            putLong("position", waitPosition)
+            putString("outcome", outcome.name)
+            putLong("waitedNanos", waitedNanos)
+        }
+    }
+
+    private fun emitPrdsReadReturn(read: Int, requestedLength: Int) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.PRDS, "read_return") {
+            putInt("read", read)
+            putInt("requestedLength", requestedLength)
+            putLong("position", position)
+            putLong("bytesRemaining", bytesRemaining)
+        }
+    }
+
+    private fun emitPrdsReadError(error: Throwable, requestedLength: Int) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.PRDS, "read_error") {
+            putInt("requestedLength", requestedLength)
+            putLong("position", position)
+            putLong("bytesRemaining", bytesRemaining)
+            putString("errorClass", error::class.java.name)
+            putString("errorMessage", error.message)
+        }
+    }
+
+    private fun emitPrdsClose(wasStarted: Boolean) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.PRDS, "prds_close") {
+            putBool("wasStarted", wasStarted)
+            putLong("position", position)
+            putLong("bytesRemaining", bytesRemaining)
+            putLong("totalFileLength", totalFileLength)
+            putBool("hadOpenSession", openSession != null)
+            putString("resolvedScheme", resolvedUri?.scheme)
+            putString("resolvedHost", resolvedUri?.host)
+        }
+    }
+
     override fun open(dataSpec: DataSpec): Long {
         // Reset listener-fire latch first: open() may throw before close() runs, and the
         // caller is allowed to retry. If the latch stayed `true` from a prior open(),
@@ -208,6 +327,7 @@ internal class ParallelRangeDataSource(
         originalDataSpec = dataSpec
         position = dataSpec.position
         activeChunkSize = chunkSize
+        emitPrdsOpenStart(dataSpec)
         bootstrapPrefetchDeferred = false
         bootstrapStartPosition = C.TIME_UNSET
         // Defensive: ensure getUri() returns the requested URI on any throw before
@@ -300,6 +420,7 @@ internal class ParallelRangeDataSource(
                     "file=${totalFileLength / 1024 / 1024}MB, resolved=${resolvedUri?.host}"
             )
             fireTransferStarted(dataSpec)
+            emitPrdsOpenSuccess("bootstrap_reuse", cached.openLength, "true")
             return cached.openLength
         }
 
@@ -333,6 +454,7 @@ internal class ParallelRangeDataSource(
                 }
                 sizingProbe.close()
                 if (dataSpec.position > actualLength) {
+                    emitPrdsOpenError(dataSpec, e)
                     throw androidx.media3.datasource.DataSourceException(
                         e,
                         androidx.media3.datasource.DataSourceException.POSITION_OUT_OF_RANGE
@@ -363,15 +485,19 @@ internal class ParallelRangeDataSource(
                     chunkWaitTimeoutMs = chunkWaitTimeoutMs
                 )
                 fireTransferStarted(dataSpec)
-                return if (dataSpec.length != C.LENGTH_UNSET.toLong()) dataSpec.length else 0L
+                val returnedOpenLength = if (dataSpec.length != C.LENGTH_UNSET.toLong()) dataSpec.length else 0L
+                emitPrdsOpenSuccess("range_416_eof", returnedOpenLength, "true")
+                return returnedOpenLength
             }
             // 404 / other error: contract requires getUri() to surface the requested URI.
             resolvedUri = dataSpec.uri
+            emitPrdsOpenError(dataSpec, e)
             throw e
         } catch (e: Exception) {
             probeSource.close()
             // Contract: getUri() after a failed open must return the requested URI.
             resolvedUri = dataSpec.uri
+            emitPrdsOpenError(dataSpec, e)
             throw e
         }
 
@@ -431,7 +557,9 @@ internal class ParallelRangeDataSource(
                 chunkWaitTimeoutMs = chunkWaitTimeoutMs
             )
             startFallbackPump(probeSource, position)
-            return if (dataSpec.length != C.LENGTH_UNSET.toLong()) dataSpec.length else clampedOpenLength
+            val returnedOpenLength = if (dataSpec.length != C.LENGTH_UNSET.toLong()) dataSpec.length else clampedOpenLength
+            emitPrdsOpenSuccess("fallback_single_connection", returnedOpenLength, "false")
+            return returnedOpenLength
         }
 
         totalFileLength = if (authoritativeTotal != C.LENGTH_UNSET.toLong()) authoritativeTotal else position + clampedOpenLength
@@ -464,7 +592,9 @@ internal class ParallelRangeDataSource(
                 chunkWaitTimeoutMs = chunkWaitTimeoutMs
             )
             fireTransferStarted(dataSpec)
-            return if (dataSpec.length != C.LENGTH_UNSET.toLong()) dataSpec.length else 0L
+            val returnedOpenLength = if (dataSpec.length != C.LENGTH_UNSET.toLong()) dataSpec.length else 0L
+            emitPrdsOpenSuccess("zero_length_eof", returnedOpenLength, acceptsRanges.toString())
+            return returnedOpenLength
         }
 
         fireTransferStarted(dataSpec)
@@ -569,7 +699,9 @@ internal class ParallelRangeDataSource(
         }
         // Contract: open() must return dataSpec.length when it's set, even if the implementation
         // knows fewer bytes will actually be read.
-        return if (dataSpec.length != C.LENGTH_UNSET.toLong()) dataSpec.length else clampedOpenLength
+        val returnedOpenLength = if (dataSpec.length != C.LENGTH_UNSET.toLong()) dataSpec.length else clampedOpenLength
+        emitPrdsOpenSuccess("parallel_range", returnedOpenLength, acceptsRanges.toString())
+        return returnedOpenLength
     }
 
     /**
@@ -580,25 +712,48 @@ internal class ParallelRangeDataSource(
      * typed wait error, or throw a timeout.
      */
     private fun waitForBytesAt(position: Long, deadlineNanos: Long): WaitOutcome {
+        val waitStartedNanos = System.nanoTime()
+        var outcome = WaitOutcome.ERROR
+        emitReadWaitStart(position, deadlineNanos)
         readLock.lock()
         try {
-            if (closed.get()) return WaitOutcome.CLOSED
-            lastDownloadError?.let { return WaitOutcome.ERROR }
+            if (closed.get()) {
+                outcome = WaitOutcome.CLOSED
+                return outcome
+            }
+            lastDownloadError?.let {
+                outcome = WaitOutcome.ERROR
+                return outcome
+            }
             // Re-check the store *while holding the lock* to close the missed-wakeup race
             // between the cursor's last `store.read()` and our await. A producer that wrote
             // bytes + signaled in that window would otherwise be lost: the signal fires
             // when no thread is waiting, then we enter awaitNanos and never wake. Worker
             // signals also acquire `readLock` before calling signalAll, so any write that
             // races with us is either visible here or arrives as a signal after we await.
-            if (store.readableContiguousBytesFrom(position) > 0L) return WaitOutcome.DATA_AVAILABLE
+            if (store.readableContiguousBytesFrom(position) > 0L) {
+                outcome = WaitOutcome.DATA_AVAILABLE
+                return outcome
+            }
             val remaining = deadlineNanos - System.nanoTime()
-            if (remaining <= 0L) return WaitOutcome.TIMEOUT
+            if (remaining <= 0L) {
+                outcome = WaitOutcome.TIMEOUT
+                return outcome
+            }
             dataAvailable.awaitNanos(remaining)
-            if (closed.get()) return WaitOutcome.CLOSED
-            if (lastDownloadError != null) return WaitOutcome.ERROR
-            return WaitOutcome.DATA_AVAILABLE
+            if (closed.get()) {
+                outcome = WaitOutcome.CLOSED
+                return outcome
+            }
+            if (lastDownloadError != null) {
+                outcome = WaitOutcome.ERROR
+                return outcome
+            }
+            outcome = WaitOutcome.DATA_AVAILABLE
+            return outcome
         } finally {
             readLock.unlock()
+            emitReadWaitOutcome(position, outcome, waitStartedNanos)
         }
     }
 
@@ -611,7 +766,10 @@ internal class ParallelRangeDataSource(
     }
 
     private fun readInternal(buffer: ByteArray, offset: Int, length: Int): Int {
-        if (length == 0) return 0
+        if (length == 0) {
+            emitPrdsReadReturn(0, length)
+            return 0
+        }
 
         // Trigger deferred bootstrap prefetch on the first post-open read.
         if (bootstrapPrefetchDeferred && shouldAllowBackgroundPrefetch()) {
@@ -625,13 +783,17 @@ internal class ParallelRangeDataSource(
         // Surface any producer error to the reader thread.
         lastDownloadError?.let { error ->
             lastDownloadError = null
+            emitPrdsReadError(error, length)
             throw error
         }
 
         // All bytes flow through the cursor, which reads from AbsoluteByteStore.
         // Producers (bootstrap reuse, continuation pump, fallback pump, range workers)
         // write into the store underneath; the cursor is the sole reader.
-        val cursor = this.cursor ?: return C.RESULT_END_OF_INPUT
+        val cursor = this.cursor ?: run {
+            emitPrdsReadReturn(C.RESULT_END_OF_INPUT, length)
+            return C.RESULT_END_OF_INPUT
+        }
         val read = try {
             cursor.read(buffer, offset, length)
         } catch (e: IOException) {
@@ -640,8 +802,10 @@ internal class ParallelRangeDataSource(
             val producerError = lastDownloadError
             if (producerError != null) {
                 lastDownloadError = null
+                emitPrdsReadError(producerError, length)
                 throw producerError
             }
+            emitPrdsReadError(e, length)
             throw e
         }
         if (read > 0) {
@@ -649,6 +813,7 @@ internal class ParallelRangeDataSource(
             bytesRemaining = cursor.bytesRemaining
             scheduleFromCursor()
         }
+        emitPrdsReadReturn(read, length)
         return read
     }
 
@@ -775,6 +940,7 @@ internal class ParallelRangeDataSource(
 
     override fun close() {
         val wasStarted = transferStartedFired
+        emitPrdsClose(wasStarted)
         transferStartedFired = false
         closed.set(true)
         stopPumps()

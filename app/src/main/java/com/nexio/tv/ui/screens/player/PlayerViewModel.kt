@@ -47,7 +47,7 @@ class PlayerViewModel @Inject constructor(
     private val transportValidationRuntimeCollector: TransportValidationRuntimeCollector,
     private val debridConfigBenchmarkStore: DebridConfigBenchmarkStore,
     private val debridBenchmarkStore: DebridBenchmarkStore,
-    @Named("playback") private val playbackOkHttpClient: OkHttpClient,
+    @Named("playbackTraced") private val playbackOkHttpClient: OkHttpClient,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val controller = PlayerRuntimeController(

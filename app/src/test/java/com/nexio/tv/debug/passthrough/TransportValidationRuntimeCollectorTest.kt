@@ -1,9 +1,11 @@
 package com.nexio.tv.debug.passthrough
 
+import android.content.Context
 import android.os.SystemClock
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.analytics.PlaybackStats
 import io.mockk.every
+import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import kotlinx.coroutines.Dispatchers
@@ -187,7 +189,7 @@ class TransportValidationRuntimeCollectorTest {
 
     @Test
     fun `snapshot keeps last playback stats after listener is cleared`() {
-        val collector = TransportValidationRuntimeCollector()
+        val collector = TransportValidationRuntimeCollector(mockk<Context>(relaxed = true))
         collector.beginSession(
             sample = sample(),
             settings = TransportValidationSettings(runtimeValidationEnabled = true),
@@ -210,7 +212,7 @@ class TransportValidationRuntimeCollectorTest {
 
     @Test
     fun `transport specialization events are exported in analytics snapshot`() {
-        val collector = TransportValidationRuntimeCollector()
+        val collector = TransportValidationRuntimeCollector(mockk<Context>(relaxed = true))
         collector.beginSession(
             sample = sample(),
             settings = TransportValidationSettings(runtimeValidationEnabled = true),

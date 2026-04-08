@@ -232,6 +232,7 @@ class PlayerRuntimeController(
     internal var sourceChipErrorDismissJob: Job? = null
     internal var aiSubtitleTranslationJob: Job? = null
     internal var builtInAiSubtitleTranslationJob: Job? = null
+    internal var addonSubtitleOverlayJob: Job? = null
     internal var sourceStreamsCacheRequestKey: String? = null
     internal var hostActivityRef: WeakReference<Activity>? = null
     internal var initialPlaybackStarted: Boolean = false
@@ -278,6 +279,8 @@ class PlayerRuntimeController(
     internal var aiTranslationSelectionGeneration: Long = 0L
     internal var currentCueGroup: CueGroup = CueGroup.EMPTY_TIME_ZERO
     internal var builtInAiCueGeneration: Long = 0L
+    internal var addonSubtitleOverlayGeneration: Long = 0L
+    internal var addonSubtitleOverlayCueGroups: List<TimedAddonCueGroup> = emptyList()
     internal val playbackSessionGuard = PlayerPlaybackSessionGuard()
 
     internal var lastBufferLogTimeMs: Long = 0L

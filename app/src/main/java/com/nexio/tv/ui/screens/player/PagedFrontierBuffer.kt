@@ -1,8 +1,14 @@
 package com.nexio.tv.ui.screens.player
 
+import android.os.SystemClock
+import com.nexio.tv.instrumentation.EventFamily
+import com.nexio.tv.instrumentation.HistogramSnapshot
+import com.nexio.tv.instrumentation.HotPathHistogram
+import com.nexio.tv.instrumentation.PlaybackTracer
 import java.util.BitSet
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * A page-level byte buffer that tracks which 128KB pages are complete via a BitSet.
@@ -19,6 +25,8 @@ internal class PagedFrontierBuffer(
 
     companion object {
         const val PAGE_SIZE = 128 * 1024 // 128KB
+        private const val HISTOGRAM_DRAIN_INTERVAL_NANOS = 1_000_000_000L
+        private const val FRONTIER_STALL_POLL_NANOS = 100_000_000L
     }
 
     // Page index → page data
@@ -44,8 +52,64 @@ internal class PagedFrontierBuffer(
     // passed to setBasePosition, or 0 for zero-position opens).
     private var contiguousFrontierBytes: Long = 0L
 
+    private val lockWaitHistogram = HotPathHistogram()
+    private val writeHistogram = HotPathHistogram()
+    private val readHistogram = HotPathHistogram()
+    private val histogramLastDrainNanos = AtomicLong(SystemClock.elapsedRealtimeNanos())
+    private val lastFrontierAdvanceNanos = AtomicLong(SystemClock.elapsedRealtimeNanos())
+    private val lastNoProgressEmitNanos = AtomicLong(SystemClock.elapsedRealtimeNanos())
+    private val lastObservedFrontier = AtomicLong(0L)
+
     val frontier: Long
         get() = synchronized(this) { contiguousFrontierBytes }
+
+    private fun emitHistogramIfPresent(event: String, snapshot: HistogramSnapshot) {
+        if (snapshot.count <= 0L) return
+        PlaybackTracer.emit(EventFamily.FRONTIER, event) {
+            putLong("p50Ns", snapshot.p50Ns)
+            putLong("p99Ns", snapshot.p99Ns)
+            putLong("count", snapshot.count)
+        }
+    }
+
+    private fun maybeDrainHistograms() {
+        if (!PlaybackTracer.enabled) return
+        val now = SystemClock.elapsedRealtimeNanos()
+        val last = histogramLastDrainNanos.get()
+        if (now - last < HISTOGRAM_DRAIN_INTERVAL_NANOS) return
+        if (!histogramLastDrainNanos.compareAndSet(last, now)) return
+        emitHistogramIfPresent("store_lock_wait_ms", lockWaitHistogram.snapshot())
+        emitHistogramIfPresent("store_write_ms", writeHistogram.snapshot())
+        emitHistogramIfPresent("store_read_ms", readHistogram.snapshot())
+    }
+
+    private fun emitFrontierAdvance(delta: Long, newBytes: Long) {
+        if (delta <= 0L) return
+        if (!PlaybackTracer.enabled) return
+        val now = SystemClock.elapsedRealtimeNanos()
+        lastFrontierAdvanceNanos.set(now)
+        lastObservedFrontier.set(newBytes)
+        PlaybackTracer.emit(EventFamily.FRONTIER, "frontier_advance") {
+            putLong("delta", delta)
+            putLong("newBytes", newBytes)
+        }
+    }
+
+    private fun maybeEmitNoProgressBand(currentFrontier: Long) {
+        if (!PlaybackTracer.enabled) return
+        val now = SystemClock.elapsedRealtimeNanos()
+        val lastEmit = lastNoProgressEmitNanos.get()
+        if (now - lastEmit < FRONTIER_STALL_POLL_NANOS) return
+        if (!lastNoProgressEmitNanos.compareAndSet(lastEmit, now)) return
+        val lastAdvance = lastFrontierAdvanceNanos.get()
+        if (now - lastAdvance < FRONTIER_STALL_POLL_NANOS) return
+        val previous = lastObservedFrontier.getAndSet(currentFrontier)
+        if (previous != currentFrontier) return
+        PlaybackTracer.emit(EventFamily.FRONTIER, "frontier_no_progress_band") {
+            putLong("frontier", currentFrontier)
+            putLong("idleNanos", now - lastAdvance)
+        }
+    }
 
     /**
      * Inform the buffer of the total content length so the last (partial) page can be
@@ -68,6 +132,8 @@ internal class PagedFrontierBuffer(
         synchronized(this) {
             require(pages.isEmpty()) { "setBasePosition must be called before any writes" }
             contiguousFrontierBytes = position
+            lastObservedFrontier.set(position)
+            lastFrontierAdvanceNanos.set(SystemClock.elapsedRealtimeNanos())
             // If basePosition is not page-aligned, pre-initialize the first page's lowWater
             // to the in-page offset so writes that begin exactly at basePosition extend the
             // contiguous fill (rather than landing in the pending range and never completing).
@@ -95,7 +161,15 @@ internal class PagedFrontierBuffer(
             val spaceInPage = pageSize - offsetInPage
             val toCopy = minOf(remaining, spaceInPage)
 
+            val oldFrontier = frontier
+            val waitStartNanos = if (PlaybackTracer.enabled) SystemClock.elapsedRealtimeNanos() else 0L
+            var lockAcquiredNanos = 0L
+            var frontierDelta = 0L
             synchronized(this) {
+                if (PlaybackTracer.enabled) {
+                    lockAcquiredNanos = SystemClock.elapsedRealtimeNanos()
+                    lockWaitHistogram.recordNanos(lockAcquiredNanos - waitStartNanos)
+                }
                 val pageBuf = pages.getOrPut(pageIndex) { acquirePage() }
                 System.arraycopy(data, srcOffset, pageBuf, offsetInPage, toCopy)
 
@@ -121,14 +195,20 @@ internal class PagedFrontierBuffer(
                 val expectedPageBytes = expectedBytesForPage(pageIndex)
                 if (fill.lowWater >= expectedPageBytes) {
                     completedPages.set(pageIndex)
-                    advanceFrontier()
+                    frontierDelta = advanceFrontier()
                 }
             }
+            if (PlaybackTracer.enabled) {
+                writeHistogram.recordNanos(SystemClock.elapsedRealtimeNanos() - lockAcquiredNanos)
+            }
+            emitFrontierAdvance(frontierDelta, oldFrontier + frontierDelta)
 
             currentAbsOffset += toCopy
             srcOffset += toCopy
             remaining -= toCopy
         }
+        maybeDrainHistograms()
+        maybeEmitNoProgressBand(frontier)
     }
 
     /**
@@ -148,23 +228,36 @@ internal class PagedFrontierBuffer(
      * data is available at [position].
      */
     fun read(position: Long, dest: ByteArray, destOffset: Int, length: Int): Int {
+        val waitStartNanos = if (PlaybackTracer.enabled) SystemClock.elapsedRealtimeNanos() else 0L
+        var lockAcquiredNanos = 0L
+        var currentFrontier = 0L
+        var totalCopied = 0
         synchronized(this) {
-            if (contiguousFrontierBytes <= position) return 0
+            if (PlaybackTracer.enabled) {
+                lockAcquiredNanos = SystemClock.elapsedRealtimeNanos()
+                lockWaitHistogram.recordNanos(lockAcquiredNanos - waitStartNanos)
+            }
+            currentFrontier = contiguousFrontierBytes
+            if (currentFrontier <= position) {
+                if (PlaybackTracer.enabled) {
+                    readHistogram.recordNanos(SystemClock.elapsedRealtimeNanos() - lockAcquiredNanos)
+                }
+                return@synchronized
+            }
 
-            var totalCopied = 0
             var currentPos = position
             var destPos = destOffset
 
             while (totalCopied < length) {
                 val pageIndex = (currentPos / pageSize).toInt()
                 if (!completedPages[pageIndex]) break
-                if (currentPos >= contiguousFrontierBytes) break
+                if (currentPos >= currentFrontier) break
 
                 val pageBuf = pages[pageIndex] ?: break
                 val offsetInPage = (currentPos % pageSize).toInt()
                 val availableInPage = minOf(
                     pageBuf.size - offsetInPage,
-                    (contiguousFrontierBytes - currentPos).toInt()
+                    (currentFrontier - currentPos).toInt()
                 )
                 val toCopy = minOf(length - totalCopied, availableInPage)
                 if (toCopy <= 0) break
@@ -175,8 +268,13 @@ internal class PagedFrontierBuffer(
                 destPos += toCopy
             }
 
-            return totalCopied
+            if (PlaybackTracer.enabled) {
+                readHistogram.recordNanos(SystemClock.elapsedRealtimeNanos() - lockAcquiredNanos)
+            }
         }
+        maybeDrainHistograms()
+        maybeEmitNoProgressBand(currentFrontier)
+        return totalCopied
     }
 
     /**
@@ -197,8 +295,16 @@ internal class PagedFrontierBuffer(
         var remaining = length
         var srcOffset = 0
         var currentAbsOffset = absoluteStart
+        val oldFrontier = frontier
+        val waitStartNanos = if (PlaybackTracer.enabled) SystemClock.elapsedRealtimeNanos() else 0L
+        var lockAcquiredNanos = 0L
+        var frontierDelta = 0L
 
         synchronized(this) {
+            if (PlaybackTracer.enabled) {
+                lockAcquiredNanos = SystemClock.elapsedRealtimeNanos()
+                lockWaitHistogram.recordNanos(lockAcquiredNanos - waitStartNanos)
+            }
             while (remaining > 0) {
                 val pageIndex = (currentAbsOffset / pageSize).toInt()
                 val offsetInPage = (currentAbsOffset % pageSize).toInt()
@@ -236,8 +342,14 @@ internal class PagedFrontierBuffer(
                 srcOffset += toCopy
                 remaining -= toCopy
             }
-            advanceFrontier()
+            frontierDelta = advanceFrontier()
         }
+        if (PlaybackTracer.enabled) {
+            writeHistogram.recordNanos(SystemClock.elapsedRealtimeNanos() - lockAcquiredNanos)
+        }
+        emitFrontierAdvance(frontierDelta, oldFrontier + frontierDelta)
+        maybeDrainHistograms()
+        maybeEmitNoProgressBand(oldFrontier + frontierDelta)
     }
 
     /**
@@ -269,12 +381,15 @@ internal class PagedFrontierBuffer(
             pageFills.clear()
             contiguousFrontierBytes = 0L
             totalLength = -1L
+            lastObservedFrontier.set(0L)
+            lastFrontierAdvanceNanos.set(SystemClock.elapsedRealtimeNanos())
         }
     }
 
     // Advance contiguousFrontierBytes as far as completed contiguous pages allow.
     // Must be called under synchronized(this).
-    private fun advanceFrontier() {
+    internal fun advanceFrontier(): Long {
+        val oldFrontier = contiguousFrontierBytes
         while (true) {
             val nextPageIndex = (contiguousFrontierBytes / pageSize).toInt()
             if (!completedPages[nextPageIndex]) break
@@ -283,6 +398,7 @@ internal class PagedFrontierBuffer(
             if (newFrontier <= contiguousFrontierBytes) break
             contiguousFrontierBytes = newFrontier
         }
+        return contiguousFrontierBytes - oldFrontier
     }
 
     // Returns how many bytes we expect for a given page. For all pages except the last

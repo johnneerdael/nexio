@@ -1,5 +1,8 @@
 package com.nexio.tv.ui.screens.player
 
+import com.nexio.tv.instrumentation.EventFamily
+import com.nexio.tv.instrumentation.PayloadBuilder
+import com.nexio.tv.instrumentation.PlaybackTracer
 import java.util.ArrayDeque
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.ExecutorService
@@ -78,6 +81,13 @@ internal class DualLaneScheduler(
     val pendingUrgentCount: Int
         get() = pendingUrgentTasks.get()
 
+    private inline fun emitLaneEvent(type: String, crossinline build: PayloadBuilder.() -> Unit = {}) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.RANGE, type) {
+            build()
+        }
+    }
+
     fun submitUrgent(range: LongRange, callback: (LongRange) -> Unit): Future<*> {
         // Preempt any in-flight prefetch task before incrementing the counter so that
         // the prefetch worker exits quickly and the urgent task can acquire bandwidth.
@@ -89,16 +99,32 @@ internal class DualLaneScheduler(
                 future.cancel(true)
                 preemptCount.incrementAndGet()
                 parkedPrefetch.addLast(handle)
+                emitLaneEvent("lane_prefetch_preempted") {
+                    putLong("prefetchStart", handle.range.first)
+                    putLong("prefetchEndExclusive", handle.range.last + 1L)
+                    putInt("totalRead", handle.totalRead)
+                    putLong("preemptCount", preemptCount.get())
+                }
                 currentPrefetchHandle = null
                 currentPrefetchFuture = null
             }
         }
         pendingUrgentTasks.incrementAndGet()
+        emitLaneEvent("lane_submit_urgent") {
+            putLong("start", range.first)
+            putLong("endExclusive", range.last + 1L)
+            putInt("pendingUrgent", pendingUrgentTasks.get())
+        }
         return urgentExecutor.submit {
             try {
                 callback(range)
             } finally {
                 val remaining = pendingUrgentTasks.decrementAndGet()
+                emitLaneEvent("lane_urgent_done") {
+                    putLong("start", range.first)
+                    putLong("endExclusive", range.last + 1L)
+                    putInt("pendingUrgent", remaining)
+                }
                 if (remaining == 0) {
                     onUrgentDrained()
                 }
@@ -141,9 +167,20 @@ internal class DualLaneScheduler(
             if (pendingUrgentTasks.get() > 0) {
                 // Park immediately — re-submitted by onUrgentDrained.
                 parkedPrefetch.addLast(handle)
+                emitLaneEvent("lane_prefetch_parked") {
+                    putLong("start", range.first)
+                    putLong("endExclusive", range.last + 1L)
+                    putLong("chunkSize", chunkSize)
+                    putInt("pendingUrgent", pendingUrgentTasks.get())
+                }
                 // Return a cancelled stub future so the caller does not need to null-check.
                 prefetchExecutor.submit { }.also { it.cancel(false) }
             } else {
+                emitLaneEvent("lane_submit_prefetch") {
+                    putLong("start", range.first)
+                    putLong("endExclusive", range.last + 1L)
+                    putLong("chunkSize", chunkSize)
+                }
                 submitHandleToExecutor(handle, callback)
             }
         }
@@ -183,6 +220,12 @@ internal class DualLaneScheduler(
                 val cb = handle.resumeCallback ?: continue
                 // Reset preempted flag so the worker runs normally on re-submission.
                 handle.preempted.set(false)
+                emitLaneEvent("lane_prefetch_resume") {
+                    putLong("start", handle.range.first)
+                    putLong("endExclusive", handle.range.last + 1L)
+                    putLong("chunkSize", handle.chunkSize)
+                    putInt("totalRead", handle.totalRead)
+                }
                 submitHandleToExecutor(handle, cb)
             }
         }
@@ -198,11 +241,13 @@ internal class DualLaneScheduler(
             parkedPrefetch.clear()
             currentPrefetchHandle = null
             currentPrefetchFuture = null
+            emitLaneEvent("lane_cancel_all_prefetch")
         }
     }
 
     fun cancelAll() {
         cancelAllPrefetch()
+        emitLaneEvent("lane_cancel_all")
         urgentExecutor.shutdownNow()
         prefetchExecutor.shutdownNow()
     }
@@ -217,6 +262,10 @@ internal class DualLaneScheduler(
             currentPrefetchFuture = null
             urgentExecutor = Executors.newFixedThreadPool(urgentWorkers)
             prefetchExecutor = Executors.newFixedThreadPool(prefetchWorkers)
+            emitLaneEvent("lane_reconfigure") {
+                putInt("urgentWorkers", urgentWorkers)
+                putInt("prefetchWorkers", prefetchWorkers)
+            }
         }
     }
 }

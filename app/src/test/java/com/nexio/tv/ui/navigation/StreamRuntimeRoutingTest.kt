@@ -140,10 +140,51 @@ class StreamRuntimeRoutingTest {
         assertTrue(route.contains("returnToDetailOnBack=true"))
     }
 
-    private fun watchProgress(durationMs: Long): WatchProgress {
+    @Test
+    fun `continue watching movie manual route disables deterministic autoplay and skips detail return`() {
+        val route = buildContinueWatchingManualSelectionStreamRoute(
+            item = ContinueWatchingItem.InProgress(
+                progress = watchProgress(durationMs = 9_091_000L, contentType = "movie")
+            )
+        )
+
+        assertTrue(route.contains("manualSelection=true"))
+        assertTrue(route.contains("deterministicAutoplay=false"))
+        assertTrue(route.contains("returnToDetailOnBack=false"))
+        assertTrue(route.contains("contentType=movie") || route.contains("/movie/"))
+    }
+
+    @Test
+    fun `continue watching series manual route disables deterministic autoplay and returns to detail`() {
+        val route = buildContinueWatchingManualSelectionStreamRoute(
+            item = ContinueWatchingItem.NextUp(
+                info = nextUpInfo(runtime = "47m")
+            )
+        )
+
+        assertTrue(route.contains("manualSelection=true"))
+        assertTrue(route.contains("deterministicAutoplay=false"))
+        assertTrue(route.contains("returnToDetailOnBack=true"))
+    }
+
+    @Test
+    fun `manual continue watching route hydrates missing runtime before routing`() = runTest {
+        val route = buildContinueWatchingManualSelectionStreamRouteWithHydration(
+            item = ContinueWatchingItem.NextUp(
+                info = nextUpInfo(runtime = null)
+            ),
+            resolveRuntimeMinutes = { 62 }
+        )
+
+        assertTrue(route.contains("manualSelection=true"))
+        assertTrue(route.contains("deterministicAutoplay=false"))
+        assertTrue(route.contains("runtime=62"))
+    }
+
+    private fun watchProgress(durationMs: Long, contentType: String = "movie"): WatchProgress {
         return WatchProgress(
             contentId = "tt123",
-            contentType = "movie",
+            contentType = contentType,
             name = "Example",
             poster = null,
             backdrop = null,

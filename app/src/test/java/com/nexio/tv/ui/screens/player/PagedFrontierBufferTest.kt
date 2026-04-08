@@ -1,16 +1,34 @@
 package com.nexio.tv.ui.screens.player
 
+import com.nexio.tv.instrumentation.ClientIdentitySnapshot
+import com.nexio.tv.instrumentation.DeviceProvenance
+import com.nexio.tv.instrumentation.FactoryArgs
+import com.nexio.tv.instrumentation.PlaybackTracer
+import com.nexio.tv.instrumentation.PolicySnapshot
+import com.nexio.tv.instrumentation.SessionHeader
+import com.nexio.tv.instrumentation.SessionWriter
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.io.StringWriter
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 @RunWith(RobolectricTestRunner::class)
 class PagedFrontierBufferTest {
 
     private val PAGE_SIZE = PagedFrontierBuffer.PAGE_SIZE
+
+    @After
+    fun tearDown() {
+        PlaybackTracer.enabled = false
+        PlaybackTracer.currentInternal()?.let { PlaybackTracer.endSession(it.sessionId) }
+        PlaybackTracer.installWriterFactory(null)
+    }
 
     // -------------------------------------------------------------------------
     // Helper: write a full page worth of bytes at the given page index
@@ -209,5 +227,103 @@ class PagedFrontierBufferTest {
         assertEquals(2L * PAGE_SIZE, buffer.readableContiguousBytesFrom(0L))
         assertEquals(PAGE_SIZE.toLong(), buffer.readableContiguousBytesFrom(PAGE_SIZE.toLong()))
         assertEquals(0L, buffer.readableContiguousBytesFrom(2L * PAGE_SIZE))
+    }
+
+    @Test(timeout = 5_000L)
+    fun `trace emits frontier advance histograms and no progress band`() {
+        val sink = StringWriter()
+        PlaybackTracer.installWriterFactory { header ->
+            SessionWriter(
+                header = header,
+                baseFile = null,
+                capacity = 4096,
+                testSink = sink,
+                rotationBytes = Long.MAX_VALUE,
+                parkNanos = 1_000_000L,
+                overflowReportIntervalNanos = Long.MAX_VALUE
+            )
+        }
+        PlaybackTracer.enabled = true
+        val sid = PlaybackTracer.beginSession(fakeHeader())
+
+        val buffer = PagedFrontierBuffer()
+        buffer.setTotalLength(PAGE_SIZE.toLong())
+        buffer.writePage(0, 0x44)
+        val dest = ByteArray(16)
+        assertEquals(16, buffer.read(0L, dest, 0, dest.size))
+        buffer.setAtomicLongField("histogramLastDrainNanos", -2_000_000_000L)
+        buffer.setAtomicLongField("lastNoProgressEmitNanos", -2_000_000_000L)
+        buffer.setAtomicLongField("lastFrontierAdvanceNanos", -2_000_000_000L)
+        buffer.setAtomicLongField("lastObservedFrontier", buffer.frontier)
+        assertEquals(16, buffer.read(0L, dest, 0, dest.size))
+        PlaybackTracer.endSession(sid)
+
+        val out = sink.toString()
+        assertTrue(out.contains("\"ev\":\"frontier_advance\""))
+        assertTrue(out.contains("\"ev\":\"store_lock_wait_ms\""))
+        assertTrue(out.contains("\"ev\":\"store_write_ms\""))
+        assertTrue(out.contains("\"ev\":\"store_read_ms\""))
+        assertTrue(out.contains("\"ev\":\"frontier_no_progress_band\""))
+    }
+
+    private fun PagedFrontierBuffer.setAtomicLongField(name: String, value: Long) {
+        val field = PagedFrontierBuffer::class.java.getDeclaredField(name)
+        field.isAccessible = true
+        (field.get(this) as AtomicLong).set(value)
+    }
+
+    private fun fakeHeader(sid: String = UUID.randomUUID().toString()): SessionHeader {
+        return SessionHeader(
+            sessionId = sid,
+            startedAtNanos = 1L,
+            assetKeyHash = "deadbeef0000",
+            serviceKey = "real-debrid",
+            provider = "addon-x",
+            benchmarkResultId = null,
+            benchmarkSource = null,
+            envelopePresent = false,
+            runtimeHintsPresent = false,
+            specializationState = "baseline",
+            hintServiceKey = null,
+            hintHostScope = null,
+            hintTransportClass = null,
+            hintAgeMs = null,
+            hintFreshnessBand = null,
+            specializationMismatchReason = null,
+            observedHostScope = null,
+            observedTransportClass = null,
+            branch = "prds",
+            cacheActive = false,
+            warmAheadFactory = null,
+            factoryArgs = FactoryArgs(8L * 1024 * 1024, 4, 32L * 1024 * 1024, 4L * 1024 * 1024),
+            initialPolicy = PolicySnapshot(2, 16, 4L * 1024 * 1024, 16L * 1024 * 1024, "fallback"),
+            clientIdentity = ClientIdentitySnapshot(
+                playbackClientHash = "abc123",
+                dispatcherMaxRequests = 64,
+                dispatcherMaxRequestsPerHost = 12,
+                dispatcherQueuedCalls = 0,
+                dispatcherRunningCalls = 0,
+                connectionPoolIdleCount = 0,
+                connectionPoolTotalCount = 0,
+                callTimeoutMs = 0L,
+                readTimeoutMs = 30_000L,
+                writeTimeoutMs = 30_000L,
+                connectTimeoutMs = 10_000L
+            ),
+            device = DeviceProvenance(
+                deviceModel = "TEST",
+                deviceManufacturer = "TEST",
+                androidRelease = "14",
+                androidSdkInt = 34,
+                appVersionName = "test",
+                appVersionCode = 1L,
+                gitSha = null,
+                memoryClass = 256,
+                largeMemoryClass = 512,
+                isLowRamDevice = false,
+                networkType = "wifi",
+                networkTransportHash = null
+            )
+        )
     }
 }

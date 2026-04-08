@@ -3,8 +3,10 @@ package com.nexio.tv.ui.screens.player
 import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.exoplayer.ExoPlayer
 import com.nexio.tv.domain.model.Subtitle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -221,13 +223,15 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(
             PlayerRuntimeController.TAG,
             "ADDON_SUB: select id=${subtitle.id} lang=${subtitle.lang} url=${subtitle.url.take(120)}"
         )
+        deactivateAddonSubtitleOverlay()
 
         val normalizedLang = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)
+        val subtitleMimeType = PlayerSubtitleUtils.mimeTypeFromUrl(subtitle.url)
         val addonTrackId = buildAddonSubtitleTrackId(subtitle)
         val preAttachedByStartup = attachedAddonSubtitleKeys.contains(addonSubtitleKey(subtitle))
         Log.i(
             PlayerRuntimeController.TAG,
-            "ADDON_SUB: normalizedLang=$normalizedLang trackId=$addonTrackId preAttached=$preAttachedByStartup"
+            "ADDON_SUB: normalizedLang=$normalizedLang trackId=$addonTrackId preAttached=$preAttachedByStartup mime=$subtitleMimeType"
         )
         val appliedWithoutReload = applyAddonSubtitleOverride(addonTrackId) ||
             (preAttachedByStartup && applyAddonSubtitleOverrideByLanguage(normalizedLang))
@@ -244,113 +248,150 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(
             _uiState.update {
                 it.copy(
                     selectedAddonSubtitle = selectedSubtitle,
-                    selectedSubtitleTrackIndex = -1
+                    selectedSubtitleTrackIndex = -1,
+                    addonOverlayCues = emptyList()
                 )
             }
             return@let
         }
 
-        pendingAddonSubtitleLanguage = normalizedLang
-        pendingAddonSubtitleTrackId = addonTrackId
-        pendingAudioSelectionAfterSubtitleRefresh =
-            captureCurrentAudioSelectionForSubtitleRefresh(player)
+        val fallback = {
+            selectAddonSubtitleViaMediaSourceRefresh(
+                subtitle = subtitle,
+                selectedSubtitle = selectedSubtitle,
+                player = player,
+                normalizedLang = normalizedLang,
+                addonTrackId = addonTrackId
+            )
+        }
+        if (addonSubtitleSupportsOverlay(subtitleMimeType)) {
+            Log.i(
+                PlayerRuntimeController.TAG,
+                "ADDON_SUB: overlay-path selected (no media reload) id=${subtitle.id} mime=$subtitleMimeType"
+            )
+            activateAddonSubtitleOverlay(
+                subtitle = subtitle,
+                selectedSubtitle = selectedSubtitle
+            )
+            return@let
+        }
 
-        val currentPosition = player.currentPosition
-        val playWhenReady = player.playWhenReady
-        val previousSelectedAddonSubtitle = _uiState.value.selectedAddonSubtitle
+        fallback()
+    }
+}
 
-        // Suppress the buffering/loading UI during the swap so the user
-        // doesn't see a black flash + loading overlay for an .srt change.
-        _uiState.update { it.copy(isSwappingAddonSubtitle = true) }
+internal fun addonSubtitleSupportsOverlay(mimeType: String): Boolean {
+    return mimeType == MimeTypes.APPLICATION_SUBRIP || mimeType == MimeTypes.TEXT_VTT
+}
+
+internal fun PlayerRuntimeController.selectAddonSubtitleViaMediaSourceRefresh(
+    subtitle: Subtitle,
+    selectedSubtitle: Subtitle,
+    player: ExoPlayer,
+    normalizedLang: String,
+    addonTrackId: String
+) {
+    pendingAddonSubtitleLanguage = normalizedLang
+    pendingAddonSubtitleTrackId = addonTrackId
+    pendingAudioSelectionAfterSubtitleRefresh =
+        captureCurrentAudioSelectionForSubtitleRefresh(player)
+
+    val currentPosition = player.currentPosition
+    val playWhenReady = player.playWhenReady
+    val previousSelectedAddonSubtitle = _uiState.value.selectedAddonSubtitle
+
+    // Suppress the buffering/loading UI during the swap so the user
+    // doesn't see a black flash + loading overlay for an .srt change.
+    _uiState.update { it.copy(isSwappingAddonSubtitle = true) }
+
+    Log.i(
+        PlayerRuntimeController.TAG,
+        "ADDON_SUB: slow-path entry pos=$currentPosition pwr=$playWhenReady"
+    )
+
+    scope.launch {
+        // Use the addon-provided subtitle URL directly. A previous
+        // attempt to pre-download the .srt to a local cache was reverted
+        // because many addons require specific request headers that a
+        // bare HttpURLConnection cannot replicate, which caused Media3
+        // to receive HTML/error bytes and silently drop the track.
+        // Media3's own DataSource (with the addon URL) handles the fetch
+        // correctly, so let it do the work; the swap-flag below still
+        // suppresses the visible rebuffer flash.
+        val subtitleConfigurations = (_uiState.value.addonSubtitles + subtitle)
+            .distinctBy { "${it.id}|${it.url}" }
+            .map(::toSubtitleConfiguration)
+        attachedAddonSubtitleKeys = (_uiState.value.addonSubtitles + subtitle)
+            .distinctBy { addonSubtitleKey(it) }
+            .map(::addonSubtitleKey)
+            .toSet()
+        Log.i(
+            PlayerRuntimeController.TAG,
+            "ADDON_SUB: building refreshed source subs=${subtitleConfigurations.size} " +
+                "configs=${subtitleConfigurations.map { "${it.id}|${it.language}|${it.mimeType}" }}"
+        )
+
+        val createStartMs = System.currentTimeMillis()
+        val refreshedMediaSource = withTimeoutOrNull(SUBTITLE_SWAP_TIMEOUT_MS) {
+            withContext(Dispatchers.IO) {
+                mediaSourceFactory.createMediaSource(
+                    url = currentStreamUrl,
+                    headers = currentHeaders,
+                    subtitleConfigurations = subtitleConfigurations
+                )
+            }
+        }
+
+        if (refreshedMediaSource == null) {
+            Log.w(
+                PlayerRuntimeController.TAG,
+                "ADDON_SUB: createMediaSource TIMEOUT after ${System.currentTimeMillis() - createStartMs}ms; aborting swap"
+            )
+            _uiState.update {
+                it.copy(
+                    isSwappingAddonSubtitle = false,
+                    selectedAddonSubtitle = previousSelectedAddonSubtitle
+                )
+            }
+            pendingAddonSubtitleLanguage = null
+            pendingAddonSubtitleTrackId = null
+            pendingAudioSelectionAfterSubtitleRefresh = null
+            return@launch
+        }
 
         Log.i(
             PlayerRuntimeController.TAG,
-            "ADDON_SUB: slow-path entry pos=$currentPosition pwr=$playWhenReady"
+            "ADDON_SUB: createMediaSource ok in ${System.currentTimeMillis() - createStartMs}ms; calling setMediaSource+prepare"
+        )
+        player.setMediaSource(refreshedMediaSource, currentPosition)
+        player.prepare()
+        player.playWhenReady = playWhenReady
+
+        player.trackSelectionParameters = player.trackSelectionParameters
+            .buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+            .setPreferredTextLanguage(normalizedLang)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            .build()
+        Log.i(
+            PlayerRuntimeController.TAG,
+            "ADDON_SUB: trackSelectionParameters set preferredText=$normalizedLang; awaiting onTracksChanged"
         )
 
+        _uiState.update {
+            it.copy(
+                selectedAddonSubtitle = selectedSubtitle,
+                selectedSubtitleTrackIndex = -1,
+                addonOverlayCues = emptyList()
+            )
+        }
+        // Safety net: clear the swap flag after a bounded delay even if
+        // STATE_READY never fires (e.g. surface paused). The buffering
+        // observer will also clear it on the first STATE_READY.
         scope.launch {
-            // Use the addon-provided subtitle URL directly. A previous
-            // attempt to pre-download the .srt to a local cache was reverted
-            // because many addons require specific request headers that a
-            // bare HttpURLConnection cannot replicate, which caused Media3
-            // to receive HTML/error bytes and silently drop the track.
-            // Media3's own DataSource (with the addon URL) handles the fetch
-            // correctly, so let it do the work; the swap-flag below still
-            // suppresses the visible rebuffer flash.
-            val subtitleConfigurations = (_uiState.value.addonSubtitles + subtitle)
-                .distinctBy { "${it.id}|${it.url}" }
-                .map(::toSubtitleConfiguration)
-            attachedAddonSubtitleKeys = (_uiState.value.addonSubtitles + subtitle)
-                .distinctBy { addonSubtitleKey(it) }
-                .map(::addonSubtitleKey)
-                .toSet()
-            Log.i(
-                PlayerRuntimeController.TAG,
-                "ADDON_SUB: building refreshed source subs=${subtitleConfigurations.size} " +
-                    "configs=${subtitleConfigurations.map { "${it.id}|${it.language}|${it.mimeType}" }}"
-            )
-
-            val createStartMs = System.currentTimeMillis()
-            val refreshedMediaSource = withTimeoutOrNull(SUBTITLE_SWAP_TIMEOUT_MS) {
-                withContext(Dispatchers.IO) {
-                    mediaSourceFactory.createMediaSource(
-                        url = currentStreamUrl,
-                        headers = currentHeaders,
-                        subtitleConfigurations = subtitleConfigurations
-                    )
-                }
-            }
-
-            if (refreshedMediaSource == null) {
-                Log.w(
-                    PlayerRuntimeController.TAG,
-                    "ADDON_SUB: createMediaSource TIMEOUT after ${System.currentTimeMillis() - createStartMs}ms; aborting swap"
-                )
-                _uiState.update {
-                    it.copy(
-                        isSwappingAddonSubtitle = false,
-                        selectedAddonSubtitle = previousSelectedAddonSubtitle
-                    )
-                }
-                pendingAddonSubtitleLanguage = null
-                pendingAddonSubtitleTrackId = null
-                pendingAudioSelectionAfterSubtitleRefresh = null
-                return@launch
-            }
-
-            Log.i(
-                PlayerRuntimeController.TAG,
-                "ADDON_SUB: createMediaSource ok in ${System.currentTimeMillis() - createStartMs}ms; calling setMediaSource+prepare"
-            )
-            player.setMediaSource(refreshedMediaSource, currentPosition)
-            player.prepare()
-            player.playWhenReady = playWhenReady
-
-            player.trackSelectionParameters = player.trackSelectionParameters
-                .buildUpon()
-                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                .setPreferredTextLanguage(normalizedLang)
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                .build()
-            Log.i(
-                PlayerRuntimeController.TAG,
-                "ADDON_SUB: trackSelectionParameters set preferredText=$normalizedLang; awaiting onTracksChanged"
-            )
-
-            _uiState.update {
-                it.copy(
-                    selectedAddonSubtitle = selectedSubtitle,
-                    selectedSubtitleTrackIndex = -1
-                )
-            }
-            // Safety net: clear the swap flag after a bounded delay even if
-            // STATE_READY never fires (e.g. surface paused). The buffering
-            // observer will also clear it on the first STATE_READY.
-            scope.launch {
-                delay(SUBTITLE_SWAP_TIMEOUT_MS)
-                if (_uiState.value.isSwappingAddonSubtitle) {
-                    _uiState.update { it.copy(isSwappingAddonSubtitle = false) }
-                }
+            delay(SUBTITLE_SWAP_TIMEOUT_MS)
+            if (_uiState.value.isSwappingAddonSubtitle) {
+                _uiState.update { it.copy(isSwappingAddonSubtitle = false) }
             }
         }
     }

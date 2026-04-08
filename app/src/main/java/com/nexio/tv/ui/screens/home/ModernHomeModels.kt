@@ -116,6 +116,7 @@ internal data class CarouselRowLookups(
 internal data class ModernHomeContentState(
     val catalogRows: List<CatalogRow> = emptyList(),
     val continueWatchingItems: List<ContinueWatchingItem> = emptyList(),
+    val deterministicAutoplayEnabled: Boolean = false,
     val modernLandscapePostersEnabled: Boolean = false,
     val catalogTypeSuffixEnabled: Boolean = true,
     val focusedPosterBackdropExpandEnabled: Boolean = false,

@@ -8,6 +8,12 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
+import com.nexio.tv.instrumentation.EventFamily
+import com.nexio.tv.instrumentation.PayloadBuilder
+import com.nexio.tv.instrumentation.PlaybackTracer
+import com.nexio.tv.instrumentation.RangeContext
+import com.nexio.tv.instrumentation.RangeContextHolder
+import com.nexio.tv.instrumentation.putRangeContext
 import java.io.EOFException
 import java.io.IOException
 import java.io.InterruptedIOException
@@ -77,6 +83,43 @@ internal class SharedParallelTransportManager(
     private val frontierPromotionCounts = ConcurrentHashMap<Long, Int>()
     private val connectionOpenTimestamps = ArrayDeque<Long>()
 
+    private inline fun emitRangeEvent(type: String, crossinline build: PayloadBuilder.() -> Unit = {}) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.RANGE, type) {
+            build()
+        }
+    }
+
+    private inline fun emitRangeContextEvent(type: String, context: RangeContext, crossinline build: PayloadBuilder.() -> Unit = {}) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.RANGE, type) {
+            putRangeContext(context)
+            build()
+        }
+    }
+
+    private fun rangeContext(
+        chunkIndex: Long,
+        lane: String,
+        attempt: Int,
+        requestStart: Long,
+        requestEndExclusive: Long,
+        chunkStart: Long,
+        chunkEndExclusive: Long,
+        expectedBytes: Int,
+        resumeOffsetBytes: Int
+    ): RangeContext = RangeContext(
+        chunkIndex = chunkIndex,
+        lane = lane,
+        attempt = attempt,
+        requestStart = requestStart,
+        requestEndExclusive = requestEndExclusive,
+        chunkStart = chunkStart,
+        chunkEndExclusive = chunkEndExclusive,
+        expectedBytes = expectedBytes,
+        resumeOffsetBytes = resumeOffsetBytes
+    )
+
     fun attachSession(
         store: AbsoluteByteStore,
         resolvedUri: Uri?,
@@ -100,6 +143,16 @@ internal class SharedParallelTransportManager(
         }
         scheduler?.cancelAll()
         scheduler = DualLaneScheduler(envelope.maxSafeUrgentWorkers, envelope.maxSafePrefetchWorkers)
+        emitRangeEvent("range_attach_session") {
+            putString("resolvedHost", resolvedUri?.host)
+            putString("fallbackHost", fallbackUri?.host)
+            putLong("totalFileLength", totalFileLength)
+            putLong("activeChunkSize", activeChunkSize)
+            putLong("bootstrapCoverageEnd", bootstrapCoverageEnd)
+            putInt("preScheduledChunks", preScheduledChunkIndexes.size)
+            putInt("urgentWorkers", envelope.maxSafeUrgentWorkers)
+            putInt("prefetchWorkers", envelope.maxSafePrefetchWorkers)
+        }
         PlayerTransportTelemetry.log("sptm.attach", mapOf(
             "prefetchChunk" to envelope.maxSafePrefetchChunkBytes,
             "prefetchWorkers" to envelope.maxSafePrefetchWorkers,
@@ -110,6 +163,12 @@ internal class SharedParallelTransportManager(
     }
 
     fun detach() {
+        emitRangeEvent("range_detach_session") {
+            putLong("totalFileLength", totalFileLength)
+            putLong("activeChunkSize", activeChunkSize)
+            putInt("scheduledRanges", scheduledRanges.size)
+            putInt("frontierPromotions", frontierPromotionCounts.size)
+        }
         closed.set(true)
         scheduler?.cancelAll()
         scheduler = null
@@ -161,6 +220,11 @@ internal class SharedParallelTransportManager(
         if (closed.get()) return
         val chunkSize = activeChunkSize
         if (chunkSize <= 0L) return
+        emitRangeEvent("range_schedule_reader_position") {
+            putLong("readerPosition", readerPosition)
+            putLong("activeChunkSize", chunkSize)
+            putLong("totalFileLength", totalFileLength)
+        }
         promoteRanges(
             readerPosition = readerPosition,
             activeChunkSize = chunkSize,
@@ -196,6 +260,13 @@ internal class SharedParallelTransportManager(
             "urgentCount" to urgentCountForLog,
             "urgentWorkers" to envelope.maxSafeUrgentWorkers
         ))
+        emitRangeEvent("range_promote") {
+            putLong("readerPosition", readerPosition)
+            putLong("currentChunkIndex", currentChunkIdx)
+            putInt("maxAhead", maxAheadForLog)
+            putInt("urgentCount", urgentCountForLog)
+            putString("policy", policy?.javaClass?.simpleName)
+        }
 
         val urgentStart = currentChunkIdx * activeChunkSize
         val urgentEnd = if (totalFileLength != C.LENGTH_UNSET.toLong()) {
@@ -241,6 +312,12 @@ internal class SharedParallelTransportManager(
         if (s.frontier >= end) return
 
         if (urgent) {
+            emitRangeEvent("submit_urgent") {
+                putLong("chunkIndex", chunkIndex)
+                putLong("start", start)
+                putLong("endExclusive", end)
+                putLong("frontier", s.frontier)
+            }
             sched.submitUrgent(start until end) { range ->
                 downloadRange(range.first, range.last + 1)
             }
@@ -248,6 +325,13 @@ internal class SharedParallelTransportManager(
             val prefetchChunkSize = transportPolicyProvider()?.prefetchChunkBytes
                 ?.takeIf { it > 0L }
                 ?: activeChunkSize
+            emitRangeEvent("submit_prefetch") {
+                putLong("chunkIndex", chunkIndex)
+                putLong("start", start)
+                putLong("endExclusive", end)
+                putLong("frontier", s.frontier)
+                putLong("prefetchChunkSize", prefetchChunkSize)
+            }
             sched.submitPrefetch(start until end, chunkSize = prefetchChunkSize) { handle ->
                 downloadRangeIntoScratch(handle)
             }
@@ -270,16 +354,33 @@ internal class SharedParallelTransportManager(
 
         while (!closed.get() && totalRead < expectedBytes) {
             val ds = upstreamFactory.createDataSource()
+            var attemptContext: RangeContext? = null
             try {
                 awaitConnectionBudgetIfNeeded()
                 val uri = resolvedUri ?: fallbackUri ?: throw IOException("No URI available")
+                val attemptNumber = transientAttemptNumber + nonTransientAttemptNumber + 1
+                val requestStart = effectiveStart + totalRead
+                attemptContext = rangeContext(
+                    chunkIndex = chunkIndex,
+                    lane = "urgent",
+                    attempt = attemptNumber,
+                    requestStart = requestStart,
+                    requestEndExclusive = effectiveStart + expectedBytes,
+                    chunkStart = start,
+                    chunkEndExclusive = end,
+                    expectedBytes = expectedBytes,
+                    resumeOffsetBytes = totalRead
+                )
                 val spec = DataSpec.Builder()
                     .setUri(uri)
-                    .setPosition(effectiveStart + totalRead)
+                    .setPosition(requestStart)
                     .setLength((expectedBytes - totalRead).toLong())
                     .build()
 
-                ds.open(spec)
+                emitRangeContextEvent("range_start", attemptContext)
+                RangeContextHolder.withContext(attemptContext) {
+                    ds.open(spec)
+                }
                 emitTransportObservation(ds.responseHeaders, ds.uri)
                 while (!closed.get() && totalRead < expectedBytes) {
                     val maxRead = minOf(expectedBytes - totalRead, READ_BUFFER_SIZE)
@@ -295,9 +396,20 @@ internal class SharedParallelTransportManager(
                     val sampleTime = transportSampleTimeMs()
                     onTransportBytesDownloaded(read.toLong(), sampleTime)
                     onChunkBytesDownloaded(chunkIndex, chunkSize, offsetInChunk, read, sampleTime)
+                    emitRangeContextEvent("range_http_body", attemptContext) {
+                        putInt("bytesRead", read)
+                        putInt("totalRead", totalRead)
+                        putLong("offsetInChunk", offsetInChunk)
+                        putLong("sampleTimeMs", sampleTime)
+                    }
                     signalDataAvailable()
                 }
                 ds.close()
+                if (totalRead >= expectedBytes) {
+                    emitRangeContextEvent("range_done", attemptContext) {
+                        putInt("totalRead", totalRead)
+                    }
+                }
             } catch (e: Exception) {
                 runCatching { ds.close() }
                 if (closed.get()) return
@@ -321,6 +433,15 @@ internal class SharedParallelTransportManager(
                         "Range $chunkIndex download failed at $resumeOffset / $expectedBytes bytes (attempt $attemptNumber/$allowedAttempts), retrying: ${e.message}"
                     )
                 }
+                attemptContext?.let { context ->
+                    emitRangeContextEvent("range_retry", context) {
+                        putInt("resumeOffset", resumeOffset)
+                        putInt("allowedAttempts", allowedAttempts)
+                        putBool("recoverable", recoverable)
+                        putString("errorClass", e::class.java.name)
+                        putString("errorMessage", e.message)
+                    }
+                }
                 val delayMs = retryBackoffMs(attemptNumber, madeProgress = resumeOffset > 0)
                 if (delayMs > 0L) {
                     try { Thread.sleep(delayMs) } catch (_: InterruptedException) { }
@@ -341,6 +462,12 @@ internal class SharedParallelTransportManager(
                 scheduledRanges.remove(chunkIndex)
                 Log.w(TAG, "Range $chunkIndex is frontier-blocking (frontier=$currentFrontier), " +
                     "re-promoting for urgent requeue (promotion ${promotionCount + 1}/$MAX_FRONTIER_PROMOTIONS)")
+                emitRangeEvent("range_frontier_requeue") {
+                    putLong("chunkIndex", chunkIndex)
+                    putString("lane", "urgent")
+                    putLong("frontier", currentFrontier)
+                    putInt("promotionCount", promotionCount + 1)
+                }
                 signalDataAvailable()
                 // Re-schedule using the current frontier as a proxy for the reader position;
                 // the façade will re-drive us from the next read() anyway, but this keeps the
@@ -354,6 +481,13 @@ internal class SharedParallelTransportManager(
                 )
                 onTerminalError(error)
                 signalDataAvailable()
+                emitRangeEvent("range_failed") {
+                    putLong("chunkIndex", chunkIndex)
+                    putString("lane", "urgent")
+                    putLong("frontier", currentFrontier)
+                    putString("errorClass", lastException::class.java.name)
+                    putString("errorMessage", lastException.message)
+                }
                 Log.e(TAG, "Range $chunkIndex failed to download completely after retries: ${lastException.message}")
             }
         }
@@ -393,17 +527,34 @@ internal class SharedParallelTransportManager(
         while (!closed.get() && handle.totalRead < expectedBytes) {
             if (handle.preempted.get()) throw PreemptedException()
             val ds = upstreamFactory.createDataSource()
+            var attemptContext: RangeContext? = null
             try {
                 awaitConnectionBudgetIfNeeded()
                 if (handle.preempted.get()) throw PreemptedException()
                 val uri = resolvedUri ?: fallbackUri ?: throw IOException("No URI available")
+                val attemptNumber = transientAttemptNumber + nonTransientAttemptNumber + 1
+                val requestStart = effectiveStart + handle.totalRead
+                attemptContext = rangeContext(
+                    chunkIndex = chunkIndex,
+                    lane = "prefetch",
+                    attempt = attemptNumber,
+                    requestStart = requestStart,
+                    requestEndExclusive = effectiveStart + expectedBytes,
+                    chunkStart = start,
+                    chunkEndExclusive = end,
+                    expectedBytes = expectedBytes,
+                    resumeOffsetBytes = handle.totalRead
+                )
                 val spec = DataSpec.Builder()
                     .setUri(uri)
-                    .setPosition(effectiveStart + handle.totalRead)
+                    .setPosition(requestStart)
                     .setLength((expectedBytes - handle.totalRead).toLong())
                     .build()
 
-                ds.open(spec)
+                emitRangeContextEvent("range_start", attemptContext)
+                RangeContextHolder.withContext(attemptContext) {
+                    ds.open(spec)
+                }
                 emitTransportObservation(ds.responseHeaders, ds.uri)
                 while (!closed.get() && handle.totalRead < expectedBytes) {
                     if (handle.preempted.get()) throw PreemptedException()
@@ -420,10 +571,26 @@ internal class SharedParallelTransportManager(
                     val sampleTime = transportSampleTimeMs()
                     onTransportBytesDownloaded(read.toLong(), sampleTime)
                     onChunkBytesDownloaded(chunkIndex, chunkSize, offsetInChunk, read, sampleTime)
+                    emitRangeContextEvent("range_http_body", attemptContext) {
+                        putInt("bytesRead", read)
+                        putInt("totalRead", handle.totalRead)
+                        putLong("offsetInChunk", offsetInChunk)
+                        putLong("sampleTimeMs", sampleTime)
+                    }
                 }
                 ds.close()
+                if (handle.totalRead >= expectedBytes) {
+                    emitRangeContextEvent("range_done", attemptContext) {
+                        putInt("totalRead", handle.totalRead)
+                    }
+                }
             } catch (e: PreemptedException) {
                 runCatching { ds.close() }
+                attemptContext?.let { context ->
+                    emitRangeContextEvent("range_preempted", context) {
+                        putInt("totalRead", handle.totalRead)
+                    }
+                }
                 throw e  // Propagate without incrementing retry counters.
             } catch (e: Exception) {
                 runCatching { ds.close() }
@@ -449,6 +616,15 @@ internal class SharedParallelTransportManager(
                         "Prefetch range $chunkIndex download failed at $resumeOffset / $expectedBytes bytes (attempt $attemptNumber/$allowedAttempts), retrying: ${e.message}"
                     )
                 }
+                attemptContext?.let { context ->
+                    emitRangeContextEvent("range_retry", context) {
+                        putInt("resumeOffset", resumeOffset)
+                        putInt("allowedAttempts", allowedAttempts)
+                        putBool("recoverable", recoverable)
+                        putString("errorClass", e::class.java.name)
+                        putString("errorMessage", e.message)
+                    }
+                }
                 val delayMs = retryBackoffMs(attemptNumber, madeProgress = resumeOffset > 0)
                 if (delayMs > 0L) {
                     try { Thread.sleep(delayMs) } catch (_: InterruptedException) { }
@@ -460,6 +636,12 @@ internal class SharedParallelTransportManager(
         if (!closed.get() && handle.totalRead >= expectedBytes) {
             // Chunk complete — publish atomically so no reader observes partial state.
             s.publishCompleteChunk(effectiveStart, handle.scratch, handle.totalRead)
+            emitRangeEvent("scratch_publish") {
+                putLong("chunkIndex", chunkIndex)
+                putString("lane", "prefetch")
+                putLong("effectiveStart", effectiveStart)
+                putInt("totalRead", handle.totalRead)
+            }
             signalDataAvailable()
         } else if (!closed.get() && handle.totalRead < expectedBytes && lastException != null) {
             val chunkStart = chunkIndex * chunkSize
@@ -473,6 +655,12 @@ internal class SharedParallelTransportManager(
                 scheduledRanges.remove(chunkIndex)
                 Log.w(TAG, "Prefetch range $chunkIndex is frontier-blocking (frontier=$currentFrontier), " +
                     "re-promoting for urgent requeue (promotion ${promotionCount + 1}/$MAX_FRONTIER_PROMOTIONS)")
+                emitRangeEvent("range_frontier_requeue") {
+                    putLong("chunkIndex", chunkIndex)
+                    putString("lane", "prefetch")
+                    putLong("frontier", currentFrontier)
+                    putInt("promotionCount", promotionCount + 1)
+                }
                 signalDataAvailable()
                 scheduleForReaderPosition(currentFrontier)
             } else {
@@ -483,6 +671,13 @@ internal class SharedParallelTransportManager(
                 )
                 onTerminalError(error)
                 signalDataAvailable()
+                emitRangeEvent("range_failed") {
+                    putLong("chunkIndex", chunkIndex)
+                    putString("lane", "prefetch")
+                    putLong("frontier", currentFrontier)
+                    putString("errorClass", lastException::class.java.name)
+                    putString("errorMessage", lastException.message)
+                }
                 Log.e(TAG, "Prefetch range $chunkIndex failed to download completely after retries: ${lastException.message}")
             }
         }
@@ -550,14 +745,29 @@ internal class SharedParallelTransportManager(
 
         while (!closed.get()) {
             val now = SystemClock.elapsedRealtime()
+            var waitingOpenCount = 0
+            var acquiredOpenCount = 0
             synchronized(connectionOpenTimestamps) {
                 while (connectionOpenTimestamps.isNotEmpty() && now - connectionOpenTimestamps.first() >= 1_000L) {
                     connectionOpenTimestamps.removeFirst()
                 }
                 if (connectionOpenTimestamps.size < maxConnectionsPerSecond) {
                     connectionOpenTimestamps.addLast(now)
-                    return
+                    acquiredOpenCount = connectionOpenTimestamps.size
+                } else {
+                    waitingOpenCount = connectionOpenTimestamps.size
                 }
+            }
+            if (acquiredOpenCount > 0) {
+                emitRangeEvent("connection_budget_acquired") {
+                    putInt("maxConnectionsPerSecond", maxConnectionsPerSecond)
+                    putInt("openCount", acquiredOpenCount)
+                }
+                return
+            }
+            emitRangeEvent("connection_budget_wait") {
+                putInt("maxConnectionsPerSecond", maxConnectionsPerSecond)
+                putInt("openCount", waitingOpenCount)
             }
             try {
                 Thread.sleep(25L)

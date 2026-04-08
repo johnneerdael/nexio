@@ -66,6 +66,7 @@ data class PlayerUiState(
     val aiSubtitleError: String? = null,
     val useBuiltInAiSubtitleOverlay: Boolean = false,
     val translatedBuiltInCues: List<Cue> = emptyList(),
+    val addonOverlayCues: List<Cue> = emptyList(),
     // Episodes/streams side panel (for series)
     val showEpisodesPanel: Boolean = false,
     val isLoadingEpisodes: Boolean = false,

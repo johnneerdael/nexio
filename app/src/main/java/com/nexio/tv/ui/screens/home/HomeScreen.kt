@@ -87,6 +87,19 @@ internal fun shouldShowHomeManualStreamSelection(
         apiType.equals("movie", ignoreCase = true)
 }
 
+internal fun shouldShowContinueWatchingManualStreamSelection(
+    deterministicAutoplayEnabled: Boolean,
+    item: ContinueWatchingItem
+): Boolean {
+    if (!deterministicAutoplayEnabled) return false
+    val contentType = when (item) {
+        is ContinueWatchingItem.InProgress -> item.progress.contentType
+        is ContinueWatchingItem.NextUp -> item.info.contentType
+    }
+    return contentType.equals("movie", ignoreCase = true) ||
+        contentType.equals("series", ignoreCase = true)
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -112,6 +125,7 @@ fun HomeScreen(
         )
     },
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit = onContinueWatchingClick,
+    onContinueWatchingManualStreamSelection: (ContinueWatchingItem) -> Unit = {},
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit = { _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -310,6 +324,7 @@ fun HomeScreen(
                                 onNavigateToDetail = onNavigateToDetail,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
+                                onContinueWatchingManualStreamSelection = onContinueWatchingManualStreamSelection,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
                                 isCatalogItemWatched = isCatalogItemWatched,
                                 onCatalogItemLongPress = onCatalogItemLongPress
@@ -322,6 +337,7 @@ fun HomeScreen(
                                 onNavigateToDetail = onNavigateToDetail,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
+                                onContinueWatchingManualStreamSelection = onContinueWatchingManualStreamSelection,
                                 onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
                                 isCatalogItemWatched = isCatalogItemWatched,
                                 onCatalogItemLongPress = onCatalogItemLongPress
@@ -338,6 +354,7 @@ fun HomeScreen(
                                 onNavigateToDetail = onNavigateToDetail,
                                 onContinueWatchingClick = onContinueWatchingClick,
                                 onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
+                                onContinueWatchingManualStreamSelection = onContinueWatchingManualStreamSelection,
                                 isCatalogItemWatched = isCatalogItemWatched,
                                 onCatalogItemLongPress = onCatalogItemLongPress
                             )
@@ -587,6 +604,7 @@ private fun ClassicHomeRoute(
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit,
+    onContinueWatchingManualStreamSelection: (ContinueWatchingItem) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
     onCatalogItemLongPress: (MetaPreview, String) -> Unit
@@ -605,6 +623,7 @@ private fun ClassicHomeRoute(
         onNavigateToDetail = onNavigateToDetail,
         onContinueWatchingClick = onContinueWatchingClick,
         onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
+        onContinueWatchingManualStreamSelection = onContinueWatchingManualStreamSelection,
         onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
         onRemoveContinueWatching = { contentId, season, episode, isNextUp ->
             viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
@@ -639,6 +658,7 @@ private fun GridHomeRoute(
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit,
+    onContinueWatchingManualStreamSelection: (ContinueWatchingItem) -> Unit,
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
     onCatalogItemLongPress: (MetaPreview, String) -> Unit
@@ -651,6 +671,7 @@ private fun GridHomeRoute(
         onNavigateToDetail = onNavigateToDetail,
         onContinueWatchingClick = onContinueWatchingClick,
         onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
+        onContinueWatchingManualStreamSelection = onContinueWatchingManualStreamSelection,
         onNavigateToCatalogSeeAll = onNavigateToCatalogSeeAll,
         onRemoveContinueWatching = { contentId, season, episode, isNextUp ->
             viewModel.onEvent(HomeEvent.OnRemoveContinueWatching(contentId, season, episode, isNextUp))
@@ -688,6 +709,7 @@ private fun ModernHomeRoute(
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit,
+    onContinueWatchingManualStreamSelection: (ContinueWatchingItem) -> Unit,
     isCatalogItemWatched: (MetaPreview) -> Boolean,
     onCatalogItemLongPress: (MetaPreview, String) -> Unit
 ) {
@@ -696,6 +718,7 @@ private fun ModernHomeRoute(
     val modernContentState = remember(
         uiState.catalogRows,
         uiState.continueWatchingItems,
+        uiState.deterministicAutoplayEnabled,
         uiState.modernLandscapePostersEnabled,
         uiState.catalogTypeSuffixEnabled,
         uiState.focusedPosterBackdropExpandEnabled,
@@ -719,6 +742,7 @@ private fun ModernHomeRoute(
         ModernHomeContentState(
             catalogRows = uiState.catalogRows,
             continueWatchingItems = uiState.continueWatchingItems,
+            deterministicAutoplayEnabled = uiState.deterministicAutoplayEnabled,
             modernLandscapePostersEnabled = uiState.modernLandscapePostersEnabled,
             catalogTypeSuffixEnabled = uiState.catalogTypeSuffixEnabled,
             focusedPosterBackdropExpandEnabled = uiState.focusedPosterBackdropExpandEnabled,
@@ -790,6 +814,7 @@ private fun ModernHomeRoute(
         onNavigateToDetail = onNavigateToDetail,
         onContinueWatchingClick = onContinueWatchingClick,
         onContinueWatchingStartFromBeginning = onContinueWatchingStartFromBeginning,
+        onContinueWatchingManualStreamSelection = onContinueWatchingManualStreamSelection,
         onLoadMoreCatalog = loadMoreCatalog,
         onRemoveContinueWatching = removeContinueWatching,
         onMarkContinueWatchingWatched = markContinueWatchingWatched,
