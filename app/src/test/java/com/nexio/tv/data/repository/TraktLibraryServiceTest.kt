@@ -332,6 +332,60 @@ class TraktLibraryServiceTest {
     }
 
     @Test
+    fun `targeted rollback restores watchlist slice without removing unrelated provisional list`() = runTest {
+        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktAuthService = mockk<TraktAuthService>(relaxed = true)
+        val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>()
+        val metaRepository = mockk<MetaRepository>(relaxed = true)
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val snapshotStore = mockk<TraktLibrarySnapshotStore>(relaxed = true)
+        var persistedSnapshot: TraktLibrarySnapshotStore.Snapshot? = samplePersistedSnapshot()
+
+        every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
+        every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
+        every { snapshotStore.read() } answers { persistedSnapshot }
+        every { snapshotStore.write(any()) } answers { persistedSnapshot = firstArg() }
+        coEvery { traktMutationOutboxCoordinator.enqueueAndDrain(any()) } answers { firstArg() }
+
+        val service = TraktLibraryService(
+            traktApi = traktApi,
+            traktAuthService = traktAuthService,
+            traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
+            metaRepository = metaRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            traktAuthDataStore = traktAuthDataStore,
+            snapshotStore = snapshotStore
+        )
+
+        advanceUntilIdle()
+        service.createPersonalList(
+            name = "Queued List",
+            description = null,
+            privacy = com.nexio.tv.domain.model.TraktListPrivacy.PRIVATE
+        )
+        service.toggleWatchlist(sampleLibraryInput())
+        advanceUntilIdle()
+
+        val provisionalKey = service.observeListTabs().first().first { it.key.startsWith("personal:pending:") }.key
+        assertTrue(service.observeAllItems().first().none { it.id == "tt1234567" })
+
+        service.rollbackQueuedLibraryMutation(
+            rollbackState = TraktLibraryService.LibraryRollbackState(
+                entriesByList = mapOf(
+                    TraktLibraryService.WATCHLIST_KEY to samplePersistedSnapshot().entriesByList.getValue(TraktLibraryService.WATCHLIST_KEY)
+                )
+            )
+        )
+        advanceUntilIdle()
+
+        val tabs = service.observeListTabs().first()
+        val items = service.observeAllItems().first()
+        assertTrue(tabs.any { it.key == provisionalKey })
+        assertTrue(items.any { it.id == "tt1234567" })
+    }
+
+    @Test
     fun `rollback queued library mutation restores affected list slice without blanking snapshot`() = runTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>(relaxed = true)
