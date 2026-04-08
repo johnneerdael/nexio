@@ -232,7 +232,7 @@ class TraktLibraryService @Inject constructor(
         description: String?,
         privacy: TraktListPrivacy
     ) {
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+        val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
             traktApi.createUserList(
                 authorization = authHeader,
                 id = ME_PATH,
@@ -286,7 +286,7 @@ class TraktLibraryService @Inject constructor(
                 rebuildSnapshot(updatedTabs, snapshot.entriesByList)
             }
         ) {
-            val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+            val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
                 traktApi.updateUserList(
                     authorization = authHeader,
                     id = ME_PATH,
@@ -317,7 +317,7 @@ class TraktLibraryService @Inject constructor(
                 rebuildSnapshot(updatedTabs, updatedEntries)
             }
         ) {
-            val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+            val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
                 traktApi.deleteUserList(
                     authorization = authHeader,
                     id = ME_PATH,
@@ -352,7 +352,7 @@ class TraktLibraryService @Inject constructor(
                 )
             }
         ) {
-            val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+            val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
                 traktApi.reorderUserLists(
                     authorization = authHeader,
                     id = ME_PATH,
@@ -757,7 +757,7 @@ class TraktLibraryService @Inject constructor(
 
     private suspend fun addToWatchlist(item: LibraryEntryInput) {
         val body = buildMutationBody(item)
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+        val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
             traktApi.addToWatchlist(
                 authorization = authHeader,
                 body = body
@@ -771,7 +771,7 @@ class TraktLibraryService @Inject constructor(
 
     private suspend fun removeFromWatchlist(item: LibraryEntryInput) {
         val body = buildMutationBody(item)
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+        val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
             traktApi.removeFromWatchlist(
                 authorization = authHeader,
                 body = body
@@ -785,7 +785,7 @@ class TraktLibraryService @Inject constructor(
 
     private suspend fun addToPersonalList(listId: String, item: LibraryEntryInput) {
         val body = buildMutationBody(item)
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+        val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
             traktApi.addUserListItems(
                 authorization = authHeader,
                 id = ME_PATH,
@@ -801,7 +801,7 @@ class TraktLibraryService @Inject constructor(
 
     private suspend fun removeFromPersonalList(listId: String, item: LibraryEntryInput) {
         val body = buildMutationBody(item)
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+        val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
             traktApi.removeUserListItems(
                 authorization = authHeader,
                 id = ME_PATH,

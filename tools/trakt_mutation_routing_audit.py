@@ -27,7 +27,6 @@ EXPECTED_TRACKED_METHODS = {
 }
 
 EXPECTED_CALL_SITE_COUNTS = {
-    "app/src/main/java/com/nexio/tv/data/repository/TraktDiscoveryService.kt:hideRecommendation": 1,
     "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:addToWatchlist": 1,
     "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:addUserListItems": 1,
     "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:createUserList": 1,
@@ -43,6 +42,7 @@ EXPECTED_CALL_SITE_COUNTS = {
     "app/src/main/java/com/nexio/tv/data/repository/TraktScrobbleService.kt:scrobblePause": 1,
     "app/src/main/java/com/nexio/tv/data/repository/TraktScrobbleService.kt:scrobbleStart": 1,
     "app/src/main/java/com/nexio/tv/data/repository/TraktScrobbleService.kt:scrobbleStop": 1,
+    "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktDiscoveryMutationAdapter.kt:hideRecommendation": 1,
 }
 
 CALL_PATTERN = re.compile(r"traktApi\.(\w+)\(")

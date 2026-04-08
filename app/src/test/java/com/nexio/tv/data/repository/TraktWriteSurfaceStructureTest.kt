@@ -38,7 +38,7 @@ class TraktWriteSurfaceStructureTest {
                 "updateUserList" to setOf("com/nexio/tv/data/repository/TraktLibraryService.kt"),
                 "deleteUserList" to setOf("com/nexio/tv/data/repository/TraktLibraryService.kt"),
                 "reorderUserLists" to setOf("com/nexio/tv/data/repository/TraktLibraryService.kt"),
-                "hideRecommendation" to setOf("com/nexio/tv/data/repository/TraktDiscoveryService.kt"),
+                "hideRecommendation" to setOf("com/nexio/tv/data/repository/trakt/TraktDiscoveryMutationAdapter.kt"),
                 "checkin" to setOf("com/nexio/tv/data/repository/TraktScrobbleService.kt"),
                 "scrobbleStart" to setOf("com/nexio/tv/data/repository/TraktScrobbleService.kt"),
                 "scrobblePause" to setOf("com/nexio/tv/data/repository/TraktScrobbleService.kt"),
@@ -54,9 +54,10 @@ class TraktWriteSurfaceStructureTest {
 
         assertEquals(
             setOf(
-                "com/nexio/tv/data/repository/TraktDiscoveryService.kt",
+                "com/nexio/tv/data/repository/TraktLibraryService.kt",
                 "com/nexio/tv/data/repository/TraktProgressService.kt",
                 "com/nexio/tv/data/repository/TraktScrobbleService.kt",
+                "com/nexio/tv/data/repository/trakt/TraktDiscoveryMutationAdapter.kt",
             ),
             callSites,
         )

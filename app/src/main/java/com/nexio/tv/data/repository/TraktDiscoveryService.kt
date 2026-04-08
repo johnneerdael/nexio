@@ -10,6 +10,7 @@ import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
+import com.nexio.tv.data.repository.trakt.TraktDiscoveryMutationAdapter
 import com.nexio.tv.data.remote.dto.trakt.TraktCalendarEpisodeItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemDto
@@ -22,6 +23,7 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.repository.MetaRepository
+import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -119,7 +121,8 @@ class TraktDiscoveryService @Inject constructor(
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     private val snapshotStore: TraktDiscoverySnapshotStore,
-    private val debugSettingsDataStore: DebugSettingsDataStore
+    private val debugSettingsDataStore: DebugSettingsDataStore,
+    private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val rawSnapshotState = MutableStateFlow(TraktDiscoverySnapshot())
@@ -329,17 +332,12 @@ class TraktDiscoveryService @Inject constructor(
 
     suspend fun dismissRecommendation(ref: TraktRecommendationRef) = withContext(Dispatchers.IO) {
         runCatching {
-            traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-                traktApi.hideRecommendation(
-                    authorization = authHeader,
-                    type = ref.type,
-                    id = ref.pathId
-                )
-            }
+            traktMutationOutboxCoordinator.enqueueAndDrain(
+                TraktDiscoveryMutationAdapter.buildDismissRecommendationEnvelope(ref)
+            )
         }.onFailure { error ->
-            Log.w("TraktDiscoveryService", "Failed to hide recommendation remotely: ${error.message}")
+            Log.w("TraktDiscoveryService", "Failed to enqueue recommendation dismissal: ${error.message}")
         }
-        traktSettingsDataStore.addDismissedRecommendationKey(ref.recommendationKey)
     }
 
     private suspend fun ensureStartupGateInitialized() {
