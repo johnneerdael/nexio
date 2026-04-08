@@ -197,6 +197,17 @@ fun NexioNavHost(
                         navController.navigate(route)
                     }
                 },
+                onContinueWatchingManualStreamSelection = { item ->
+                    homeScope.launch {
+                        val route = buildContinueWatchingManualSelectionStreamRouteWithHydration(
+                            item = item,
+                            resolveRuntimeMinutes = { candidate ->
+                                homeViewModel.resolveContinueWatchingRuntimeMinutes(candidate)
+                            }
+                        )
+                        navController.navigate(route)
+                    }
+                },
                 onNavigateToCatalogSeeAll = { catalogId, addonId, type ->
                     navController.navigate(Screen.CatalogSeeAll.createRoute(catalogId, addonId, type))
                 }
@@ -248,7 +259,7 @@ fun NexioNavHost(
                     savedState["returnFocusEpisode"] = null
                 },
                 onTrailerPlaybackActiveChanged = onDetailTrailerPlaybackActiveChanged,
-                onBackPress = { navController.navigateDetailBackToHome() },
+                onBackPress = { navController.navigateDetailBack(detailArgs.getString("detailSource")) },
                 onNavigateToCastDetail = { personId, personName, preferCrew ->
                     navController.navigate(Screen.CastDetail.createRoute(personId, personName, preferCrew))
                 },
@@ -842,6 +853,24 @@ fun NexioNavHost(
                         )
                     )
                 },
+                onPlayWithManualStreamSelection = { item, _ ->
+                    navController.navigate(
+                        buildManualSelectionStreamRoute(
+                            videoId = item.id,
+                            contentType = item.apiType,
+                            title = item.name,
+                            poster = item.poster,
+                            backdrop = item.background,
+                            logo = item.logo,
+                            contentId = item.id,
+                            contentName = item.name,
+                            genres = item.genres.takeIf { it.isNotEmpty() }?.joinToString(", "),
+                            runtime = parseRuntimeMinutes(item.runtime),
+                            originalLanguage = item.language,
+                            returnToDetailOnBack = false
+                        )
+                    )
+                },
                 onNavigateToSeeAll = { catalogId, addonId, type ->
                     navController.navigate(Screen.CatalogSeeAll.createRoute(catalogId, addonId, type))
                 },
@@ -858,6 +887,24 @@ fun NexioNavHost(
                             itemType = itemType,
                             addonBaseUrl = addonBaseUrl,
                             detailSource = "search"
+                        )
+                    )
+                },
+                onPlayWithManualStreamSelection = { item, _ ->
+                    navController.navigate(
+                        buildManualSelectionStreamRoute(
+                            videoId = item.id,
+                            contentType = item.apiType,
+                            title = item.name,
+                            poster = item.poster,
+                            backdrop = item.background,
+                            logo = item.logo,
+                            contentId = item.id,
+                            contentName = item.name,
+                            genres = item.genres.takeIf { it.isNotEmpty() }?.joinToString(", "),
+                            runtime = parseRuntimeMinutes(item.runtime),
+                            originalLanguage = item.language,
+                            returnToDetailOnBack = false
                         )
                     )
                 }
@@ -1185,6 +1232,54 @@ internal suspend fun buildContinueWatchingStreamRouteWithHydration(
         deterministicAutoplayEnabled = deterministicAutoplayEnabled,
         startFromBeginning = startFromBeginning
     )
+}
+
+internal fun buildContinueWatchingManualSelectionStreamRoute(
+    item: ContinueWatchingItem
+): String {
+    return when (item) {
+        is ContinueWatchingItem.InProgress -> buildManualSelectionStreamRoute(
+            videoId = item.progress.videoId,
+            contentType = item.progress.contentType,
+            title = item.progress.name,
+            poster = item.progress.poster,
+            backdrop = item.progress.backdrop,
+            logo = item.progress.logo,
+            season = item.progress.season,
+            episode = item.progress.episode,
+            episodeName = item.progress.episodeTitle,
+            contentId = item.progress.contentId,
+            contentName = item.progress.name,
+            runtime = continueWatchingRuntimeMinutes(item),
+            returnToDetailOnBack = item.progress.contentType.equals("series", ignoreCase = true)
+        )
+
+        is ContinueWatchingItem.NextUp -> buildManualSelectionStreamRoute(
+            videoId = item.info.videoId,
+            contentType = item.info.contentType,
+            title = item.info.name,
+            poster = item.info.poster,
+            backdrop = item.info.backdrop,
+            logo = item.info.logo,
+            season = item.info.season,
+            episode = item.info.episode,
+            episodeName = item.info.episodeTitle,
+            contentId = item.info.contentId,
+            contentName = item.info.name,
+            runtime = continueWatchingRuntimeMinutes(item),
+            returnToDetailOnBack = item.info.contentType.equals("series", ignoreCase = true)
+        )
+    }
+}
+
+internal suspend fun buildContinueWatchingManualSelectionStreamRouteWithHydration(
+    item: ContinueWatchingItem,
+    resolveRuntimeMinutes: suspend (ContinueWatchingItem) -> Int?
+): String {
+    val hydratedItem = item.withHydratedRuntimeMinutes(
+        continueWatchingRuntimeMinutes(item) ?: resolveRuntimeMinutes(item)
+    )
+    return buildContinueWatchingManualSelectionStreamRoute(hydratedItem)
 }
 
 internal fun runtimeMinutesFromDurationMs(durationMs: Long?): Int? {

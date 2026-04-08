@@ -22,6 +22,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.components.EmptyScreenState
 import com.nexio.tv.ui.components.PosterCardDefaults
 import com.nexio.tv.ui.components.PosterCardStyle
@@ -31,7 +32,8 @@ import kotlin.math.roundToInt
 @Composable
 fun DiscoverScreen(
     viewModel: SearchViewModel = hiltViewModel(),
-    onNavigateToDetail: (String, String, String) -> Unit
+    onNavigateToDetail: (String, String, String) -> Unit,
+    onPlayWithManualStreamSelection: (MetaPreview, String) -> Unit = { _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -39,6 +41,7 @@ fun DiscoverScreen(
     var discoverFocusedItemIndex by rememberSaveable { mutableStateOf(0) }
     var restoreDiscoverFocus by rememberSaveable { mutableStateOf(false) }
     var pendingDiscoverRestoreOnResume by rememberSaveable { mutableStateOf(false) }
+    var searchManualStreamSelectionTarget by remember { mutableStateOf<SearchManualStreamSelectionTarget?>(null) }
 
     val posterCardStyle = remember(uiState.posterCardWidthDp, uiState.posterCardCornerRadiusDp) {
         val computedHeightDp = (uiState.posterCardWidthDp * 1.5f).roundToInt()
@@ -88,6 +91,19 @@ fun DiscoverScreen(
                     onNavigateToDetail(itemId, itemType, addonBaseUrl)
                 },
                 onDiscoverItemFocused = { discoverFocusedItemIndex = it },
+                onPlayWithManualStreamSelection = { item, addonBaseUrl ->
+                    if (
+                        shouldShowSearchManualStreamSelection(
+                            deterministicAutoplayEnabled = uiState.deterministicAutoplayEnabled,
+                            apiType = item.apiType
+                        )
+                    ) {
+                        searchManualStreamSelectionTarget = SearchManualStreamSelectionTarget(
+                            item = item,
+                            addonBaseUrl = addonBaseUrl
+                        )
+                    }
+                },
                 onSelectType = { viewModel.onEvent(SearchEvent.SelectDiscoverType(it)) },
                 onSelectCatalog = { viewModel.onEvent(SearchEvent.SelectDiscoverCatalog(it)) },
                 onSelectGenre = { viewModel.onEvent(SearchEvent.SelectDiscoverGenre(it)) },
@@ -95,5 +111,29 @@ fun DiscoverScreen(
                 modifier = Modifier.padding(top = 16.dp)
             )
         }
+    }
+
+    val selectedManualTarget = searchManualStreamSelectionTarget
+    if (selectedManualTarget != null) {
+        SearchManualStreamSelectionDialog(
+            title = selectedManualTarget.item.name,
+            onDismiss = { searchManualStreamSelectionTarget = null },
+            onPlayWithManualStreamSelection = {
+                onPlayWithManualStreamSelection(
+                    selectedManualTarget.item,
+                    selectedManualTarget.addonBaseUrl
+                )
+                searchManualStreamSelectionTarget = null
+            },
+            onDetails = {
+                pendingDiscoverRestoreOnResume = true
+                onNavigateToDetail(
+                    selectedManualTarget.item.id,
+                    selectedManualTarget.item.apiType,
+                    selectedManualTarget.addonBaseUrl
+                )
+                searchManualStreamSelectionTarget = null
+            }
+        )
     }
 }

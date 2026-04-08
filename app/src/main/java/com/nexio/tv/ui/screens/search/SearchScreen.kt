@@ -70,12 +70,15 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.nexio.tv.ui.components.CatalogRowSection
 import com.nexio.tv.ui.components.EmptyScreenState
 import com.nexio.tv.ui.components.ErrorState
 import com.nexio.tv.ui.components.LoadingIndicator
+import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.components.PosterCardDefaults
 import com.nexio.tv.ui.components.PosterCardStyle
 import com.nexio.tv.ui.theme.NexioColors
@@ -87,12 +90,29 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
+import com.nexio.tv.domain.model.MetaPreview
+
+internal data class SearchManualStreamSelectionTarget(
+    val item: MetaPreview,
+    val addonBaseUrl: String
+)
+
+internal fun shouldShowSearchManualStreamSelection(
+    deterministicAutoplayEnabled: Boolean,
+    apiType: String
+): Boolean {
+    return deterministicAutoplayEnabled && (
+        apiType.equals("movie", ignoreCase = true) ||
+            apiType.equals("series", ignoreCase = true)
+    )
+}
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SearchScreen(
     viewModel: SearchViewModel = hiltViewModel(),
     onNavigateToDetail: (String, String, String) -> Unit,
+    onPlayWithManualStreamSelection: (MetaPreview, String) -> Unit = { _, _ -> },
     onNavigateToSeeAll: (catalogId: String, addonId: String, type: String) -> Unit = { _, _, _ -> },
     onOpenDiscover: () -> Unit = {}
 ) {
@@ -116,6 +136,7 @@ fun SearchScreen(
     var discoverFocusedItemIndex by rememberSaveable { mutableStateOf(0) }
     var restoreDiscoverFocus by rememberSaveable { mutableStateOf(false) }
     var pendingDiscoverRestoreOnResume by rememberSaveable { mutableStateOf(false) }
+    var searchManualStreamSelectionTarget by remember { mutableStateOf<SearchManualStreamSelectionTarget?>(null) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
     val onVoiceQueryResultState = rememberUpdatedState<(String) -> Unit> { recognized ->
@@ -541,6 +562,19 @@ fun SearchScreen(
                                 onItemClick = { id, type, addonBaseUrl ->
                                     onNavigateToDetail(id, type, addonBaseUrl)
                                 },
+                                onItemLongPress = { item, addonBaseUrl ->
+                                    if (
+                                        shouldShowSearchManualStreamSelection(
+                                            deterministicAutoplayEnabled = uiState.deterministicAutoplayEnabled,
+                                            apiType = item.apiType
+                                        )
+                                    ) {
+                                        searchManualStreamSelectionTarget = SearchManualStreamSelectionTarget(
+                                            item = item,
+                                            addonBaseUrl = addonBaseUrl
+                                        )
+                                    }
+                                },
                                 onSeeAll = {
                                     onNavigateToSeeAll(
                                         catalogRow.catalogId,
@@ -553,6 +587,73 @@ fun SearchScreen(
                     }
                 }
             }
+        }
+    }
+
+    val selectedManualTarget = searchManualStreamSelectionTarget
+    if (selectedManualTarget != null) {
+        SearchManualStreamSelectionDialog(
+            title = selectedManualTarget.item.name,
+            onDismiss = { searchManualStreamSelectionTarget = null },
+            onPlayWithManualStreamSelection = {
+                onPlayWithManualStreamSelection(
+                    selectedManualTarget.item,
+                    selectedManualTarget.addonBaseUrl
+                )
+                searchManualStreamSelectionTarget = null
+            },
+            onDetails = {
+                onNavigateToDetail(
+                    selectedManualTarget.item.id,
+                    selectedManualTarget.item.apiType,
+                    selectedManualTarget.addonBaseUrl
+                )
+                searchManualStreamSelectionTarget = null
+            }
+        )
+    }
+}
+
+@Composable
+internal fun SearchManualStreamSelectionDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    onPlayWithManualStreamSelection: () -> Unit,
+    onDetails: () -> Unit
+) {
+    val primaryFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        primaryFocusRequester.requestFocus()
+    }
+
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = title,
+        subtitle = stringResource(R.string.cw_dialog_subtitle)
+    ) {
+        Button(
+            onClick = onPlayWithManualStreamSelection,
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(primaryFocusRequester),
+            colors = ButtonDefaults.colors(
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary
+            )
+        ) {
+            Text(stringResource(R.string.play_with_manual_stream_selection))
+        }
+
+        Button(
+            onClick = onDetails,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.colors(
+                containerColor = NexioColors.BackgroundCard,
+                contentColor = NexioColors.TextPrimary
+            )
+        ) {
+            Text(stringResource(R.string.cw_action_go_to_details))
         }
     }
 }
