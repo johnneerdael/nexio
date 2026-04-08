@@ -8,9 +8,17 @@ import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktMovieDto
 import com.nexio.tv.data.remote.dto.trakt.TraktScrobbleRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
@@ -46,6 +54,12 @@ class TraktScrobbleService @Inject constructor(
     private val traktAuthService: TraktAuthService,
     private val traktProgressService: TraktProgressService
 ) {
+    internal sealed interface MutationResult {
+        data object Success : MutationResult
+        data object Failed : MutationResult
+        data object Collapsed : MutationResult
+    }
+
     data class WatchingNowState(
         val active: Boolean = false,
         val title: String? = null,
@@ -62,55 +76,147 @@ class TraktScrobbleService @Inject constructor(
     )
 
     private val watchingNowState = MutableStateFlow(WatchingNowState())
+    private val mutationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val pendingMutationMutex = Mutex()
     private var lastScrobbleStamp: ScrobbleStamp? = null
+    private var pendingMutation: QueuedWatchingMutation? = null
+    private var pendingMutationDrainJob: Job? = null
+    private var watchingNowOptimisticVersion: Long = 0L
     private val minSendIntervalMs = 8_000L
     private val progressWindow = 1.5f
 
     suspend fun scrobbleStart(item: TraktScrobbleItem, progressPercent: Float) {
-        sendScrobble(action = "start", item = item, progressPercent = progressPercent)
+        if (!canMutateWatchingState()) return
+        submitMutation(
+            request = WatchingMutationRequest.Scrobble(
+                action = "start",
+                item = item,
+                progressPercent = progressPercent
+            )
+        )
     }
 
     suspend fun scrobbleStop(item: TraktScrobbleItem, progressPercent: Float) {
-        sendScrobble(action = "stop", item = item, progressPercent = progressPercent)
+        if (!canMutateWatchingState()) return
+        submitMutation(
+            request = WatchingMutationRequest.Scrobble(
+                action = "stop",
+                item = item,
+                progressPercent = progressPercent
+            )
+        )
     }
 
     suspend fun scrobblePause(item: TraktScrobbleItem, progressPercent: Float) {
-        sendScrobble(action = "pause", item = item, progressPercent = progressPercent)
+        if (!canMutateWatchingState()) return
+        submitMutation(
+            request = WatchingMutationRequest.Scrobble(
+                action = "pause",
+                item = item,
+                progressPercent = progressPercent
+            )
+        )
     }
 
     suspend fun checkin(item: TraktScrobbleItem, message: String? = null): Boolean {
-        if (!traktAuthService.getCurrentAuthState().isAuthenticated) return false
-        if (!traktAuthService.hasRequiredCredentials()) return false
-
-        val requestBody = buildCheckinRequestBody(item = item, message = message)
-        val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-            traktApi.checkin(authHeader, requestBody)
-        } ?: return false
-
-        if (response.isSuccessful || response.code() == 409) {
-            traktProgressService.refreshNow()
-            updateWatchingNowState(
-                active = true,
+        if (!canMutateWatchingState()) return false
+        return submitMutation(
+            request = WatchingMutationRequest.CheckIn(
                 item = item,
-                progressPercent = null
+                message = message
             )
-            return true
-        }
-        return false
+        ) == MutationResult.Success
     }
 
     fun observeWatchingNowState(): StateFlow<WatchingNowState> = watchingNowState.asStateFlow()
 
-    private suspend fun sendScrobble(
-        action: String,
-        item: TraktScrobbleItem,
-        progressPercent: Float
-    ) {
-        if (!traktAuthService.getCurrentAuthState().isAuthenticated) return
-        if (!traktAuthService.hasRequiredCredentials()) return
+    private suspend fun canMutateWatchingState(): Boolean {
+        if (!traktAuthService.getCurrentAuthState().isAuthenticated) return false
+        if (!traktAuthService.hasRequiredCredentials()) return false
+        return true
+    }
 
+    private suspend fun submitMutation(request: WatchingMutationRequest): MutationResult {
+        val result = CompletableDeferred<MutationResult>()
+        pendingMutationMutex.withLock {
+            val optimisticVersion = watchingNowOptimisticVersion + 1L
+            watchingNowOptimisticVersion = optimisticVersion
+            val incoming = QueuedWatchingMutation(
+                mutation = PendingWatchingMutation(
+                    request = request,
+                    rollbackState = watchingNowState.value,
+                    optimisticVersion = optimisticVersion
+                ),
+                result = result
+            )
+            publishWatchingNowState(request.toWatchingNowState())
+            val existing = pendingMutation
+            if (existing != null) {
+                existing.result.complete(MutationResult.Collapsed)
+            }
+            pendingMutation = replacePendingWatchingMutation(
+                existing = existing?.mutation,
+                incoming = incoming.mutation
+            ).let { merged ->
+                incoming.copy(mutation = merged)
+            }
+            if (pendingMutationDrainJob?.isActive != true) {
+                pendingMutationDrainJob = mutationScope.launch {
+                    drainPendingMutations()
+                }
+            }
+        }
+        return result.await()
+    }
+
+    private suspend fun drainPendingMutations() {
+        while (true) {
+            val next = pendingMutationMutex.withLock {
+                val queued = pendingMutation ?: run {
+                    pendingMutationDrainJob = null
+                    return
+                }
+                pendingMutation = null
+                queued
+            }
+            val result = executeMutation(next.mutation.request)
+            if (result == MutationResult.Failed) {
+                pendingMutationMutex.withLock {
+                    if (shouldRollbackWatchingMutation(watchingNowOptimisticVersion, next.mutation.optimisticVersion)) {
+                        publishWatchingNowState(next.mutation.rollbackState)
+                    }
+                }
+            }
+            next.result.complete(result)
+        }
+    }
+
+    private suspend fun executeMutation(request: WatchingMutationRequest): MutationResult {
+        return when (request) {
+            is WatchingMutationRequest.CheckIn -> executeCheckin(request)
+            is WatchingMutationRequest.Scrobble -> executeScrobble(request)
+        }
+    }
+
+    private suspend fun executeCheckin(request: WatchingMutationRequest.CheckIn): MutationResult {
+        val requestBody = buildCheckinRequestBody(item = request.item, message = request.message)
+        val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
+            traktApi.checkin(authHeader, requestBody)
+        } ?: return MutationResult.Failed
+
+        if (response.isSuccessful || response.code() == 409) {
+            traktProgressService.refreshNow()
+            return MutationResult.Success
+        }
+        return MutationResult.Failed
+    }
+
+    private suspend fun executeScrobble(request: WatchingMutationRequest.Scrobble): MutationResult {
+        val action = request.action
+        val item = request.item
+        val progressPercent = request.progressPercent
         val clampedProgress = progressPercent.coerceIn(0f, 100f)
-        if (shouldSkip(action, item.itemKey, clampedProgress)) return
+        if (shouldSkip(action, item.itemKey, clampedProgress)) return MutationResult.Success
 
         val requestBody = buildRequestBody(item, clampedProgress)
 
@@ -120,7 +226,7 @@ class TraktScrobbleService @Inject constructor(
                 "pause" -> traktApi.scrobblePause(authHeader, requestBody)
                 else -> traktApi.scrobbleStop(authHeader, requestBody)
             }
-        } ?: return
+        } ?: return MutationResult.Failed
 
         if (response.isSuccessful || response.code() == 409) {
             lastScrobbleStamp = ScrobbleStamp(
@@ -129,23 +235,12 @@ class TraktScrobbleService @Inject constructor(
                 progress = clampedProgress,
                 timestampMs = System.currentTimeMillis()
             )
-            when (action) {
-                "start" -> updateWatchingNowState(
-                    active = true,
-                    item = item,
-                    progressPercent = clampedProgress
-                )
-
-                "pause", "stop" -> updateWatchingNowState(
-                    active = false,
-                    item = item,
-                    progressPercent = clampedProgress
-                )
-            }
             if (action == "stop") {
                 traktProgressService.refreshNow()
             }
+            return MutationResult.Success
         }
+        return MutationResult.Failed
     }
 
     internal fun buildRequestBody(
@@ -227,7 +322,21 @@ class TraktScrobbleService @Inject constructor(
         item: TraktScrobbleItem,
         progressPercent: Float?
     ) {
-        val (title, contentType) = when (item) {
+        publishWatchingNowState(
+            WatchingNowState(
+                active = active,
+                title = buildWatchingTitle(item),
+                contentType = when (item) {
+                    is TraktScrobbleItem.Movie -> "movie"
+                    is TraktScrobbleItem.Episode -> "episode"
+                },
+                progressPercent = progressPercent
+            )
+        )
+    }
+
+    private fun buildWatchingTitle(item: TraktScrobbleItem): String? {
+        val title = when (item) {
             is TraktScrobbleItem.Movie -> item.title to "movie"
             is TraktScrobbleItem.Episode -> {
                 val label = buildString {
@@ -243,13 +352,103 @@ class TraktScrobbleService @Inject constructor(
                 }.trim()
                 label to "episode"
             }
-        }
-        watchingNowState.value = WatchingNowState(
-            active = active,
-            title = title?.takeIf { it.isNotBlank() },
-            contentType = contentType,
-            progressPercent = progressPercent,
+        }.first
+        return title?.takeIf { it.isNotBlank() }
+    }
+
+    private fun publishWatchingNowState(state: WatchingNowState) {
+        watchingNowState.value = state.copy(
             updatedAtMs = System.currentTimeMillis()
         )
     }
 }
+
+internal sealed interface WatchingMutationRequest {
+    fun toWatchingNowState(): TraktScrobbleService.WatchingNowState
+
+    data class Scrobble(
+        val action: String,
+        val item: TraktScrobbleItem,
+        val progressPercent: Float
+    ) : WatchingMutationRequest {
+        override fun toWatchingNowState(): TraktScrobbleService.WatchingNowState {
+            val progress = progressPercent.coerceIn(0f, 100f)
+            return TraktScrobbleService.WatchingNowState(
+                active = action == "start",
+                title = when (item) {
+                    is TraktScrobbleItem.Movie -> item.title?.takeIf { it.isNotBlank() }
+                    is TraktScrobbleItem.Episode -> buildString {
+                        append(item.showTitle.orEmpty())
+                        append(" S")
+                        append(item.season)
+                        append("E")
+                        append(item.number)
+                        if (!item.episodeTitle.isNullOrBlank()) {
+                            append(" ")
+                            append(item.episodeTitle)
+                        }
+                    }.trim().takeIf { it.isNotBlank() }
+                },
+                contentType = when (item) {
+                    is TraktScrobbleItem.Movie -> "movie"
+                    is TraktScrobbleItem.Episode -> "episode"
+                },
+                progressPercent = progress
+            )
+        }
+    }
+
+    data class CheckIn(
+        val item: TraktScrobbleItem,
+        val message: String?
+    ) : WatchingMutationRequest {
+        override fun toWatchingNowState(): TraktScrobbleService.WatchingNowState {
+            return TraktScrobbleService.WatchingNowState(
+                active = true,
+                title = when (item) {
+                    is TraktScrobbleItem.Movie -> item.title?.takeIf { it.isNotBlank() }
+                    is TraktScrobbleItem.Episode -> buildString {
+                        append(item.showTitle.orEmpty())
+                        append(" S")
+                        append(item.season)
+                        append("E")
+                        append(item.number)
+                        if (!item.episodeTitle.isNullOrBlank()) {
+                            append(" ")
+                            append(item.episodeTitle)
+                        }
+                    }.trim().takeIf { it.isNotBlank() }
+                },
+                contentType = when (item) {
+                    is TraktScrobbleItem.Movie -> "movie"
+                    is TraktScrobbleItem.Episode -> "episode"
+                },
+                progressPercent = null
+            )
+        }
+    }
+}
+
+internal data class PendingWatchingMutation(
+    val request: WatchingMutationRequest,
+    val rollbackState: TraktScrobbleService.WatchingNowState,
+    val optimisticVersion: Long
+)
+
+private data class QueuedWatchingMutation(
+    val mutation: PendingWatchingMutation,
+    val result: CompletableDeferred<TraktScrobbleService.MutationResult>
+)
+
+internal fun replacePendingWatchingMutation(
+    existing: PendingWatchingMutation?,
+    incoming: PendingWatchingMutation
+): PendingWatchingMutation {
+    val rollbackState = existing?.rollbackState ?: incoming.rollbackState
+    return incoming.copy(rollbackState = rollbackState)
+}
+
+internal fun shouldRollbackWatchingMutation(
+    currentOptimisticVersion: Long,
+    failedMutationVersion: Long
+): Boolean = currentOptimisticVersion == failedMutationVersion
