@@ -87,8 +87,13 @@ class SimklLibraryService @Inject constructor(
     private val inFlightMetadataKeys = mutableSetOf<String>()
     private val metadataHydrationLimit = 80
     private val metadataFetchSemaphore = Semaphore(4)
-    private var lastActivitiesAllAt: String? = null
-    private var lastActivitiesRemovedFromListAt: String? = null
+    // Per-type activity timestamps — stored from /sync/activities and used as date_from on delta syncs
+    private var lastTvShowsAllAt: String? = null
+    private var lastMoviesAllAt: String? = null
+    private var lastAnimeAllAt: String? = null
+    private var lastTvShowsRemovedFromListAt: String? = null
+    private var lastMoviesRemovedFromListAt: String? = null
+    private var lastAnimeRemovedFromListAt: String? = null
     private val autoRefreshThrottleMs = 20 * 60 * 1000L
     private var lastAutoRefreshMs = 0L
 
@@ -114,8 +119,12 @@ class SimklLibraryService @Inject constructor(
             }
             snapshotState.value = restored
             hasCacheState.value = restored.updatedAtMs > 0L || restored.allEntries.isNotEmpty()
-            lastActivitiesAllAt = persisted.lastActivitiesAllAt
-            lastActivitiesRemovedFromListAt = persisted.lastActivitiesRemovedFromListAt
+            lastTvShowsAllAt = persisted.lastTvShowsAllAt
+            lastMoviesAllAt = persisted.lastMoviesAllAt
+            lastAnimeAllAt = persisted.lastAnimeAllAt
+            lastTvShowsRemovedFromListAt = persisted.lastTvShowsRemovedFromListAt
+            lastMoviesRemovedFromListAt = persisted.lastMoviesRemovedFromListAt
+            lastAnimeRemovedFromListAt = persisted.lastAnimeRemovedFromListAt
         }
     }
 
@@ -231,28 +240,38 @@ class SimklLibraryService @Inject constructor(
                     return@runCatching
                 }
                 val activities = activitiesResponse.body()
-                val currentAll = maxTimestamp(
-                    activities?.all,
-                    activities?.tvShows?.all,
-                    activities?.movies?.all,
-                    activities?.anime?.all
-                )
-                val currentRemovedFromList = maxTimestamp(
-                    activities?.tvShows?.removedFromList,
-                    activities?.movies?.removedFromList,
-                    activities?.anime?.removedFromList
-                )
-                if (!force && currentAll != null && currentAll == lastActivitiesAllAt) {
+                val currentTvShowsAll = activities?.tvShows?.all
+                val currentMoviesAll = activities?.movies?.all
+                val currentAnimeAll = activities?.anime?.all
+
+                // Detect first sync: no per-type timestamps saved yet
+                val isFirstSync = lastTvShowsAllAt == null && lastMoviesAllAt == null && lastAnimeAllAt == null
+
+                // Skip entirely if nothing changed across any type
+                if (!force && !isFirstSync &&
+                    currentTvShowsAll == lastTvShowsAllAt &&
+                    currentMoviesAll == lastMoviesAllAt &&
+                    currentAnimeAll == lastAnimeAllAt
+                ) {
                     lastAutoRefreshMs = now
                     return@runCatching
                 }
-                val snapshot = if (lastActivitiesAllAt == null) {
+
+                val snapshot = if (isFirstSync) {
+                    // Phase 1: single GET /sync/all-items/ — no type filter, no date_from
                     fetchInitialSnapshot()
                 } else {
-                    fetchDeltaAndMerge(currentRemovedFromList)
+                    // Phase 2: per-type delta using type-specific saved timestamps
+                    fetchDeltaAndMerge(activities)
                 } ?: return@runCatching
-                lastActivitiesAllAt = currentAll
-                lastActivitiesRemovedFromListAt = currentRemovedFromList
+
+                // Save per-type timestamps from this activities response
+                lastTvShowsAllAt = currentTvShowsAll
+                lastMoviesAllAt = currentMoviesAll
+                lastAnimeAllAt = currentAnimeAll
+                lastTvShowsRemovedFromListAt = activities?.tvShows?.removedFromList
+                lastMoviesRemovedFromListAt = activities?.movies?.removedFromList
+                lastAnimeRemovedFromListAt = activities?.anime?.removedFromList
                 lastAutoRefreshMs = now
                 snapshotState.value = snapshot
                 hasCacheState.value = snapshot.updatedAtMs > 0L || snapshot.allEntries.isNotEmpty()
@@ -266,6 +285,7 @@ class SimklLibraryService @Inject constructor(
     }
 
     private suspend fun fetchInitialSnapshot(): Snapshot? {
+        // Spec: first sync uses GET /sync/all-items/ with no type filter and no date_from
         val response = remote.getAllItems(dateFrom = null, extended = "full")
         if (!response.isSuccessful) {
             Log.w("SimklLibraryService", "Failed to fetch initial SIMKL all-items (${response.code()})")
@@ -274,19 +294,37 @@ class SimklLibraryService @Inject constructor(
         return buildSnapshotFromItems(response.body().orEmpty())
     }
 
-    private suspend fun fetchDeltaAndMerge(currentRemovedFromList: String?): Snapshot? {
-        val effectiveDateFrom = if (currentRemovedFromList != lastActivitiesRemovedFromListAt) null else lastActivitiesAllAt
-        val response = remote.getAllItems(dateFrom = effectiveDateFrom, extended = "full")
-        if (!response.isSuccessful) {
-            Log.w("SimklLibraryService", "Failed to fetch SIMKL all-items delta (${response.code()})")
-            return null
+    private suspend fun fetchDeltaAndMerge(
+        activities: com.nexio.tv.data.remote.dto.simkl.SimklLastActivitiesResponseDto?
+    ): Snapshot? {
+        // If removals changed for ANY type, fall back to a full re-fetch so removed items are cleaned up
+        val removalsChanged =
+            activities?.tvShows?.removedFromList != lastTvShowsRemovedFromListAt ||
+            activities?.movies?.removedFromList != lastMoviesRemovedFromListAt ||
+            activities?.anime?.removedFromList != lastAnimeRemovedFromListAt
+        if (removalsChanged) {
+            return fetchInitialSnapshot()
         }
-        val deltaItems = response.body().orEmpty()
-        return if (effectiveDateFrom == null) {
-            buildSnapshotFromItems(deltaItems)
-        } else {
-            mergeLibraryDelta(snapshotState.value, deltaItems)
+
+        // Per-type delta: fetch only types whose timestamp changed, using the saved timestamp as date_from
+        data class TypeConfig(val type: String, val extended: String, val currentAll: String?, val savedAll: String?)
+        val types = listOf(
+            TypeConfig("shows", "full", activities?.tvShows?.all, lastTvShowsAllAt),
+            TypeConfig("movies", "full", activities?.movies?.all, lastMoviesAllAt),
+            TypeConfig("anime", "full_anime_seasons", activities?.anime?.all, lastAnimeAllAt)
+        )
+
+        var merged = snapshotState.value
+        for (tc in types) {
+            if (tc.currentAll == tc.savedAll) continue  // no changes for this type
+            val response = remote.getAllItemsByType(tc.type, dateFrom = tc.savedAll, extended = tc.extended)
+            if (!response.isSuccessful) {
+                Log.w("SimklLibraryService", "Failed to fetch SIMKL ${tc.type} delta (${response.code()})")
+                continue
+            }
+            merged = mergeLibraryDelta(merged, response.body().orEmpty())
         }
+        return merged.copy(updatedAtMs = System.currentTimeMillis())
     }
 
     private fun buildSnapshotFromItems(items: List<com.nexio.tv.data.remote.dto.simkl.SimklLibraryItemDto>): Snapshot {
@@ -654,8 +692,12 @@ class SimklLibraryService @Inject constructor(
                     )
                 },
                 updatedAtMs = snapshot.updatedAtMs,
-                lastActivitiesAllAt = lastActivitiesAllAt,
-                lastActivitiesRemovedFromListAt = lastActivitiesRemovedFromListAt
+                lastTvShowsAllAt = lastTvShowsAllAt,
+                lastMoviesAllAt = lastMoviesAllAt,
+                lastAnimeAllAt = lastAnimeAllAt,
+                lastTvShowsRemovedFromListAt = lastTvShowsRemovedFromListAt,
+                lastMoviesRemovedFromListAt = lastMoviesRemovedFromListAt,
+                lastAnimeRemovedFromListAt = lastAnimeRemovedFromListAt
             )
         )
     }

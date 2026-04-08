@@ -42,8 +42,13 @@ class SimklLibrarySnapshotStore @Inject constructor(
         val entriesByList: Map<String, List<LibraryEntry>> = emptyMap(),
         val metadataByContentKey: Map<String, PersistedLibraryMetadata> = emptyMap(),
         val updatedAtMs: Long = 0L,
-        val lastActivitiesAllAt: String? = null,
-        val lastActivitiesRemovedFromListAt: String? = null
+        // Per-type activity timestamps from /sync/activities (used for date_from on delta syncs)
+        val lastTvShowsAllAt: String? = null,
+        val lastMoviesAllAt: String? = null,
+        val lastAnimeAllAt: String? = null,
+        val lastTvShowsRemovedFromListAt: String? = null,
+        val lastMoviesRemovedFromListAt: String? = null,
+        val lastAnimeRemovedFromListAt: String? = null
     )
 
     private val gson = Gson()
@@ -69,8 +74,12 @@ class SimklLibrarySnapshotStore @Inject constructor(
                 add("entriesByList", encodeEntriesByList(snapshot.entriesByList))
                 add("metadataByContentKey", encodeMetadata(snapshot.metadataByContentKey))
                 addProperty("updatedAtMs", snapshot.updatedAtMs)
-                snapshot.lastActivitiesAllAt?.let { addProperty("lastActivitiesAllAt", it) }
-                snapshot.lastActivitiesRemovedFromListAt?.let { addProperty("lastActivitiesRemovedFromListAt", it) }
+                snapshot.lastTvShowsAllAt?.let { addProperty("lastTvShowsAllAt", it) }
+                snapshot.lastMoviesAllAt?.let { addProperty("lastMoviesAllAt", it) }
+                snapshot.lastAnimeAllAt?.let { addProperty("lastAnimeAllAt", it) }
+                snapshot.lastTvShowsRemovedFromListAt?.let { addProperty("lastTvShowsRemovedFromListAt", it) }
+                snapshot.lastMoviesRemovedFromListAt?.let { addProperty("lastMoviesRemovedFromListAt", it) }
+                snapshot.lastAnimeRemovedFromListAt?.let { addProperty("lastAnimeRemovedFromListAt", it) }
             }
             prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).commit()
         }.onFailure { error ->
@@ -98,8 +107,12 @@ class SimklLibrarySnapshotStore @Inject constructor(
             entriesByList = decodeEntriesByList(root.get("entriesByList")),
             metadataByContentKey = decodeMetadata(root.get("metadataByContentKey")),
             updatedAtMs = root.longOrNull("updatedAtMs") ?: 0L,
-            lastActivitiesAllAt = root.stringOrNull("lastActivitiesAllAt"),
-            lastActivitiesRemovedFromListAt = root.stringOrNull("lastActivitiesRemovedFromListAt")
+            lastTvShowsAllAt = root.stringOrNull("lastTvShowsAllAt"),
+            lastMoviesAllAt = root.stringOrNull("lastMoviesAllAt"),
+            lastAnimeAllAt = root.stringOrNull("lastAnimeAllAt"),
+            lastTvShowsRemovedFromListAt = root.stringOrNull("lastTvShowsRemovedFromListAt"),
+            lastMoviesRemovedFromListAt = root.stringOrNull("lastMoviesRemovedFromListAt"),
+            lastAnimeRemovedFromListAt = root.stringOrNull("lastAnimeRemovedFromListAt")
         )
     }
 
