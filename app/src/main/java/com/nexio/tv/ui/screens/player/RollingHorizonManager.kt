@@ -154,6 +154,6 @@ internal class RollingHorizonManager(
             .setCacheWriteDataSinkFactory(dataSinkFactory)
             .setUpstreamDataSourceFactory(upstreamFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-            .createDataSource() as CacheDataSource
+            .createDataSource()
     }
 }

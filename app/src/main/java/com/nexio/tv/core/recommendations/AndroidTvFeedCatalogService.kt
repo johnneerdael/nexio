@@ -87,6 +87,7 @@ class AndroidTvFeedCatalogService @Inject constructor(
         ) { values ->
             @Suppress("UNCHECKED_CAST")
             val addons = values[0] as List<Addon>
+            @Suppress("UNCHECKED_CAST")
             val disabledKeys = values[1] as List<String>
             val traktSnapshot = values[2] as TraktDiscoverySnapshot
             val traktPrefs = values[3] as TraktCatalogPreferences

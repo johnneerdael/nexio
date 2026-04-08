@@ -1154,7 +1154,7 @@ class StreamScreenViewModel @Inject constructor(
                     streamKey = fallback.stream.wrappedOriginalStreamKey ?: fallback.parsed.exactDuplicateKey,
                     url = fallback.stream.getStreamUrl(),
                     streamName = (fallback.stream.name ?: "").ifEmpty {
-                        fallback.stream.addonName ?: "Fallback"
+                        fallback.stream.addonName
                     },
                     headers = fallback.stream.behaviorHints?.proxyHeaders?.request,
                     filename = fallback.stream.behaviorHints?.filename,

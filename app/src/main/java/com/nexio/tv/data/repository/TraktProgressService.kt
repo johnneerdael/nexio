@@ -1360,7 +1360,7 @@ class TraktProgressService @Inject constructor(
 
         val cachedNextUp = cached?.entry
         val sameEpisodeAsCached = cachedNextUp?.season == season && cachedNextUp.episode == episode
-        val episodeSummary = if (sameEpisodeAsCached && cachedNextUp != null) {
+        val episodeSummary = if (sameEpisodeAsCached) {
             null
         } else {
             fetchEpisodeSummary(pathId = pathId, season = season, episode = episode)

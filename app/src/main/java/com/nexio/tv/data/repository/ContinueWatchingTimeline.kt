@@ -97,11 +97,12 @@ internal fun <R, N> buildMixedContinueWatchingTimeline(
                 var leadResume: TimelineEntry.Resume<R>? = null
                 cluster.forEach { entry ->
                     if (entry is TimelineEntry.Resume<R>) {
+                        val current = leadResume
                         if (
-                            leadResume == null ||
-                            entry.activityAtMs > leadResume!!.activityAtMs ||
-                            (entry.activityAtMs == leadResume!!.activityAtMs &&
-                                entry.stableKey() < leadResume!!.stableKey())
+                            current == null ||
+                            entry.activityAtMs > current.activityAtMs ||
+                            (entry.activityAtMs == current.activityAtMs &&
+                                entry.stableKey() < current.stableKey())
                         ) {
                             leadResume = entry
                         }

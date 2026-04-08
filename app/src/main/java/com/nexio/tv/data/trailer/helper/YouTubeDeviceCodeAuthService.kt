@@ -127,13 +127,13 @@ class YouTubeDeviceCodeAuthService @Inject constructor(
             }
 
             val body = parseTokenResponse(response.body)
-            if (response.code in 200..299 && !body?.accessToken.isNullOrBlank()) {
+            if (response.code in 200..299 && body != null && !body.accessToken.isNullOrBlank()) {
                 Log.i(
                     TAG,
-                    "Device token approved http=${response.code} refresh=${!body?.refreshToken.isNullOrBlank()}"
+                    "Device token approved http=${response.code} refresh=${!body.refreshToken.isNullOrBlank()}"
                 )
                 return@withContext YouTubeTrailerTokenPollResult.Approved(
-                    body!!.toSession(persistedRefreshToken = null)
+                    body.toSession(persistedRefreshToken = null)
                 )
             }
 
@@ -180,9 +180,9 @@ class YouTubeDeviceCodeAuthService @Inject constructor(
             ).getOrElse { return@withContext Result.failure(it) }
 
             val body = parseTokenResponse(response.body)
-            if (response.code in 200..299 && !body?.accessToken.isNullOrBlank()) {
+            if (response.code in 200..299 && body != null && !body.accessToken.isNullOrBlank()) {
                 return@withContext Result.success(
-                    body!!.toSession(persistedRefreshToken = refreshToken)
+                    body.toSession(persistedRefreshToken = refreshToken)
                 ).also {
                     Log.i(TAG, "Access token refreshed http=${response.code}")
                 }

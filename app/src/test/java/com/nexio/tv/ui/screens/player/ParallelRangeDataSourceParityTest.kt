@@ -357,6 +357,7 @@ class ParallelRangeDataSourceParityTest {
                 prds.open(specAt(url, CONTENT.size.toLong() + 1L))
                 org.junit.Assert.fail("expected DataSourceException POSITION_OUT_OF_RANGE")
             } catch (e: androidx.media3.datasource.DataSourceException) {
+                @Suppress("DEPRECATION")
                 assertEquals(
                     androidx.media3.datasource.DataSourceException.POSITION_OUT_OF_RANGE,
                     e.reason

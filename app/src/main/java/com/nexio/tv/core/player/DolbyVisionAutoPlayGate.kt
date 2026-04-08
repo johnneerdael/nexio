@@ -783,6 +783,7 @@ fun supportsDolbyVisionDisplay(context: Context): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
     val displayManager = context.getSystemService(DisplayManager::class.java) ?: return false
     val display = displayManager.getDisplay(Display.DEFAULT_DISPLAY) ?: return false
+    @Suppress("DEPRECATION")
     val hdrTypes = display.hdrCapabilities?.supportedHdrTypes ?: return false
     return hdrTypes.contains(Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION)
 }

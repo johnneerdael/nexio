@@ -40,9 +40,9 @@ internal fun nextRuntimeTransportSpecializationTransition(
     val normalizedHintServiceKey = normalizedBenchmarkServiceKey(hintServiceKey)
     val serviceKeyMatches = normalizedActiveServiceKey != null &&
         normalizedActiveServiceKey == normalizedHintServiceKey
-    val observationMatches = observation != null &&
-        observation.hostScope == runtimeHints?.observedHostScope &&
-        observation.transportClass == runtimeHints?.observedTransportClass
+    val observationMatches = observation != null && runtimeHints != null &&
+        observation.hostScope == runtimeHints.observedHostScope &&
+        observation.transportClass == runtimeHints.observedTransportClass
 
     val status = when {
         !enabled || runtimeHints == null -> RuntimeTransportSpecializationStatus.BASELINE

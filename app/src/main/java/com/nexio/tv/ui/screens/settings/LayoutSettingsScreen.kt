@@ -28,7 +28,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -585,7 +585,7 @@ fun LayoutSettingsContent(
                                 },
                                 onFocused = { focusedSection = LayoutSettingsSection.FOCUSED_POSTER },
                                 trailingIcon = if (uiState.focusedPosterBackdropTrailerMuted) {
-                                    Icons.Default.VolumeUp
+                                    Icons.AutoMirrored.Filled.VolumeUp
                                 } else {
                                     Icons.Default.PlayCircle
                                 }
