@@ -55,6 +55,7 @@ import com.nexio.tv.core.stream.StreamPresentationEngine
 import com.nexio.tv.domain.model.Stream
 import com.nexio.tv.ui.components.InlineIconText
 import com.nexio.tv.ui.components.StreamBadgeKind
+import com.nexio.tv.ui.components.StreamDetailLines
 import com.nexio.tv.ui.components.SourceChipItem
 import com.nexio.tv.ui.components.SourceChipStatus
 import com.nexio.tv.ui.components.SourceStatusFilterChip
@@ -185,16 +186,12 @@ internal fun StreamItem(
                     }
                 }
 
-                item.detailLines.forEachIndexed { index, detail ->
-                    InlineIconText(
-                        text = detail,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = NexioTheme.extendedColors.textSecondary
-                        ),
-                        maxLines = if (index == item.detailLines.lastIndex) 1 else 2,
-                        overflow = TextOverflow.Ellipsis
+                StreamDetailLines(
+                    detailLines = item.detailLines,
+                    colorStyle = MaterialTheme.typography.bodySmall.copy(
+                        color = NexioTheme.extendedColors.textSecondary
                     )
-                }
+                )
 
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
