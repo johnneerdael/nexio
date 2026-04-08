@@ -15,7 +15,7 @@ class TraktWriteSurfaceStructureTest {
     @Test
     fun trackedTraktWriteApisStayConfinedToDedicatedMutationServices() {
         val findings = trackedWriteMethods.associateWith { method ->
-            findCallSites(Regex("""\\btraktApi\\.$method\\s*\\("""))
+            findCallSites(Regex("""\btraktApi\.$method\s*\("""))
         }
 
         trackedWriteMethods.forEach { method ->
@@ -50,7 +50,7 @@ class TraktWriteSurfaceStructureTest {
 
     @Test
     fun trackedTraktWriteHelpersStayInsideDedicatedMutationServices() {
-        val callSites = findCallSites(Regex("""\\btraktAuthService\\.executeAuthorizedWriteRequest\\s*\\("""))
+        val callSites = findCallSites(Regex("""\btraktAuthService\.executeAuthorizedWriteRequest\s*\("""))
 
         assertEquals(
             setOf(
