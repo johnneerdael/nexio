@@ -145,6 +145,8 @@ private sealed class DetailTrailerTakeoverRequest {
     data class SeasonRecap(val season: Int) : DetailTrailerTakeoverRequest()
 }
 
+private const val FIRST_DETAIL_LOWER_CONTENT_ITEM_INDEX = 1
+
 private fun resolveDetailReturnEpisodeFocusTarget(
     meta: Meta,
     request: DetailReturnEpisodeFocusRequest?,
@@ -1500,7 +1502,7 @@ private fun MetaDetailsContent(
             onTrailerButtonClick()
         }
     }
-    val heroMoveDownRequest: (() -> Unit)? = remember(heroDownFocusRequester, coroutineScope) {
+    val heroMoveDownRequest: (() -> Unit)? = remember(heroDownFocusRequester, coroutineScope, listState) {
         val target = heroDownFocusRequester
         if (target == null) {
             null
@@ -1509,7 +1511,12 @@ private fun MetaDetailsContent(
                 hasUserMovedDownFromHero = true
                 coroutineScope.launch {
                     logFocusState("heroMoveDownRequested")
-                    target.requestFocusAfterFrames(reason = "hero_move_down")
+                    moveFocusToLazyItem(
+                        listState = listState,
+                        targetItemIndex = FIRST_DETAIL_LOWER_CONTENT_ITEM_INDEX,
+                        focusRequester = target,
+                        reason = "hero_move_down"
+                    )
                 }
             }
         }
