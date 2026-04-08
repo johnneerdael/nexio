@@ -21,6 +21,7 @@ import com.nexio.tv.data.remote.api.OmdbApi
 import com.nexio.tv.data.remote.api.PremiumizeApi
 import com.nexio.tv.data.remote.api.RealDebridApi
 import com.nexio.tv.data.remote.api.RpdbApi
+import com.nexio.tv.data.remote.api.SimklApi
 import com.nexio.tv.data.remote.api.TrailerApi
 import com.nexio.tv.data.remote.api.TopPostersApi
 import com.nexio.tv.data.remote.api.TmdbApi
@@ -234,6 +235,37 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @Named("simkl")
+    fun provideSimklOkHttpClient(
+        okHttpClient: OkHttpClient
+    ): OkHttpClient = okHttpClient.newBuilder()
+        .disableDiskCacheForGetRequests()
+        .addInterceptor { chain ->
+            val request = chain.request()
+            val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
+            val appName = "NEXIO"
+            val urlBuilder = request.url.newBuilder()
+            if (request.url.queryParameter("client_id").isNullOrBlank() && BuildConfig.SIMKL_CLIENT_ID.isNotBlank()) {
+                urlBuilder.addQueryParameter("client_id", BuildConfig.SIMKL_CLIENT_ID)
+            }
+            if (request.url.queryParameter("app-name").isNullOrBlank()) {
+                urlBuilder.addQueryParameter("app-name", appName)
+            }
+            if (request.url.queryParameter("app-version").isNullOrBlank()) {
+                urlBuilder.addQueryParameter("app-version", version)
+            }
+            val updatedRequest = request.newBuilder()
+                .url(urlBuilder.build())
+                .header("Content-Type", "application/json")
+                .header("User-Agent", "$appName/$version")
+                .header("simkl-api-key", BuildConfig.SIMKL_CLIENT_ID)
+                .build()
+            chain.proceed(updatedRequest)
+        }
+        .build()
+
+    @Provides
+    @Singleton
     @Named("addonCatalog")
     fun provideAddonCatalogOkHttpClient(
         okHttpClient: OkHttpClient
@@ -325,6 +357,19 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @Named("simkl")
+    fun provideSimklRetrofit(
+        @Named("simkl") okHttpClient: OkHttpClient,
+        moshi: Moshi
+    ): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(BuildConfig.SIMKL_API_URL.ifBlank { "https://api.simkl.com/" })
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
     fun provideAddonApi(retrofit: Retrofit): AddonApi =
         retrofit.create(AddonApi::class.java)
 
@@ -344,6 +389,12 @@ object NetworkModule {
     @Singleton
     fun provideTraktApi(@Named("trakt") retrofit: Retrofit): TraktApi =
         retrofit.create(TraktApi::class.java)
+
+
+    @Provides
+    @Singleton
+    fun provideSimklApi(@Named("simkl") retrofit: Retrofit): SimklApi =
+        retrofit.create(SimklApi::class.java)
 
     // --- Skip Intro APIs ---
 

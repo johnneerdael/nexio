@@ -76,6 +76,7 @@ import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.AppFont
 import com.nexio.tv.domain.model.AppTheme
 import com.nexio.tv.domain.model.HomeLayout
+import com.nexio.tv.domain.model.TrackingProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.CoroutineScope
@@ -484,6 +485,7 @@ class AccountSettingsSyncService @Inject constructor(
         playerSettingsDataStore.setFilterMovieYearMismatchStreamsEnabled(settings.playback.streamSelection.filterMovieYearMismatchStreamsEnabled)
         playerSettingsDataStore.setStreamAutoPlayMode(enumValueOrDefault(settings.playback.streamSelection.streamAutoPlayMode, StreamAutoPlayMode.MANUAL))
         playerSettingsDataStore.setStreamAutoPlaySource(enumValueOrDefault(settings.playback.streamSelection.streamAutoPlaySource, StreamAutoPlaySource.ALL_SOURCES))
+        playerSettingsDataStore.setTrackingProvider(enumValueOrDefault(settings.playback.streamSelection.trackingProvider, TrackingProvider.TRAKT))
         playerSettingsDataStore.setStreamAutoPlaySelectedAddons(settings.playback.streamSelection.streamAutoPlaySelectedAddons.toSet())
         playerSettingsDataStore.setStreamAutoPlayRegex(settings.playback.streamSelection.streamAutoPlayRegex)
         playerSettingsDataStore.setStreamAutoPlayNextEpisodeEnabled(settings.playback.streamSelection.streamAutoPlayNextEpisodeEnabled)

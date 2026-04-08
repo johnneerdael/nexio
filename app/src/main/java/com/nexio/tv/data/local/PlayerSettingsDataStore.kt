@@ -13,6 +13,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.nexio.tv.domain.model.TrackingProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -215,6 +216,7 @@ data class PlayerSettings(
     // Stream selection settings
     val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,
     val streamAutoPlaySource: StreamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES,
+    val trackingProvider: TrackingProvider = TrackingProvider.TRAKT,
     val streamAutoPlaySelectedAddons: Set<String> = emptySet(),
     val streamAutoPlayRegex: String = "",
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
@@ -436,6 +438,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val resolutionMatchingEnabledKey = booleanPreferencesKey("resolution_matching_enabled")
     private val streamAutoPlayModeKey = stringPreferencesKey("stream_auto_play_mode")
     private val streamAutoPlaySourceKey = stringPreferencesKey("stream_auto_play_source")
+    private val trackingProviderKey = stringPreferencesKey("tracking_provider")
     private val streamAutoPlaySelectedAddonsKey = stringSetPreferencesKey("stream_auto_play_selected_addons")
     private val streamAutoPlayRegexKey = stringPreferencesKey("stream_auto_play_regex")
     private val streamAutoPlayNextEpisodeEnabledKey = booleanPreferencesKey("stream_auto_play_next_episode_enabled")
@@ -728,6 +731,9 @@ class PlayerSettingsDataStore @Inject constructor(
                 streamAutoPlaySource = prefs[streamAutoPlaySourceKey]?.let {
                     runCatching { StreamAutoPlaySource.valueOf(it) }.getOrDefault(StreamAutoPlaySource.ALL_SOURCES)
                 } ?: StreamAutoPlaySource.ALL_SOURCES,
+                trackingProvider = prefs[trackingProviderKey]?.let {
+                    runCatching { TrackingProvider.valueOf(it) }.getOrDefault(TrackingProvider.TRAKT)
+                } ?: TrackingProvider.TRAKT,
                 streamAutoPlaySelectedAddons = prefs[streamAutoPlaySelectedAddonsKey] ?: emptySet(),
                 streamAutoPlayRegex = prefs[streamAutoPlayRegexKey] ?: "",
                 streamAutoPlayNextEpisodeEnabled = prefs[streamAutoPlayNextEpisodeEnabledKey] ?: false,
@@ -941,6 +947,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setStreamAutoPlaySource(source: StreamAutoPlaySource) {
         store().edit { prefs ->
             prefs[streamAutoPlaySourceKey] = source.name
+        }
+    }
+
+    suspend fun setTrackingProvider(provider: TrackingProvider) {
+        store().edit { prefs ->
+            prefs[trackingProviderKey] = provider.name
         }
     }
 

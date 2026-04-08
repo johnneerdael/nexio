@@ -145,6 +145,7 @@
     <string name="settings_playback">Playback</string>
     <string name="settings_playback_subtitle">Player, subtitles, and auto-play.</string>
     <string name="settings_trakt_subtitle">Open Trakt connection screen.</string>
+    <string name="settings_simkl_subtitle">Open SIMKL connection screen.</string>
     <string name="settings_about_subtitle">Version and policies.</string>
     <string name="settings_debug">Debug</string>
     <string name="settings_debug_subtitle">Developer tools and feature flags.</string>
@@ -1255,4 +1256,24 @@
     <string name="update_open_settings">Open Settings</string>
     <string name="update_install">Install</string>
     <string name="update_ignore">Ignore</string>
+    <string name="simkl_title">SIMKL</string>
+    <string name="simkl_description">Connect SIMKL with a PIN code to enable SIMKL-backed tracking and future SIMKL discovery features.</string>
+    <string name="simkl_login">Connect SIMKL</string>
+    <string name="simkl_login_instruction">Start SIMKL PIN sign-in and approve this device at simkl.com/pin.</string>
+    <string name="simkl_disconnect">Disconnect SIMKL</string>
+    <string name="simkl_disconnect_subtitle">Remove this device\'s stored SIMKL session.</string>
+    <string name="simkl_auth_status_title">SIMKL status</string>
+    <string name="simkl_auth_status_subtitle">Current SIMKL connection state for this device.</string>
+    <string name="simkl_auth_status_authenticated">Authenticated</string>
+    <string name="simkl_auth_status_disconnected">Disconnected</string>
+    <string name="simkl_connected_as">Connected as %1$s</string>
+    <string name="simkl_waiting_approval">Waiting for approval</string>
+    <string name="simkl_awaiting_instruction">Enter this code at simkl.com/pin</string>
+    <string name="simkl_retry">Retry polling</string>
+    <string name="simkl_sync_now_subtitle">Refresh the SIMKL account profile for this device.</string>
+    <string name="playback_tracking_provider">Tracking provider</string>
+    <string name="playback_tracking_provider_trakt">Trakt</string>
+    <string name="playback_tracking_provider_simkl">SIMKL</string>
+    <string name="playback_tracking_provider_dialog_title">Choose tracking provider</string>
+    <string name="playback_tracking_provider_dialog_subtitle">Pick which configured provider controls continue watching and scrobbling.</string>
 </resources>

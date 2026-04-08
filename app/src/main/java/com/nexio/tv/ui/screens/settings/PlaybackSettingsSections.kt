@@ -110,6 +110,10 @@ internal fun PlaybackSettingsSections(
     onShowOutlineColorDialog: () -> Unit,
     onShowStreamAutoPlayModeDialog: () -> Unit,
     onShowStreamAutoPlaySourceDialog: () -> Unit,
+    onShowTrackingProviderDialog: () -> Unit,
+    trackingProviderLabel: String,
+    trackingProviderEnabled: Boolean,
+    trackingProviderVisible: Boolean,
     onShowStreamAutoPlayAddonSelectionDialog: () -> Unit,
     onShowStreamRegexDialog: () -> Unit,
     onShowNextEpisodeThresholdModeDialog: () -> Unit,
@@ -355,6 +359,19 @@ internal fun PlaybackSettingsSections(
                     onClick = onShowPlayerPreferenceDialog,
                     onFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
                 )
+            }
+
+            if (trackingProviderVisible) {
+                item(key = "stream_tracking_provider") {
+                    NavigationSettingsItem(
+                        icon = Icons.Default.History,
+                        title = stringResource(R.string.playback_tracking_provider),
+                        subtitle = trackingProviderLabel,
+                        onClick = onShowTrackingProviderDialog,
+                        onFocused = { focusedSection = PlaybackSection.STREAM_SELECTION },
+                        enabled = trackingProviderEnabled
+                    )
+                }
             }
 
             autoPlaySettingsItems(

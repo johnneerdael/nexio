@@ -296,6 +296,7 @@ data class StreamSelectionSettings(
     val filterMovieYearMismatchStreamsEnabled: Boolean = true,
     val streamAutoPlayMode: String = "MANUAL",
     val streamAutoPlaySource: String = "ALL_SOURCES",
+    val trackingProvider: String = "TRAKT",
     val streamAutoPlaySelectedAddons: List<String> = emptyList(),
     val streamAutoPlayRegex: String = "",
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
