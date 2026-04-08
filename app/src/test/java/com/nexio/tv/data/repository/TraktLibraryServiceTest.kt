@@ -1,9 +1,11 @@
 package com.nexio.tv.data.repository
 
+import com.google.gson.JsonObject
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktLibrarySnapshotStore
+import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemDto
@@ -20,6 +22,7 @@ import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
+import io.mockk.slot
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.runBlocking
@@ -383,6 +386,49 @@ class TraktLibraryServiceTest {
         val items = service.observeAllItems().first()
         assertTrue(tabs.any { it.key == provisionalKey })
         assertTrue(items.any { it.id == "tt1234567" })
+    }
+
+    @Test
+    fun `toggle watchlist stores list-scoped rollback payload`() = runTest {
+        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktAuthService = mockk<TraktAuthService>(relaxed = true)
+        val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>()
+        val metaRepository = mockk<MetaRepository>(relaxed = true)
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val snapshotStore = mockk<TraktLibrarySnapshotStore>(relaxed = true)
+        var persistedSnapshot: TraktLibrarySnapshotStore.Snapshot? = samplePersistedSnapshot()
+        val envelopeSlot = slot<TraktMutationEnvelope>()
+
+        every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
+        every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
+        every { snapshotStore.read() } answers { persistedSnapshot }
+        every { snapshotStore.write(any()) } answers { persistedSnapshot = firstArg() }
+        coEvery { traktMutationOutboxCoordinator.enqueueAndDrain(capture(envelopeSlot)) } answers { envelopeSlot.captured }
+
+        val service = TraktLibraryService(
+            traktApi = traktApi,
+            traktAuthService = traktAuthService,
+            traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
+            metaRepository = metaRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            traktAuthDataStore = traktAuthDataStore,
+            snapshotStore = snapshotStore
+        )
+
+        advanceUntilIdle()
+        service.toggleWatchlist(sampleLibraryInput())
+        advanceUntilIdle()
+
+        val rollbackPayload = envelopeSlot.captured.rollbackPayload ?: JsonObject()
+        assertEquals(false, rollbackPayload.get("replaceAll")?.asBoolean ?: false)
+        assertTrue(rollbackPayload.getAsJsonObject("entriesByList").has(TraktLibraryService.WATCHLIST_KEY))
+        assertEquals(
+            1,
+            rollbackPayload.getAsJsonObject("entriesByList")
+                .getAsJsonArray(TraktLibraryService.WATCHLIST_KEY)
+                .size()
+        )
     }
 
     @Test

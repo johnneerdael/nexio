@@ -181,7 +181,7 @@ class TraktLibraryService @Inject constructor(
             ) { before, _, _ ->
                 removeFromWatchlist(
                     item = item,
-                    rollbackState = rollbackState(before)
+                    rollbackState = rollbackStateForList(before, WATCHLIST_KEY)
                 )
             }
         } else {
@@ -190,7 +190,7 @@ class TraktLibraryService @Inject constructor(
             ) { before, _, _ ->
                 addToWatchlist(
                     item = item,
-                    rollbackState = rollbackState(before)
+                    rollbackState = rollbackStateForList(before, WATCHLIST_KEY)
                 )
             }
         }
