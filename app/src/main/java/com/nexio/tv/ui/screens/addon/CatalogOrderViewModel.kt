@@ -9,14 +9,17 @@ import com.nexio.tv.core.sync.isAddonCatalogDisabled
 import com.nexio.tv.data.local.AndroidTvRecommendationsDataStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.MDBListSettingsDataStore
+import com.nexio.tv.data.local.SimklCatalogIds
+import com.nexio.tv.data.local.SimklCatalogPreferences
+import com.nexio.tv.data.local.SimklSettingsDataStore
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.repository.MDBListDiscoveryService
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
-import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
+import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.repository.AddonRepository
@@ -36,6 +39,7 @@ class CatalogOrderViewModel @Inject constructor(
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val traktDiscoveryService: TraktDiscoveryService,
     private val traktSettingsDataStore: TraktSettingsDataStore,
+    private val simklSettingsDataStore: SimklSettingsDataStore,
     private val mdbListDiscoveryService: MDBListDiscoveryService,
     private val mdbListSettingsDataStore: MDBListSettingsDataStore,
     private val androidTvRecommendationsDataStore: AndroidTvRecommendationsDataStore,
@@ -113,21 +117,24 @@ class CatalogOrderViewModel @Inject constructor(
                     savedOrderKeys = savedOrderKeys,
                     disabledKeys = disabledKeys.toSet(),
                     traktSnapshot = traktSnapshot,
-                    traktPrefs = traktPrefs
+                    traktPrefs = traktPrefs,
+                    simklPrefs = SimklCatalogPreferences()
                 )
             }
 
             combine(
                 baseInputsFlow,
+                simklSettingsDataStore.catalogPreferences,
                 mdbListDiscoveryService.observeSnapshot(),
                 mdbListSettingsDataStore.catalogPreferences
-            ) { base, mdbListSnapshot, mdbListPrefs ->
+            ) { base, simklPrefs, mdbListSnapshot, mdbListPrefs ->
                 base.savedOrderKeys to buildOrderedCatalogItems(
                     addons = base.addons,
                     savedOrderKeys = base.savedOrderKeys,
                     disabledKeys = base.disabledKeys,
                     traktSnapshot = base.traktSnapshot,
                     traktPrefs = base.traktPrefs,
+                    simklPrefs = simklPrefs,
                     mdbListSnapshot = mdbListSnapshot,
                     mdbListPrefs = mdbListPrefs
                 )
@@ -181,11 +188,13 @@ class CatalogOrderViewModel @Inject constructor(
         disabledKeys: Set<String>,
         traktSnapshot: TraktDiscoverySnapshot,
         traktPrefs: TraktCatalogPreferences,
+        simklPrefs: SimklCatalogPreferences,
         mdbListSnapshot: MDBListDiscoverySnapshot,
         mdbListPrefs: MDBListCatalogPreferences
     ): List<CatalogOrderItem> {
         val defaultEntries = buildDefaultCatalogEntries(addons, disabledKeys)
             .plus(buildActiveTraktCatalogEntries(traktSnapshot, traktPrefs))
+            .plus(buildActiveSimklCatalogEntries(simklPrefs))
             .plus(buildActiveMdbListCatalogEntries(mdbListSnapshot, mdbListPrefs))
         val availableMap = defaultEntries.associateBy { it.key }
         val defaultOrderKeys = defaultEntries.map { it.key }
@@ -345,6 +354,40 @@ class CatalogOrderViewModel @Inject constructor(
         }
     }
 
+    private fun buildActiveSimklCatalogEntries(
+        prefs: SimklCatalogPreferences
+    ): List<CatalogOrderEntry> {
+        fun labelFor(catalogId: String): Pair<String, String> = when (catalogId) {
+            SimklCatalogIds.TV_TRENDING_TODAY -> "SIMKL Trending TV (Today)" to "series"
+            SimklCatalogIds.TV_TRENDING_WEEK -> "SIMKL Trending TV (Week)" to "series"
+            SimklCatalogIds.TV_TRENDING_MONTH -> "SIMKL Trending TV (Month)" to "series"
+            SimklCatalogIds.ANIME_TRENDING_TODAY -> "SIMKL Trending Anime (Today)" to "series"
+            SimklCatalogIds.ANIME_TRENDING_WEEK -> "SIMKL Trending Anime (Week)" to "series"
+            SimklCatalogIds.ANIME_TRENDING_MONTH -> "SIMKL Trending Anime (Month)" to "series"
+            SimklCatalogIds.MOVIE_TRENDING_TODAY -> "SIMKL Trending Movies (Today)" to "movie"
+            SimklCatalogIds.MOVIE_TRENDING_WEEK -> "SIMKL Trending Movies (Week)" to "movie"
+            SimklCatalogIds.MOVIE_TRENDING_MONTH -> "SIMKL Trending Movies (Month)" to "movie"
+            SimklCatalogIds.DVD_RELEASES -> "SIMKL Popular DVD Releases" to "movie"
+            else -> catalogId to "catalog"
+        }
+
+        val orderedKeys = prefs.catalogOrder.filter { it in prefs.enabledCatalogs } +
+            prefs.enabledCatalogs.filterNot { it in prefs.catalogOrder }
+
+        return orderedKeys.distinct().map { catalogId ->
+            val (catalogName, typeLabel) = labelFor(catalogId)
+            CatalogOrderEntry(
+                key = catalogId,
+                disableKey = "",
+                catalogName = catalogName,
+                addonName = "SIMKL",
+                typeLabel = typeLabel,
+                isToggleable = false,
+                isDisabled = false
+            )
+        }
+    }
+
     private fun catalogKey(addonId: String, type: String, catalogId: String): String {
         return "${addonId}_${type}_${catalogId}"
     }
@@ -440,5 +483,6 @@ private data class BaseCatalogOrderInputs(
     val savedOrderKeys: List<String>,
     val disabledKeys: Set<String>,
     val traktSnapshot: TraktDiscoverySnapshot,
-    val traktPrefs: TraktCatalogPreferences
+    val traktPrefs: TraktCatalogPreferences,
+    val simklPrefs: SimklCatalogPreferences
 )
