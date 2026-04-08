@@ -64,7 +64,8 @@ class TraktLibraryService @Inject constructor(
 ) {
     data class LibraryRollbackState(
         val listTabs: List<LibraryListTab> = emptyList(),
-        val entriesByList: Map<String, List<LibraryEntry>> = emptyMap()
+        val entriesByList: Map<String, List<LibraryEntry>> = emptyMap(),
+        val replaceAll: Boolean = false
     )
 
     private data class LibraryMetadata(
@@ -216,7 +217,7 @@ class TraktLibraryService @Inject constructor(
                     ) { before, _, _ ->
                         addToWatchlist(
                             item = item,
-                            rollbackState = rollbackState(before)
+                            rollbackState = rollbackStateForList(before, WATCHLIST_KEY)
                         )
                     }
                 } else {
@@ -225,7 +226,7 @@ class TraktLibraryService @Inject constructor(
                     ) { before, _, _ ->
                         removeFromWatchlist(
                             item = item,
-                            rollbackState = rollbackState(before)
+                            rollbackState = rollbackStateForList(before, WATCHLIST_KEY)
                         )
                     }
                 }
@@ -238,7 +239,7 @@ class TraktLibraryService @Inject constructor(
                         addToPersonalList(
                             listId = listId,
                             item = item,
-                            rollbackState = rollbackState(before)
+                            rollbackState = rollbackStateForList(before, listKey)
                         )
                     }
                 } else {
@@ -248,7 +249,7 @@ class TraktLibraryService @Inject constructor(
                         removeFromPersonalList(
                             listId = listId,
                             item = item,
-                            rollbackState = rollbackState(before)
+                            rollbackState = rollbackStateForList(before, listKey)
                         )
                     }
                 }
@@ -980,9 +981,24 @@ class TraktLibraryService @Inject constructor(
                 snapshot = rebuildSnapshot(updatedTabs, updatedEntries),
                 metadata = metadataState.value
             )
-        } else {
+        } else if (rollbackState.replaceAll) {
             persistAndRestoreSnapshot(
                 snapshot = rebuildSnapshot(rollbackState.listTabs, rollbackState.entriesByList),
+                metadata = metadataState.value
+            )
+        } else {
+            val current = snapshotState.value
+            val updatedTabs = mergeRollbackTabs(
+                currentTabs = current.listTabs,
+                rollbackTabs = rollbackState.listTabs
+            )
+            val updatedEntries = current.entriesByList.toMutableMap().apply {
+                rollbackState.entriesByList.forEach { (key, entries) ->
+                    this[key] = entries.map { entry -> entry.copy(listKeys = entry.listKeys.toSet()) }
+                }
+            }
+            persistAndRestoreSnapshot(
+                snapshot = rebuildSnapshot(updatedTabs, updatedEntries),
                 metadata = metadataState.value
             )
         }
@@ -994,8 +1010,34 @@ class TraktLibraryService @Inject constructor(
             listTabs = snapshot.listTabs,
             entriesByList = snapshot.entriesByList.mapValues { (_, entries) ->
                 entries.map { entry -> entry.copy(listKeys = entry.listKeys.toSet()) }
-            }
+            },
+            replaceAll = true
         )
+    }
+
+    private fun rollbackStateForList(snapshot: Snapshot, listKey: String): LibraryRollbackState {
+        return LibraryRollbackState(
+            entriesByList = mapOf(
+                listKey to snapshot.entriesByList[listKey].orEmpty().map { entry ->
+                    entry.copy(listKeys = entry.listKeys.toSet())
+                }
+            )
+        )
+    }
+
+    private fun mergeRollbackTabs(
+        currentTabs: List<LibraryListTab>,
+        rollbackTabs: List<LibraryListTab>
+    ): List<LibraryListTab> {
+        if (rollbackTabs.isEmpty()) return currentTabs
+        val rollbackByKey = rollbackTabs.associateBy { it.key }
+        val merged = currentTabs.map { tab -> rollbackByKey[tab.key] ?: tab }.toMutableList()
+        rollbackTabs.forEach { rollbackTab ->
+            if (merged.none { it.key == rollbackTab.key }) {
+                merged.add(rollbackTab)
+            }
+        }
+        return merged
     }
 
     private fun provisionalListKey(): String = PERSONAL_KEY_PREFIX + "pending:${UUID.randomUUID()}"
