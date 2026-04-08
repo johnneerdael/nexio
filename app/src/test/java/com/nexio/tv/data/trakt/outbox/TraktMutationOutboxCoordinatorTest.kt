@@ -54,6 +54,34 @@ class TraktMutationOutboxCoordinatorTest {
         assertTrue(adapter.reconciled.isEmpty())
     }
 
+    @Test
+    fun `coordinator resumes queued mutations that were persisted before startup`() = runTest {
+        val store = TraktMutationOutboxStore(context = mockContext(InMemorySharedPreferences()))
+        val envelope = sampleEnvelope().copy(id = "persisted")
+        store.write(
+            TraktMutationOutboxSnapshot(items = listOf(envelope))
+        )
+        val adapter = RecordingAdapter(
+            adapterKey = "progress",
+            executionResult = TraktMutationExecutionResult.Success(httpStatusCode = 201)
+        )
+        val worker = TraktMutationOutboxWorker(
+            store = store,
+            policy = TraktMutationOutboxPolicy()
+        )
+
+        val coordinator = TraktMutationOutboxCoordinator(
+            worker = worker,
+            adapters = setOf(adapter)
+        )
+
+        val settled = awaitTerminalState(coordinator, envelope.id)
+
+        assertEquals(TraktMutationLifecycleState.SUCCEEDED, settled.state)
+        assertEquals(listOf(envelope.id), adapter.optimisticApplied)
+        assertEquals(listOf(envelope.id), adapter.reconciled)
+    }
+
     private suspend fun awaitTerminalState(
         coordinator: TraktMutationOutboxCoordinator,
         envelopeId: String
