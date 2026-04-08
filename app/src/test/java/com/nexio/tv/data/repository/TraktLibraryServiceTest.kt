@@ -332,6 +332,49 @@ class TraktLibraryServiceTest {
     }
 
     @Test
+    fun `rollback queued library mutation restores affected list slice without blanking snapshot`() = runTest {
+        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktAuthService = mockk<TraktAuthService>(relaxed = true)
+        val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
+        val metaRepository = mockk<MetaRepository>(relaxed = true)
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val snapshotStore = mockk<TraktLibrarySnapshotStore>(relaxed = true)
+        var persistedSnapshot: TraktLibrarySnapshotStore.Snapshot? = samplePersistedSnapshot()
+
+        every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
+        every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
+        every { snapshotStore.read() } answers { persistedSnapshot }
+        every { snapshotStore.write(any()) } answers { persistedSnapshot = firstArg() }
+        coEvery { traktAuthService.executeAuthorizedRequest<Any?>(any()) } returns null
+
+        val service = TraktLibraryService(
+            traktApi = traktApi,
+            traktAuthService = traktAuthService,
+            traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
+            metaRepository = metaRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            traktAuthDataStore = traktAuthDataStore,
+            snapshotStore = snapshotStore
+        )
+        advanceUntilIdle()
+
+        service.rollbackQueuedLibraryMutation(
+            rollbackState = TraktLibraryService.LibraryRollbackState(
+                listTabs = samplePersistedSnapshot().listTabs,
+                entriesByList = samplePersistedSnapshot().entriesByList
+            )
+        )
+        advanceUntilIdle()
+
+        val tabs = service.observeListTabs().first()
+        val items = service.observeAllItems().first()
+        assertEquals(listOf(TraktLibraryService.WATCHLIST_KEY, "personal:123"), tabs.map { it.key })
+        assertEquals(listOf("tt1234567", "tmdb:321"), items.map { it.id })
+        assertTrue(items.none { it.id == "trakt:999" })
+    }
+
+    @Test
     fun `warm refresh keeps showing persisted cache until replacement snapshot is written`() = runTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()

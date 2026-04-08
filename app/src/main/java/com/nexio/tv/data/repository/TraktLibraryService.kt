@@ -177,14 +177,20 @@ class TraktLibraryService @Inject constructor(
         if (isInWatchlist) {
             performOptimisticMutation(
                 optimistic = { snapshot -> removeItemFromList(snapshot, item, WATCHLIST_KEY) }
-            ) {
-                removeFromWatchlist(item)
+            ) { before, _, _ ->
+                removeFromWatchlist(
+                    item = item,
+                    rollbackState = rollbackState(before)
+                )
             }
         } else {
             performOptimisticMutation(
                 optimistic = { snapshot -> addItemToList(snapshot, item, WATCHLIST_KEY) }
-            ) {
-                addToWatchlist(item)
+            ) { before, _, _ ->
+                addToWatchlist(
+                    item = item,
+                    rollbackState = rollbackState(before)
+                )
             }
         }
     }
@@ -207,14 +213,20 @@ class TraktLibraryService @Inject constructor(
                 if (after) {
                     performOptimisticMutation(
                         optimistic = { snapshot -> addItemToList(snapshot, item, WATCHLIST_KEY) }
-                    ) {
-                        addToWatchlist(item)
+                    ) { before, _, _ ->
+                        addToWatchlist(
+                            item = item,
+                            rollbackState = rollbackState(before)
+                        )
                     }
                 } else {
                     performOptimisticMutation(
                         optimistic = { snapshot -> removeItemFromList(snapshot, item, WATCHLIST_KEY) }
-                    ) {
-                        removeFromWatchlist(item)
+                    ) { before, _, _ ->
+                        removeFromWatchlist(
+                            item = item,
+                            rollbackState = rollbackState(before)
+                        )
                     }
                 }
             } else {
@@ -222,14 +234,22 @@ class TraktLibraryService @Inject constructor(
                 if (after) {
                     performOptimisticMutation(
                         optimistic = { snapshot -> addItemToList(snapshot, item, listKey) }
-                    ) {
-                        addToPersonalList(listId, item)
+                    ) { before, _, _ ->
+                        addToPersonalList(
+                            listId = listId,
+                            item = item,
+                            rollbackState = rollbackState(before)
+                        )
                     }
                 } else {
                     performOptimisticMutation(
                         optimistic = { snapshot -> removeItemFromList(snapshot, item, listKey) }
-                    ) {
-                        removeFromPersonalList(listId, item)
+                    ) { before, _, _ ->
+                        removeFromPersonalList(
+                            listId = listId,
+                            item = item,
+                            rollbackState = rollbackState(before)
+                        )
                     }
                 }
             }
@@ -287,7 +307,7 @@ class TraktLibraryService @Inject constructor(
                 }
                 rebuildSnapshot(updatedTabs, snapshot.entriesByList)
             }
-        ) {
+        ) { before, _, _ ->
             enqueueLibraryMutation(
                 TraktLibraryMutationAdapter.buildUpdateListEnvelope(
                     listId = listId,
@@ -295,7 +315,8 @@ class TraktLibraryService @Inject constructor(
                         name = name,
                         description = description,
                         privacy = privacy.apiValue
-                    )
+                    ),
+                    rollbackState = rollbackState(before)
                 )
             )
         }
@@ -312,9 +333,12 @@ class TraktLibraryService @Inject constructor(
                 val updatedEntries = snapshot.entriesByList.filterKeys { it !in removedKeys }
                 rebuildSnapshot(updatedTabs, updatedEntries)
             }
-        ) {
+        ) { before, _, _ ->
             enqueueLibraryMutation(
-                TraktLibraryMutationAdapter.buildDeleteListEnvelope(listId)
+                TraktLibraryMutationAdapter.buildDeleteListEnvelope(
+                    listId = listId,
+                    rollbackState = rollbackState(before)
+                )
             )
         }
     }
@@ -339,9 +363,12 @@ class TraktLibraryService @Inject constructor(
                     rawEntriesByList = snapshot.entriesByList
                 )
             }
-        ) {
+        ) { before, _, _ ->
             enqueueLibraryMutation(
-                TraktLibraryMutationAdapter.buildReorderListsEnvelope(rank)
+                TraktLibraryMutationAdapter.buildReorderListsEnvelope(
+                    rank = rank,
+                    rollbackState = rollbackState(before)
+                )
             )
         }
     }
@@ -750,36 +777,58 @@ class TraktLibraryService @Inject constructor(
         )
     }
 
-    private suspend fun addToWatchlist(item: LibraryEntryInput) {
+    private suspend fun addToWatchlist(
+        item: LibraryEntryInput,
+        rollbackState: LibraryRollbackState
+    ) {
         val body = buildMutationBody(item)
         enqueueLibraryMutation(
-            TraktLibraryMutationAdapter.buildWatchlistAddEnvelope(body)
-        )
-    }
-
-    private suspend fun removeFromWatchlist(item: LibraryEntryInput) {
-        val body = buildMutationBody(item)
-        enqueueLibraryMutation(
-            TraktLibraryMutationAdapter.buildWatchlistRemoveEnvelope(body)
-        )
-    }
-
-    private suspend fun addToPersonalList(listId: String, item: LibraryEntryInput) {
-        val body = buildMutationBody(item)
-        enqueueLibraryMutation(
-            TraktLibraryMutationAdapter.buildListAddEnvelope(
-                listId = listId,
-                body = body
+            TraktLibraryMutationAdapter.buildWatchlistAddEnvelope(
+                body = body,
+                rollbackState = rollbackState
             )
         )
     }
 
-    private suspend fun removeFromPersonalList(listId: String, item: LibraryEntryInput) {
+    private suspend fun removeFromWatchlist(
+        item: LibraryEntryInput,
+        rollbackState: LibraryRollbackState
+    ) {
+        val body = buildMutationBody(item)
+        enqueueLibraryMutation(
+            TraktLibraryMutationAdapter.buildWatchlistRemoveEnvelope(
+                body = body,
+                rollbackState = rollbackState
+            )
+        )
+    }
+
+    private suspend fun addToPersonalList(
+        listId: String,
+        item: LibraryEntryInput,
+        rollbackState: LibraryRollbackState
+    ) {
+        val body = buildMutationBody(item)
+        enqueueLibraryMutation(
+            TraktLibraryMutationAdapter.buildListAddEnvelope(
+                listId = listId,
+                body = body,
+                rollbackState = rollbackState
+            )
+        )
+    }
+
+    private suspend fun removeFromPersonalList(
+        listId: String,
+        item: LibraryEntryInput,
+        rollbackState: LibraryRollbackState
+    ) {
         val body = buildMutationBody(item)
         enqueueLibraryMutation(
             TraktLibraryMutationAdapter.buildListRemoveEnvelope(
                 listId = listId,
-                body = body
+                body = body,
+                rollbackState = rollbackState
             )
         )
     }
@@ -931,8 +980,22 @@ class TraktLibraryService @Inject constructor(
                 snapshot = rebuildSnapshot(updatedTabs, updatedEntries),
                 metadata = metadataState.value
             )
+        } else {
+            persistAndRestoreSnapshot(
+                snapshot = rebuildSnapshot(rollbackState.listTabs, rollbackState.entriesByList),
+                metadata = metadataState.value
+            )
         }
         refresh(force = true)
+    }
+
+    private fun rollbackState(snapshot: Snapshot): LibraryRollbackState {
+        return LibraryRollbackState(
+            listTabs = snapshot.listTabs,
+            entriesByList = snapshot.entriesByList.mapValues { (_, entries) ->
+                entries.map { entry -> entry.copy(listKeys = entry.listKeys.toSet()) }
+            }
+        )
     }
 
     private fun provisionalListKey(): String = PERSONAL_KEY_PREFIX + "pending:${UUID.randomUUID()}"
