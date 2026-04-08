@@ -44,7 +44,6 @@ class AddonSyncService @Inject constructor(
     suspend fun pushToRemote(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val localAddons = addonPreferences.installedAddons.first()
-                .filterNot { addon -> isBuiltinSubtitleAddonUrl(addon.url) }
             val parsedAddons = localAddons.mapNotNull { addon ->
                 runCatching { parseAddonInstallUrl(addon.url) to addon.parserPreset }
                     .onFailure { error ->
@@ -133,7 +132,6 @@ class AddonSyncService @Inject constructor(
                             }.getOrDefault(AddonParserPreset.GENERIC)
                         )
                     }
-                    .filterNot { addon -> isBuiltinSubtitleAddonUrl(addon.url) }
             )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get remote addon configs", e)

@@ -260,45 +260,44 @@ class AccountConfigSyncContractTest {
 
     @Test
     fun `buildRemoteAddonInstallConfigs preserves v2 snapshot addons for startup reconcile`() = runTest {
-        val snapshot = AccountConfigSnapshotRpcResponse(
-            settings = AccountConfigSyncPayload(),
-            addons = listOf(
-                AccountAddonPayload(
-                    url = "https://disabled.example",
-                    parserPreset = "GENERIC",
-                    enabled = false,
-                    sortOrder = 0
-                ),
-                AccountAddonPayload(
-                    url = "https://alpha.example",
-                    parserPreset = "unknown",
-                    enabled = true,
-                    sortOrder = 1
-                ),
-                AccountAddonPayload(
-                    url = "https://beta.example",
-                    parserPreset = "torrentio",
-                    enabled = true,
-                    sortOrder = 2
-                ),
-                AccountAddonPayload(
-                    url = BUILTIN_SUBTITLE_ADDON_PUBLIC_BASE_URL,
-                    parserPreset = "generic",
-                    enabled = true,
-                    sortOrder = 3
-                )
+        val addons = listOf(
+            AccountAddonPayload(
+                url = "https://disabled.example",
+                parserPreset = "GENERIC",
+                enabled = false,
+                sortOrder = 0
+            ),
+            AccountAddonPayload(
+                url = "https://alpha.example",
+                parserPreset = "unknown",
+                enabled = true,
+                sortOrder = 1
+            ),
+            AccountAddonPayload(
+                url = "https://beta.example",
+                parserPreset = "torrentio",
+                enabled = true,
+                sortOrder = 2
+            ),
+            AccountAddonPayload(
+                url = "https://opensubtitlesv3-pro.dexter21767.com",
+                parserPreset = "generic",
+                enabled = true,
+                sortOrder = 3
             )
         )
 
-        val addonConfigs = buildRemoteAddonInstallConfigs(snapshot.addons) { addon ->
+        val addonConfigs = buildRemoteAddonInstallConfigs(addons) { addon ->
             Result.success("${addon.url}/manifest.json")
         }
 
-        assertEquals(2, addonConfigs.size)
+        assertEquals(3, addonConfigs.size)
         assertEquals("https://alpha.example/manifest.json", addonConfigs[0].url)
         assertEquals(AddonParserPreset.GENERIC, addonConfigs[0].parserPreset)
         assertEquals("https://beta.example/manifest.json", addonConfigs[1].url)
         assertEquals(AddonParserPreset.TORRENTIO, addonConfigs[1].parserPreset)
+        assertEquals("https://opensubtitlesv3-pro.dexter21767.com/manifest.json", addonConfigs[2].url)
+        assertEquals(AddonParserPreset.GENERIC, addonConfigs[2].parserPreset)
     }
 
     @Test

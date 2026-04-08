@@ -13,6 +13,7 @@ import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
+import com.nexio.tv.domain.model.Subtitle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -1044,6 +1045,12 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
 
     val state = _uiState.value
     val targets = subtitleLanguageTargets()
+    val allowStartupAiFallback = shouldAllowStartupSubtitleAiFallback(
+        hasRenderedFirstFrame = hasRenderedFirstFrame,
+        selectedSubtitleTrackIndex = state.selectedSubtitleTrackIndex,
+        selectedAddonSubtitle = state.selectedAddonSubtitle,
+        autoSubtitleSelected = autoSubtitleSelected
+    )
     Log.d(
         PlayerRuntimeController.TAG,
         "AUTO_SUB eval: targets=$targets, scannedText=$hasScannedTextTracksOnce, " +
@@ -1066,7 +1073,7 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
         addonSubtitleDiscoveryPending =
             state.isLoadingAddonSubtitles || startupSubtitlePreparationJob?.isActive == true,
         aiTranslationConfigured = geminiEnabled && geminiApiKey.isNotBlank(),
-        startupPhase = !hasRenderedFirstFrame,
+        startupPhase = allowStartupAiFallback,
         videoRelease = currentParsedRelease
     )
     when (startupDecision) {
@@ -1178,6 +1185,18 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
     } else {
         Log.d(PlayerRuntimeController.TAG, "AUTO_SUB no addon match for targets=$targets")
     }
+}
+
+internal fun shouldAllowStartupSubtitleAiFallback(
+    hasRenderedFirstFrame: Boolean,
+    selectedSubtitleTrackIndex: Int,
+    selectedAddonSubtitle: Subtitle?,
+    autoSubtitleSelected: Boolean
+): Boolean {
+    if (!hasRenderedFirstFrame) return true
+    return !autoSubtitleSelected &&
+        selectedSubtitleTrackIndex < 0 &&
+        selectedAddonSubtitle == null
 }
 
 internal fun PlayerRuntimeController.startFrameRateProbe(

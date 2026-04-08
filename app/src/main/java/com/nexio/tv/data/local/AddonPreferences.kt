@@ -4,15 +4,11 @@ import android.content.Context
 import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.nexio.tv.core.sync.BUILTIN_SUBTITLE_ADDON_PUBLIC_BASE_URL
-import com.nexio.tv.core.sync.isBuiltinSubtitleAddonUrl
 import com.nexio.tv.core.sync.normalizeAddonInstallUrl
-import com.nexio.tv.core.sync.normalizePublicAddonBaseUrl
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -42,20 +38,12 @@ class AddonPreferences @Inject constructor(
         private const val TAG = "AddonPreferences"
     }
 
-    data class BuiltinSubtitleAddonSyncMutation(
-        val changed: Boolean = false,
-        val previousUrl: String? = null,
-        val currentUrl: String? = null
-    )
-
     private val dataStore = context.addonPreferencesDataStore
     private fun store() = dataStore
 
     private val gson = Gson()
     private val orderedUrlsKey = stringPreferencesKey("installed_addon_urls_ordered")
     private val legacyUrlsKey = stringSetPreferencesKey("installed_addon_urls")
-    private val builtinSubtitleAddonSeededKey = booleanPreferencesKey("builtin_subtitle_addon_seeded")
-    private val builtinSubtitleAddonRemovedKey = booleanPreferencesKey("builtin_subtitle_addon_removed")
 
     private fun canonicalizeUrl(url: String): String {
         return normalizeAddonInstallUrl(url)
@@ -111,30 +99,6 @@ class AddonPreferences @Inject constructor(
         store().edit { preferences ->
             val current = getCurrentList(preferences).toMutableList()
             val normalizedUrl = canonicalizeUrl(url)
-            if (isBuiltinSubtitleAddonUrl(normalizedUrl)) {
-                val builtinIndexes = current.mapIndexedNotNull { index, addon ->
-                    index.takeIf { addonMatchesBuiltinSubtitleAddon(addon.url) }
-                }
-                if (builtinIndexes.isNotEmpty()) {
-                    val primaryIndex = builtinIndexes.first()
-                    val replacement = current[primaryIndex].copy(
-                        url = normalizedUrl,
-                        parserPreset = parserPreset
-                    )
-                    val updated = current.toMutableList().apply {
-                        this[primaryIndex] = replacement
-                        builtinIndexes.drop(1).asReversed().forEach(::removeAt)
-                    }
-                    if (updated != current) {
-                        preferences[orderedUrlsKey] = gson.toJson(updated)
-                    }
-                    preferences[builtinSubtitleAddonSeededKey] = true
-                    preferences[builtinSubtitleAddonRemovedKey] = false
-                    return@edit
-                }
-                preferences[builtinSubtitleAddonSeededKey] = true
-                preferences[builtinSubtitleAddonRemovedKey] = false
-            }
             if (current.any { it.url.equals(normalizedUrl, ignoreCase = true) }) return@edit
             preferences[orderedUrlsKey] = gson.toJson(
                 current + AddonInstallConfig(
@@ -146,8 +110,7 @@ class AddonPreferences @Inject constructor(
     }
 
     suspend fun removeAddon(
-        url: String,
-        markBuiltinSubtitleAddonRemoved: Boolean = true
+        url: String
     ) {
         store().edit { preferences ->
             val current = getCurrentList(preferences).toMutableList()
@@ -155,10 +118,6 @@ class AddonPreferences @Inject constructor(
 
             val indexToRemove = current.indexOfFirst { it.url.equals(normalizedUrl, ignoreCase = true) }
             if (indexToRemove != -1) {
-                if (markBuiltinSubtitleAddonRemoved && isBuiltinSubtitleAddonUrl(current[indexToRemove].url)) {
-                    preferences[builtinSubtitleAddonSeededKey] = true
-                    preferences[builtinSubtitleAddonRemovedKey] = true
-                }
                 current.removeAt(indexToRemove)
             }
             preferences[orderedUrlsKey] = gson.toJson(current)
@@ -200,67 +159,6 @@ class AddonPreferences @Inject constructor(
             }.distinctBy { it.url.lowercase() }
             preferences[orderedUrlsKey] = gson.toJson(normalized)
         }
-    }
-
-    suspend fun syncBuiltinSubtitleAddon(
-        targetUrl: String,
-        parserPreset: AddonParserPreset = AddonParserPreset.GENERIC
-    ): BuiltinSubtitleAddonSyncMutation {
-        var mutation = BuiltinSubtitleAddonSyncMutation()
-        store().edit { preferences ->
-            val current = getCurrentList(preferences).toMutableList()
-            val normalizedTargetUrl = canonicalizeUrl(targetUrl)
-            val seeded = preferences[builtinSubtitleAddonSeededKey] ?: false
-            val removed = preferences[builtinSubtitleAddonRemovedKey] ?: false
-            val builtinIndexes = current.mapIndexedNotNull { index, addon ->
-                index.takeIf { addonMatchesBuiltinSubtitleAddon(addon.url) }
-            }
-            val builtinIndex = builtinIndexes.firstOrNull() ?: -1
-
-            when {
-                builtinIndex >= 0 -> {
-                    val updatedCurrent = current.toMutableList().apply {
-                        builtinIndexes.drop(1).asReversed().forEach(::removeAt)
-                    }
-                    val existingAddon = updatedCurrent[builtinIndex]
-                    val replacement = existingAddon.copy(
-                        url = normalizedTargetUrl,
-                        parserPreset = parserPreset
-                    )
-                    updatedCurrent[builtinIndex] = replacement
-                    if (updatedCurrent != current) {
-                        preferences[orderedUrlsKey] = gson.toJson(updatedCurrent)
-                        mutation = BuiltinSubtitleAddonSyncMutation(
-                            changed = true,
-                            previousUrl = existingAddon.url,
-                            currentUrl = replacement.url
-                        )
-                    }
-                    preferences[builtinSubtitleAddonSeededKey] = true
-                    preferences[builtinSubtitleAddonRemovedKey] = false
-                }
-
-                !removed -> {
-                    current += AddonInstallConfig(
-                        url = normalizedTargetUrl,
-                        parserPreset = parserPreset
-                    )
-                    preferences[orderedUrlsKey] = gson.toJson(current)
-                    preferences[builtinSubtitleAddonSeededKey] = true
-                    mutation = BuiltinSubtitleAddonSyncMutation(
-                        changed = true,
-                        currentUrl = normalizedTargetUrl
-                    )
-                }
-
-                else -> {
-                    if (!seeded) {
-                        preferences[builtinSubtitleAddonSeededKey] = true
-                    }
-                }
-            }
-        }
-        return mutation
     }
 
     private fun getCurrentList(preferences: Preferences): List<AddonInstallConfig> {
@@ -308,13 +206,4 @@ class AddonPreferences @Inject constructor(
         "https://v3-cinemeta.strem.io",
         "https://opensubtitles-v3.strem.io"
     )
-
-    private fun addonMatchesBuiltinSubtitleAddon(url: String): Boolean {
-        return (
-            runCatching { normalizePublicAddonBaseUrl(url) }
-            .getOrNull()
-            ?.equals(BUILTIN_SUBTITLE_ADDON_PUBLIC_BASE_URL, ignoreCase = true)
-            == true
-        )
-    }
 }
