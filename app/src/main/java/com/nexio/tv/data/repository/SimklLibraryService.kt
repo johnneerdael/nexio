@@ -266,13 +266,12 @@ class SimklLibraryService @Inject constructor(
     }
 
     private suspend fun fetchInitialSnapshot(): Snapshot? {
-        val showItems = remote.getAllItemsByType("shows", extended = "full")
-            .takeIf { it.isSuccessful }?.body().orEmpty()
-        val movieItems = remote.getAllItemsByType("movies", extended = "full")
-            .takeIf { it.isSuccessful }?.body().orEmpty()
-        val animeItems = remote.getAllItemsByType("anime", extended = "full_anime_seasons")
-            .takeIf { it.isSuccessful }?.body().orEmpty()
-        return buildSnapshotFromItems(showItems + movieItems + animeItems)
+        val response = remote.getAllItems(dateFrom = null, extended = "full")
+        if (!response.isSuccessful) {
+            Log.w("SimklLibraryService", "Failed to fetch initial SIMKL all-items (${response.code()})")
+            return null
+        }
+        return buildSnapshotFromItems(response.body().orEmpty())
     }
 
     private suspend fun fetchDeltaAndMerge(currentRemovedFromList: String?): Snapshot? {
