@@ -100,6 +100,7 @@ import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.data.local.TrailerSettings
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.launch
@@ -134,6 +135,9 @@ fun PlaybackSettingsContent(
     val trailerSettings by viewModel.trailerSettings.collectAsStateWithLifecycle(initialValue = TrailerSettings())
     val streamDiagnosticsEnabled by viewModel.streamDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val startupPerfTelemetryEnabled by viewModel.startupPerfTelemetryEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val trackingProviderSelectorState by viewModel.trackingProviderSelectorState.collectAsStateWithLifecycle(
+        initialValue = TrackingProviderSelectorState()
+    )
     val installedAddonNames by viewModel.installedAddonNames.collectAsStateWithLifecycle(initialValue = emptyList())
     val coroutineScope = rememberCoroutineScope()
     var memoryUsageTrigger by remember { mutableStateOf(0) }
@@ -152,6 +156,7 @@ fun PlaybackSettingsContent(
     var showIecPackerChannelLayoutDialog by remember { mutableStateOf(false) }
     var showStreamAutoPlayModeDialog by remember { mutableStateOf(false) }
     var showStreamAutoPlaySourceDialog by remember { mutableStateOf(false) }
+    var showTrackingProviderDialog by remember { mutableStateOf(false) }
     var showStreamAutoPlayAddonSelectionDialog by remember { mutableStateOf(false) }
     var showStreamRegexDialog by remember { mutableStateOf(false) }
     var showNextEpisodeThresholdModeDialog by remember { mutableStateOf(false) }
@@ -171,6 +176,7 @@ fun PlaybackSettingsContent(
         showIecPackerChannelLayoutDialog = false
         showStreamAutoPlayModeDialog = false
         showStreamAutoPlaySourceDialog = false
+        showTrackingProviderDialog = false
         showStreamAutoPlayAddonSelectionDialog = false
         showStreamRegexDialog = false
         showNextEpisodeThresholdModeDialog = false
@@ -221,6 +227,13 @@ fun PlaybackSettingsContent(
                 onShowOutlineColorDialog = { openDialog { showOutlineColorDialog = true } },
                 onShowStreamAutoPlayModeDialog = { openDialog { showStreamAutoPlayModeDialog = true } },
                 onShowStreamAutoPlaySourceDialog = { openDialog { showStreamAutoPlaySourceDialog = true } },
+                onShowTrackingProviderDialog = { openDialog { showTrackingProviderDialog = true } },
+                trackingProviderLabel = when (trackingProviderSelectorState.effectiveProvider) {
+                    TrackingProvider.TRAKT -> stringResource(R.string.playback_tracking_provider_trakt)
+                    TrackingProvider.SIMKL -> stringResource(R.string.playback_tracking_provider_simkl)
+                },
+                trackingProviderEnabled = trackingProviderSelectorState.canChoose,
+                trackingProviderVisible = trackingProviderSelectorState.hasAnyConfiguredProvider,
                 onShowStreamAutoPlayAddonSelectionDialog = { openDialog { showStreamAutoPlayAddonSelectionDialog = true } },
                 onShowStreamRegexDialog = { openDialog { showStreamRegexDialog = true } },
                 onShowNextEpisodeThresholdModeDialog = { openDialog { showNextEpisodeThresholdModeDialog = true } },
@@ -486,6 +499,65 @@ fun PlaybackSettingsContent(
         onDismissNextEpisodeThresholdModeDialog = ::dismissAllDialogs,
         onDismissReuseLastLinkCacheDialog = ::dismissAllDialogs
     )
+
+    if (showTrackingProviderDialog) {
+        NexioDialog(
+            onDismiss = { showTrackingProviderDialog = false },
+            title = stringResource(R.string.playback_tracking_provider_dialog_title),
+            subtitle = stringResource(R.string.playback_tracking_provider_dialog_subtitle),
+            width = 620.dp,
+            suppressFirstKeyUp = false
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (trackingProviderSelectorState.traktConfigured) {
+                    val selected = trackingProviderSelectorState.effectiveProvider == TrackingProvider.TRAKT
+                    Button(
+                        onClick = {
+                            coroutineScope.launch { viewModel.setTrackingProvider(TrackingProvider.TRAKT) }
+                            showTrackingProviderDialog = false
+                        },
+                        colors = ButtonDefaults.colors(
+                            containerColor = if (selected) NexioColors.Primary else NexioColors.BackgroundCard,
+                            contentColor = if (selected) Color.Black else NexioColors.TextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.playback_tracking_provider_trakt))
+                    }
+                }
+                if (trackingProviderSelectorState.simklConfigured) {
+                    val selected = trackingProviderSelectorState.effectiveProvider == TrackingProvider.SIMKL
+                    Button(
+                        onClick = {
+                            coroutineScope.launch { viewModel.setTrackingProvider(TrackingProvider.SIMKL) }
+                            showTrackingProviderDialog = false
+                        },
+                        colors = ButtonDefaults.colors(
+                            containerColor = if (selected) NexioColors.Primary else NexioColors.BackgroundCard,
+                            contentColor = if (selected) Color.Black else NexioColors.TextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.playback_tracking_provider_simkl))
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = { showTrackingProviderDialog = false },
+                        colors = ButtonDefaults.colors(
+                            containerColor = NexioColors.BackgroundCard,
+                            contentColor = NexioColors.TextPrimary
+                        )
+                    ) {
+                        Text(stringResource(R.string.action_cancel))
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -577,6 +649,7 @@ internal fun ToggleSettingsItem(
             )
         }
     }
+
 }
 
 @Composable
