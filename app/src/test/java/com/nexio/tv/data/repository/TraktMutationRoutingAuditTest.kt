@@ -106,10 +106,10 @@ class TraktMutationRoutingAuditTest {
             "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt:deletePlayback" to 1,
             "app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt:removeHistory" to 2,
             "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt:removeHistory" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/TraktScrobbleService.kt:checkin" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/TraktScrobbleService.kt:scrobblePause" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/TraktScrobbleService.kt:scrobbleStart" to 1,
-            "app/src/main/java/com/nexio/tv/data/repository/TraktScrobbleService.kt:scrobbleStop" to 1,
+            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt:checkin" to 1,
+            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt:scrobblePause" to 1,
+            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt:scrobbleStart" to 1,
+            "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt:scrobbleStop" to 1,
             "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktDiscoveryMutationAdapter.kt:hideRecommendation" to 1
         )
     }

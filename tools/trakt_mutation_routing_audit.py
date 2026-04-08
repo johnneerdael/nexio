@@ -41,10 +41,10 @@ EXPECTED_CALL_SITE_COUNTS = {
     "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt:deletePlayback": 1,
     "app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt:removeHistory": 2,
     "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt:removeHistory": 1,
-    "app/src/main/java/com/nexio/tv/data/repository/TraktScrobbleService.kt:checkin": 1,
-    "app/src/main/java/com/nexio/tv/data/repository/TraktScrobbleService.kt:scrobblePause": 1,
-    "app/src/main/java/com/nexio/tv/data/repository/TraktScrobbleService.kt:scrobbleStart": 1,
-    "app/src/main/java/com/nexio/tv/data/repository/TraktScrobbleService.kt:scrobbleStop": 1,
+    "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt:checkin": 1,
+    "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt:scrobblePause": 1,
+    "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt:scrobbleStart": 1,
+    "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt:scrobbleStop": 1,
     "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktDiscoveryMutationAdapter.kt:hideRecommendation": 1,
 }
 
