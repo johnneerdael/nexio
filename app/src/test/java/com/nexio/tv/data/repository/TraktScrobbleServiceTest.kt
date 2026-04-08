@@ -1,10 +1,11 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.data.local.TraktAuthState
-import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
+import com.nexio.tv.data.repository.trakt.TraktWatchingNowStateController
+import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
+import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import io.mockk.coEvery
-import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
@@ -12,13 +13,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import retrofit2.Response
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.withTimeout
 
@@ -30,9 +28,10 @@ class TraktScrobbleServiceTest {
             request = WatchingMutationRequest.Scrobble(
                 action = "start",
                 item = movieItem("Existing"),
-                progressPercent = 12f
+                progressPercent = 12f,
+                optimisticVersion = 1L
             ),
-            rollbackState = TraktScrobbleService.WatchingNowState(
+            rollbackState = TraktWatchingNowStateController.Snapshot(
                 active = false,
                 title = "Server truth"
             ),
@@ -42,9 +41,10 @@ class TraktScrobbleServiceTest {
             request = WatchingMutationRequest.Scrobble(
                 action = "stop",
                 item = movieItem("Existing"),
-                progressPercent = 42f
+                progressPercent = 42f,
+                optimisticVersion = 2L
             ),
-            rollbackState = TraktScrobbleService.WatchingNowState(
+            rollbackState = TraktWatchingNowStateController.Snapshot(
                 active = true,
                 title = "Optimistic start"
             ),
@@ -56,28 +56,26 @@ class TraktScrobbleServiceTest {
         assertEquals(existing.rollbackState, merged.rollbackState)
         assertEquals(incoming.request, merged.request)
         assertEquals(incoming.optimisticVersion, merged.optimisticVersion)
-        assertFalse(shouldRollbackWatchingMutation(currentOptimisticVersion = 2L, failedMutationVersion = 1L))
-        assertTrue(shouldRollbackWatchingMutation(currentOptimisticVersion = 2L, failedMutationVersion = 2L))
     }
 
     @Test
     fun `checkin applies optimistic watching state and rolls back on failure`() = runTest {
-        val traktApi = mockk<TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
-        val traktProgressService = mockk<TraktProgressService>(relaxed = true)
+        val coordinator = mockk<TraktMutationOutboxCoordinator>()
+        val controller = TraktWatchingNowStateController()
         val requestGate = CompletableDeferred<Unit>()
 
         coEvery { traktAuthService.getCurrentAuthState() } returns authenticatedState()
         every { traktAuthService.hasRequiredCredentials() } returns true
-        coEvery { traktAuthService.executeAuthorizedWriteRequest<Any?>(any()) } coAnswers {
+        coEvery { coordinator.enqueueAndDrain(any()) } coAnswers {
             requestGate.await()
-            errorResponse(code = 500)
+            throw IllegalStateException("boom")
         }
 
         val service = TraktScrobbleService(
-            traktApi = traktApi,
             traktAuthService = traktAuthService,
-            traktProgressService = traktProgressService
+            watchingNowStateController = controller,
+            traktMutationOutboxCoordinator = coordinator
         )
 
         val mutation = async { service.checkin(movieItem("Arrival")) }
@@ -88,38 +86,37 @@ class TraktScrobbleServiceTest {
 
         assertFalse(mutation.await())
         awaitState(service) { !it.active && it.title == null && it.progressPercent == null }
-        coVerify(exactly = 0) { traktProgressService.refreshNow() }
     }
 
     @Test
     fun `older failed mutation does not rollback newer optimistic watching state`() = runTest {
-        val traktApi = mockk<TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
-        val traktProgressService = mockk<TraktProgressService>(relaxed = true)
+        val coordinator = mockk<TraktMutationOutboxCoordinator>()
+        val controller = TraktWatchingNowStateController()
         val firstGate = CompletableDeferred<Unit>()
         val secondGate = CompletableDeferred<Unit>()
         var callCount = 0
 
         coEvery { traktAuthService.getCurrentAuthState() } returns authenticatedState()
         every { traktAuthService.hasRequiredCredentials() } returns true
-        coEvery { traktAuthService.executeAuthorizedWriteRequest<Any?>(any()) } coAnswers {
+        coEvery { coordinator.enqueueAndDrain(any()) } coAnswers {
             when (callCount++) {
                 0 -> {
                     firstGate.await()
-                    errorResponse(code = 500)
+                    throw IllegalStateException("boom")
                 }
 
                 else -> {
                     secondGate.await()
-                    successResponse()
+                    firstArg<TraktMutationEnvelope>()
                 }
             }
         }
 
         val service = TraktScrobbleService(
-            traktApi = traktApi,
             traktAuthService = traktAuthService,
-            traktProgressService = traktProgressService
+            watchingNowStateController = controller,
+            traktMutationOutboxCoordinator = coordinator
         )
         val item = movieItem("Heat")
 
@@ -137,7 +134,6 @@ class TraktScrobbleServiceTest {
 
         assertFalse(first.await())
         awaitState(service) { !it.active && it.title == "Heat" && it.progressPercent == 42f }
-        coVerify(exactly = 1) { traktProgressService.refreshNow() }
     }
 
     private suspend fun awaitState(
@@ -161,10 +157,4 @@ class TraktScrobbleServiceTest {
         accessToken = "access",
         refreshToken = "refresh"
     )
-
-    private fun errorResponse(code: Int): Response<Any?> {
-        return Response.error(code, "{}".toResponseBody("application/json".toMediaType()))
-    }
-
-    private fun successResponse(): Response<Any?> = Response.success(null)
 }
