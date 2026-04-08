@@ -16,7 +16,7 @@ import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.repository.TraktAuthService
-import com.nexio.tv.data.repository.TraktScrobbleService
+import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerResolutionResult
 import com.nexio.tv.data.trailer.TrailerService
@@ -1030,7 +1030,7 @@ class MetaDetailsSeasonMediaViewModelTest {
         val mdbListRepository = mockk<MDBListRepository>(relaxed = true)
         val traktApi = mockk<TraktApi>(relaxed = true)
         val traktAuthService = mockk<TraktAuthService>(relaxed = true)
-        val traktScrobbleService = mockk<TraktScrobbleService>(relaxed = true)
+        val traktScrobbleService = mockk<TrackingScrobbleService>(relaxed = true)
         val addonRepository = mockk<AddonRepository>()
         val context = mockk<Context>(relaxed = true)
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
@@ -1053,7 +1053,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             watchProgressRepository = effectiveWatchProgressRepository,
             continueWatchingSnapshotService = mockk(relaxed = true),
             addonRepository = addonRepository,
-            traktScrobbleService = traktScrobbleService,
+            trackingScrobbleService = traktScrobbleService,
             layoutPreferenceDataStore = layoutPreferenceDataStore,
             playerSettingsDataStore = playerSettingsDataStore,
             trailerService = trailerService,

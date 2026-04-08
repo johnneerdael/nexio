@@ -48,7 +48,7 @@ class LibraryViewModelTest {
         val repository = FakeLibraryRepository(
             sourceMode = MutableStateFlow(LibrarySourceMode.TRAKT),
             isSyncing = MutableStateFlow(false),
-            hasTraktCache = MutableStateFlow(false),
+            hasProviderCache = MutableStateFlow(false),
             libraryItems = MutableStateFlow(emptyList()),
             listTabs = MutableStateFlow(emptyList())
         )
@@ -59,7 +59,7 @@ class LibraryViewModelTest {
 
         advanceUntilIdle()
 
-        assertEquals(1, repository.refreshTraktNowCalls)
+        assertEquals(1, repository.refreshProviderNowCalls)
         assertTrue(viewModel.uiState.value.isLoading)
 
         repository.isSyncing.value = true
@@ -73,7 +73,7 @@ class LibraryViewModelTest {
                 type = LibraryListTab.Type.WATCHLIST
             )
         }
-        repository.hasTraktCache.value = true
+        repository.hasProviderCache.value = true
         repository.isSyncing.value = false
         advanceUntilIdle()
 
@@ -85,7 +85,7 @@ class LibraryViewModelTest {
         val repository = FakeLibraryRepository(
             sourceMode = MutableStateFlow(LibrarySourceMode.TRAKT),
             isSyncing = MutableStateFlow(true),
-            hasTraktCache = MutableStateFlow(true),
+            hasProviderCache = MutableStateFlow(true),
             libraryItems = MutableStateFlow(emptyList()),
             listTabs = MutableStateFlow(
                 listOf(
@@ -106,7 +106,7 @@ class LibraryViewModelTest {
 
         assertFalse(viewModel.uiState.value.isLoading)
         assertTrue(viewModel.uiState.value.isSyncing)
-        assertEquals(0, repository.refreshTraktNowCalls)
+        assertEquals(0, repository.refreshProviderNowCalls)
     }
 
     @Test
@@ -114,10 +114,10 @@ class LibraryViewModelTest {
         val repository = FakeLibraryRepository(
             sourceMode = MutableStateFlow(LibrarySourceMode.TRAKT),
             isSyncing = MutableStateFlow(false),
-            hasTraktCache = MutableStateFlow(false),
+            hasProviderCache = MutableStateFlow(false),
             libraryItems = MutableStateFlow(emptyList()),
             listTabs = MutableStateFlow(emptyList()),
-            refreshTraktNowBlock = { throw IllegalStateException("Trakt unavailable") }
+            refreshProviderNowBlock = { throw IllegalStateException("Trakt unavailable") }
         )
         val viewModel = LibraryViewModel(
             libraryRepository = repository,
@@ -126,9 +126,40 @@ class LibraryViewModelTest {
 
         advanceUntilIdle()
 
-        assertEquals(1, repository.refreshTraktNowCalls)
+        assertEquals(1, repository.refreshProviderNowCalls)
         assertFalse(viewModel.uiState.value.isLoading)
         assertEquals("Trakt unavailable", viewModel.uiState.value.errorMessage)
+    }
+
+    @Test
+    fun `simkl watchlist refresh uses provider sync path`() = runTest(dispatcher) {
+        val repository = FakeLibraryRepository(
+            sourceMode = MutableStateFlow(LibrarySourceMode.SIMKL),
+            isSyncing = MutableStateFlow(false),
+            hasProviderCache = MutableStateFlow(true),
+            libraryItems = MutableStateFlow(emptyList()),
+            listTabs = MutableStateFlow(
+                listOf(
+                    LibraryListTab(
+                        key = "simkl:plantowatch",
+                        title = "SIMKL Watchlist",
+                        type = LibraryListTab.Type.WATCHLIST
+                    )
+                )
+            )
+        )
+        val viewModel = LibraryViewModel(
+            libraryRepository = repository,
+            layoutPreferenceDataStore = layoutPreferenceDataStore()
+        )
+
+        advanceUntilIdle()
+        viewModel.onSelectListTab("simkl:plantowatch")
+        viewModel.onRefresh()
+        advanceUntilIdle()
+
+        assertEquals(1, repository.refreshProviderNowCalls)
+        assertEquals(null, viewModel.uiState.value.errorMessage)
     }
 
     private fun layoutPreferenceDataStore(): LayoutPreferenceDataStore {
@@ -141,12 +172,12 @@ class LibraryViewModelTest {
     private class FakeLibraryRepository(
         override val sourceMode: MutableStateFlow<LibrarySourceMode>,
         override val isSyncing: MutableStateFlow<Boolean>,
-        override val hasTraktCache: MutableStateFlow<Boolean>,
+        override val hasProviderCache: MutableStateFlow<Boolean>,
         override val libraryItems: MutableStateFlow<List<LibraryEntry>>,
         override val listTabs: MutableStateFlow<List<LibraryListTab>>,
-        private val refreshTraktNowBlock: suspend () -> Unit = {}
+        private val refreshProviderNowBlock: suspend () -> Unit = {}
     ) : LibraryRepository {
-        var refreshTraktNowCalls: Int = 0
+        var refreshProviderNowCalls: Int = 0
 
         override fun isInLibrary(itemId: String, itemType: String): Flow<Boolean> = flowOf(false)
 
@@ -175,9 +206,9 @@ class LibraryViewModelTest {
 
         override suspend fun refreshNow() = Unit
 
-        override suspend fun refreshTraktNow() {
-            refreshTraktNowCalls += 1
-            refreshTraktNowBlock()
+        override suspend fun refreshProviderNow() {
+            refreshProviderNowCalls += 1
+            refreshProviderNowBlock()
         }
 
         override suspend fun refreshDebridNow() = Unit

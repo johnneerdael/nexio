@@ -654,7 +654,7 @@ class InAppYouTubeExtractor @Inject constructor() {
         return withTimeoutOrNull(2_000L) {
             coroutineScope {
                 val result = CompletableDeferred<String>()
-                candidates.forEach { candidate ->
+                val jobs = candidates.map { candidate ->
                     launch {
                         val reachable = isUrlReachable(candidate)
                         Log.d(TAG, "CDN probe: ${Uri.parse(candidate).host} -> $reachable")
@@ -662,7 +662,7 @@ class InAppYouTubeExtractor @Inject constructor() {
                     }
                 }
                 val winner = result.await()
-                coroutineContext.cancelChildren()
+                jobs.forEach { it.cancel() }
                 winner
             }
         } ?: url

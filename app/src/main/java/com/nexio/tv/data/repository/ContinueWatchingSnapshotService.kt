@@ -4,7 +4,6 @@ import android.util.Log
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
-import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
@@ -28,6 +27,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -39,20 +39,20 @@ import javax.inject.Singleton
 
 data class ContinueWatchingSnapshot(
     val resumeItems: List<WatchProgress> = emptyList(),
-    val nextUpItems: List<TraktProgressService.NextUpEntry> = emptyList(),
-    val traktUpNextItems: List<TraktProgressService.NextUpEntry> = emptyList(),
+    val nextUpItems: List<TrackingNextUpEntry> = emptyList(),
+    val traktUpNextItems: List<TrackingNextUpEntry> = emptyList(),
     val displayMetadataByItemKey: Map<String, HomeDisplayMetadata> = emptyMap(),
     val updatedAtMs: Long = 0L,
     /** Entries excluded from rails because their air date has not yet passed. */
-    val scheduledReemit: List<TraktProgressService.NextUpEntry> = emptyList()
+    val scheduledReemit: List<TrackingNextUpEntry> = emptyList()
 )
 
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContinueWatchingSnapshotService @Inject constructor(
     private val watchProgressRepository: WatchProgressRepository,
-    private val traktProgressService: TraktProgressService,
-    private val traktAuthDataStore: TraktAuthDataStore,
+    private val trackingProgressService: TrackingProgressService,
+    private val trackingProviderStateService: TrackingProviderStateService,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val metaRepository: MetaRepository,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
@@ -108,7 +108,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
 
         scope.launch {
-            traktAuthDataStore.isEffectivelyAuthenticated
+            trackingProviderStateService.state.map { it.hasAuthenticatedProvider }
                 .distinctUntilChanged()
                 .flatMapLatest { isAuthenticated ->
                     if (!isAuthenticated) {
@@ -126,10 +126,10 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     } else {
                         hasSeenAuthenticatedSession = true
                         combine(
-                            traktProgressService.observeRemoteSnapshotLoaded(),
+                            trackingProgressService.observeRemoteSnapshotLoaded(),
                             watchProgressRepository.allProgress,
-                            traktProgressService.observeContinueWatchingNextUp(),
-                            traktProgressService.observeSyntheticContinueWatchingNextUp()
+                            trackingProgressService.observeContinueWatchingNextUp(),
+                            trackingProgressService.observeSyntheticContinueWatchingNextUp()
                         ) { hasLoadedRemoteSnapshot, allProgress, nextUpEntries, traktUpNextEntries ->
                             if (!hasLoadedRemoteSnapshot) {
                                 null
@@ -175,7 +175,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             ) {
                 return@withLock
             }
-            traktProgressService.refreshNow()
+            trackingProgressService.refreshNow()
             lastRefreshRequestMs = lockedNow
         }
     }
@@ -199,8 +199,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
      */
     data class EpisodeRollbackState(
         val resumeItems: List<WatchProgress> = emptyList(),
-        val nextUpItems: List<TraktProgressService.NextUpEntry> = emptyList(),
-        val traktUpNextItems: List<TraktProgressService.NextUpEntry> = emptyList()
+        val nextUpItems: List<TrackingNextUpEntry> = emptyList(),
+        val traktUpNextItems: List<TrackingNextUpEntry> = emptyList()
     )
 
     /**
@@ -381,7 +381,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     fun invalidateLocalizedMetadata() {
-        traktProgressService.invalidateLocalizedMetadata()
+        trackingProgressService.invalidateLocalizedMetadata()
         snapshotStore.clear()
         metadataDiskCacheStore.replaceHomeFeedReferences(feedKey = "continue_watching", itemKeys = emptySet())
         scope.launch {
@@ -392,8 +392,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private fun buildRawSnapshot(
         allProgress: List<WatchProgress>,
-        nextUpEntries: List<TraktProgressService.NextUpEntry>,
-        traktUpNextEntries: List<TraktProgressService.NextUpEntry>
+        nextUpEntries: List<TrackingNextUpEntry>,
+        traktUpNextEntries: List<TrackingNextUpEntry>
     ): ContinueWatchingSnapshot {
         val nowMs = System.currentTimeMillis()
         val resumeItems = allProgress
@@ -514,8 +514,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     private fun normalizeNextUpEntry(
-        entry: TraktProgressService.NextUpEntry
-    ): TraktProgressService.NextUpEntry? {
+        entry: TrackingNextUpEntry
+    ): TrackingNextUpEntry? {
         return try {
             val contentId = entry.contentId.trim()
             if (contentId.isBlank()) return null
@@ -565,7 +565,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     private fun scheduleReemitIfNeeded(
-        scheduledReemit: List<TraktProgressService.NextUpEntry>,
+        scheduledReemit: List<TrackingNextUpEntry>,
         nowMs: Long
     ) {
         val soonestMs = AirDateGate.soonestPendingMs(
@@ -726,7 +726,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         )
     }
 
-    private fun nextUpRefForEntry(entry: TraktProgressService.NextUpEntry): ContinueWatchingNextUpRef {
+    private fun nextUpRefForEntry(entry: TrackingNextUpEntry): ContinueWatchingNextUpRef {
         return ContinueWatchingNextUpRef(
             contentId = entry.contentId,
             activityAtMs = entry.activityAtMs,

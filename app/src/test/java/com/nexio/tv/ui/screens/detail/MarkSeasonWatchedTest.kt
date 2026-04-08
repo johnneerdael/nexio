@@ -6,9 +6,13 @@ import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.remote.api.TmdbEpisode
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
-import com.nexio.tv.data.repository.TraktProgressService
+import com.nexio.tv.data.repository.EffectiveTrackingProviderState
+import com.nexio.tv.data.repository.TrackingProgressService
+import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher
 import com.nexio.tv.data.repository.trakt.TraktEpisodeRef
+import com.nexio.tv.data.repository.simkl.SimklSeasonMarkMutationAdapter
+import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
@@ -253,13 +257,13 @@ class MarkSeasonWatchedTest {
     // ── Helpers shared with ContinueWatchingSnapshotServiceMutationTest ────────
 
     private fun buildService(): ContinueWatchingSnapshotService {
-        val traktAuthDataStore = mockk<TraktAuthDataStore>(relaxed = true) {
-            every { isEffectivelyAuthenticated } returns flowOf(false)
+        val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
+            every { state } returns flowOf(EffectiveTrackingProviderState())
         }
         val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true) {
             every { dismissedNextUpKeys } returns flowOf(emptySet())
         }
-        val traktProgressService = mockk<TraktProgressService>(relaxed = true) {
+        val traktProgressService = mockk<TrackingProgressService>(relaxed = true) {
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
@@ -268,8 +272,8 @@ class MarkSeasonWatchedTest {
             watchProgressRepository = mockk(relaxed = true) {
                 every { allProgress } returns flowOf(emptyList())
             },
-            traktProgressService = traktProgressService,
-            traktAuthDataStore = traktAuthDataStore,
+            trackingProgressService = traktProgressService,
+            trackingProviderStateService = trackingProviderStateService,
             traktSettingsDataStore = traktSettingsDataStore,
             metaRepository = mockk(relaxed = true),
             metadataDiskCacheStore = mockk(relaxed = true),
@@ -305,7 +309,7 @@ class MarkSeasonWatchedTest {
                 )
             }
 
-            val traktProgressService = mockk<TraktProgressService>(relaxed = true)
+            val traktProgressService = mockk<TrackingProgressService>(relaxed = true)
             coEvery {
                 traktProgressService.resolveSeasonEpisodeTraktIds(showId, season, any())
             } returns (1..10).associate { epNum ->
@@ -323,13 +327,15 @@ class MarkSeasonWatchedTest {
                 resumeItems = resumeItems
             )
 
-            val traktAuthDataStore = mockk<TraktAuthDataStore>(relaxed = true)
-            coEvery { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
+            val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
+                every { state } returns flowOf(EffectiveTrackingProviderState(traktAuthenticated = true))
+                coEvery { currentState() } returns EffectiveTrackingProviderState(traktAuthenticated = true)
+            }
 
             val repo = com.nexio.tv.data.repository.WatchProgressRepositoryImpl(
                 watchProgressPreferences = mockk(relaxed = true),
-                traktAuthDataStore = traktAuthDataStore,
-                traktProgressService = traktProgressService,
+                trackingProviderStateService = trackingProviderStateService,
+                trackingProgressService = traktProgressService,
                 traktMutationOutboxCoordinator = mockk(relaxed = true),
                 metaRepository = mockk(relaxed = true),
                 seasonMarkBatcher = seasonMarkBatcher,
@@ -387,7 +393,7 @@ class MarkSeasonWatchedTest {
                 )
             }
 
-            val traktProgressService = mockk<TraktProgressService>(relaxed = true)
+            val traktProgressService = mockk<TrackingProgressService>(relaxed = true)
             coEvery {
                 traktProgressService.resolveSeasonEpisodeTraktIds(showId, season, any())
             } returns mapOf(
@@ -410,13 +416,15 @@ class MarkSeasonWatchedTest {
             coEvery { snapshotService.rollbackEpisodes(any<ContinueWatchingSnapshotService.EpisodeRollbackState>()) } returns Unit
             coEvery { snapshotService.rollbackEpisodes(capture(rollbackSlot)) } returns Unit
 
-            val traktAuthDataStore = mockk<TraktAuthDataStore>(relaxed = true)
-            coEvery { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
+            val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
+                every { state } returns flowOf(EffectiveTrackingProviderState(traktAuthenticated = true))
+                coEvery { currentState() } returns EffectiveTrackingProviderState(traktAuthenticated = true)
+            }
 
             val repo = com.nexio.tv.data.repository.WatchProgressRepositoryImpl(
                 watchProgressPreferences = mockk(relaxed = true),
-                traktAuthDataStore = traktAuthDataStore,
-                traktProgressService = traktProgressService,
+                trackingProviderStateService = trackingProviderStateService,
+                trackingProgressService = traktProgressService,
                 traktMutationOutboxCoordinator = mockk(relaxed = true),
                 metaRepository = mockk(relaxed = true),
                 seasonMarkBatcher = seasonMarkBatcher,
@@ -488,7 +496,7 @@ class MarkSeasonWatchedTest {
                 )
             }
 
-            val traktProgressService = mockk<TraktProgressService>(relaxed = true)
+            val traktProgressService = mockk<TrackingProgressService>(relaxed = true)
             coEvery {
                 traktProgressService.resolveSeasonEpisodeTraktIds(showId, season, any())
             } returns (1..5).associate { epNum ->
@@ -510,13 +518,15 @@ class MarkSeasonWatchedTest {
             coEvery { snapshotService.rollbackEpisodes(any<ContinueWatchingSnapshotService.EpisodeRollbackState>()) } returns Unit
             coEvery { snapshotService.rollbackEpisodes(capture(rollbackSlot)) } returns Unit
 
-            val traktAuthDataStore = mockk<TraktAuthDataStore>(relaxed = true)
-            coEvery { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
+            val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
+                every { state } returns flowOf(EffectiveTrackingProviderState(traktAuthenticated = true))
+                coEvery { currentState() } returns EffectiveTrackingProviderState(traktAuthenticated = true)
+            }
 
             val repo = com.nexio.tv.data.repository.WatchProgressRepositoryImpl(
                 watchProgressPreferences = mockk(relaxed = true),
-                traktAuthDataStore = traktAuthDataStore,
-                traktProgressService = traktProgressService,
+                trackingProviderStateService = trackingProviderStateService,
+                trackingProgressService = traktProgressService,
                 traktMutationOutboxCoordinator = mockk(relaxed = true),
                 metaRepository = mockk(relaxed = true),
                 seasonMarkBatcher = seasonMarkBatcher,
@@ -573,7 +583,7 @@ class MarkSeasonWatchedTest {
             }
 
             val nextUpItems = (1..2).map { ep ->
-                com.nexio.tv.data.repository.TraktProgressService.NextUpEntry(
+                com.nexio.tv.data.repository.TrackingNextUpEntry(
                     contentId = showId,
                     name = "Show",
                     season = season,
@@ -587,7 +597,7 @@ class MarkSeasonWatchedTest {
             }
 
             val traktUpNextItems = (3..4).map { ep ->
-                com.nexio.tv.data.repository.TraktProgressService.NextUpEntry(
+                com.nexio.tv.data.repository.TrackingNextUpEntry(
                     contentId = showId,
                     name = "Show",
                     season = season,
@@ -600,7 +610,7 @@ class MarkSeasonWatchedTest {
                 )
             }
 
-            val traktProgressService = mockk<TraktProgressService>(relaxed = true)
+            val traktProgressService = mockk<TrackingProgressService>(relaxed = true)
             coEvery {
                 traktProgressService.resolveSeasonEpisodeTraktIds(showId, season, any())
             } returns (1..3).associate { epNum ->
@@ -624,13 +634,15 @@ class MarkSeasonWatchedTest {
             coEvery { snapshotService.rollbackEpisodes(any<ContinueWatchingSnapshotService.EpisodeRollbackState>()) } returns Unit
             coEvery { snapshotService.rollbackEpisodes(capture(rollbackSlot)) } returns Unit
 
-            val traktAuthDataStore = mockk<TraktAuthDataStore>(relaxed = true)
-            coEvery { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
+            val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
+                every { state } returns flowOf(EffectiveTrackingProviderState(traktAuthenticated = true))
+                coEvery { currentState() } returns EffectiveTrackingProviderState(traktAuthenticated = true)
+            }
 
             val repo = com.nexio.tv.data.repository.WatchProgressRepositoryImpl(
                 watchProgressPreferences = mockk(relaxed = true),
-                traktAuthDataStore = traktAuthDataStore,
-                traktProgressService = traktProgressService,
+                trackingProviderStateService = trackingProviderStateService,
+                trackingProgressService = traktProgressService,
                 traktMutationOutboxCoordinator = mockk(relaxed = true),
                 metaRepository = mockk(relaxed = true),
                 seasonMarkBatcher = seasonMarkBatcher,
@@ -673,6 +685,46 @@ class MarkSeasonWatchedTest {
                 (1..3).toSet(),
                 rollbackSlot.captured.resumeItems.mapNotNull { it.episode }.toSet()
             )
+        }
+
+    @Test
+    fun `simkl provider routes season batch through simkl outbox envelope`() =
+        runTest(dispatcher) {
+            val showId = "tt3333333"
+            val season = 2
+            val episodes = (1..3).map(::seasonEpisodeMark)
+            val snapshotService = mockk<ContinueWatchingSnapshotService>(relaxed = true)
+            every { snapshotService.snapshotForEpisodes(any()) } returns ContinueWatchingSnapshotService.EpisodeRollbackState()
+
+            val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
+                val state = EffectiveTrackingProviderState(
+                    effectiveProvider = com.nexio.tv.domain.model.TrackingProvider.SIMKL,
+                    traktAuthenticated = false,
+                    simklAuthenticated = true
+                )
+                every { this@mockk.state } returns flowOf(state)
+                coEvery { currentState() } returns state
+            }
+
+            val envelopeSlot = slot<TraktMutationEnvelope>()
+            val outbox = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
+            coEvery { outbox.enqueueAndDrain(capture(envelopeSlot)) } answers { envelopeSlot.captured }
+
+            val repo = com.nexio.tv.data.repository.WatchProgressRepositoryImpl(
+                watchProgressPreferences = mockk(relaxed = true),
+                trackingProviderStateService = trackingProviderStateService,
+                trackingProgressService = mockk(relaxed = true),
+                traktMutationOutboxCoordinator = outbox,
+                metaRepository = mockk(relaxed = true),
+                seasonMarkBatcher = mockk(relaxed = true),
+                snapshotServiceProvider = Provider { snapshotService }
+            )
+
+            val meta = buildSeriesMeta(id = showId)
+            repo.markAsCompletedBatch(meta, season, episodes)
+
+            assertEquals(SimklSeasonMarkMutationAdapter.ADAPTER_KEY, envelopeSlot.captured.adapterKey)
+            assertEquals(SimklSeasonMarkMutationAdapter.MUTATION_KIND, envelopeSlot.captured.mutationKind)
         }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

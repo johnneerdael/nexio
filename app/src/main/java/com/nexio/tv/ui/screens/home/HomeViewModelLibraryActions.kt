@@ -20,11 +20,11 @@ internal fun HomeViewModel.observeLibraryState() {
         libraryRepository.sourceMode
             .distinctUntilChanged()
             .collectLatest { sourceMode ->
-                if (sourceMode != LibrarySourceMode.TRAKT) {
+                if (sourceMode == LibrarySourceMode.LOCAL || sourceMode == LibrarySourceMode.DEBRID) {
                     activePosterListPickerInput = null
                 }
                 _uiState.update { state ->
-                    val resetPickerState = sourceMode != LibrarySourceMode.TRAKT
+                    val resetPickerState = sourceMode == LibrarySourceMode.LOCAL || sourceMode == LibrarySourceMode.DEBRID
                     val updatedState = state.copy(
                         librarySourceMode = sourceMode,
                         showPosterListPicker = if (resetPickerState) false else state.showPosterListPicker,
@@ -88,7 +88,7 @@ fun HomeViewModel.togglePosterLibrary(item: MetaPreview, addonBaseUrl: String?) 
 }
 
 fun HomeViewModel.openPosterListPicker(item: MetaPreview, addonBaseUrl: String?) {
-    if (_uiState.value.librarySourceMode != LibrarySourceMode.TRAKT) {
+    if (_uiState.value.librarySourceMode == LibrarySourceMode.LOCAL || _uiState.value.librarySourceMode == LibrarySourceMode.DEBRID) {
         togglePosterLibrary(item, addonBaseUrl)
         return
     }
@@ -148,7 +148,7 @@ fun HomeViewModel.toggleContinueWatchingLibraryPipeline(item: ContinueWatchingIt
 }
 
 fun HomeViewModel.openContinueWatchingListPickerPipeline(item: ContinueWatchingItem) {
-    if (_uiState.value.librarySourceMode != LibrarySourceMode.TRAKT) return
+    if (_uiState.value.librarySourceMode == LibrarySourceMode.LOCAL || _uiState.value.librarySourceMode == LibrarySourceMode.DEBRID) return
     val input = item.toLibraryEntryInput()
     activePosterListPickerInput = input
 
@@ -210,7 +210,7 @@ fun HomeViewModel.togglePosterListPickerMembership(listKey: String) {
 
 fun HomeViewModel.savePosterListPickerMembership() {
     if (_uiState.value.posterListPickerPending) return
-    if (_uiState.value.librarySourceMode != LibrarySourceMode.TRAKT) return
+    if (_uiState.value.librarySourceMode == LibrarySourceMode.LOCAL || _uiState.value.librarySourceMode == LibrarySourceMode.DEBRID) return
     val input = activePosterListPickerInput ?: return
 
     viewModelScope.launch {

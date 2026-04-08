@@ -141,11 +141,17 @@ class LibraryViewModel @Inject constructor(
             val successMessage: String
             val refreshBlock: suspend () -> Unit
             when {
-                selectedList?.type == LibraryListTab.Type.WATCHLIST ||
-                    selectedList?.type == LibraryListTab.Type.PERSONAL -> {
+                selectedList?.type == LibraryListTab.Type.PERSONAL -> {
                     startMessage = "Syncing Trakt library..."
                     successMessage = "Trakt library synced"
-                    refreshBlock = { libraryRepository.refreshTraktNow() }
+                    refreshBlock = { libraryRepository.refreshProviderNow() }
+                }
+
+                selectedList?.type == LibraryListTab.Type.WATCHLIST &&
+                    (state.sourceMode == LibrarySourceMode.TRAKT || state.sourceMode == LibrarySourceMode.SIMKL) -> {
+                    startMessage = providerSyncStartMessage(state.sourceMode)
+                    successMessage = providerSyncSuccessMessage(state.sourceMode)
+                    refreshBlock = { libraryRepository.refreshProviderNow() }
                 }
 
                 selectedList?.key == DebridLibraryService.REAL_DEBRID_LIST_KEY -> {
@@ -174,9 +180,15 @@ class LibraryViewModel @Inject constructor(
                 }
 
                 state.sourceMode == LibrarySourceMode.TRAKT -> {
-                    startMessage = "Syncing Trakt library..."
-                    successMessage = "Trakt library synced"
-                    refreshBlock = { libraryRepository.refreshTraktNow() }
+                    startMessage = providerSyncStartMessage(state.sourceMode)
+                    successMessage = providerSyncSuccessMessage(state.sourceMode)
+                    refreshBlock = { libraryRepository.refreshProviderNow() }
+                }
+
+                state.sourceMode == LibrarySourceMode.SIMKL -> {
+                    startMessage = providerSyncStartMessage(state.sourceMode)
+                    successMessage = providerSyncSuccessMessage(state.sourceMode)
+                    refreshBlock = { libraryRepository.refreshNow() }
                 }
 
                 else -> {
@@ -351,18 +363,18 @@ class LibraryViewModel @Inject constructor(
             combine(
                 libraryRepository.sourceMode,
                 libraryRepository.isSyncing,
-                libraryRepository.hasTraktCache,
+                libraryRepository.hasProviderCache,
                 libraryRepository.libraryItems,
                 libraryRepository.listTabs
-            ) { sourceMode, isSyncing, hasTraktCache, items, listTabs ->
+            ) { sourceMode, isSyncing, hasProviderCache, items, listTabs ->
                 DataBundle(
                     sourceMode = sourceMode,
                     isSyncing = isSyncing,
-                    hasTraktCache = hasTraktCache,
+                    hasProviderCache = hasProviderCache,
                     items = items,
                     listTabs = listTabs
                 )
-            }.collectLatest { (sourceMode, isSyncing, hasTraktCache, items, listTabs) ->
+            }.collectLatest { (sourceMode, isSyncing, hasProviderCache, items, listTabs) ->
                 _uiState.update { current ->
                     val supportsListTabs = listTabs.isNotEmpty()
                     val nextSelectedList = when {
@@ -422,8 +434,8 @@ class LibraryViewModel @Inject constructor(
                         selectedSortOption = nextSelectedSort,
                         manageSelectedListKey = nextManageSelected,
                         isSyncing = sourceMode != LibrarySourceMode.LOCAL && isSyncing,
-                        isLoading = sourceMode == LibrarySourceMode.TRAKT &&
-                            !hasTraktCache &&
+                        isLoading = (sourceMode == LibrarySourceMode.TRAKT || sourceMode == LibrarySourceMode.SIMKL) &&
+                            !hasProviderCache &&
                             current.errorMessage == null
                     )
                     updated.withVisibleItems()
@@ -459,7 +471,7 @@ class LibraryViewModel @Inject constructor(
     private data class DataBundle(
         val sourceMode: LibrarySourceMode,
         val isSyncing: Boolean,
-        val hasTraktCache: Boolean,
+        val hasProviderCache: Boolean,
         val items: List<LibraryEntry>,
         val listTabs: List<LibraryListTab>
     )
@@ -468,29 +480,60 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             combine(
                 libraryRepository.sourceMode,
-                libraryRepository.hasTraktCache
-            ) { sourceMode, hasTraktCache ->
-                sourceMode to hasTraktCache
-            }.collectLatest { (sourceMode, hasTraktCache) ->
+                libraryRepository.hasProviderCache
+            ) { sourceMode, hasProviderCache ->
+                sourceMode to hasProviderCache
+            }.collectLatest { (sourceMode, hasProviderCache) ->
                 when {
-                    sourceMode != LibrarySourceMode.TRAKT -> {
+                    sourceMode != LibrarySourceMode.TRAKT && sourceMode != LibrarySourceMode.SIMKL -> {
                         initialTraktSyncRequested = false
                     }
 
-                    hasTraktCache -> {
+                    hasProviderCache -> {
                         initialTraktSyncRequested = true
                     }
 
                     !initialTraktSyncRequested -> {
                         initialTraktSyncRequested = true
                         runCatching {
-                            libraryRepository.refreshTraktNow()
+                            if (sourceMode == LibrarySourceMode.TRAKT || sourceMode == LibrarySourceMode.SIMKL) {
+                                libraryRepository.refreshProviderNow()
+                            } else {
+                                libraryRepository.refreshNow()
+                            }
                         }.onFailure { error ->
-                            setError(error.message ?: "Failed to sync Trakt library")
+                            setError(error.message ?: providerSyncFailureMessage(sourceMode))
                         }
                     }
                 }
             }
+        }
+    }
+
+    private fun providerSyncStartMessage(sourceMode: LibrarySourceMode): String {
+        return when (sourceMode) {
+            LibrarySourceMode.TRAKT -> "Syncing Trakt library..."
+            LibrarySourceMode.SIMKL -> "Syncing SIMKL library..."
+            LibrarySourceMode.DEBRID -> "Syncing debrid libraries..."
+            LibrarySourceMode.LOCAL -> "Syncing library..."
+        }
+    }
+
+    private fun providerSyncSuccessMessage(sourceMode: LibrarySourceMode): String {
+        return when (sourceMode) {
+            LibrarySourceMode.TRAKT -> "Trakt library synced"
+            LibrarySourceMode.SIMKL -> "SIMKL library synced"
+            LibrarySourceMode.DEBRID -> "Debrid libraries synced"
+            LibrarySourceMode.LOCAL -> "Library synced"
+        }
+    }
+
+    private fun providerSyncFailureMessage(sourceMode: LibrarySourceMode): String {
+        return when (sourceMode) {
+            LibrarySourceMode.TRAKT -> "Failed to sync Trakt library"
+            LibrarySourceMode.SIMKL -> "Failed to sync SIMKL library"
+            LibrarySourceMode.DEBRID -> "Failed to sync debrid libraries"
+            LibrarySourceMode.LOCAL -> "Failed to sync library"
         }
     }
 

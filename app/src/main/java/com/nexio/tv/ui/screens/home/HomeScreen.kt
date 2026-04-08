@@ -388,7 +388,7 @@ fun HomeScreen(
             title = item.name,
             isInLibrary = uiState.posterLibraryMembership[statusKey] == true,
             isLibraryPending = statusKey in uiState.posterLibraryPending,
-            showManageLists = uiState.librarySourceMode == LibrarySourceMode.TRAKT,
+            showManageLists = uiState.librarySourceMode == LibrarySourceMode.TRAKT || uiState.librarySourceMode == LibrarySourceMode.SIMKL,
             isMovie = isMovie,
             showManualStreamSelection = shouldShowHomeManualStreamSelection(
                 deterministicAutoplayEnabled = uiState.deterministicAutoplayEnabled,
@@ -427,7 +427,7 @@ fun HomeScreen(
                 posterOptionsTarget = null
             },
             onToggleLibrary = {
-                if (uiState.librarySourceMode == LibrarySourceMode.TRAKT) {
+                if (uiState.librarySourceMode == LibrarySourceMode.TRAKT || uiState.librarySourceMode == LibrarySourceMode.SIMKL) {
                     viewModel.openPosterListPicker(item, selectedPoster.addonBaseUrl)
                 } else {
                     viewModel.togglePosterLibrary(item, selectedPoster.addonBaseUrl)

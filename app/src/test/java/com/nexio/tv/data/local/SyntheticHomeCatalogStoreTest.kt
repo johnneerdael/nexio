@@ -32,6 +32,12 @@ class SyntheticHomeCatalogStoreTest {
                     rows = listOf(sampleRow("trakt", "up_next"))
                 )
             ),
+            simklGroups = listOf(
+                PersistedSyntheticCatalogGroup(
+                    orderKey = "simkl_tv_trending_today",
+                    rows = listOf(sampleRow("simkl", "simkl_tv_trending_today"))
+                )
+            ),
             mdbListGroups = listOf(
                 PersistedSyntheticCatalogGroup(
                     orderKey = "top:list",
@@ -96,6 +102,30 @@ class SyntheticHomeCatalogStoreTest {
         assertTrue(raw.contains("\"orderKey\":\"trakt_trending_movies\""))
         assertTrue(raw.contains("\"rows\""))
         assertTrue(raw.contains("\"traktGroups\""))
+    }
+
+    @Test
+    fun `write persists simkl synthetic groups alongside trakt and mdblist`() {
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(prefs, "synthetic_home_catalogs", localePrefs("en"))
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 7
+        val store = SyntheticHomeCatalogStore(context, metadataStore)
+
+        store.write(
+            SyntheticHomeCatalogStore.Snapshot(
+                simklGroups = listOf(
+                    PersistedSyntheticCatalogGroup(
+                        orderKey = "simkl_anime_trending_month",
+                        rows = listOf(sampleRow("simkl", "simkl_anime_trending_month"))
+                    )
+                )
+            )
+        )
+
+        val raw = prefs.getString("snapshot", null).orEmpty()
+        assertTrue(raw.contains("\"simklGroups\""))
+        assertTrue(raw.contains("\"orderKey\":\"simkl_anime_trending_month\""))
     }
 
     private fun sampleRow(addonId: String, catalogId: String): CatalogRow {

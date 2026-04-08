@@ -25,6 +25,7 @@ begin
         'top_posters_api_key',
         'realdebrid_access_token',
         'realdebrid_refresh_token',
+        'simkl_access_token',
         'trakt_access_token',
         'trakt_refresh_token'
       ));
@@ -46,6 +47,7 @@ begin
         'top_posters_api_key',
         'realdebrid_access_token',
         'realdebrid_refresh_token',
+        'simkl_access_token',
         'trakt_access_token',
         'trakt_refresh_token'
       )),

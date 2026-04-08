@@ -49,6 +49,7 @@ data class LibraryEntry(
 enum class LibrarySourceMode {
     LOCAL,
     TRAKT,
+    SIMKL,
     DEBRID
 }
 

@@ -21,6 +21,7 @@ import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.local.PremiumizeSettingsDataStore
 import com.nexio.tv.data.local.RealDebridAuthDataStore
 import com.nexio.tv.data.local.SimklAuthDataStore
+import com.nexio.tv.data.local.SimklSettingsDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.data.local.SubtitleOrganizationMode
@@ -158,6 +159,7 @@ class AccountSettingsSyncService @Inject constructor(
     private val traktAuthDataStore: TraktAuthDataStore,
     private val simklAuthDataStore: SimklAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
+    private val simklSettingsDataStore: SimklSettingsDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     @ApplicationContext private val context: Context
@@ -210,6 +212,7 @@ class AccountSettingsSyncService @Inject constructor(
                 realDebridState = realDebridAuthDataStore.state.drop(1).map { Unit },
                 traktAuthState = traktAuthDataStore.state.drop(1).map { Unit },
                 traktCatalogPreferences = traktSettingsDataStore.catalogPreferences.drop(1).map { Unit },
+                simklCatalogPreferences = simklSettingsDataStore.catalogPreferences.drop(1).map { Unit },
                 simklAuthState = simklAuthDataStore.state.drop(1).map { Unit },
                 playerSettings = playerSettingsDataStore.playerSettings.drop(1).map { Unit }
             ).collect {
@@ -298,6 +301,7 @@ class AccountSettingsSyncService @Inject constructor(
                     imdbSettingsDataStore = imdbSettingsDataStore,
                     posterRatingsSettingsDataStore = posterRatingsSettingsDataStore,
                     traktSettingsDataStore = traktSettingsDataStore,
+                    simklSettingsDataStore = simklSettingsDataStore,
                     playerSettingsDataStore = playerSettingsDataStore
                 )
                 applyRemoteSecrets(snapshot.settings)
@@ -332,6 +336,7 @@ class AccountSettingsSyncService @Inject constructor(
         val traktAuth = traktAuthDataStore.state.first()
         val simklAuth = simklAuthDataStore.state.first()
         val traktCatalogPrefs = traktSettingsDataStore.catalogPreferences.first()
+        val simklCatalogPrefs = simklSettingsDataStore.catalogPreferences.first()
 
         return buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(
@@ -425,6 +430,8 @@ class AccountSettingsSyncService @Inject constructor(
             traktCatalogEnabledSet = traktCatalogPrefs.enabledCatalogs.toList(),
             traktCatalogOrder = traktCatalogPrefs.catalogOrder,
             traktSelectedPopularListKeys = traktCatalogPrefs.selectedPopularListKeys.toList(),
+            simklCatalogEnabledSet = simklCatalogPrefs.enabledCatalogs.toList(),
+            simklCatalogOrder = simklCatalogPrefs.catalogOrder,
             mdbListHiddenPersonalListKeys = mdbListPrefs.hiddenPersonalListKeys.toList(),
             mdbListSelectedTopListKeys = mdbListPrefs.selectedTopListKeys.toList(),
             mdbListCatalogOrder = mdbListPrefs.catalogOrder,

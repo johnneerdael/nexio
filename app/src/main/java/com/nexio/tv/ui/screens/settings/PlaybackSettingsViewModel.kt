@@ -17,35 +17,17 @@ import com.nexio.tv.data.local.SubtitleOrganizationMode
 import com.nexio.tv.data.local.TrailerSettings
 import com.nexio.tv.data.local.TrailerSettingsDataStore
 import com.nexio.tv.data.local.VodCacheSizeMode
-import com.nexio.tv.data.local.TraktAuthDataStore
-import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.repository.AddonRepository
+import com.nexio.tv.data.repository.TrackingProviderState
+import com.nexio.tv.data.repository.TrackingProviderStateRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
-data class TrackingProviderSelectorState(
-    val storedProvider: TrackingProvider = TrackingProvider.TRAKT,
-    val traktConfigured: Boolean = false,
-    val simklConfigured: Boolean = false
-) {
-    val canChoose: Boolean
-        get() = traktConfigured && simklConfigured
-
-    val hasAnyConfiguredProvider: Boolean
-        get() = traktConfigured || simklConfigured
-
-    val effectiveProvider: TrackingProvider
-        get() = when {
-            traktConfigured && !simklConfigured -> TrackingProvider.TRAKT
-            simklConfigured && !traktConfigured -> TrackingProvider.SIMKL
-            else -> storedProvider
-        }
-}
+typealias TrackingProviderSelectorState = TrackingProviderState
 
 @HiltViewModel
 class PlaybackSettingsViewModel @Inject constructor(
@@ -53,25 +35,14 @@ class PlaybackSettingsViewModel @Inject constructor(
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val addonRepository: AddonRepository,
-    private val traktAuthDataStore: TraktAuthDataStore,
-    private val simklAuthDataStore: SimklAuthDataStore
+    trackingProviderStateRepository: TrackingProviderStateRepository
 ) : ViewModel() {
 
     val playerSettings: Flow<PlayerSettings> = playerSettingsDataStore.playerSettings
     val trailerSettings: Flow<TrailerSettings> = trailerSettingsDataStore.settings
     val streamDiagnosticsEnabled: Flow<Boolean> = debugSettingsDataStore.streamDiagnosticsEnabled
     val startupPerfTelemetryEnabled: Flow<Boolean> = debugSettingsDataStore.startupPerfTelemetryEnabled
-    val trackingProviderSelectorState: Flow<TrackingProviderSelectorState> = combine(
-        playerSettings,
-        traktAuthDataStore.isEffectivelyAuthenticated,
-        simklAuthDataStore.isEffectivelyAuthenticated
-    ) { settings, traktConfigured, simklConfigured ->
-        TrackingProviderSelectorState(
-            storedProvider = settings.trackingProvider,
-            traktConfigured = traktConfigured,
-            simklConfigured = simklConfigured
-        )
-    }
+    val trackingProviderSelectorState: Flow<TrackingProviderSelectorState> = trackingProviderStateRepository.state
     val installedAddonNames: Flow<List<String>> = addonRepository.getInstalledAddons().map { addons ->
         addons
             .filter { addon ->

@@ -148,8 +148,8 @@ class ContinueWatchingTimelineTest {
         episode: Int = 1,
         activityAtMs: Long,
         firstAiredMs: Long
-    ): TraktProgressService.NextUpEntry {
-        return TraktProgressService.NextUpEntry(
+    ): TrackingNextUpEntry {
+        return TrackingNextUpEntry(
             contentId = contentId,
             name = contentId,
             season = season,
@@ -162,7 +162,7 @@ class ContinueWatchingTimelineTest {
         )
     }
 
-    private fun nextUpRef(entry: TraktProgressService.NextUpEntry): ContinueWatchingNextUpRef {
+    private fun nextUpRef(entry: TrackingNextUpEntry): ContinueWatchingNextUpRef {
         return ContinueWatchingNextUpRef(
             contentId = entry.contentId,
             activityAtMs = entry.activityAtMs,

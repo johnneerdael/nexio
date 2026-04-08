@@ -67,13 +67,13 @@ class ContinueWatchingSnapshotServiceMutationTest {
      * at its initial empty value until we seed it via the mutation helpers.
      */
     private fun buildService(): ContinueWatchingSnapshotService {
-        val traktAuthDataStore = mockk<TraktAuthDataStore>(relaxed = true) {
-            every { isEffectivelyAuthenticated } returns flowOf(false)
+        val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
+            every { state } returns flowOf(EffectiveTrackingProviderState())
         }
         val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true) {
             every { dismissedNextUpKeys } returns flowOf(emptySet())
         }
-        val traktProgressService = mockk<TraktProgressService>(relaxed = true) {
+        val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
             every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
@@ -89,8 +89,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
 
         return ContinueWatchingSnapshotService(
             watchProgressRepository = watchProgressRepository,
-            traktProgressService = traktProgressService,
-            traktAuthDataStore = traktAuthDataStore,
+            trackingProgressService = trackingProgressService,
+            trackingProviderStateService = trackingProviderStateService,
             traktSettingsDataStore = traktSettingsDataStore,
             metaRepository = metaRepository,
             metadataDiskCacheStore = metadataDiskCacheStore,
@@ -270,14 +270,14 @@ class ContinueWatchingSnapshotServiceMutationTest {
     fun `forceRefreshBypassesGate - ensureFresh with force=true calls refreshNow even within throttle window`() =
         runTest {
             var refreshCount = 0
-            val traktProgressService = mockk<TraktProgressService>(relaxed = true) {
+            val traktProgressService = mockk<TrackingProgressService>(relaxed = true) {
                 every { observeRemoteSnapshotLoaded() } returns flowOf(false)
                 every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
                 every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
                 coEvery { refreshNow() } answers { refreshCount++ }
             }
-            val traktAuthDataStore = mockk<TraktAuthDataStore>(relaxed = true) {
-                every { isEffectivelyAuthenticated } returns flowOf(false)
+            val trackingProviderStateService = mockk<TrackingProviderStateService>(relaxed = true) {
+                every { state } returns flowOf(EffectiveTrackingProviderState())
             }
             val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true) {
                 every { dismissedNextUpKeys } returns flowOf(emptySet())
@@ -286,8 +286,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 watchProgressRepository = mockk(relaxed = true) {
                     every { allProgress } returns flowOf(emptyList())
                 },
-                traktProgressService = traktProgressService,
-                traktAuthDataStore = traktAuthDataStore,
+                trackingProgressService = traktProgressService,
+                trackingProviderStateService = trackingProviderStateService,
                 traktSettingsDataStore = traktSettingsDataStore,
                 metaRepository = mockk(relaxed = true),
                 metadataDiskCacheStore = mockk(relaxed = true),
@@ -401,7 +401,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             // (b) The next-up episode (S1E4) for this show is unaired.
             // Build the scheduledReemit list as buildRawSnapshot would — unaired entries are
             // collected into ContinueWatchingSnapshot.scheduledReemit.
-            val unairedNextUp = TraktProgressService.NextUpEntry(
+            val unairedNextUp = TrackingNextUpEntry(
                 contentId = "show-x",
                 name = "Show X",
                 season = 1,
@@ -416,7 +416,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
 
             // Inline timer harness — mirrors ContinueWatchingSnapshotService.scheduleReemitIfNeeded
             var currentTimerTargetMs: Long? = null
-            fun scheduleReemitIfNeeded(entries: List<TraktProgressService.NextUpEntry>, snapshotNowMs: Long) {
+            fun scheduleReemitIfNeeded(entries: List<TrackingNextUpEntry>, snapshotNowMs: Long) {
                 val soonestMs = AirDateGate.soonestPendingMs(
                     entries = entries,
                     firstAiredMsSelector = { it.firstAiredMs },

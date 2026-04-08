@@ -8,7 +8,7 @@ import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
-import com.nexio.tv.data.repository.TraktProgressService
+import com.nexio.tv.data.repository.TrackingNextUpEntry
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -116,7 +116,7 @@ class ContinueWatchingSnapshotStore @Inject constructor(
     }
 
     private fun encodeNextUpItems(
-        items: List<TraktProgressService.NextUpEntry>
+        items: List<TrackingNextUpEntry>
     ): JsonArray {
         return JsonArray().apply {
             items.forEach { entry ->
@@ -155,7 +155,7 @@ class ContinueWatchingSnapshotStore @Inject constructor(
     private fun decodeNextUpItems(
         root: JsonObject,
         key: String
-    ): List<TraktProgressService.NextUpEntry> {
+    ): List<TrackingNextUpEntry> {
         val array = root.getAsJsonArray(key) ?: return emptyList()
         if (array.size() == 0) return emptyList()
 
@@ -167,9 +167,9 @@ class ContinueWatchingSnapshotStore @Inject constructor(
             return canonical
         }
 
-        val legacyType = object : TypeToken<List<TraktProgressService.NextUpEntry>>() {}.type
+        val legacyType = object : TypeToken<List<TrackingNextUpEntry>>() {}.type
         val legacy = runCatching {
-            gson.fromJson<List<TraktProgressService.NextUpEntry>>(array, legacyType).orEmpty()
+            gson.fromJson<List<TrackingNextUpEntry>>(array, legacyType).orEmpty()
         }.getOrDefault(emptyList())
         return legacy.mapNotNull(::normalizeNextUpEntry)
     }
@@ -189,7 +189,7 @@ class ContinueWatchingSnapshotStore @Inject constructor(
 
     private fun decodeNextUpItemObject(
         obj: JsonObject
-    ): TraktProgressService.NextUpEntry? {
+    ): TrackingNextUpEntry? {
         val contentId = obj.stringOrNull("contentId")?.trim().orEmpty()
         if (contentId.isBlank()) return null
 
@@ -206,7 +206,7 @@ class ContinueWatchingSnapshotStore @Inject constructor(
             ?.takeIf { it.isNotBlank() }
             ?: "$contentId:$season:$episode"
 
-        return TraktProgressService.NextUpEntry(
+        return TrackingNextUpEntry(
             contentId = contentId,
             contentType = contentType,
             name = name,
@@ -228,8 +228,8 @@ class ContinueWatchingSnapshotStore @Inject constructor(
     }
 
     private fun normalizeNextUpEntry(
-        entry: TraktProgressService.NextUpEntry
-    ): TraktProgressService.NextUpEntry? {
+        entry: TrackingNextUpEntry
+    ): TrackingNextUpEntry? {
         return try {
             val contentId = entry.contentId.trim()
             if (contentId.isBlank()) return null

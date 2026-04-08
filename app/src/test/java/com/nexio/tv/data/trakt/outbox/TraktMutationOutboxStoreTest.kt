@@ -52,6 +52,36 @@ class TraktMutationOutboxStoreTest {
         assertEquals(0L, restored.updatedAtMs)
     }
 
+    @Test
+    fun `write and read round trips SIMKL mutation envelope snapshot`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        val store = TraktMutationOutboxStore(context = mockContext(prefs))
+        val snapshot = TraktMutationOutboxSnapshot(
+            items = listOf(
+                TraktMutationEnvelope(
+                    id = "simkl-queued-1",
+                    adapterKey = "simkl.library",
+                    mutationKind = "simkl.library.addToList",
+                    priority = TraktMutationPriorityBucket.WATCHLIST,
+                    collapseKey = "simkl.library:simkl:plantowatch",
+                    payload = JsonObject().apply { addProperty("contentId", "tt1375666") },
+                    rollbackPayload = JsonObject().apply { addProperty("before", false) },
+                    metadata = JsonObject().apply { addProperty("scope", "simkl") },
+                    state = TraktMutationLifecycleState.QUEUED,
+                    createdAtMs = 1_000L,
+                    updatedAtMs = 1_000L,
+                    nextAttemptAtMs = 1_000L
+                )
+            ),
+            nextWritableAtMs = 3_000L,
+            updatedAtMs = 2_000L
+        )
+
+        store.write(snapshot)
+
+        assertEquals(snapshot, store.read())
+    }
+
     private fun mockContext(prefs: InMemorySharedPreferences): Context {
         return mockk(relaxed = true) {
             every { getSharedPreferences("trakt_mutation_outbox", Context.MODE_PRIVATE) } returns prefs

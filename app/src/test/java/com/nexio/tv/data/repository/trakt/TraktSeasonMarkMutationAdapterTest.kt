@@ -5,7 +5,7 @@ import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddNotFoundDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
-import com.nexio.tv.data.repository.TraktProgressService
+import com.nexio.tv.data.repository.TrackingNextUpEntry
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationSettlement
 import io.mockk.coEvery
@@ -124,7 +124,7 @@ class TraktSeasonMarkMutationAdapterTest {
                 )
             },
             nextUpItems = episodes.map { episode ->
-                TraktProgressService.NextUpEntry(
+                TrackingNextUpEntry(
                     contentId = showId,
                     name = "Show",
                     season = season,

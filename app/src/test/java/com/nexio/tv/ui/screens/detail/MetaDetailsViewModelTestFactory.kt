@@ -15,7 +15,7 @@ import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.repository.TraktAuthService
-import com.nexio.tv.data.repository.TraktScrobbleService
+import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.trailer.SeasonMediaAvailability
 import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.domain.model.ImdbSettings
@@ -87,7 +87,7 @@ fun buildMetaDetailsViewModel(
         watchProgressRepository = watchProgressRepository,
         continueWatchingSnapshotService = mockk(relaxed = true),
         addonRepository = addonRepository,
-        traktScrobbleService = mockk(relaxed = true),
+        trackingScrobbleService = mockk<TrackingScrobbleService>(relaxed = true),
         layoutPreferenceDataStore = layoutPreferenceDataStore,
         playerSettingsDataStore = playerSettingsDataStore,
         trailerService = trailerService,

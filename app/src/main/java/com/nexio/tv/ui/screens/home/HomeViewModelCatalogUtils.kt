@@ -5,9 +5,12 @@ import com.nexio.tv.core.sync.addonCatalogKey
 import com.nexio.tv.core.sync.isAddonCatalogDisabled
 import com.nexio.tv.core.sync.normalizePublicAddonBaseUrl
 import com.nexio.tv.data.local.MDBListCatalogPreferences
+import com.nexio.tv.data.local.SimklCatalogIds
+import com.nexio.tv.data.local.SimklCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
+import com.nexio.tv.data.repository.SimklDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
@@ -16,8 +19,10 @@ import com.nexio.tv.domain.model.MetaPreview
 import kotlinx.coroutines.Job
 
 internal const val TRAKT_HOME_ADDON_ID = "trakt"
+internal const val SIMKL_HOME_ADDON_ID = "simkl"
 internal const val MDBLIST_HOME_ADDON_ID = "mdblist"
 private const val TRAKT_HOME_KEY_PREFIX = "trakt_"
+private const val SIMKL_HOME_KEY_PREFIX = "simkl_"
 private const val MDBLIST_HOME_KEY_PREFIX = "mdblist_"
 
 internal fun HomeViewModel.catalogKey(addonId: String, type: String, catalogId: String): String {
@@ -27,6 +32,7 @@ internal fun HomeViewModel.catalogKey(addonId: String, type: String, catalogId: 
 internal fun homeCatalogGlobalKey(row: CatalogRow): String {
     return when (row.addonId) {
         TRAKT_HOME_ADDON_ID -> if (row.catalogId.startsWith(TRAKT_HOME_KEY_PREFIX)) row.catalogId else "$TRAKT_HOME_KEY_PREFIX${row.catalogId}"
+        SIMKL_HOME_ADDON_ID -> if (row.catalogId.startsWith(SIMKL_HOME_KEY_PREFIX)) row.catalogId else "$SIMKL_HOME_KEY_PREFIX${row.catalogId}"
         MDBLIST_HOME_ADDON_ID -> if (row.catalogId.startsWith(MDBLIST_HOME_KEY_PREFIX)) row.catalogId else "$MDBLIST_HOME_KEY_PREFIX${row.catalogId}"
         else -> "${row.addonId}_${row.apiType}_${row.catalogId}"
     }
@@ -87,13 +93,15 @@ internal fun buildExpectedConfiguredHomeOrderKeys(
     addons: List<Addon>,
     disabledHomeCatalogKeys: Set<String>,
     traktPrefs: TraktCatalogPreferences,
+    simklPrefs: SimklCatalogPreferences,
     mdbPrefs: MDBListCatalogPreferences,
     mdbSnapshot: MDBListDiscoverySnapshot
 ): List<String> {
     val traktKeys = buildExpectedConfiguredTraktOrderKeys(traktPrefs)
+    val simklKeys = buildExpectedConfiguredSimklOrderKeys(simklPrefs)
     val mdbKeys = buildExpectedConfiguredMDBListOrderKeys(mdbPrefs, mdbSnapshot)
     val addonKeys = buildExpectedConfiguredAddonOrderKeys(addons, disabledHomeCatalogKeys)
-    return (traktKeys + mdbKeys + addonKeys).distinct()
+    return (traktKeys + simklKeys + mdbKeys + addonKeys).distinct()
 }
 
 internal fun buildPublishableConfiguredHomeOrderKeys(
@@ -102,6 +110,8 @@ internal fun buildPublishableConfiguredHomeOrderKeys(
     traktPrefs: TraktCatalogPreferences,
     traktSnapshot: TraktDiscoverySnapshot,
     hasTraktUpNextItems: Boolean,
+    simklPrefs: SimklCatalogPreferences,
+    simklSnapshot: SimklDiscoverySnapshot,
     mdbPrefs: MDBListCatalogPreferences,
     mdbSnapshot: MDBListDiscoverySnapshot
 ): List<String> {
@@ -110,12 +120,16 @@ internal fun buildPublishableConfiguredHomeOrderKeys(
         snapshot = traktSnapshot,
         hasTraktUpNextItems = hasTraktUpNextItems
     )
+    val simklKeys = buildPublishableConfiguredSimklOrderKeys(
+        prefs = simklPrefs,
+        snapshot = simklSnapshot
+    )
     val mdbKeys = buildPublishableConfiguredMDBListOrderKeys(
         prefs = mdbPrefs,
         snapshot = mdbSnapshot
     )
     val addonKeys = buildExpectedConfiguredAddonOrderKeys(addons, disabledHomeCatalogKeys)
-    return (traktKeys + mdbKeys + addonKeys).distinct()
+    return (traktKeys + simklKeys + mdbKeys + addonKeys).distinct()
 }
 
 internal fun buildExpectedConfiguredTraktOrderKeys(
@@ -233,6 +247,9 @@ internal fun areConfiguredHomeSourceCachesReady(
     traktExpectedOrderKeys: List<String>,
     traktPrefs: TraktCatalogPreferences,
     traktSnapshot: TraktDiscoverySnapshot,
+    simklExpectedOrderKeys: List<String>,
+    simklPrefs: SimklCatalogPreferences,
+    simklSnapshot: SimklDiscoverySnapshot,
     mdbExpectedOrderKeys: List<String>,
     mdbPrefs: MDBListCatalogPreferences,
     mdbSnapshot: MDBListDiscoverySnapshot
@@ -243,12 +260,17 @@ internal fun areConfiguredHomeSourceCachesReady(
     } else {
         !shouldRefreshTraktDiscoveryForState(traktPrefs, traktSnapshot)
     }
+    val simklReady = if (simklExpectedOrderKeys.isEmpty()) {
+        true
+    } else {
+        !shouldRefreshSimklDiscoveryForState(simklPrefs, simklSnapshot)
+    }
     val mdbReady = if (mdbExpectedOrderKeys.isEmpty()) {
         true
     } else {
         !shouldRefreshMDBListDiscoveryForState(mdbPrefs, mdbSnapshot)
     }
-    return addonsReady && traktReady && mdbReady
+    return addonsReady && traktReady && simklReady && mdbReady
 }
 
 internal fun areConfiguredHomePublishSourcesReady(
@@ -256,13 +278,26 @@ internal fun areConfiguredHomePublishSourcesReady(
     availableAddonOrderKeys: Set<String>,
     traktExpectedOrderKeys: List<String>,
     traktObserved: Boolean,
+    simklExpectedOrderKeys: List<String>,
+    simklObserved: Boolean,
     mdbExpectedOrderKeys: List<String>,
     mdbObserved: Boolean
 ): Boolean {
     val addonsReady = addonExpectedOrderKeys.all { it in availableAddonOrderKeys }
     val traktReady = traktExpectedOrderKeys.isEmpty() || traktObserved
+    val simklReady = simklExpectedOrderKeys.isEmpty() || simklObserved
     val mdbReady = mdbExpectedOrderKeys.isEmpty() || mdbObserved
-    return addonsReady && traktReady && mdbReady
+    return addonsReady && traktReady && simklReady && mdbReady
+}
+
+internal fun shouldRefreshSimklDiscoveryForState(
+    prefs: SimklCatalogPreferences,
+    snapshot: SimklDiscoverySnapshot
+): Boolean {
+    if (snapshot.updatedAtMs <= 0L) return true
+    return buildExpectedConfiguredSimklOrderKeys(prefs).any { key ->
+        snapshot.itemsByCatalog[key].isNullOrEmpty()
+    }
 }
 
 internal fun resolveHomeOrderedKey(rawKey: String, availableKeys: Set<String>): String? {
@@ -358,4 +393,24 @@ internal fun MetaPreview.hasHeroArtwork(): Boolean {
 internal fun HomeViewModel.extractYear(releaseInfo: String?): String? {
     if (releaseInfo.isNullOrBlank()) return null
     return Regex("\\b(19|20)\\d{2}\\b").find(releaseInfo)?.value
+}
+
+
+internal fun buildExpectedConfiguredSimklOrderKeys(
+    prefs: SimklCatalogPreferences
+): List<String> {
+    val orderedEnabledBuiltIns = prefs.catalogOrder.filter { it in prefs.enabledCatalogs }
+    val remainingEnabledBuiltIns = prefs.enabledCatalogs.filterNot { it in orderedEnabledBuiltIns }
+    return (orderedEnabledBuiltIns + remainingEnabledBuiltIns).distinct()
+}
+
+internal fun buildPublishableConfiguredSimklOrderKeys(
+    prefs: SimklCatalogPreferences,
+    snapshot: SimklDiscoverySnapshot
+): List<String> {
+    val availableKeys = snapshot.itemsByCatalog
+        .filterValues { it.isNotEmpty() }
+        .keys
+        .toSet()
+    return buildExpectedConfiguredSimklOrderKeys(prefs).filter { it in availableKeys }
 }

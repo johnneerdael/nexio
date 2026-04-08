@@ -20,6 +20,9 @@ import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
+import com.nexio.tv.data.local.SimklCatalogPreferences
+import com.nexio.tv.data.local.SimklDiscoverySnapshotStore
+import com.nexio.tv.data.local.SimklSettingsDataStore
 import com.nexio.tv.data.local.SyntheticHomeCatalogStore
 import com.nexio.tv.data.local.TrailerSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
@@ -29,9 +32,10 @@ import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.local.YouTubeTrailerAuthDataStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.MDBListRepository
+import com.nexio.tv.data.repository.SimklDiscoveryService
 import com.nexio.tv.data.repository.MDBListDiscoveryService
+import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.repository.TraktDiscoveryService
-import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -73,12 +77,15 @@ class HomeViewModel @Inject constructor(
     internal val tmdbSettingsDataStore: TmdbSettingsDataStore,
     internal val traktSettingsDataStore: TraktSettingsDataStore,
     internal val mdbListSettingsDataStore: MDBListSettingsDataStore,
+    internal val simklSettingsDataStore: SimklSettingsDataStore,
     internal val playerSettingsDataStore: PlayerSettingsDataStore,
     internal val traktDiscoverySnapshotStore: TraktDiscoverySnapshotStore,
+    internal val simklDiscoverySnapshotStore: SimklDiscoverySnapshotStore,
     internal val mdbListDiscoverySnapshotStore: MDBListDiscoverySnapshotStore,
     internal val continueWatchingSnapshotService: ContinueWatchingSnapshotService,
-    internal val traktScrobbleService: TraktScrobbleService,
+    internal val trackingScrobbleService: TrackingScrobbleService,
     internal val traktDiscoveryService: TraktDiscoveryService,
+    internal val simklDiscoveryService: SimklDiscoveryService,
     internal val mdbListDiscoveryService: MDBListDiscoveryService,
     internal val mdbListRepository: MDBListRepository,
     internal val tmdbService: TmdbService,
@@ -165,12 +172,18 @@ class HomeViewModel @Inject constructor(
     internal var persistedTraktDiscoverySnapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot =
         com.nexio.tv.data.repository.TraktDiscoverySnapshot()
     internal var traktCatalogPreferences: TraktCatalogPreferences = TraktCatalogPreferences()
+    internal var simklDiscoverySnapshot: com.nexio.tv.data.repository.SimklDiscoverySnapshot =
+        com.nexio.tv.data.repository.SimklDiscoverySnapshot()
+    internal var persistedSimklDiscoverySnapshot: com.nexio.tv.data.repository.SimklDiscoverySnapshot =
+        com.nexio.tv.data.repository.SimklDiscoverySnapshot()
+    internal var simklCatalogPreferences: SimklCatalogPreferences = SimklCatalogPreferences()
     internal var mdbListDiscoverySnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot =
         com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
     internal var persistedMDBListDiscoverySnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot =
         com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
     internal var mdbListCatalogPreferences: MDBListCatalogPreferences = MDBListCatalogPreferences()
     internal var persistedTraktSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
+    internal var persistedSimklSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var persistedMDBListSyntheticGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     internal var heroEnrichmentJob: Job? = null
     internal var continueWatchingEnrichmentJob: Job? = null
@@ -212,11 +225,15 @@ class HomeViewModel @Inject constructor(
     @Volatile
     internal var traktDiscoveryRefreshInProgress: Boolean = false
     @Volatile
+    internal var simklDiscoveryRefreshInProgress: Boolean = false
+    @Volatile
     internal var mdbListDiscoveryRefreshInProgress: Boolean = false
     @Volatile
     internal var installedAddonsObserved: Boolean = false
     @Volatile
     internal var traktDiscoveryObserved: Boolean = false
+    @Volatile
+    internal var simklDiscoveryObserved: Boolean = false
     @Volatile
     internal var mdbListDiscoveryObserved: Boolean = false
     @Volatile
@@ -274,6 +291,8 @@ class HomeViewModel @Inject constructor(
         observeMDBListSettings()
         observeTraktCatalogPreferences()
         observeTraktDiscovery()
+        observeSimklCatalogPreferences()
+        observeSimklDiscovery()
         observeMDBListCatalogPreferences()
         observeMDBListDiscovery()
         observeAccountSyncRefresh()
@@ -322,6 +341,7 @@ class HomeViewModel @Inject constructor(
                     pendingRestoredCatalogSnapshot = null
                     pendingHomeSnapshotPersist = null
                     persistedTraktSyntheticGroups = emptyList()
+                    persistedSimklSyntheticGroups = emptyList()
                     persistedMDBListSyntheticGroups = emptyList()
                     watchProgressRepository.invalidateLocalizedMetadata()
                     continueWatchingSnapshotService.invalidateLocalizedMetadata()
@@ -420,6 +440,10 @@ class HomeViewModel @Inject constructor(
     private fun observeTraktCatalogPreferences() = observeTraktCatalogPreferencesPipeline()
 
     private fun observeTraktDiscovery() = observeTraktDiscoveryPipeline()
+
+    private fun observeSimklCatalogPreferences() = observeSimklCatalogPreferencesPipeline()
+
+    private fun observeSimklDiscovery() = observeSimklDiscoveryPipeline()
 
     private fun observeMDBListCatalogPreferences() = observeMDBListCatalogPreferencesPipeline()
 

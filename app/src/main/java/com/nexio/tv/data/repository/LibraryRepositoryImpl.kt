@@ -1,6 +1,5 @@
 package com.nexio.tv.data.repository
 
-import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryEntryInput
 import com.nexio.tv.domain.model.LibraryListTab
@@ -12,7 +11,6 @@ import com.nexio.tv.domain.repository.LibraryRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import javax.inject.Inject
@@ -20,18 +18,23 @@ import javax.inject.Singleton
 
 @Singleton
 class LibraryRepositoryImpl @Inject constructor(
-    private val traktAuthDataStore: TraktAuthDataStore,
+    private val trackingProviderStateService: TrackingProviderStateService,
     private val traktLibraryService: TraktLibraryService,
+    private val simklLibraryService: SimklLibraryService,
     private val debridLibraryService: DebridLibraryService
 ) : LibraryRepository {
 
     override val sourceMode: Flow<LibrarySourceMode> = combine(
-        traktAuthDataStore.isEffectivelyAuthenticated,
+        trackingProviderStateService.state,
         traktLibraryService.observeHasCache(),
+        simklLibraryService.observeHasCache(),
         debridLibraryService.observeIsConnected()
-    ) { isTraktAuthenticated, hasTraktCache, isDebridConnected ->
+    ) { providerState, hasProviderCache, hasSimklCache, isDebridConnected ->
         when {
-            isTraktAuthenticated || hasTraktCache -> LibrarySourceMode.TRAKT
+            providerState.effectiveProvider == com.nexio.tv.domain.model.TrackingProvider.TRAKT &&
+                (providerState.traktAuthenticated || hasProviderCache) -> LibrarySourceMode.TRAKT
+            providerState.effectiveProvider == com.nexio.tv.domain.model.TrackingProvider.SIMKL &&
+                (providerState.simklAuthenticated || hasSimklCache) -> LibrarySourceMode.SIMKL
             isDebridConnected -> LibrarySourceMode.DEBRID
             else -> LibrarySourceMode.LOCAL
         }
@@ -39,58 +42,123 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override val isSyncing: Flow<Boolean> = combine(
         traktLibraryService.observeIsRefreshing(),
+        simklLibraryService.observeIsRefreshing(),
         debridLibraryService.observeIsRefreshing()
-    ) { traktRefreshing, debridRefreshing ->
-        traktRefreshing || debridRefreshing
+    ) { traktRefreshing, simklRefreshing, debridRefreshing ->
+        traktRefreshing || simklRefreshing || debridRefreshing
     }
         .distinctUntilChanged()
 
-    override val hasTraktCache: Flow<Boolean> =
-        traktLibraryService.observeHasCache().distinctUntilChanged()
+    override val hasProviderCache: Flow<Boolean> =
+        combine(
+            sourceMode,
+            traktLibraryService.observeHasCache(),
+            simklLibraryService.observeHasCache()
+        ) { mode, hasProviderCache, hasSimklCache ->
+            when (mode) {
+                LibrarySourceMode.SIMKL -> hasSimklCache
+                LibrarySourceMode.TRAKT -> hasProviderCache
+                else -> false
+            }
+        }.distinctUntilChanged()
 
     override val libraryItems: Flow<List<LibraryEntry>> =
         combine(
+            sourceMode,
             traktLibraryService.observeAllItems(),
+            simklLibraryService.observeAllItems(),
             debridLibraryService.observeItems().onStart { emit(emptyList()) }
-        ) { traktItems, debridItems ->
-            traktItems + debridItems
+        ) { mode, traktItems, simklItems, debridItems ->
+            when (mode) {
+                LibrarySourceMode.TRAKT -> traktItems + debridItems
+                LibrarySourceMode.SIMKL -> simklItems + debridItems
+                LibrarySourceMode.DEBRID -> debridItems
+                LibrarySourceMode.LOCAL -> emptyList()
+            }
         }.distinctUntilChanged()
 
     override val listTabs: Flow<List<LibraryListTab>> =
         combine(
+            sourceMode,
             traktLibraryService.observeListTabs(),
+            simklLibraryService.observeListTabs(),
             debridLibraryService.observeListTabs().onStart { emit(emptyList()) }
-        ) { traktTabs, debridTabs ->
-            traktTabs + debridTabs
+        ) { mode, traktTabs, simklTabs, debridTabs ->
+            when (mode) {
+                LibrarySourceMode.TRAKT -> traktTabs + debridTabs
+                LibrarySourceMode.SIMKL -> simklTabs + debridTabs
+                LibrarySourceMode.DEBRID -> debridTabs
+                LibrarySourceMode.LOCAL -> emptyList()
+            }
         }.distinctUntilChanged()
 
     override fun isInLibrary(itemId: String, itemType: String): Flow<Boolean> {
-        return traktLibraryService.observeMembership(itemId, itemType)
-            .map { memberships -> memberships.isNotEmpty() }
+        return combine(
+            sourceMode,
+            traktLibraryService.observeMembership(itemId, itemType),
+            simklLibraryService.observeMembership(itemId, itemType)
+        ) { mode, traktMembership, simklMembership ->
+            when (mode) {
+                LibrarySourceMode.SIMKL -> simklMembership.isNotEmpty()
+                LibrarySourceMode.TRAKT -> traktMembership.isNotEmpty()
+                else -> false
+            }
+        }
             .distinctUntilChanged()
     }
 
     override fun isInWatchlist(itemId: String, itemType: String): Flow<Boolean> {
-        return traktLibraryService.observeMembership(itemId, itemType)
-            .map { memberships -> memberships.contains(TraktLibraryService.WATCHLIST_KEY) }
+        return combine(
+            sourceMode,
+            traktLibraryService.observeMembership(itemId, itemType),
+            simklLibraryService.observeMembership(itemId, itemType)
+        ) { mode, traktMembership, simklMembership ->
+            when (mode) {
+                LibrarySourceMode.SIMKL -> simklMembership.contains(SimklLibraryService.WATCHLIST_KEY)
+                LibrarySourceMode.TRAKT -> traktMembership.contains(TraktLibraryService.WATCHLIST_KEY)
+                else -> false
+            }
+        }
             .distinctUntilChanged()
     }
 
     override suspend fun toggleDefault(item: LibraryEntryInput) {
-        if (!traktAuthDataStore.isEffectivelyAuthenticated.first()) return
-        traktLibraryService.toggleWatchlist(item)
+        when (trackingProviderStateService.currentState().effectiveProvider) {
+            com.nexio.tv.domain.model.TrackingProvider.SIMKL -> {
+                if (!trackingProviderStateService.currentState().simklAuthenticated) return
+                simklLibraryService.toggleWatchlist(item)
+            }
+            com.nexio.tv.domain.model.TrackingProvider.TRAKT -> {
+                if (!trackingProviderStateService.currentState().traktAuthenticated) return
+                traktLibraryService.toggleWatchlist(item)
+            }
+        }
     }
 
     override suspend fun getMembershipSnapshot(item: LibraryEntryInput): ListMembershipSnapshot {
-        if (traktAuthDataStore.isEffectivelyAuthenticated.first()) {
-            return traktLibraryService.getMembershipSnapshot(item)
+        return when (trackingProviderStateService.currentState().effectiveProvider) {
+            com.nexio.tv.domain.model.TrackingProvider.SIMKL -> {
+                if (trackingProviderStateService.currentState().simklAuthenticated) simklLibraryService.getMembershipSnapshot(item)
+                else ListMembershipSnapshot(listMembership = emptyMap())
+            }
+            com.nexio.tv.domain.model.TrackingProvider.TRAKT -> {
+                if (trackingProviderStateService.currentState().traktAuthenticated) traktLibraryService.getMembershipSnapshot(item)
+                else ListMembershipSnapshot(listMembership = emptyMap())
+            }
         }
-        return ListMembershipSnapshot(listMembership = emptyMap())
     }
 
     override suspend fun applyMembershipChanges(item: LibraryEntryInput, changes: ListMembershipChanges) {
-        if (!traktAuthDataStore.isEffectivelyAuthenticated.first()) return
-        traktLibraryService.applyMembershipChanges(item, changes)
+        when (trackingProviderStateService.currentState().effectiveProvider) {
+            com.nexio.tv.domain.model.TrackingProvider.SIMKL -> {
+                if (!trackingProviderStateService.currentState().simklAuthenticated) return
+                simklLibraryService.applyMembershipChanges(item, changes)
+            }
+            com.nexio.tv.domain.model.TrackingProvider.TRAKT -> {
+                if (!trackingProviderStateService.currentState().traktAuthenticated) return
+                traktLibraryService.applyMembershipChanges(item, changes)
+            }
+        }
     }
 
     override suspend fun createPersonalList(name: String, description: String?, privacy: TraktListPrivacy) {
@@ -124,15 +192,25 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun refreshNow() {
-        if (traktAuthDataStore.isEffectivelyAuthenticated.first()) {
-            traktLibraryService.refreshNow()
+        when (trackingProviderStateService.currentState().effectiveProvider) {
+            com.nexio.tv.domain.model.TrackingProvider.SIMKL -> {
+                if (trackingProviderStateService.currentState().simklAuthenticated) simklLibraryService.refreshNow()
+            }
+            com.nexio.tv.domain.model.TrackingProvider.TRAKT -> {
+                if (trackingProviderStateService.currentState().traktAuthenticated) traktLibraryService.refreshNow()
+            }
         }
         debridLibraryService.refreshNow(DebridLibraryService.RefreshTarget.ALL)
     }
 
-    override suspend fun refreshTraktNow() {
-        if (traktAuthDataStore.isEffectivelyAuthenticated.first()) {
-            traktLibraryService.refreshNow()
+    override suspend fun refreshProviderNow() {
+        when (trackingProviderStateService.currentState().effectiveProvider) {
+            com.nexio.tv.domain.model.TrackingProvider.SIMKL -> {
+                if (trackingProviderStateService.currentState().simklAuthenticated) simklLibraryService.refreshNow()
+            }
+            com.nexio.tv.domain.model.TrackingProvider.TRAKT -> {
+                if (trackingProviderStateService.currentState().traktAuthenticated) traktLibraryService.refreshNow()
+            }
         }
     }
 
@@ -153,7 +231,7 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     private suspend fun requireTraktAuth() {
-        if (!traktAuthDataStore.isEffectivelyAuthenticated.first()) {
+        if (!trackingProviderStateService.currentState().traktAuthenticated) {
             throw IllegalStateException("Trakt authentication required")
         }
     }
