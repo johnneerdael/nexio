@@ -1589,7 +1589,11 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun calculateNextToWatch() {
         val meta = _uiState.value.meta ?: return
-        val progressMap = _uiState.value.episodeProgressMap
+        val progressMap = buildEpisodeProgressForNavigation(
+            meta = meta,
+            rawProgressMap = _uiState.value.episodeProgressMap,
+            overrides = _uiState.value.episodeWatchOverrides
+        )
         val isSeries = meta.apiType in listOf("series", "tv")
         nextToWatchJob?.cancel()
 
@@ -2624,6 +2628,28 @@ class MetaDetailsViewModel @Inject constructor(
             }
         }
         return effective.toSet()
+    }
+
+    private fun buildEpisodeProgressForNavigation(
+        meta: Meta,
+        rawProgressMap: Map<Pair<Int, Int>, WatchProgress>,
+        overrides: Map<Pair<Int, Int>, Boolean>
+    ): Map<Pair<Int, Int>, WatchProgress> {
+        if (overrides.isEmpty()) return rawProgressMap
+        val effective = rawProgressMap.toMutableMap()
+        overrides.forEach { (episodeKey, watched) ->
+            if (!watched) {
+                effective.remove(episodeKey)
+                return@forEach
+            }
+            val season = episodeKey.first
+            val episode = episodeKey.second
+            val current = effective[episodeKey]
+            if (current?.isCompleted() == true) return@forEach
+            val video = meta.videos.firstOrNull { it.season == season && it.episode == episode } ?: return@forEach
+            effective[episodeKey] = buildCompletedEpisodeProgress(meta, video)
+        }
+        return effective
     }
 
     private fun checkInEpisode(video: Video) {
