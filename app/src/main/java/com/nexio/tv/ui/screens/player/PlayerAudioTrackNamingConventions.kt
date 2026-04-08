@@ -53,12 +53,40 @@ internal object PlayerAudioTrackNamingConventions {
     }
 
     private fun loadNamingMap(): AudioTrackNamingMap {
-        val stream = openNamingMapStream()
-        return if (stream == null) {
-            fallbackNamingMap()
-        } else {
-            stream.use(::parseNamingMap)
+        val fallback = fallbackNamingMap()
+        val stream = openNamingMapStream() ?: return fallback
+        val parsed = stream.use(::parseNamingMap)
+        // Merge parsed CSV on top of the fallback so any language that is
+        // missing from the curated CSV (e.g. English, Italian) still gets the
+        // baseline aliases from AVAILABLE_SUBTITLE_LANGUAGES, preventing
+        // startup audio selection from failing to infer obvious languages
+        // when only the track name carries the language ("English (AAC)").
+        val mergedLanguages = linkedMapOf<String, Set<String>>().apply {
+            fallback.languageAliasesByCode.forEach { (code, aliases) ->
+                put(code, aliases.toMutableSet())
+            }
+            parsed.languageAliasesByCode.forEach { (code, aliases) ->
+                val combined = linkedSetOf<String>()
+                get(code)?.let(combined::addAll)
+                combined.addAll(aliases)
+                put(code, combined)
+            }
         }
+        val mergedTrackTypes = linkedMapOf<AudioTrackType, Set<String>>().apply {
+            fallback.trackTypeAliases.forEach { (type, aliases) ->
+                put(type, aliases.toMutableSet())
+            }
+            parsed.trackTypeAliases.forEach { (type, aliases) ->
+                val combined = linkedSetOf<String>()
+                get(type)?.let(combined::addAll)
+                combined.addAll(aliases)
+                put(type, combined)
+            }
+        }
+        return AudioTrackNamingMap(
+            languageAliasesByCode = mergedLanguages,
+            trackTypeAliases = mergedTrackTypes
+        )
     }
 
     private fun openNamingMapStream(): InputStream? {

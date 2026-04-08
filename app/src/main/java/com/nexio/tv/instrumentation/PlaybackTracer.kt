@@ -1,7 +1,6 @@
 package com.nexio.tv.instrumentation
 
 import android.content.Context
-import android.os.Trace
 import java.io.File
 
 /**
@@ -86,19 +85,6 @@ object PlaybackTracer {
     @PublishedApi
     internal fun currentInternal(): SessionWriter? = current
 
-    /** Phase 2 atrace marker helpers (spec §G). Guarded against systrace cost. */
-    fun beginAsyncSection(family: EventFamily, type: String, cookie: Int) {
-        if (!enabled) return
-        if (!Trace.isEnabled()) return
-        Trace.beginAsyncSection("nexio.${family.name.lowercase()}.$type", cookie)
-    }
-
-    fun endAsyncSection(family: EventFamily, type: String, cookie: Int) {
-        if (!enabled) return
-        if (!Trace.isEnabled()) return
-        Trace.endAsyncSection("nexio.${family.name.lowercase()}.$type", cookie)
-    }
-
     private fun defaultWriter(header: SessionHeader): SessionWriter {
         val dir = filesDir
         val file = if (dir != null) {
@@ -109,63 +95,5 @@ object PlaybackTracer {
     }
 }
 
-/** Helper to splice the full session header into the start event payload. */
-internal fun PayloadBuilder.putHeader(h: SessionHeader) {
-    putString("sessionId", h.sessionId)
-    putLong("startedAtNanos", h.startedAtNanos)
-    putString("assetKeyHash", h.assetKeyHash)
-    putString("serviceKey", h.serviceKey)
-    putString("provider", h.provider)
-    putString("benchmarkResultId", h.benchmarkResultId)
-    putString("benchmarkSource", h.benchmarkSource)
-    putBool("envelopePresent", h.envelopePresent)
-    putBool("runtimeHintsPresent", h.runtimeHintsPresent)
-    putString("specializationState", h.specializationState)
-    putString("hintServiceKey", h.hintServiceKey)
-    putString("hintHostScope", h.hintHostScope)
-    putString("hintTransportClass", h.hintTransportClass)
-    if (h.hintAgeMs != null) putLong("hintAgeMs", h.hintAgeMs)
-    putString("hintFreshnessBand", h.hintFreshnessBand)
-    putString("specializationMismatchReason", h.specializationMismatchReason)
-    putString("observedHostScope", h.observedHostScope)
-    putString("observedTransportClass", h.observedTransportClass)
-    putString("branch", h.branch)
-    putBool("cacheActive", h.cacheActive)
-    putString("warmAheadFactory", h.warmAheadFactory)
-    // FactoryArgs
-    putLong("activeChunkBytes", h.factoryArgs.activeChunkBytes)
-    putInt("parallelConnections", h.factoryArgs.parallelConnections)
-    putLong("keepBehindBytes", h.factoryArgs.keepBehindBytes)
-    putLong("bootstrapBytes", h.factoryArgs.bootstrapBytes)
-    // Initial policy
-    putInt("policy_urgentWorkers", h.initialPolicy.urgentWorkers)
-    putInt("policy_prefetchWorkers", h.initialPolicy.prefetchWorkers)
-    putLong("policy_urgentChunkBytes", h.initialPolicy.urgentChunkBytes)
-    putLong("policy_prefetchChunkBytes", h.initialPolicy.prefetchChunkBytes)
-    putString("policy_source", h.initialPolicy.source)
-    // Client identity
-    putString("playbackClientHash", h.clientIdentity.playbackClientHash)
-    putInt("dispatcherMaxRequests", h.clientIdentity.dispatcherMaxRequests)
-    putInt("dispatcherMaxRequestsPerHost", h.clientIdentity.dispatcherMaxRequestsPerHost)
-    putInt("dispatcherQueuedCalls", h.clientIdentity.dispatcherQueuedCalls)
-    putInt("dispatcherRunningCalls", h.clientIdentity.dispatcherRunningCalls)
-    putInt("connectionPoolIdleCount", h.clientIdentity.connectionPoolIdleCount)
-    putInt("connectionPoolTotalCount", h.clientIdentity.connectionPoolTotalCount)
-    putLong("callTimeoutMs", h.clientIdentity.callTimeoutMs)
-    putLong("readTimeoutMs", h.clientIdentity.readTimeoutMs)
-    putLong("writeTimeoutMs", h.clientIdentity.writeTimeoutMs)
-    putLong("connectTimeoutMs", h.clientIdentity.connectTimeoutMs)
-    // Device
-    putString("deviceModel", h.device.deviceModel)
-    putString("deviceManufacturer", h.device.deviceManufacturer)
-    putString("androidRelease", h.device.androidRelease)
-    putInt("androidSdkInt", h.device.androidSdkInt)
-    putString("appVersionName", h.device.appVersionName)
-    putLong("appVersionCode", h.device.appVersionCode)
-    putString("gitSha", h.device.gitSha)
-    putInt("memoryClass", h.device.memoryClass)
-    putInt("largeMemoryClass", h.device.largeMemoryClass)
-    putBool("isLowRamDevice", h.device.isLowRamDevice)
-    putString("networkType", h.device.networkType)
-    putString("networkTransportHash", h.device.networkTransportHash)
-}
+// `putHeader` extension lives next to its receiver in `PayloadBuilder.kt`
+// (L3 cleanup). It is `internal` so call sites in this file still resolve it.

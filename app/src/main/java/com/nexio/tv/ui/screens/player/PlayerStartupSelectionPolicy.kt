@@ -165,13 +165,24 @@ internal fun audioTrackMatchesLanguage(
     val normalizedOriginalLanguage = originalLanguage
         ?.takeIf { it.isNotBlank() }
         ?.let(PlayerSubtitleUtils::normalizeLanguageCode)
-    val inferredMatch = PlayerAudioTrackNamingConventions.inferredLanguageCodes(track).any { code ->
+    val inferredCodes = PlayerAudioTrackNamingConventions.inferredLanguageCodes(track)
+    val inferredMatch = inferredCodes.any { code ->
         code == normalizedTarget ||
             code.startsWith("$normalizedTarget-") ||
             code.startsWith("${normalizedTarget}_")
     }
     if (inferredMatch) {
         return true
+    }
+    // If we successfully inferred a concrete language from the track's name
+    // and it is not the target, do not fall through to the "undetermined
+    // original language" heuristic — the track is clearly a different
+    // language (e.g. an Italian track in a file whose original language is
+    // English). Ignore "und"/blank explicit codes so actual undetermined
+    // tracks still pass through to the original-language check below.
+    val nameInferredCodes = inferredCodes.filterNot { isUndeterminedAudioTrackLanguage(it) }
+    if (nameInferredCodes.isNotEmpty()) {
+        return false
     }
 
     return normalizedOriginalLanguage != null &&

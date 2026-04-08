@@ -54,6 +54,7 @@ internal class SessionWriter(
 
     @PublishedApi
     internal fun enqueue(family: EventFamily, type: String, build: PayloadBuilder.() -> Unit) {
+        if (!running.get()) return
         val rec = TraceRecord.obtain(family, type)
         PayloadBuilder(rec).build()
         if (!ring.offer(rec)) {
@@ -66,6 +67,7 @@ internal class SessionWriter(
 
     @PublishedApi
     internal fun enqueueEmpty(family: EventFamily, type: String) {
+        if (!running.get()) return
         val rec = TraceRecord.obtain(family, type)
         if (!ring.offer(rec)) {
             overflowCount.incrementAndGet()
@@ -100,8 +102,11 @@ internal class SessionWriter(
     }
 
     private fun drainLoop() {
-        var lastOverflowReportNs = android.os.SystemClock.elapsedRealtimeNanos()
         try {
+            // Initialised inside the try so any unexpected throw from the
+            // initial clock read still lands in the finally and lets
+            // `awaitDrained` make progress.
+            var lastOverflowReportNs = android.os.SystemClock.elapsedRealtimeNanos()
             while (running.get()) {
                 val rec = ring.poll()
                 if (rec == null) {
@@ -140,13 +145,19 @@ internal class SessionWriter(
             .append("\",\"tNs\":").append(rec.tNanos)
             .append(",\"th\":\"").append(escape(rec.thread))
             .append("\",\"fam\":\"").append(rec.family.name)
-            .append("\",\"ev\":\"").append(rec.type).append('"')
+            // `rec.type` is a constant string from EventFamily emit call sites
+            // in production, but escape it defensively so a future caller
+            // passing a quote-containing type cannot break the JSON.
+            .append("\",\"ev\":\"").append(escape(rec.type)).append('"')
         if (rec.payloadBuffer.isNotEmpty()) {
             line.append(rec.payloadBuffer)
         }
         line.append("}\n")
         try {
-            sink.write(line.toString())
+            // Append the StringBuilder directly to avoid the per-record
+            // String allocation `line.toString()` would incur on the writer
+            // thread. `Writer.append(CharSequence)` is a standard method.
+            sink.append(line)
             bytesWrittenInCurrentFile += line.length
             // Phase 2 atrace markers — only meaningful for FRONTIER/RANGE/REBUFFER.
             maybeAtrace(rec)
@@ -159,6 +170,10 @@ internal class SessionWriter(
     }
 
     private fun maybeAtrace(rec: TraceRecord) {
+        // The async-section APIs require API 29; on older devices the markers
+        // are silently skipped — Phase 2 system tracing is only useful on
+        // newer Fire TV / Google TV hardware anyway.
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) return
         val traceEnabled = try {
             Trace.isEnabled()
         } catch (_: Throwable) {
@@ -168,10 +183,14 @@ internal class SessionWriter(
         if (!PlaybackTracer.enabled) return
         when (rec.family) {
             EventFamily.FRONTIER, EventFamily.RANGE, EventFamily.REBUFFER -> {
+                // Point event: post-hoc Perfetto correlation joins on
+                // (sessionId, tNanos) so a zero-duration async span would
+                // be misleading. `Trace.beginSection`/`endSection` would also
+                // not span the producer-thread cost — these markers run on
+                // the writer thread when the record is drained.
                 val name = "nexio.${rec.family.name.lowercase()}.${rec.type}"
-                val cookie = (rec.tNanos and 0x7fffffffL).toInt()
-                Trace.beginAsyncSection(name, cookie)
-                Trace.endAsyncSection(name, cookie)
+                Trace.beginSection(name)
+                Trace.endSection()
             }
             else -> Unit
         }
@@ -204,9 +223,16 @@ internal class SessionWriter(
         sink = openFile(currentFile())
     }
 
+    /**
+     * Returns the file the writer should open for this rotation index. Only
+     * called when [baseFile] is non-null — the test path constructs the
+     * writer with `testSink` and short-circuits the file open at line 45,
+     * so this method is only reachable on the production file-backed path.
+     */
     private fun currentFile(): File {
-        val parent = baseFile?.parentFile
-        val base = baseFile ?: return File("/dev/null")
+        val base = baseFile
+            ?: error("currentFile() called without a baseFile — test paths must use testSink")
+        val parent = base.parentFile
         if (parent != null && !parent.exists()) parent.mkdirs()
         return if (rotationIndex == 0) base
         else File(parent, base.nameWithoutExtension + "-" + rotationIndex + "." + base.extension)
@@ -231,15 +257,39 @@ internal class SessionWriter(
          * Apply the "keep last 20 sessions" retention policy on the
          * `playback-traces` directory. Called from [PlaybackTracer.beginSession]
          * before opening a new file.
+         *
+         * Files are grouped by session id (everything up to the first `-` or
+         * `.` after the UUID) so a single long session that rotated into
+         * `<sid>.jsonl`, `<sid>-1.jsonl`, `<sid>-2.jsonl` etc. counts as one
+         * retained session, not three. Without this, a single 30-min session
+         * with 4 rotations would consume 5 of the 20 retention slots and
+         * could evict the older parts of itself mid-stream.
          */
         fun pruneOldSessions(dir: File) {
             if (!dir.exists() || !dir.isDirectory) return
             val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".jsonl") } ?: return
-            if (files.size <= MAX_RETAINED_SESSIONS) return
-            files.sortBy { it.lastModified() }
-            val excess = files.size - MAX_RETAINED_SESSIONS
+            // Group by session id. Filename shapes:
+            //   <sid>.jsonl              → session id = <sid>
+            //   <sid>-1.jsonl            → session id = <sid>
+            //   <sid>-12.jsonl           → session id = <sid>
+            val groups: Map<String, List<File>> = files.groupBy { f ->
+                val name = f.nameWithoutExtension
+                val dashIdx = name.lastIndexOf('-')
+                if (dashIdx > 0 && name.substring(dashIdx + 1).all { it.isDigit() }) {
+                    name.substring(0, dashIdx)
+                } else {
+                    name
+                }
+            }
+            if (groups.size <= MAX_RETAINED_SESSIONS) return
+            // Sort sessions by the most recent mtime within each group, so the
+            // active session (still being written) is always retained.
+            val sorted = groups.entries.sortedBy { entry ->
+                entry.value.maxOf { it.lastModified() }
+            }
+            val excess = sorted.size - MAX_RETAINED_SESSIONS
             for (i in 0 until excess) {
-                runCatching { files[i].delete() }
+                sorted[i].value.forEach { f -> runCatching { f.delete() } }
             }
         }
     }

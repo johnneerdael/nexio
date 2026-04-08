@@ -44,60 +44,8 @@ class PlaybackTracerTest {
         PlaybackTracer.installWriterFactory(null)
     }
 
-    private fun fakeHeader(sid: String = UUID.randomUUID().toString()): SessionHeader {
-        return SessionHeader(
-            sessionId = sid,
-            startedAtNanos = 1L,
-            assetKeyHash = "deadbeef0000",
-            serviceKey = "real-debrid",
-            provider = "addon-x",
-            benchmarkResultId = null,
-            benchmarkSource = null,
-            envelopePresent = false,
-            runtimeHintsPresent = false,
-            specializationState = "baseline",
-            hintServiceKey = null,
-            hintHostScope = null,
-            hintTransportClass = null,
-            hintAgeMs = null,
-            hintFreshnessBand = null,
-            specializationMismatchReason = null,
-            observedHostScope = null,
-            observedTransportClass = null,
-            branch = "prds",
-            cacheActive = false,
-            warmAheadFactory = null,
-            factoryArgs = FactoryArgs(8L * 1024 * 1024, 4, 32L * 1024 * 1024, 4L * 1024 * 1024),
-            initialPolicy = PolicySnapshot(2, 16, 4L * 1024 * 1024, 16L * 1024 * 1024, "fallback"),
-            clientIdentity = ClientIdentitySnapshot(
-                playbackClientHash = "abc123",
-                dispatcherMaxRequests = 64,
-                dispatcherMaxRequestsPerHost = 12,
-                dispatcherQueuedCalls = 0,
-                dispatcherRunningCalls = 0,
-                connectionPoolIdleCount = 0,
-                connectionPoolTotalCount = 0,
-                callTimeoutMs = 0L,
-                readTimeoutMs = 30_000L,
-                writeTimeoutMs = 30_000L,
-                connectTimeoutMs = 10_000L
-            ),
-            device = DeviceProvenance(
-                deviceModel = "TEST",
-                deviceManufacturer = "TEST",
-                androidRelease = "14",
-                androidSdkInt = 34,
-                appVersionName = "test",
-                appVersionCode = 1L,
-                gitSha = null,
-                memoryClass = 256,
-                largeMemoryClass = 512,
-                isLowRamDevice = false,
-                networkType = "wifi",
-                networkTransportHash = null
-            )
-        )
-    }
+    private fun fakeHeader(sid: String = UUID.randomUUID().toString()): SessionHeader =
+        SessionHeaderFixture.build(sessionId = sid)
 
     @Test
     fun toggleOffIsNoOp() {

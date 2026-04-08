@@ -14,10 +14,11 @@ class DebridBenchmarkMetricsCollector(
         private const val COLLECTOR_VERSION = 8
         private const val SAMPLING_MODE_FIXED_TIME_BUCKET = "fixed_time_bucket"
         private const val CONSISTENCY_TOLERANCE_RATIO = 0.10
-        private const val STEADY_STATE_WARMUP_MS = 5_000L
+        private const val STEADY_STATE_WARMUP_MS = 10_000L
         private const val DECISION_CONSUMER_WINDOW_MS = 5_000L
         private const val DECISION_TRANSIENT_DROP_FLOOR_RATIO = 0.25
         private const val DECISION_MIN_WINDOW_COUNT_FOR_FLOOR = 4
+        private const val CONSUMER_TRANSIENT_DROP_MAX_RUN_LENGTH = 3
         private const val CACHE_HEADROOM_INITIAL_MS = 10_000L
         private const val CACHE_HEADROOM_MAX_MS = 45_000L
         private const val CACHE_HEADROOM_DRAINING_FLOOR_MS = 5_000L
@@ -91,6 +92,12 @@ class DebridBenchmarkMetricsCollector(
             val deltaMs = windowStartMs?.let { sampleTimeMs - it }?.coerceAtLeast(0L) ?: 0L
             pendingOuterDeltaBytes += clampedBytesRead.toDouble()
             if (deltaMs > 0L) {
+                if (!completedBeforeSample) {
+                    recordConsumerThroughputSample(
+                        deltaBytes = clampedBytesRead.toDouble(),
+                        deltaMs = deltaMs
+                    )
+                }
                 recordThroughputInterval(
                     intervalStartMs = requireNotNull(windowStartMs),
                     intervalEndMs = sampleTimeMs,
@@ -194,7 +201,7 @@ class DebridBenchmarkMetricsCollector(
             steadyStateAverage
         ).minOrNull()
         val cacheEvidence = analyzeCacheAwareDeficits(
-            buckets = steadyStateDecisionBuckets,
+            buckets = steadyStateCompletedSustainedBuckets(completedBuckets),
             referenceMbps = steadyStateReference
         )
         val completedBytesTransferred = completedBuckets.sumOf { it.bytesTransferred }
@@ -286,6 +293,13 @@ class DebridBenchmarkMetricsCollector(
             val segmentEndMs = minOf(intervalEndMs, currentWindowEnd)
             val segmentDurationMs = segmentEndMs - cursorMs
             if (segmentDurationMs <= 0L) {
+                // Defensive guard: should be unreachable now that the
+                // window index advances on every boundary crossing below.
+                // If we ever land here without progress, force-advance the
+                // window index to break out instead of spinning forever.
+                if (segmentEndMs <= cursorMs) {
+                    flushCurrentThroughputWindow(complete = true)
+                }
                 cursorMs = segmentEndMs
                 continue
             }
@@ -299,7 +313,15 @@ class DebridBenchmarkMetricsCollector(
             remainingBytes -= segmentBytes
             cursorMs = segmentEndMs
 
-            if (throughputWindowAccumulatedMs >= throughputWindowMs) {
+            // Flush whenever the cursor reaches the current window's end —
+            // even if the window is only partially filled. The previous
+            // `accumulatedMs >= windowMs` condition could leave a partial
+            // window unflushed, then the next iteration would see the same
+            // (unchanged) window index and spin forever because
+            // `segmentDurationMs` would collapse to 0. (Reproduced by the
+            // `finishSustained keeps rd probe consumer p10 resilient to a
+            // single zero sample` test in `DebridBenchmarkMetricsCollectorTest`.)
+            if (cursorMs == currentWindowEnd) {
                 flushCurrentThroughputWindow(complete = true)
             }
         }
@@ -499,10 +521,41 @@ class DebridBenchmarkMetricsCollector(
     }
 
     private fun consumerP10Mbps(): Double? {
-        val steadyState = consumerThroughputSamples
-            .map { it.throughputMbps }
-            .sorted()
-        return steadyState.percentileNearestRank(0.10)
+        val timeOrdered = consumerThroughputSamples.map { it.throughputMbps }
+        val filtered = filterTransientConsumerDropRuns(timeOrdered)
+        return filtered.sorted().percentileNearestRank(0.10)
+    }
+
+    private fun filterTransientConsumerDropRuns(samples: List<Double>): List<Double> {
+        // A transient drop is a contiguous run of up to
+        // CONSUMER_TRANSIENT_DROP_MAX_RUN_LENGTH samples whose throughput is
+        // under DECISION_TRANSIENT_DROP_FLOOR_RATIO of the overall median.
+        // Sustained collapses (longer runs) are preserved so they still
+        // drag the autoplay floor down.
+        if (samples.isEmpty()) return samples
+        val sorted = samples.sorted()
+        val median = sorted.percentileNearestRank(0.50) ?: return samples
+        if (!median.isFinite() || median <= 0.0) return samples
+        val floor = median * DECISION_TRANSIENT_DROP_FLOOR_RATIO
+        val result = mutableListOf<Double>()
+        var i = 0
+        while (i < samples.size) {
+            if (samples[i] >= floor) {
+                result += samples[i]
+                i += 1
+            } else {
+                var runEnd = i
+                while (runEnd < samples.size && samples[runEnd] < floor) {
+                    runEnd += 1
+                }
+                val runLength = runEnd - i
+                if (runLength > CONSUMER_TRANSIENT_DROP_MAX_RUN_LENGTH) {
+                    for (j in i until runEnd) result += samples[j]
+                }
+                i = runEnd
+            }
+        }
+        return result
     }
 
     private fun filterTransientDropWindows(windows: List<Double>): List<Double> {

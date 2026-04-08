@@ -76,8 +76,15 @@ class DebridConfigBenchmarkServiceTest {
         assertEquals(3, result.summary.bestProfile?.parallelConnectionCount)
         assertEquals(24, result.summary.bestProfile?.chunkSizeMb)
         assertEquals(42L, result.summary.capabilityEnvelope?.measuredAtMs)
-        assertEquals(3, result.summary.capabilityEnvelope?.maxSafeUrgentWorkers)
-        assertEquals(8L * 1024L * 1024L, result.summary.capabilityEnvelope?.maxSafeUrgentChunkBytes)
+        // RD envelope uses the locked shape — urgent workers = 1, urgent chunk = 32 MiB.
+        assertEquals(
+            CapabilityEnvelope.LOCKED_REAL_DEBRID.maxSafeUrgentWorkers,
+            result.summary.capabilityEnvelope?.maxSafeUrgentWorkers
+        )
+        assertEquals(
+            CapabilityEnvelope.LOCKED_REAL_DEBRID.maxSafeUrgentChunkBytes,
+            result.summary.capabilityEnvelope?.maxSafeUrgentChunkBytes
+        )
         assertEquals(2, result.summary.runtimeTransportHints?.artifactVersion)
         assertEquals("RD", result.summary.runtimeTransportHints?.serviceKey)
         assertEquals(42L, result.summary.runtimeTransportHints?.measuredAtMs)

@@ -248,14 +248,20 @@ data class ParsedSession(
             val t = it.optLongField("tNs", 0L)
             t in windowFloorNs..endNs
         }
+        // Actual span of the captured window — may be < 5 seconds if the
+        // session is younger than 5 s. Used by the rate aggregators below
+        // so they don't underestimate throughput on short sessions.
+        val firstNsInWindow = inWindow.minOfOrNull { it.optLongField("tNs", 0L) } ?: endNs
+        val actualSpanNs = (endNs - firstNsInWindow).coerceAtLeast(1L)
+        val actualSpanSec = actualSpanNs.toDouble() / 1_000_000_000.0
 
         return RebufferWindow(
             startTNanos = startNs,
             endTNanos = endNs,
             windowDurationMs = durationMs.coerceAtLeast(0L),
-            networkBytesPerSec = aggregateNetworkBytesPerSec(inWindow),
+            networkBytesPerSec = aggregateNetworkBytesPerSec(inWindow, actualSpanSec),
             networkBytesPerSec5sCollapseFraction = networkCollapseFraction(inWindow),
-            frontierAdvanceBytesPerSec = aggregateFrontierBytesPerSec(inWindow),
+            frontierAdvanceBytesPerSec = aggregateFrontierBytesPerSec(inWindow, actualSpanSec),
             readWaitP99Ms = aggregateReadWaitP99Ms(inWindow),
             storeLockWaitP99Ms = aggregateStoreLockWaitP99Ms(inWindow),
             rangeHttpTtfbP99Ms = aggregateHttpTtfbP99Ms(inWindow),
@@ -266,8 +272,7 @@ data class ParsedSession(
             cacheWriteLatencyP99Ms = aggregateCacheWriteLatencyP99Ms(inWindow),
             prefetchStarvedPerSec = aggregatePrefetchStarvedPerSec(inWindow, durationMs),
             submitUrgentCount = countEvents(inWindow, "submit_urgent"),
-            prefetchStartedCount = countEvents(inWindow, "submit_prefetch") -
-                countEvents(inWindow, "submit_prefetch_starved"),
+            prefetchStartedCount = countRangeStartedWithLane(inWindow, lane = "prefetch"),
             observedPrefetchChunkBytes = observedPrefetchChunkBytes(inWindow),
             maxHeapDeltaKb = maxHeapDeltaKb(inWindow),
             maxThermalStatus = maxThermalStatus(inWindow),
@@ -278,11 +283,27 @@ data class ParsedSession(
     private fun countEvents(events: List<JsonObject>, type: String): Int =
         events.count { it.optStringField("ev") == type }
 
-    private fun aggregateNetworkBytesPerSec(events: List<JsonObject>): Long {
+    /**
+     * Count `range_started` events whose `lane` field matches [lane]. Used to
+     * report a true count of started prefetch ranges (the previous arithmetic
+     * `submit_prefetch − submit_prefetch_starved` could go negative under
+     * retries / multi-starvation).
+     */
+    private fun countRangeStartedWithLane(events: List<JsonObject>, lane: String): Int =
+        events.count { ev ->
+            ev.optStringField("ev") == "range_started" &&
+                ev.optStringField("lane") == lane
+        }
+
+    private fun aggregateNetworkBytesPerSec(events: List<JsonObject>, spanSec: Double): Long {
         val totals = events
             .filter { it.optStringField("ev") == "range_done" }
             .sumOf { it.optLongField("bytes", 0L) }
-        return totals / 5L // 5-second window
+        // Normalise by the actual captured span, not a fixed 5 s — for short
+        // sessions the dividend is much smaller and dividing by 5 would
+        // under-report throughput by up to 5×.
+        if (spanSec <= 0.0) return 0L
+        return (totals.toDouble() / spanSec).toLong()
     }
 
     private fun networkCollapseFraction(events: List<JsonObject>): Double {
@@ -300,11 +321,12 @@ data class ParsedSession(
         return ((prior - recent).toDouble() / prior.toDouble()).coerceIn(0.0, 1.0)
     }
 
-    private fun aggregateFrontierBytesPerSec(events: List<JsonObject>): Long {
+    private fun aggregateFrontierBytesPerSec(events: List<JsonObject>, spanSec: Double): Long {
         val totals = events
             .filter { it.optStringField("ev") == "frontier_advance" }
             .sumOf { it.optLongField("delta", 0L) }
-        return totals / 5L
+        if (spanSec <= 0.0) return 0L
+        return (totals.toDouble() / spanSec).toLong()
     }
 
     private fun aggregateReadWaitP99Ms(events: List<JsonObject>): Long =
@@ -316,8 +338,29 @@ data class ParsedSession(
     private fun aggregateHttpTtfbP99Ms(events: List<JsonObject>): Long =
         p99FromEvents(events, "range_http_response_headers", "ms")
 
-    private fun aggregateHttpBodyGapP99Ms(events: List<JsonObject>): Long =
-        p99FromEvents(events, "range_http_body_end", "ms")
+    /**
+     * p99 of *gaps between consecutive `range_http_body_end` events*, in
+     * milliseconds. The body_end event itself carries an `ms` field that
+     * measures the body fetch duration; the TRANSPORT rule needs the
+     * inter-arrival gap, which is the delta between successive `tNs`
+     * timestamps. Empty / single-sample windows return 0.
+     */
+    private fun aggregateHttpBodyGapP99Ms(events: List<JsonObject>): Long {
+        val timestampsNs = events
+            .filter { it.optStringField("ev") == "range_http_body_end" }
+            .map { it.optLongField("tNs", 0L) }
+            .sorted()
+        if (timestampsNs.size < 2) return 0L
+        val gapsMs = mutableListOf<Long>()
+        for (i in 1 until timestampsNs.size) {
+            gapsMs += (timestampsNs[i] - timestampsNs[i - 1]) / 1_000_000L
+        }
+        gapsMs.sort()
+        val n = gapsMs.size
+        val rank = ((99 * n + 99) / 100) - 1
+        val idx = rank.coerceIn(0, n - 1)
+        return gapsMs[idx]
+    }
 
     private fun aggregateCacheWriteLatencyP99Ms(events: List<JsonObject>): Long =
         p99FromEvents(events, "cache_write_latency_ms", "p99")
@@ -368,7 +411,13 @@ data class ParsedSession(
             .map { it.optLongField(key, 0L) }
             .sorted()
         if (values.isEmpty()) return 0L
-        val idx = ((values.size - 1) * 99) / 100
+        // Nearest-rank p99: idx = ceil(0.99 * N) - 1, clamped to [0, N-1].
+        // For sparse windows (N < 100) this still surfaces the *largest*
+        // sample rather than collapsing to the smallest, which the previous
+        // ((N - 1) * 99) / 100 formula did for N ≤ 10.
+        val n = values.size
+        val rank = ((99 * n + 99) / 100) - 1
+        val idx = rank.coerceIn(0, n - 1)
         return values[idx]
     }
 }
@@ -388,15 +437,18 @@ data class ParsedSessionHeader(
 ) {
     companion object {
         fun fromJson(obj: JsonObject): ParsedSessionHeader = ParsedSessionHeader(
-            sessionId = obj.optStringField("sid").ifEmpty { obj.optStringField("sessionId") },
-            branch = obj.optStringField("branch"),
-            envelopePresent = obj.optBoolField("envelopePresent", false),
-            specializationState = obj.optStringField("specializationState"),
-            specializationMismatchReason = obj.optStringOrNull("specializationMismatchReason")
-                ?.takeUnless { it == "null" || it.isEmpty() },
-            policySource = obj.optStringOrNull("policy_source")
-                ?.takeUnless { it == "null" || it.isEmpty() },
-            policyPrefetchChunkBytes = obj.optLongField("policy_prefetchChunkBytes", -1L)
+            // `sid` is the per-event envelope id; `sessionId` is the field
+            // written by [PayloadBuilder.putHeader] on the started-event itself.
+            sessionId = obj.optStringField("sid").ifEmpty { obj.optStringField(SessionHeaderKeys.SESSION_ID) },
+            branch = obj.optStringField(SessionHeaderKeys.BRANCH),
+            envelopePresent = obj.optBoolField(SessionHeaderKeys.ENVELOPE_PRESENT, false),
+            specializationState = obj.optStringField(SessionHeaderKeys.SPECIALIZATION_STATE),
+            // PayloadBuilder writes JSON `null` (not the string "null") for
+            // nullable values, so optStringOrNull already returns Kotlin null
+            // for absent / null fields. No vestigial string-literal guard.
+            specializationMismatchReason = obj.optStringOrNull(SessionHeaderKeys.SPECIALIZATION_MISMATCH_REASON),
+            policySource = obj.optStringOrNull(SessionHeaderKeys.POLICY_SOURCE),
+            policyPrefetchChunkBytes = obj.optLongField(SessionHeaderKeys.POLICY_PREFETCH_CHUNK_BYTES, -1L)
                 .takeIf { it > 0L },
         )
     }

@@ -130,34 +130,16 @@ class PlaybackTracerBenchmarkTest {
     private fun currentSessionIdOrNull(): String? =
         PlaybackTracer.currentInternal()?.sessionId
 
-    private fun benchmarkSessionHeader(): SessionHeader = SessionHeader(
+    private fun benchmarkSessionHeader(): SessionHeader = SessionHeaderFixture.build(
         sessionId = "bench-session",
         startedAtNanos = 0L,
         assetKeyHash = "benchmark0000",
         serviceKey = null,
         provider = null,
-        benchmarkResultId = null,
-        benchmarkSource = null,
         envelopePresent = true,
-        runtimeHintsPresent = false,
         specializationState = "confirmed",
-        hintServiceKey = null,
-        hintHostScope = null,
-        hintTransportClass = null,
-        hintAgeMs = null,
-        hintFreshnessBand = null,
-        specializationMismatchReason = null,
-        observedHostScope = null,
-        observedTransportClass = null,
-        branch = "prds",
-        cacheActive = false,
-        warmAheadFactory = null,
-        factoryArgs = FactoryArgs(
-            activeChunkBytes = 8L * 1024 * 1024,
-            parallelConnections = 4,
-            keepBehindBytes = 32L * 1024 * 1024,
-            bootstrapBytes = 4L * 1024 * 1024,
-        ),
+        // Benchmark-shaped overrides for the policy + client identity so the
+        // header reflects an envelope-confirmed PRDS run, not the test default.
         initialPolicy = PolicySnapshot(
             urgentWorkers = 4,
             prefetchWorkers = 1,

@@ -749,7 +749,10 @@ class TrailerService(
         apiKey: String
     ): List<TmdbVideoResult> {
         val localized = fetchTmdbMovieVideosOnce(tmdbId, preferredLanguage, apiKey)
-        if (localized.isNotEmpty() || preferredLanguage.equals(TMDB_TRAILER_FALLBACK_LANGUAGE, ignoreCase = true)) {
+        if (preferredLanguage.equals(TMDB_TRAILER_FALLBACK_LANGUAGE, ignoreCase = true)) {
+            return localized
+        }
+        if (rankTmdbVideoCandidates(localized).isNotEmpty()) {
             return localized
         }
         return fetchTmdbMovieVideosOnce(tmdbId, TMDB_TRAILER_FALLBACK_LANGUAGE, apiKey)
@@ -761,7 +764,10 @@ class TrailerService(
         apiKey: String
     ): List<TmdbVideoResult> {
         val localized = fetchTmdbTvVideosOnce(tmdbId, preferredLanguage, apiKey)
-        if (localized.isNotEmpty() || preferredLanguage.equals(TMDB_TRAILER_FALLBACK_LANGUAGE, ignoreCase = true)) {
+        if (preferredLanguage.equals(TMDB_TRAILER_FALLBACK_LANGUAGE, ignoreCase = true)) {
+            return localized
+        }
+        if (rankTmdbVideoCandidates(localized).isNotEmpty()) {
             return localized
         }
         return fetchTmdbTvVideosOnce(tmdbId, TMDB_TRAILER_FALLBACK_LANGUAGE, apiKey)
@@ -903,7 +909,9 @@ class TrailerService(
     }
 
     private fun getPreferredTmdbTrailerLanguage(): String {
-        return TMDB_TRAILER_FALLBACK_LANGUAGE
+        return normalizeTmdbTrailerLanguage(
+            runCatching { tmdbMetadataService.currentTmdbLanguageTag() }.getOrNull()
+        )
     }
 
     private suspend fun requireTmdbApiKey(): String? {
