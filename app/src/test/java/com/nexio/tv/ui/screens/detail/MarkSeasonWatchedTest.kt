@@ -313,7 +313,7 @@ class MarkSeasonWatchedTest {
 
             // Batcher returns not_found for traktIds 1..5 (episodes 1..5)
             val seasonMarkBatcher = mockk<SeasonMarkBatcher>()
-            coEvery { seasonMarkBatcher.markSeasonWatched(any()) } returns SeasonMarkResult(
+            coEvery { seasonMarkBatcher.markSeasonWatched(any(), any(), any()) } returns SeasonMarkResult(
                 succeeded = (6..10).map { TraktEpisodeRef(it) },
                 notFound = (1..5).map { TraktEpisodeRef(it) }
             )
@@ -394,7 +394,7 @@ class MarkSeasonWatchedTest {
 
             // Episodes 3, 6, and 8 could not be resolved to Trakt IDs — they must be rolled back.
             val seasonMarkBatcher = mockk<SeasonMarkBatcher>()
-            coEvery { seasonMarkBatcher.markSeasonWatched(any()) } returns SeasonMarkResult(
+            coEvery { seasonMarkBatcher.markSeasonWatched(any(), any(), any()) } returns SeasonMarkResult(
                 succeeded = listOf(TraktEpisodeRef(101), TraktEpisodeRef(102), TraktEpisodeRef(105)),
                 notFound = listOf(TraktEpisodeRef(104), TraktEpisodeRef(107))
             )
@@ -492,7 +492,7 @@ class MarkSeasonWatchedTest {
             } returns (1..5).associate { epNum -> epNum to TraktEpisodeRef(epNum) }
 
             val seasonMarkBatcher = mockk<SeasonMarkBatcher>()
-            coEvery { seasonMarkBatcher.markSeasonWatched(any()) } throws IOException("network error")
+            coEvery { seasonMarkBatcher.markSeasonWatched(any(), any(), any()) } throws IOException("network error")
 
             val snapshotService = mockk<ContinueWatchingSnapshotService>(relaxed = true)
             every { snapshotService.snapshotForRollback() } returns ContinueWatchingSnapshotService.EpisodeRollbackState(
@@ -599,7 +599,7 @@ class MarkSeasonWatchedTest {
             } returns (1..3).associate { epNum -> epNum to com.nexio.tv.data.repository.trakt.TraktEpisodeRef(epNum) }
 
             val seasonMarkBatcher = mockk<SeasonMarkBatcher>()
-            coEvery { seasonMarkBatcher.markSeasonWatched(any()) } throws IOException("network failure")
+            coEvery { seasonMarkBatcher.markSeasonWatched(any(), any(), any()) } throws IOException("network failure")
 
             val snapshotService = mockk<ContinueWatchingSnapshotService>(relaxed = true)
             every { snapshotService.snapshotForRollback() } returns ContinueWatchingSnapshotService.EpisodeRollbackState(

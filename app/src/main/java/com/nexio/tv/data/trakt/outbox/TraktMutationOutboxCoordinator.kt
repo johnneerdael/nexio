@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -44,6 +45,33 @@ class TraktMutationOutboxCoordinator @Inject constructor(
         val queued = worker.enqueue(envelope)
         ensureDraining()
         return queued
+    }
+
+    suspend fun enqueueAndAwait(
+        envelope: TraktMutationEnvelope,
+        timeoutMs: Long = 30_000L
+    ): TraktMutationEnvelope {
+        val queued = enqueueAndDrain(envelope)
+        lateinit var settled: TraktMutationEnvelope
+        withTimeout(timeoutMs) {
+            while (true) {
+                val current = worker.snapshot().items.firstOrNull { it.id == queued.id }
+                    ?: run {
+                        settled = queued
+                        return@withTimeout
+                    }
+                when (current.state) {
+                    TraktMutationLifecycleState.SUCCEEDED,
+                    TraktMutationLifecycleState.TERMINAL_FAILED,
+                    TraktMutationLifecycleState.COLLAPSED -> {
+                        settled = current
+                        return@withTimeout
+                    }
+                    else -> delay(25L)
+                }
+            }
+        }
+        return settled
     }
 
     suspend fun requestDrain() {

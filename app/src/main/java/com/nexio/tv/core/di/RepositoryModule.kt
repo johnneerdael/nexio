@@ -7,11 +7,12 @@ import com.nexio.tv.data.repository.MetaRepositoryImpl
 import com.nexio.tv.data.repository.StreamRepositoryImpl
 import com.nexio.tv.data.repository.SubtitleRepositoryImpl
 import com.nexio.tv.data.repository.SyncRepositoryImpl
-import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.repository.WatchProgressRepositoryImpl
 import com.nexio.tv.data.repository.servicewrap.DebridAvailabilityResolver
 import com.nexio.tv.data.repository.servicewrap.ServiceWrapResolver
 import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher
+import com.nexio.tv.data.repository.trakt.TraktSeasonMarkMutationAdapter
+import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.LibraryRepository
@@ -71,8 +72,15 @@ abstract class RepositoryModule {
     companion object {
         @Provides
         @Singleton
-        fun provideSeasonMarkBatcher(traktProgressService: TraktProgressService): SeasonMarkBatcher {
-            return SeasonMarkBatcher(traktProgressService, Dispatchers.IO)
+        fun provideSeasonMarkBatcher(
+            traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator,
+            traktSeasonMarkMutationAdapter: TraktSeasonMarkMutationAdapter
+        ): SeasonMarkBatcher {
+            return SeasonMarkBatcher(
+                traktMutationOutboxCoordinator,
+                traktSeasonMarkMutationAdapter,
+                Dispatchers.IO
+            )
         }
     }
 }

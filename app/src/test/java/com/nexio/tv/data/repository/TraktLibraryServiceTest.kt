@@ -45,6 +45,8 @@ class TraktLibraryServiceTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
+        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
+        val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthDataStore = mockk<TraktAuthDataStore>()
@@ -60,6 +62,8 @@ class TraktLibraryServiceTest {
             traktApi = traktApi,
             traktAuthService = traktAuthService,
             traktLibraryMutationExecutor = traktLibraryMutationExecutor,
+            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
+            traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
@@ -84,6 +88,8 @@ class TraktLibraryServiceTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
+        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
+        val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthState = MutableStateFlow(true)
@@ -122,6 +128,8 @@ class TraktLibraryServiceTest {
             traktApi = traktApi,
             traktAuthService = traktAuthService,
             traktLibraryMutationExecutor = traktLibraryMutationExecutor,
+            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
+            traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
@@ -141,6 +149,8 @@ class TraktLibraryServiceTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
+        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
+        val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthState = MutableStateFlow(true)
@@ -184,6 +194,8 @@ class TraktLibraryServiceTest {
             traktApi = traktApi,
             traktAuthService = traktAuthService,
             traktLibraryMutationExecutor = traktLibraryMutationExecutor,
+            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
+            traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
@@ -205,6 +217,8 @@ class TraktLibraryServiceTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
+        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
+        val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthState = MutableStateFlow(true)
@@ -222,6 +236,8 @@ class TraktLibraryServiceTest {
             traktApi = traktApi,
             traktAuthService = traktAuthService,
             traktLibraryMutationExecutor = traktLibraryMutationExecutor,
+            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
+            traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
@@ -242,6 +258,8 @@ class TraktLibraryServiceTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
+        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
+        val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthState = MutableStateFlow(true)
@@ -285,6 +303,8 @@ class TraktLibraryServiceTest {
             traktApi = traktApi,
             traktAuthService = traktAuthService,
             traktLibraryMutationExecutor = traktLibraryMutationExecutor,
+            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
+            traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
@@ -306,6 +326,8 @@ class TraktLibraryServiceTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
+        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
+        val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthState = MutableStateFlow(true)
@@ -321,6 +343,8 @@ class TraktLibraryServiceTest {
             traktApi = traktApi,
             traktAuthService = traktAuthService,
             traktLibraryMutationExecutor = traktLibraryMutationExecutor,
+            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
+            traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
@@ -350,6 +374,8 @@ class TraktLibraryServiceTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
+        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
+        val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthState = MutableStateFlow(false)
@@ -365,6 +391,8 @@ class TraktLibraryServiceTest {
             traktApi = traktApi,
             traktAuthService = traktAuthService,
             traktLibraryMutationExecutor = traktLibraryMutationExecutor,
+            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
+            traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
@@ -396,6 +424,8 @@ class TraktLibraryServiceTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
+        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
+        val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthState = MutableStateFlow(true)
@@ -469,6 +499,8 @@ class TraktLibraryServiceTest {
             traktApi = traktApi,
             traktAuthService = traktAuthService,
             traktLibraryMutationExecutor = traktLibraryMutationExecutor,
+            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
+            traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
@@ -504,6 +536,8 @@ class TraktLibraryServiceTest {
         val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
         val traktAuthService = mockk<TraktAuthService>()
         val traktLibraryMutationExecutor = mockk<TraktLibraryMutationExecutor>(relaxed = true)
+        val traktLibraryMutationAdapter = mockk<com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter>(relaxed = true)
+        val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>(relaxed = true)
         val metaRepository = mockk<MetaRepository>()
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
         val traktAuthState = MutableStateFlow(true)
@@ -554,6 +588,8 @@ class TraktLibraryServiceTest {
             traktApi = traktApi,
             traktAuthService = traktAuthService,
             traktLibraryMutationExecutor = traktLibraryMutationExecutor,
+            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
+            traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
             traktAuthDataStore = traktAuthDataStore,
