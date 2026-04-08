@@ -57,6 +57,24 @@ suspend fun FocusRequester.requestFocusAfterFrames(
     }
 }
 
+internal suspend fun moveFocusToLazyItem(
+    listState: LazyListState,
+    targetItemIndex: Int,
+    focusRequester: FocusRequester,
+    reason: String = "unspecified"
+) {
+    val normalizedTargetIndex = targetItemIndex.coerceAtLeast(0)
+    val targetVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == normalizedTargetIndex }
+    if (!targetVisible) {
+        detailFocusDebug(
+            "moveFocusToLazyItem scroll reason=$reason targetIndex=$normalizedTargetIndex currentIndex=${listState.firstVisibleItemIndex} currentOffset=${listState.firstVisibleItemScrollOffset}"
+        )
+        listState.scrollToItem(normalizedTargetIndex)
+        withFrameNanos { }
+    }
+    focusRequester.requestFocusAfterFrames(reason = "$reason:item_$normalizedTargetIndex")
+}
+
 suspend fun LazyListState.restoreHeroScrollAfterFocus(
     frames: Int = 2,
     reason: String = "unspecified"
