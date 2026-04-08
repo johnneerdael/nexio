@@ -448,7 +448,7 @@ class MetaDetailsSeasonMediaViewModelTest {
         val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
         every { watchProgressRepository.getAllEpisodeProgress(any()) } returns progressFlow
         every { watchProgressRepository.getProgress(any()) } returns flowOf(null)
-        coEvery { watchProgressRepository.markAsCompleted(any()) } throws IllegalStateException("boom")
+        coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), any()) } throws IllegalStateException("boom")
 
         val viewModel = buildViewModel(
             trailerService = trailerService,
