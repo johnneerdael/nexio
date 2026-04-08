@@ -10,6 +10,7 @@ internal fun PlayerRuntimeController.releasePlayer() {
     playbackSessionGuard.onPlayerReleased()
     playbackIdleGateState.onPlayerSessionEnded()
     cancelFirstFrameWatchdog()
+    deactivateAddonSubtitleOverlay()
 
     notifyAudioSessionUpdate(false)
 

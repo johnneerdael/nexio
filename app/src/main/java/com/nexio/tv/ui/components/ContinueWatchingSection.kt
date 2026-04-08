@@ -85,6 +85,8 @@ fun ContinueWatchingSection(
     cwWatchlistMembership: Map<String, Boolean> = emptyMap(),
     onToggleLibrary: ((ContinueWatchingItem) -> Unit)? = null,
     onStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
+    showManualStreamSelection: (ContinueWatchingItem) -> Boolean = { false },
+    onPlayWithManualStreamSelection: (ContinueWatchingItem) -> Unit = {},
     modifier: Modifier = Modifier,
     focusedItemIndex: Int = -1,
     onItemFocused: (itemIndex: Int) -> Unit = {}
@@ -195,6 +197,11 @@ fun ContinueWatchingSection(
             },
             onMarkAsWatched = {
                 onMarkAsWatched(menuItem)
+                optionsItem = null
+            },
+            showManualStreamSelection = showManualStreamSelection(menuItem),
+            onPlayWithManualStreamSelection = {
+                onPlayWithManualStreamSelection(menuItem)
                 optionsItem = null
             },
             onDetails = {
@@ -508,6 +515,8 @@ fun ContinueWatchingOptionsDialog(
     onDismiss: () -> Unit,
     onRemove: () -> Unit,
     onMarkAsWatched: () -> Unit,
+    showManualStreamSelection: Boolean = false,
+    onPlayWithManualStreamSelection: () -> Unit = {},
     onDetails: () -> Unit,
     onCheckIn: (() -> Unit)? = null,
     isInWatchlist: Boolean = false,
@@ -519,10 +528,10 @@ fun ContinueWatchingOptionsDialog(
         is ContinueWatchingItem.NextUp -> item.info.name
     }
 
-    val detailsFocusRequester = remember { FocusRequester() }
+    val primaryFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
-        detailsFocusRequester.requestFocus()
+        primaryFocusRequester.requestFocus()
     }
 
     NexioDialog(
@@ -530,11 +539,30 @@ fun ContinueWatchingOptionsDialog(
         title = title,
         subtitle = stringResource(R.string.cw_dialog_subtitle)
     ) {
+        if (showManualStreamSelection) {
+            Button(
+                onClick = onPlayWithManualStreamSelection,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(primaryFocusRequester),
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.play_with_manual_stream_selection))
+            }
+        }
+
         Button(
             onClick = onDetails,
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(detailsFocusRequester),
+            modifier = if (showManualStreamSelection) {
+                Modifier.fillMaxWidth()
+            } else {
+                Modifier
+                    .fillMaxWidth()
+                    .focusRequester(primaryFocusRequester)
+            },
             colors = ButtonDefaults.colors(
                 containerColor = NexioColors.BackgroundCard,
                 contentColor = NexioColors.TextPrimary

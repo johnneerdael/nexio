@@ -33,6 +33,9 @@ import androidx.media3.extractor.ts.TsExtractor
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.VodCacheSizeMode
 import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
+import com.nexio.tv.instrumentation.EventFamily
+import com.nexio.tv.instrumentation.PlaybackRangeContextCallFactory
+import com.nexio.tv.instrumentation.PlaybackTracer
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -68,6 +71,63 @@ internal class PlayerMediaSourceFactory(
         val clipIds: List<String>,
         val duration90kHz: Long
     )
+
+    private fun emitCacheActive(active: Boolean, source: String, maxBytes: Long? = null) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.CACHE, "cache_active") {
+            putBool("active", active)
+            putString("source", source)
+            putString("streamHost", currentVodCacheUrl?.let { runCatching { Uri.parse(it).host }.getOrNull() })
+            if (maxBytes != null) putLong("maxBytes", maxBytes)
+        }
+    }
+
+    private fun emitWarmAheadStart(streamUrl: String, capBytes: Long) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.CACHE, "warm_ahead_start") {
+            putString("streamHost", runCatching { Uri.parse(streamUrl).host }.getOrNull())
+            putLong("capBytes", capBytes)
+            putBool("cacheActive", currentVodCacheActive)
+        }
+    }
+
+    private fun emitWarmAheadStop(reason: String) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.CACHE, "warm_ahead_stop") {
+            putString("reason", reason)
+            putBool("cacheActive", currentVodCacheActive)
+            putBool("cancelRequested", prefetchStop.get())
+        }
+    }
+
+    private fun emitWarmAheadLoopIteration(
+        durationMs: Long,
+        state: String,
+        paused: Boolean,
+        holeStart: Long,
+        writeLength: Long
+    ) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.CACHE, "warm_ahead_loop_iteration_ms") {
+            putLong("durationMs", durationMs)
+            putString("state", state)
+            putBool("paused", paused)
+            if (holeStart >= 0L) putLong("holeStart", holeStart)
+            if (writeLength > 0L) putLong("writeLength", writeLength)
+        }
+    }
+
+    private fun emitCacheWriteLatency(durationMs: Long, holeStart: Long, writeLength: Long, success: Boolean, error: Throwable? = null) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.CACHE, "cache_write_latency_ms") {
+            putLong("durationMs", durationMs)
+            putLong("holeStart", holeStart)
+            putLong("writeLength", writeLength)
+            putBool("success", success)
+            putString("errorClass", error?.javaClass?.name)
+            putString("errorMessage", error?.message)
+        }
+    }
 
     @Volatile private var currentVodCacheUrl: String? = null
     @Volatile private var currentVodCacheResolvedUrl: String? = null
@@ -118,7 +178,9 @@ internal class PlayerMediaSourceFactory(
     ): MediaSource {
         stopVodWarmAhead()
         val sanitizedHeaders = sanitizeHeaders(headers)
-        val okHttpFactory = OkHttpDataSource.Factory(getOrCreateOkHttpClient()).apply {
+        val okHttpFactory = OkHttpDataSource.Factory(
+            PlaybackRangeContextCallFactory(getOrCreateOkHttpClient())
+        ).apply {
             setDefaultRequestProperties(sanitizedHeaders)
             if (!sanitizedHeaders.containsKey("User-Agent")) {
                 setUserAgent(
@@ -264,15 +326,18 @@ internal class PlayerMediaSourceFactory(
                 runCatching {
                     Log.d(TAG, "Using VOD cache for host=${Uri.parse(url).host ?: "unknown"}")
                     currentVodCacheActive = true
+                    emitCacheActive(active = true, source = "progressive_attach", maxBytes = vodCacheMaxBytes)
                     buildVodCacheDataSourceFactory(progressiveUpstreamFactory, cache)
                 }.getOrElse { error ->
                     currentVodCacheActive = false
                     isVodCacheDisabled = true
+                    emitCacheActive(active = false, source = "datasource_failure", maxBytes = vodCacheMaxBytes)
                     Log.e(TAG, "Disabling VOD cache after datasource failure", error)
                     progressiveUpstreamFactory
                 }
             } else {
                 currentVodCacheActive = false
+                emitCacheActive(active = false, source = "cache_not_ready", maxBytes = vodCacheMaxBytes)
                 if (!hasLoggedVodCacheNotReady) {
                     hasLoggedVodCacheNotReady = true
                     Log.d(TAG, "VOD cache not ready yet, falling back to network datasource")
@@ -282,6 +347,7 @@ internal class PlayerMediaSourceFactory(
         } else {
             currentVodCacheActive = false
             currentProgressiveIsEligibleForWarmAhead = false
+            emitCacheActive(active = false, source = "cache_disabled")
             progressiveUpstreamFactory
         }
 
@@ -757,9 +823,11 @@ internal class PlayerMediaSourceFactory(
                 capBytes = capBytes
             )
         }
+        emitWarmAheadStart(streamUrl, capBytes)
     }
 
     internal fun stopVodWarmAhead() {
+        emitWarmAheadStop("stop_requested")
         prefetchStop.set(true)
         activePrefetchWriter?.cancel()
         prefetchFuture?.cancel(true)
@@ -778,93 +846,131 @@ internal class PlayerMediaSourceFactory(
         var cursor = 0L
         var idleCycles = 0
         while (!prefetchStop.get() && !Thread.currentThread().isInterrupted) {
+            val iterationStartMs = android.os.SystemClock.elapsedRealtime()
+            var iterationState = "running"
+            var paused = false
+            var holeStartForTrace = -1L
+            var writeLengthForTrace = 0L
             // Pause warm-ahead during rebuffer recovery so urgent connection slots and
             // bandwidth are fully available for the playhead. Resume automatically once
             // the rebuffer window expires (TTL-based: gate ttlMs = REBUFFER_PREFETCH_PAUSE_MS).
-            val isPaused = rebufferGate.isPaused()
-            val ageMs = rebufferGate.ageMs()
-            PlayerTransportTelemetry.logThrottled(
-                site = "warmahead.rebuffer",
-                windowMs = 1_000L,
-                pairs = mapOf(
-                    "ageMs" to if (ageMs == Long.MAX_VALUE) -1L else ageMs,
-                    "paused" to isPaused
-                )
-            )
-            if (isPaused) {
-                Thread.sleep(WARM_AHEAD_REBUFFER_POLL_MS)
-                continue
-            }
-            val liveUrl = currentVodCacheResolvedUrl ?: currentVodCacheUrl ?: streamUrl
-            val prefetchUri = runCatching { Uri.parse(liveUrl) }.getOrElse { Uri.parse(streamUrl) }
-            val cacheKey = stableCacheKeyFactory.buildCacheKey(
-                DataSpec.Builder().setUri(prefetchUri).build()
-            )
-            val cachedFrontier = contiguousCachedPrefix(cache, cacheKey, effectiveCapBytes)
-            if (cachedFrontier > activeReadBytePosition.get()) {
-                activeReadBytePosition.set(cachedFrontier)
-            }
-            if (cursor >= effectiveCapBytes) {
-                break
-            }
-            val hole = findNextUncachedHole(
-                cache = cache,
-                cacheKey = cacheKey,
-                start = cursor,
-                endExclusive = effectiveCapBytes
-            )
-            if (hole == null) {
-                idleCycles++
-                if (idleCycles > PREFETCH_MAX_IDLE_CYCLES) break
-                Thread.sleep(PREFETCH_IDLE_SLEEP_MS)
-                continue
-            }
-            idleCycles = 0
-
-            var holeStart = hole.first
-            val holeLength = hole.second
-            val activeGuardEnd = activeReadBytePosition.get().coerceAtLeast(0L) + PREFETCH_ACTIVE_GUARD_BYTES
-            if (holeStart < activeGuardEnd) {
-                cursor = activeGuardEnd.coerceAtMost(effectiveCapBytes)
-                Thread.sleep(PREFETCH_REBASE_SLEEP_MS)
-                continue
-            }
-
-            val writeLength = minOf(
-                PREFETCH_BLOCK_BYTES,
-                holeLength,
-                effectiveCapBytes - holeStart
-            )
-            if (writeLength <= 0L) {
-                cursor = (holeStart + 1L).coerceAtMost(effectiveCapBytes)
-                continue
-            }
-
-            val dataSpec = DataSpec.Builder()
-                .setUri(prefetchUri)
-                .setPosition(holeStart)
-                .setLength(writeLength)
-                .build()
-            val prefetchFactory = buildVodCacheDataSourceFactory(
-                upstreamFactory = upstreamFactory,
-                cache = cache,
-                blockOnCache = true
-            )
-            val writer = CacheWriter(prefetchFactory.createDataSource() as CacheDataSource, dataSpec, null, null)
-            activePrefetchWriter = writer
-            runCatching {
-                writer.cache()
-            }.onFailure { error ->
-                if (!prefetchStop.get()) {
-                    Log.w(
-                        TAG,
-                        "VOD warm-ahead failed at offset=${holeStart / 1024L / 1024L}MB len=${writeLength / 1024L / 1024L}MB",
-                        error
+            try {
+                val isPaused = rebufferGate.isPaused()
+                val ageMs = rebufferGate.ageMs()
+                PlayerTransportTelemetry.logThrottled(
+                    site = "warmahead.rebuffer",
+                    windowMs = 1_000L,
+                    pairs = mapOf(
+                        "ageMs" to if (ageMs == Long.MAX_VALUE) -1L else ageMs,
+                        "paused" to isPaused
                     )
+                )
+                if (isPaused) {
+                    iterationState = "paused_rebuffer"
+                    paused = true
+                    Thread.sleep(WARM_AHEAD_REBUFFER_POLL_MS)
+                    continue
                 }
+                val liveUrl = currentVodCacheResolvedUrl ?: currentVodCacheUrl ?: streamUrl
+                val prefetchUri = runCatching { Uri.parse(liveUrl) }.getOrElse { Uri.parse(streamUrl) }
+                val cacheKey = stableCacheKeyFactory.buildCacheKey(
+                    DataSpec.Builder().setUri(prefetchUri).build()
+                )
+                val cachedFrontier = contiguousCachedPrefix(cache, cacheKey, effectiveCapBytes)
+                if (cachedFrontier > activeReadBytePosition.get()) {
+                    activeReadBytePosition.set(cachedFrontier)
+                }
+                if (cursor >= effectiveCapBytes) {
+                    iterationState = "cap_reached"
+                    break
+                }
+                val hole = findNextUncachedHole(
+                    cache = cache,
+                    cacheKey = cacheKey,
+                    start = cursor,
+                    endExclusive = effectiveCapBytes
+                )
+                if (hole == null) {
+                    iterationState = "idle_no_hole"
+                    idleCycles++
+                    if (idleCycles > PREFETCH_MAX_IDLE_CYCLES) break
+                    Thread.sleep(PREFETCH_IDLE_SLEEP_MS)
+                    continue
+                }
+                idleCycles = 0
+
+                val holeStart = hole.first
+                holeStartForTrace = holeStart
+                val holeLength = hole.second
+                val activeGuardEnd = activeReadBytePosition.get().coerceAtLeast(0L) + PREFETCH_ACTIVE_GUARD_BYTES
+                if (holeStart < activeGuardEnd) {
+                    iterationState = "rebase_active_guard"
+                    cursor = activeGuardEnd.coerceAtMost(effectiveCapBytes)
+                    Thread.sleep(PREFETCH_REBASE_SLEEP_MS)
+                    continue
+                }
+
+                val writeLength = minOf(
+                    PREFETCH_BLOCK_BYTES,
+                    holeLength,
+                    effectiveCapBytes - holeStart
+                )
+                writeLengthForTrace = writeLength
+                if (writeLength <= 0L) {
+                    iterationState = "advance_zero_length"
+                    cursor = (holeStart + 1L).coerceAtMost(effectiveCapBytes)
+                    continue
+                }
+
+                val dataSpec = DataSpec.Builder()
+                    .setUri(prefetchUri)
+                    .setPosition(holeStart)
+                    .setLength(writeLength)
+                    .build()
+                val prefetchFactory = buildVodCacheDataSourceFactory(
+                    upstreamFactory = upstreamFactory,
+                    cache = cache,
+                    blockOnCache = true
+                )
+                val writer = CacheWriter(prefetchFactory.createDataSource() as CacheDataSource, dataSpec, null, null)
+                activePrefetchWriter = writer
+                val writeStartMs = android.os.SystemClock.elapsedRealtime()
+                runCatching {
+                    writer.cache()
+                    emitCacheWriteLatency(
+                        durationMs = android.os.SystemClock.elapsedRealtime() - writeStartMs,
+                        holeStart = holeStart,
+                        writeLength = writeLength,
+                        success = true
+                    )
+                }.onFailure { error ->
+                    emitCacheWriteLatency(
+                        durationMs = android.os.SystemClock.elapsedRealtime() - writeStartMs,
+                        holeStart = holeStart,
+                        writeLength = writeLength,
+                        success = false,
+                        error = error
+                    )
+                    if (!prefetchStop.get()) {
+                        Log.w(
+                            TAG,
+                            "VOD warm-ahead failed at offset=${holeStart / 1024L / 1024L}MB len=${writeLength / 1024L / 1024L}MB",
+                            error
+                        )
+                    }
+                }
+                activePrefetchWriter = null
+                iterationState = "cache_write"
+                cursor = (holeStart + writeLength).coerceAtMost(effectiveCapBytes)
+            } finally {
+                emitWarmAheadLoopIteration(
+                    durationMs = android.os.SystemClock.elapsedRealtime() - iterationStartMs,
+                    state = iterationState,
+                    paused = paused,
+                    holeStart = holeStartForTrace,
+                    writeLength = writeLengthForTrace
+                )
             }
-            activePrefetchWriter = null
-            cursor = (holeStart + writeLength).coerceAtMost(effectiveCapBytes)
         }
     }
 
@@ -917,6 +1023,7 @@ internal class PlayerMediaSourceFactory(
             .setCacheKeyFactory(stableCacheKeyFactory)
             .setCacheWriteDataSinkFactory(dataSinkFactory)
             .setUpstreamDataSourceFactory(upstreamFactory)
+            .setEventListener(PlaybackTraceCacheEventListener(if (blockOnCache) "warm_ahead" else "progressive"))
             .setFlags(flags)
     }
 
@@ -1373,4 +1480,27 @@ private fun dataTypeName(dataType: Int): String = when (dataType) {
     C.DATA_TYPE_MEDIA -> "media"
     C.DATA_TYPE_MANIFEST -> "manifest"
     else -> "other($dataType)"
+}
+
+internal class PlaybackTraceCacheEventListener(
+    private val source: String
+) : CacheDataSource.EventListener {
+    override fun onCachedBytesRead(cacheSizeBytes: Long, cachedBytesRead: Long) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.CACHE, "cache_event") {
+            putString("source", source)
+            putString("kind", "cached_bytes_read")
+            putLong("cacheSizeBytes", cacheSizeBytes)
+            putLong("cachedBytesRead", cachedBytesRead)
+        }
+    }
+
+    override fun onCacheIgnored(reason: Int) {
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.CACHE, "cache_event") {
+            putString("source", source)
+            putString("kind", "cache_ignored")
+            putInt("reason", reason)
+        }
+    }
 }

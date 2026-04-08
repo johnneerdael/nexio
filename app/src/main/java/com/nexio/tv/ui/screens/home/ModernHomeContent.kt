@@ -269,6 +269,7 @@ internal fun ModernHomeContent(
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
+    onContinueWatchingManualStreamSelection: (ContinueWatchingItem) -> Unit = {},
     onLoadMoreCatalog: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
     onMarkContinueWatchingWatched: (ContinueWatchingItem) -> Unit = {},
@@ -1417,6 +1418,14 @@ internal fun ModernHomeContent(
             },
             onMarkAsWatched = {
                 onMarkContinueWatchingWatched(selectedOptionsItem)
+                optionsItem = null
+            },
+            showManualStreamSelection = shouldShowContinueWatchingManualStreamSelection(
+                deterministicAutoplayEnabled = contentState.deterministicAutoplayEnabled,
+                item = selectedOptionsItem
+            ),
+            onPlayWithManualStreamSelection = {
+                onContinueWatchingManualStreamSelection(selectedOptionsItem)
                 optionsItem = null
             },
             onDetails = {

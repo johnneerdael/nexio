@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
+import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -22,7 +23,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -32,7 +35,8 @@ import javax.inject.Inject
 class SearchViewModel @Inject constructor(
     private val addonRepository: AddonRepository,
     private val catalogRepository: CatalogRepository,
-    private val layoutPreferenceDataStore: LayoutPreferenceDataStore
+    private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
+    private val playerSettingsDataStore: PlayerSettingsDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -58,6 +62,17 @@ class SearchViewModel @Inject constructor(
     }
 
     init {
+        viewModelScope.launch {
+            playerSettingsDataStore.playerSettings
+                .map { it.deterministicAutoplayEnabled }
+                .distinctUntilChanged()
+                .collectLatest { enabled ->
+                    _uiState.update { state ->
+                        if (state.deterministicAutoplayEnabled == enabled) state
+                        else state.copy(deterministicAutoplayEnabled = enabled)
+                    }
+                }
+        }
         viewModelScope.launch {
             layoutPreferenceDataStore.searchDiscoverEnabled.collectLatest { enabled ->
                 _uiState.update { it.copy(discoverEnabled = enabled) }

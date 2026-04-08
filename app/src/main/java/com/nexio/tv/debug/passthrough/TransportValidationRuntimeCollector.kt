@@ -1,5 +1,6 @@
 package com.nexio.tv.debug.passthrough
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -9,6 +10,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.analytics.PlaybackStats
 import androidx.media3.exoplayer.analytics.PlaybackStatsListener
+import com.nexio.tv.instrumentation.DeviceHealthSampler
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,8 +23,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Singleton
-class TransportValidationRuntimeCollector @Inject constructor() {
+class TransportValidationRuntimeCollector @Inject constructor(
+    @ApplicationContext private val appContext: Context,
+) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    // WP8 — device-health sampler tied to the playback-trace MediaSourceSession.
+    // Starts on `beginSession`, stops on `clearSession`. Lazy so the collector
+    // can be constructed on a thread without immediately spinning up the
+    // sampler's HandlerThread.
+    private val deviceHealthSampler: DeviceHealthSampler by lazy {
+        DeviceHealthSampler(appContext)
+    }
 
     @Volatile
     private var activeSession: ActiveRuntimeSession? = null
@@ -51,6 +64,9 @@ class TransportValidationRuntimeCollector @Inject constructor() {
         settings: TransportValidationSettings,
     ) {
         clearSession()
+        // WP8 — start the device-health sampler tied to this session.
+        // Best-effort: any failure is swallowed inside DeviceHealthSampler.
+        deviceHealthSampler.start()
         activeSession =
             ActiveRuntimeSession(
                 sampleId = sample.id,
@@ -107,6 +123,50 @@ class TransportValidationRuntimeCollector @Inject constructor() {
                     ) {
                         session.readyBufferingOscillationCount += 1
                     }
+                    // WP8 — DECODE player_state_changed.
+                    com.nexio.tv.instrumentation.PlaybackTracer.emit(
+                        com.nexio.tv.instrumentation.EventFamily.DECODE,
+                        "player_state_changed"
+                    ) {
+                        putString("state", playerStateName(playbackState))
+                        putLong("posMs", player.currentPosition)
+                    }
+                    // WP8 — REBUFFER rebuffer_start on READY→BUFFERING.
+                    if (previousState == Player.STATE_READY &&
+                        playbackState == Player.STATE_BUFFERING
+                    ) {
+                        session.lastRebufferStartElapsedMs = now
+                        com.nexio.tv.instrumentation.PlaybackTracer.emit(
+                            com.nexio.tv.instrumentation.EventFamily.REBUFFER,
+                            "rebuffer_start"
+                        ) {
+                            putLong("posMs", player.currentPosition)
+                        }
+                    }
+                    // WP8 — REBUFFER rebuffer_end on BUFFERING→READY with
+                    // a 5-second snapshot of dropped frames + audio underruns
+                    // assembled from this collector's existing event lists.
+                    if (previousState == Player.STATE_BUFFERING &&
+                        playbackState == Player.STATE_READY
+                    ) {
+                        val startMs = session.lastRebufferStartElapsedMs
+                        val durationMs = if (startMs != null) (now - startMs) else 0L
+                        session.lastRebufferStartElapsedMs = null
+                        val windowFloor = now - 5_000L
+                        val droppedFrames5s = session.analyticsEvents
+                            .count { it.type == "dropped_video_frames" && it.elapsedRealtimeMs >= windowFloor }
+                        val audioUnderruns5s = session.analyticsEvents
+                            .count { it.type == "audio_underrun" && it.elapsedRealtimeMs >= windowFloor }
+                        com.nexio.tv.instrumentation.PlaybackTracer.emit(
+                            com.nexio.tv.instrumentation.EventFamily.REBUFFER,
+                            "rebuffer_end"
+                        ) {
+                            putLong("durationMs", durationMs)
+                            putInt("droppedFrames5s", droppedFrames5s)
+                            putInt("audioUnderruns5s", audioUnderruns5s)
+                            putLong("posMs", player.currentPosition)
+                        }
+                    }
                 }
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -131,8 +191,19 @@ class TransportValidationRuntimeCollector @Inject constructor() {
                             type = "rendered_first_frame",
                             positionMs = player.currentPosition,
                         )
+                    val fromStartMs = session.firstRenderedFrameAtElapsedRealtimeMs?.let { 0L }
+                        ?: (now - session.startedAtElapsedRealtimeMs)
                     if (session.firstRenderedFrameAtElapsedRealtimeMs == null) {
                         session.firstRenderedFrameAtElapsedRealtimeMs = now
+                    }
+                    // WP8 — DECODE rendered_first_frame emit. Reuses the
+                    // existing Player.Listener (no second listener attached).
+                    com.nexio.tv.instrumentation.PlaybackTracer.emit(
+                        com.nexio.tv.instrumentation.EventFamily.DECODE,
+                        "rendered_first_frame"
+                    ) {
+                        putLong("ms", fromStartMs)
+                        putLong("posMs", player.currentPosition)
                     }
                 }
 
@@ -144,6 +215,15 @@ class TransportValidationRuntimeCollector @Inject constructor() {
                             positionMs = player.currentPosition,
                             detail = "${error.errorCodeName}:${error.message ?: "unknown"}",
                         )
+                    // WP8 — DECODE player_error.
+                    com.nexio.tv.instrumentation.PlaybackTracer.emit(
+                        com.nexio.tv.instrumentation.EventFamily.DECODE,
+                        "player_error"
+                    ) {
+                        putString("code", error.errorCodeName)
+                        putString("message", error.message ?: "unknown")
+                        putLong("posMs", player.currentPosition)
+                    }
                 }
             }
         val analyticsListener =
@@ -161,6 +241,15 @@ class TransportValidationRuntimeCollector @Inject constructor() {
                             value = droppedFrames.toLong(),
                             detail = "elapsedMs=$elapsedMs",
                         )
+                    // WP8 — DECODE dropped_video_frames.
+                    com.nexio.tv.instrumentation.PlaybackTracer.emit(
+                        com.nexio.tv.instrumentation.EventFamily.DECODE,
+                        "dropped_video_frames"
+                    ) {
+                        putInt("count", droppedFrames)
+                        putLong("elapsedMs", elapsedMs)
+                        putLong("posMs", eventTime.currentPlaybackPositionMs)
+                    }
                 }
 
                 override fun onAudioUnderrun(
@@ -180,6 +269,16 @@ class TransportValidationRuntimeCollector @Inject constructor() {
                         )
                     if (session.firstAudioUnderrunAtElapsedRealtimeMs == null) {
                         session.firstAudioUnderrunAtElapsedRealtimeMs = now
+                    }
+                    // WP8 — DECODE audio_underrun.
+                    com.nexio.tv.instrumentation.PlaybackTracer.emit(
+                        com.nexio.tv.instrumentation.EventFamily.DECODE,
+                        "audio_underrun"
+                    ) {
+                        putInt("bufferSize", bufferSize)
+                        putLong("bufferSizeMs", bufferSizeMs)
+                        putLong("elapsedSinceLastFeedMs", elapsedSinceLastFeedMs)
+                        putLong("posMs", eventTime.currentPlaybackPositionMs)
                     }
                 }
             }
@@ -353,6 +452,9 @@ class TransportValidationRuntimeCollector @Inject constructor() {
     }
 
     fun clearSession() {
+        // WP8 — stop the device-health sampler before tearing down the session.
+        // Idempotent: stop() is a no-op if the sampler is not running.
+        deviceHealthSampler.stop()
         val session = activeSession ?: return
         session.detach()
         activeSession = null
@@ -400,6 +502,10 @@ class TransportValidationRuntimeCollector @Inject constructor() {
         var lastPlaybackState: Int? = null,
         var playbackStateTransitionCount: Int = 0,
         var readyBufferingOscillationCount: Int = 0,
+        // WP8 — wall-clock of the most recent READY→BUFFERING transition so
+        // the matching BUFFERING→READY can compute durationMs for the
+        // playback-trace REBUFFER rebuffer_end event.
+        var lastRebufferStartElapsedMs: Long? = null,
         val playerEvents: MutableList<TransportValidationRuntimePlayerEvent> = mutableListOf(),
         val analyticsEvents: MutableList<TransportValidationRuntimeAnalyticsEvent> = mutableListOf(),
         val positionSamples: MutableList<PositionSample> = mutableListOf(),

@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.player
 
 import androidx.media3.common.MimeTypes
 import com.nexio.tv.R
+import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
 import com.nexio.tv.domain.model.Subtitle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -143,6 +144,42 @@ internal fun PlayerRuntimeController.translateAndSelectAddonSubtitle(sourceSubti
 
     val targetLanguage = _uiState.value.subtitleStyle.preferredLanguage
     aiSubtitleTranslationJob = scope.launch {
+        if (addonSubtitleSupportsOverlay(PlayerSubtitleUtils.mimeTypeFromUrl(sourceSubtitle.url))) {
+            val overlayResult = translateAndActivateAddonOverlayCues(
+                sourceSubtitle = sourceSubtitle,
+                targetLanguage = targetLanguage,
+                requestGeneration = requestGeneration
+            )
+            if (requestGeneration != aiTranslationSelectionGeneration) {
+                return@launch
+            }
+            overlayResult
+                .onSuccess {
+                    _uiState.update {
+                        it.copy(
+                            isAiSubtitleTranslating = false,
+                            aiSubtitleError = null
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    if (error is CancellationException) {
+                        return@onFailure
+                    }
+                    // For SRT/VTT, reselecting the source subtitle still uses the overlay
+                    // no-rebuffer path. Do not fall back to media-source refresh on AI failure.
+                    selectAddonSubtitle(sourceSubtitle)
+                    _uiState.update {
+                        it.copy(
+                            isAiSubtitleTranslating = false,
+                            aiSubtitleError = error.message?.takeIf { message -> message.isNotBlank() }
+                                ?: context.getString(R.string.subtitle_ai_translate_failed)
+                        )
+                    }
+                }
+            return@launch
+        }
+
         val result = geminiSubtitleTranslationService.translateSubtitle(
             sourceSubtitle = sourceSubtitle,
             targetLanguageCode = targetLanguage,
@@ -182,6 +219,36 @@ internal fun PlayerRuntimeController.translateAndSelectAddonSubtitle(sourceSubti
                 }
             }
     }
+}
+
+private suspend fun PlayerRuntimeController.translateAndActivateAddonOverlayCues(
+    sourceSubtitle: Subtitle,
+    targetLanguage: String,
+    requestGeneration: Long
+): Result<Unit> = runCatching {
+    val cueGroups = loadAddonSubtitleOverlayCueGroups(sourceSubtitle)
+    val sourceTexts = sourceTextsForTranslation(cueGroups)
+    if (sourceTexts.isEmpty()) {
+        throw UnsupportedOperationException(context.getString(R.string.subtitle_ai_translate_unsupported_format))
+    }
+    val translatedTexts = geminiSubtitleTranslationService.translateCueTexts(
+        texts = sourceTexts,
+        targetLanguageCode = targetLanguage,
+        apiKey = geminiApiKey,
+        chunkConfig = GeminiSubtitleTranslationService.ADDON_OVERLAY_CUE_CHUNK_CONFIG
+    ).getOrThrow()
+
+    if (requestGeneration != aiTranslationSelectionGeneration) {
+        return@runCatching
+    }
+
+    activateAddonSubtitleOverlayCueGroups(
+        selectedSubtitle = sourceSubtitle,
+        cueGroups = translateTimedAddonCueGroups(
+            cueGroups = cueGroups,
+            translatedTexts = translatedTexts
+        )
+    )
 }
 
 private fun supportsAiTranslation(subtitle: Subtitle): Boolean {

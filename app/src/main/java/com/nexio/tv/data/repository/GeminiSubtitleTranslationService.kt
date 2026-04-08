@@ -10,6 +10,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -26,12 +28,17 @@ import javax.inject.Singleton
 
 private const val TAG = "GeminiSubtitleTx"
 private const val GEMINI_MODEL = "gemini-2.5-flash"
-private const val MAX_CHUNK_ENTRIES = 40
-private const val MAX_CHUNK_CHARS = 3500
 
 data class GeminiTranslatedSubtitleAsset(
     val sourceSubtitle: Subtitle,
     val translatedSubtitle: Subtitle
+)
+
+data class GeminiTranslationChunkConfig(
+    val maxEntries: Int,
+    val maxChars: Int,
+    val minSplitEntries: Int = 20,
+    val maxParallelRequests: Int = 3
 )
 
 @Singleton
@@ -39,6 +46,21 @@ class GeminiSubtitleTranslationService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val httpClient: OkHttpClient
 ) {
+    companion object {
+        val DEFAULT_CUE_CHUNK_CONFIG = GeminiTranslationChunkConfig(
+            maxEntries = 40,
+            maxChars = 3_500,
+            minSplitEntries = 20,
+            maxParallelRequests = 3
+        )
+        val ADDON_OVERLAY_CUE_CHUNK_CONFIG = GeminiTranslationChunkConfig(
+            maxEntries = 120,
+            maxChars = 12_000,
+            minSplitEntries = 20,
+            maxParallelRequests = 3
+        )
+    }
+
     private val cueTranslationCache = ConcurrentHashMap<String, String>()
 
     suspend fun translateSubtitle(
@@ -107,7 +129,8 @@ class GeminiSubtitleTranslationService @Inject constructor(
     suspend fun translateCueTexts(
         texts: List<String>,
         targetLanguageCode: String,
-        apiKey: String
+        apiKey: String,
+        chunkConfig: GeminiTranslationChunkConfig = DEFAULT_CUE_CHUNK_CONFIG
     ): Result<Map<String, String>> = withContext(Dispatchers.IO) {
         runCatching {
             val normalizedTarget = targetLanguageCode.trim().ifBlank {
@@ -139,7 +162,8 @@ class GeminiSubtitleTranslationService @Inject constructor(
                 val translated = translateMissingCueTexts(
                     texts = missing,
                     targetLanguageCode = normalizedTarget,
-                    apiKey = trimmedKey
+                    apiKey = trimmedKey,
+                    chunkConfig = chunkConfig
                 )
                 translated.forEach { (source, value) ->
                     cueTranslationCache[cueCacheKey(source, normalizedTarget)] = value
@@ -179,19 +203,24 @@ class GeminiSubtitleTranslationService @Inject constructor(
     private suspend fun translateBlocks(
         blocks: List<TranslatableTimedTextBlock>,
         targetLanguageCode: String,
-        apiKey: String
+        apiKey: String,
+        chunkConfig: GeminiTranslationChunkConfig = DEFAULT_CUE_CHUNK_CONFIG
     ): Map<Int, String> = coroutineScope {
-        val chunks = chunkBlocks(blocks)
+        val chunks = chunkBlocks(blocks, chunkConfig)
         val targetLanguageName = displayLanguage(targetLanguageCode)
+        val gate = Semaphore(chunkConfig.maxParallelRequests.coerceAtLeast(1))
 
         chunks.map { chunk ->
             async(Dispatchers.IO) {
-                requestChunkTranslation(
-                    blocks = chunk,
-                    targetLanguageCode = targetLanguageCode,
-                    targetLanguageName = targetLanguageName,
-                    apiKey = apiKey
-                )
+                gate.withPermit {
+                    requestChunkTranslationAdaptive(
+                        blocks = chunk,
+                        targetLanguageCode = targetLanguageCode,
+                        targetLanguageName = targetLanguageName,
+                        apiKey = apiKey,
+                        chunkConfig = chunkConfig
+                    )
+                }
             }
         }.awaitAll()
             .fold(mutableMapOf<Int, String>()) { acc, entries ->
@@ -199,14 +228,17 @@ class GeminiSubtitleTranslationService @Inject constructor(
             }
     }
 
-    private fun chunkBlocks(blocks: List<TranslatableTimedTextBlock>): List<List<TranslatableTimedTextBlock>> {
+    private fun chunkBlocks(
+        blocks: List<TranslatableTimedTextBlock>,
+        chunkConfig: GeminiTranslationChunkConfig
+    ): List<List<TranslatableTimedTextBlock>> {
         val result = mutableListOf<List<TranslatableTimedTextBlock>>()
         var current = mutableListOf<TranslatableTimedTextBlock>()
         var currentChars = 0
 
         for (block in blocks) {
             val nextChars = currentChars + block.text.length
-            if (current.isNotEmpty() && (current.size >= MAX_CHUNK_ENTRIES || nextChars > MAX_CHUNK_CHARS)) {
+            if (current.isNotEmpty() && (current.size >= chunkConfig.maxEntries || nextChars > chunkConfig.maxChars)) {
                 result += current.toList()
                 current = mutableListOf()
                 currentChars = 0
@@ -220,6 +252,41 @@ class GeminiSubtitleTranslationService @Inject constructor(
         }
 
         return result
+    }
+
+    private fun requestChunkTranslationAdaptive(
+        blocks: List<TranslatableTimedTextBlock>,
+        targetLanguageCode: String,
+        targetLanguageName: String,
+        apiKey: String,
+        chunkConfig: GeminiTranslationChunkConfig
+    ): Map<Int, String> {
+        return runCatching {
+            requestChunkTranslation(
+                blocks = blocks,
+                targetLanguageCode = targetLanguageCode,
+                targetLanguageName = targetLanguageName,
+                apiKey = apiKey
+            )
+        }.getOrElse { error ->
+            if (blocks.size <= chunkConfig.minSplitEntries || blocks.size <= 1) {
+                throw error
+            }
+            val midpoint = blocks.size / 2
+            requestChunkTranslationAdaptive(
+                blocks = blocks.take(midpoint),
+                targetLanguageCode = targetLanguageCode,
+                targetLanguageName = targetLanguageName,
+                apiKey = apiKey,
+                chunkConfig = chunkConfig
+            ) + requestChunkTranslationAdaptive(
+                blocks = blocks.drop(midpoint),
+                targetLanguageCode = targetLanguageCode,
+                targetLanguageName = targetLanguageName,
+                apiKey = apiKey,
+                chunkConfig = chunkConfig
+            )
+        }
     }
 
     private fun requestChunkTranslation(
@@ -253,7 +320,8 @@ class GeminiSubtitleTranslationService @Inject constructor(
     private suspend fun translateMissingCueTexts(
         texts: List<String>,
         targetLanguageCode: String,
-        apiKey: String
+        apiKey: String,
+        chunkConfig: GeminiTranslationChunkConfig
     ): Map<String, String> = coroutineScope {
         val targetLanguageName = displayLanguage(targetLanguageCode)
         val blocks = texts.mapIndexed { index, text ->
@@ -263,15 +331,19 @@ class GeminiSubtitleTranslationService @Inject constructor(
                 text = text
             )
         }
-        val chunks = chunkBlocks(blocks)
+        val chunks = chunkBlocks(blocks, chunkConfig)
+        val gate = Semaphore(chunkConfig.maxParallelRequests.coerceAtLeast(1))
         val translatedByIndex = chunks.map { chunk ->
             async(Dispatchers.IO) {
-                requestChunkTranslation(
-                    blocks = chunk,
-                    targetLanguageCode = targetLanguageCode,
-                    targetLanguageName = targetLanguageName,
-                    apiKey = apiKey
-                )
+                gate.withPermit {
+                    requestChunkTranslationAdaptive(
+                        blocks = chunk,
+                        targetLanguageCode = targetLanguageCode,
+                        targetLanguageName = targetLanguageName,
+                        apiKey = apiKey,
+                        chunkConfig = chunkConfig
+                    )
+                }
             }
         }.awaitAll().fold(mutableMapOf<Int, String>()) { acc, entries ->
             acc.apply { putAll(entries) }

@@ -579,6 +579,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             ) {
                 clearAiTranslationStateSilently()
             }
+            deactivateAddonSubtitleOverlay()
             selectSubtitleTrack(event.index)
             _uiState.update {
                 it.copy(
@@ -597,6 +598,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             pendingAddonSubtitleLanguage = null
             pendingAddonSubtitleTrackId = null
             pendingAudioSelectionAfterSubtitleRefresh = null
+            deactivateAddonSubtitleOverlay()
             disableSubtitles()
             _uiState.update { 
                 it.copy(

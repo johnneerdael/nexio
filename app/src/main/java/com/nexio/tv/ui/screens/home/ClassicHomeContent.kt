@@ -49,6 +49,7 @@ fun ClassicHomeContent(
     onNavigateToDetail: (String, String, String) -> Unit,
     onContinueWatchingClick: (ContinueWatchingItem) -> Unit,
     onContinueWatchingStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
+    onContinueWatchingManualStreamSelection: (ContinueWatchingItem) -> Unit = {},
     onNavigateToCatalogSeeAll: (String, String, String) -> Unit,
     onRemoveContinueWatching: (String, Int?, Int?, Boolean) -> Unit,
     onMarkContinueWatchingWatched: (ContinueWatchingItem) -> Unit = {},
@@ -188,6 +189,13 @@ fun ClassicHomeContent(
                         onContinueWatchingClick(item)
                     },
                     onStartFromBeginning = onContinueWatchingStartFromBeginning,
+                    showManualStreamSelection = { item ->
+                        shouldShowContinueWatchingManualStreamSelection(
+                            deterministicAutoplayEnabled = uiState.deterministicAutoplayEnabled,
+                            item = item
+                        )
+                    },
+                    onPlayWithManualStreamSelection = onContinueWatchingManualStreamSelection,
                     onMarkAsWatched = onMarkContinueWatchingWatched,
                     onCheckIn = onCheckInContinueWatching,
                     cwWatchlistMembership = cwWatchlistMembership,

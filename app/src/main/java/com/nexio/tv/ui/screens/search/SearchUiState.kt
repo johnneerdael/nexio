@@ -13,6 +13,7 @@ data class SearchUiState(
     val error: String? = null,
     val catalogRows: List<CatalogRow> = emptyList(),
     val installedAddons: List<Addon> = emptyList(),
+    val deterministicAutoplayEnabled: Boolean = false,
     val discoverEnabled: Boolean = true,
     val discoverInitialized: Boolean = false,
     val discoverLoading: Boolean = false,

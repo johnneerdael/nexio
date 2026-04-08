@@ -123,7 +123,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.delay
 
-private const val BUILT_IN_AI_SUBTITLE_OVERLAY_TAG = "built-in-ai-subtitle-overlay"
+private const val EXTERNAL_SUBTITLE_OVERLAY_TAG = "external-subtitle-overlay"
 
 private fun applySubtitleStyle(
     subtitleView: SubtitleView,
@@ -172,15 +172,15 @@ private fun applySubtitleStyle(
     }
 }
 
-private fun PlayerView.ensureBuiltInAiSubtitleOverlay(): SubtitleView? {
+private fun PlayerView.ensureExternalSubtitleOverlay(): SubtitleView? {
     val overlayFrameLayout = overlayFrameLayout ?: return null
-    val existing = overlayFrameLayout.findViewWithTag<SubtitleView>(BUILT_IN_AI_SUBTITLE_OVERLAY_TAG)
+    val existing = overlayFrameLayout.findViewWithTag<SubtitleView>(EXTERNAL_SUBTITLE_OVERLAY_TAG)
     if (existing != null) {
         return existing
     }
 
     return SubtitleView(context).apply {
-        tag = BUILT_IN_AI_SUBTITLE_OVERLAY_TAG
+        tag = EXTERNAL_SUBTITLE_OVERLAY_TAG
         visibility = View.GONE
         isClickable = false
         isFocusable = false
@@ -190,20 +190,6 @@ private fun PlayerView.ensureBuiltInAiSubtitleOverlay(): SubtitleView? {
             FrameLayout.LayoutParams.MATCH_PARENT
         )
         overlayFrameLayout.addView(this)
-    }
-}
-
-private fun createBuiltInAiSubtitleOverlay(context: android.content.Context): SubtitleView {
-    return SubtitleView(context).apply {
-        tag = BUILT_IN_AI_SUBTITLE_OVERLAY_TAG
-        visibility = View.GONE
-        isClickable = false
-        isFocusable = false
-        isFocusableInTouchMode = false
-        layoutParams = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT
-        )
     }
 }
 
@@ -568,6 +554,7 @@ fun PlayerScreen(
             val resizeMode = uiState.resizeMode
             val useAiOverlay = uiState.useBuiltInAiSubtitleOverlay
             val translatedBuiltInCues = uiState.translatedBuiltInCues
+            val addonOverlayCues = uiState.addonOverlayCues
             
             AndroidView(
                 factory = { context ->
@@ -586,16 +573,19 @@ fun PlayerScreen(
                         applySubtitleStyle(defaultSubtitleView, subtitleStyle)
                     }
 
-                    val overlaySubtitleView = playerView.ensureBuiltInAiSubtitleOverlay()
+                    val overlaySubtitleView = playerView.ensureExternalSubtitleOverlay()
                     overlaySubtitleView?.let { subtitleOverlay ->
                         applySubtitleStyle(subtitleOverlay, subtitleStyle)
-                        val overlayHasTranslatedCues = useAiOverlay && translatedBuiltInCues.isNotEmpty()
-                        subtitleOverlay.visibility = if (overlayHasTranslatedCues) View.VISIBLE else View.GONE
-                        subtitleOverlay.setCues(
-                            if (overlayHasTranslatedCues) translatedBuiltInCues else emptyList<Cue>()
-                        )
+                        val overlayCues = when {
+                            addonOverlayCues.isNotEmpty() -> addonOverlayCues
+                            useAiOverlay && translatedBuiltInCues.isNotEmpty() -> translatedBuiltInCues
+                            else -> emptyList()
+                        }
+                        val overlayHasCues = overlayCues.isNotEmpty()
+                        subtitleOverlay.visibility = if (overlayHasCues) View.VISIBLE else View.GONE
+                        subtitleOverlay.setCues(overlayCues)
                         playerView.subtitleView?.visibility =
-                            if (overlayHasTranslatedCues) View.INVISIBLE else View.VISIBLE
+                            if (overlayHasCues) View.INVISIBLE else View.VISIBLE
                     }
                 },
                 modifier = Modifier.fillMaxSize()

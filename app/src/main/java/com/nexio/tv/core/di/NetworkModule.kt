@@ -25,6 +25,7 @@ import com.nexio.tv.data.remote.api.TrailerApi
 import com.nexio.tv.data.remote.api.TopPostersApi
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TorBoxApi
+import com.nexio.tv.instrumentation.PlaybackOkHttpEventListener
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import dagger.Module
@@ -156,6 +157,20 @@ object NetworkModule {
             }
             .build()
     }
+
+    /**
+     * Playback-only traced child client. This preserves the shared playback
+     * dispatcher and connection pool, but keeps OkHttp range instrumentation
+     * off the benchmark client that derives from @Named("playback").
+     */
+    @Provides
+    @Singleton
+    @Named("playbackTraced")
+    fun providePlaybackTracedOkHttpClient(
+        @Named("playback") playbackClient: OkHttpClient
+    ): OkHttpClient = playbackClient.newBuilder()
+        .eventListenerFactory(PlaybackOkHttpEventListener.FACTORY)
+        .build()
 
     @Provides
     @Singleton

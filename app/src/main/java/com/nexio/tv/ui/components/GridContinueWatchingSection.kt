@@ -44,6 +44,8 @@ fun GridContinueWatchingSection(
     cwWatchlistMembership: Map<String, Boolean> = emptyMap(),
     onToggleLibrary: ((ContinueWatchingItem) -> Unit)? = null,
     onStartFromBeginning: (ContinueWatchingItem) -> Unit = {},
+    showManualStreamSelection: (ContinueWatchingItem) -> Boolean = { false },
+    onPlayWithManualStreamSelection: (ContinueWatchingItem) -> Unit = {},
     modifier: Modifier = Modifier,
     focusedItemIndex: Int = -1
 ) {
@@ -149,6 +151,11 @@ fun GridContinueWatchingSection(
             },
             onMarkAsWatched = {
                 onMarkAsWatched(menuItem)
+                optionsItem = null
+            },
+            showManualStreamSelection = showManualStreamSelection(menuItem),
+            onPlayWithManualStreamSelection = {
+                onPlayWithManualStreamSelection(menuItem)
                 optionsItem = null
             },
             onDetails = {

@@ -373,6 +373,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     )
     
     resetLoadingOverlayForNewStream()
+    deactivateAddonSubtitleOverlay()
     backendStop()
 
     currentStreamUrl = url
@@ -698,6 +699,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     // Reset transient playback flags before stopping, so stop callbacks never
     // persist stale positions into the newly selected episode.
     resetLoadingOverlayForNewStream()
+    deactivateAddonSubtitleOverlay()
     backendStop()
 
     currentStreamUrl = url

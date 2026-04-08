@@ -34,6 +34,7 @@ import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkRuntimeState
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkService
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkSessionSummary
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkStatus
+import com.nexio.tv.instrumentation.PlaybackTraceToggle
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -610,7 +611,8 @@ class DebridSettingsViewModelTest {
         benchmarkService: DebridBenchmarkService? = null,
         configBenchmarkService: DebridConfigBenchmarkService? = null,
         playerSettingsDataStore: PlayerSettingsDataStore? = null,
-        collectorPublicDashboardLinkProvider: CollectorPublicDashboardLinkProvider? = null
+        collectorPublicDashboardLinkProvider: CollectorPublicDashboardLinkProvider? = null,
+        playbackTraceToggle: PlaybackTraceToggle? = null
     ): DebridSettingsViewModel {
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
         every { realDebridAuthDataStore.state } returns flowOf(
@@ -700,6 +702,10 @@ class DebridSettingsViewModelTest {
                     CollectorPublicDashboardLinkResult.Reason.BASE_URL_MISSING
                 )
             )
+        val resolvedPlaybackTraceToggle = playbackTraceToggle
+            ?: mockk<PlaybackTraceToggle>(relaxed = true).also {
+                every { it.enabledFlow } returns flowOf(false)
+            }
 
         return DebridSettingsViewModel(
             realDebridAuthService = mockk<RealDebridAuthService>(relaxed = true),
@@ -713,7 +719,8 @@ class DebridSettingsViewModelTest {
             playerSettingsDataStore = resolvedPlayerSettingsDataStore,
             debridBenchmarkService = resolvedBenchmarkService,
             debridConfigBenchmarkService = resolvedConfigBenchmarkService,
-            collectorPublicDashboardLinkProvider = resolvedCollectorPublicDashboardLinkProvider
+            collectorPublicDashboardLinkProvider = resolvedCollectorPublicDashboardLinkProvider,
+            playbackTraceToggle = resolvedPlaybackTraceToggle
         )
     }
 
