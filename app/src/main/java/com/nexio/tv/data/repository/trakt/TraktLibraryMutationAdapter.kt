@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository.trakt
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.nexio.tv.data.repository.TraktLibraryService
 import com.nexio.tv.data.remote.dto.trakt.TraktCreateOrUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationResponseDto
@@ -19,16 +20,17 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 import retrofit2.Response
 
 @Singleton
 class TraktLibraryMutationAdapter @Inject constructor(
-    private val executor: TraktLibraryMutationExecutor
+    private val executor: TraktLibraryMutationExecutor,
+    private val libraryServiceProvider: Provider<TraktLibraryService>
 ) : TraktMutationAdapter {
 
     private val createdListsByEnvelopeId = ConcurrentHashMap<String, TraktListSummaryDto>()
-    private val listMutationResponsesByEnvelopeId = ConcurrentHashMap<String, TraktListItemsMutationResponseDto?>()
 
     override val adapterKey: String = ADAPTER_KEY
 
@@ -51,27 +53,42 @@ class TraktLibraryMutationAdapter @Inject constructor(
         }
     }
 
-    override suspend fun reconcileSuccess(envelope: TraktMutationEnvelope) = Unit
+    override suspend fun reconcileSuccess(envelope: TraktMutationEnvelope) {
+        when (envelope.mutationKind) {
+            MUTATION_KIND_CREATE_LIST -> {
+                libraryServiceProvider.get().reconcileQueuedCreateListSuccess(
+                    provisionalKey = envelope.provisionalKey(),
+                    createdList = createdListsByEnvelopeId.remove(envelope.id)
+                )
+            }
+
+            else -> Unit
+        }
+    }
 
     override suspend fun rollbackToServerTruth(
         envelope: TraktMutationEnvelope,
         failure: TraktMutationSettlement.TerminalFailure
-    ) = Unit
-
-    fun consumeCreatedListSummary(envelopeId: String): TraktListSummaryDto? {
-        return createdListsByEnvelopeId.remove(envelopeId)
-    }
-
-    fun consumeListMutationResponse(envelopeId: String): TraktListItemsMutationResponseDto? {
-        return listMutationResponsesByEnvelopeId.remove(envelopeId)
+    ) {
+        val service = libraryServiceProvider.get()
+        val provisionalKey = envelope.provisionalKeyOrNull()
+        if (provisionalKey != null) {
+            service.rollbackQueuedLibraryMutation(
+                rollbackState = envelope.rollbackState(),
+                provisionalKeyToRemove = provisionalKey
+            )
+        } else {
+            service.refreshNow()
+        }
     }
 
     private suspend fun executeCreateList(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
         return executeMutation(
             envelope = envelope,
             failureLabel = "create list",
-            captureBody = { summary: TraktListSummaryDto? ->
+            successValidator = { summary ->
                 summary?.let { createdListsByEnvelopeId[envelope.id] = it }
+                summary?.ids?.trakt != null || !summary?.ids?.slug.isNullOrBlank()
             }
         ) {
             executor.createUserList(
@@ -113,9 +130,7 @@ class TraktLibraryMutationAdapter @Inject constructor(
         return executeMutation(
             envelope = envelope,
             failureLabel = "add to watchlist",
-            captureBody = { response: TraktListItemsMutationResponseDto? ->
-                listMutationResponsesByEnvelopeId[envelope.id] = response
-            }
+            successValidator = ::isSuccessfulAddResponse
         ) {
             executor.addToWatchlist(envelope.listItemsBody())
         }
@@ -131,9 +146,7 @@ class TraktLibraryMutationAdapter @Inject constructor(
         return executeMutation(
             envelope = envelope,
             failureLabel = "add to list",
-            captureBody = { response: TraktListItemsMutationResponseDto? ->
-                listMutationResponsesByEnvelopeId[envelope.id] = response
-            }
+            successValidator = ::isSuccessfulAddResponse
         ) {
             executor.addUserListItems(
                 id = ME_PATH,
@@ -163,15 +176,21 @@ class TraktLibraryMutationAdapter @Inject constructor(
     private suspend fun <T> executeMutation(
         envelope: TraktMutationEnvelope? = null,
         failureLabel: String,
-        captureBody: ((T?) -> Unit)? = null,
+        successValidator: ((T?) -> Boolean)? = null,
         request: suspend () -> Response<T>?
     ): TraktMutationExecutionResult {
         val response = request() ?: return failed("Trakt request failed")
-        captureBody?.invoke(response.body())
-        return response.toExecutionResult(failureLabel, envelope?.mutationKind)
+        val body = response.body()
+        if (response.isSuccessful && successValidator != null && !successValidator(body)) {
+            return failed("Failed to $failureLabel (${response.code()})", response.code())
+        }
+        return response.toExecutionResult(
+            failureLabel = failureLabel,
+            mutationKind = envelope?.mutationKind
+        )
     }
 
-    private fun Response<*>.toExecutionResult(
+    private fun <T> Response<T>.toExecutionResult(
         failureLabel: String,
         mutationKind: String? = null
     ): TraktMutationExecutionResult {
@@ -184,9 +203,18 @@ class TraktLibraryMutationAdapter @Inject constructor(
         }
     }
 
+    private fun isSuccessfulAddResponse(body: TraktListItemsMutationResponseDto?): Boolean {
+        val added = body?.added
+        val existing = body?.existing
+        val addCount = (added?.movies ?: 0) + (added?.shows ?: 0) + (added?.seasons ?: 0) + (added?.episodes ?: 0)
+        val existingCount = (existing?.movies ?: 0) + (existing?.shows ?: 0) + (existing?.seasons ?: 0) + (existing?.episodes ?: 0)
+        return addCount > 0 || existingCount > 0
+    }
+
     companion object {
         private const val PAYLOAD_LIST_ID = "listId"
         private const val PAYLOAD_BODY = "body"
+        private const val METADATA_PROVISIONAL_KEY = "provisionalKey"
 
         const val ADAPTER_KEY = "library"
         const val MUTATION_KIND_CREATE_LIST = "library.list.create"
@@ -200,20 +228,47 @@ class TraktLibraryMutationAdapter @Inject constructor(
         private val gson = Gson()
 
         fun buildCreateListEnvelope(
+            provisionalKey: String,
             body: TraktCreateOrUpdateListRequestDto
+        ): TraktMutationEnvelope {
+            return buildCreateListEnvelope(
+                provisionalKey = provisionalKey,
+                body = body,
+                rollbackState = TraktLibraryService.LibraryRollbackState()
+            )
+        }
+
+        fun buildCreateListEnvelope(
+            provisionalKey: String,
+            body: TraktCreateOrUpdateListRequestDto,
+            rollbackState: TraktLibraryService.LibraryRollbackState
         ): TraktMutationEnvelope {
             return TraktMutationEnvelope(
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_CREATE_LIST,
                 priority = TraktMutationPriorityBucket.WATCHLIST,
                 collapseKey = "library:create:${body.name.orEmpty()}",
-                payload = JsonObject().apply { add(PAYLOAD_BODY, gson.toJsonTree(body)) }
+                payload = JsonObject().apply { add(PAYLOAD_BODY, gson.toJsonTree(body)) },
+                rollbackPayload = gson.toJsonTree(rollbackState).asJsonObject,
+                metadata = JsonObject().apply { addProperty(METADATA_PROVISIONAL_KEY, provisionalKey) }
             )
         }
 
         fun buildUpdateListEnvelope(
             listId: String,
             body: TraktCreateOrUpdateListRequestDto
+        ): TraktMutationEnvelope {
+            return buildUpdateListEnvelope(
+                listId = listId,
+                body = body,
+                rollbackState = TraktLibraryService.LibraryRollbackState()
+            )
+        }
+
+        fun buildUpdateListEnvelope(
+            listId: String,
+            body: TraktCreateOrUpdateListRequestDto,
+            rollbackState: TraktLibraryService.LibraryRollbackState
         ): TraktMutationEnvelope {
             return TraktMutationEnvelope(
                 adapterKey = ADAPTER_KEY,
@@ -223,22 +278,46 @@ class TraktLibraryMutationAdapter @Inject constructor(
                 payload = JsonObject().apply {
                     addProperty(PAYLOAD_LIST_ID, listId)
                     add(PAYLOAD_BODY, gson.toJsonTree(body))
-                }
+                },
+                rollbackPayload = gson.toJsonTree(rollbackState).asJsonObject
             )
         }
 
         fun buildDeleteListEnvelope(listId: String): TraktMutationEnvelope {
+            return buildDeleteListEnvelope(
+                listId = listId,
+                rollbackState = TraktLibraryService.LibraryRollbackState()
+            )
+        }
+
+        fun buildDeleteListEnvelope(
+            listId: String,
+            rollbackState: TraktLibraryService.LibraryRollbackState
+        ): TraktMutationEnvelope {
             return TraktMutationEnvelope(
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_DELETE_LIST,
                 priority = TraktMutationPriorityBucket.LISTS,
                 collapseKey = "library:list:$listId",
-                payload = JsonObject().apply { addProperty(PAYLOAD_LIST_ID, listId) }
+                payload = JsonObject().apply {
+                    addProperty(PAYLOAD_LIST_ID, listId)
+                },
+                rollbackPayload = gson.toJsonTree(rollbackState).asJsonObject
             )
         }
 
         fun buildReorderListsEnvelope(
             rank: List<Long>
+        ): TraktMutationEnvelope {
+            return buildReorderListsEnvelope(
+                rank = rank,
+                rollbackState = TraktLibraryService.LibraryRollbackState()
+            )
+        }
+
+        fun buildReorderListsEnvelope(
+            rank: List<Long>,
+            rollbackState: TraktLibraryService.LibraryRollbackState
         ): TraktMutationEnvelope {
             return TraktMutationEnvelope(
                 adapterKey = ADAPTER_KEY,
@@ -247,36 +326,86 @@ class TraktLibraryMutationAdapter @Inject constructor(
                 collapseKey = "library:reorder",
                 payload = JsonObject().apply {
                     add(PAYLOAD_BODY, gson.toJsonTree(TraktReorderListsRequestDto(rank = rank)))
-                }
+                },
+                rollbackPayload = gson.toJsonTree(rollbackState).asJsonObject
             )
         }
 
-        fun buildWatchlistAddEnvelope(body: TraktListItemsMutationRequestDto): TraktMutationEnvelope {
-            return buildItemEnvelope(MUTATION_KIND_WATCHLIST_ADD, "library:watchlist", body)
+        fun buildWatchlistAddEnvelope(
+            body: TraktListItemsMutationRequestDto
+        ): TraktMutationEnvelope {
+            return buildWatchlistAddEnvelope(
+                body = body,
+                rollbackState = TraktLibraryService.LibraryRollbackState()
+            )
         }
 
-        fun buildWatchlistRemoveEnvelope(body: TraktListItemsMutationRequestDto): TraktMutationEnvelope {
-            return buildItemEnvelope(MUTATION_KIND_WATCHLIST_REMOVE, "library:watchlist", body)
+        fun buildWatchlistAddEnvelope(
+            body: TraktListItemsMutationRequestDto,
+            rollbackState: TraktLibraryService.LibraryRollbackState
+        ): TraktMutationEnvelope {
+            return buildItemEnvelope(MUTATION_KIND_WATCHLIST_ADD, "library:watchlist", body, rollbackState = rollbackState)
+        }
+
+        fun buildWatchlistRemoveEnvelope(
+            body: TraktListItemsMutationRequestDto
+        ): TraktMutationEnvelope {
+            return buildWatchlistRemoveEnvelope(
+                body = body,
+                rollbackState = TraktLibraryService.LibraryRollbackState()
+            )
+        }
+
+        fun buildWatchlistRemoveEnvelope(
+            body: TraktListItemsMutationRequestDto,
+            rollbackState: TraktLibraryService.LibraryRollbackState
+        ): TraktMutationEnvelope {
+            return buildItemEnvelope(MUTATION_KIND_WATCHLIST_REMOVE, "library:watchlist", body, rollbackState = rollbackState)
         }
 
         fun buildListAddEnvelope(
             listId: String,
             body: TraktListItemsMutationRequestDto
         ): TraktMutationEnvelope {
-            return buildItemEnvelope(MUTATION_KIND_LIST_ADD, "library:list:$listId", body, listId)
+            return buildListAddEnvelope(
+                listId = listId,
+                body = body,
+                rollbackState = TraktLibraryService.LibraryRollbackState()
+            )
+        }
+
+        fun buildListAddEnvelope(
+            listId: String,
+            body: TraktListItemsMutationRequestDto,
+            rollbackState: TraktLibraryService.LibraryRollbackState
+        ): TraktMutationEnvelope {
+            return buildItemEnvelope(MUTATION_KIND_LIST_ADD, "library:list:$listId", body, rollbackState, listId)
         }
 
         fun buildListRemoveEnvelope(
             listId: String,
             body: TraktListItemsMutationRequestDto
         ): TraktMutationEnvelope {
-            return buildItemEnvelope(MUTATION_KIND_LIST_REMOVE, "library:list:$listId", body, listId)
+            return buildListRemoveEnvelope(
+                listId = listId,
+                body = body,
+                rollbackState = TraktLibraryService.LibraryRollbackState()
+            )
+        }
+
+        fun buildListRemoveEnvelope(
+            listId: String,
+            body: TraktListItemsMutationRequestDto,
+            rollbackState: TraktLibraryService.LibraryRollbackState
+        ): TraktMutationEnvelope {
+            return buildItemEnvelope(MUTATION_KIND_LIST_REMOVE, "library:list:$listId", body, rollbackState, listId)
         }
 
         private fun buildItemEnvelope(
             kind: String,
             collapseKey: String,
             body: TraktListItemsMutationRequestDto,
+            rollbackState: TraktLibraryService.LibraryRollbackState,
             listId: String? = null
         ): TraktMutationEnvelope {
             return TraktMutationEnvelope(
@@ -287,7 +416,8 @@ class TraktLibraryMutationAdapter @Inject constructor(
                 payload = JsonObject().apply {
                     listId?.let { addProperty(PAYLOAD_LIST_ID, it) }
                     add(PAYLOAD_BODY, gson.toJsonTree(body))
-                }
+                },
+                rollbackPayload = gson.toJsonTree(rollbackState).asJsonObject
             )
         }
 
@@ -306,6 +436,22 @@ class TraktLibraryMutationAdapter @Inject constructor(
 
         private fun TraktMutationEnvelope.listItemsBody(): TraktListItemsMutationRequestDto {
             return gson.fromJson(payload.get(PAYLOAD_BODY), TraktListItemsMutationRequestDto::class.java)
+        }
+
+        private fun TraktMutationEnvelope.rollbackState(): TraktLibraryService.LibraryRollbackState {
+            return gson.fromJson(
+                rollbackPayload ?: JsonObject(),
+                TraktLibraryService.LibraryRollbackState::class.java
+            ) ?: TraktLibraryService.LibraryRollbackState()
+        }
+
+        private fun TraktMutationEnvelope.provisionalKey(): String {
+            return metadata.get(METADATA_PROVISIONAL_KEY)?.asString
+                ?: error("Missing provisional key metadata")
+        }
+
+        private fun TraktMutationEnvelope.provisionalKeyOrNull(): String? {
+            return metadata.get(METADATA_PROVISIONAL_KEY)?.asString
         }
 
         private const val ME_PATH = "me"

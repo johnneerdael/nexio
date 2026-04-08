@@ -61,8 +61,6 @@ class TraktLibraryServiceTest {
         val service = TraktLibraryService(
             traktApi = traktApi,
             traktAuthService = traktAuthService,
-            traktLibraryMutationExecutor = traktLibraryMutationExecutor,
-            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -127,8 +125,6 @@ class TraktLibraryServiceTest {
         val service = TraktLibraryService(
             traktApi = traktApi,
             traktAuthService = traktAuthService,
-            traktLibraryMutationExecutor = traktLibraryMutationExecutor,
-            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -193,8 +189,6 @@ class TraktLibraryServiceTest {
         service = TraktLibraryService(
             traktApi = traktApi,
             traktAuthService = traktAuthService,
-            traktLibraryMutationExecutor = traktLibraryMutationExecutor,
-            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -235,8 +229,6 @@ class TraktLibraryServiceTest {
         val service = TraktLibraryService(
             traktApi = traktApi,
             traktAuthService = traktAuthService,
-            traktLibraryMutationExecutor = traktLibraryMutationExecutor,
-            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -251,6 +243,102 @@ class TraktLibraryServiceTest {
         val items = service.observeAllItems().first()
         assertEquals(listOf("tt1234567", "tmdb:321"), items.map { it.id })
         assertTrue(items.first().poster == "https://image.test/watchlist/poster.jpg")
+    }
+
+    @Test
+    fun `create personal list persists provisional tab before Trakt settlement`() = runTest {
+        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktAuthService = mockk<TraktAuthService>(relaxed = true)
+        val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>()
+        val metaRepository = mockk<MetaRepository>(relaxed = true)
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val snapshotStore = mockk<TraktLibrarySnapshotStore>(relaxed = true)
+        var persistedSnapshot: TraktLibrarySnapshotStore.Snapshot? = samplePersistedSnapshot()
+
+        every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
+        every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
+        every { snapshotStore.read() } answers { persistedSnapshot }
+        every { snapshotStore.write(any()) } answers { persistedSnapshot = firstArg() }
+        coEvery { traktMutationOutboxCoordinator.enqueueAndDrain(any()) } answers { firstArg() }
+
+        val service = TraktLibraryService(
+            traktApi = traktApi,
+            traktAuthService = traktAuthService,
+            traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
+            metaRepository = metaRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            traktAuthDataStore = traktAuthDataStore,
+            snapshotStore = snapshotStore
+        )
+
+        advanceUntilIdle()
+        service.createPersonalList(
+            name = "Queued List",
+            description = "stale-safe",
+            privacy = com.nexio.tv.domain.model.TraktListPrivacy.PRIVATE
+        )
+        advanceUntilIdle()
+
+        val tabs = service.observeListTabs().first()
+        assertTrue(tabs.any { it.key.startsWith("personal:pending:") && it.title == "Queued List" })
+        verify(atLeast = 1) { snapshotStore.write(any()) }
+        coVerify(exactly = 1) { traktMutationOutboxCoordinator.enqueueAndDrain(any()) }
+        coVerify(exactly = 0) { traktAuthService.executeAuthorizedRequest<Any?>(any()) }
+    }
+
+    @Test
+    fun `create personal list success reconciles provisional tab in place`() = runTest {
+        val traktApi = mockk<com.nexio.tv.data.remote.api.TraktApi>()
+        val traktAuthService = mockk<TraktAuthService>(relaxed = true)
+        val traktMutationOutboxCoordinator = mockk<com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator>()
+        val metaRepository = mockk<MetaRepository>(relaxed = true)
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val traktAuthDataStore = mockk<TraktAuthDataStore>()
+        val snapshotStore = mockk<TraktLibrarySnapshotStore>(relaxed = true)
+        var persistedSnapshot: TraktLibrarySnapshotStore.Snapshot? = samplePersistedSnapshot()
+
+        every { debugSettingsDataStore.diskFirstHomeStartupEnabled } returns flowOf(false)
+        every { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
+        every { snapshotStore.read() } answers { persistedSnapshot }
+        every { snapshotStore.write(any()) } answers { persistedSnapshot = firstArg() }
+        coEvery { traktMutationOutboxCoordinator.enqueueAndDrain(any()) } answers { firstArg() }
+
+        val service = TraktLibraryService(
+            traktApi = traktApi,
+            traktAuthService = traktAuthService,
+            traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
+            metaRepository = metaRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            traktAuthDataStore = traktAuthDataStore,
+            snapshotStore = snapshotStore
+        )
+
+        advanceUntilIdle()
+        service.createPersonalList(
+            name = "Queued List",
+            description = "desc",
+            privacy = com.nexio.tv.domain.model.TraktListPrivacy.PUBLIC
+        )
+        advanceUntilIdle()
+
+        val provisionalKey = service.observeListTabs().first().first { it.key.startsWith("personal:pending:") }.key
+        service.reconcileQueuedCreateListSuccess(
+            provisionalKey = provisionalKey,
+            createdList = TraktListSummaryDto(
+                name = "Queued List",
+                description = "desc",
+                privacy = "public",
+                type = "personal",
+                ids = TraktListIdsDto(trakt = 999L, slug = "queued-list")
+            )
+        )
+        advanceUntilIdle()
+
+        val tabs = service.observeListTabs().first()
+        assertTrue(tabs.none { it.key == provisionalKey })
+        assertEquals(1, tabs.count { it.key == "personal:999" })
+        assertTrue(tabs.any { it.key == "personal:999" && it.slug == "queued-list" })
     }
 
     @Test
@@ -302,8 +390,6 @@ class TraktLibraryServiceTest {
         service = TraktLibraryService(
             traktApi = traktApi,
             traktAuthService = traktAuthService,
-            traktLibraryMutationExecutor = traktLibraryMutationExecutor,
-            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -342,8 +428,6 @@ class TraktLibraryServiceTest {
         val service = TraktLibraryService(
             traktApi = traktApi,
             traktAuthService = traktAuthService,
-            traktLibraryMutationExecutor = traktLibraryMutationExecutor,
-            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -390,8 +474,6 @@ class TraktLibraryServiceTest {
         val service = TraktLibraryService(
             traktApi = traktApi,
             traktAuthService = traktAuthService,
-            traktLibraryMutationExecutor = traktLibraryMutationExecutor,
-            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -498,8 +580,6 @@ class TraktLibraryServiceTest {
         val service = TraktLibraryService(
             traktApi = traktApi,
             traktAuthService = traktAuthService,
-            traktLibraryMutationExecutor = traktLibraryMutationExecutor,
-            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
@@ -587,8 +667,6 @@ class TraktLibraryServiceTest {
         val service = TraktLibraryService(
             traktApi = traktApi,
             traktAuthService = traktAuthService,
-            traktLibraryMutationExecutor = traktLibraryMutationExecutor,
-            traktLibraryMutationAdapter = traktLibraryMutationAdapter,
             traktMutationOutboxCoordinator = traktMutationOutboxCoordinator,
             metaRepository = metaRepository,
             debugSettingsDataStore = debugSettingsDataStore,
