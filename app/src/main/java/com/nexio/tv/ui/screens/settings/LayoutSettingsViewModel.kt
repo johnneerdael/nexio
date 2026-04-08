@@ -44,7 +44,6 @@ data class LayoutSettingsUiState(
     val blurUnwatchedEpisodes: Boolean = false,
     val detailPageTrailerButtonEnabled: Boolean = false,
     val preferExternalMetaAddonDetail: Boolean = false,
-    val hideUnreleasedContent: Boolean = false,
     val diskFirstHomeStartupEnabled: Boolean = true
 )
 
@@ -79,7 +78,6 @@ sealed class LayoutSettingsEvent {
     data class SetBlurUnwatchedEpisodes(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetDetailPageTrailerButtonEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetPreferExternalMetaAddonDetail(val enabled: Boolean) : LayoutSettingsEvent()
-    data class SetHideUnreleasedContent(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetDiskFirstHomeStartupEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data object ResetPosterCardStyle : LayoutSettingsEvent()
 }
@@ -226,11 +224,6 @@ class LayoutSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            layoutPreferenceDataStore.hideUnreleasedContent.distinctUntilChanged().collectLatest { enabled ->
-                updateUiStateIfChanged { it.copy(hideUnreleasedContent = enabled) }
-            }
-        }
-        viewModelScope.launch {
             debugSettingsDataStore.diskFirstHomeStartupEnabled.distinctUntilChanged().collectLatest { enabled ->
                 updateUiStateIfChanged { it.copy(diskFirstHomeStartupEnabled = enabled) }
             }
@@ -262,7 +255,6 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetBlurUnwatchedEpisodes -> setBlurUnwatchedEpisodes(event.enabled)
             is LayoutSettingsEvent.SetDetailPageTrailerButtonEnabled -> setDetailPageTrailerButtonEnabled(event.enabled)
             is LayoutSettingsEvent.SetPreferExternalMetaAddonDetail -> setPreferExternalMetaAddonDetail(event.enabled)
-            is LayoutSettingsEvent.SetHideUnreleasedContent -> setHideUnreleasedContent(event.enabled)
             is LayoutSettingsEvent.SetDiskFirstHomeStartupEnabled -> setDiskFirstHomeStartupEnabled(event.enabled)
             LayoutSettingsEvent.ResetPosterCardStyle -> resetPosterCardStyle()
         }
@@ -428,13 +420,6 @@ class LayoutSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.setPreferExternalMetaAddonDetail(enabled)
             metaRepository.clearCache()
-        }
-    }
-
-    private fun setHideUnreleasedContent(enabled: Boolean) {
-        if (_uiState.value.hideUnreleasedContent == enabled) return
-        viewModelScope.launch {
-            layoutPreferenceDataStore.setHideUnreleasedContent(enabled)
         }
     }
 

@@ -1008,7 +1008,6 @@ class MetaDetailsSeasonMediaViewModelTest {
         val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>()
         every { layoutPreferenceDataStore.detailPageTrailerButtonEnabled } returns flowOf(true)
         every { layoutPreferenceDataStore.preferExternalMetaAddonDetail } returns flowOf(false)
-        every { layoutPreferenceDataStore.hideUnreleasedContent } returns flowOf(false)
         every { layoutPreferenceDataStore.blurUnwatchedEpisodes } returns flowOf(false)
 
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()

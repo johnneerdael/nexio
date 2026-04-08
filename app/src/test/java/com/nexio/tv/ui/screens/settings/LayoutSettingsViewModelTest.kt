@@ -116,7 +116,6 @@ class LayoutSettingsViewModelTest {
         every { layoutPreferenceDataStore.blurUnwatchedEpisodes } returns flowOf(false)
         every { layoutPreferenceDataStore.detailPageTrailerButtonEnabled } returns flowOf(false)
         every { layoutPreferenceDataStore.preferExternalMetaAddonDetail } returns flowOf(false)
-        every { layoutPreferenceDataStore.hideUnreleasedContent } returns flowOf(false)
         every { layoutPreferenceDataStore.trailerScreensaverEnabled } returns trailerScreensaverEnabled
     }
 }

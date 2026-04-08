@@ -1039,7 +1039,6 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val currentGridItems = currentState.gridItems
     val continueWatchingItems = currentState.continueWatchingItems
     val heroSectionEnabled = currentState.heroSectionEnabled
-    val hideUnreleased = currentState.hideUnreleasedContent
     val traktSnapshot = traktDiscoverySnapshot
     val traktPrefs = traktCatalogPreferences
     val mdbListSnapshot = mdbListDiscoverySnapshot
@@ -1122,7 +1121,6 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             heroCatalogKeys = heroCatalogKeys,
             currentLayout = currentLayout,
             heroSectionEnabled = heroSectionEnabled,
-            hideUnreleased = hideUnreleased,
             continueWatchingItems = continueWatchingItems,
             traktSnapshot = effectiveTraktSnapshot,
             traktPrefs = traktPrefs,
@@ -1186,14 +1184,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
                 syntheticRowsByKey[key]?.let { addAll(it) } ?: rawRowsByKey[key]?.let { add(it) }
             }
         }
-        val liveOrderedRows = if (hideUnreleased) {
-            val today = LocalDate.now()
-            combinedRows.map { row ->
-                if (row.addonId == TRAKT_RAIL_ADDON_ID) row else row.filterReleasedItems(today)
-            }
-        } else {
-            combinedRows
-        }
+        val liveOrderedRows = combinedRows
 
         val preservationState = CachedHomePreservationState(
             preserveAddonRows = hasPersistedCatalogSnapshot &&
@@ -1592,7 +1583,6 @@ private fun buildCatalogComputationSignature(
     heroCatalogKeys: List<String>,
     currentLayout: HomeLayout,
     heroSectionEnabled: Boolean,
-    hideUnreleased: Boolean,
     continueWatchingItems: List<ContinueWatchingItem>,
     traktSnapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot,
     traktPrefs: TraktCatalogPreferences,
@@ -1613,7 +1603,6 @@ private fun buildCatalogComputationSignature(
     signature = (signature * 31) + heroCatalogKeys.hashCode()
     signature = (signature * 31) + currentLayout.hashCode()
     signature = (signature * 31) + heroSectionEnabled.hashCode()
-    signature = (signature * 31) + hideUnreleased.hashCode()
     signature = (signature * 31) + continueWatchingItems.hashCode()
     signature = (signature * 31) + traktSnapshot.hashCode()
     signature = (signature * 31) + traktPrefs.hashCode()

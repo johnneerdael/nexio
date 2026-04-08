@@ -280,8 +280,15 @@ private val parallelConnectionCountMigrationKey =
     intPreferencesKey("parallel_connection_count")
 private val migrationPreferredAudioOriginalEnabledKey =
     booleanPreferencesKey("migration_preferred_audio_original_enabled")
+private val migrationLegacyStreamAutoplaySelectionRetiredEnabledKey =
+    booleanPreferencesKey("migration_legacy_stream_autoplay_selection_retired_enabled")
 private val preferredAudioLanguageMigrationKey =
     stringPreferencesKey("preferred_audio_language")
+private val streamAutoPlayModeMigrationKey = stringPreferencesKey("stream_auto_play_mode")
+private val streamAutoPlaySourceMigrationKey = stringPreferencesKey("stream_auto_play_source")
+private val streamAutoPlaySelectedAddonsMigrationKey =
+    stringSetPreferencesKey("stream_auto_play_selected_addons")
+private val streamAutoPlayRegexMigrationKey = stringPreferencesKey("stream_auto_play_regex")
 
 internal fun applyPlayerSettingsMigrations(prefs: MutablePreferences) {
     val streamSelectionDefaultsEnabled =
@@ -303,6 +310,17 @@ internal fun applyPlayerSettingsMigrations(prefs: MutablePreferences) {
     if (!preferredAudioOriginalEnabled) {
         prefs[preferredAudioLanguageMigrationKey] = AudioLanguageOption.ORIGINAL
         prefs[migrationPreferredAudioOriginalEnabledKey] = true
+    }
+
+    val legacyStreamAutoplaySelectionRetired =
+        prefs[migrationLegacyStreamAutoplaySelectionRetiredEnabledKey] ?: false
+    if (!legacyStreamAutoplaySelectionRetired) {
+        // Legacy stream auto-selection is retired from UX in favor of deterministic autoplay.
+        prefs[streamAutoPlayModeMigrationKey] = StreamAutoPlayMode.MANUAL.name
+        prefs[streamAutoPlaySourceMigrationKey] = StreamAutoPlaySource.ALL_SOURCES.name
+        prefs.remove(streamAutoPlaySelectedAddonsMigrationKey)
+        prefs.remove(streamAutoPlayRegexMigrationKey)
+        prefs[migrationLegacyStreamAutoplaySelectionRetiredEnabledKey] = true
     }
 }
 
