@@ -19,7 +19,6 @@ import com.nexio.tv.data.remote.dto.trakt.TraktCreateOrUpdateListRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationRequestDto
-import com.nexio.tv.data.remote.dto.trakt.TraktListItemsMutationResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListMovieRequestItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListShowRequestItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktListSummaryDto
@@ -822,14 +821,6 @@ class TraktLibraryService @Inject constructor(
             imdb = item.imdbId ?: parsed.imdb,
             tmdb = item.tmdbId ?: parsed.tmdb
         )
-    }
-
-    private fun isSuccessfulAddResponse(body: TraktListItemsMutationResponseDto?): Boolean {
-        val added = body?.added
-        val existing = body?.existing
-        val addCount = (added?.movies ?: 0) + (added?.shows ?: 0) + (added?.seasons ?: 0) + (added?.episodes ?: 0)
-        val existingCount = (existing?.movies ?: 0) + (existing?.shows ?: 0) + (existing?.seasons ?: 0) + (existing?.episodes ?: 0)
-        return addCount > 0 || existingCount > 0
     }
 
     private fun errorMessageForCode(code: Int, defaultMessage: String): String {
