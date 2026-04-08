@@ -483,15 +483,14 @@ Turn on:
 
 - **Trailer Screensaver**
 
-Optional related settings live under:
+Trailer autoplay now lives under:
 
-- **Settings → Layout → Focused Poster**
+- **Settings → Playback → General**
 
 Useful choices there:
 
-- **Autoplay Trailer**
-- **Trailer Playback Target**
-- **Mute Trailer Previews**
+- **Autoplay Trailers**
+- **Trailer Delay**
 
 This is not essential for playback quality, but it makes NEXIO feel much more polished.
 

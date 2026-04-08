@@ -10,10 +10,7 @@ import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
-import com.nexio.tv.core.util.filterReleasedItems
-import com.nexio.tv.core.util.isUnreleased
 import com.nexio.tv.domain.repository.AddonRepository
-import java.time.LocalDate
 import com.nexio.tv.domain.repository.CatalogRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -52,7 +49,6 @@ class SearchViewModel @Inject constructor(
     private var hasRenderedFirstCatalog = false
     private var pendingCatalogResponses = 0
     private var revealBatchAfterNextDiscoverFetch = false
-    private var hideUnreleasedContent = false
 
     private companion object {
         const val DISCOVER_INITIAL_LIMIT = 100
@@ -116,12 +112,6 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             layoutPreferenceDataStore.catalogTypeSuffixEnabled.collectLatest { enabled ->
                 _uiState.update { it.copy(catalogTypeSuffixEnabled = enabled) }
-            }
-        }
-        viewModelScope.launch {
-            layoutPreferenceDataStore.hideUnreleasedContent.collectLatest { enabled ->
-                hideUnreleasedContent = enabled
-                scheduleCatalogRowsUpdate()
             }
         }
     }
@@ -467,12 +457,7 @@ class SearchViewModel @Inject constructor(
     private fun updateCatalogRowsNow() {
         _uiState.update { state ->
             val orderedRows = catalogOrder.mapNotNull { key -> catalogsMap[key] }
-            val filteredRows = if (hideUnreleasedContent) {
-                val today = LocalDate.now()
-                orderedRows.map { it.filterReleasedItems(today) }
-            } else {
-                orderedRows
-            }
+            val filteredRows = orderedRows
             state.copy(
                 catalogRows = filteredRows
             )
@@ -681,12 +666,7 @@ class SearchViewModel @Inject constructor(
                         }
                         val merged = if (reset) incoming else (existing + incoming)
                         val rawDeduped = merged.distinctBy { "${it.apiType}:${it.id}" }
-                        val deduped = if (hideUnreleasedContent) {
-                            val today = LocalDate.now()
-                            rawDeduped.filterNot { it.isUnreleased(today) }
-                        } else {
-                            rawDeduped
-                        }
+                        val deduped = rawDeduped
                         val shouldRevealBatch = !reset && revealBatchAfterNextDiscoverFetch
                         val visibleLimit = if (reset) {
                             DISCOVER_INITIAL_LIMIT

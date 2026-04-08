@@ -95,4 +95,23 @@ class PlayerSettingsDataStoreMigrationTest {
     fun `player settings default audio preference is original`() {
         assertEquals(AudioLanguageOption.ORIGINAL, PlayerSettings().preferredAudioLanguage)
     }
+
+    @Test
+    fun `legacy stream autoplay selection migration resets hidden autoplay mode to manual`() {
+        val prefs = mutablePreferencesOf(
+            booleanPreferencesKey("migration_legacy_stream_autoplay_selection_retired_enabled") to false,
+            stringPreferencesKey("stream_auto_play_mode") to "REGEX_MATCH",
+            stringPreferencesKey("stream_auto_play_source") to "INSTALLED_ADDONS_ONLY",
+            stringPreferencesKey("stream_auto_play_regex") to "2160p"
+        )
+
+        applyPlayerSettingsMigrations(prefs)
+
+        assertEquals("MANUAL", prefs[stringPreferencesKey("stream_auto_play_mode")])
+        assertEquals("ALL_SOURCES", prefs[stringPreferencesKey("stream_auto_play_source")])
+        assertEquals(null, prefs[stringPreferencesKey("stream_auto_play_regex")])
+        assertTrue(
+            prefs[booleanPreferencesKey("migration_legacy_stream_autoplay_selection_retired_enabled")] == true
+        )
+    }
 }

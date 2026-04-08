@@ -141,7 +141,6 @@ class MetaDetailsViewModel @Inject constructor(
     private var trailerFetchJob: Job? = null
     private val loadingSeasonAvailability = mutableSetOf<Int>()
 
-    private var hideUnreleasedContent = false
     private var trailerHasPlayed = false
     private var isPlayButtonFocused = false
     private var currentReviewsMetaId: String? = null
@@ -163,7 +162,6 @@ class MetaDetailsViewModel @Inject constructor(
         observeWatchedEpisodes()
         observeMovieWatched()
         observeBlurUnwatchedEpisodes()
-        observeHideUnreleasedContent()
         observeEpisodeRatingsProviderChanges()
         loadMeta()
     }
@@ -257,16 +255,6 @@ class MetaDetailsViewModel @Inject constructor(
                 selectedSeasonHasPlayableTrailerMedia = cachedSeasonAvailability?.hasTrailerOrTeaser == true,
                 selectedSeasonHasPlayableRecap = cachedSeasonAvailability?.hasRecap == true
             )
-        }
-    }
-
-    private fun observeHideUnreleasedContent() {
-        viewModelScope.launch {
-            layoutPreferenceDataStore.hideUnreleasedContent
-                .distinctUntilChanged()
-                .collectLatest { enabled ->
-                    hideUnreleasedContent = enabled
-                }
         }
     }
 
@@ -739,12 +727,7 @@ class MetaDetailsViewModel @Inject constructor(
                 emptyList()
             }
 
-            val recommendations = if (hideUnreleasedContent) {
-                val today = LocalDate.now()
-                rawRecommendations.filterNot { it.isUnreleased(today) }
-            } else {
-                rawRecommendations
-            }
+            val recommendations = rawRecommendations
 
             _uiState.update { state ->
                 if (state.meta == null || state.meta.id == meta.id) {
@@ -1154,12 +1137,7 @@ class MetaDetailsViewModel @Inject constructor(
                 emptyList()
             }
 
-            val filteredItems = if (hideUnreleasedContent) {
-                val today = LocalDate.now()
-                items.filterNot { it.isUnreleased(today) }
-            } else {
-                items
-            }
+            val filteredItems = items
 
             _uiState.update { state ->
                 state.copy(collection = filteredItems, collectionName = collectionName)

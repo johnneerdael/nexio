@@ -47,7 +47,6 @@ fun buildMetaDetailsViewModel(
     val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>()
     every { layoutPreferenceDataStore.detailPageTrailerButtonEnabled } returns flowOf(false)
     every { layoutPreferenceDataStore.preferExternalMetaAddonDetail } returns flowOf(false)
-    every { layoutPreferenceDataStore.hideUnreleasedContent } returns flowOf(false)
     every { layoutPreferenceDataStore.blurUnwatchedEpisodes } returns flowOf(false)
 
     val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()

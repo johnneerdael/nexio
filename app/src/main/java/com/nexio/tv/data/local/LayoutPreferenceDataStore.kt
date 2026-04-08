@@ -29,15 +29,25 @@ private val Context.layoutPreferenceDataStore: DataStore<Preferences> by prefere
 
 private val migrationSidebarCollapsedDefaultEnabledKey =
     booleanPreferencesKey("migration_sidebar_collapsed_default_enabled")
+private val migrationHideUnreleasedDefaultEnabledKey =
+    booleanPreferencesKey("migration_hide_unreleased_default_enabled")
 private val sidebarCollapsedKey = booleanPreferencesKey("sidebar_collapsed_by_default")
 private val modernSidebarEnabledKey = booleanPreferencesKey("modern_sidebar_enabled")
 private val legacyModernSidebarEnabledKey = booleanPreferencesKey("glass_sidepanel_enabled")
+private val hideUnreleasedContentKey = booleanPreferencesKey("hide_unreleased_content")
 
 internal fun applyLayoutPreferenceMigrations(prefs: MutablePreferences) {
     val sidebarCollapseDefaultMigrated = prefs[migrationSidebarCollapsedDefaultEnabledKey] ?: false
     if (!sidebarCollapseDefaultMigrated) {
         prefs[sidebarCollapsedKey] = true
         prefs[migrationSidebarCollapsedDefaultEnabledKey] = true
+    }
+
+    val hideUnreleasedDefaultMigrated = prefs[migrationHideUnreleasedDefaultEnabledKey] ?: false
+    if (!hideUnreleasedDefaultMigrated) {
+        // This preference is retired from UX; keep unreleased titles visible by default.
+        prefs[hideUnreleasedContentKey] = false
+        prefs[migrationHideUnreleasedDefaultEnabledKey] = true
     }
 }
 
@@ -101,8 +111,6 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val blurUnwatchedEpisodesKey = booleanPreferencesKey("blur_unwatched_episodes")
     private val detailPageTrailerButtonEnabledKey = booleanPreferencesKey("detail_page_trailer_button_enabled")
     private val preferExternalMetaAddonDetailKey = booleanPreferencesKey("prefer_external_meta_addon_detail")
-    private val hideUnreleasedContentKey = booleanPreferencesKey("hide_unreleased_content")
-
     init {
         ioScope.launch {
             store().edit { prefs ->
@@ -239,10 +247,6 @@ class LayoutPreferenceDataStore @Inject constructor(
 
     val preferExternalMetaAddonDetail: Flow<Boolean> = profileFlow { prefs ->
         prefs[preferExternalMetaAddonDetailKey] ?: false
-    }
-
-    val hideUnreleasedContent: Flow<Boolean> = profileFlow { prefs ->
-        prefs[hideUnreleasedContentKey] ?: false
     }
 
     suspend fun setLayout(layout: HomeLayout) {
@@ -430,12 +434,6 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setPreferExternalMetaAddonDetail(enabled: Boolean) {
         store().edit { prefs ->
             prefs[preferExternalMetaAddonDetailKey] = enabled
-        }
-    }
-
-    suspend fun setHideUnreleasedContent(enabled: Boolean) {
-        store().edit { prefs ->
-            prefs[hideUnreleasedContentKey] = enabled
         }
     }
 

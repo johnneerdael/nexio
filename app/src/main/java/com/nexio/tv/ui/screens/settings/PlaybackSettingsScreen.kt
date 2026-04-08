@@ -154,11 +154,7 @@ fun PlaybackSettingsContent(
     var showSecondaryAudioLanguageDialog by remember { mutableStateOf(false) }
     var showDecoderPriorityDialog by remember { mutableStateOf(false) }
     var showIecPackerChannelLayoutDialog by remember { mutableStateOf(false) }
-    var showStreamAutoPlayModeDialog by remember { mutableStateOf(false) }
-    var showStreamAutoPlaySourceDialog by remember { mutableStateOf(false) }
     var showTrackingProviderDialog by remember { mutableStateOf(false) }
-    var showStreamAutoPlayAddonSelectionDialog by remember { mutableStateOf(false) }
-    var showStreamRegexDialog by remember { mutableStateOf(false) }
     var showNextEpisodeThresholdModeDialog by remember { mutableStateOf(false) }
     var showReuseLastLinkCacheDialog by remember { mutableStateOf(false) }
     var showPlayerPreferenceDialog by remember { mutableStateOf(false) }
@@ -174,11 +170,7 @@ fun PlaybackSettingsContent(
         showSecondaryAudioLanguageDialog = false
         showDecoderPriorityDialog = false
         showIecPackerChannelLayoutDialog = false
-        showStreamAutoPlayModeDialog = false
-        showStreamAutoPlaySourceDialog = false
         showTrackingProviderDialog = false
-        showStreamAutoPlayAddonSelectionDialog = false
-        showStreamRegexDialog = false
         showNextEpisodeThresholdModeDialog = false
         showReuseLastLinkCacheDialog = false
         showPlayerPreferenceDialog = false
@@ -225,8 +217,6 @@ fun PlaybackSettingsContent(
                 onShowTextColorDialog = { openDialog { showTextColorDialog = true } },
                 onShowBackgroundColorDialog = { openDialog { showBackgroundColorDialog = true } },
                 onShowOutlineColorDialog = { openDialog { showOutlineColorDialog = true } },
-                onShowStreamAutoPlayModeDialog = { openDialog { showStreamAutoPlayModeDialog = true } },
-                onShowStreamAutoPlaySourceDialog = { openDialog { showStreamAutoPlaySourceDialog = true } },
                 onShowTrackingProviderDialog = { openDialog { showTrackingProviderDialog = true } },
                 trackingProviderLabel = when (trackingProviderSelectorState.effectiveProvider) {
                     TrackingProvider.TRAKT -> stringResource(R.string.playback_tracking_provider_trakt)
@@ -234,8 +224,6 @@ fun PlaybackSettingsContent(
                 },
                 trackingProviderEnabled = trackingProviderSelectorState.canChoose,
                 trackingProviderVisible = trackingProviderSelectorState.hasAnyConfiguredProvider,
-                onShowStreamAutoPlayAddonSelectionDialog = { openDialog { showStreamAutoPlayAddonSelectionDialog = true } },
-                onShowStreamRegexDialog = { openDialog { showStreamRegexDialog = true } },
                 onShowNextEpisodeThresholdModeDialog = { openDialog { showNextEpisodeThresholdModeDialog = true } },
                 onShowReuseLastLinkCacheDialog = { openDialog { showReuseLastLinkCacheDialog = true } },
                 onSetStreamAutoPlayNextEpisodeEnabled = { enabled ->
@@ -424,10 +412,6 @@ fun PlaybackSettingsContent(
         showSecondaryAudioLanguageDialog = showSecondaryAudioLanguageDialog,
         showDecoderPriorityDialog = showDecoderPriorityDialog,
         showIecPackerChannelLayoutDialog = showIecPackerChannelLayoutDialog,
-        showStreamAutoPlayModeDialog = showStreamAutoPlayModeDialog,
-        showStreamAutoPlaySourceDialog = showStreamAutoPlaySourceDialog,
-        showStreamAutoPlayAddonSelectionDialog = showStreamAutoPlayAddonSelectionDialog,
-        showStreamRegexDialog = showStreamRegexDialog,
         showNextEpisodeThresholdModeDialog = showNextEpisodeThresholdModeDialog,
         showReuseLastLinkCacheDialog = showReuseLastLinkCacheDialog,
         onSetPlayerPreference = { preference ->
@@ -464,20 +448,8 @@ fun PlaybackSettingsContent(
         onSetIecPackerMaxPcmChannelLayout = { layout: IecPackerChannelLayout ->
             coroutineScope.launch { viewModel.setIecPackerMaxPcmChannelLayout(layout) }
         },
-        onSetStreamAutoPlayMode = { mode ->
-            coroutineScope.launch { viewModel.setStreamAutoPlayMode(mode) }
-        },
-        onSetStreamAutoPlaySource = { source ->
-            coroutineScope.launch { viewModel.setStreamAutoPlaySource(source) }
-        },
         onSetNextEpisodeThresholdMode = { mode ->
             coroutineScope.launch { viewModel.setNextEpisodeThresholdMode(mode) }
-        },
-        onSetStreamAutoPlayRegex = { regex ->
-            coroutineScope.launch { viewModel.setStreamAutoPlayRegex(regex) }
-        },
-        onSetStreamAutoPlaySelectedAddons = { selected ->
-            coroutineScope.launch { viewModel.setStreamAutoPlaySelectedAddons(selected) }
         },
         onSetReuseLastLinkCacheHours = { hours ->
             coroutineScope.launch { viewModel.setStreamReuseLastLinkCacheHours(hours) }
@@ -492,10 +464,6 @@ fun PlaybackSettingsContent(
         onDismissSecondaryAudioLanguageDialog = ::dismissAllDialogs,
         onDismissDecoderPriorityDialog = ::dismissAllDialogs,
         onDismissIecPackerChannelLayoutDialog = ::dismissAllDialogs,
-        onDismissStreamAutoPlayModeDialog = ::dismissAllDialogs,
-        onDismissStreamAutoPlaySourceDialog = ::dismissAllDialogs,
-        onDismissStreamRegexDialog = ::dismissAllDialogs,
-        onDismissStreamAutoPlayAddonSelectionDialog = ::dismissAllDialogs,
         onDismissNextEpisodeThresholdModeDialog = ::dismissAllDialogs,
         onDismissReuseLastLinkCacheDialog = ::dismissAllDialogs
     )
