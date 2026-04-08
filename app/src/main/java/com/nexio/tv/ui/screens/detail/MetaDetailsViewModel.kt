@@ -398,10 +398,15 @@ class MetaDetailsViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collectLatest { progressMap ->
                 _uiState.update { state ->
-                    if (state.episodeProgressMap == progressMap) {
+                    val updatedState = state.withEpisodeProgressSnapshot(progressMap)
+                    if (
+                        state.episodeProgressMap == updatedState.episodeProgressMap &&
+                        state.watchedEpisodes == updatedState.watchedEpisodes &&
+                        state.episodeWatchOverrides == updatedState.episodeWatchOverrides
+                    ) {
                         state
                     } else {
-                        state.copy(episodeProgressMap = progressMap)
+                        updatedState
                     }
                 }
                 // Recalculate next to watch when progress changes
@@ -422,10 +427,24 @@ class MetaDetailsViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collectLatest { watchedSet ->
                 _uiState.update { state ->
-                    if (state.watchedEpisodes == watchedSet) {
+                    val overrides = reconcileEpisodeWatchOverrides(
+                        rawWatchedSet = watchedSet,
+                        overrides = state.episodeWatchOverrides
+                    )
+                    val effectiveWatched = applyEpisodeWatchOverrides(
+                        rawWatchedSet = watchedSet,
+                        overrides = overrides
+                    )
+                    if (
+                        state.watchedEpisodes == effectiveWatched &&
+                        state.episodeWatchOverrides == overrides
+                    ) {
                         state
                     } else {
-                        state.copy(watchedEpisodes = watchedSet)
+                        state.copy(
+                            watchedEpisodes = effectiveWatched,
+                            episodeWatchOverrides = overrides
+                        )
                     }
                 }
                 calculateNextToWatch()
@@ -1803,8 +1822,9 @@ class MetaDetailsViewModel @Inject constructor(
                 it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys + pendingKey)
             }
 
-            val isWatched = _uiState.value.episodeProgressMap[season to episode]?.isCompleted() == true
-                || _uiState.value.watchedEpisodes.contains(season to episode)
+            val episodeKey = season to episode
+            val isWatched = _uiState.value.isEpisodeWatched(season, episode)
+            applyEpisodeWatchOverride(setOf(episodeKey), watched = !isWatched)
             runCatching {
                 if (isWatched) {
                     watchProgressRepository.removeFromHistory(itemId, season, episode)
@@ -1818,6 +1838,7 @@ class MetaDetailsViewModel @Inject constructor(
                     message = error.message ?: "Failed to update episode watched status",
                     isError = true
                 )
+                clearEpisodeWatchOverride(setOf(episodeKey))
             }
 
             _uiState.update {
@@ -1834,8 +1855,7 @@ class MetaDetailsViewModel @Inject constructor(
         return episodes.all { video ->
             val s = video.season ?: return@all false
             val e = video.episode ?: return@all false
-            state.episodeProgressMap[s to e]?.isCompleted() == true
-                || state.watchedEpisodes.contains(s to e)
+            state.isEpisodeWatched(s, e)
         }
     }
 
@@ -1870,14 +1890,48 @@ class MetaDetailsViewModel @Inject constructor(
                         airDate = ep.airDate
                     )
                 }
+                val episodeKeys = episodes.mapNotNull { mark ->
+                    val episodeNumber = mark.episodeNumber ?: return@mapNotNull null
+                    season to episodeNumber
+                }.toSet()
+                if (episodeKeys.isEmpty()) {
+                    showMessage(context.getString(R.string.detail_all_episodes_watched))
+                    return@launch
+                }
+                val pendingKeys = meta.videos
+                    .filter { video ->
+                        val episodeNumber = video.episode ?: return@filter false
+                        video.season == season && episodeKeys.contains(season to episodeNumber)
+                    }
+                    .map(::episodePendingKey)
+                    .toSet()
+                _uiState.update {
+                    it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys + pendingKeys)
+                }
+                applyEpisodeWatchOverride(episodeKeys, watched = true)
                 watchProgressRepository.markAsCompletedBatch(meta, season, episodes)
                 showMessage(context.getString(R.string.detail_marked_episodes_watched, episodes.size))
             } catch (e: Exception) {
+                val episodeKeys = _uiState.value.episodeWatchOverrides
+                    .filterKeys { it.first == season }
+                    .filterValues { watched -> watched }
+                    .keys
+                clearEpisodeWatchOverride(episodeKeys)
                 Log.w(TAG, "markSeasonWatched failed for season=$season: ${e.message}")
                 showMessage(
                     message = e.message ?: context.getString(R.string.detail_marked_episodes_watched, 0),
                     isError = true
                 )
+            } finally {
+                _uiState.update { state ->
+                    state.copy(
+                        episodeWatchedPendingKeys = state.episodeWatchedPendingKeys.filterNot { key ->
+                            meta.videos.any { video ->
+                                video.season == season && episodePendingKey(video) == key
+                            }
+                        }.toSet()
+                    )
+                }
             }
         }
     }
@@ -1889,27 +1943,30 @@ class MetaDetailsViewModel @Inject constructor(
             val watched = episodes.filter { video ->
                 val s = video.season!!
                 val e = video.episode!!
-                _uiState.value.episodeProgressMap[s to e]?.isCompleted() == true
-                    || _uiState.value.watchedEpisodes.contains(s to e)
+                _uiState.value.isEpisodeWatched(s, e)
             }
             if (watched.isEmpty()) {
                 showMessage(context.getString(R.string.detail_no_watched_episodes))
                 return@launch
             }
 
+            val episodeKeys = watched.map { it.season!! to it.episode!! }.toSet()
             val pendingKeys = watched.map { episodePendingKey(it) }.toSet()
             _uiState.update {
                 it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys + pendingKeys)
             }
+            applyEpisodeWatchOverride(episodeKeys, watched = false)
 
             var unmarked = 0
             for (video in watched) {
                 val key = episodePendingKey(video)
+                val episodeKey = video.season!! to video.episode!!
                 runCatching {
                     watchProgressRepository.removeFromHistory(itemId, video.season!!, video.episode!!)
                     unmarked++
                 }.onFailure { error ->
                     Log.w(TAG, "Failed to unmark S${video.season}E${video.episode}: ${error.message}")
+                    clearEpisodeWatchOverride(setOf(episodeKey))
                 }
                 _uiState.update {
                     it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys - key)
@@ -1932,28 +1989,30 @@ class MetaDetailsViewModel @Inject constructor(
             val unwatched = previous.filter { v ->
                 val s = v.season!!
                 val e = v.episode!!
-                val isWatched = _uiState.value.episodeProgressMap[s to e]?.isCompleted() == true
-                    || _uiState.value.watchedEpisodes.contains(s to e)
-                !isWatched
+                !_uiState.value.isEpisodeWatched(s, e)
             }
             if (unwatched.isEmpty()) {
                 showMessage(context.getString(R.string.detail_all_previous_watched))
                 return@launch
             }
 
+            val episodeKeys = unwatched.map { it.season!! to it.episode!! }.toSet()
             val pendingKeys = unwatched.map { episodePendingKey(it) }.toSet()
             _uiState.update {
                 it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys + pendingKeys)
             }
+            applyEpisodeWatchOverride(episodeKeys, watched = true)
 
             var marked = 0
             for (ep in unwatched) {
                 val key = episodePendingKey(ep)
+                val episodeKey = ep.season!! to ep.episode!!
                 runCatching {
                     watchProgressRepository.markAsCompleted(buildCompletedEpisodeProgress(meta, ep))
                     marked++
                 }.onFailure { error ->
                     Log.w(TAG, "Failed to mark S${ep.season}E${ep.episode} as watched: ${error.message}")
+                    clearEpisodeWatchOverride(setOf(episodeKey))
                 }
                 _uiState.update {
                     it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys - key)
@@ -2446,6 +2505,8 @@ class MetaDetailsViewModel @Inject constructor(
             if (captured != null) {
                 continueWatchingSnapshotService.removeResumeEntry(captured.videoId)
             }
+            val episodeKey = season to episode
+            applyEpisodeWatchOverride(setOf(episodeKey), watched = false)
             runCatching {
                 watchProgressRepository.removeFromHistory(itemId, season, episode)
                 showMessage(context.getString(R.string.cw_action_clear_progress))
@@ -2459,11 +2520,117 @@ class MetaDetailsViewModel @Inject constructor(
                     message = error.message ?: "Failed to clear episode progress",
                     isError = true
                 )
+                clearEpisodeWatchOverride(setOf(episodeKey))
             }
             _uiState.update {
                 it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys - pendingKey)
             }
         }
+    }
+
+    private fun MetaDetailsUiState.withEpisodeProgressSnapshot(
+        rawProgressMap: Map<Pair<Int, Int>, WatchProgress>
+    ): MetaDetailsUiState {
+        val overrides = reconcileEpisodeWatchOverrides(
+            rawWatchedSet = rawCompletedEpisodeSet(rawProgressMap),
+            overrides = episodeWatchOverrides
+        )
+        val effectiveWatched = applyEpisodeWatchOverrides(
+            rawWatchedSet = rawCompletedEpisodeSet(rawProgressMap),
+            overrides = overrides
+        )
+        return copy(
+            episodeProgressMap = rawProgressMap,
+            watchedEpisodes = effectiveWatched,
+            episodeWatchOverrides = overrides
+        )
+    }
+
+    private fun MetaDetailsUiState.isEpisodeWatched(season: Int, episode: Int): Boolean {
+        episodeWatchOverrides[season to episode]?.let { return it }
+        return episodeProgressMap[season to episode]?.isCompleted() == true ||
+            watchedEpisodes.contains(season to episode)
+    }
+
+    private fun applyEpisodeWatchOverride(
+        episodeKeys: Set<Pair<Int, Int>>,
+        watched: Boolean
+    ) {
+        _uiState.update { state ->
+            val overrides = state.episodeWatchOverrides.toMutableMap()
+            episodeKeys.forEach { overrides[it] = watched }
+            val reconciled = reconcileEpisodeWatchOverrides(
+                rawWatchedSet = rawCompletedEpisodeSet(state.episodeProgressMap),
+                overrides = overrides
+            )
+            state.copy(
+                episodeWatchOverrides = reconciled,
+                watchedEpisodes = applyEpisodeWatchOverrides(
+                    rawWatchedSet = rawCompletedEpisodeSet(state.episodeProgressMap),
+                    overrides = reconciled
+                )
+            )
+        }
+    }
+
+    private fun clearEpisodeWatchOverride(episodeKeys: Set<Pair<Int, Int>>) {
+        _uiState.update { state ->
+            if (episodeKeys.none { it in state.episodeWatchOverrides }) {
+                return@update state
+            }
+            val overrides = state.episodeWatchOverrides.toMutableMap()
+            episodeKeys.forEach(overrides::remove)
+            val reconciled = reconcileEpisodeWatchOverrides(
+                rawWatchedSet = rawCompletedEpisodeSet(state.episodeProgressMap),
+                overrides = overrides
+            )
+            state.copy(
+                episodeWatchOverrides = reconciled,
+                watchedEpisodes = applyEpisodeWatchOverrides(
+                    rawWatchedSet = rawCompletedEpisodeSet(state.episodeProgressMap),
+                    overrides = reconciled
+                )
+            )
+        }
+    }
+
+    private fun rawCompletedEpisodeSet(
+        progressMap: Map<Pair<Int, Int>, WatchProgress>
+    ): Set<Pair<Int, Int>> {
+        return progressMap
+            .filterValues { it.isCompleted() }
+            .keys
+    }
+
+    private fun reconcileEpisodeWatchOverrides(
+        rawWatchedSet: Set<Pair<Int, Int>>,
+        overrides: Map<Pair<Int, Int>, Boolean>
+    ): Map<Pair<Int, Int>, Boolean> {
+        return overrides.filter { (key, watched) ->
+            rawWatchedSet.contains(key) != watched
+        }
+    }
+
+    private fun applyEpisodeWatchOverrides(
+        rawWatchedSet: Set<Pair<Int, Int>>,
+        overrides: Map<Pair<Int, Int>, Boolean>
+    ): Set<Pair<Int, Int>> {
+        val effective = rawWatchedSet.toMutableSet()
+        overrides.forEach { (key, watched) ->
+            if (watched) {
+                effective.add(key)
+            } else {
+                effective.remove(key)
+            }
+        }
+        return effective.toSet()
+    }
+
+    private fun applyEpisodeProgressOverrides(
+        progressMap: Map<Pair<Int, Int>, WatchProgress>,
+        overrides: Map<Pair<Int, Int>, Boolean>
+    ): Map<Pair<Int, Int>, WatchProgress> {
+        return progressMap.filterKeys { overrides[it] != false }
     }
 
     private fun checkInEpisode(video: Video) {
