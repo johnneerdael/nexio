@@ -257,6 +257,33 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     /**
+     * Returns only the rollback entries that match [episodes].
+     * Use this for durable mutation payloads so they only carry the state needed to restore
+     * the affected season rows rather than the whole continue-watching snapshot.
+     */
+    fun snapshotForEpisodes(episodes: List<EpisodeRef>): EpisodeRollbackState {
+        if (episodes.isEmpty()) return EpisodeRollbackState()
+        val keys = episodes
+            .map { "${it.showId}|${it.seasonNumber}|${it.episodeNumber}" }
+            .toSet()
+        return rawSnapshotState.value.let { snapshot ->
+            EpisodeRollbackState(
+                resumeItems = snapshot.resumeItems.filter { progress ->
+                    progress.season != null &&
+                        progress.episode != null &&
+                        keys.contains("${progress.contentId}|${progress.season}|${progress.episode}")
+                },
+                nextUpItems = snapshot.nextUpItems.filter { entry ->
+                    keys.contains("${entry.contentId}|${entry.season}|${entry.episode}")
+                },
+                traktUpNextItems = snapshot.traktUpNextItems.filter { entry ->
+                    keys.contains("${entry.contentId}|${entry.season}|${entry.episode}")
+                }
+            )
+        }
+    }
+
+    /**
      * Remove all resume entries and next-up entries that match any of the given [episodes].
      * Matches on showId + seasonNumber + episodeNumber.
      */

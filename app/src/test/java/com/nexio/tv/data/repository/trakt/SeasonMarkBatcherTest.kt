@@ -1,83 +1,66 @@
 package com.nexio.tv.data.repository.trakt
 
+import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import io.mockk.coEvery
-import io.mockk.every
+import io.mockk.coVerify
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.io.IOException
-import org.junit.Assert.fail
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SeasonMarkBatcherTest {
 
     @Test
-    fun `batcherIssuesOneCallForManyEpisodes`() = runTest {
+    fun `batcher enqueues one queued mutation for many episodes`() = runTest {
         val coordinator = mockk<TraktMutationOutboxCoordinator>()
-        val adapter = mockk<TraktSeasonMarkMutationAdapter>()
-        coEvery { coordinator.enqueueAndAwaitOrThrow(any(), any(), any()) } answers { firstArg<TraktMutationEnvelope>() }
-        every { adapter.consumeNotFound(any()) } returns emptySet()
+        coEvery { coordinator.enqueueAndDrain(any()) } answers { firstArg<TraktMutationEnvelope>() }
 
-        val batcher = SeasonMarkBatcher(coordinator, adapter, StandardTestDispatcher(testScheduler))
-        val episodes = (1..24).map { TraktEpisodeRef(traktId = it) }
+        val batcher = SeasonMarkBatcher(coordinator, StandardTestDispatcher(testScheduler))
+        val episodes = (1..24).map { episodeNumber ->
+            TraktEpisodeRef(
+                episodeNumber = episodeNumber,
+                traktId = episodeNumber
+            )
+        }
+        val rollbackState = ContinueWatchingSnapshotService.EpisodeRollbackState()
 
-        val result = batcher.markSeasonWatched("show", 1, episodes)
+        batcher.markSeasonWatched("show", 1, episodes, rollbackState)
 
-        assertEquals(24, result.succeeded.size)
+        val envelopeSlot = slot<TraktMutationEnvelope>()
+        coVerify(exactly = 1) { coordinator.enqueueAndDrain(capture(envelopeSlot)) }
+        assertEquals("show:season:1", envelopeSlot.captured.collapseKey)
     }
 
     @Test
-    fun `demultiplexesNotFoundByTraktId`() = runTest {
+    fun `hard enqueue failure propagates exception`() = runTest {
         val coordinator = mockk<TraktMutationOutboxCoordinator>()
-        val adapter = mockk<TraktSeasonMarkMutationAdapter>()
-        coEvery { coordinator.enqueueAndAwaitOrThrow(any(), any(), any()) } answers { firstArg<TraktMutationEnvelope>() }
-        every { adapter.consumeNotFound(any()) } returns setOf(3, 7)
+        coEvery { coordinator.enqueueAndDrain(any()) } throws IOException("storage failure")
 
-        val batcher = SeasonMarkBatcher(coordinator, adapter, StandardTestDispatcher(testScheduler))
-        val episodes = (1..10).map { TraktEpisodeRef(traktId = it) }
-
-        val result = batcher.markSeasonWatched("show", 1, episodes)
-
-        assertEquals(2, result.notFound.size)
-        assertEquals(setOf(3, 7), result.notFound.map { it.traktId }.toSet())
-        assertEquals(8, result.succeeded.size)
-    }
-
-    @Test
-    fun `hardFailurePropagatesException`() = runTest {
-        val coordinator = mockk<TraktMutationOutboxCoordinator>()
-        val adapter = mockk<TraktSeasonMarkMutationAdapter>()
-        coEvery { coordinator.enqueueAndAwaitOrThrow(any(), any(), any()) } throws IOException("network failure")
-
-        val batcher = SeasonMarkBatcher(coordinator, adapter, StandardTestDispatcher(testScheduler))
-        val episodes = listOf(TraktEpisodeRef(traktId = 1))
+        val batcher = SeasonMarkBatcher(coordinator, StandardTestDispatcher(testScheduler))
+        val episodes = listOf(
+            TraktEpisodeRef(
+                episodeNumber = 1,
+                traktId = 42
+            )
+        )
 
         try {
-            batcher.markSeasonWatched("show", 1, episodes)
-            fail("Expected IOException to be thrown")
-        } catch (e: IOException) {
-            // expected
+            batcher.markSeasonWatched(
+                showContentId = "show",
+                seasonNumber = 1,
+                episodes = episodes,
+                rollbackState = ContinueWatchingSnapshotService.EpisodeRollbackState()
+            )
+            throw AssertionError("Expected IOException")
+        } catch (error: IOException) {
+            assertEquals("storage failure", error.message)
         }
-    }
-
-    @Test
-    fun `dispatcherInjectionWorksWithTestScheduler`() = runTest {
-        val coordinator = mockk<TraktMutationOutboxCoordinator>()
-        val adapter = mockk<TraktSeasonMarkMutationAdapter>()
-        coEvery { coordinator.enqueueAndAwaitOrThrow(any(), any(), any()) } answers { firstArg<TraktMutationEnvelope>() }
-        every { adapter.consumeNotFound(any()) } returns emptySet()
-
-        val batcher = SeasonMarkBatcher(coordinator, adapter, StandardTestDispatcher(testScheduler))
-        val episodes = listOf(TraktEpisodeRef(traktId = 42))
-
-        val result = batcher.markSeasonWatched("show", 1, episodes)
-
-        assertEquals(1, result.succeeded.size)
-        assertEquals(42, result.succeeded[0].traktId)
     }
 }

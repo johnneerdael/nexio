@@ -1,10 +1,12 @@
 package com.nexio.tv.data.repository.trakt
 
+import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryEpisodeAddDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
+import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
@@ -17,14 +19,16 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 @Singleton
 class TraktSeasonMarkMutationAdapter @Inject constructor(
-    private val traktProgressMutationExecutor: TraktProgressMutationExecutor
+    private val traktProgressMutationExecutor: TraktProgressMutationExecutor,
+    private val snapshotServiceProvider: Provider<ContinueWatchingSnapshotService>
 ) : TraktMutationAdapter {
 
-    private val notFoundByEnvelopeId = ConcurrentHashMap<String, Set<Int>>()
+    private val notFoundEpisodeNumbersByEnvelopeId = ConcurrentHashMap<String, Set<Int>>()
 
     override val adapterKey: String = ADAPTER_KEY
 
@@ -33,19 +37,32 @@ class TraktSeasonMarkMutationAdapter @Inject constructor(
     override suspend fun execute(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
         val body = TraktHistoryAddRequestDto(
             episodes = envelope.episodes().map { episode ->
-                TraktHistoryEpisodeAddDto(ids = TraktIdsDto(trakt = episode.traktId))
+                TraktHistoryEpisodeAddDto(
+                    number = episode.episodeNumber,
+                    ids = TraktIdsDto(trakt = episode.traktId)
+                )
             }
         )
         val response = traktProgressMutationExecutor.addHistory(body)
             ?: return TraktMutationExecutionResult.Failure(reason = "Trakt request failed")
 
-        val notFound = response.body()
+        val notFoundEpisodeNumbers = response.body()
             ?.notFound
             ?.episodes
-            ?.mapNotNull { it.ids?.trakt }
-            ?.toSet()
-            ?: emptySet()
-        notFoundByEnvelopeId[envelope.id] = notFound
+            .orEmpty()
+            .mapNotNull { dto -> dto.ids?.trakt }
+            .toSet()
+            .let { notFoundIds ->
+                if (notFoundIds.isEmpty()) {
+                    emptySet()
+                } else {
+                    envelope.episodes()
+                        .filter { it.traktId in notFoundIds }
+                        .map { it.episodeNumber }
+                        .toSet()
+                }
+            }
+        notFoundEpisodeNumbersByEnvelopeId[envelope.id] = notFoundEpisodeNumbers
 
         return if (response.isSuccessful) {
             TraktMutationExecutionResult.Success(httpStatusCode = response.code())
@@ -58,32 +75,51 @@ class TraktSeasonMarkMutationAdapter @Inject constructor(
         }
     }
 
-    override suspend fun reconcileSuccess(envelope: TraktMutationEnvelope) = Unit
+    override suspend fun reconcileSuccess(envelope: TraktMutationEnvelope) {
+        val notFoundEpisodeNumbers = notFoundEpisodeNumbersByEnvelopeId.remove(envelope.id).orEmpty()
+        if (notFoundEpisodeNumbers.isNotEmpty()) {
+            snapshotServiceProvider.get().rollbackEpisodes(
+                envelope.rollbackState().filterEpisodeNumbers(notFoundEpisodeNumbers)
+            )
+        }
+        snapshotServiceProvider.get().ensureFresh(force = true)
+    }
 
     override suspend fun rollbackToServerTruth(
         envelope: TraktMutationEnvelope,
         failure: TraktMutationSettlement.TerminalFailure
-    ) = Unit
-
-    fun consumeNotFound(envelopeId: String): Set<Int> {
-        return notFoundByEnvelopeId.remove(envelopeId).orEmpty()
+    ) {
+        notFoundEpisodeNumbersByEnvelopeId.remove(envelope.id)
+        snapshotServiceProvider.get().rollbackEpisodes(envelope.rollbackState())
+        snapshotServiceProvider.get().ensureFresh(force = true)
     }
 
     companion object {
+        private const val PAYLOAD_SHOW_CONTENT_ID = "showContentId"
+        private const val PAYLOAD_SEASON_NUMBER = "seasonNumber"
         private const val PAYLOAD_EPISODES = "episodes"
+        private const val PAYLOAD_EPISODE_NUMBER = "episodeNumber"
+        private const val PAYLOAD_TRAKT_ID = "traktId"
+
         const val ADAPTER_KEY = "season-batch"
         const val MUTATION_KIND = "progress.history.batchAdd"
+
+        private val gson = Gson()
 
         fun buildEnvelope(
             showContentId: String,
             seasonNumber: Int,
-            episodes: List<TraktEpisodeRef>
+            episodes: List<TraktEpisodeRef>,
+            rollbackState: ContinueWatchingSnapshotService.EpisodeRollbackState
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
+                addProperty(PAYLOAD_SHOW_CONTENT_ID, showContentId)
+                addProperty(PAYLOAD_SEASON_NUMBER, seasonNumber)
                 add(PAYLOAD_EPISODES, JsonArray().apply {
                     episodes.forEach { episode ->
                         add(JsonObject().apply {
-                            addProperty("traktId", episode.traktId)
+                            addProperty(PAYLOAD_EPISODE_NUMBER, episode.episodeNumber)
+                            addProperty(PAYLOAD_TRAKT_ID, episode.traktId)
                         })
                     }
                 })
@@ -93,17 +129,41 @@ class TraktSeasonMarkMutationAdapter @Inject constructor(
                 mutationKind = MUTATION_KIND,
                 priority = TraktMutationPriorityBucket.WATCHED,
                 collapseKey = "$showContentId:season:$seasonNumber",
-                payload = payload
+                payload = payload,
+                rollbackPayload = gson.toJsonTree(rollbackState).asJsonObject
             )
         }
 
         private fun TraktMutationEnvelope.episodes(): List<TraktEpisodeRef> {
             return payload.getAsJsonArray(PAYLOAD_EPISODES)
                 ?.mapNotNull { element ->
-                    val traktId = element.asJsonObject.get("traktId")?.asInt ?: return@mapNotNull null
-                    TraktEpisodeRef(traktId)
+                    val obj = element.asJsonObject
+                    val episodeNumber = obj.get(PAYLOAD_EPISODE_NUMBER)?.asInt ?: return@mapNotNull null
+                    val traktId = obj.get(PAYLOAD_TRAKT_ID)?.asInt ?: return@mapNotNull null
+                    TraktEpisodeRef(
+                        episodeNumber = episodeNumber,
+                        traktId = traktId
+                    )
                 }
                 .orEmpty()
+        }
+
+        private fun TraktMutationEnvelope.rollbackState(): ContinueWatchingSnapshotService.EpisodeRollbackState {
+            return gson.fromJson(
+                rollbackPayload ?: JsonObject(),
+                ContinueWatchingSnapshotService.EpisodeRollbackState::class.java
+            ) ?: ContinueWatchingSnapshotService.EpisodeRollbackState()
+        }
+
+        private fun ContinueWatchingSnapshotService.EpisodeRollbackState.filterEpisodeNumbers(
+            episodeNumbers: Set<Int>
+        ): ContinueWatchingSnapshotService.EpisodeRollbackState {
+            if (episodeNumbers.isEmpty()) return ContinueWatchingSnapshotService.EpisodeRollbackState()
+            return ContinueWatchingSnapshotService.EpisodeRollbackState(
+                resumeItems = resumeItems.filter { it.episode in episodeNumbers },
+                nextUpItems = nextUpItems.filter { it.episode in episodeNumbers },
+                traktUpNextItems = traktUpNextItems.filter { it.episode in episodeNumbers }
+            )
         }
     }
 }
