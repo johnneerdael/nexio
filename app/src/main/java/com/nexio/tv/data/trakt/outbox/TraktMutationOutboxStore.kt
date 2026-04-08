@@ -2,6 +2,9 @@ package com.nexio.tv.data.trakt.outbox
 
 import android.content.Context
 import com.google.gson.Gson
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -16,12 +19,12 @@ class TraktMutationOutboxStore @Inject constructor(
         private const val PREFS_NAME = "trakt_mutation_outbox"
         private const val SNAPSHOT_KEY = "snapshot"
         private const val SCHEMA_VERSION = 1
+        private const val JSON_SCHEMA_VERSION = "schemaVersion"
+        private const val JSON_SNAPSHOT = "snapshot"
+        private const val JSON_ITEMS = "items"
+        private const val JSON_NEXT_WRITABLE_AT_MS = "nextWritableAtMs"
+        private const val JSON_UPDATED_AT_MS = "updatedAtMs"
     }
-
-    private data class PersistedState(
-        val schemaVersion: Int = SCHEMA_VERSION,
-        val snapshot: TraktMutationOutboxSnapshot = TraktMutationOutboxSnapshot()
-    )
 
     private val gson = Gson()
     private val mutex = Mutex()
@@ -31,22 +34,25 @@ class TraktMutationOutboxStore @Inject constructor(
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() }
                 ?: return@withLock TraktMutationOutboxSnapshot()
-            val persisted = runCatching {
-                gson.fromJson(raw, PersistedState::class.java)
+            val root = runCatching {
+                JsonParser.parseString(raw).asJsonObject
             }.getOrNull()
-            if (persisted == null || persisted.schemaVersion > SCHEMA_VERSION) {
+            if (root == null || root.schemaVersion() > SCHEMA_VERSION) {
                 return@withLock TraktMutationOutboxSnapshot()
             }
-            persisted.snapshot
+            deserializeSnapshot(root.getAsJsonObject(JSON_SNAPSHOT))
         }
     }
 
     suspend fun write(snapshot: TraktMutationOutboxSnapshot) {
         mutex.withLock {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val payload = PersistedState(snapshot = snapshot)
+            val payload = JsonObject().apply {
+                addProperty(JSON_SCHEMA_VERSION, SCHEMA_VERSION)
+                add(JSON_SNAPSHOT, snapshot.toJson())
+            }
             prefs.edit()
-                .putString(SNAPSHOT_KEY, gson.toJson(payload))
+                .putString(SNAPSHOT_KEY, payload.toString())
                 .commit()
         }
     }
@@ -56,5 +62,42 @@ class TraktMutationOutboxStore @Inject constructor(
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             prefs.edit().remove(SNAPSHOT_KEY).commit()
         }
+    }
+
+    private fun JsonObject.schemaVersion(): Int {
+        return get(JSON_SCHEMA_VERSION)?.takeIf { it.isJsonPrimitive }?.asInt ?: 0
+    }
+
+    private fun deserializeSnapshot(snapshotJson: JsonObject?): TraktMutationOutboxSnapshot {
+        if (snapshotJson == null) return TraktMutationOutboxSnapshot()
+        val items = snapshotJson.getAsJsonArray(JSON_ITEMS)
+            ?.mapNotNull(::deserializeEnvelope)
+            .orEmpty()
+        return TraktMutationOutboxSnapshot(
+            items = items,
+            nextWritableAtMs = snapshotJson.longOrZero(JSON_NEXT_WRITABLE_AT_MS),
+            updatedAtMs = snapshotJson.longOrZero(JSON_UPDATED_AT_MS)
+        )
+    }
+
+    private fun deserializeEnvelope(element: JsonElement?): TraktMutationEnvelope? {
+        if (element == null || element.isJsonNull) return null
+        return runCatching {
+            gson.fromJson(element, TraktMutationEnvelope::class.java)
+        }.getOrNull()
+    }
+
+    private fun TraktMutationOutboxSnapshot.toJson(): JsonObject {
+        return JsonObject().apply {
+            add(JSON_ITEMS, gson.toJsonTree(items))
+            addProperty(JSON_NEXT_WRITABLE_AT_MS, nextWritableAtMs)
+            addProperty(JSON_UPDATED_AT_MS, updatedAtMs)
+        }
+    }
+
+    private fun JsonObject.longOrZero(fieldName: String): Long {
+        val value = get(fieldName) ?: return 0L
+        if (value.isJsonNull) return 0L
+        return runCatching { value.asLong }.getOrDefault(0L)
     }
 }

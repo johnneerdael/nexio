@@ -42,6 +42,15 @@
 -keep class com.nexio.tv.core.tmdb.TmdbEnrichment { *; }
 # Keep local snapshot payload models serialized with Gson to survive restarts/updates.
 -keep class com.nexio.tv.data.local.HomeCatalogSnapshotStore$Snapshot { *; }
+-keep class com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope { *; }
+-keep class com.nexio.tv.data.trakt.outbox.TraktMutationOutboxSnapshot { *; }
+-keep class com.nexio.tv.data.trakt.outbox.TraktMutationPriorityBucket { *; }
+-keep class com.nexio.tv.data.trakt.outbox.TraktMutationLifecycleState { *; }
+-keep class com.nexio.tv.data.repository.ContinueWatchingSnapshotService$EpisodeRollbackState { *; }
+-keep class com.nexio.tv.data.repository.TrackingNextUpEntry { *; }
+-keep class com.nexio.tv.data.repository.TraktLibraryService$LibraryRollbackState { *; }
+-keep class com.nexio.tv.data.repository.SimklLibraryService$LibraryRollbackState { *; }
+-keep class com.nexio.tv.data.repository.trakt.TraktWatchingNowStateController$Snapshot { *; }
 -keep class com.nexio.tv.data.repository.TraktDiscoverySnapshot { *; }
 -keep class com.nexio.tv.data.repository.TraktCustomListCatalog { *; }
 -keep class com.nexio.tv.data.repository.TraktPopularListOption { *; }
