@@ -73,7 +73,7 @@ class DualLaneSchedulerTest {
 
         scheduler.cancelAllPrefetch()
 
-        assertTrue("Prefetch future should be cancelled", prefetchFuture!!.isCancelled)
+        assertTrue("Prefetch future should be cancelled", prefetchFuture.isCancelled)
         assertTrue("Urgent future should not be cancelled", !urgentFuture.isCancelled)
 
         scheduler.cancelAll()

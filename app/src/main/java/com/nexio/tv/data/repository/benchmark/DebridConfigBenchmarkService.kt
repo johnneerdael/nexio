@@ -233,7 +233,7 @@ class DebridConfigBenchmarkService internal constructor(
         val capabilityEnvelope = summary.toCapabilityEnvelope(provider.storageKey, measuredAtMs)
         val observedTransportClass = bestSuccessfulTransportResult?.observedTransportClass
         val isConnectionClose = observedTransportClass == "connection_close"
-        val runtimeTransportHints = capabilityEnvelope?.let { envelope ->
+        val runtimeTransportHints = capabilityEnvelope.let { envelope ->
             val bestChunkBytes = bestProfile?.chunkSizeMb?.toLong()?.times(1024L * 1024L)
                 ?: envelope.maxSafeUrgentChunkBytes
             RuntimeTransportHintsV2(

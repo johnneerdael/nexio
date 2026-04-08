@@ -196,7 +196,7 @@ class CatalogRepositoryImpl @Inject constructor(
             }
 
             is Result.Failure -> kotlin.Result.failure(
-                IllegalStateException(refreshed.error.message ?: "Catalog refresh failed")
+                IllegalStateException(refreshed.error.message)
             )
         }
     }

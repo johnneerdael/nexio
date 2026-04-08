@@ -455,6 +455,7 @@ internal class ParallelRangeDataSource(
                 sizingProbe.close()
                 if (dataSpec.position > actualLength) {
                     emitPrdsOpenError(dataSpec, e)
+                    @Suppress("DEPRECATION")
                     throw androidx.media3.datasource.DataSourceException(
                         e,
                         androidx.media3.datasource.DataSourceException.POSITION_OUT_OF_RANGE

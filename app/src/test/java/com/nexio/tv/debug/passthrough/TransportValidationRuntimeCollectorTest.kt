@@ -9,6 +9,7 @@ import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -20,6 +21,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class TransportValidationRuntimeCollectorTest {
 
     @Before
@@ -291,8 +293,8 @@ class TransportValidationRuntimeCollectorTest {
                 .getDeclaredMethod(
                     "toRouteHealthSummary",
                     List::class.java,
-                    java.lang.Long::class.java,
-                    java.lang.Long::class.java,
+                    Long::class.javaObjectType,
+                    Long::class.javaObjectType,
                     List::class.java,
                 )
         return method.invoke(

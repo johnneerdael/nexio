@@ -94,7 +94,7 @@ class BenchmarkAwareScoringEvaluator {
             val failureCategory = when {
                 exactTopMatch -> null
                 !acceptableMatch && selectedKey == null -> "no_selection"
-                !acceptableMatch && selectedKey != null -> "wrong_winner"
+                !acceptableMatch -> "wrong_winner"
                 pairwiseSatisfied < scenario.preferredPairs.size -> "pairwise_mismatch"
                 else -> null
             }

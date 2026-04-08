@@ -341,7 +341,7 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
             PlayerRuntimeController.TAG,
             "ADDON_SUB: onTracksChanged pendingTrackId=$pendingAddonTrackId " +
                 "internalSubs=${subtitleTracks.size} " +
-                "subTracks=${subtitleTracks.map { "${it.language ?: "und"}|${it.trackId ?: "?"}|${it.name ?: "?"}" }}"
+                "subTracks=${subtitleTracks.map { "${it.language ?: "und"}|${it.trackId ?: "?"}|${it.name}" }}"
         )
         if (applyAddonSubtitleOverride(pendingAddonTrackId)) {
             Log.i(PlayerRuntimeController.TAG, "ADDON_SUB: pending track applied id=$pendingAddonTrackId")
@@ -529,7 +529,7 @@ internal fun PlayerRuntimeController.maybeApplyStartupPreferredAudioSelection(
         PlayerRuntimeController.TAG,
         "AUDIO_STARTUP: pref=$lastPreferredAudioLanguage origLang=$originalLanguage " +
             "resolvedTargets=$preferredAudioLanguages " +
-            "tracks=${audioTracks.map { "${it.language ?: "und"}|${it.name ?: "?"}" }}"
+            "tracks=${audioTracks.map { "${it.language ?: "und"}|${it.name}" }}"
     )
 
     if (preferredAudioLanguages.isEmpty()) {
@@ -1046,9 +1046,6 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
     val state = _uiState.value
     val targets = subtitleLanguageTargets()
     val allowStartupAiFallback = shouldAllowStartupSubtitleAiFallback(
-        hasRenderedFirstFrame = hasRenderedFirstFrame,
-        selectedSubtitleTrackIndex = state.selectedSubtitleTrackIndex,
-        selectedAddonSubtitle = state.selectedAddonSubtitle,
         autoSubtitleSelected = autoSubtitleSelected
     )
     Log.d(
@@ -1188,15 +1185,16 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
 }
 
 internal fun shouldAllowStartupSubtitleAiFallback(
-    hasRenderedFirstFrame: Boolean,
-    selectedSubtitleTrackIndex: Int,
-    selectedAddonSubtitle: Subtitle?,
     autoSubtitleSelected: Boolean
 ): Boolean {
-    if (!hasRenderedFirstFrame) return true
-    return !autoSubtitleSelected &&
-        selectedSubtitleTrackIndex < 0 &&
-        selectedAddonSubtitle == null
+    // The AI-translation tier must stay available until the auto-selector has
+    // actually committed a decision. Previously this gate also closed once the
+    // first frame rendered or once Media3's own default text-track pick landed
+    // in `selectedSubtitleTrackIndex`, which raced the addon-discovery + text-
+    // track-scan convergence: if the video started painting before the auto
+    // pass reached the AI tier, the tier was silently skipped and the user
+    // ended up with an untranslated English fallback (or no subs at all).
+    return !autoSubtitleSelected
 }
 
 internal fun PlayerRuntimeController.startFrameRateProbe(

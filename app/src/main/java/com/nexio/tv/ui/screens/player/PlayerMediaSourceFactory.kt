@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package com.nexio.tv.ui.screens.player
 
 import android.content.Context
@@ -1198,7 +1200,14 @@ internal class PlayerMediaSourceFactory(
             androidRelease = android.os.Build.VERSION.RELEASE ?: "unknown",
             androidSdkInt = android.os.Build.VERSION.SDK_INT,
             appVersionName = pm?.versionName ?: "unknown",
-            appVersionCode = pm?.longVersionCode ?: 0L,
+            appVersionCode = pm?.let { info ->
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                    info.longVersionCode
+                } else {
+                    @Suppress("DEPRECATION")
+                    info.versionCode.toLong()
+                }
+            } ?: 0L,
             gitSha = null,
             memoryClass = am?.memoryClass ?: 0,
             largeMemoryClass = am?.largeMemoryClass ?: 0,

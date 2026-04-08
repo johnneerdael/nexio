@@ -281,7 +281,7 @@ private fun StreamCardModel.toPlaybackInfo(
     return StreamPlaybackInfo(
         url = stream.getStreamUrl(),
         title = request.title ?: title,
-        streamName = stream.name ?: stream.addonName ?: "Example",
+        streamName = stream.name ?: stream.addonName,
         year = parsed.year,
         isExternal = false,
         isTorrent = stream.infoHash != null,
@@ -312,7 +312,7 @@ private fun StreamCardModel.toPlaybackInfo(
             AutoPlayStreamAlternative(
                 streamKey = it.stream.wrappedOriginalStreamKey,
                 url = it.stream.getStreamUrl(),
-                streamName = it.stream.name ?: it.stream.addonName ?: "Fallback",
+                streamName = it.stream.name ?: it.stream.addonName,
                 headers = it.stream.behaviorHints?.proxyHeaders?.request,
                 filename = it.stream.behaviorHints?.filename,
                 videoHash = it.stream.behaviorHints?.videoHash,

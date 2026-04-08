@@ -107,7 +107,7 @@ class TerminalErrorPropagationTest {
                 ds.close()
             }
             assertTrue(
-                "expected ChunkDownloadException, got ${thrown?.javaClass?.name}: ${thrown?.message}",
+                "expected ChunkDownloadException, got ${thrown.javaClass.name}: ${thrown.message}",
                 thrown is ChunkDownloadException
             )
         } finally {
