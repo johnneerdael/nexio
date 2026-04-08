@@ -306,7 +306,27 @@ class WatchProgressRepositoryImpl @Inject constructor(
         val isAuthenticated = traktAuthDataStore.isEffectivelyAuthenticated.first()
         if (!isAuthenticated) return
         traktProgressService.applyOptimisticRemoval(contentId, season, episode)
-        traktProgressService.removeProgress(contentId, season, episode)
+        runCatching {
+            traktProgressService.resolvePlaybackDeleteIdsForOutbox(contentId, season, episode)
+                .forEach { playbackId ->
+                    traktMutationOutboxCoordinator.enqueueAndDrain(
+                        TraktProgressHistoryMutationAdapter.buildPlaybackDeleteEnvelope(
+                            playbackId = playbackId,
+                            contentId = contentId,
+                            season = season,
+                            episode = episode
+                        )
+                    )
+                }
+        }.onFailure {
+            traktProgressService.rollbackQueuedPlaybackDelete(
+                contentId = contentId,
+                season = season,
+                episode = episode,
+                clearShow = false
+            )
+            throw it
+        }
         watchProgressPreferences.removeProgress(contentId, season, episode)
     }
 
@@ -314,7 +334,24 @@ class WatchProgressRepositoryImpl @Inject constructor(
         if (!traktAuthDataStore.isEffectivelyAuthenticated.first()) {
             return
         }
-        traktProgressService.removeFromHistory(contentId, season, episode)
+        traktProgressService.applyOptimisticRemoval(contentId, season, episode)
+        runCatching {
+            traktMutationOutboxCoordinator.enqueueAndDrain(
+                TraktProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
+                    contentId = contentId,
+                    season = season,
+                    episode = episode
+                )
+            )
+        }.onFailure {
+            traktProgressService.rollbackQueuedHistoryRemove(
+                contentId = contentId,
+                season = season,
+                episode = episode,
+                removeShow = false
+            )
+            throw it
+        }
         watchProgressPreferences.removeProgress(contentId, season, episode)
     }
 
@@ -322,7 +359,41 @@ class WatchProgressRepositoryImpl @Inject constructor(
         if (!traktAuthDataStore.isEffectivelyAuthenticated.first()) {
             return
         }
-        traktProgressService.clearShowProgress(contentId)
+        val playbackIds = traktProgressService.resolvePlaybackDeleteIdsForOutbox(
+            contentId = contentId,
+            season = null,
+            episode = null
+        )
+        traktProgressService.applyOptimisticRemoval(contentId, null, null)
+        runCatching {
+            playbackIds.forEach { playbackId ->
+                traktMutationOutboxCoordinator.enqueueAndDrain(
+                    TraktProgressHistoryMutationAdapter.buildPlaybackDeleteEnvelope(
+                        playbackId = playbackId,
+                        contentId = contentId,
+                        season = null,
+                        episode = null,
+                        clearShow = true
+                    )
+                )
+            }
+            traktMutationOutboxCoordinator.enqueueAndDrain(
+                TraktProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
+                    contentId = contentId,
+                    season = null,
+                    episode = null,
+                    removeShow = true
+                )
+            )
+        }.onFailure {
+            traktProgressService.rollbackQueuedHistoryRemove(
+                contentId = contentId,
+                season = null,
+                episode = null,
+                removeShow = true
+            )
+            throw it
+        }
         watchProgressPreferences.removeProgress(contentId, null, null)
     }
 

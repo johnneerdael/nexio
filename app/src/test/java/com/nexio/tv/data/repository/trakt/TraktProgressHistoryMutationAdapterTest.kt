@@ -35,6 +35,22 @@ class TraktProgressHistoryMutationAdapterTest {
     }
 
     @Test
+    fun `history remove envelope keeps show intent separate`() {
+        val envelope = TraktProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
+            contentId = "show",
+            season = null,
+            episode = null,
+            removeShow = true
+        )
+
+        assertEquals("show:show", envelope.collapseKey)
+        assertEquals(
+            TraktProgressHistoryMutationAdapter.MUTATION_KIND_HISTORY_REMOVE,
+            envelope.mutationKind
+        )
+    }
+
+    @Test
     fun `apply optimistic and rollback delegate to progress service`() = kotlinx.coroutines.test.runTest {
         val traktApi = mockk<TraktApi>(relaxed = true)
         val traktAuthService = mockk<TraktAuthService>(relaxed = true)
@@ -85,6 +101,32 @@ class TraktProgressHistoryMutationAdapterTest {
         coEvery {
             traktAuthService.executeAuthorizedWriteRequest<TraktHistoryAddResponseDto>(any())
         } returns Response.success(null)
+
+        val result = adapter.execute(envelope)
+
+        assertTrue(result is TraktMutationExecutionResult.Success)
+    }
+
+    @Test
+    fun `execute returns success when Trakt accepts playback delete`() = kotlinx.coroutines.test.runTest {
+        val traktApi = mockk<TraktApi>(relaxed = true)
+        val traktAuthService = mockk<TraktAuthService>()
+        val traktProgressService = mockk<TraktProgressService>(relaxed = true)
+        val adapter = TraktProgressHistoryMutationAdapter(
+            traktApi = traktApi,
+            traktAuthService = traktAuthService,
+            traktProgressService = traktProgressService
+        )
+        val envelope = TraktProgressHistoryMutationAdapter.buildPlaybackDeleteEnvelope(
+            playbackId = 123L,
+            contentId = "show",
+            season = 1,
+            episode = 2
+        )
+
+        coEvery {
+            traktAuthService.executeAuthorizedWriteRequest<Unit>(any())
+        } returns Response.success(Unit)
 
         val result = adapter.execute(envelope)
 
