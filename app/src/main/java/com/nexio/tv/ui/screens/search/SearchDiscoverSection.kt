@@ -76,6 +76,7 @@ internal fun DiscoverSection(
     onRestoreFocusedItemHandled: () -> Unit,
     onNavigateToDetail: (String, String, String) -> Unit,
     onDiscoverItemFocused: (Int) -> Unit,
+    onPlayWithManualStreamSelection: (MetaPreview, String) -> Unit = { _, _ -> },
     onSelectType: (String) -> Unit,
     onSelectCatalog: (String) -> Unit,
     onSelectGenre: (String?) -> Unit,
@@ -220,6 +221,12 @@ internal fun DiscoverSection(
                         onNavigateToDetail(
                             item.id,
                             item.apiType,
+                            selectedCatalog?.addonBaseUrl ?: ""
+                        )
+                    },
+                    onItemLongPress = { _, item ->
+                        onPlayWithManualStreamSelection(
+                            item,
                             selectedCatalog?.addonBaseUrl ?: ""
                         )
                     }
@@ -405,7 +412,8 @@ internal fun DiscoverGrid(
     canLoadMore: Boolean,
     isLoadingMore: Boolean,
     onLoadMore: () -> Unit,
-    onItemClick: (Int, MetaPreview) -> Unit
+    onItemClick: (Int, MetaPreview) -> Unit,
+    onItemLongPress: (Int, MetaPreview) -> Unit = { _, _ -> }
 ) {
     val restoreFocusRequester = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
@@ -492,6 +500,7 @@ internal fun DiscoverGrid(
             GridContentCard(
                 item = item,
                 onClick = { onItemClick(index, item) },
+                onLongPress = { onItemLongPress(index, item) },
                 posterCardStyle = adaptiveStyle,
                 modifier = Modifier.width(adaptiveStyle.width),
                 focusRequester = focusReq,

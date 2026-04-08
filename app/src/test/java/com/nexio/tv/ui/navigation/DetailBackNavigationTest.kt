@@ -20,6 +20,21 @@ class DetailBackNavigationTest {
     }
 
     @Test
+    fun `detail back pops to search when detail source is search and search exists in stack`() {
+        val action = resolveDetailBackNavigation(
+            listOf(
+                "search",
+                "stream/show/series/episode",
+                "player/https://cdn.example.com/video.mkv",
+                "detail/show/series"
+            ),
+            detailSource = "search"
+        )
+
+        assertEquals(popDetailBackToExistingSearch(), action)
+    }
+
+    @Test
     fun `detail back replaces the transient playback flow with home when home is missing`() {
         val action = resolveDetailBackNavigation(
             listOf(
