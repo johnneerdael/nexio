@@ -7,7 +7,6 @@ import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktLibrarySnapshotStore
 import com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter
-import com.nexio.tv.data.repository.trakt.TraktLibraryMutationExecutor
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import com.nexio.tv.data.repository.hasAnyId
@@ -50,6 +49,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -57,14 +57,17 @@ import javax.inject.Singleton
 class TraktLibraryService @Inject constructor(
     private val traktApi: TraktApi,
     private val traktAuthService: TraktAuthService,
-    private val traktLibraryMutationExecutor: TraktLibraryMutationExecutor,
-    private val traktLibraryMutationAdapter: TraktLibraryMutationAdapter,
     private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator,
     private val metaRepository: MetaRepository,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val snapshotStore: TraktLibrarySnapshotStore
 ) {
+    data class LibraryRollbackState(
+        val listTabs: List<LibraryListTab> = emptyList(),
+        val entriesByList: Map<String, List<LibraryEntry>> = emptyMap()
+    )
+
     private data class LibraryMetadata(
         val name: String?,
         val poster: String?,
@@ -239,34 +242,33 @@ class TraktLibraryService @Inject constructor(
         description: String?,
         privacy: TraktListPrivacy
     ) {
-        val settled = awaitLibraryMutation(
-            TraktLibraryMutationAdapter.buildCreateListEnvelope(
-                TraktCreateOrUpdateListRequestDto(
-                    name = name,
+        val request = TraktCreateOrUpdateListRequestDto(
+            name = name,
+            description = description,
+            privacy = privacy.apiValue
+        )
+        val provisionalKey = provisionalListKey()
+        performOptimisticMutation(
+            optimistic = { snapshot ->
+                val provisionalTab = LibraryListTab(
+                    key = provisionalKey,
+                    title = name,
+                    type = LibraryListTab.Type.PERSONAL,
                     description = description,
-                    privacy = privacy.apiValue
+                    privacy = privacy
+                )
+                val updatedTabs = snapshot.listTabs + provisionalTab
+                val updatedEntries = snapshot.entriesByList + (provisionalKey to emptyList())
+                rebuildSnapshot(updatedTabs, updatedEntries)
+            }
+        ) {
+            enqueueLibraryMutation(
+                TraktLibraryMutationAdapter.buildCreateListEnvelope(
+                    provisionalKey = provisionalKey,
+                    body = request
                 )
             )
-        )
-
-        val createdTab = traktLibraryMutationAdapter.consumeCreatedListSummary(settled.id)?.let(::mapListTab)
-        if (createdTab == null) {
-            refresh(force = true)
-            return
         }
-        val current = snapshotState.value
-        val existingTabKeys = current.listTabs.map { it.key }.toSet()
-        val nonDuplicateTabs = current.listTabs.filterNot { it.key == createdTab.key }
-        val updatedTabs = nonDuplicateTabs + createdTab
-        val updatedEntries = if (createdTab.key in existingTabKeys) {
-            current.entriesByList
-        } else {
-            current.entriesByList + (createdTab.key to emptyList())
-        }
-        persistAndRestoreSnapshot(
-            snapshot = rebuildSnapshot(updatedTabs, updatedEntries),
-            metadata = metadataState.value
-        )
     }
 
     suspend fun updatePersonalList(
@@ -287,7 +289,7 @@ class TraktLibraryService @Inject constructor(
                 rebuildSnapshot(updatedTabs, snapshot.entriesByList)
             }
         ) {
-            awaitLibraryMutation(
+            enqueueLibraryMutation(
                 TraktLibraryMutationAdapter.buildUpdateListEnvelope(
                     listId = listId,
                     body = TraktCreateOrUpdateListRequestDto(
@@ -312,7 +314,7 @@ class TraktLibraryService @Inject constructor(
                 rebuildSnapshot(updatedTabs, updatedEntries)
             }
         ) {
-            awaitLibraryMutation(
+            enqueueLibraryMutation(
                 TraktLibraryMutationAdapter.buildDeleteListEnvelope(listId)
             )
         }
@@ -339,16 +341,16 @@ class TraktLibraryService @Inject constructor(
                 )
             }
         ) {
-            awaitLibraryMutation(
+            enqueueLibraryMutation(
                 TraktLibraryMutationAdapter.buildReorderListsEnvelope(rank)
             )
         }
     }
 
-    private suspend fun awaitLibraryMutation(
+    private suspend fun enqueueLibraryMutation(
         envelope: TraktMutationEnvelope
-    ): TraktMutationEnvelope {
-        return traktMutationOutboxCoordinator.enqueueAndAwaitOrThrow(envelope)
+    ) {
+        traktMutationOutboxCoordinator.enqueueAndDrain(envelope)
     }
 
     suspend fun refreshNow() {
@@ -414,13 +416,22 @@ class TraktLibraryService @Inject constructor(
         optimistic: (Snapshot) -> Snapshot,
         mutation: suspend () -> Unit
     ) {
+        performOptimisticMutation(optimistic = optimistic) { _, _, _ ->
+            mutation()
+        }
+    }
+
+    private suspend fun <T> performOptimisticMutation(
+        optimistic: (Snapshot) -> Snapshot,
+        mutation: suspend (before: Snapshot, beforeMetadata: Map<String, LibraryMetadata>, optimisticSnapshot: Snapshot) -> T
+    ) {
         val before = snapshotState.value
         val beforeMetadata = metadataState.value
         val optimisticSnapshot = applyMetadata(optimistic(before), beforeMetadata)
         persistAndRestoreSnapshot(optimisticSnapshot, beforeMetadata)
         hydrateMetadata(snapshotState.value.allEntries)
         try {
-            mutation()
+            mutation(before, beforeMetadata, optimisticSnapshot)
         } catch (error: Throwable) {
             persistAndRestoreSnapshot(before, beforeMetadata)
             throw error
@@ -742,39 +753,31 @@ class TraktLibraryService @Inject constructor(
 
     private suspend fun addToWatchlist(item: LibraryEntryInput) {
         val body = buildMutationBody(item)
-        val settled = awaitLibraryMutation(
+        enqueueLibraryMutation(
             TraktLibraryMutationAdapter.buildWatchlistAddEnvelope(body)
         )
-        val response = traktLibraryMutationAdapter.consumeListMutationResponse(settled.id)
-        if (!isSuccessfulAddResponse(response)) {
-            throw IllegalStateException("Failed to add to watchlist")
-        }
     }
 
     private suspend fun removeFromWatchlist(item: LibraryEntryInput) {
         val body = buildMutationBody(item)
-        awaitLibraryMutation(
+        enqueueLibraryMutation(
             TraktLibraryMutationAdapter.buildWatchlistRemoveEnvelope(body)
         )
     }
 
     private suspend fun addToPersonalList(listId: String, item: LibraryEntryInput) {
         val body = buildMutationBody(item)
-        val settled = awaitLibraryMutation(
+        enqueueLibraryMutation(
             TraktLibraryMutationAdapter.buildListAddEnvelope(
                 listId = listId,
                 body = body
             )
         )
-        val response = traktLibraryMutationAdapter.consumeListMutationResponse(settled.id)
-        if (!isSuccessfulAddResponse(response)) {
-            throw IllegalStateException("Failed to add to list")
-        }
     }
 
     private suspend fun removeFromPersonalList(listId: String, item: LibraryEntryInput) {
         val body = buildMutationBody(item)
-        awaitLibraryMutation(
+        enqueueLibraryMutation(
             TraktLibraryMutationAdapter.buildListRemoveEnvelope(
                 listId = listId,
                 body = body
@@ -877,6 +880,71 @@ class TraktLibraryService @Inject constructor(
             else -> itemType.lowercase()
         }
     }
+
+    internal suspend fun reconcileQueuedCreateListSuccess(
+        provisionalKey: String,
+        createdList: TraktListSummaryDto?
+    ) {
+        val createdTab = createdList?.let(::mapListTab)
+        if (createdTab == null) {
+            refresh(force = true)
+            return
+        }
+        val current = snapshotState.value
+        val provisionalEntries = current.entriesByList[provisionalKey].orEmpty()
+        var replaced = false
+        val updatedTabs = current.listTabs.mapNotNull { tab ->
+            if (tab.key == provisionalKey) {
+                replaced = true
+                createdTab
+            } else if (tab.key == createdTab.key) {
+                replaced = true
+                null
+            } else {
+                tab
+            }
+        }.let { tabs ->
+            if (replaced) tabs else tabs + createdTab
+        }
+        val updatedEntries = current.entriesByList
+            .filterKeys { it != provisionalKey && it != createdTab.key }
+            .toMutableMap()
+            .apply {
+                put(
+                    createdTab.key,
+                    provisionalEntries.map { entry ->
+                        entry.copy(
+                            listKeys = entry.listKeys
+                                .map { key -> if (key == provisionalKey) createdTab.key else key }
+                                .toSet()
+                        )
+                    }
+                )
+            }
+
+        persistAndRestoreSnapshot(
+            snapshot = rebuildSnapshot(updatedTabs, updatedEntries),
+            metadata = metadataState.value
+        )
+    }
+
+    internal suspend fun rollbackQueuedLibraryMutation(
+        rollbackState: LibraryRollbackState,
+        provisionalKeyToRemove: String? = null
+    ) {
+        if (provisionalKeyToRemove != null) {
+            val current = snapshotState.value
+            val updatedTabs = current.listTabs.filterNot { it.key == provisionalKeyToRemove }
+            val updatedEntries = current.entriesByList.filterKeys { it != provisionalKeyToRemove }
+            persistAndRestoreSnapshot(
+                snapshot = rebuildSnapshot(updatedTabs, updatedEntries),
+                metadata = metadataState.value
+            )
+        }
+        refresh(force = true)
+    }
+
+    private fun provisionalListKey(): String = PERSONAL_KEY_PREFIX + "pending:${UUID.randomUUID()}"
 
     private fun enrichEntries(
         entries: List<LibraryEntry>,
