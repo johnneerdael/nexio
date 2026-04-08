@@ -5,9 +5,8 @@ import android.util.Log
 import com.google.gson.Gson
 import com.nexio.tv.BuildConfig
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -652,20 +651,21 @@ class InAppYouTubeExtractor @Inject constructor() {
         }
 
         if (candidates.size == 1) return candidates[0]
-        val result = CompletableDeferred<String>()
-        val probeScope = CoroutineScope(Dispatchers.IO)
-        candidates.forEach { candidate ->
-            probeScope.launch {
-                val reachable = isUrlReachable(candidate)
-                Log.d(TAG, "CDN probe: ${Uri.parse(candidate).host} -> $reachable")
-                if (reachable) result.complete(candidate)
+        return withTimeoutOrNull(2_000L) {
+            coroutineScope {
+                val result = CompletableDeferred<String>()
+                candidates.forEach { candidate ->
+                    launch {
+                        val reachable = isUrlReachable(candidate)
+                        Log.d(TAG, "CDN probe: ${Uri.parse(candidate).host} -> $reachable")
+                        if (reachable) result.complete(candidate)
+                    }
+                }
+                val winner = result.await()
+                coroutineContext.cancelChildren()
+                winner
             }
-        }
-        return try {
-            withTimeoutOrNull(2_000L) { result.await() } ?: url
-        } finally {
-            probeScope.cancel()
-        }
+        } ?: url
     }
 
     private val probeClient = OkHttpClient.Builder()
