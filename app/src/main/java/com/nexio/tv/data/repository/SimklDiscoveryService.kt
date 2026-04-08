@@ -200,21 +200,26 @@ class SimklDiscoveryService @Inject constructor(
     }
 
     suspend fun ensureFresh(force: Boolean) = withContext(Dispatchers.IO) {
+        val prefs = simklSettingsDataStore.catalogPreferences.first()
         val now = System.currentTimeMillis()
         val snapshot = snapshotState.value
         val isFresh = snapshot.updatedAtMs > 0L && (now - snapshot.updatedAtMs) < snapshotTtlMs
-        if (!force && isFresh) return@withContext
-        if (!force && now - lastRefreshMs < minRefreshIntervalMs && snapshot.updatedAtMs > 0L) return@withContext
-
-        val prefs = simklSettingsDataStore.catalogPreferences.first()
+        val hasConfiguredContent = snapshot.hasConfiguredDiscoveryContent(prefs)
+        if (!force && isFresh && hasConfiguredContent) return@withContext
+        if (!force && now - lastRefreshMs < minRefreshIntervalMs && snapshot.updatedAtMs > 0L && hasConfiguredContent) {
+            return@withContext
+        }
         activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
 
         refreshMutex.withLock {
             val lockedNow = System.currentTimeMillis()
             val lockedSnapshot = snapshotState.value
             val lockedFresh = lockedSnapshot.updatedAtMs > 0L && (lockedNow - lockedSnapshot.updatedAtMs) < snapshotTtlMs
-            if (!force && lockedFresh) return@withLock
-            if (!force && lockedNow - lastRefreshMs < minRefreshIntervalMs && lockedSnapshot.updatedAtMs > 0L) return@withLock
+            val lockedHasConfiguredContent = lockedSnapshot.hasConfiguredDiscoveryContent(prefs)
+            if (!force && lockedFresh && lockedHasConfiguredContent) return@withLock
+            if (!force && lockedNow - lastRefreshMs < minRefreshIntervalMs && lockedSnapshot.updatedAtMs > 0L && lockedHasConfiguredContent) {
+                return@withLock
+            }
 
             val results = linkedMapOf<String, List<MetaPreview>>()
             prefs.enabledCatalogs.forEach { catalogId ->
