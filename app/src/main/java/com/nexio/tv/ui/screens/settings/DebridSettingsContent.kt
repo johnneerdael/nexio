@@ -659,35 +659,44 @@ internal fun DebridSettingsContent(
                         }
                     }
                 }
-                // WP2 — playback diagnostics trace. Compile-time elided
-                // when `PLAYBACK_TRACE_UI_ENABLED` is false.
+                // Playback diagnostics trace. Compile-time elided when
+                // `PLAYBACK_TRACE_UI_ENABLED` is false. Each interactive
+                // element is emitted as its own LazyColumn item so the
+                // Fire TV d-pad can focus rows individually — see the
+                // header comment on [playbackDiagnosticsItems].
                 @Suppress("KotlinConstantConditions")
                 if (com.nexio.tv.instrumentation.PLAYBACK_TRACE_UI_ENABLED) {
-                    item(key = "playback_diagnostics") {
-                        val context = androidx.compose.ui.platform.LocalContext.current
-                        PlaybackDiagnosticsSection(
-                            enabled = uiState.playbackTraceEnabled,
-                            adbControlEnabled = uiState.playbackTraceAdbControlEnabled,
-                            status = uiState.playbackTraceStatus,
-                            onToggleEnabled = { value ->
-                                viewModel.setPlaybackTraceEnabled(value)
-                            },
-                            onToggleAdbControl = { value ->
-                                viewModel.setPlaybackTraceAdbControlEnabled(value)
-                            },
-                            onExportLast = {
-                                viewModel.exportLastSession { intent -> context.startActivity(intent) }
-                            },
-                            onExportAll = {
-                                viewModel.exportAllSessions { intent -> context.startActivity(intent) }
-                            },
-                            onCopyToDownloads = { uri ->
-                                viewModel.copyLastTraceToDownloads(uri)
-                            },
-                            onClearAll = { viewModel.clearAllTraces() },
-                            onShareIntent = { intent -> context.startActivity(intent) },
-                        )
-                    }
+                    val playbackDiagnosticsContext =
+                        androidx.compose.ui.platform.LocalContext.current
+                    playbackDiagnosticsItems(
+                        enabled = uiState.playbackTraceEnabled,
+                        adbControlEnabled = uiState.playbackTraceAdbControlEnabled,
+                        status = uiState.playbackTraceStatus,
+                        onToggleEnabled = {
+                            viewModel.setPlaybackTraceEnabled(
+                                !uiState.playbackTraceEnabled
+                            )
+                        },
+                        onToggleAdbControl = {
+                            viewModel.setPlaybackTraceAdbControlEnabled(
+                                !uiState.playbackTraceAdbControlEnabled
+                            )
+                        },
+                        onExportLast = {
+                            viewModel.exportLastSession { intent ->
+                                playbackDiagnosticsContext.startActivity(intent)
+                            }
+                        },
+                        onExportAll = {
+                            viewModel.exportAllSessions { intent ->
+                                playbackDiagnosticsContext.startActivity(intent)
+                            }
+                        },
+                        onCopyToDownloads = { uri ->
+                            viewModel.copyLastTraceToDownloads(uri)
+                        },
+                        onClearAll = { viewModel.clearAllTraces() },
+                    )
                 }
             }
         }

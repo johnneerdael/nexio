@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -29,19 +30,17 @@ class NexioApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         // Prepare the playback-trace files directory and restore the
-        // persisted on/off state before any player code runs. The tracer
-        // has to be available before `PlayerMediaSourceFactory` hits its
-        // `openPlaybackTraceSession` hook, so this has to happen
-        // synchronously-enough to beat the first `createMediaSource`.
+        // persisted on/off state synchronously before any player code
+        // runs. `PlayerMediaSourceFactory.openPlaybackTraceSession` early-
+        // returns if `PlaybackTracer.enabled` is false, so we have to beat
+        // the first `createMediaSource` with the DataStore-restored value.
+        // Using `runBlocking` on onCreate adds ~2-10 ms of cold-start cost
+        // — a one-time read of a single DataStore key — which is worth it
+        // to avoid an async race that drops the first session of every
+        // process restart.
         PlaybackTracer.installFilesDir(this)
-        appScope.launch {
-            // Read the DataStore-persisted enable flag once and re-apply
-            // it so the tracer resumes in the same state the user left
-            // it in. Without this, PlaybackTracer.enabled defaults to
-            // false on every process start, even if the user toggled it
-            // on in settings.
-            val persistedEnabled = playbackTraceToggle.enabledFlow.first()
-            PlaybackTracer.enabled = persistedEnabled
+        PlaybackTracer.enabled = runBlocking {
+            playbackTraceToggle.enabledFlow.first()
         }
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(this))

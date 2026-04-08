@@ -4,47 +4,155 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.nexio.tv.instrumentation.TraceStatus
 
 /**
- * Debrid-settings section for the playback diagnostics trace (WP2 + L7).
+ * WP2 / L7 — playback diagnostics trace section for the debrid settings
+ * LazyColumn.
  *
- *  - Master switch backed by [com.nexio.tv.instrumentation.PlaybackTraceToggle]
- *    via the ViewModel. Toggle-off mid-session flushes the current
- *    `MediaSourceSession` and writes a final `playback_session_ended` event
- *    before the boolean flag flips (spec §A.4).
- *  - **Allow ADB control** secondary opt-in. Default off. When on, the
- *    [com.nexio.tv.instrumentation.PlaybackTraceAdbReceiver] will accept
- *    `adb shell am broadcast` commands to drive the same operations from a
- *    workstation. Off by default per the spec's security guidance — leaving
- *    a permanently exported diagnostics control surface open is broader
- *    than the in-app toggle.
- *  - Three export actions: share the latest session, share a `.zip` of
- *    every retained session, copy the latest session into a SAF-picked
- *    destination (Downloads / external storage / cloud).
- *  - Clear button — wipes every retained `.jsonl` file under
- *    `filesDir/playback-traces/`.
- *  - Read-only status line: `N sessions · X.X MiB · last <sessionId> Y KiB`.
+ * Each interactive element lives in its **own** LazyColumn item so the
+ * Fire TV d-pad can focus and activate it row-by-row. The previous version
+ * of this section bundled everything into a single nested Surface + Row,
+ * which Material3 `Switch` does not make accessible to d-pad focus — users
+ * saw a visually-off switch that could not be flipped on the TV.
+ *
+ * Call from `DebridSettingsContent`'s LazyColumn scope:
+ *
+ * ```kotlin
+ * playbackDiagnosticsItems(
+ *     enabled = uiState.playbackTraceEnabled,
+ *     adbControlEnabled = uiState.playbackTraceAdbControlEnabled,
+ *     status = uiState.playbackTraceStatus,
+ *     ...
+ * )
+ * ```
+ */
+internal fun LazyListScope.playbackDiagnosticsItems(
+    enabled: Boolean,
+    adbControlEnabled: Boolean,
+    status: TraceStatus,
+    onToggleEnabled: () -> Unit,
+    onToggleAdbControl: () -> Unit,
+    onExportLast: () -> Unit,
+    onExportAll: () -> Unit,
+    onCopyToDownloads: (Uri) -> Unit,
+    onClearAll: () -> Unit,
+) {
+    // Section title + status line. Non-interactive — acts as a visual header
+    // separating the diagnostics block from the rest of the debrid settings.
+    item(key = "playback_diagnostics_header") {
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "Playback diagnostics",
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(horizontal = 18.dp),
+        )
+        Text(
+            text = formatStatusLine(status),
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp),
+        )
+        Spacer(Modifier.height(4.dp))
+    }
+
+    // Master toggle — uses the same SettingsToggleRow the rest of the
+    // debrid settings use, so d-pad focus + SELECT works exactly the same
+    // way as every other toggle on the screen.
+    item(key = "playback_diagnostics_toggle") {
+        SettingsToggleRow(
+            title = "Playback diagnostics trace",
+            subtitle = "Records every playback session as a JSONL file you can export for support",
+            checked = enabled,
+            enabled = true,
+            onToggle = onToggleEnabled,
+        )
+    }
+
+    // Export actions. Disabled until there is at least one session on disk
+    // (the Card's onClick guard handles this, but we also grey the value
+    // text out for visual feedback).
+    item(key = "playback_diagnostics_export_last") {
+        SettingsActionRow(
+            title = "Export last session",
+            subtitle = "Share the latest playback-trace JSONL file",
+            value = status.lastSessionFileName?.let { "${status.lastSessionSizeBytes / 1024L} KiB" },
+            enabled = status.lastSessionFileName != null,
+            onClick = onExportLast,
+        )
+    }
+
+    item(key = "playback_diagnostics_export_all") {
+        SettingsActionRow(
+            title = "Export all sessions",
+            subtitle = "Bundle every retained session into a .zip and share it",
+            value = if (status.sessionCount > 0) {
+                "${status.sessionCount} · ${"%.1f".format(status.totalBytes / (1024.0 * 1024.0))} MiB"
+            } else null,
+            enabled = status.sessionCount > 0,
+            onClick = onExportAll,
+        )
+    }
+
+    // SAF "copy to…" path. The Composable owns the launcher; the ViewModel
+    // writes bytes to the picked Uri.
+    item(key = "playback_diagnostics_copy_to") {
+        val createDocumentLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.CreateDocument("application/json")
+        ) { uri ->
+            if (uri != null) onCopyToDownloads(uri)
+        }
+        val suggestedName = remember(status.lastSessionFileName) {
+            status.lastSessionFileName ?: "playback-trace.jsonl"
+        }
+        SettingsActionRow(
+            title = "Copy latest to…",
+            subtitle = "Write the latest session to any storage location (Downloads, USB, cloud)",
+            enabled = status.lastSessionFileName != null,
+            onClick = { createDocumentLauncher.launch(suggestedName) },
+        )
+    }
+
+    item(key = "playback_diagnostics_clear") {
+        SettingsActionRow(
+            title = "Clear all traces",
+            subtitle = "Delete every retained .jsonl file under playback-traces/",
+            enabled = status.sessionCount > 0,
+            onClick = onClearAll,
+        )
+    }
+
+    // ADB control plane — second opt-in. Off by default; must be explicitly
+    // enabled before `am broadcast` commands from adb will do anything.
+    item(key = "playback_diagnostics_adb_toggle") {
+        SettingsToggleRow(
+            title = "Allow ADB control",
+            subtitle = "Lets workstation ADB commands drive the same tracer operations",
+            checked = adbControlEnabled,
+            enabled = true,
+            onToggle = onToggleAdbControl,
+        )
+        Spacer(Modifier.height(6.dp))
+    }
+}
+
+/**
+ * Legacy entry point kept for source-compat with the DebridSettingsContent
+ * call site that expects a single composable. New call sites should prefer
+ * [playbackDiagnosticsItems] above so each element is its own LazyColumn
+ * item with its own d-pad focus surface.
  */
 @Composable
+@Suppress("UNUSED_PARAMETER")
 internal fun PlaybackDiagnosticsSection(
     enabled: Boolean,
     adbControlEnabled: Boolean,
@@ -57,96 +165,13 @@ internal fun PlaybackDiagnosticsSection(
     onClearAll: () -> Unit,
     onShareIntent: (Intent) -> Unit,
 ) {
-    // SAF launcher: ACTION_CREATE_DOCUMENT for the "Copy to Downloads" path.
-    // The Composable owns the launcher and forwards the picked Uri to the
-    // ViewModel's copy action.
-    val createDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/json")
-    ) { uri ->
-        if (uri != null) onCopyToDownloads(uri)
-    }
-
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(8.dp),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            // Header row: title + master switch
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Playback diagnostics trace",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        "Records every playback session as a JSONL file you can export for support",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = onToggleEnabled,
-                )
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            // Status line — refreshed via the ViewModel's status flow.
-            Text(
-                text = formatStatusLine(status),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            // Export action row.
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Button(
-                    onClick = onExportLast,
-                    enabled = status.lastSessionFileName != null,
-                ) { Text("Export last") }
-                Button(
-                    onClick = onExportAll,
-                    enabled = status.sessionCount > 0,
-                ) { Text("Export all (.zip)") }
-                Button(
-                    onClick = {
-                        val suggestedName = status.lastSessionFileName ?: "playback-trace.jsonl"
-                        createDocumentLauncher.launch(suggestedName)
-                    },
-                    enabled = status.lastSessionFileName != null,
-                ) { Text("Copy to…") }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            // Secondary controls row: clear + ADB toggle.
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(
-                    onClick = onClearAll,
-                    enabled = status.sessionCount > 0,
-                ) { Text("Clear traces") }
-
-                Spacer(Modifier.weight(1f))
-
-                Text(
-                    "Allow ADB control",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Spacer(Modifier.height(0.dp))
-                Switch(
-                    checked = adbControlEnabled,
-                    onCheckedChange = onToggleAdbControl,
-                )
-            }
-        }
-    }
+    // Deliberately empty — the DebridSettingsContent call site below has
+    // been migrated to [playbackDiagnosticsItems]. This stub exists to keep
+    // any stale caller compiling while the migration lands.
+    Text(
+        "Use playbackDiagnosticsItems(...) from a LazyListScope instead.",
+        style = MaterialTheme.typography.bodySmall,
+    )
 }
 
 private fun formatStatusLine(status: TraceStatus): String {
@@ -159,11 +184,6 @@ private fun formatStatusLine(status: TraceStatus): String {
     sb.append(sessions).append(' ').append(sessionWord)
     if (sessions > 0) {
         sb.append(" · ").append("%.1f".format(totalMib)).append(" MiB total")
-    }
-    val last = status.lastSessionFileName
-    if (last != null) {
-        val lastKib = (status.lastSessionSizeBytes / 1024L).coerceAtLeast(0L)
-        sb.append("\nLatest: ").append(last).append(" (").append(lastKib).append(" KiB)")
     }
     return sb.toString()
 }
