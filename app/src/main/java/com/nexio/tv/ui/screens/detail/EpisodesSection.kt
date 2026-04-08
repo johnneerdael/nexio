@@ -474,8 +474,8 @@ private fun EpisodeCard(
     val isWatched = watchProgress?.isCompleted() == true || isMarkedWatched
     val shouldBlur = blurUnwatched && !isWatched
     val progressPercent = watchProgress?.progressPercentage ?: 0f
-    val showProgress = progressPercent >= 0.02f && progressPercent < 0.85f
     val showCompletedBadge = isWatched
+    val showProgress = !showCompletedBadge && progressPercent >= 0.02f && progressPercent < 0.85f
     val showNotStartedBadge = !showCompletedBadge && progressPercent < 0.02f
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }

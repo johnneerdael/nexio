@@ -40,6 +40,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runCurrent
@@ -415,6 +416,52 @@ class MetaDetailsSeasonMediaViewModelTest {
                 contentId = any()
             )
         }
+    }
+
+    @Test
+    fun `mark season watched reflects watched state immediately before repository flow catches up`() = runTest(dispatcher) {
+        val trailerService = mockk<TrailerService>(relaxed = true)
+        val progressFlow = MutableStateFlow<Map<Pair<Int, Int>, com.nexio.tv.domain.model.WatchProgress>>(emptyMap())
+        val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
+        every { watchProgressRepository.getAllEpisodeProgress(any()) } returns progressFlow
+        every { watchProgressRepository.getProgress(any()) } returns flowOf(null)
+
+        val viewModel = buildViewModel(
+            trailerService = trailerService,
+            watchProgressRepository = watchProgressRepository
+        )
+        advanceUntilIdle()
+
+        viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonWatched(1))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state.watchedEpisodes.contains(1 to 1))
+        assertTrue(viewModel.isSeasonFullyWatched(1))
+        coVerify(exactly = 1) { watchProgressRepository.markAsCompletedBatch(any(), eq(1), any()) }
+    }
+
+    @Test
+    fun `failed season watched mutation rolls optimistic watched state back`() = runTest(dispatcher) {
+        val trailerService = mockk<TrailerService>(relaxed = true)
+        val progressFlow = MutableStateFlow<Map<Pair<Int, Int>, com.nexio.tv.domain.model.WatchProgress>>(emptyMap())
+        val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
+        every { watchProgressRepository.getAllEpisodeProgress(any()) } returns progressFlow
+        every { watchProgressRepository.getProgress(any()) } returns flowOf(null)
+        coEvery { watchProgressRepository.markAsCompleted(any()) } throws IllegalStateException("boom")
+
+        val viewModel = buildViewModel(
+            trailerService = trailerService,
+            watchProgressRepository = watchProgressRepository
+        )
+        advanceUntilIdle()
+
+        viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonWatched(1))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertFalse(state.watchedEpisodes.contains(1 to 1))
+        assertFalse(viewModel.isSeasonFullyWatched(1))
     }
 
     @Test
@@ -911,7 +958,8 @@ class MetaDetailsSeasonMediaViewModelTest {
         tmdbService: TmdbService? = null,
         tmdbMetadataService: TmdbMetadataService? = null,
         tmdbSettings: TmdbSettings = TmdbSettings(),
-        installedAddons: List<com.nexio.tv.domain.model.Addon> = emptyList()
+        installedAddons: List<com.nexio.tv.domain.model.Addon> = emptyList(),
+        watchProgressRepository: WatchProgressRepository? = null
     ): MetaDetailsViewModel {
         val metaRepository = mockk<MetaRepository>()
         every {
@@ -930,9 +978,10 @@ class MetaDetailsSeasonMediaViewModelTest {
         every { libraryRepository.isInLibrary(any(), any()) } returns flowOf(false)
         every { libraryRepository.isInWatchlist(any(), any()) } returns flowOf(false)
 
-        val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
-        every { watchProgressRepository.getAllEpisodeProgress(any()) } returns flowOf(emptyMap())
-        every { watchProgressRepository.getProgress(any()) } returns flowOf(null)
+        val effectiveWatchProgressRepository = watchProgressRepository ?: mockk<WatchProgressRepository>(relaxed = true).also {
+            every { it.getAllEpisodeProgress(any()) } returns flowOf(emptyMap())
+            every { it.getProgress(any()) } returns flowOf(null)
+        }
 
         val layoutPreferenceDataStore = mockk<LayoutPreferenceDataStore>()
         every { layoutPreferenceDataStore.detailPageTrailerButtonEnabled } returns flowOf(true)
@@ -980,7 +1029,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             mdbListRepository = mdbListRepository,
             episodeRatingsSelectionRepository = episodeRatingsSelectionRepository,
             libraryRepository = libraryRepository,
-            watchProgressRepository = watchProgressRepository,
+            watchProgressRepository = effectiveWatchProgressRepository,
             continueWatchingSnapshotService = mockk(relaxed = true),
             addonRepository = addonRepository,
             traktScrobbleService = traktScrobbleService,
