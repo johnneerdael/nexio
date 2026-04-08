@@ -8,10 +8,13 @@ import coil.memory.MemoryCache
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import com.nexio.tv.core.sync.StartupSyncService
+import com.nexio.tv.instrumentation.PlaybackTraceToggle
+import com.nexio.tv.instrumentation.PlaybackTracer
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -20,10 +23,26 @@ import javax.inject.Inject
 class NexioApplication : Application(), ImageLoaderFactory {
 
     @Inject lateinit var startupSyncService: StartupSyncService
+    @Inject lateinit var playbackTraceToggle: PlaybackTraceToggle
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
+        // Prepare the playback-trace files directory and restore the
+        // persisted on/off state before any player code runs. The tracer
+        // has to be available before `PlayerMediaSourceFactory` hits its
+        // `openPlaybackTraceSession` hook, so this has to happen
+        // synchronously-enough to beat the first `createMediaSource`.
+        PlaybackTracer.installFilesDir(this)
+        appScope.launch {
+            // Read the DataStore-persisted enable flag once and re-apply
+            // it so the tracer resumes in the same state the user left
+            // it in. Without this, PlaybackTracer.enabled defaults to
+            // false on every process start, even if the user toggled it
+            // on in settings.
+            val persistedEnabled = playbackTraceToggle.enabledFlow.first()
+            PlaybackTracer.enabled = persistedEnabled
+        }
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(this))
         }

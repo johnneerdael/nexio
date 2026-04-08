@@ -706,6 +706,17 @@ class DebridSettingsViewModelTest {
             ?: mockk<PlaybackTraceToggle>(relaxed = true).also {
                 every { it.enabledFlow } returns flowOf(false)
             }
+        val resolvedPlaybackTraceController =
+            mockk<com.nexio.tv.instrumentation.PlaybackTraceController>(relaxed = true).also {
+                every { it.enabledFlow } returns flowOf(false)
+                every { it.statusFlow } returns kotlinx.coroutines.flow.MutableStateFlow(
+                    com.nexio.tv.instrumentation.TraceStatus.EMPTY
+                )
+            }
+        val resolvedPlaybackTraceAdbControlToggle =
+            mockk<com.nexio.tv.instrumentation.PlaybackTraceAdbControlToggle>(relaxed = true).also {
+                every { it.enabledFlow } returns flowOf(false)
+            }
 
         return DebridSettingsViewModel(
             realDebridAuthService = mockk<RealDebridAuthService>(relaxed = true),
@@ -720,7 +731,9 @@ class DebridSettingsViewModelTest {
             debridBenchmarkService = resolvedBenchmarkService,
             debridConfigBenchmarkService = resolvedConfigBenchmarkService,
             collectorPublicDashboardLinkProvider = resolvedCollectorPublicDashboardLinkProvider,
-            playbackTraceToggle = resolvedPlaybackTraceToggle
+            playbackTraceToggle = resolvedPlaybackTraceToggle,
+            playbackTraceController = resolvedPlaybackTraceController,
+            playbackTraceAdbControlToggle = resolvedPlaybackTraceAdbControlToggle
         )
     }
 

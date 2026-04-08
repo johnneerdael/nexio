@@ -12,7 +12,7 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-private val Context.playbackTraceDataStore: DataStore<Preferences> by preferencesDataStore(
+internal val Context.playbackTraceDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "playback_trace_settings"
 )
 

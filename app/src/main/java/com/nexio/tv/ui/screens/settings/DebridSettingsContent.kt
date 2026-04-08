@@ -95,8 +95,10 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -141,6 +143,9 @@ internal data class DebridUiState(
     val easyDebridPaidUntil: String? = null,
     // WP2 — playback diagnostics trace (gated by PLAYBACK_TRACE_UI_ENABLED)
     val playbackTraceEnabled: Boolean = false,
+    val playbackTraceAdbControlEnabled: Boolean = false,
+    val playbackTraceStatus: com.nexio.tv.instrumentation.TraceStatus =
+        com.nexio.tv.instrumentation.TraceStatus.EMPTY,
     val lastTraceSummary: TraceFileSummary? = null
 )
 
@@ -654,18 +659,33 @@ internal fun DebridSettingsContent(
                         }
                     }
                 }
-                // WP2 — playback diagnostics trace. Compile-time elided until
-                // WP9 flips PLAYBACK_TRACE_UI_ENABLED to true.
+                // WP2 — playback diagnostics trace. Compile-time elided
+                // when `PLAYBACK_TRACE_UI_ENABLED` is false.
                 @Suppress("KotlinConstantConditions")
                 if (com.nexio.tv.instrumentation.PLAYBACK_TRACE_UI_ENABLED) {
                     item(key = "playback_diagnostics") {
+                        val context = androidx.compose.ui.platform.LocalContext.current
                         PlaybackDiagnosticsSection(
                             enabled = uiState.playbackTraceEnabled,
-                            lastTraceSummary = uiState.lastTraceSummary,
-                            onToggle = { /* wired in WP9 */ },
-                            onExportLast = { /* wired in WP9 */ },
-                            onExportAll = { /* wired in WP9 */ },
-                            onCopyToDownloads = { /* wired in WP9 */ },
+                            adbControlEnabled = uiState.playbackTraceAdbControlEnabled,
+                            status = uiState.playbackTraceStatus,
+                            onToggleEnabled = { value ->
+                                viewModel.setPlaybackTraceEnabled(value)
+                            },
+                            onToggleAdbControl = { value ->
+                                viewModel.setPlaybackTraceAdbControlEnabled(value)
+                            },
+                            onExportLast = {
+                                viewModel.exportLastSession { intent -> context.startActivity(intent) }
+                            },
+                            onExportAll = {
+                                viewModel.exportAllSessions { intent -> context.startActivity(intent) }
+                            },
+                            onCopyToDownloads = { uri ->
+                                viewModel.copyLastTraceToDownloads(uri)
+                            },
+                            onClearAll = { viewModel.clearAllTraces() },
+                            onShareIntent = { intent -> context.startActivity(intent) },
                         )
                     }
                 }
@@ -1655,34 +1675,66 @@ internal class DebridSettingsViewModel @Inject internal constructor(
     private val collectorPublicDashboardLinkProvider: CollectorPublicDashboardLinkProvider,
     private val debridBenchmarkService: DebridBenchmarkService,
     private val debridConfigBenchmarkService: DebridConfigBenchmarkService,
-    private val playbackTraceToggle: com.nexio.tv.instrumentation.PlaybackTraceToggle
+    private val playbackTraceToggle: com.nexio.tv.instrumentation.PlaybackTraceToggle,
+    private val playbackTraceController: com.nexio.tv.instrumentation.PlaybackTraceController,
+    private val playbackTraceAdbControlToggle:
+        com.nexio.tv.instrumentation.PlaybackTraceAdbControlToggle
 ) : ViewModel() {
 
-    // WP2 — playback diagnostics trace plumbing. Flow + actions are exposed
-    // here so the UI can wire them when WP9 flips PLAYBACK_TRACE_UI_ENABLED to
-    // true. No callers exist in production code yet — the composable section
-    // in DebridSettingsContent is compile-time elided until then.
+    // Playback diagnostics trace plumbing. The composable section in
+    // DebridSettingsContent collects [uiState] for status, then calls these
+    // action methods which delegate to [PlaybackTraceController]. The
+    // controller is the single source of truth shared with the optional
+    // ADB receiver.
     internal val playbackTraceEnabled: kotlinx.coroutines.flow.Flow<Boolean> =
-        playbackTraceToggle.enabledFlow
+        playbackTraceController.enabledFlow
 
     internal fun setPlaybackTraceEnabled(value: Boolean) {
         viewModelScope.launch {
-            playbackTraceToggle.setEnabled(value)
+            playbackTraceController.setEnabled(value)
         }
     }
 
-    internal fun exportLastSession() {
-        // WP9 wires the FileProvider ACTION_SEND share intent here.
+    internal fun setPlaybackTraceAdbControlEnabled(value: Boolean) {
+        viewModelScope.launch {
+            playbackTraceAdbControlToggle.setEnabled(value)
+        }
     }
 
-    internal fun exportAllSessions() {
-        // WP9 wires the cacheDir zip + FileProvider ACTION_SEND here.
+    /**
+     * Build the share intent for the latest session and pass it back to the
+     * Composable so it can call `context.startActivity`. Activity dispatch
+     * lives in the UI layer, not the ViewModel.
+     */
+    internal fun exportLastSession(launchIntent: (android.content.Intent) -> Unit) {
+        viewModelScope.launch {
+            val intent = playbackTraceController.exportLast() ?: return@launch
+            launchIntent(intent)
+        }
     }
 
+    internal fun exportAllSessions(launchIntent: (android.content.Intent) -> Unit) {
+        viewModelScope.launch {
+            val intent = playbackTraceController.exportAll() ?: return@launch
+            launchIntent(intent)
+        }
+    }
+
+    /**
+     * Write the latest session bytes into the SAF-picked Uri. Caller is the
+     * Composable's ActivityResult callback for `ACTION_CREATE_DOCUMENT`.
+     */
     internal fun copyLastTraceToDownloads(target: android.net.Uri) {
-        // WP9 wires the SAF ACTION_CREATE_DOCUMENT byte copy here.
-        @Suppress("UNUSED_PARAMETER")
-        val _u = target
+        viewModelScope.launch {
+            playbackTraceController.copyLastToDestination(target)
+            playbackTraceController.refreshStatus()
+        }
+    }
+
+    internal fun clearAllTraces() {
+        viewModelScope.launch {
+            playbackTraceController.clearAll()
+        }
     }
 
     private val _uiState = MutableStateFlow(DebridUiState())
@@ -1703,6 +1755,29 @@ internal class DebridSettingsViewModel @Inject internal constructor(
     internal val easyDebridApiKey = easyDebridSettingsDataStore.settings.map { it.apiKey }
 
     init {
+        // Playback diagnostics trace — refresh the on-disk status snapshot
+        // every time the master toggle flips, plus once at startup so the
+        // section shows accurate data on first open. The status flow is a
+        // StateFlow on the controller; the toggle flow is the canonical
+        // source of `enabled`.
+        viewModelScope.launch {
+            playbackTraceController.refreshStatus()
+            playbackTraceController.statusFlow.collect { status ->
+                _uiState.update { it.copy(playbackTraceStatus = status) }
+            }
+        }
+        viewModelScope.launch {
+            playbackTraceController.enabledFlow.collect { enabled ->
+                _uiState.update { it.copy(playbackTraceEnabled = enabled) }
+                playbackTraceController.refreshStatus()
+            }
+        }
+        viewModelScope.launch {
+            playbackTraceAdbControlToggle.enabledFlow.collect { adbEnabled ->
+                _uiState.update { it.copy(playbackTraceAdbControlEnabled = adbEnabled) }
+            }
+        }
+
         val connectionState = combine(
             realDebridAuthDataStore.state,
             premiumizeService.observeAccountState(),
