@@ -7,6 +7,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -80,6 +81,107 @@ class TraktMutationOutboxStoreTest {
         store.write(snapshot)
 
         assertEquals(snapshot, store.read())
+    }
+
+    @Test
+    fun `read restores persisted item as envelope instead of raw map`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        prefs.edit().putString(
+            "snapshot",
+            """
+            {
+              "schemaVersion": 1,
+              "snapshot": {
+                "items": [
+                  {
+                    "id": "queued-1",
+                    "adapterKey": "season-batch",
+                    "mutationKind": "progress.history.batchAdd",
+                    "priority": "WATCHED",
+                    "collapseKey": "show-1:season:1",
+                    "payload": {
+                      "showContentId": "show-1",
+                      "seasonNumber": 1,
+                      "episodes": [
+                        {
+                          "episodeNumber": 1,
+                          "traktId": 101
+                        }
+                      ]
+                    },
+                    "rollbackPayload": {
+                      "resumeItems": [],
+                      "nextUpItems": [],
+                      "traktUpNextItems": []
+                    },
+                    "metadata": {},
+                    "state": "QUEUED",
+                    "createdAtMs": 1,
+                    "updatedAtMs": 1,
+                    "nextAttemptAtMs": 1,
+                    "attemptCount": 0
+                  }
+                ],
+                "nextWritableAtMs": 0,
+                "updatedAtMs": 1
+              }
+            }
+            """.trimIndent()
+        ).commit()
+        val store = TraktMutationOutboxStore(context = mockContext(prefs))
+
+        val restored = store.read()
+
+        assertEquals(1, restored.items.size)
+        val envelope = restored.items.single()
+        assertEquals("queued-1", envelope.id)
+        assertEquals("season-batch", envelope.adapterKey)
+        assertEquals(TraktMutationPriorityBucket.WATCHED, envelope.priority)
+        assertFalse(envelope.payload.getAsJsonArray("episodes").isEmpty)
+    }
+
+    @Test
+    fun `read skips malformed persisted items but keeps valid envelopes`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        prefs.edit().putString(
+            "snapshot",
+            """
+            {
+              "schemaVersion": 1,
+              "snapshot": {
+                "items": [
+                  "broken",
+                  {
+                    "id": "queued-2",
+                    "adapterKey": "simkl.season-batch",
+                    "mutationKind": "simkl.progress.history.batchAdd",
+                    "priority": "WATCHED",
+                    "collapseKey": "show-2:season:2",
+                    "payload": {
+                      "showContentId": "show-2",
+                      "seasonNumber": 2
+                    },
+                    "rollbackPayload": {},
+                    "metadata": {},
+                    "state": "QUEUED",
+                    "createdAtMs": 2,
+                    "updatedAtMs": 2,
+                    "nextAttemptAtMs": 2,
+                    "attemptCount": 0
+                  }
+                ],
+                "nextWritableAtMs": 0,
+                "updatedAtMs": 2
+              }
+            }
+            """.trimIndent()
+        ).commit()
+        val store = TraktMutationOutboxStore(context = mockContext(prefs))
+
+        val restored = store.read()
+
+        assertEquals(1, restored.items.size)
+        assertEquals("queued-2", restored.items.single().id)
     }
 
     private fun mockContext(prefs: InMemorySharedPreferences): Context {
