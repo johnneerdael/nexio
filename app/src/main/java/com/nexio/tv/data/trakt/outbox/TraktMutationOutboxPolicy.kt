@@ -143,7 +143,11 @@ class TraktMutationOutboxPolicy(
 
         val nextWritableAtMs = when (settlement) {
             is TraktMutationSettlement.Retryable -> {
-                maxOf(snapshot.nextWritableAtMs, settlement.retryAtMs, nowMs + minWriteIntervalMs)
+                if (settlement.httpStatusCode == 429) {
+                    maxOf(snapshot.nextWritableAtMs, settlement.retryAtMs, nowMs + minWriteIntervalMs)
+                } else {
+                    maxOf(snapshot.nextWritableAtMs, nowMs + minWriteIntervalMs)
+                }
             }
 
             else -> maxOf(snapshot.nextWritableAtMs, nowMs + minWriteIntervalMs)

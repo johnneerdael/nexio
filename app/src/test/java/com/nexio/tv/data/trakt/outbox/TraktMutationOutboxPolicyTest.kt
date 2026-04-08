@@ -118,6 +118,72 @@ class TraktMutationOutboxPolicyTest {
     }
 
     @Test
+    fun `retryable non rate limit failures do not globally stall other queued writes`() {
+        val leased = sampleEnvelope(
+            id = "leased",
+            priority = TraktMutationPriorityBucket.SCROBBLE,
+            createdAtMs = 10L,
+            updatedAtMs = 10L
+        ).copy(
+            state = TraktMutationLifecycleState.LEASED,
+            leaseToken = "lease-1",
+            leaseExpiresAtMs = 5_000L
+        )
+        val queued = sampleEnvelope(
+            id = "queued",
+            priority = TraktMutationPriorityBucket.WATCHED,
+            createdAtMs = 20L,
+            updatedAtMs = 20L
+        )
+        val snapshot = TraktMutationOutboxSnapshot(
+            items = listOf(leased, queued)
+        )
+
+        val settled = policy.settleLease(
+            snapshot = snapshot,
+            leaseToken = "lease-1",
+            settlement = TraktMutationSettlement.Retryable(
+                retryAtMs = 61_000L,
+                reason = "temporary upstream failure",
+                httpStatusCode = 503
+            ),
+            nowMs = 1_000L
+        )
+
+        assertEquals(2_000L, settled.snapshot.nextWritableAtMs)
+    }
+
+    @Test
+    fun `rate limited retry keeps the global write gate parked until retry after`() {
+        val leased = sampleEnvelope(
+            id = "leased",
+            priority = TraktMutationPriorityBucket.SCROBBLE,
+            createdAtMs = 10L,
+            updatedAtMs = 10L
+        ).copy(
+            state = TraktMutationLifecycleState.LEASED,
+            leaseToken = "lease-429",
+            leaseExpiresAtMs = 5_000L
+        )
+        val snapshot = TraktMutationOutboxSnapshot(
+            items = listOf(leased)
+        )
+
+        val settled = policy.settleLease(
+            snapshot = snapshot,
+            leaseToken = "lease-429",
+            settlement = TraktMutationSettlement.Retryable(
+                retryAtMs = 61_000L,
+                reason = "rate limited",
+                httpStatusCode = 429
+            ),
+            nowMs = 1_000L
+        )
+
+        assertEquals(61_000L, settled.snapshot.nextWritableAtMs)
+    }
+
+    @Test
     fun `worker enforces next writable gate between settlements`() = runTest {
         val now = MutableNow(1_000L)
         val store = TraktMutationOutboxStore(context = mockContext(InMemorySharedPreferences()))
