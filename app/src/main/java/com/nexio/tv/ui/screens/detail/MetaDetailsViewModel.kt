@@ -2626,13 +2626,6 @@ class MetaDetailsViewModel @Inject constructor(
         return effective.toSet()
     }
 
-    private fun applyEpisodeProgressOverrides(
-        progressMap: Map<Pair<Int, Int>, WatchProgress>,
-        overrides: Map<Pair<Int, Int>, Boolean>
-    ): Map<Pair<Int, Int>, WatchProgress> {
-        return progressMap.filterKeys { overrides[it] != false }
-    }
-
     private fun checkInEpisode(video: Video) {
         val season = video.season ?: return
         val episode = video.episode ?: return
