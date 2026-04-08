@@ -28,15 +28,15 @@ class TraktWriteSurfaceStructureTest {
         assertEquals(
             mapOf(
                 "addHistory" to setOf(
-                    "com/nexio/tv/data/repository/TraktProgressService.kt",
+                    "com/nexio/tv/data/repository/trakt/TraktProgressMutationExecutor.kt",
                     "com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt"
                 ),
                 "removeHistory" to setOf(
-                    "com/nexio/tv/data/repository/TraktProgressService.kt",
+                    "com/nexio/tv/data/repository/trakt/TraktProgressMutationExecutor.kt",
                     "com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt"
                 ),
                 "deletePlayback" to setOf(
-                    "com/nexio/tv/data/repository/TraktProgressService.kt",
+                    "com/nexio/tv/data/repository/trakt/TraktProgressMutationExecutor.kt",
                     "com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt"
                 ),
                 "addToWatchlist" to setOf("com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt"),
@@ -63,9 +63,9 @@ class TraktWriteSurfaceStructureTest {
 
         assertEquals(
             setOf(
-                "com/nexio/tv/data/repository/TraktProgressService.kt",
                 "com/nexio/tv/data/repository/trakt/TraktDiscoveryMutationAdapter.kt",
                 "com/nexio/tv/data/repository/trakt/TraktLibraryMutationExecutor.kt",
+                "com/nexio/tv/data/repository/trakt/TraktProgressMutationExecutor.kt",
                 "com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt",
                 "com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt",
             ),

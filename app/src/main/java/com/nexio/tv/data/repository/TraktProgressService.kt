@@ -26,6 +26,7 @@ import com.nexio.tv.data.remote.dto.trakt.TraktPlaybackItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktShowSeasonProgressDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserEpisodeHistoryItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktWatchedShowItemDto
+import com.nexio.tv.data.repository.trakt.TraktProgressMutationExecutor
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.MetaRepository
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -72,6 +73,7 @@ import javax.inject.Singleton
 class TraktProgressService @Inject constructor(
     private val traktApi: TraktApi,
     private val traktAuthService: TraktAuthService,
+    private val traktProgressMutationExecutor: TraktProgressMutationExecutor,
     private val metaRepository: MetaRepository,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore
@@ -514,9 +516,8 @@ class TraktProgressService @Inject constructor(
         val body = buildHistoryAddRequest(progress, title, year)
             ?: throw IllegalStateException("Insufficient Trakt IDs to mark watched")
 
-        val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-            traktApi.addHistory(authHeader, body)
-        } ?: throw IllegalStateException("Trakt request failed")
+        val response = traktProgressMutationExecutor.addHistory(body)
+            ?: throw IllegalStateException("Trakt request failed")
 
         val responseBody = response.body()
         if (!response.isSuccessful || hasHistoryAddNotFound(responseBody)) {
@@ -741,9 +742,7 @@ class TraktProgressService @Inject constructor(
             .forEach { item ->
                 item.id?.let { playbackId ->
                     Log.d(TAG, "removeProgress deleting movie playbackId=$playbackId")
-                    traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-                        traktApi.deletePlayback(authHeader, playbackId)
-                    }
+                    traktProgressMutationExecutor.deletePlayback(playbackId)
                 }
             }
 
@@ -763,9 +762,7 @@ class TraktProgressService @Inject constructor(
                         TAG,
                         "removeProgress deleting episode playbackId=$playbackId s=${item.episode?.season} e=${item.episode?.number}"
                     )
-                    traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-                        traktApi.deletePlayback(authHeader, playbackId)
-                    }
+                    traktProgressMutationExecutor.deletePlayback(playbackId)
                 }
             }
 
@@ -786,9 +783,7 @@ class TraktProgressService @Inject constructor(
             .filter { normalizeContentId(it.show?.ids) == canonicalId }
             .forEach { item ->
                 item.id?.let { playbackId ->
-                    traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-                        traktApi.deletePlayback(authHeader, playbackId)
-                    }
+                    traktProgressMutationExecutor.deletePlayback(playbackId)
                 }
             }
 
@@ -798,9 +793,7 @@ class TraktProgressService @Inject constructor(
                     TraktHistoryShowRemoveDto(ids = ids)
                 )
             )
-            traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-                traktApi.removeHistory(authHeader, removeBody)
-            }
+            traktProgressMutationExecutor.removeHistory(removeBody)
         }
 
         remoteProgress.update { items ->
@@ -854,9 +847,7 @@ class TraktProgressService @Inject constructor(
             )
         }
 
-        traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-            traktApi.removeHistory(authHeader, removeBody)
-        }
+        traktProgressMutationExecutor.removeHistory(removeBody)
 
         if (!likelySeries) {
             setMovieWatchedInCache(
@@ -2247,8 +2238,7 @@ class TraktProgressService @Inject constructor(
         episodes: List<TraktHistoryEpisodeAddDto>
     ): Response<TraktHistoryAddResponseDto> {
         val body = TraktHistoryAddRequestDto(episodes = episodes)
-        return traktAuthService.executeAuthorizedWriteRequest { authHeader ->
-            traktApi.addHistory(authHeader, body)
-        } ?: throw IllegalStateException("Trakt authorized request returned null")
+        return traktProgressMutationExecutor.addHistory(body)
+            ?: throw IllegalStateException("Trakt authorized request returned null")
     }
 }
