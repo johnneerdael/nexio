@@ -20,6 +20,7 @@ import dagger.multibindings.IntoSet
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import retrofit2.Response
 
 @Singleton
 class TraktLibraryMutationAdapter @Inject constructor(
@@ -66,91 +67,90 @@ class TraktLibraryMutationAdapter @Inject constructor(
     }
 
     private suspend fun executeCreateList(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
-        val response = executor.createUserList(
-            id = ME_PATH,
-            body = envelope.listRequestBody()
-        ) ?: return failed("Trakt request failed")
-        response.body()?.let { createdListsByEnvelopeId[envelope.id] = it }
-        return if (response.isSuccessful) success(response.code()) else failed(
-            "Failed to create list (${response.code()})",
-            response.code()
-        )
+        return executeMutation(
+            envelope = envelope,
+            failureLabel = "create list",
+            captureBody = { summary: TraktListSummaryDto? ->
+                summary?.let { createdListsByEnvelopeId[envelope.id] = it }
+            }
+        ) {
+            executor.createUserList(
+                id = ME_PATH,
+                body = envelope.listRequestBody()
+            )
+        }
     }
 
     private suspend fun executeUpdateList(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
-        val response = executor.updateUserList(
-            id = ME_PATH,
-            listId = envelope.listId(),
-            body = envelope.listRequestBody()
-        ) ?: return failed("Trakt request failed")
-        return if (response.isSuccessful) success(response.code()) else failed(
-            "Failed to update list (${response.code()})",
-            response.code()
-        )
+        return executeMutation(failureLabel = "update list") {
+            executor.updateUserList(
+                id = ME_PATH,
+                listId = envelope.listId(),
+                body = envelope.listRequestBody()
+            )
+        }
     }
 
     private suspend fun executeDeleteList(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
-        val response = executor.deleteUserList(
-            id = ME_PATH,
-            listId = envelope.listId()
-        ) ?: return failed("Trakt request failed")
-        return if (response.isSuccessful || response.code() == 204) success(response.code()) else failed(
-            "Failed to delete list (${response.code()})",
-            response.code()
-        )
+        return executeMutation(failureLabel = "delete list") {
+            executor.deleteUserList(
+                id = ME_PATH,
+                listId = envelope.listId()
+            )
+        }
     }
 
     private suspend fun executeReorderLists(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
-        val response = executor.reorderUserLists(
-            id = ME_PATH,
-            body = envelope.reorderRequestBody()
-        ) ?: return failed("Trakt request failed")
-        return if (response.isSuccessful) success(response.code()) else failed(
-            "Failed to reorder lists (${response.code()})",
-            response.code()
-        )
+        return executeMutation(failureLabel = "reorder lists") {
+            executor.reorderUserLists(
+                id = ME_PATH,
+                body = envelope.reorderRequestBody()
+            )
+        }
     }
 
     private suspend fun executeWatchlistAdd(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
-        val response = executor.addToWatchlist(envelope.listItemsBody()) ?: return failed("Trakt request failed")
-        listMutationResponsesByEnvelopeId[envelope.id] = response.body()
-        return if (response.isSuccessful) success(response.code()) else failed(
-            "Failed to add to watchlist (${response.code()})",
-            response.code()
-        )
+        return executeMutation(
+            envelope = envelope,
+            failureLabel = "add to watchlist",
+            captureBody = { response: TraktListItemsMutationResponseDto? ->
+                listMutationResponsesByEnvelopeId[envelope.id] = response
+            }
+        ) {
+            executor.addToWatchlist(envelope.listItemsBody())
+        }
     }
 
     private suspend fun executeWatchlistRemove(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
-        val response = executor.removeFromWatchlist(envelope.listItemsBody()) ?: return failed("Trakt request failed")
-        return if (response.isSuccessful) success(response.code()) else failed(
-            "Failed to remove from watchlist (${response.code()})",
-            response.code()
-        )
+        return executeMutation(failureLabel = "remove from watchlist") {
+            executor.removeFromWatchlist(envelope.listItemsBody())
+        }
     }
 
     private suspend fun executeListAdd(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
-        val response = executor.addUserListItems(
-            id = ME_PATH,
-            listId = envelope.listId(),
-            body = envelope.listItemsBody()
-        ) ?: return failed("Trakt request failed")
-        listMutationResponsesByEnvelopeId[envelope.id] = response.body()
-        return if (response.isSuccessful) success(response.code()) else failed(
-            "Failed to add to list (${response.code()})",
-            response.code()
-        )
+        return executeMutation(
+            envelope = envelope,
+            failureLabel = "add to list",
+            captureBody = { response: TraktListItemsMutationResponseDto? ->
+                listMutationResponsesByEnvelopeId[envelope.id] = response
+            }
+        ) {
+            executor.addUserListItems(
+                id = ME_PATH,
+                listId = envelope.listId(),
+                body = envelope.listItemsBody()
+            )
+        }
     }
 
     private suspend fun executeListRemove(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
-        val response = executor.removeUserListItems(
-            id = ME_PATH,
-            listId = envelope.listId(),
-            body = envelope.listItemsBody()
-        ) ?: return failed("Trakt request failed")
-        return if (response.isSuccessful) success(response.code()) else failed(
-            "Failed to remove from list (${response.code()})",
-            response.code()
-        )
+        return executeMutation(failureLabel = "remove from list") {
+            executor.removeUserListItems(
+                id = ME_PATH,
+                listId = envelope.listId(),
+                body = envelope.listItemsBody()
+            )
+        }
     }
 
     private fun success(code: Int?) = TraktMutationExecutionResult.Success(httpStatusCode = code)
@@ -159,6 +159,30 @@ class TraktLibraryMutationAdapter @Inject constructor(
         httpStatusCode = code,
         reason = reason
     )
+
+    private suspend fun <T> executeMutation(
+        envelope: TraktMutationEnvelope? = null,
+        failureLabel: String,
+        captureBody: ((T?) -> Unit)? = null,
+        request: suspend () -> Response<T>?
+    ): TraktMutationExecutionResult {
+        val response = request() ?: return failed("Trakt request failed")
+        captureBody?.invoke(response.body())
+        return response.toExecutionResult(failureLabel, envelope?.mutationKind)
+    }
+
+    private fun Response<*>.toExecutionResult(
+        failureLabel: String,
+        mutationKind: String? = null
+    ): TraktMutationExecutionResult {
+        val code = code()
+        return if (isSuccessful) {
+            success(code)
+        } else {
+            val context = mutationKind?.let { " for $it" }.orEmpty()
+            failed("Failed to $failureLabel$context ($code)", code)
+        }
+    }
 
     companion object {
         private const val PAYLOAD_LIST_ID = "listId"

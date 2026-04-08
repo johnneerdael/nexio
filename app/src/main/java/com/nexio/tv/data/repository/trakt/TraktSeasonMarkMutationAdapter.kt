@@ -2,10 +2,7 @@ package com.nexio.tv.data.repository.trakt
 
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
-import com.nexio.tv.data.remote.dto.trakt.TraktEpisodeDto
-import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddNotFoundDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddRequestDto
-import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryEpisodeAddDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
