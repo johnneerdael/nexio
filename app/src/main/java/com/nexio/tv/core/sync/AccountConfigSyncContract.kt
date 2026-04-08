@@ -9,6 +9,8 @@ import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.OmdbSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
+import com.nexio.tv.data.local.SimklAuthDataStore
+import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.remote.supabase.AccountAddonPayload
@@ -19,9 +21,12 @@ import com.nexio.tv.data.remote.supabase.IntegrationSettings
 import com.nexio.tv.data.remote.supabase.ImdbSyncSettings
 import com.nexio.tv.data.remote.supabase.MDBListCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
+import com.nexio.tv.data.remote.supabase.PlaybackConfigSyncSettings
+import com.nexio.tv.data.remote.supabase.StreamSelectionConfigSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktCatalogSyncSettings
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.ImdbSettings
+import com.nexio.tv.domain.model.TrackingProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.merge
@@ -30,7 +35,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 4
+internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 5
 
 internal fun observeAccountConfigSyncChanges(
     heroCatalogSelections: Flow<Unit>,
@@ -40,6 +45,7 @@ internal fun observeAccountConfigSyncChanges(
     mdbListSettings: Flow<Unit>,
     mdbListCatalogPreferences: Flow<Unit>,
     omdbSettings: Flow<Unit>,
+    theIntroDbSettings: Flow<Unit>,
     animeSkipEnabled: Flow<Unit>,
     animeSkipClientId: Flow<Unit>,
     geminiSettings: Flow<Unit>,
@@ -53,7 +59,9 @@ internal fun observeAccountConfigSyncChanges(
     easyDebridAccountState: Flow<Unit>,
     realDebridState: Flow<Unit>,
     traktAuthState: Flow<Unit>,
-    traktCatalogPreferences: Flow<Unit>
+    traktCatalogPreferences: Flow<Unit>,
+    simklAuthState: Flow<Unit>,
+    playerSettings: Flow<Unit>
 ): Flow<Unit> {
     return merge(
         heroCatalogSelections,
@@ -63,6 +71,7 @@ internal fun observeAccountConfigSyncChanges(
         mdbListSettings,
         mdbListCatalogPreferences,
         omdbSettings,
+        theIntroDbSettings,
         animeSkipEnabled,
         animeSkipClientId,
         geminiSettings,
@@ -76,7 +85,9 @@ internal fun observeAccountConfigSyncChanges(
         easyDebridAccountState,
         realDebridState,
         traktAuthState,
-        traktCatalogPreferences
+        traktCatalogPreferences,
+        simklAuthState,
+        playerSettings
     )
 }
 
@@ -91,6 +102,7 @@ internal fun buildAccountConfigSyncPayload(
     mdbListHiddenPersonalListKeys: List<String>,
     mdbListSelectedTopListKeys: List<String>,
     mdbListCatalogOrder: List<String>,
+    trackingProvider: TrackingProvider,
     formatter: FormatterSyncSettings
 ): AccountConfigSyncPayload {
     return AccountConfigSyncPayload(
@@ -111,6 +123,11 @@ internal fun buildAccountConfigSyncPayload(
                 hiddenPersonalListKeys = mdbListHiddenPersonalListKeys,
                 selectedTopListKeys = mdbListSelectedTopListKeys,
                 catalogOrder = mdbListCatalogOrder
+            )
+        ),
+        playback = PlaybackConfigSyncSettings(
+            streamSelection = StreamSelectionConfigSyncSettings(
+                trackingProvider = trackingProvider.name
             )
         ),
         formatter = formatter
@@ -179,6 +196,7 @@ internal suspend fun applyAccountConfigSyncSettings(
     tmdbSettingsDataStore: TmdbSettingsDataStore,
     mdbListSettingsDataStore: MDBListSettingsDataStore,
     omdbSettingsDataStore: OmdbSettingsDataStore,
+    theIntroDbSettingsDataStore: TheIntroDbSettingsDataStore,
     animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
     geminiSettingsDataStore: GeminiSettingsDataStore,
     imdbSettingsDataStore: ImdbSettingsDataStore,
@@ -217,6 +235,12 @@ internal suspend fun applyAccountConfigSyncSettings(
 
     omdbSettingsDataStore.setEnabled(settings.integrations.omdb.enabled)
 
+    theIntroDbSettingsDataStore.setEnabled(settings.integrations.theIntroDb.enabled)
+    theIntroDbSettingsDataStore.setShowIntroButton(settings.integrations.theIntroDb.showIntroButton)
+    theIntroDbSettingsDataStore.setShowRecapButton(settings.integrations.theIntroDb.showRecapButton)
+    theIntroDbSettingsDataStore.setShowCreditsButton(settings.integrations.theIntroDb.showCreditsButton)
+    theIntroDbSettingsDataStore.setShowPreviewButton(settings.integrations.theIntroDb.showPreviewButton)
+
     animeSkipSettingsDataStore.setEnabled(settings.integrations.animeSkip.enabled)
     animeSkipSettingsDataStore.setClientId(settings.integrations.animeSkip.clientId)
 
@@ -229,6 +253,11 @@ internal suspend fun applyAccountConfigSyncSettings(
         enabledCatalogs = settings.catalogs.trakt.catalogEnabledSet.toSet(),
         catalogOrder = settings.catalogs.trakt.catalogOrder,
         selectedPopularListKeys = settings.catalogs.trakt.selectedPopularListKeys.toSet()
+    )
+
+    playerSettingsDataStore.setTrackingProvider(
+        runCatching { TrackingProvider.valueOf(settings.playback.streamSelection.trackingProvider) }
+            .getOrDefault(TrackingProvider.TRAKT)
     )
 
     playerSettingsDataStore.setSyncedFormatterEnabled(settings.formatter.enabled)

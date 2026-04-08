@@ -58,7 +58,18 @@ data class AccountConfigSyncPayload(
     val schemaVersion: Int = 4,
     val integrations: IntegrationSettings = IntegrationSettings(),
     val catalogs: CatalogSyncSettings = CatalogSyncSettings(),
+    val playback: PlaybackConfigSyncSettings = PlaybackConfigSyncSettings(),
     val formatter: FormatterSyncSettings = FormatterSyncSettings()
+)
+
+@Serializable
+data class PlaybackConfigSyncSettings(
+    val streamSelection: StreamSelectionConfigSyncSettings = StreamSelectionConfigSyncSettings()
+)
+
+@Serializable
+data class StreamSelectionConfigSyncSettings(
+    val trackingProvider: String = "TRAKT"
 )
 
 @Serializable
@@ -148,6 +159,7 @@ data class LayoutSettings(
 @Serializable
 data class IntegrationSettings(
     val debrid: DebridSyncSettings = DebridSyncSettings(),
+    val theIntroDb: TheIntroDbSyncSettings = TheIntroDbSyncSettings(),
     val tmdb: TmdbSyncSettings = TmdbSyncSettings(),
     val omdb: OmdbSyncSettings = OmdbSyncSettings(),
     @EncodeDefault
@@ -156,7 +168,8 @@ data class IntegrationSettings(
     val animeSkip: AnimeSkipSyncSettings = AnimeSkipSyncSettings(),
     val gemini: GeminiSyncSettings = GeminiSyncSettings(),
     val posterRatings: PosterRatingsSyncSettings = PosterRatingsSyncSettings(),
-    val traktAuth: TraktAuthSyncSettings = TraktAuthSyncSettings()
+    val traktAuth: TraktAuthSyncSettings = TraktAuthSyncSettings(),
+    val simklAuth: SimklAuthSyncSettings = SimklAuthSyncSettings()
 )
 
 @Serializable
@@ -198,6 +211,15 @@ data class EasyDebridSyncSettings(
     val configured: Boolean = false,
     val userId: String = "",
     val paidUntil: String = ""
+)
+
+@Serializable
+data class TheIntroDbSyncSettings(
+    val enabled: Boolean = true,
+    val showIntroButton: Boolean = true,
+    val showRecapButton: Boolean = true,
+    val showCreditsButton: Boolean = true,
+    val showPreviewButton: Boolean = true
 )
 
 @Serializable
@@ -263,6 +285,15 @@ data class TraktAuthSyncSettings(
     val username: String = "",
     val userSlug: String = "",
     val connectedAt: String? = null,
+    val pending: Boolean = false
+)
+
+@Serializable
+data class SimklAuthSyncSettings(
+    val connected: Boolean = false,
+    val username: String = "",
+    val accountId: Long? = null,
+    val accountType: String = "",
     val pending: Boolean = false
 )
 
@@ -374,6 +405,11 @@ data class AccountTraktAccessSecretPayload(
 @Serializable
 data class AccountTraktRefreshSecretPayload(
     val refreshToken: String = ""
+)
+
+@Serializable
+data class AccountSimklAccessSecretPayload(
+    val accessToken: String = ""
 )
 
 @Serializable

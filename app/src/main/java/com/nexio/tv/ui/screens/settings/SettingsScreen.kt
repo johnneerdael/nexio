@@ -71,6 +71,7 @@ private enum class IntegrationSettingsSection {
     Debrid,
     Trakt,
     Simkl,
+    TheIntroDb,
     Tmdb,
     Omdb,
     Imdb,
@@ -199,6 +200,7 @@ fun SettingsScreen(
     val integrationDebridFocusRequester = remember { FocusRequester() }
     val integrationTraktFocusRequester = remember { FocusRequester() }
     val integrationSimklFocusRequester = remember { FocusRequester() }
+    val integrationTheIntroDbFocusRequester = remember { FocusRequester() }
     val integrationTmdbFocusRequester = remember { FocusRequester() }
     val integrationOmdbFocusRequester = remember { FocusRequester() }
     val integrationImdbFocusRequester = remember { FocusRequester() }
@@ -384,6 +386,7 @@ fun SettingsScreen(
                             debridFocusRequester = integrationDebridFocusRequester,
                             traktFocusRequester = integrationTraktFocusRequester,
                             simklFocusRequester = integrationSimklFocusRequester,
+                            theIntroDbFocusRequester = integrationTheIntroDbFocusRequester,
                             tmdbFocusRequester = integrationTmdbFocusRequester,
                             omdbFocusRequester = integrationOmdbFocusRequester,
                             imdbFocusRequester = integrationImdbFocusRequester,
@@ -447,6 +450,7 @@ private fun IntegrationSettingsContent(
     debridFocusRequester: FocusRequester,
     traktFocusRequester: FocusRequester,
     simklFocusRequester: FocusRequester,
+    theIntroDbFocusRequester: FocusRequester,
     tmdbFocusRequester: FocusRequester,
     omdbFocusRequester: FocusRequester,
     imdbFocusRequester: FocusRequester,
@@ -468,6 +472,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.Debrid -> debridFocusRequester
             IntegrationSettingsSection.Trakt -> traktFocusRequester
             IntegrationSettingsSection.Simkl -> simklFocusRequester
+            IntegrationSettingsSection.TheIntroDb -> theIntroDbFocusRequester
             IntegrationSettingsSection.Tmdb -> tmdbFocusRequester
             IntegrationSettingsSection.Omdb -> omdbFocusRequester
             IntegrationSettingsSection.Imdb -> imdbFocusRequester
@@ -518,6 +523,13 @@ private fun IntegrationSettingsContent(
                                 title = stringResource(R.string.simkl_title),
                                 subtitle = stringResource(R.string.settings_simkl_subtitle),
                                 onClick = { onSelectSection(IntegrationSettingsSection.Simkl) }
+                            )
+                        }
+                        item(key = "integration_hub_theintrodb") {
+                            SettingsActionRow(
+                                title = stringResource(R.string.theid_title),
+                                subtitle = stringResource(R.string.settings_theintrodb_subtitle),
+                                onClick = { onSelectSection(IntegrationSettingsSection.TheIntroDb) }
                             )
                         }
                         item(key = "integration_hub_tmdb") {
@@ -596,6 +608,12 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.Simkl -> {
             SimklSettingsContent(
                 initialFocusRequester = simklFocusRequester
+            )
+        }
+
+        IntegrationSettingsSection.TheIntroDb -> {
+            TheIntroDbSettingsContent(
+                initialFocusRequester = theIntroDbFocusRequester
             )
         }
 

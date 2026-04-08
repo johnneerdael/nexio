@@ -319,6 +319,53 @@ internal fun PlayerRuntimeController.observeGeminiSettings() {
     }
 }
 
+internal fun PlayerRuntimeController.observeTheIntroDbSettings() {
+    scope.launch {
+        theIntroDbSettingsDataStore.settings.collectLatest { settings ->
+            theIntroDbEnabledSetting = settings.enabled
+            val signature = listOf(
+                settings.enabled,
+                settings.apiKey.trim(),
+                settings.showIntroButton,
+                settings.showRecapButton,
+                settings.showCreditsButton,
+                settings.showPreviewButton
+            ).joinToString("|")
+
+            val previous = lastTheIntroDbSettingsSignature
+            lastTheIntroDbSettingsSignature = signature
+            if (previous == null || previous == signature) return@collectLatest
+
+            if (isAnimePrimarySkipPath()) return@collectLatest
+
+            skipIntroRepository.clearCachedIntervals()
+            skipIntroFetchedKey = null
+            skipIntervals = emptyList()
+
+            if (!skipIntroEnabled || !settings.enabled) {
+                _uiState.update {
+                    it.copy(
+                        activeSkipInterval = null,
+                        skipIntervalDismissed = true,
+                        showNextEpisodeCard = false,
+                        nextEpisodeCardDismissed = false
+                    )
+                }
+            } else {
+                _uiState.update {
+                    it.copy(
+                        activeSkipInterval = null,
+                        skipIntervalDismissed = false,
+                        showNextEpisodeCard = false,
+                        nextEpisodeCardDismissed = false
+                    )
+                }
+                fetchSkipIntervals(contentId, currentSeason, currentEpisode)
+            }
+        }
+    }
+}
+
 internal fun PlayerRuntimeController.loadSavedProgressFor(season: Int?, episode: Int?) {
     if (contentId == null) return
     
@@ -381,15 +428,24 @@ internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int
         return
     }
 
-    val imdbId = effectiveId.split(":").firstOrNull()?.takeIf { it.startsWith("tt") } ?: return
-    if (season == null || episode == null) return
+    val canonicalId = effectiveId.split(":").firstOrNull() ?: return
+    if (!canonicalId.startsWith("tt") && canonicalId.toIntOrNull() == null) return
 
-    val key = "$imdbId:$season:$episode"
+    val key = "$canonicalId:$season:$episode"
     if (skipIntroFetchedKey == key) return
     skipIntroFetchedKey = key
 
     scope.launch {
-        val intervals = skipIntroRepository.getSkipIntervals(imdbId, season, episode)
+        val intervals = if (
+            isAnimePrimarySkipPath() &&
+            canonicalId.startsWith("tt") &&
+            season != null &&
+            episode != null
+        ) {
+            skipIntroRepository.getAnimePrimarySkipIntervals(canonicalId, season, episode)
+        } else {
+            skipIntroRepository.getSkipIntervals(canonicalId, season, episode)
+        }
         skipIntervals = intervals
     }
 }

@@ -211,6 +211,12 @@ fun PlayerScreen(
     val skipIntroFocusRequester = remember { FocusRequester() }
     var skipButtonActuallyVisible by remember { mutableStateOf(false) }
     val nextEpisodeFocusRequester = remember { FocusRequester() }
+    val playNextOwnsSegmentCta = PlayerSegmentCtaPolicy.shouldReplaceSkipButtonWithPlayNext(
+        activeInterval = uiState.activeSkipInterval,
+        hasEpisodeContext = uiState.currentSeason != null && uiState.currentEpisode != null,
+        hasAiredNextEpisode = uiState.nextEpisode?.hasAired == true,
+        showNextEpisodeCard = uiState.showNextEpisodeCard
+    )
     val exitPlayer: () -> Unit = {
         viewModel.stopAndRelease()
         onBackPress()
@@ -644,7 +650,11 @@ fun PlayerScreen(
 
         // Skip Intro button (bottom-left, lifted when controls are visible)
         SkipIntroButton(
-            interval = if (uiState.showPauseOverlay || uiState.showLoadingOverlay) null else uiState.activeSkipInterval,
+            interval = if (uiState.showPauseOverlay || uiState.showLoadingOverlay || playNextOwnsSegmentCta) {
+                null
+            } else {
+                uiState.activeSkipInterval
+            },
             dismissed = uiState.skipIntervalDismissed,
             controlsVisible = uiState.showControls,
             onSkip = { viewModel.onEvent(PlayerEvent.OnSkipIntro) },
@@ -1185,7 +1195,8 @@ private fun PlayerControlsOverlay(
                     val hasEpisodeContext = uiState.currentSeason != null && uiState.currentEpisode != null
                     val hasSubtitleControl = uiState.subtitleTracks.isNotEmpty() || uiState.addonSubtitles.isNotEmpty()
                     val hasAudioControl = uiState.audioTracks.isNotEmpty()
-                    val showNextEpisodeButton = uiState.nextEpisode?.hasAired == true &&
+                    val showNextEpisodeButton = uiState.showNextEpisodeCard &&
+                        uiState.nextEpisode?.hasAired == true &&
                         !uiState.nextEpisodeAutoPlaySearching &&
                         uiState.nextEpisodeAutoPlayCountdownSec == null
 

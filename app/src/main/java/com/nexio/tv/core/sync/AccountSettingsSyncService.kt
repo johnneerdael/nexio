@@ -20,9 +20,11 @@ import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.local.PremiumizeSettingsDataStore
 import com.nexio.tv.data.local.RealDebridAuthDataStore
+import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.data.local.SubtitleOrganizationMode
+import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.local.ThemeDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TorBoxSettingsDataStore
@@ -39,6 +41,7 @@ import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
 import com.nexio.tv.data.remote.supabase.AccountRealDebridAccessSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountRealDebridRefreshSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountSettingsPayload
+import com.nexio.tv.data.remote.supabase.AccountSimklAccessSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountSecretApiKeyPayload
 import com.nexio.tv.data.remote.supabase.AccountSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountSyncMutationResult
@@ -63,8 +66,10 @@ import com.nexio.tv.data.remote.supabase.PlaybackSettings
 import com.nexio.tv.data.remote.supabase.PosterRatingsSyncSettings
 import com.nexio.tv.data.remote.supabase.PremiumizeSyncSettings
 import com.nexio.tv.data.remote.supabase.RealDebridSyncSettings
+import com.nexio.tv.data.remote.supabase.SimklAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.StreamSelectionSettings
 import com.nexio.tv.data.remote.supabase.SubtitleSyncSettings
+import com.nexio.tv.data.remote.supabase.TheIntroDbSyncSettings
 import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.TorBoxSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
@@ -85,6 +90,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -99,6 +105,8 @@ import javax.inject.Singleton
 private const val TAG = "AccountSettingsSync"
 private const val TMDB_SECRET_TYPE = "tmdb_api_key"
 private const val TMDB_SECRET_REF = "integration:tmdb"
+private const val THEINTRODB_SECRET_TYPE = "theintrodb_api_key"
+private const val THEINTRODB_SECRET_REF = "integration:theintrodb"
 private const val MDBLIST_SECRET_TYPE = "mdblist_api_key"
 private const val MDBLIST_SECRET_REF = "integration:mdblist"
 private const val OMDB_SECRET_TYPE = "omdb_api_key"
@@ -123,6 +131,8 @@ private const val REAL_DEBRID_SECRET_REF = "integration:realdebrid"
 private const val TRAKT_ACCESS_SECRET_TYPE = "trakt_access_token"
 private const val TRAKT_REFRESH_SECRET_TYPE = "trakt_refresh_token"
 private const val TRAKT_SECRET_REF = "integration:trakt"
+private const val SIMKL_ACCESS_SECRET_TYPE = "simkl_access_token"
+private const val SIMKL_SECRET_REF = "integration:simkl"
 
 @Singleton
 class AccountSettingsSyncService @Inject constructor(
@@ -133,6 +143,7 @@ class AccountSettingsSyncService @Inject constructor(
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val mdbListSettingsDataStore: MDBListSettingsDataStore,
     private val omdbSettingsDataStore: OmdbSettingsDataStore,
+    private val theIntroDbSettingsDataStore: TheIntroDbSettingsDataStore,
     private val animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
     private val geminiSettingsDataStore: GeminiSettingsDataStore,
     private val imdbSettingsDataStore: ImdbSettingsDataStore,
@@ -145,6 +156,7 @@ class AccountSettingsSyncService @Inject constructor(
     private val easyDebridService: EasyDebridService,
     private val realDebridAuthDataStore: RealDebridAuthDataStore,
     private val traktAuthDataStore: TraktAuthDataStore,
+    private val simklAuthDataStore: SimklAuthDataStore,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
@@ -170,6 +182,20 @@ class AccountSettingsSyncService @Inject constructor(
                 mdbListSettings = mdbListSettingsDataStore.settings.drop(1).map { Unit },
                 mdbListCatalogPreferences = mdbListSettingsDataStore.catalogPreferences.drop(1).map { Unit },
                 omdbSettings = omdbSettingsDataStore.settings.drop(1).map { Unit },
+                theIntroDbSettings = theIntroDbSettingsDataStore.settings
+                    .map {
+                        listOf(
+                            it.enabled,
+                            it.apiKey.trim(),
+                            it.showIntroButton,
+                            it.showRecapButton,
+                            it.showCreditsButton,
+                            it.showPreviewButton
+                        ).joinToString("|")
+                    }
+                    .distinctUntilChanged()
+                    .drop(1)
+                    .map { Unit },
                 animeSkipEnabled = animeSkipSettingsDataStore.enabled.drop(1).map { Unit },
                 animeSkipClientId = animeSkipSettingsDataStore.clientId.drop(1).map { Unit },
                 geminiSettings = geminiSettingsDataStore.settings.drop(1).map { Unit },
@@ -183,7 +209,9 @@ class AccountSettingsSyncService @Inject constructor(
                 easyDebridAccountState = easyDebridService.observeAccountState().drop(1).map { Unit },
                 realDebridState = realDebridAuthDataStore.state.drop(1).map { Unit },
                 traktAuthState = traktAuthDataStore.state.drop(1).map { Unit },
-                traktCatalogPreferences = traktSettingsDataStore.catalogPreferences.drop(1).map { Unit }
+                traktCatalogPreferences = traktSettingsDataStore.catalogPreferences.drop(1).map { Unit },
+                simklAuthState = simklAuthDataStore.state.drop(1).map { Unit },
+                playerSettings = playerSettingsDataStore.playerSettings.drop(1).map { Unit }
             ).collect {
                 schedulePush()
             }
@@ -226,6 +254,7 @@ class AccountSettingsSyncService @Inject constructor(
             }
 
             syncApiKeySecretToRemote(TMDB_SECRET_TYPE, TMDB_SECRET_REF, tmdbSettingsDataStore.settings.first().apiKey)
+            syncApiKeySecretToRemote(THEINTRODB_SECRET_TYPE, THEINTRODB_SECRET_REF, theIntroDbSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, mdbListSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(OMDB_SECRET_TYPE, OMDB_SECRET_REF, omdbSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(IMDB_SECRET_TYPE, IMDB_SECRET_REF, imdbSettingsDataStore.settings.first().apiKey)
@@ -237,6 +266,7 @@ class AccountSettingsSyncService @Inject constructor(
             syncApiKeySecretToRemote(EASY_DEBRID_SECRET_TYPE, EASY_DEBRID_SECRET_REF, easyDebridSettingsDataStore.settings.first().apiKey)
             syncRealDebridSecretsToRemote()
             syncTraktSecretsToRemote()
+            syncSimklSecretsToRemote()
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -262,6 +292,7 @@ class AccountSettingsSyncService @Inject constructor(
                     tmdbSettingsDataStore = tmdbSettingsDataStore,
                     mdbListSettingsDataStore = mdbListSettingsDataStore,
                     omdbSettingsDataStore = omdbSettingsDataStore,
+                    theIntroDbSettingsDataStore = theIntroDbSettingsDataStore,
                     animeSkipSettingsDataStore = animeSkipSettingsDataStore,
                     geminiSettingsDataStore = geminiSettingsDataStore,
                     imdbSettingsDataStore = imdbSettingsDataStore,
@@ -285,6 +316,7 @@ class AccountSettingsSyncService @Inject constructor(
         val tmdb = tmdbSettingsDataStore.settings.first()
         val mdbList = mdbListSettingsDataStore.settings.first()
         val mdbListPrefs = mdbListSettingsDataStore.catalogPreferences.first()
+        val theIntroDb = theIntroDbSettingsDataStore.settings.first()
         val animeSkipEnabled = animeSkipSettingsDataStore.enabled.first()
         val animeSkipClientId = animeSkipSettingsDataStore.clientId.first()
         val gemini = geminiSettingsDataStore.settings.first()
@@ -298,6 +330,7 @@ class AccountSettingsSyncService @Inject constructor(
         val easyDebridAccount = easyDebridService.observeAccountState().first()
         val realDebrid = realDebridAuthDataStore.state.first()
         val traktAuth = traktAuthDataStore.state.first()
+        val simklAuth = simklAuthDataStore.state.first()
         val traktCatalogPrefs = traktSettingsDataStore.catalogPreferences.first()
 
         return buildAccountConfigSyncPayload(
@@ -353,6 +386,13 @@ class AccountSettingsSyncService @Inject constructor(
                     enabled = omdbSettingsDataStore.settings.first().enabled
                 ),
                 imdb = buildImdbSyncSettings(imdbSettingsDataStore),
+                theIntroDb = TheIntroDbSyncSettings(
+                    enabled = theIntroDb.enabled,
+                    showIntroButton = theIntroDb.showIntroButton,
+                    showRecapButton = theIntroDb.showRecapButton,
+                    showCreditsButton = theIntroDb.showCreditsButton,
+                    showPreviewButton = theIntroDb.showPreviewButton
+                ),
                 animeSkip = AnimeSkipSyncSettings(
                     enabled = animeSkipEnabled,
                     clientId = animeSkipClientId
@@ -370,6 +410,13 @@ class AccountSettingsSyncService @Inject constructor(
                     userSlug = traktAuth.userSlug.orEmpty(),
                     connectedAt = null,
                     pending = traktAuth.deviceCode != null && !traktAuth.isAuthenticated
+                ),
+                simklAuth = SimklAuthSyncSettings(
+                    connected = simklAuth.isAuthenticated,
+                    username = simklAuth.username.orEmpty(),
+                    accountId = simklAuth.accountId,
+                    accountType = simklAuth.accountType.orEmpty(),
+                    pending = simklAuth.userCode != null && !simklAuth.isAuthenticated
                 )
             ),
             heroCatalogKeys = layoutPreferenceDataStore.heroCatalogSelections.first(),
@@ -381,6 +428,7 @@ class AccountSettingsSyncService @Inject constructor(
             mdbListHiddenPersonalListKeys = mdbListPrefs.hiddenPersonalListKeys.toList(),
             mdbListSelectedTopListKeys = mdbListPrefs.selectedTopListKeys.toList(),
             mdbListCatalogOrder = mdbListPrefs.catalogOrder,
+            trackingProvider = playerSettings.trackingProvider,
             formatter = FormatterSyncSettings(
                 enabled = playerSettings.syncedFormatterTemplate.enabled,
                 selectedTemplateId = playerSettings.syncedFormatterTemplate.selectedTemplateId,
@@ -460,6 +508,12 @@ class AccountSettingsSyncService @Inject constructor(
             selectedTopListKeys = settings.integrations.mdblist.selectedTopListKeys.toSet(),
             catalogOrder = settings.integrations.mdblist.catalogOrder
         )
+
+        theIntroDbSettingsDataStore.setEnabled(settings.integrations.theIntroDb.enabled)
+        theIntroDbSettingsDataStore.setShowIntroButton(settings.integrations.theIntroDb.showIntroButton)
+        theIntroDbSettingsDataStore.setShowRecapButton(settings.integrations.theIntroDb.showRecapButton)
+        theIntroDbSettingsDataStore.setShowCreditsButton(settings.integrations.theIntroDb.showCreditsButton)
+        theIntroDbSettingsDataStore.setShowPreviewButton(settings.integrations.theIntroDb.showPreviewButton)
 
         animeSkipSettingsDataStore.setEnabled(settings.integrations.animeSkip.enabled)
         animeSkipSettingsDataStore.setClientId(settings.integrations.animeSkip.clientId)
@@ -710,12 +764,52 @@ class AccountSettingsSyncService @Inject constructor(
         }
     }
 
+    private suspend fun syncSimklSecretsToRemote() {
+        val simklState = simklAuthDataStore.state.first()
+        val accessToken = simklState.accessToken?.trim().orEmpty()
+
+        if (accessToken.isBlank()) {
+            withJwtRefreshRetry {
+                postgrest.rpc(
+                    "sync_delete_account_secret",
+                    buildJsonObject {
+                        put("p_secret_type", SIMKL_ACCESS_SECRET_TYPE)
+                        put("p_secret_ref", SIMKL_SECRET_REF)
+                        put("p_source", "app")
+                    }
+                )
+            }
+            return
+        }
+
+        withJwtRefreshRetry {
+            postgrest.rpc(
+                "sync_set_account_secret",
+                buildJsonObject {
+                    put("p_secret_type", SIMKL_ACCESS_SECRET_TYPE)
+                    put("p_secret_ref", SIMKL_SECRET_REF)
+                    put(
+                        "p_secret_payload",
+                        Json.encodeToJsonElement(
+                            AccountSimklAccessSecretPayload.serializer(),
+                            AccountSimklAccessSecretPayload(accessToken = accessToken)
+                        )
+                    )
+                    put("p_masked_preview", "Connected ••••${accessToken.takeLast(4)}")
+                    put("p_status", "configured")
+                    put("p_source", "app")
+                }
+            )
+        }
+    }
+
     private suspend fun applyRemoteSecrets(settings: AccountConfigSyncPayload) {
         // Each helper returns null when the resolve RPC fails transiently (network,
         // JWT, decode). Only overwrite the local API key when we have an authoritative
         // response from the server — otherwise we'd wipe valid local credentials on
         // every flaky upgrade-time sync.
         resolveApiKeySecretOrNull(TMDB_SECRET_TYPE, TMDB_SECRET_REF)?.let { tmdbSettingsDataStore.setApiKey(it) }
+        resolveApiKeySecretOrNull(THEINTRODB_SECRET_TYPE, THEINTRODB_SECRET_REF)?.let { theIntroDbSettingsDataStore.setApiKey(it) }
         resolveApiKeySecretOrNull(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF)?.let { mdbListSettingsDataStore.setApiKey(it) }
         resolveApiKeySecretOrNull(OMDB_SECRET_TYPE, OMDB_SECRET_REF)?.let { omdbSettingsDataStore.setApiKey(it) }
         resolveApiKeySecretOrNull(IMDB_SECRET_TYPE, IMDB_SECRET_REF)?.let { imdbSettingsDataStore.setApiKey(it) }
@@ -731,6 +825,7 @@ class AccountSettingsSyncService @Inject constructor(
         easyDebridService.refreshAccountState()
         applyRemoteRealDebridSecrets(settings)
         applyRemoteTraktSecrets(settings)
+        applyRemoteSimklSecrets(settings)
     }
 
     private suspend fun resolveApiKeySecret(secretType: String, secretRef: String): String {
@@ -855,6 +950,44 @@ class AccountSettingsSyncService @Inject constructor(
         )
         if (!settings.integrations.traktAuth.pending) {
             traktAuthDataStore.clearDeviceFlow()
+        }
+    }
+
+    private suspend fun applyRemoteSimklSecrets(settings: AccountConfigSyncPayload) {
+        val accessResult = runCatching {
+            withJwtRefreshRetry {
+                postgrest.rpc(
+                    "sync_resolve_account_secret",
+                    buildJsonObject {
+                        put("p_secret_type", SIMKL_ACCESS_SECRET_TYPE)
+                        put("p_secret_ref", SIMKL_SECRET_REF)
+                        put("p_source", "app")
+                    }
+                ).decodeAs<AccountSimklAccessSecretPayload>()
+            }
+        }
+
+        if (accessResult.isFailure) {
+            return
+        }
+
+        val accessToken = accessResult.getOrNull()?.accessToken?.trim().orEmpty()
+        if (accessToken.isBlank()) {
+            val remote = settings.integrations.simklAuth
+            if (!remote.connected && !remote.pending) {
+                simklAuthDataStore.clearAuth()
+            }
+            return
+        }
+
+        simklAuthDataStore.saveAccessToken(accessToken)
+        simklAuthDataStore.saveUser(
+            username = settings.integrations.simklAuth.username.takeIf { it.isNotBlank() },
+            accountId = settings.integrations.simklAuth.accountId,
+            accountType = settings.integrations.simklAuth.accountType.takeIf { it.isNotBlank() }
+        )
+        if (!settings.integrations.simklAuth.pending) {
+            simklAuthDataStore.clearDeviceFlow()
         }
     }
 

@@ -51,7 +51,7 @@ import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
 
 /**
- * Skip Intro/Outro/Recap button for the player.
+ * Skip-segment button for the player.
  * Appears at bottom-left when playback is within a skip interval.
  * Auto-hides after 15 seconds. Focusable for D-pad navigation.
  */
@@ -208,6 +208,8 @@ fun SkipIntroButton(
 @Composable
 private fun getSkipLabel(type: String?): String = when (type) {
     "op", "mixed-op", "intro" -> stringResource(R.string.skip_intro)
+    "credits" -> stringResource(R.string.skip_credits)
+    "preview" -> stringResource(R.string.skip_preview)
     "ed", "mixed-ed", "outro" -> stringResource(R.string.skip_ending)
     "recap" -> stringResource(R.string.skip_recap)
     else -> stringResource(R.string.skip_generic)
