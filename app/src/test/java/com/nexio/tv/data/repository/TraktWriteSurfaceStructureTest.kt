@@ -80,7 +80,7 @@ class TraktWriteSurfaceStructureTest {
                 .filter { it.isRegularFile() && it.fileName.toString().endsWith(".kt") }
                 .mapNotNull { path ->
                     val relativePath = root.relativize(path).invariantSeparatorsPathString
-                    val source = Files.readString(path)
+                    val source = path.toFile().readText()
                     relativePath.takeIf { pattern.containsMatchIn(source) }
                 }
                 .toSet()

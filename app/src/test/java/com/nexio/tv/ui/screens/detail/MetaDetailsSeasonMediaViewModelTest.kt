@@ -423,12 +423,23 @@ class MetaDetailsSeasonMediaViewModelTest {
         val trailerService = mockk<TrailerService>(relaxed = true)
         val progressFlow = MutableStateFlow<Map<Pair<Int, Int>, com.nexio.tv.domain.model.WatchProgress>>(emptyMap())
         val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
+        val tmdbService = mockk<TmdbService>()
+        val tmdbMetadataService = mockk<TmdbMetadataService>()
         every { watchProgressRepository.getAllEpisodeProgress(any()) } returns progressFlow
         every { watchProgressRepository.getProgress(any()) } returns flowOf(null)
+        coEvery { tmdbService.ensureTmdbId(any(), any()) } returns "42"
+        coEvery { tmdbMetadataService.fetchSeasonEpisodes(42, 1, null) } returns listOf(
+            com.nexio.tv.data.remote.api.TmdbEpisode(
+                episodeNumber = 1,
+                airDate = "2020-01-01"
+            )
+        )
 
         val viewModel = buildViewModel(
             trailerService = trailerService,
-            watchProgressRepository = watchProgressRepository
+            watchProgressRepository = watchProgressRepository,
+            tmdbService = tmdbService,
+            tmdbMetadataService = tmdbMetadataService
         )
         advanceUntilIdle()
 
@@ -446,13 +457,24 @@ class MetaDetailsSeasonMediaViewModelTest {
         val trailerService = mockk<TrailerService>(relaxed = true)
         val progressFlow = MutableStateFlow<Map<Pair<Int, Int>, com.nexio.tv.domain.model.WatchProgress>>(emptyMap())
         val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
+        val tmdbService = mockk<TmdbService>()
+        val tmdbMetadataService = mockk<TmdbMetadataService>()
         every { watchProgressRepository.getAllEpisodeProgress(any()) } returns progressFlow
         every { watchProgressRepository.getProgress(any()) } returns flowOf(null)
         coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), any()) } throws IllegalStateException("boom")
+        coEvery { tmdbService.ensureTmdbId(any(), any()) } returns "42"
+        coEvery { tmdbMetadataService.fetchSeasonEpisodes(42, 1, null) } returns listOf(
+            com.nexio.tv.data.remote.api.TmdbEpisode(
+                episodeNumber = 1,
+                airDate = "2020-01-01"
+            )
+        )
 
         val viewModel = buildViewModel(
             trailerService = trailerService,
-            watchProgressRepository = watchProgressRepository
+            watchProgressRepository = watchProgressRepository,
+            tmdbService = tmdbService,
+            tmdbMetadataService = tmdbMetadataService
         )
         advanceUntilIdle()
 

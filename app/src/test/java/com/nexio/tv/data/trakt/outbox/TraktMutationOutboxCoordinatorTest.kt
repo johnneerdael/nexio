@@ -78,7 +78,7 @@ class TraktMutationOutboxCoordinatorTest {
         val settled = awaitTerminalState(coordinator, envelope.id)
 
         assertEquals(TraktMutationLifecycleState.SUCCEEDED, settled.state)
-        assertEquals(listOf(envelope.id), adapter.optimisticApplied)
+        assertTrue(adapter.optimisticApplied.isEmpty())
         assertEquals(listOf(envelope.id), adapter.reconciled)
     }
 
@@ -86,18 +86,17 @@ class TraktMutationOutboxCoordinatorTest {
         coordinator: TraktMutationOutboxCoordinator,
         envelopeId: String
     ): TraktMutationEnvelope {
-        return withTimeout(2_000L) {
-            while (true) {
-                val item = coordinator.snapshot().items.firstOrNull { it.id == envelopeId }
-                    ?: error("Missing envelope $envelopeId")
-                if (item.state == TraktMutationLifecycleState.SUCCEEDED ||
-                    item.state == TraktMutationLifecycleState.TERMINAL_FAILED
-                ) {
-                    return@withTimeout item
-                }
-                delay(10)
+        repeat(500) {
+            val item = coordinator.snapshot().items.firstOrNull { it.id == envelopeId }
+                ?: error("Missing envelope $envelopeId")
+            if (item.state == TraktMutationLifecycleState.SUCCEEDED ||
+                item.state == TraktMutationLifecycleState.TERMINAL_FAILED
+            ) {
+                return item
             }
+            Thread.sleep(10)
         }
+        error("Timed out waiting for envelope $envelopeId to settle")
     }
 
     private fun buildCoordinator(

@@ -334,6 +334,7 @@ class MarkSeasonWatchedTest {
                 watchProgressPreferences = mockk(relaxed = true),
                 traktAuthDataStore = traktAuthDataStore,
                 traktProgressService = traktProgressService,
+                traktMutationOutboxCoordinator = mockk(relaxed = true),
                 metaRepository = mockk(relaxed = true),
                 seasonMarkBatcher = seasonMarkBatcher,
                 snapshotServiceProvider = Provider { snapshotService }
@@ -414,6 +415,7 @@ class MarkSeasonWatchedTest {
                 watchProgressPreferences = mockk(relaxed = true),
                 traktAuthDataStore = traktAuthDataStore,
                 traktProgressService = traktProgressService,
+                traktMutationOutboxCoordinator = mockk(relaxed = true),
                 metaRepository = mockk(relaxed = true),
                 seasonMarkBatcher = seasonMarkBatcher,
                 snapshotServiceProvider = Provider { snapshotService }
@@ -508,6 +510,7 @@ class MarkSeasonWatchedTest {
                 watchProgressPreferences = mockk(relaxed = true),
                 traktAuthDataStore = traktAuthDataStore,
                 traktProgressService = traktProgressService,
+                traktMutationOutboxCoordinator = mockk(relaxed = true),
                 metaRepository = mockk(relaxed = true),
                 seasonMarkBatcher = seasonMarkBatcher,
                 snapshotServiceProvider = Provider { snapshotService }
@@ -616,6 +619,7 @@ class MarkSeasonWatchedTest {
                 watchProgressPreferences = mockk(relaxed = true),
                 traktAuthDataStore = traktAuthDataStore,
                 traktProgressService = traktProgressService,
+                traktMutationOutboxCoordinator = mockk(relaxed = true),
                 metaRepository = mockk(relaxed = true),
                 seasonMarkBatcher = seasonMarkBatcher,
                 snapshotServiceProvider = Provider { snapshotService }
