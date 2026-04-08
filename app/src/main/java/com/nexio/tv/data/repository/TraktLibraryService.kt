@@ -9,7 +9,6 @@ import com.nexio.tv.data.local.TraktLibrarySnapshotStore
 import com.nexio.tv.data.repository.trakt.TraktLibraryMutationAdapter
 import com.nexio.tv.data.repository.trakt.TraktLibraryMutationExecutor
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
-import com.nexio.tv.data.trakt.outbox.TraktMutationLifecycleState
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import com.nexio.tv.data.repository.hasAnyId
 import com.nexio.tv.data.repository.normalizeContentId
@@ -349,11 +348,7 @@ class TraktLibraryService @Inject constructor(
     private suspend fun awaitLibraryMutation(
         envelope: TraktMutationEnvelope
     ): TraktMutationEnvelope {
-        val settled = traktMutationOutboxCoordinator.enqueueAndAwait(envelope)
-        if (settled.state == TraktMutationLifecycleState.TERMINAL_FAILED) {
-            throw IllegalStateException(settled.lastError ?: "Trakt request failed")
-        }
-        return settled
+        return traktMutationOutboxCoordinator.enqueueAndAwaitOrThrow(envelope)
     }
 
     suspend fun refreshNow() {

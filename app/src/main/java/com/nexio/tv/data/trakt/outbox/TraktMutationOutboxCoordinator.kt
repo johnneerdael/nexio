@@ -74,6 +74,18 @@ class TraktMutationOutboxCoordinator @Inject constructor(
         return settled
     }
 
+    suspend fun enqueueAndAwaitOrThrow(
+        envelope: TraktMutationEnvelope,
+        timeoutMs: Long = 30_000L,
+        fallbackMessage: String = "Trakt request failed"
+    ): TraktMutationEnvelope {
+        val settled = enqueueAndAwait(envelope = envelope, timeoutMs = timeoutMs)
+        if (settled.state == TraktMutationLifecycleState.TERMINAL_FAILED) {
+            throw IllegalStateException(settled.lastError ?: fallbackMessage)
+        }
+        return settled
+    }
+
     suspend fun requestDrain() {
         ensureDraining()
     }

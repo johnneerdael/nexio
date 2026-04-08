@@ -1,6 +1,5 @@
 package com.nexio.tv.data.repository.trakt
 
-import com.nexio.tv.data.trakt.outbox.TraktMutationLifecycleState
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -9,9 +8,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * A narrow batcher that collapses season-mark fan-out into a single batched POST /sync/history.
- * Issues exactly one network call per [markSeasonWatched] invocation — no debounce, no queue,
- * no retry. Hard failures propagate as-is to the caller.
+ * A narrow batcher that collapses season-mark fan-out into one queued
+ * POST /sync/history mutation and waits for that durable outbox item to settle.
  */
 @Singleton
 class SeasonMarkBatcher @Inject constructor(
@@ -25,22 +23,17 @@ class SeasonMarkBatcher @Inject constructor(
         episodes: List<TraktEpisodeRef>
     ): SeasonMarkResult =
         withContext(ioDispatcher) {
-            val settled = traktMutationOutboxCoordinator.enqueueAndAwait(
+            val settled = traktMutationOutboxCoordinator.enqueueAndAwaitOrThrow(
                 TraktSeasonMarkMutationAdapter.buildEnvelope(
                     showContentId = showContentId,
                     seasonNumber = seasonNumber,
                     episodes = episodes
-                )
+                ),
+                fallbackMessage = "Failed to batch mark season watched"
             )
 
-            if (settled.state == TraktMutationLifecycleState.TERMINAL_FAILED) {
-                throw IllegalStateException(settled.lastError ?: "Failed to batch mark season watched")
-            }
-
             val notFoundIds = traktSeasonMarkMutationAdapter.consumeNotFound(settled.id)
-
-            val succeeded = episodes.filter { it.traktId !in notFoundIds }
-            val notFound = episodes.filter { it.traktId in notFoundIds }
+            val (notFound, succeeded) = episodes.partition { it.traktId in notFoundIds }
 
             SeasonMarkResult(succeeded = succeeded, notFound = notFound)
         }

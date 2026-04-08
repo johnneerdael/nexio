@@ -5,11 +5,11 @@ import com.google.gson.JsonObject
 import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class TraktMutationOutboxCoordinatorTest {
@@ -80,6 +80,25 @@ class TraktMutationOutboxCoordinatorTest {
         assertEquals(TraktMutationLifecycleState.SUCCEEDED, settled.state)
         assertTrue(adapter.optimisticApplied.isEmpty())
         assertEquals(listOf(envelope.id), adapter.reconciled)
+    }
+
+    @Test
+    fun `enqueueAndAwaitOrThrow surfaces terminal failures consistently`() = runBlocking {
+        val adapter = RecordingAdapter(
+            adapterKey = "progress",
+            executionResult = TraktMutationExecutionResult.Failure(
+                httpStatusCode = 404,
+                reason = "missing"
+            )
+        )
+        val coordinator = buildCoordinator(adapter)
+
+        try {
+            coordinator.enqueueAndAwaitOrThrow(sampleEnvelope(), timeoutMs = 2_000L)
+            fail("Expected IllegalStateException")
+        } catch (error: IllegalStateException) {
+            assertEquals("missing", error.message)
+        }
     }
 
     private suspend fun awaitTerminalState(

@@ -1,7 +1,6 @@
 package com.nexio.tv.data.repository.trakt
 
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
-import com.nexio.tv.data.trakt.outbox.TraktMutationLifecycleState
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import io.mockk.coEvery
 import io.mockk.every
@@ -21,7 +20,7 @@ class SeasonMarkBatcherTest {
     fun `batcherIssuesOneCallForManyEpisodes`() = runTest {
         val coordinator = mockk<TraktMutationOutboxCoordinator>()
         val adapter = mockk<TraktSeasonMarkMutationAdapter>()
-        coEvery { coordinator.enqueueAndAwait(any(), any()) } answers { firstArg<TraktMutationEnvelope>().copy(state = TraktMutationLifecycleState.SUCCEEDED) }
+        coEvery { coordinator.enqueueAndAwaitOrThrow(any(), any(), any()) } answers { firstArg<TraktMutationEnvelope>() }
         every { adapter.consumeNotFound(any()) } returns emptySet()
 
         val batcher = SeasonMarkBatcher(coordinator, adapter, StandardTestDispatcher(testScheduler))
@@ -36,7 +35,7 @@ class SeasonMarkBatcherTest {
     fun `demultiplexesNotFoundByTraktId`() = runTest {
         val coordinator = mockk<TraktMutationOutboxCoordinator>()
         val adapter = mockk<TraktSeasonMarkMutationAdapter>()
-        coEvery { coordinator.enqueueAndAwait(any(), any()) } answers { firstArg<TraktMutationEnvelope>().copy(state = TraktMutationLifecycleState.SUCCEEDED) }
+        coEvery { coordinator.enqueueAndAwaitOrThrow(any(), any(), any()) } answers { firstArg<TraktMutationEnvelope>() }
         every { adapter.consumeNotFound(any()) } returns setOf(3, 7)
 
         val batcher = SeasonMarkBatcher(coordinator, adapter, StandardTestDispatcher(testScheduler))
@@ -53,7 +52,7 @@ class SeasonMarkBatcherTest {
     fun `hardFailurePropagatesException`() = runTest {
         val coordinator = mockk<TraktMutationOutboxCoordinator>()
         val adapter = mockk<TraktSeasonMarkMutationAdapter>()
-        coEvery { coordinator.enqueueAndAwait(any(), any()) } throws IOException("network failure")
+        coEvery { coordinator.enqueueAndAwaitOrThrow(any(), any(), any()) } throws IOException("network failure")
 
         val batcher = SeasonMarkBatcher(coordinator, adapter, StandardTestDispatcher(testScheduler))
         val episodes = listOf(TraktEpisodeRef(traktId = 1))
@@ -70,7 +69,7 @@ class SeasonMarkBatcherTest {
     fun `dispatcherInjectionWorksWithTestScheduler`() = runTest {
         val coordinator = mockk<TraktMutationOutboxCoordinator>()
         val adapter = mockk<TraktSeasonMarkMutationAdapter>()
-        coEvery { coordinator.enqueueAndAwait(any(), any()) } answers { firstArg<TraktMutationEnvelope>().copy(state = TraktMutationLifecycleState.SUCCEEDED) }
+        coEvery { coordinator.enqueueAndAwaitOrThrow(any(), any(), any()) } answers { firstArg<TraktMutationEnvelope>() }
         every { adapter.consumeNotFound(any()) } returns emptySet()
 
         val batcher = SeasonMarkBatcher(coordinator, adapter, StandardTestDispatcher(testScheduler))
