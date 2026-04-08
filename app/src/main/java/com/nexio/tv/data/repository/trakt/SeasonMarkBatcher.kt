@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository.trakt
 
+import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -8,43 +9,37 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * A narrow batcher that collapses season-mark fan-out into one queued
- * POST /sync/history mutation and waits for that durable outbox item to settle.
+ * Collapses season-mark fan-out into one queued POST /sync/history mutation and returns as soon
+ * as the durable outbox accepts the command.
  */
 @Singleton
 class SeasonMarkBatcher @Inject constructor(
     private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator,
-    private val traktSeasonMarkMutationAdapter: TraktSeasonMarkMutationAdapter,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     suspend fun markSeasonWatched(
         showContentId: String,
         seasonNumber: Int,
-        episodes: List<TraktEpisodeRef>
-    ): SeasonMarkResult =
+        episodes: List<TraktEpisodeRef>,
+        rollbackState: ContinueWatchingSnapshotService.EpisodeRollbackState
+    ) {
         withContext(ioDispatcher) {
-            val settled = traktMutationOutboxCoordinator.enqueueAndAwaitOrThrow(
+            traktMutationOutboxCoordinator.enqueueAndDrain(
                 TraktSeasonMarkMutationAdapter.buildEnvelope(
                     showContentId = showContentId,
                     seasonNumber = seasonNumber,
-                    episodes = episodes
-                ),
-                fallbackMessage = "Failed to batch mark season watched"
+                    episodes = episodes,
+                    rollbackState = rollbackState
+                )
             )
-
-            val notFoundIds = traktSeasonMarkMutationAdapter.consumeNotFound(settled.id)
-            val (notFound, succeeded) = episodes.partition { it.traktId in notFoundIds }
-
-            SeasonMarkResult(succeeded = succeeded, notFound = notFound)
         }
+    }
 }
 
 /**
- * A lightweight reference to a Trakt episode identified by its Trakt integer ID.
+ * Reference to a season episode using both app-side coordinates and its Trakt integer ID.
  */
-data class TraktEpisodeRef(val traktId: Int)
-
-data class SeasonMarkResult(
-    val succeeded: List<TraktEpisodeRef>,
-    val notFound: List<TraktEpisodeRef>,
+data class TraktEpisodeRef(
+    val episodeNumber: Int,
+    val traktId: Int
 )

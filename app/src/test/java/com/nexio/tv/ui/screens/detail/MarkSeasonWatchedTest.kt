@@ -8,7 +8,6 @@ import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher
-import com.nexio.tv.data.repository.trakt.SeasonMarkResult
 import com.nexio.tv.data.repository.trakt.TraktEpisodeRef
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
@@ -278,10 +277,10 @@ class MarkSeasonWatchedTest {
         )
     }
 
-    // ── Test 6: partialBatchRolloutRollback (C1) ──────────────────────────────
+    // ── Test 6: partialBatchHandledAsync (C1) ──────────────────────────────
 
     @Test
-    fun `partialBatchRolloutRollback - not_found episodes rolled back, succeeded stay removed`() =
+    fun `partialBatchHandledAsync - repository enqueues resolved season refs without waiting for settlement`() =
         runTest(dispatcher) {
             val showId = "tt3333333"
             val season = 2
@@ -309,23 +308,20 @@ class MarkSeasonWatchedTest {
             val traktProgressService = mockk<TraktProgressService>(relaxed = true)
             coEvery {
                 traktProgressService.resolveSeasonEpisodeTraktIds(showId, season, any())
-            } returns (1..10).associate { epNum -> epNum to TraktEpisodeRef(epNum) }
+            } returns (1..10).associate { epNum ->
+                epNum to TraktEpisodeRef(
+                    episodeNumber = epNum,
+                    traktId = epNum
+                )
+            }
 
-            // Batcher returns not_found for traktIds 1..5 (episodes 1..5)
             val seasonMarkBatcher = mockk<SeasonMarkBatcher>()
-            coEvery { seasonMarkBatcher.markSeasonWatched(any(), any(), any()) } returns SeasonMarkResult(
-                succeeded = (6..10).map { TraktEpisodeRef(it) },
-                notFound = (1..5).map { TraktEpisodeRef(it) }
-            )
+            coEvery { seasonMarkBatcher.markSeasonWatched(any(), any(), any(), any()) } returns Unit
 
             val snapshotService = mockk<ContinueWatchingSnapshotService>(relaxed = true)
-            every { snapshotService.snapshotForRollback() } returns ContinueWatchingSnapshotService.EpisodeRollbackState(
+            every { snapshotService.snapshotForEpisodes(any()) } returns ContinueWatchingSnapshotService.EpisodeRollbackState(
                 resumeItems = resumeItems
             )
-
-            val rollbackSlot = slot<ContinueWatchingSnapshotService.EpisodeRollbackState>()
-            coEvery { snapshotService.rollbackEpisodes(any<ContinueWatchingSnapshotService.EpisodeRollbackState>()) } returns Unit
-            coEvery { snapshotService.rollbackEpisodes(capture(rollbackSlot)) } returns Unit
 
             val traktAuthDataStore = mockk<TraktAuthDataStore>(relaxed = true)
             coEvery { traktAuthDataStore.isEffectivelyAuthenticated } returns flowOf(true)
@@ -345,13 +341,23 @@ class MarkSeasonWatchedTest {
 
             repo.markAsCompletedBatch(meta, season, episodes)
 
-            // rollbackEpisodes called with exactly the 5 not-found entries
-            coVerify(exactly = 1) { snapshotService.rollbackEpisodes(any<ContinueWatchingSnapshotService.EpisodeRollbackState>()) }
-            assertEquals(5, rollbackSlot.captured.resumeItems.size)
+            val refsSlot = slot<List<TraktEpisodeRef>>()
+            val rollbackSlot = slot<ContinueWatchingSnapshotService.EpisodeRollbackState>()
+            coVerify(exactly = 1) {
+                seasonMarkBatcher.markSeasonWatched(
+                    showId,
+                    season,
+                    capture(refsSlot),
+                    capture(rollbackSlot)
+                )
+            }
             assertEquals(
-                (1..5).toSet(),
-                rollbackSlot.captured.resumeItems.map { it.episode }.toSet()
+                (1..10).toSet(),
+                refsSlot.captured.map { it.episodeNumber }.toSet()
             )
+            assertEquals(10, rollbackSlot.captured.resumeItems.size)
+            coVerify(exactly = 0) { snapshotService.rollbackEpisodes(any<ContinueWatchingSnapshotService.EpisodeRollbackState>()) }
+            coVerify(exactly = 0) { snapshotService.ensureFresh(force = true) }
         }
 
     // ── Test 6.5: unresolvedEpisodeRolloutRollback (N6) ─────────────────
@@ -385,22 +391,18 @@ class MarkSeasonWatchedTest {
             coEvery {
                 traktProgressService.resolveSeasonEpisodeTraktIds(showId, season, any())
             } returns mapOf(
-                1 to TraktEpisodeRef(101),
-                2 to TraktEpisodeRef(102),
-                4 to TraktEpisodeRef(104),
-                5 to TraktEpisodeRef(105),
-                7 to TraktEpisodeRef(107),
+                1 to TraktEpisodeRef(episodeNumber = 1, traktId = 101),
+                2 to TraktEpisodeRef(episodeNumber = 2, traktId = 102),
+                4 to TraktEpisodeRef(episodeNumber = 4, traktId = 104),
+                5 to TraktEpisodeRef(episodeNumber = 5, traktId = 105),
+                7 to TraktEpisodeRef(episodeNumber = 7, traktId = 107),
             )
 
-            // Episodes 3, 6, and 8 could not be resolved to Trakt IDs — they must be rolled back.
             val seasonMarkBatcher = mockk<SeasonMarkBatcher>()
-            coEvery { seasonMarkBatcher.markSeasonWatched(any(), any(), any()) } returns SeasonMarkResult(
-                succeeded = listOf(TraktEpisodeRef(101), TraktEpisodeRef(102), TraktEpisodeRef(105)),
-                notFound = listOf(TraktEpisodeRef(104), TraktEpisodeRef(107))
-            )
+            coEvery { seasonMarkBatcher.markSeasonWatched(any(), any(), any(), any()) } returns Unit
 
             val snapshotService = mockk<ContinueWatchingSnapshotService>(relaxed = true)
-            every { snapshotService.snapshotForRollback() } returns ContinueWatchingSnapshotService.EpisodeRollbackState(
+            every { snapshotService.snapshotForEpisodes(any()) } returns ContinueWatchingSnapshotService.EpisodeRollbackState(
                 resumeItems = resumeItems
             )
 
@@ -428,11 +430,11 @@ class MarkSeasonWatchedTest {
 
             coVerify(exactly = 1) { snapshotService.rollbackEpisodes(any<ContinueWatchingSnapshotService.EpisodeRollbackState>()) }
             assertEquals(
-                "Rollback should include unresolved and notFound episodes",
-                setOf(3, 4, 6, 7, 8),
+                "Rollback should include only unresolved episodes before the queued mutation settles",
+                setOf(3, 6, 8),
                 rollbackSlot.captured.resumeItems.mapNotNull { it.episode }.toSet()
             )
-            coVerify(exactly = 1) { snapshotService.ensureFresh(force = true) }
+            coVerify(exactly = 0) { snapshotService.ensureFresh(force = true) }
         }
 
     // ── Test 7: singleEpisodeToggleRegression ─────────────────────────────────
@@ -489,13 +491,18 @@ class MarkSeasonWatchedTest {
             val traktProgressService = mockk<TraktProgressService>(relaxed = true)
             coEvery {
                 traktProgressService.resolveSeasonEpisodeTraktIds(showId, season, any())
-            } returns (1..5).associate { epNum -> epNum to TraktEpisodeRef(epNum) }
+            } returns (1..5).associate { epNum ->
+                epNum to TraktEpisodeRef(
+                    episodeNumber = epNum,
+                    traktId = epNum
+                )
+            }
 
             val seasonMarkBatcher = mockk<SeasonMarkBatcher>()
-            coEvery { seasonMarkBatcher.markSeasonWatched(any(), any(), any()) } throws IOException("network error")
+            coEvery { seasonMarkBatcher.markSeasonWatched(any(), any(), any(), any()) } throws IOException("network error")
 
             val snapshotService = mockk<ContinueWatchingSnapshotService>(relaxed = true)
-            every { snapshotService.snapshotForRollback() } returns ContinueWatchingSnapshotService.EpisodeRollbackState(
+            every { snapshotService.snapshotForEpisodes(any()) } returns ContinueWatchingSnapshotService.EpisodeRollbackState(
                 resumeItems = resumeItems
             )
 
@@ -596,13 +603,18 @@ class MarkSeasonWatchedTest {
             val traktProgressService = mockk<TraktProgressService>(relaxed = true)
             coEvery {
                 traktProgressService.resolveSeasonEpisodeTraktIds(showId, season, any())
-            } returns (1..3).associate { epNum -> epNum to com.nexio.tv.data.repository.trakt.TraktEpisodeRef(epNum) }
+            } returns (1..3).associate { epNum ->
+                epNum to com.nexio.tv.data.repository.trakt.TraktEpisodeRef(
+                    episodeNumber = epNum,
+                    traktId = epNum
+                )
+            }
 
             val seasonMarkBatcher = mockk<SeasonMarkBatcher>()
-            coEvery { seasonMarkBatcher.markSeasonWatched(any(), any(), any()) } throws IOException("network failure")
+            coEvery { seasonMarkBatcher.markSeasonWatched(any(), any(), any(), any()) } throws IOException("network failure")
 
             val snapshotService = mockk<ContinueWatchingSnapshotService>(relaxed = true)
-            every { snapshotService.snapshotForRollback() } returns ContinueWatchingSnapshotService.EpisodeRollbackState(
+            every { snapshotService.snapshotForEpisodes(any()) } returns ContinueWatchingSnapshotService.EpisodeRollbackState(
                 resumeItems = resumeItems,
                 nextUpItems = nextUpItems,
                 traktUpNextItems = traktUpNextItems

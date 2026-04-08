@@ -1608,8 +1608,11 @@ class TraktProgressService @Inject constructor(
             )
         }
 
-        return resolved.mapValues { (_, traktId) ->
-            com.nexio.tv.data.repository.trakt.TraktEpisodeRef(traktId)
+        return resolved.mapValues { (episodeNumber, traktId) ->
+            com.nexio.tv.data.repository.trakt.TraktEpisodeRef(
+                episodeNumber = episodeNumber,
+                traktId = traktId
+            )
         }
     }
 

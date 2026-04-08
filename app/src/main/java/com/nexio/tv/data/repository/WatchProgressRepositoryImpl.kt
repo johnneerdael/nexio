@@ -451,19 +451,13 @@ class WatchProgressRepositoryImpl @Inject constructor(
                 episodeNumber = epNum
             )
         }
+        val snapshotService = snapshotServiceProvider.get()
 
-        // 2. Capture the current snapshot (resume + next-up rails) that match these episodes.
-        val snapshot = snapshotServiceProvider.get().snapshotForRollback()
-        val optimisticallyRemoved = snapshot.resumeItems.filter { progress ->
-            episodeRefs.any { ref ->
-                progress.contentId == ref.showId &&
-                    progress.season == ref.seasonNumber &&
-                    progress.episode == ref.episodeNumber
-            }
-        }
+        // 2. Capture only the rails touched by this season mutation for later rollback.
+        val rollbackState = snapshotService.snapshotForEpisodes(episodeRefs)
 
         // 3. Atomic optimistic update — remove from CW
-        snapshotServiceProvider.get().applyEpisodesMarked(episodeRefs)
+        snapshotService.applyEpisodesMarked(episodeRefs)
 
         // 4. Resolve Trakt episode IDs in parallel — map<episodeNumber, TraktEpisodeRef>
         val episodeNumbers = episodes.mapNotNull { it.episodeNumber }
@@ -477,79 +471,45 @@ class WatchProgressRepositoryImpl @Inject constructor(
 
         if (traktRefs.isEmpty()) {
             if (initialNotFoundEpisodeNumbers.isNotEmpty()) {
-                val unresolvedRefs = episodeRefs.filter { it.episodeNumber in initialNotFoundEpisodeNumbers }
-                val unresolvedProgress = optimisticallyRemoved.filter { progress ->
-                    progress.episode != null && unresolvedRefs.any { it.episodeNumber == progress.episode }
-                }
-                if (unresolvedProgress.isNotEmpty()) {
-                    snapshotServiceProvider.get().rollbackEpisodes(
-                        ContinueWatchingSnapshotService.EpisodeRollbackState(resumeItems = unresolvedProgress)
-                    )
-                }
+                snapshotService.rollbackEpisodes(
+                    rollbackState.filterEpisodeNumbers(initialNotFoundEpisodeNumbers)
+                )
             }
-            snapshotServiceProvider.get().ensureFresh(force = true)
+            snapshotService.ensureFresh(force = true)
             return
         }
 
-        // 5. One batched POST via SeasonMarkBatcher
-        val result = try {
+        if (initialNotFoundEpisodeNumbers.isNotEmpty()) {
+            snapshotService.rollbackEpisodes(
+                rollbackState.filterEpisodeNumbers(initialNotFoundEpisodeNumbers)
+            )
+        }
+
+        // 5. One batched POST via SeasonMarkBatcher; settlement is handled asynchronously by the outbox.
+        try {
             seasonMarkBatcher.markSeasonWatched(
                 showContentId = showContentId,
                 seasonNumber = seasonNumber,
-                episodes = traktRefs
+                episodes = traktRefs,
+                rollbackState = rollbackState.filterEpisodeNumbers(epNumToTraktRef.keys)
             )
         } catch (e: Exception) {
-            // Hard failure: restore the pre-mutation snapshot and force a full rebuild so
-            // continuation rails remain aligned with remote state.
-            snapshotServiceProvider.get().rollbackEpisodes(snapshot)
-            snapshotServiceProvider.get().ensureFresh(force = true)
+            snapshotService.rollbackEpisodes(rollbackState)
+            snapshotService.ensureFresh(force = true)
             throw e
         }
+    }
 
-        // 6. Partial rollback for not_found episodes
-        val fromResponseNotFound: Set<Int> = if (result.notFound.isNotEmpty()) {
-            val notFoundIds = result.notFound.map { it.traktId }.toSet()
-            // Invert epNumToTraktRef to map traktId → episodeNumber for rollback lookup
-            val traktIdToEpNum: Map<Int, Int> = epNumToTraktRef
-                .entries
-                .associate { (epNum, ref) -> ref.traktId to epNum }
-            notFoundIds.mapNotNull { traktIdToEpNum[it] }.toSet()
-        } else emptySet()
-
-        val notFoundEpisodeNumbers = initialNotFoundEpisodeNumbers + fromResponseNotFound
-
-        if (notFoundEpisodeNumbers.isNotEmpty()) {
-            val notFoundRefs = episodeRefs.filter { ref -> notFoundEpisodeNumbers.contains(ref.episodeNumber) }
-            val notFoundProgress = optimisticallyRemoved.filter { progress ->
-                progress.episode != null && notFoundEpisodeNumbers.contains(progress.episode)
-            }
-            if (notFoundProgress.isNotEmpty()) {
-                val notFoundNextUp = snapshot.nextUpItems.filter { entry ->
-                    notFoundRefs.any { ref ->
-                        entry.contentId == ref.showId &&
-                            entry.season == ref.seasonNumber &&
-                            entry.episode == ref.episodeNumber
-                    }
-                }
-                val notFoundTraktUpNext = snapshot.traktUpNextItems.filter { entry ->
-                    notFoundRefs.any { ref ->
-                        entry.contentId == ref.showId &&
-                            entry.season == ref.seasonNumber &&
-                            entry.episode == ref.episodeNumber
-                    }
-                }
-                snapshotServiceProvider.get().rollbackEpisodes(
-                    ContinueWatchingSnapshotService.EpisodeRollbackState(
-                        resumeItems = notFoundProgress,
-                        nextUpItems = notFoundNextUp,
-                        traktUpNextItems = notFoundTraktUpNext
-                    )
-                )
-            }
-        }
-
-        // 7. Force snapshot refresh
-        snapshotServiceProvider.get().ensureFresh(force = true)
+    private fun ContinueWatchingSnapshotService.EpisodeRollbackState.filterEpisodeNumbers(
+        episodeNumbers: Collection<Int>
+    ): ContinueWatchingSnapshotService.EpisodeRollbackState {
+        val episodeSet = episodeNumbers.toSet()
+        if (episodeSet.isEmpty()) return ContinueWatchingSnapshotService.EpisodeRollbackState()
+        return ContinueWatchingSnapshotService.EpisodeRollbackState(
+            resumeItems = resumeItems.filter { it.episode in episodeSet },
+            nextUpItems = nextUpItems.filter { it.episode in episodeSet },
+            traktUpNextItems = traktUpNextItems.filter { it.episode in episodeSet }
+        )
     }
 
     private fun progressKey(progress: WatchProgress): String {

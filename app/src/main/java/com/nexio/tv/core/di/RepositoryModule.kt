@@ -11,7 +11,6 @@ import com.nexio.tv.data.repository.WatchProgressRepositoryImpl
 import com.nexio.tv.data.repository.servicewrap.DebridAvailabilityResolver
 import com.nexio.tv.data.repository.servicewrap.ServiceWrapResolver
 import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher
-import com.nexio.tv.data.repository.trakt.TraktSeasonMarkMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
@@ -73,12 +72,10 @@ abstract class RepositoryModule {
         @Provides
         @Singleton
         fun provideSeasonMarkBatcher(
-            traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator,
-            traktSeasonMarkMutationAdapter: TraktSeasonMarkMutationAdapter
+            traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator
         ): SeasonMarkBatcher {
             return SeasonMarkBatcher(
                 traktMutationOutboxCoordinator,
-                traktSeasonMarkMutationAdapter,
                 Dispatchers.IO
             )
         }
