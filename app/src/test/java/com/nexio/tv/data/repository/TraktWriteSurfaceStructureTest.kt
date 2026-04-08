@@ -31,8 +31,14 @@ class TraktWriteSurfaceStructureTest {
                     "com/nexio/tv/data/repository/TraktProgressService.kt",
                     "com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt"
                 ),
-                "removeHistory" to setOf("com/nexio/tv/data/repository/TraktProgressService.kt"),
-                "deletePlayback" to setOf("com/nexio/tv/data/repository/TraktProgressService.kt"),
+                "removeHistory" to setOf(
+                    "com/nexio/tv/data/repository/TraktProgressService.kt",
+                    "com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt"
+                ),
+                "deletePlayback" to setOf(
+                    "com/nexio/tv/data/repository/TraktProgressService.kt",
+                    "com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt"
+                ),
                 "addToWatchlist" to setOf("com/nexio/tv/data/repository/TraktLibraryService.kt"),
                 "removeFromWatchlist" to setOf("com/nexio/tv/data/repository/TraktLibraryService.kt"),
                 "addUserListItems" to setOf("com/nexio/tv/data/repository/TraktLibraryService.kt"),

@@ -574,6 +574,146 @@ class TraktProgressService @Inject constructor(
         refreshNow()
     }
 
+    internal fun buildHistoryRemoveRequestForOutbox(
+        contentId: String,
+        season: Int?,
+        episode: Int?,
+        removeShow: Boolean
+    ): TraktHistoryRemoveRequestDto? {
+        val parsed = parseContentIds(contentId)
+        val ids = toTraktIds(parsed)
+        if (!ids.hasAnyId()) return null
+
+        return when {
+            removeShow -> {
+                TraktHistoryRemoveRequestDto(
+                    shows = listOf(
+                        TraktHistoryShowRemoveDto(ids = ids)
+                    )
+                )
+            }
+
+            season != null && episode != null -> {
+                TraktHistoryRemoveRequestDto(
+                    shows = listOf(
+                        TraktHistoryShowRemoveDto(
+                            ids = ids,
+                            seasons = listOf(
+                                TraktHistorySeasonRemoveDto(
+                                    number = season,
+                                    episodes = listOf(TraktHistoryEpisodeRemoveDto(number = episode))
+                                )
+                            )
+                        )
+                    )
+                )
+            }
+
+            else -> {
+                TraktHistoryRemoveRequestDto(
+                    movies = listOf(TraktMovieDto(ids = ids))
+                )
+            }
+        }
+    }
+
+    internal suspend fun resolvePlaybackDeleteIdsForOutbox(
+        contentId: String,
+        season: Int?,
+        episode: Int?
+    ): List<Long> {
+        val playbackMovies = getPlayback("movies", force = true)
+        val playbackEpisodes = getPlayback("episodes", force = true)
+        val target = contentId.trim()
+
+        val movieIds = playbackMovies
+            .filter { normalizeContentId(it.movie?.ids) == target }
+            .mapNotNull { it.id }
+
+        val episodeIds = playbackEpisodes
+            .filter { item ->
+                val sameContent = normalizeContentId(item.show?.ids) == target
+                val sameEpisode = if (season != null && episode != null) {
+                    item.episode?.season == season && item.episode.number == episode
+                } else {
+                    true
+                }
+                sameContent && sameEpisode
+            }
+            .mapNotNull { it.id }
+
+        return (movieIds + episodeIds).distinct()
+    }
+
+    internal suspend fun reconcileQueuedHistoryRemoveSuccess(
+        contentId: String,
+        season: Int?,
+        episode: Int?,
+        removeShow: Boolean
+    ) {
+        val parsed = parseContentIds(contentId)
+        val ids = toTraktIds(parsed)
+        val canonicalId = normalizeContentId(ids = ids, fallback = contentId.trim())
+
+        when {
+            removeShow -> {
+                remoteProgress.update { items ->
+                    items.filterNot {
+                        it.contentId == canonicalId && (
+                            it.contentType.equals("series", ignoreCase = true) ||
+                                it.contentType.equals("tv", ignoreCase = true)
+                        )
+                    }
+                }
+                myShowsNextUp.update { items -> items.filterNot { it.contentId == canonicalId } }
+                myShowsNextUpAll.update { items -> items.filterNot { it.contentId == canonicalId } }
+                invalidateEpisodeProgressCache(canonicalId)
+                invalidateShowNextUpCache(canonicalId)
+            }
+
+            season != null && episode != null -> {
+                invalidateEpisodeProgressCache(contentId)
+                invalidateShowNextUpCache(contentId)
+            }
+
+            else -> {
+                setMovieWatchedInCache(contentId = canonicalId, watched = false)
+            }
+        }
+        refreshNow()
+    }
+
+    internal suspend fun rollbackQueuedHistoryRemove(
+        contentId: String,
+        season: Int?,
+        episode: Int?,
+        removeShow: Boolean
+    ) {
+        refreshNow()
+    }
+
+    internal suspend fun reconcileQueuedPlaybackDeleteSuccess(
+        contentId: String,
+        season: Int?,
+        episode: Int?,
+        clearShow: Boolean
+    ) {
+        if (clearShow) {
+            invalidateEpisodeProgressCache(contentId)
+            invalidateShowNextUpCache(contentId)
+        }
+        refreshNow()
+    }
+
+    internal suspend fun rollbackQueuedPlaybackDelete(
+        contentId: String,
+        season: Int?,
+        episode: Int?,
+        clearShow: Boolean
+    ) {
+        refreshNow()
+    }
+
     suspend fun isMovieWatched(contentId: String): Boolean {
         val rawKey = contentId.trim()
         if (rawKey.isBlank()) return false
