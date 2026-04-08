@@ -43,6 +43,7 @@ import retrofit2.converter.moshi.MoshiConverterFactory
 import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.locks.ReentrantLock
 import javax.inject.Named
 import javax.inject.Singleton
 
@@ -178,91 +179,158 @@ object NetworkModule {
     @Named("trakt")
     fun provideTraktOkHttpClient(
         okHttpClient: OkHttpClient
-    ): OkHttpClient = okHttpClient.newBuilder()
-        // Discovery feeds are app-cached separately; bypass OkHttp disk cache for Trakt GET traffic.
-        .disableDiskCacheForGetRequests()
-        .addInterceptor { chain ->
-            val request = chain.request()
-            val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
-            val requestBuilder = request.newBuilder()
-                .header("Content-Type", "application/json")
-                .header("User-Agent", "NEXIO/$version")
-                .header("trakt-api-key", BuildConfig.TRAKT_CLIENT_ID)
-                .header("trakt-api-version", "2")
-            val newRequest = requestBuilder.build()
+    ): OkHttpClient {
+        // Rate-limit state — captured once per singleton, shared across all requests on this client.
+        val lastMutatingRequestMs = AtomicLong(0L)
+        val getWindowTimestamps = ArrayDeque<Long>()
+        val getWindowLock = ReentrantLock()
+        val getWindowMs = 5 * 60_000L
+        val getWindowMax = 950 // conservative buffer under the 1000-call hard limit
 
-            if (!BuildConfig.DEBUG) {
-                return@addInterceptor chain.proceed(newRequest)
-            }
+        return okHttpClient.newBuilder()
+            // Discovery feeds are app-cached separately; bypass OkHttp disk cache for Trakt GET traffic.
+            .disableDiskCacheForGetRequests()
+            .addInterceptor { chain ->
+                val request = chain.request()
+                val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
 
-            val requestId = TraktHttpTrace.nextRequestId()
-            val target = sanitizeRequestTargetForLogs(
-                encodedPath = newRequest.url.encodedPath,
-                encodedQuery = newRequest.url.encodedQuery
-            )
-            val startNs = System.nanoTime()
-            Log.d("TraktHttp", "REQ #$requestId ${newRequest.method} $target")
-
-            try {
-                val response = chain.proceed(newRequest)
-                val durationMs = (System.nanoTime() - startNs) / 1_000_000L
-                val retryAfter = response.header("Retry-After")
-                val rateLimit = response.header("X-Ratelimit")
-                val page = response.header("X-Pagination-Page")
-                val pageCount = response.header("X-Pagination-Page-Count")
-                val pageInfo = if (page != null || pageCount != null) {
-                    " page=${page ?: "-"} pageCount=${pageCount ?: "-"}"
-                } else {
-                    ""
+                // Trakt rate limits — enforced here so every request on this client is covered.
+                when (request.method) {
+                    "POST", "PUT", "DELETE" -> {
+                        // 1 mutating request per second per client
+                        synchronized(lastMutatingRequestMs) {
+                            val last = lastMutatingRequestMs.get()
+                            if (last != 0L) {
+                                val elapsed = System.currentTimeMillis() - last
+                                if (elapsed < 1_000L) Thread.sleep(1_000L - elapsed)
+                            }
+                            lastMutatingRequestMs.set(System.currentTimeMillis())
+                        }
+                    }
+                    "GET" -> {
+                        // 1000 requests per 5-minute sliding window per client (950 budget for safety)
+                        getWindowLock.lock()
+                        try {
+                            val now = System.currentTimeMillis()
+                            val windowStart = now - getWindowMs
+                            while (getWindowTimestamps.isNotEmpty() && getWindowTimestamps.first() < windowStart) {
+                                getWindowTimestamps.removeFirst()
+                            }
+                            if (getWindowTimestamps.size >= getWindowMax) {
+                                val waitMs = getWindowTimestamps.first() + getWindowMs - now + 100L
+                                if (waitMs > 0) Thread.sleep(waitMs)
+                                val afterDelay = System.currentTimeMillis()
+                                val newWindowStart = afterDelay - getWindowMs
+                                while (getWindowTimestamps.isNotEmpty() && getWindowTimestamps.first() < newWindowStart) {
+                                    getWindowTimestamps.removeFirst()
+                                }
+                            }
+                            getWindowTimestamps.addLast(System.currentTimeMillis())
+                        } finally {
+                            getWindowLock.unlock()
+                        }
+                    }
                 }
-                val retryInfo = retryAfter?.let { " retryAfter=${it}s" } ?: ""
-                val rateInfo = rateLimit?.let { " rate=$it" } ?: ""
-                Log.d(
-                    "TraktHttp",
-                    "RES #$requestId ${response.code} ${newRequest.method} $target ${durationMs}ms$retryInfo$pageInfo$rateInfo"
+
+                val requestBuilder = request.newBuilder()
+                    .header("Content-Type", "application/json")
+                    .header("User-Agent", "NEXIO/$version")
+                    .header("trakt-api-key", BuildConfig.TRAKT_CLIENT_ID)
+                    .header("trakt-api-version", "2")
+                val newRequest = requestBuilder.build()
+
+                if (!BuildConfig.DEBUG) {
+                    return@addInterceptor chain.proceed(newRequest)
+                }
+
+                val requestId = TraktHttpTrace.nextRequestId()
+                val target = sanitizeRequestTargetForLogs(
+                    encodedPath = newRequest.url.encodedPath,
+                    encodedQuery = newRequest.url.encodedQuery
                 )
-                response
-            } catch (error: Exception) {
-                val durationMs = (System.nanoTime() - startNs) / 1_000_000L
-                Log.w(
-                    "TraktHttp",
-                    "ERR #$requestId ${newRequest.method} $target ${durationMs}ms ${error.javaClass.simpleName}: ${error.message}"
-                )
-                throw error
+                val startNs = System.nanoTime()
+                Log.d("TraktHttp", "REQ #$requestId ${newRequest.method} $target")
+
+                try {
+                    val response = chain.proceed(newRequest)
+                    val durationMs = (System.nanoTime() - startNs) / 1_000_000L
+                    val retryAfter = response.header("Retry-After")
+                    val rateLimit = response.header("X-Ratelimit")
+                    val page = response.header("X-Pagination-Page")
+                    val pageCount = response.header("X-Pagination-Page-Count")
+                    val pageInfo = if (page != null || pageCount != null) {
+                        " page=${page ?: "-"} pageCount=${pageCount ?: "-"}"
+                    } else {
+                        ""
+                    }
+                    val retryInfo = retryAfter?.let { " retryAfter=${it}s" } ?: ""
+                    val rateInfo = rateLimit?.let { " rate=$it" } ?: ""
+                    Log.d(
+                        "TraktHttp",
+                        "RES #$requestId ${response.code} ${newRequest.method} $target ${durationMs}ms$retryInfo$pageInfo$rateInfo"
+                    )
+                    response
+                } catch (error: Exception) {
+                    val durationMs = (System.nanoTime() - startNs) / 1_000_000L
+                    Log.w(
+                        "TraktHttp",
+                        "ERR #$requestId ${newRequest.method} $target ${durationMs}ms ${error.javaClass.simpleName}: ${error.message}"
+                    )
+                    throw error
+                }
             }
-        }
-        .build()
+            .build()
+    }
 
     @Provides
     @Singleton
     @Named("simkl")
     fun provideSimklOkHttpClient(
         okHttpClient: OkHttpClient
-    ): OkHttpClient = okHttpClient.newBuilder()
-        .disableDiskCacheForGetRequests()
-        .addInterceptor { chain ->
-            val request = chain.request()
-            val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
-            val appName = "NEXIO"
-            val urlBuilder = request.url.newBuilder()
-            if (request.url.queryParameter("client_id").isNullOrBlank() && BuildConfig.SIMKL_CLIENT_ID.isNotBlank()) {
-                urlBuilder.addQueryParameter("client_id", BuildConfig.SIMKL_CLIENT_ID)
+    ): OkHttpClient {
+        // Rate-limit state — captured once per singleton, shared across all requests on this client.
+        val lastMutatingRequestMs = AtomicLong(0L)
+
+        return okHttpClient.newBuilder()
+            .disableDiskCacheForGetRequests()
+            .addInterceptor { chain ->
+                val request = chain.request()
+                val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
+                val appName = "NEXIO"
+
+                // Simkl rate limit — enforced here so every request on this client is covered.
+                // 1 mutating request per second per client
+                if (request.method == "POST" || request.method == "DELETE") {
+                    synchronized(lastMutatingRequestMs) {
+                        val last = lastMutatingRequestMs.get()
+                        if (last != 0L) {
+                            val elapsed = System.currentTimeMillis() - last
+                            if (elapsed < 1_000L) Thread.sleep(1_000L - elapsed)
+                        }
+                        lastMutatingRequestMs.set(System.currentTimeMillis())
+                    }
+                }
+
+                val urlBuilder = request.url.newBuilder()
+                if (request.url.queryParameter("client_id").isNullOrBlank() && BuildConfig.SIMKL_CLIENT_ID.isNotBlank()) {
+                    urlBuilder.addQueryParameter("client_id", BuildConfig.SIMKL_CLIENT_ID)
+                }
+                if (request.url.queryParameter("app-name").isNullOrBlank()) {
+                    urlBuilder.addQueryParameter("app-name", appName)
+                }
+                if (request.url.queryParameter("app-version").isNullOrBlank()) {
+                    urlBuilder.addQueryParameter("app-version", version)
+                }
+                val updatedRequest = request.newBuilder()
+                    .url(urlBuilder.build())
+                    .header("Content-Type", "application/json")
+                    .header("User-Agent", "$appName/$version")
+                    .header("simkl-api-key", BuildConfig.SIMKL_CLIENT_ID)
+                    .build()
+                chain.proceed(updatedRequest)
             }
-            if (request.url.queryParameter("app-name").isNullOrBlank()) {
-                urlBuilder.addQueryParameter("app-name", appName)
-            }
-            if (request.url.queryParameter("app-version").isNullOrBlank()) {
-                urlBuilder.addQueryParameter("app-version", version)
-            }
-            val updatedRequest = request.newBuilder()
-                .url(urlBuilder.build())
-                .header("Content-Type", "application/json")
-                .header("User-Agent", "$appName/$version")
-                .header("simkl-api-key", BuildConfig.SIMKL_CLIENT_ID)
-                .build()
-            chain.proceed(updatedRequest)
-        }
-        .build()
+            .build()
+    }
 
     @Provides
     @Singleton

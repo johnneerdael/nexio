@@ -37,10 +37,7 @@ class TraktAuthService @Inject constructor(
     private val traktAuthDataStore: TraktAuthDataStore
 ) {
     private val refreshLeewaySeconds = 60L
-    private val writeRequestMutex = Mutex()
     private val tokenRefreshMutex = Mutex()
-    private var lastWriteRequestAtMs = 0L
-    private val minWriteIntervalMs = 1_000L
     private val transientRetryStatusCodes = setOf(502, 503, 504, 520, 521, 522)
     private val nonRetryableStatusCodes = setOf(400, 403, 404, 405, 409, 412, 420, 422, 423, 426)
 
@@ -48,11 +45,6 @@ class TraktAuthService @Inject constructor(
     private val circuitFailures = AtomicInteger(0)
     private val circuitBaseCooldownMs = 5 * 60_000L
     private val circuitMaxCooldownMs = 60 * 60_000L
-
-    private val rateLimitWindowMs = 5 * 60_000L
-    private val rateLimitMaxCalls = 900
-    private val getRequestTimestamps = ArrayDeque<Long>()
-    private val rateLimitMutex = Mutex()
 
     private inline fun logDebug(message: () -> String) {
         runCatching { Log.d("TraktAuthService", message()) }
@@ -84,32 +76,6 @@ class TraktAuthService @Inject constructor(
         }
         circuitFailures.set(0)
         circuitOpenUntilMs = 0L
-    }
-
-    private suspend fun acquireGetRateSlot() {
-        rateLimitMutex.withLock {
-            val now = System.currentTimeMillis()
-            val windowStart = now - rateLimitWindowMs
-            while (getRequestTimestamps.isNotEmpty() && getRequestTimestamps.first() < windowStart) {
-                getRequestTimestamps.removeFirst()
-            }
-            if (getRequestTimestamps.size >= rateLimitMaxCalls) {
-                val oldestInWindow = getRequestTimestamps.first()
-                val waitMs = oldestInWindow + rateLimitWindowMs - now + 100L
-                if (waitMs > 0) {
-                    logWarn {
-                        "GET rate limit approaching (${getRequestTimestamps.size}/$rateLimitMaxCalls in window), delaying ${waitMs}ms"
-                    }
-                    delay(waitMs)
-                }
-                val afterDelay = System.currentTimeMillis()
-                val newWindowStart = afterDelay - rateLimitWindowMs
-                while (getRequestTimestamps.isNotEmpty() && getRequestTimestamps.first() < newWindowStart) {
-                    getRequestTimestamps.removeFirst()
-                }
-            }
-            getRequestTimestamps.addLast(System.currentTimeMillis())
-        }
     }
 
     private fun trace(message: String) {
@@ -309,8 +275,6 @@ class TraktAuthService @Inject constructor(
         var retriedNetwork = false
 
         while (true) {
-            acquireGetRateSlot()
-
             val response = try {
                 call("Bearer $token")
             } catch (e: IOException) {
@@ -378,15 +342,7 @@ class TraktAuthService @Inject constructor(
 
     suspend fun <T> executeAuthorizedWriteRequest(
         call: suspend (authorizationHeader: String) -> Response<T>
-    ): Response<T>? {
-        writeRequestMutex.withLock {
-            val now = System.currentTimeMillis()
-            val waitMs = (lastWriteRequestAtMs + minWriteIntervalMs - now).coerceAtLeast(0L)
-            if (waitMs > 0L) delay(waitMs)
-            lastWriteRequestAtMs = System.currentTimeMillis()
-        }
-        return executeAuthorizedRequest(call)
-    }
+    ): Response<T>? = executeAuthorizedRequest(call)
 
     private suspend fun getValidAccessToken(): String? {
         val state = getCurrentAuthState()
