@@ -58,6 +58,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -1576,7 +1577,7 @@ class MetaDetailsViewModel @Inject constructor(
         nextToWatchJob = viewModelScope.launch {
             if (!isSeries) {
                 // For movies, check if there's an in-progress watch
-                val progress = watchProgressRepository.getProgress(itemId).first()
+                val progress = watchProgressRepository.getProgress(itemId).firstOrNull()
                 val nextToWatch = if (progress != null && shouldResumeProgress(progress)) {
                     NextToWatch(
                         watchProgress = progress,

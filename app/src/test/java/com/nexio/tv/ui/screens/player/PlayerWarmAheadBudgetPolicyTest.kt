@@ -125,7 +125,7 @@ class PlayerWarmAheadBudgetPolicyTest {
         assertTrue(controller.currentPolicy.warmAheadEnabled)
 
         controller.onSeek()
-        assertEquals(TransportState.STARTUP, controller.state)
+        assertEquals(TransportState.SEEK, controller.state)
         assertFalse("warm-ahead must be off after seek", controller.currentPolicy.warmAheadEnabled)
     }
 

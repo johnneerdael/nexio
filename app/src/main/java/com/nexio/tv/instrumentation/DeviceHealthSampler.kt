@@ -38,7 +38,9 @@ internal class DeviceHealthSampler(private val appContext: Context) {
         if (!running.compareAndSet(false, true)) return
         val thread = HandlerThread("PlaybackTrace-DeviceHealth").apply { start() }
         handlerThread = thread
-        // Thermal listener (API 29+).
+        val handler = android.os.Handler(thread.looper)
+        // Thermal listener (API 29+) — explicitly run the callback on the
+        // sampler's HandlerThread so it never touches the main thread.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             runCatching {
                 val listener = PowerManager.OnThermalStatusChangedListener { status ->
@@ -46,12 +48,12 @@ internal class DeviceHealthSampler(private val appContext: Context) {
                         putInt("status", status)
                     }
                 }
-                powerManager?.addThermalStatusListener(listener)
+                val executor = java.util.concurrent.Executor { command -> handler.post(command) }
+                powerManager?.addThermalStatusListener(executor, listener)
                 thermalListener = listener
             }
         }
         // Periodic memory + low-memory sampling at 1 Hz.
-        val handler = android.os.Handler(thread.looper)
         handler.post(object : Runnable {
             override fun run() {
                 if (!running.get()) return

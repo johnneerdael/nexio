@@ -166,6 +166,10 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.all {
+            it.maxHeapSize = "2g"
+            it.forkEvery = 50  // restart JVM every 50 tests to avoid state buildup
+        }
     }
 
     flavorDimensions += "abiPackaging"

@@ -750,18 +750,11 @@ internal class PlayerMediaSourceFactory(
      * playhead recovery rather than speculative warm-ahead.
      */
     fun notifyRebuffer() {
+        // The REBUFFER `rebuffer_start` event is emitted from
+        // [TransportValidationRuntimeCollector.onPlaybackStateChanged] (WP8)
+        // — that single site has the snapshot context for the matching
+        // `rebuffer_end`. This method only handles the warm-ahead pause.
         rebufferGate.notifyRebuffer()
-        // WP3 — emit REBUFFER rebuffer_start. Thread identity: call site is
-        // Player.Listener.onPlaybackStateChanged in PlayerRuntimeControllerInitialization
-        // which Media3 guarantees to run on the application main thread. The
-        // emit is non-blocking (MPSC ring enqueue) so it is hot-path-safe even
-        // from the main thread.
-        com.nexio.tv.instrumentation.PlaybackTracer.emit(
-            com.nexio.tv.instrumentation.EventFamily.REBUFFER,
-            "rebuffer_start"
-        ) {
-            putLong("lastReadPos", activeReadBytePosition.get())
-        }
     }
 
     fun getVodCacheLogState(currentStreamUrl: String? = null): String {
