@@ -4,6 +4,8 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.WatchProgressPreferences
 import com.nexio.tv.data.repository.trakt.SeasonMarkBatcher
+import com.nexio.tv.data.repository.trakt.TraktProgressHistoryMutationAdapter
+import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.SeasonEpisodeMark
 import com.nexio.tv.domain.model.WatchProgress
@@ -37,6 +39,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
     private val watchProgressPreferences: WatchProgressPreferences,
     private val traktAuthDataStore: TraktAuthDataStore,
     private val traktProgressService: TraktProgressService,
+    private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator,
     private val metaRepository: MetaRepository,
     private val seasonMarkBatcher: SeasonMarkBatcher,
     // Provider<> breaks the DI cycle: ContinueWatchingSnapshotService → WatchProgressRepository
@@ -335,12 +338,13 @@ class WatchProgressRepositoryImpl @Inject constructor(
             progressPercent = 100f,
             lastWatched = now
         )
-        traktProgressService.applyOptimisticProgress(completed)
         runCatching {
-            traktProgressService.markAsWatched(
-                progress = completed,
-                title = completed.name.takeIf { it.isNotBlank() },
-                year = null
+            traktMutationOutboxCoordinator.enqueueAndDrain(
+                TraktProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
+                    progress = completed,
+                    title = completed.name.takeIf { it.isNotBlank() },
+                    year = null
+                )
             )
         }.onFailure {
             traktProgressService.applyOptimisticRemoval(

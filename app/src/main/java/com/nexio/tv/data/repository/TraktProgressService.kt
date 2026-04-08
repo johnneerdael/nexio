@@ -538,6 +538,42 @@ class TraktProgressService @Inject constructor(
         refreshNow()
     }
 
+    internal fun buildHistoryAddRequestForOutbox(
+        progress: WatchProgress,
+        title: String?,
+        year: Int?
+    ): TraktHistoryAddRequestDto? {
+        return buildHistoryAddRequest(progress, title, year)
+    }
+
+    internal fun hasHistoryAddNotFoundForOutbox(
+        body: TraktHistoryAddResponseDto?
+    ): Boolean {
+        return hasHistoryAddNotFound(body)
+    }
+
+    internal suspend fun reconcileQueuedHistoryAddSuccess(progress: WatchProgress) {
+        if (progress.contentType.equals("movie", ignoreCase = true)) {
+            setMovieWatchedInCache(progress.contentId, watched = true)
+        } else if (
+            progress.contentType.equals("series", ignoreCase = true) ||
+            progress.contentType.equals("tv", ignoreCase = true)
+        ) {
+            invalidateEpisodeProgressCache(progress.contentId)
+            invalidateShowNextUpCache(progress.contentId)
+        }
+        refreshNow()
+    }
+
+    internal suspend fun rollbackQueuedHistoryAdd(progress: WatchProgress) {
+        applyOptimisticRemoval(
+            contentId = progress.contentId,
+            season = progress.season,
+            episode = progress.episode
+        )
+        refreshNow()
+    }
+
     suspend fun isMovieWatched(contentId: String): Boolean {
         val rawKey = contentId.trim()
         if (rawKey.isBlank()) return false

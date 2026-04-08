@@ -27,7 +27,10 @@ class TraktWriteSurfaceStructureTest {
 
         assertEquals(
             mapOf(
-                "addHistory" to setOf("com/nexio/tv/data/repository/TraktProgressService.kt"),
+                "addHistory" to setOf(
+                    "com/nexio/tv/data/repository/TraktProgressService.kt",
+                    "com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt"
+                ),
                 "removeHistory" to setOf("com/nexio/tv/data/repository/TraktProgressService.kt"),
                 "deletePlayback" to setOf("com/nexio/tv/data/repository/TraktProgressService.kt"),
                 "addToWatchlist" to setOf("com/nexio/tv/data/repository/TraktLibraryService.kt"),
@@ -58,6 +61,7 @@ class TraktWriteSurfaceStructureTest {
                 "com/nexio/tv/data/repository/TraktProgressService.kt",
                 "com/nexio/tv/data/repository/TraktScrobbleService.kt",
                 "com/nexio/tv/data/repository/trakt/TraktDiscoveryMutationAdapter.kt",
+                "com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt",
             ),
             callSites,
         )

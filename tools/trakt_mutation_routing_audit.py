@@ -36,6 +36,7 @@ EXPECTED_CALL_SITE_COUNTS = {
     "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:reorderUserLists": 1,
     "app/src/main/java/com/nexio/tv/data/repository/TraktLibraryService.kt:updateUserList": 1,
     "app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt:addHistory": 1,
+    "app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt:addHistory": 1,
     "app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt:deletePlayback": 3,
     "app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt:removeHistory": 2,
     "app/src/main/java/com/nexio/tv/data/repository/TraktScrobbleService.kt:checkin": 1,
