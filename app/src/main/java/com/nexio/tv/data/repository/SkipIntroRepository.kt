@@ -225,22 +225,17 @@ class SkipIntroRepository @Inject constructor(
         if (!introDbConfigured) return emptyList()
         val settings = theIntroDbSettingsDataStore.settings.firstOrNull() ?: TheIntroDbSettings()
         if (!settings.enabled) return emptyList()
-        if (settings.apiKey.trim().isBlank()) return emptyList()
         val imdbId = contentId.takeIf { it.startsWith("tt") }
         val tmdbId = contentId.toIntOrNull()
         if (imdbId == null && tmdbId == null) return emptyList()
 
         return try {
-            val authorization = settings.apiKey
-                .trim()
-                .takeIf { it.isNotBlank() }
-                ?.let { "Bearer $it" }
             val response = introDbApi.getMedia(
                 tmdbId = tmdbId,
                 imdbId = imdbId,
                 season = season,
                 episode = episode,
-                authorization = authorization
+                authorization = null
             )
             if (response.isSuccessful && response.body() != null) {
                 TheIntroDbSegmentMapper.map(

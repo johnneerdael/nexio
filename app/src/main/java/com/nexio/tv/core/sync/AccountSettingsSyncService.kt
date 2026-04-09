@@ -106,8 +106,6 @@ import javax.inject.Singleton
 private const val TAG = "AccountSettingsSync"
 private const val TMDB_SECRET_TYPE = "tmdb_api_key"
 private const val TMDB_SECRET_REF = "integration:tmdb"
-private const val THEINTRODB_SECRET_TYPE = "theintrodb_api_key"
-private const val THEINTRODB_SECRET_REF = "integration:theintrodb"
 private const val MDBLIST_SECRET_TYPE = "mdblist_api_key"
 private const val MDBLIST_SECRET_REF = "integration:mdblist"
 private const val OMDB_SECRET_TYPE = "omdb_api_key"
@@ -188,7 +186,6 @@ class AccountSettingsSyncService @Inject constructor(
                     .map {
                         listOf(
                             it.enabled,
-                            it.apiKey.trim(),
                             it.showIntroButton,
                             it.showRecapButton,
                             it.showCreditsButton,
@@ -257,7 +254,6 @@ class AccountSettingsSyncService @Inject constructor(
             }
 
             syncApiKeySecretToRemote(TMDB_SECRET_TYPE, TMDB_SECRET_REF, tmdbSettingsDataStore.settings.first().apiKey)
-            syncApiKeySecretToRemote(THEINTRODB_SECRET_TYPE, THEINTRODB_SECRET_REF, theIntroDbSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, mdbListSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(OMDB_SECRET_TYPE, OMDB_SECRET_REF, omdbSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(IMDB_SECRET_TYPE, IMDB_SECRET_REF, imdbSettingsDataStore.settings.first().apiKey)
@@ -816,7 +812,6 @@ class AccountSettingsSyncService @Inject constructor(
         // response from the server — otherwise we'd wipe valid local credentials on
         // every flaky upgrade-time sync.
         resolveApiKeySecretOrNull(TMDB_SECRET_TYPE, TMDB_SECRET_REF)?.let { tmdbSettingsDataStore.setApiKey(it) }
-        resolveApiKeySecretOrNull(THEINTRODB_SECRET_TYPE, THEINTRODB_SECRET_REF)?.let { theIntroDbSettingsDataStore.setApiKey(it) }
         resolveApiKeySecretOrNull(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF)?.let { mdbListSettingsDataStore.setApiKey(it) }
         resolveApiKeySecretOrNull(OMDB_SECRET_TYPE, OMDB_SECRET_REF)?.let { omdbSettingsDataStore.setApiKey(it) }
         resolveApiKeySecretOrNull(IMDB_SECRET_TYPE, IMDB_SECRET_REF)?.let { imdbSettingsDataStore.setApiKey(it) }
