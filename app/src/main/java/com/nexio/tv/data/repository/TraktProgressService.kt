@@ -390,6 +390,25 @@ class TraktProgressService @Inject constructor(
                 }
             }
         }
+        if (season != null && episode != null) {
+            val canonicalKey = canonicalLookupKey(contentKeyPrefix)
+            episodeProgressState.update { current ->
+                val updated = current.toMutableMap()
+                val existing = updated[canonicalKey] ?: return@update current
+                updated[canonicalKey] = existing.copy(
+                    progress = existing.progress - (season to episode)
+                )
+                updated
+            }
+        } else {
+            val canonicalKey = canonicalLookupKey(contentKeyPrefix)
+            episodeProgressState.update { current ->
+                current.toMutableMap().apply {
+                    remove(contentKeyPrefix)
+                    remove(canonicalKey)
+                }
+            }
+        }
         requestFastSync()
     }
 
