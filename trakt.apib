@@ -55,10 +55,11 @@ The API will respond with one of the following HTTP status codes.
 | `404` | Not Found - *method exists, but no record found*
 | `405` | Method Not Found - *method doesn't exist*
 | `409` | Conflict - *resource already created*
+| `410` | Deactivated User Account - *user must log in on the website to reactivate*
 | `412` | Precondition Failed - *use application/json content type*
 | `420` | Account Limit Exceeded - *list count, item count, etc*
 | `422` | Unprocessable Entity - *validation errors*
-| `423` | Locked User Account - *have the user contact support*
+| `423` | Locked User Account - *redirect to history analysis in settings*
 | `426` | VIP Only - *user must upgrade to VIP*
 | `429` | Rate Limit Exceeded
 | `500` | Server Error - *please open a support ticket*
@@ -104,11 +105,17 @@ Here are the current limits. There are separate limits for authed (user level) a
 | `UNAUTHED_API_GET_LIMIT` | `GET` | all | 1000 calls every 5 minutes |
 
 # Locked User Account
-A `423` HTTP status code is returned when the OAuth user has a locked or deactivated user account. Please instruct the user to [**email Trakt support**](mailto:support@trakt.tv) so we can fix their account. API access will be suspended for the user until we fix their account.
+A `423` HTTP status code is returned when the OAuth user has a locked user account. Please redirect the user to their [**history analysis in settings**](https://trakt.tv/settings/data) to run a history analysis and unlock their account.
 
 | Header | Value |
 |---|---|
 | `X-Account-Locked` | `true` or `false` |
+
+# Deactivated User Account
+A `410` HTTP status code is returned when the OAuth user has a deactivated user account. Please instruct the user to log in on the [**Trakt website**](https://trakt.tv) to reactivate their account.
+
+| Header | Value |
+|---|---|
 | `X-Account-Deactivated` | `true` or `false` |
 
 # VIP Methods
@@ -5903,18 +5910,21 @@ Some `sort_by` options are 🔥 **VIP Only** including `imdb_rating`, `tmdb_rati
 ## List Comments [/lists/{id}/comments/{sort}]
 + Parameters
     + id (required, integer, `55`) ... Trakt ID
-    + sort (optional, string, `newest`) ... how to sort
+    + sort (optional, string, `likes`) ... how to sort
 
         + Values
-            + `newest`
-            + `oldest`
             + `likes`
+            + `likes_30`
             + `replies`
+            + `replies_30`
+            + `plays`
+            + `rating`
+            + `added`
 
 ### Get all list comments [GET]
 #### &#128275; OAuth Optional &#128196; Pagination &#128513; Emojis
 
-Returns all top level comments for a list. By default, the `newest` comments are returned first. Other sorting options include `oldest`, most `likes`, and most `replies`.
+Returns all top level comments for a list. By default, the comments are sorted by most `likes`. Other sorting options include `likes_30`, most `replies`, `replies_30`, most `plays`, highest `rating`, and `added` date.
 
 > ### 🅽🅾🆃🅴
 > _If you send OAuth, comments from blocked users will be automatically filtered out._
@@ -7508,21 +7518,21 @@ Returns all translations for a movie, including language and translated values f
 ## Comments [/movies/{id}/comments/{sort}]
 + Parameters
     + id (required, string, `tron-legacy-2010`) ... Trakt ID, Trakt slug, or IMDB ID
-    + sort (optional, string, `newest`) ... how to sort
+    + sort (optional, string, `likes`) ... how to sort
 
         + Values
-            + `newest`
-            + `oldest`
             + `likes`
+            + `likes_30`
             + `replies`
-            + `highest`
-            + `lowest`
+            + `replies_30`
             + `plays`
+            + `rating`
+            + `added`
 
 ### Get all movie comments [GET]
 #### &#128275; OAuth Optional &#128196; Pagination &#128513; Emojis
 
-Returns all top level comments for a movie. By default, the `newest` comments are returned first. Other sorting options include `oldest`, most `likes`, most `replies`, `highest` rated, `lowest` rated, and most `plays`.
+Returns all top level comments for a movie. By default, comments are sorted by most `likes`. Other sorting options include `likes_30`, most `replies`, `replies_30`, most `plays`, highest `rating`, and `added` date.
 
 > ### 🅽🅾🆃🅴
 > _If you send OAuth, comments from blocked users will be automatically filtered out._
@@ -12212,6 +12222,7 @@ Returns a single shows's details. If you request extended info, the `airs` objec
                     "timezone": "America/New_York"
                 },
                 "runtime": 60,
+                "total_runtime": 3000,
                 "certification": "TV-MA",
                 "network": "HBO",
                 "country": "us",
@@ -12380,22 +12391,22 @@ Returns all translations for a show, including language and translated values fo
 ## Comments [/shows/{id}/comments/{sort}]
 + Parameters
     + id (required, string, `game-of-thrones`) ... Trakt ID, Trakt slug, or IMDB ID
-    + sort (optional, string, `newest`) ... how to sort
+    + sort (optional, string, `likes`) ... how to sort
 
         + Values
-            + `newest`
-            + `oldest`
             + `likes`
+            + `likes_30`
             + `replies`
-            + `highest`
-            + `lowest`
-            + `plays`
+            + `replies_30`
             + `watched`
+            + `plays`
+            + `rating`
+            + `added`
 
 ### Get all show comments [GET]
 #### &#128275; OAuth Optional &#128196; Pagination &#128513; Emojis
 
-Returns all top level comments for a show. By default, the `newest` comments are returned first. Other sorting options include `oldest`, most `likes`, most `replies`, `highest` rated, `lowest` rated, most `plays`, and highest `watched` percentage.
+Returns all top level comments for a show. By default, comments are sorted by most `likes`. Other sorting options include `likes_30`, most `replies`, `replies_30`, highest `watched` percentage, most `plays`, highest `rating`, and `added` date.
 
 > ### 🅽🅾🆃🅴
 > _If you send OAuth, comments from blocked users will be automatically filtered out._
@@ -13816,6 +13827,7 @@ If you add `?extended=episodes` to the URL, it will return all episodes for all 
                     "votes": 111,
                     "episode_count": 10,
                     "aired_episodes": 10,
+                    "total_runtime": 600,
                     "title": "Specials",
                     "overview": null,
                     "first_aired": "2010-12-06T02:00:00.000Z",
@@ -13834,6 +13846,7 @@ If you add `?extended=episodes` to the URL, it will return all episodes for all 
                     "votes": 111,
                     "episode_count": 10,
                     "aired_episodes": 10,
+                    "total_runtime": 600,
                     "title": "Season 1",
                     "overview": "Season 1 overview.",
                     "first_aired": "2011-04-09T02:00:00.000Z",
@@ -13852,6 +13865,7 @@ If you add `?extended=episodes` to the URL, it will return all episodes for all 
                     "votes": 111,
                     "episode_count": 10,
                     "aired_episodes": 10,
+                    "total_runtime": 600,
                     "title": "Season 2",
                     "overview": "Season 2 overview.",
                     "first_aired": "2012-04-02T02:00:00.000Z",
@@ -13870,6 +13884,7 @@ If you add `?extended=episodes` to the URL, it will return all episodes for all 
                     "votes": 111,
                     "episode_count": 10,
                     "aired_episodes": 10,
+                    "total_runtime": 600,
                     "title": "Season 3",
                     "overview": "Season 3 overview.",
                     "first_aired": "2013-04-01T02:00:00.000Z",
@@ -13888,6 +13903,7 @@ If you add `?extended=episodes` to the URL, it will return all episodes for all 
                     "votes": 111,
                     "episode_count": 10,
                     "aired_episodes": 10,
+                    "total_runtime": 600,
                     "title": "Season 4",
                     "overview": "Season 4 overview",
                     "first_aired": "2014-04-07T02:00:00.000Z",
@@ -14582,6 +14598,7 @@ Returns a single seasons for a show.
                 "votes": 111,
                 "episode_count": 10,
                 "aired_episodes": 10,
+                "total_runtime": 600,
                 "title": "Season 1",
                 "overview": "Season 1 overview.",
                 "first_aired": "2011-04-09T02:00:00.000Z",
@@ -14777,22 +14794,22 @@ Returns all translations for an season, including language and translated values
 + Parameters
     + id (required, string, `game-of-thrones`) ... Trakt ID, Trakt slug, or IMDB ID
     + season (required, integer, `1`) ... season number
-    + sort (optional, string, `newest`) ... how to sort
+    + sort (optional, string, `likes`) ... how to sort
 
         + Values
-            + `newest`
-            + `oldest`
             + `likes`
+            + `likes_30`
             + `replies`
-            + `highest`
-            + `lowest`
-            + `plays`
+            + `replies_30`
             + `watched`
+            + `plays`
+            + `rating`
+            + `added`
 
 ### Get all season comments [GET]
 #### &#128275; OAuth Optional &#128196; Pagination &#128513; Emojis
 
-Returns all top level comments for a season. By default, the `newest` comments are returned first. Other sorting options include `oldest`, most `likes`, most `replies`, `highest` rated, `lowest` rated, most `plays`, and highest `watched` percentage.
+Returns all top level comments for a season. By default, comments are sorted by most `likes`. Other sorting options include `likes_30`, most `replies`, `replies_30`, highest `watched` percentage, most `plays`, highest `rating`, and `added` date.
 
 > ### 🅽🅾🆃🅴
 > _If you send OAuth, comments from blocked users will be automatically filtered out._
@@ -15620,21 +15637,21 @@ Returns all translations for an episode, including language and translated value
     + id (required, string, `game-of-thrones`) ... Trakt ID, Trakt slug, or IMDB ID
     + season (required, integer, `1`) ... season number
     + episode (required, integer, `1`) ... episode number
-    + sort (optional, string, `newest`) ... how to sort
+    + sort (optional, string, `likes`) ... how to sort
 
         + Values
-            + `newest`
-            + `oldest`
             + `likes`
+            + `likes_30`
             + `replies`
-            + `highest`
-            + `lowest`
+            + `replies_30`
             + `plays`
+            + `rating`
+            + `added`
 
 ### Get all episode comments [GET]
 #### &#128275; OAuth Optional &#128196; Pagination &#128513; Emojis
 
-Returns all top level comments for an episode. By default, the `newest` comments are returned first. Other sorting options include `oldest`, most `likes`, most `replies`, `highest` rated, `lowest` rated, and most `plays`.
+Returns all top level comments for an episode. By default, comments are sorted by most `likes`. Other sorting options include `likes_30`, most `replies`, `replies_30`, most `plays`, highest `rating`, and `added` date.
 
 > ### 🅽🅾🆃🅴
 > _If you send OAuth, comments from blocked users will be automatically filtered out._
@@ -22636,18 +22653,21 @@ Update the `notes` on a single list item.
 + Parameters
     + id (required, string, `sean`) ... User slug
     + list_id (required, string, `star-wars-in-machete-order`) ... Trakt ID or Trakt slug
-    + sort (optional, string, `newest`) ... how to sort
+    + sort (optional, string, `likes`) ... how to sort
 
         + Values
-            + `newest`
-            + `oldest`
             + `likes`
+            + `likes_30`
             + `replies`
+            + `replies_30`
+            + `plays`
+            + `rating`
+            + `added`
 
 ### Get all list comments [GET]
 #### &#128275; OAuth Optional &#128196; Pagination &#128513; Emojis
 
-Returns all top level comments for a list. By default, the `newest` comments are returned first. Other sorting options include `oldest`, most `likes`, and most `replies`.
+Returns all top level comments for a list. By default, the comments are sorted by most `likes`. Other sorting options include `likes_30`, most `replies`, `replies_30`, most `plays`, highest `rating`, and `added` date.
 
 > ### 🅽🅾🆃🅴
 > _If you send OAuth, comments from blocked users will be automatically filtered out._
@@ -23742,18 +23762,21 @@ When an item is watched, it will be automatically removed from the watchlist. Fo
 ## Watchlist Comments [/users/{id}/watchlist/comments/{sort}]
 + Parameters
     + id (required, string, `sean`) ... User slug
-    + sort (optional, string, `newest`) ... how to sort
+    + sort (optional, string, `likes`) ... how to sort
 
         + Values
-            + `newest`
-            + `oldest`
             + `likes`
+            + `likes_30`
             + `replies`
+            + `replies_30`
+            + `plays`
+            + `rating`
+            + `added`
 
 ### Get all favorites comments [GET]
 #### &#128275; OAuth Optional &#128196; Pagination &#128513; Emojis
 
-Returns all top level comments for the watchlist. By default, the `newest` comments are returned first. Other sorting options include `oldest`, most `likes`, and most `replies`.
+Returns all top level comments for the watchlist. By default, the comments are sorted by most `likes`. Other sorting options include `likes_30`, most `replies`, `replies_30`, most `plays`, highest `rating`, and `added` date.
 
 > ### 🅽🅾🆃🅴
 > _If you send OAuth, comments from blocked users will be automatically filtered out._
@@ -23973,18 +23996,21 @@ Some `sort_by` options are 🔥 **VIP Only** including `imdb_rating`, `tmdb_rati
 ## Favorites Comments [/users/{id}/favorites/comments/{sort}]
 + Parameters
     + id (required, string, `sean`) ... User slug
-    + sort (optional, string, `newest`) ... how to sort
+    + sort (optional, string, `likes`) ... how to sort
 
         + Values
-            + `newest`
-            + `oldest`
             + `likes`
+            + `likes_30`
             + `replies`
+            + `replies_30`
+            + `plays`
+            + `rating`
+            + `added`
 
 ### Get all favorites comments [GET]
 #### &#128275; OAuth Optional &#128196; Pagination &#128513; Emojis
 
-Returns all top level comments for the favorites. By default, the `newest` comments are returned first. Other sorting options include `oldest`, most `likes`, and most `replies`.
+Returns all top level comments for the favorites. By default, the comments are sorted by most `likes`. Other sorting options include `likes_30`, most `replies`, `replies_30`, most `plays`, highest `rating`, and `added` date.
 
 > ### 🅽🅾🆃🅴
 > _If you send OAuth, comments from blocked users will be automatically filtered out._
