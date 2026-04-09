@@ -91,6 +91,9 @@ class TrailerService(
 
     private val lookupCache = ConcurrentHashMap<String, CachedTrailerLookup>()
     private val youtubeSourceCache = ConcurrentHashMap<String, CachedTrailerPlaybackSource>()
+    // Process-lifetime cache: tmdbId (Int) → latest aired season number, or -1 if none found / detection failed.
+    // ConcurrentHashMap does not accept null values, so -1 is used as a sentinel for "computed but no result".
+    private val tvLatestAiredSeasonCache = ConcurrentHashMap<Int, Int>()
 
     fun invalidateLookupCache(
         title: String,
@@ -125,12 +128,33 @@ class TrailerService(
         val helperSignedIn = trailerAvailabilityService.isSignedIn()
         val tmdbLanguage = getPreferredTmdbTrailerLanguage()
         val tmdbApiKey = tmdbSettingsDataStore.settings.first().apiKey.trim()
+
+        // For TV shows with no explicit season, auto-detect the latest aired season before building
+        // the cache key so the key encodes the actual season. When a new season airs the detected
+        // number changes, the key changes, and the cache misses correctly.
+        val effectiveSeasonNumber: Int? = if (
+            seasonNumber == null &&
+            !tmdbId.isNullOrBlank() &&
+            normalizeTmdbMediaType(type) == "tv"
+        ) {
+            val numericId = tmdbId.toIntOrNull()
+            if (numericId != null && tmdbApiKey.isNotBlank()) {
+                resolveLatestAiredSeasonNumber(numericId, tmdbApiKey).also { detected ->
+                    if (detected != null) {
+                        Log.d(TAG, "Auto-detected latest aired season=$detected for tmdbId=$tmdbId")
+                    }
+                }
+            } else null
+        } else {
+            seasonNumber
+        }
+
         val cacheKey = buildLookupCacheKey(
             title = title,
             year = year,
             tmdbId = tmdbId,
             type = type,
-            seasonNumber = seasonNumber,
+            seasonNumber = effectiveSeasonNumber,
             contentId = contentId,
             fallbackYtIds = fallbackYtIds,
             helperSignedIn = helperSignedIn,
@@ -150,7 +174,7 @@ class TrailerService(
                 year = year,
                 tmdbId = tmdbId,
                 type = type,
-                seasonNumber = seasonNumber,
+                seasonNumber = effectiveSeasonNumber,
                 contentId = contentId,
                 fallbackYtIds = fallbackYtIds
             )
@@ -347,6 +371,7 @@ class TrailerService(
     fun clearCache() {
         lookupCache.clear()
         youtubeSourceCache.clear()
+        tvLatestAiredSeasonCache.clear()
     }
 
     private fun buildLookupCacheKey(
@@ -756,6 +781,33 @@ class TrailerService(
             return localized
         }
         return fetchTmdbMovieVideosOnce(tmdbId, TMDB_TRAILER_FALLBACK_LANGUAGE, apiKey)
+    }
+
+    private suspend fun resolveLatestAiredSeasonNumber(
+        tmdbId: Int,
+        apiKey: String
+    ): Int? {
+        tvLatestAiredSeasonCache[tmdbId]?.let { cached -> return if (cached >= 0) cached else null }
+        val result = try {
+            val seasons = tmdbApi.getTvDetails(tvId = tmdbId, apiKey = apiKey)
+                .body()?.seasons.orEmpty()
+            val today = java.time.LocalDate.now(clock.zone)
+            seasons
+                .filter { season ->
+                    val num = season.seasonNumber ?: return@filter false
+                    if (num <= 0) return@filter false
+                    val count = season.episodeCount ?: return@filter false
+                    if (count <= 0) return@filter false
+                    val airDate = season.airDate?.takeIf { it.isNotBlank() } ?: return@filter false
+                    runCatching { java.time.LocalDate.parse(airDate) <= today }.getOrElse { false }
+                }
+                .maxByOrNull { it.seasonNumber!! }
+                ?.seasonNumber
+        } catch (_: Exception) {
+            null
+        }
+        tvLatestAiredSeasonCache[tmdbId] = result ?: -1
+        return result
     }
 
     private suspend fun fetchTmdbTvVideos(
