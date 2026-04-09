@@ -325,7 +325,6 @@ internal fun PlayerRuntimeController.observeTheIntroDbSettings() {
             theIntroDbEnabledSetting = settings.enabled
             val signature = listOf(
                 settings.enabled,
-                settings.apiKey.trim(),
                 settings.showIntroButton,
                 settings.showRecapButton,
                 settings.showCreditsButton,

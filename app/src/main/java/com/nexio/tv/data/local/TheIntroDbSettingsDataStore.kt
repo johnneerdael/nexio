@@ -5,7 +5,6 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -19,7 +18,6 @@ private val Context.theIntroDbSettingsDataStore: DataStore<Preferences> by prefe
 
 data class TheIntroDbSettings(
     val enabled: Boolean = true,
-    val apiKey: String = "",
     val showIntroButton: Boolean = true,
     val showRecapButton: Boolean = true,
     val showCreditsButton: Boolean = true,
@@ -34,16 +32,15 @@ class TheIntroDbSettingsDataStore @Inject constructor(
     private fun store() = dataStore
 
     private val enabledKey = booleanPreferencesKey("theintrodb_enabled")
-    private val apiKeyKey = stringPreferencesKey("theintrodb_api_key")
     private val showIntroButtonKey = booleanPreferencesKey("theintrodb_show_intro_button")
     private val showRecapButtonKey = booleanPreferencesKey("theintrodb_show_recap_button")
     private val showCreditsButtonKey = booleanPreferencesKey("theintrodb_show_credits_button")
     private val showPreviewButtonKey = booleanPreferencesKey("theintrodb_show_preview_button")
+    private val legacyApiKeyKey = androidx.datastore.preferences.core.stringPreferencesKey("theintrodb_api_key")
 
     val settings: Flow<TheIntroDbSettings> = dataStore.data.map { prefs ->
         TheIntroDbSettings(
             enabled = prefs[enabledKey] ?: true,
-            apiKey = prefs[apiKeyKey] ?: "",
             showIntroButton = prefs[showIntroButtonKey] ?: true,
             showRecapButton = prefs[showRecapButtonKey] ?: true,
             showCreditsButton = prefs[showCreditsButtonKey] ?: true,
@@ -52,26 +49,37 @@ class TheIntroDbSettingsDataStore @Inject constructor(
     }
 
     suspend fun setEnabled(enabled: Boolean) {
-        store().edit { prefs -> prefs[enabledKey] = enabled }
-    }
-
-    suspend fun setApiKey(apiKey: String) {
-        store().edit { prefs -> prefs[apiKeyKey] = apiKey.trim() }
+        store().edit { prefs ->
+            prefs[enabledKey] = enabled
+            prefs.remove(legacyApiKeyKey)
+        }
     }
 
     suspend fun setShowIntroButton(enabled: Boolean) {
-        store().edit { prefs -> prefs[showIntroButtonKey] = enabled }
+        store().edit { prefs ->
+            prefs[showIntroButtonKey] = enabled
+            prefs.remove(legacyApiKeyKey)
+        }
     }
 
     suspend fun setShowRecapButton(enabled: Boolean) {
-        store().edit { prefs -> prefs[showRecapButtonKey] = enabled }
+        store().edit { prefs ->
+            prefs[showRecapButtonKey] = enabled
+            prefs.remove(legacyApiKeyKey)
+        }
     }
 
     suspend fun setShowCreditsButton(enabled: Boolean) {
-        store().edit { prefs -> prefs[showCreditsButtonKey] = enabled }
+        store().edit { prefs ->
+            prefs[showCreditsButtonKey] = enabled
+            prefs.remove(legacyApiKeyKey)
+        }
     }
 
     suspend fun setShowPreviewButton(enabled: Boolean) {
-        store().edit { prefs -> prefs[showPreviewButtonKey] = enabled }
+        store().edit { prefs ->
+            prefs[showPreviewButtonKey] = enabled
+            prefs.remove(legacyApiKeyKey)
+        }
     }
 }
