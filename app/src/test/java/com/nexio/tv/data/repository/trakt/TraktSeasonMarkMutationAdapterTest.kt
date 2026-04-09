@@ -5,6 +5,7 @@ import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddNotFoundDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
+import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.repository.TrackingNextUpEntry
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationSettlement
@@ -13,6 +14,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -22,12 +24,73 @@ import javax.inject.Provider
 class TraktSeasonMarkMutationAdapterTest {
 
     @Test
+    fun `applyOptimistic pushes completed progress for each season episode`() = kotlinx.coroutines.test.runTest {
+        val executor = mockk<TraktProgressMutationExecutor>(relaxed = true)
+        val snapshotService = mockk<ContinueWatchingSnapshotService>(relaxed = true)
+        val progressService = mockk<TraktProgressService>(relaxed = true)
+        val adapter = TraktSeasonMarkMutationAdapter(
+            traktProgressMutationExecutor = executor,
+            snapshotServiceProvider = Provider { snapshotService },
+            traktProgressService = progressService
+        )
+        val envelope = TraktSeasonMarkMutationAdapter.buildEnvelope(
+            showContentId = "show-1",
+            seasonNumber = 2,
+            episodes = listOf(
+                TraktEpisodeRef(episodeNumber = 1, traktId = 101),
+                TraktEpisodeRef(episodeNumber = 2, traktId = 102),
+                TraktEpisodeRef(episodeNumber = 3, traktId = 103)
+            ),
+            rollbackState = rollbackState(
+                showId = "show-1",
+                season = 2,
+                episodes = 1..3
+            )
+        )
+
+        adapter.applyOptimistic(envelope)
+
+        verify(exactly = 3) { progressService.applyOptimisticProgress(any()) }
+        verify {
+            progressService.applyOptimisticProgress(
+                match {
+                    it.contentId == "show-1" &&
+                        it.contentType == "series" &&
+                        it.season == 2 &&
+                        it.episode == 1 &&
+                        it.progressPercent == 100f
+                }
+            )
+        }
+        verify {
+            progressService.applyOptimisticProgress(
+                match {
+                    it.contentId == "show-1" &&
+                        it.season == 2 &&
+                        it.episode == 2
+                }
+            )
+        }
+        verify {
+            progressService.applyOptimisticProgress(
+                match {
+                    it.contentId == "show-1" &&
+                        it.season == 2 &&
+                        it.episode == 3
+                }
+            )
+        }
+    }
+
+    @Test
     fun `execute keeps partial not_found as success and reconcile rolls back only unresolved episodes`() = kotlinx.coroutines.test.runTest {
         val executor = mockk<TraktProgressMutationExecutor>()
         val snapshotService = mockk<ContinueWatchingSnapshotService>(relaxed = true)
+        val progressService = mockk<TraktProgressService>(relaxed = true)
         val adapter = TraktSeasonMarkMutationAdapter(
             traktProgressMutationExecutor = executor,
-            snapshotServiceProvider = Provider { snapshotService }
+            snapshotServiceProvider = Provider { snapshotService },
+            traktProgressService = progressService
         )
         val envelope = TraktSeasonMarkMutationAdapter.buildEnvelope(
             showContentId = "show-1",
@@ -67,9 +130,11 @@ class TraktSeasonMarkMutationAdapterTest {
     fun `terminal failure rolls back full season snapshot and refreshes server truth`() = kotlinx.coroutines.test.runTest {
         val executor = mockk<TraktProgressMutationExecutor>(relaxed = true)
         val snapshotService = mockk<ContinueWatchingSnapshotService>(relaxed = true)
+        val progressService = mockk<TraktProgressService>(relaxed = true)
         val adapter = TraktSeasonMarkMutationAdapter(
             traktProgressMutationExecutor = executor,
-            snapshotServiceProvider = Provider { snapshotService }
+            snapshotServiceProvider = Provider { snapshotService },
+            traktProgressService = progressService
         )
         val rollbackState = rollbackState(
             showId = "show-2",
