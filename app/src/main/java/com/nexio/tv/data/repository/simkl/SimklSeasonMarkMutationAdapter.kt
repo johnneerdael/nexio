@@ -10,6 +10,7 @@ import com.nexio.tv.data.remote.dto.simkl.SimklHistoryShowPayloadDto
 import com.nexio.tv.data.remote.dto.simkl.SimklIdsDto
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
 import com.nexio.tv.data.repository.SimklTrackingRemoteDataSource
+import com.nexio.tv.data.repository.TrackingProgressService
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
@@ -27,12 +28,23 @@ import javax.inject.Singleton
 @Singleton
 class SimklSeasonMarkMutationAdapter @Inject constructor(
     private val remote: SimklTrackingRemoteDataSource,
-    private val snapshotServiceProvider: Provider<ContinueWatchingSnapshotService>
+    private val snapshotServiceProvider: Provider<ContinueWatchingSnapshotService>,
+    private val trackingProgressService: TrackingProgressService
 ) : TraktMutationAdapter {
 
     override val adapterKey: String = ADAPTER_KEY
 
-    override suspend fun applyOptimistic(envelope: TraktMutationEnvelope) = Unit
+    override suspend fun applyOptimistic(envelope: TraktMutationEnvelope) {
+        envelope.episodeNumbers().forEach { episodeNumber ->
+            trackingProgressService.applyOptimisticProgress(
+                toCompletedProgress(
+                    contentId = envelope.showContentId(),
+                    seasonNumber = envelope.seasonNumber(),
+                    episodeNumber = episodeNumber
+                )
+            )
+        }
+    }
 
     override suspend fun execute(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
         val response = remote.addHistory(envelope.requestBody())
@@ -111,14 +123,12 @@ class SimklSeasonMarkMutationAdapter @Inject constructor(
                 title = payload.get(PAYLOAD_SHOW_TITLE)?.asString,
                 year = payload.get(PAYLOAD_SHOW_YEAR)?.takeIf { !it.isJsonNull }?.asInt,
                 status = "completed",
-                ids = parseIds(payload.get(PAYLOAD_SHOW_CONTENT_ID)?.asString.orEmpty()),
+                ids = parseIds(showContentId()),
                 seasons = listOf(
                     SimklHistorySeasonPayloadDto(
-                        number = payload.get(PAYLOAD_SEASON_NUMBER)?.asInt ?: 1,
-                        episodes = payload.getAsJsonArray(PAYLOAD_EPISODES)?.mapNotNull { element ->
-                            element.asJsonObject.get(PAYLOAD_EPISODE_NUMBER)?.asInt?.let { num ->
-                                SimklHistoryEpisodePayloadDto(number = num)
-                            }
+                        number = seasonNumber(),
+                        episodes = episodeNumbers().map { num ->
+                            SimklHistoryEpisodePayloadDto(number = num)
                         }
                     )
                 )
@@ -128,6 +138,22 @@ class SimklSeasonMarkMutationAdapter @Inject constructor(
             } else {
                 SimklHistoryAddRequestDto(shows = listOf(showPayload))
             }
+        }
+
+        private fun TraktMutationEnvelope.showContentId(): String {
+            return payload.get(PAYLOAD_SHOW_CONTENT_ID)?.asString.orEmpty()
+        }
+
+        private fun TraktMutationEnvelope.seasonNumber(): Int {
+            return payload.get(PAYLOAD_SEASON_NUMBER)?.asInt ?: 1
+        }
+
+        private fun TraktMutationEnvelope.episodeNumbers(): List<Int> {
+            return payload.getAsJsonArray(PAYLOAD_EPISODES)
+                ?.mapNotNull { element ->
+                    element.asJsonObject.get(PAYLOAD_EPISODE_NUMBER)?.asInt
+                }
+                .orEmpty()
         }
 
         private fun parseIds(contentId: String): SimklIdsDto {
@@ -145,6 +171,29 @@ class SimklSeasonMarkMutationAdapter @Inject constructor(
                 rollbackPayload ?: JsonObject(),
                 ContinueWatchingSnapshotService.EpisodeRollbackState::class.java
             ) ?: ContinueWatchingSnapshotService.EpisodeRollbackState()
+        }
+
+        private fun toCompletedProgress(
+            contentId: String,
+            seasonNumber: Int,
+            episodeNumber: Int
+        ): com.nexio.tv.domain.model.WatchProgress {
+            return com.nexio.tv.domain.model.WatchProgress(
+                contentId = contentId,
+                contentType = "series",
+                name = contentId,
+                poster = null,
+                backdrop = null,
+                logo = null,
+                videoId = "$contentId:$seasonNumber:$episodeNumber",
+                season = seasonNumber,
+                episode = episodeNumber,
+                episodeTitle = null,
+                position = 1L,
+                duration = 1L,
+                lastWatched = 0L,
+                progressPercent = 100f
+            )
         }
     }
 }
