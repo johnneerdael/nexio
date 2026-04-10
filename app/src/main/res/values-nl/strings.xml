@@ -910,8 +910,8 @@
     <string name="playback_autoplay_trailers_sub">Sta toe dat detail- en home-trailervoorbeelden automatisch starten na de ingestelde vertraging.</string>
     <string name="playback_trailer_delay">Trailervertraging</string>
     <string name="playback_trailer_delay_sub">Hoe lang te wachten voordat een trailervoorbeeld automatisch start.</string>
-    <string name="playback_section_logging">Logboekregistratie</string>
-    <string name="playback_section_logging_desc">Runtime-diagnostiek voor buffering, streamophalen en de native audiosink.</string>
+    <string name="playback_section_logging">Probleemoplossing</string>
+    <string name="playback_section_logging_desc">Runtime-diagnostiek, afspeeltracing, gegevensverzameling en native audiosink-logboekregistratie.</string>
     <string name="playback_logging_buffer_title">Logboekregistratie voor VOD-cache/parallel downloaden inschakelen</string>
     <string name="playback_logging_buffer_subtitle">Periodieke cache-, buffer- en parallelle downloaddiagnostiek naar logcat verzenden.</string>
     <string name="playback_logging_iec_title">Logboeken voor native AudioSink/IEC-packer inschakelen</string>
@@ -1081,6 +1081,9 @@
     <string name="debrid_data_collection_view_qr_action">QR bekijken</string>
     <string name="debrid_data_collection_qr_title">Collector-dashboard QR</string>
     <string name="debrid_data_collection_qr_subtitle">Scan deze QR-code of open de URL op een ander apparaat.</string>
+    <string name="debrid_rd_activation_qr_title">Real-Debrid activatie</string>
+    <string name="debrid_rd_activation_qr_subtitle">Scan deze QR-code om de activeringspagina op je telefoon te openen.</string>
+    <string name="debrid_rd_activation_qr_instruction">Scan de QR-code om je apparaat automatisch te authenticeren bij Real-Debrid.</string>
     <string name="debrid_data_collection_qr_unavailable">QR-code is niet beschikbaar</string>
     <string name="debrid_data_collection_qr_code_content_description">QR-code van collector-dashboard</string>
     <string name="debrid_data_collection_qr_base_url_missing">Basis-URL van collector-dashboard is niet geconfigureerd.</string>
@@ -1246,6 +1249,7 @@
     <string name="cd_voice_search">Spraakzoeken</string>
     <string name="cd_trakt_logo">Trakt-logo</string>
     <string name="cd_trakt_activation_qr">Trakt-activatie-QR</string>
+    <string name="cd_real_debrid_activation_qr">Scan om de Real-Debrid-activeringspagina te openen</string>
     <string name="filter_all">Alles</string>
     <string name="account_sign_in_title">Aanmelden / Account aanmaken</string>
     <string name="account_generate_sync_code_title">Synccode genereren</string>
@@ -1281,14 +1285,32 @@
     <string name="playback_diagnostics_trace_subtitle">Registreert elke afspeelsessie als een JSONL-bestand dat je kunt exporteren voor ondersteuning</string>
     <string name="playback_diagnostics_export_last_title">Laatste sessie exporteren</string>
     <string name="playback_diagnostics_export_last_subtitle">Deel het laatste playback-trace JSONL-bestand</string>
-    <string name="playback_diagnostics_export_all_title">Alle sessies exporteren</string>
-    <string name="playback_diagnostics_export_all_subtitle">Bundel elke bewaarde sessie in een .zip en deel deze</string>
+    <string name="playback_diagnostics_export_all_title">Alles naar Downloads exporteren</string>
+    <string name="playback_diagnostics_export_all_subtitle">Bundel elke bewaarde sessie in een .zip en sla deze op in Downloads, de primaire bestemming</string>
+    <string name="playback_diagnostics_export_all_downloads_success">Diagnose-zip opgeslagen in Downloads</string>
+    <string name="playback_diagnostics_export_all_downloads_failure">Diagnose-zip kon niet worden opgeslagen in Downloads</string>
+    <string name="playback_diagnostics_export_all_downloads_empty">Geen playback-traces om te exporteren</string>
+    <string name="playback_diagnostics_export_all_value_format">%1$d · %2$.1f MiB</string>
+    <string name="playback_diagnostics_uploading">Uploaden…</string>
+    <string name="playback_diagnostics_upload_sent">Verzonden</string>
+    <string name="playback_diagnostics_upload_no_trace">Geen trace</string>
+    <string name="playback_diagnostics_upload_failed">Mislukt: %1$s</string>
+    <string name="playback_diagnostics_status_prefix">Tracer is</string>
+    <string name="playback_diagnostics_status_enabled">ingeschakeld</string>
+    <string name="playback_diagnostics_status_disabled">uitgeschakeld</string>
+    <string name="playback_diagnostics_status_total_format">%1$.1f MiB totaal</string>
+    <plurals name="playback_diagnostics_status_session_count">
+        <item quantity="one">%d sessie</item>
+        <item quantity="other">%d sessies</item>
+    </plurals>
     <string name="playback_diagnostics_copy_latest_title">Laatste kopiëren naar\u2026</string>
     <string name="playback_diagnostics_copy_latest_subtitle">Schrijf de laatste sessie naar een willekeurige opslaglocatie (Downloads, USB, cloud)</string>
     <string name="playback_diagnostics_clear_title">Alle traces wissen</string>
     <string name="playback_diagnostics_clear_subtitle">Verwijder elk bewaard .jsonl-bestand onder playback-traces/</string>
     <string name="playback_diagnostics_adb_title">ADB-besturing toestaan</string>
     <string name="playback_diagnostics_adb_subtitle">Laat ADB-commando\'s van werkstations dezelfde traceroperaties aansturen</string>
+    <string name="playback_diagnostics_send_to_developer_title">Naar ontwikkelaar sturen</string>
+    <string name="playback_diagnostics_send_to_developer_subtitle">Upload de laatste sessie naar de collector van de ontwikkelaar voor analyse</string>
     <string name="error_missing_tracking_ids">Ontbrekende tracking-ID\'s voor check-in</string>
     <string name="error_tracking_check_in_failed">Tracking-check-in mislukt</string>
 </resources>

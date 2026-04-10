@@ -26,17 +26,17 @@ class CapabilityEnvelopeTest {
     }
 
     @Test
-    fun `DEFAULT envelope has expected conservative values and isMeasured is false`() {
+    fun `DEFAULT envelope has expected fallback values and isMeasured is false`() {
         val d = CapabilityEnvelope.DEFAULT
 
-        assertEquals(2, d.maxSafeUrgentWorkers)
+        assertEquals(1, d.maxSafeUrgentWorkers)
         assertEquals(1, d.maxSafePrefetchWorkers)
-        assertEquals(8L * 1024L * 1024L, d.maxSafeUrgentChunkBytes)
-        assertEquals(16L * 1024L * 1024L, d.maxSafePrefetchChunkBytes)
+        assertEquals(24L * 1024L * 1024L, d.maxSafeUrgentChunkBytes)
+        assertEquals(24L * 1024L * 1024L, d.maxSafePrefetchChunkBytes)
         assertEquals(50.0, d.sustainedThroughputMbps, 0.0)
         assertEquals(0.5, d.stabilityPenalty, 0.0)
         assertEquals(0L, d.measuredAtMs)
-        assertEquals(3, d.totalWorkers)
+        assertEquals(2, d.totalWorkers)
         assertFalse(d.isMeasured)
     }
 

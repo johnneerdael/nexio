@@ -33,6 +33,11 @@ internal class SessionWriter(
     private val parkNanos: Long = 200_000L,
     private val overflowReportIntervalNanos: Long = 10_000_000_000L
 ) {
+    internal data class FileSnapshot(
+        val originalFile: File,
+        val snapshotFile: File,
+    )
+
     private val ring: MpscArrayQueue<TraceRecord> = MpscArrayQueue(capacity)
     private val overflowCount = AtomicLong(0)
     private val totalEmitted = AtomicLong(0)
@@ -101,6 +106,35 @@ internal class SessionWriter(
         return drained.get() && ring.isEmpty
     }
 
+    internal fun snapshotIfCurrentFile(requestedFile: File, snapshotDir: File): FileSnapshot? {
+        if (testSink != null || baseFile == null) return null
+        synchronized(this) {
+            val current = currentFile()
+            if (requestedFile.absoluteFile != current.absoluteFile) return null
+            if (!snapshotDir.exists()) snapshotDir.mkdirs()
+            val snapshotRunDir = File(
+                snapshotDir,
+                "snapshot-" + android.os.SystemClock.elapsedRealtimeNanos()
+            ).apply { mkdirs() }
+            val snapshot = File(snapshotRunDir, current.name)
+            try {
+                sink.flush()
+                current.inputStream().use { input ->
+                    snapshot.outputStream().buffered().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            } catch (_: Exception) {
+                snapshot.delete()
+                return null
+            }
+            return FileSnapshot(
+                originalFile = current,
+                snapshotFile = snapshot,
+            )
+        }
+    }
+
     private fun drainLoop() {
         try {
             // Initialised inside the try so any unexpected throw from the
@@ -139,33 +173,35 @@ internal class SessionWriter(
     }
 
     private fun writeRecord(rec: TraceRecord) {
-        val line = lineBuffer
-        line.setLength(0)
-        line.append("{\"sid\":\"").append(header.sessionId)
-            .append("\",\"tNs\":").append(rec.tNanos)
-            .append(",\"th\":\"").append(escape(rec.thread))
-            .append("\",\"fam\":\"").append(rec.family.name)
-            // `rec.type` is a constant string from EventFamily emit call sites
-            // in production, but escape it defensively so a future caller
-            // passing a quote-containing type cannot break the JSON.
-            .append("\",\"ev\":\"").append(escape(rec.type)).append('"')
-        if (rec.payloadBuffer.isNotEmpty()) {
-            line.append(rec.payloadBuffer)
-        }
-        line.append("}\n")
-        try {
-            // Append the StringBuilder directly to avoid the per-record
-            // String allocation `line.toString()` would incur on the writer
-            // thread. `Writer.append(CharSequence)` is a standard method.
-            sink.append(line)
-            bytesWrittenInCurrentFile += line.length
-            // Phase 2 atrace markers — only meaningful for FRONTIER/RANGE/REBUFFER.
-            maybeAtrace(rec)
-            if (testSink == null && bytesWrittenInCurrentFile >= rotationBytes) {
-                rotate()
+        synchronized(this) {
+            val line = lineBuffer
+            line.setLength(0)
+            line.append("{\"sid\":\"").append(header.sessionId)
+                .append("\",\"tNs\":").append(rec.tNanos)
+                .append(",\"th\":\"").append(escape(rec.thread))
+                .append("\",\"fam\":\"").append(rec.family.name)
+                // `rec.type` is a constant string from EventFamily emit call sites
+                // in production, but escape it defensively so a future caller
+                // passing a quote-containing type cannot break the JSON.
+                .append("\",\"ev\":\"").append(escape(rec.type)).append('"')
+            if (rec.payloadBuffer.isNotEmpty()) {
+                line.append(rec.payloadBuffer)
             }
-        } catch (_: Exception) {
-            // swallow — instrumentation must never crash playback
+            line.append("}\n")
+            try {
+                // Append the StringBuilder directly to avoid the per-record
+                // String allocation `line.toString()` would incur on the writer
+                // thread. `Writer.append(CharSequence)` is a standard method.
+                sink.append(line)
+                bytesWrittenInCurrentFile += line.length
+                // Phase 2 atrace markers — only meaningful for FRONTIER/RANGE/REBUFFER.
+                maybeAtrace(rec)
+                if (testSink == null && bytesWrittenInCurrentFile >= rotationBytes) {
+                    rotate()
+                }
+            } catch (_: Exception) {
+                // swallow — instrumentation must never crash playback
+            }
         }
     }
 
@@ -199,16 +235,18 @@ internal class SessionWriter(
     private fun emitOverflowReport() {
         val dropped = overflowCount.getAndSet(0)
         if (dropped <= 0) return
-        val line = StringBuilder(96)
-            .append("{\"sid\":\"").append(header.sessionId)
-            .append("\",\"tNs\":").append(android.os.SystemClock.elapsedRealtimeNanos())
-            .append(",\"th\":\"").append(Thread.currentThread().name)
-            .append("\",\"fam\":\"TRACER\",\"ev\":\"tracer_overflow\",\"droppedCount\":")
-            .append(dropped).append("}\n")
-        try {
-            sink.write(line.toString())
-            bytesWrittenInCurrentFile += line.length
-        } catch (_: Exception) {
+        synchronized(this) {
+            val line = StringBuilder(96)
+                .append("{\"sid\":\"").append(header.sessionId)
+                .append("\",\"tNs\":").append(android.os.SystemClock.elapsedRealtimeNanos())
+                .append(",\"th\":\"").append(Thread.currentThread().name)
+                .append("\",\"fam\":\"TRACER\",\"ev\":\"tracer_overflow\",\"droppedCount\":")
+                .append(dropped).append("}\n")
+            try {
+                sink.write(line.toString())
+                bytesWrittenInCurrentFile += line.length
+            } catch (_: Exception) {
+            }
         }
     }
 

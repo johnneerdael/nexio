@@ -1,5 +1,7 @@
 package com.nexio.tv
 
+import com.nexio.tv.domain.model.AuthState
+
 internal enum class StartupLaunchDisposition {
     COLD_PROCESS_START,
     WARM_PROCESS_SKIP_SPLASH,
@@ -24,4 +26,14 @@ internal fun resolveStartupLaunchDisposition(
     } else {
         StartupLaunchDisposition.WARM_PROCESS_SHOW_SPLASH_UNREADY
     }
+}
+
+internal fun shouldShowAuthQrOnStartup(
+    hasSeenAuthQrOnFirstLaunch: Boolean?,
+    authState: AuthState,
+    onboardingCompletedThisSession: Boolean
+): Boolean {
+    return hasSeenAuthQrOnFirstLaunch == false &&
+        authState is AuthState.SignedOut &&
+        !onboardingCompletedThisSession
 }

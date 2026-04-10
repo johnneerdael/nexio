@@ -11,6 +11,7 @@ import com.nexio.tv.core.sync.StartupSyncService
 import com.nexio.tv.instrumentation.PlaybackTraceToggle
 import com.nexio.tv.instrumentation.PlaybackTracer
 import dagger.hilt.android.HiltAndroidApp
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,6 +23,9 @@ import javax.inject.Inject
 
 @HiltAndroidApp
 class NexioApplication : Application(), ImageLoaderFactory {
+    companion object {
+        private const val TAG = "NexioApp"
+    }
 
     @Inject lateinit var startupSyncService: StartupSyncService
     @Inject lateinit var playbackTraceToggle: PlaybackTraceToggle
@@ -42,6 +46,7 @@ class NexioApplication : Application(), ImageLoaderFactory {
         PlaybackTracer.enabled = runBlocking {
             playbackTraceToggle.enabledFlow.first()
         }
+        Log.i(TAG, "playback trace restored enabled=${PlaybackTracer.enabled}")
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(this))
         }

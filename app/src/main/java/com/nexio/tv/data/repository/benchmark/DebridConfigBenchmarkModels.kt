@@ -254,8 +254,7 @@ fun DebridConfigBenchmarkSessionSummary.toCapabilityEnvelope(
         maxSafePrefetchChunkBytes = best.chunkSizeMb.toLong() * 1024L * 1024L,
         sustainedThroughputMbps = throughput,
         stabilityPenalty = 0.0,
-        measuredAtMs = measuredAtMs,
-        legacyBestProfile = best
+        measuredAtMs = measuredAtMs
     )
 }
 

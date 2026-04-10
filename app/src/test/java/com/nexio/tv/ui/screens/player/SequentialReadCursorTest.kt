@@ -40,6 +40,9 @@ class SequentialReadCursorTest {
             System.arraycopy(data, dataOffset, content, absoluteOffset.toInt(), length)
             if (absoluteOffset + length > available) available = absoluteOffset + length
         }
+        override fun publishStartupWindow(absoluteOffset: Long, data: ByteArray, dataOffset: Int, length: Int) {
+            writeAt(absoluteOffset, data, dataOffset, length)
+        }
         override fun read(position: Long, dest: ByteArray, destOffset: Int, length: Int): Int {
             if (position >= available) return 0
             val n = minOf(length.toLong(), available - position).toInt()
@@ -87,6 +90,23 @@ class SequentialReadCursorTest {
         assertArrayEquals(ByteArray(16) { it.toByte() }, buf)
         assertEquals(16L, c.position)
         assertEquals(16L, c.bytesRemaining)
+    }
+
+    @Test
+    fun `onPositionAdvanced reports the true cursor position`() {
+        val store = FakeStore(ByteArray(32) { it.toByte() }, available = 32)
+        val advancedPositions = mutableListOf<Long>()
+        val c = DefaultSequentialReadCursor(
+            session = session(5, 20),
+            store = store,
+            waitForBytes = { _, _ -> WaitOutcome.DATA_AVAILABLE },
+            onPositionAdvanced = { advancedPositions.add(it) },
+            keepBehindBytes = 0,
+            chunkWaitTimeoutMs = 1_000
+        )
+
+        assertEquals(8, c.read(ByteArray(8), 0, 8))
+        assertEquals(listOf(13L), advancedPositions)
     }
 
     @Test

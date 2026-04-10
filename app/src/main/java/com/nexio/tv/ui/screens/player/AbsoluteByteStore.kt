@@ -13,6 +13,13 @@ internal interface AbsoluteByteStore {
     fun writeAt(absoluteOffset: Long, data: ByteArray, dataOffset: Int, length: Int)
 
     /**
+     * Publishes a startup/continuation window with contiguous readability semantics even
+     * before the containing page is fully complete. Used for bootstrap and early startup
+     * delivery where waiting on a full page can stall playback unnecessarily.
+     */
+    fun publishStartupWindow(absoluteOffset: Long, data: ByteArray, dataOffset: Int, length: Int)
+
+    /**
      * Atomically publishes a fully-fetched prefetch chunk. The entire [length] bytes of
      * [chunk] starting at [absoluteStart] must be visible to readers in one atomic step —
      * no partially-filled chunk state may be observable. Used exclusively by the prefetch
@@ -37,6 +44,10 @@ internal class PagedFrontierByteStore(
 
     override fun writeAt(absoluteOffset: Long, data: ByteArray, dataOffset: Int, length: Int) {
         buffer.onBytesWritten(absoluteOffset, data, dataOffset, length)
+    }
+
+    override fun publishStartupWindow(absoluteOffset: Long, data: ByteArray, dataOffset: Int, length: Int) {
+        buffer.publishStartupWindow(absoluteOffset, data, dataOffset, length)
     }
 
     override fun publishCompleteChunk(absoluteStart: Long, chunk: ByteArray, length: Int) {

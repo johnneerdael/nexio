@@ -243,8 +243,8 @@
     <string name="playback_section_subtitles_desc">Language, style, and render mode.</string>
     <string name="playback_section_network_cache">Network &amp; Cache</string>
     <string name="playback_section_network_cache_desc">Configure disk VOD cache and progressive stream transfer settings.</string>
-    <string name="playback_section_logging">Logging</string>
-    <string name="playback_section_logging_desc">Runtime diagnostics for buffering, stream fetching, and the native audio sink.</string>
+    <string name="playback_section_logging">Troubleshooting</string>
+    <string name="playback_section_logging_desc">Runtime diagnostics, playback tracing, data collection, and native audio sink logging.</string>
     <string name="playback_buffer_disk_cache_title">Disk Cache</string>
     <string name="playback_buffer_enable_vod_cache">Enable VOD Cache</string>
     <string name="playback_buffer_enable_vod_cache_sub">Cache progressive VOD on disk to absorb bandwidth spikes.</string>
@@ -682,6 +682,9 @@
     <string name="debrid_data_collection_view_qr_action">View QR</string>
     <string name="debrid_data_collection_qr_title">Collector dashboard QR</string>
     <string name="debrid_data_collection_qr_subtitle">Scan this QR code or open the URL on another device.</string>
+    <string name="debrid_rd_activation_qr_title">Real-Debrid Activation</string>
+    <string name="debrid_rd_activation_qr_subtitle">Scan this QR code to open the activation page on your phone.</string>
+    <string name="debrid_rd_activation_qr_instruction">Scan the QR code to automatically authenticate your device against Real-Debrid.</string>
     <string name="debrid_data_collection_qr_unavailable">QR code is unavailable</string>
     <string name="debrid_data_collection_qr_code_content_description">Collector dashboard QR code</string>
     <string name="debrid_data_collection_qr_base_url_missing">Collector dashboard base URL is not configured.</string>
@@ -1369,6 +1372,7 @@
     <string name="cd_voice_search">Voice search</string>
     <string name="cd_trakt_logo">Trakt Logo</string>
     <string name="cd_trakt_activation_qr">Trakt activation QR</string>
+    <string name="cd_real_debrid_activation_qr">Scan to open Real-Debrid activation page</string>
     <string name="filter_all">All</string>
     <string name="account_sign_in_title">Sign In / Create Account</string>
     <string name="account_generate_sync_code_title">Generate Sync Code</string>
@@ -1404,14 +1408,32 @@
     <string name="playback_diagnostics_trace_subtitle">Records every playback session as a JSONL file you can export for support</string>
     <string name="playback_diagnostics_export_last_title">Export last session</string>
     <string name="playback_diagnostics_export_last_subtitle">Share the latest playback-trace JSONL file</string>
-    <string name="playback_diagnostics_export_all_title">Export all sessions</string>
-    <string name="playback_diagnostics_export_all_subtitle">Bundle every retained session into a .zip and share it</string>
+    <string name="playback_diagnostics_export_all_title">Export all to Downloads</string>
+    <string name="playback_diagnostics_export_all_subtitle">Bundle every retained session into a .zip and save it to Downloads, the primary destination</string>
+    <string name="playback_diagnostics_export_all_downloads_success">Saved diagnostics zip to Downloads</string>
+    <string name="playback_diagnostics_export_all_downloads_failure">Failed to save diagnostics zip to Downloads</string>
+    <string name="playback_diagnostics_export_all_downloads_empty">No playback traces to export</string>
+    <string name="playback_diagnostics_export_all_value_format">%1$d · %2$.1f MiB</string>
+    <string name="playback_diagnostics_uploading">Uploading…</string>
+    <string name="playback_diagnostics_upload_sent">Sent</string>
+    <string name="playback_diagnostics_upload_no_trace">No trace</string>
+    <string name="playback_diagnostics_upload_failed">Failed: %1$s</string>
+    <string name="playback_diagnostics_status_prefix">Tracer is</string>
+    <string name="playback_diagnostics_status_enabled">enabled</string>
+    <string name="playback_diagnostics_status_disabled">disabled</string>
+    <string name="playback_diagnostics_status_total_format">%1$.1f MiB total</string>
+    <plurals name="playback_diagnostics_status_session_count">
+        <item quantity="one">%d session</item>
+        <item quantity="other">%d sessions</item>
+    </plurals>
     <string name="playback_diagnostics_copy_latest_title">Copy latest to\u2026</string>
     <string name="playback_diagnostics_copy_latest_subtitle">Write the latest session to any storage location (Downloads, USB, cloud)</string>
     <string name="playback_diagnostics_clear_title">Clear all traces</string>
     <string name="playback_diagnostics_clear_subtitle">Delete every retained .jsonl file under playback-traces/</string>
     <string name="playback_diagnostics_adb_title">Allow ADB control</string>
     <string name="playback_diagnostics_adb_subtitle">Lets workstation ADB commands drive the same tracer operations</string>
+    <string name="playback_diagnostics_send_to_developer_title">Send to developer</string>
+    <string name="playback_diagnostics_send_to_developer_subtitle">Upload the last session to the developer\'s collector for analysis</string>
     <string name="error_missing_tracking_ids">Missing tracking IDs for check-in</string>
     <string name="error_tracking_check_in_failed">Tracking check-in failed</string>
 </resources>

@@ -66,6 +66,10 @@ class PutHeaderContractTest {
         // reader for the subset of fields ParsedSessionHeader cares about.
         val header = SessionHeaderFixture.build(
             sessionId = "round-trip",
+            serviceKey = "RD",
+            provider = "real_debrid",
+            benchmarkResultId = "real_debrid:1700000000000",
+            benchmarkSource = "config_benchmark",
             envelopePresent = true,
             specializationState = "confirmed",
             specializationMismatchReason = null,
@@ -74,17 +78,46 @@ class PutHeaderContractTest {
         try {
             PayloadBuilder(record).putHeader(header)
             val wrapped = "{${record.payloadBuffer.toString().removePrefix(",")}}"
-            val parsed = ParsedSessionHeader.fromJson(JsonParser.parseString(wrapped).asJsonObject)
+            val obj = JsonParser.parseString(wrapped).asJsonObject
+            val parsed = ParsedSessionHeader.fromJson(obj)
 
             // sessionId is read from the `sessionId` field on the started event
             // (not the per-event `sid` envelope, which lives one level up).
             assertEquals("round-trip", parsed.sessionId)
+            assertEquals("RD", obj.get(SessionHeaderKeys.SERVICE_KEY).asString)
+            assertEquals("real_debrid", obj.get(SessionHeaderKeys.PROVIDER).asString)
+            assertEquals("real_debrid:1700000000000", obj.get(SessionHeaderKeys.BENCHMARK_RESULT_ID).asString)
+            assertEquals("config_benchmark", obj.get(SessionHeaderKeys.BENCHMARK_SOURCE).asString)
             assertEquals("prds", parsed.branch)
             assertTrue(parsed.envelopePresent)
             assertEquals("confirmed", parsed.specializationState)
             assertNull(parsed.specializationMismatchReason)
             // Default fixture uses `source = "fallback"` on the policy snapshot.
             assertEquals("fallback", parsed.policySource)
+        } finally {
+            record.recycle()
+        }
+    }
+
+    @Test
+    fun putHeaderPreservesNullBenchmarkSourceWhenNoBenchmarkWasSelected() {
+        val header = SessionHeaderFixture.build(
+            sessionId = "null-benchmark-source",
+            serviceKey = "TB",
+            provider = "torbox",
+            benchmarkResultId = null,
+            benchmarkSource = null,
+            envelopePresent = false,
+            specializationState = "baseline",
+        )
+        val record = TraceRecord.obtain(EventFamily.SESSION, "playback_session_started")
+        try {
+            PayloadBuilder(record).putHeader(header)
+            val wrapped = "{${record.payloadBuffer.toString().removePrefix(",")}}"
+            val obj = JsonParser.parseString(wrapped).asJsonObject
+
+            assertTrue(obj.get(SessionHeaderKeys.BENCHMARK_SOURCE).isJsonNull)
+            assertTrue(obj.get(SessionHeaderKeys.BENCHMARK_RESULT_ID).isJsonNull)
         } finally {
             record.recycle()
         }

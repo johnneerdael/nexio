@@ -1,6 +1,8 @@
 package com.nexio.tv.ui.screens.player
 
 import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
+import com.nexio.tv.instrumentation.EventFamily
+import com.nexio.tv.instrumentation.PlaybackTracer
 
 internal data class TransportPolicy(
     val urgentWorkers: Int,
@@ -13,10 +15,9 @@ internal data class TransportPolicy(
     val warmAheadBudgetMax: Int? = null
 )
 
-/** 2 MiB — STARTUP clamp. Urgent chunk is small here because seek TTFB is unknown and
- *  over-committing a large chunk before the CDN confirms the range wastes bandwidth.
- *  Post-seek the envelope's full urgent chunk is used via the SEEK preset. */
-internal const val STARTUP_URGENT_CHUNK_BYTES = 2L * 1024L * 1024L
+/** Unknown-provider startup preset: 1 urgent worker at 24 MiB. */
+internal const val DEFAULT_STARTUP_URGENT_CHUNK_BYTES = 24L * 1024L * 1024L
+internal const val DEFAULT_STARTUP_URGENT_WORKERS = 1
 
 internal enum class TransportState {
     STARTUP,
@@ -28,7 +29,7 @@ internal enum class TransportState {
 
 internal class TransportPolicyController(
     private var envelope: CapabilityEnvelope = CapabilityEnvelope.DEFAULT,
-    provider: String? = null
+    private val provider: String? = null
 ) {
     init {
         if (provider != null) {
@@ -47,32 +48,27 @@ internal class TransportPolicyController(
 
     fun onFirstFrame() {
         if (state == TransportState.STARTUP) {
-            state = TransportState.STABILIZING
+            transitionTo(TransportState.STABILIZING, trigger = "first_frame")
         }
     }
 
     fun onSeek() {
-        val prev = state
-        state = TransportState.SEEK
-        PlayerTransportTelemetry.log(
-            "tpc.policy",
-            mapOf("from" to prev.name, "to" to TransportState.SEEK.name, "trigger" to "seek")
-        )
+        transitionTo(TransportState.SEEK, trigger = "seek")
     }
 
     fun onRebuffer() {
-        state = TransportState.REBUFFER
+        transitionTo(TransportState.REBUFFER, trigger = "rebuffer")
     }
 
     fun onStable(bufferAheadMs: Long) {
         if (bufferAheadMs > 5000 && (state == TransportState.STARTUP || state == TransportState.REBUFFER)) {
-            state = TransportState.STABILIZING
+            transitionTo(TransportState.STABILIZING, trigger = "stable", bufferAheadMs = bufferAheadMs)
         }
     }
 
     fun onSteady(bufferAheadMs: Long) {
         if (bufferAheadMs > 15000 && state == TransportState.STABILIZING) {
-            state = TransportState.STEADY
+            transitionTo(TransportState.STEADY, trigger = "steady", bufferAheadMs = bufferAheadMs)
         }
     }
 
@@ -80,14 +76,62 @@ internal class TransportPolicyController(
         envelope = newEnvelope
     }
 
-    private fun policyForState(state: TransportState): TransportPolicy = when (state) {
-        TransportState.STARTUP, TransportState.REBUFFER -> TransportPolicy(
-            urgentWorkers = envelope.maxSafeUrgentWorkers,
-            prefetchWorkers = 0,
-            urgentChunkBytes = minOf(envelope.maxSafeUrgentChunkBytes, STARTUP_URGENT_CHUNK_BYTES),
-            prefetchChunkBytes = 0L,
-            warmAheadEnabled = false
+    private fun startupPolicy(): TransportPolicy {
+        val locked = provider?.let { CapabilityEnvelope.lockedFor(it) }
+        return if (locked != null) {
+            TransportPolicy(
+                urgentWorkers = locked.maxSafeUrgentWorkers,
+                prefetchWorkers = 0,
+                urgentChunkBytes = locked.maxSafeUrgentChunkBytes,
+                prefetchChunkBytes = 0L,
+                warmAheadEnabled = false
+            )
+        } else {
+            TransportPolicy(
+                urgentWorkers = DEFAULT_STARTUP_URGENT_WORKERS,
+                prefetchWorkers = 0,
+                urgentChunkBytes = DEFAULT_STARTUP_URGENT_CHUNK_BYTES,
+                prefetchChunkBytes = 0L,
+                warmAheadEnabled = false
+            )
+        }
+    }
+
+    private fun transitionTo(next: TransportState, trigger: String, bufferAheadMs: Long? = null) {
+        val previous = state
+        if (previous == next) return
+        state = next
+        val policy = currentPolicy
+        val fields = mutableMapOf<String, Any?>(
+            "from" to previous.name,
+            "to" to next.name,
+            "trigger" to trigger,
+            "provider" to provider,
+            "urgentWorkers" to policy.urgentWorkers,
+            "prefetchWorkers" to policy.prefetchWorkers,
+            "urgentChunkBytes" to policy.urgentChunkBytes,
+            "prefetchChunkBytes" to policy.prefetchChunkBytes,
+            "warmAheadEnabled" to policy.warmAheadEnabled,
         )
+        bufferAheadMs?.let { fields["bufferAheadMs"] = it }
+        PlayerTransportTelemetry.log("tpc.policy", fields)
+        if (!PlaybackTracer.enabled) return
+        PlaybackTracer.emit(EventFamily.POLICY, "transport_policy_state") {
+            putString("from", previous.name)
+            putString("to", next.name)
+            putString("trigger", trigger)
+            putString("provider", provider)
+            bufferAheadMs?.let { putLong("bufferAheadMs", it) }
+            putInt("urgentWorkers", policy.urgentWorkers)
+            putInt("prefetchWorkers", policy.prefetchWorkers)
+            putLong("urgentChunkBytes", policy.urgentChunkBytes)
+            putLong("prefetchChunkBytes", policy.prefetchChunkBytes)
+            putBool("warmAheadEnabled", policy.warmAheadEnabled)
+        }
+    }
+
+    private fun policyForState(state: TransportState): TransportPolicy = when (state) {
+        TransportState.STARTUP, TransportState.REBUFFER -> startupPolicy()
         // Post-seek: use the full envelope urgent chunk so throughput recovers immediately on
         // reopen. Prefetch is suppressed (prefetchWorkers=0) so urgent ranges run without
         // contention until onFirstFrame() transitions us to STABILIZING. The next open()
@@ -120,10 +164,15 @@ internal fun TransportPolicy.applyRuntimeTransportSpecialization(
     specialization: RuntimeTransportSpecialization,
     runtimeHints: com.nexio.tv.data.repository.benchmark.RuntimeTransportHintsV2?
 ): TransportPolicy {
-    val baselineUrgentChunkBytes = minOf(urgentChunkBytes, 8L * 1024L * 1024L)
+    // When no runtime specialization is confirmed, preserve the urgentChunkBytes from the
+    // policy's envelope unchanged. The previous 8 MiB cap here was intended as a guard for
+    // unknown servers, but it silently overrides locked-envelope chunk sizes (e.g.
+    // LOCKED_REAL_DEBRID = 32 MiB) causing a per-chunk TCP+TLS handshake stall on every
+    // chunk boundary for connection-close HTTP/1.1 providers. The provider-aware STARTUP preset is
+    // already applied by policyForState(STARTUP) before we reach here, so no extra cap is
+    // needed at this layer.
     if (!specialization.allowUrgentChunkAbove8MiB) {
         return copy(
-            urgentChunkBytes = baselineUrgentChunkBytes,
             connectionBudgetHint = null,
             retryMode = RuntimeTransportRetryMode.DEFAULT
         )

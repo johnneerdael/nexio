@@ -94,6 +94,7 @@ class HomeViewModel @Inject constructor(
     internal val trailerSettingsDataStore: TrailerSettingsDataStore,
     internal val youTubeTrailerAuthDataStore: YouTubeTrailerAuthDataStore,
     internal val accountSyncRefreshNotifier: AccountSyncRefreshNotifier,
+    internal val catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier,
     internal val homeCatalogSnapshotStore: HomeCatalogSnapshotStore,
     internal val homeCatalogRefreshCoordinator: HomeCatalogRefreshCoordinator,
     internal val debugSettingsDataStore: DebugSettingsDataStore,
@@ -296,6 +297,7 @@ class HomeViewModel @Inject constructor(
         observeMDBListCatalogPreferences()
         observeMDBListDiscovery()
         observeAccountSyncRefresh()
+        observePriorityHydration()
         loadContinueWatching()
         observeInstalledAddons()
     }
@@ -450,6 +452,8 @@ class HomeViewModel @Inject constructor(
     private fun observeMDBListDiscovery() = observeMDBListDiscoveryPipeline()
 
     private fun observeAccountSyncRefresh() = observeAccountSyncRefreshPipeline()
+
+    private fun observePriorityHydration() = observePriorityHydrationPipeline()
 
     fun onForeground() = onForegroundPipeline()
 

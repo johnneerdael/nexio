@@ -440,6 +440,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
         scope.launch {
             try {
                 val playerSettings = playerSettingsDataStore.playerSettings.first()
+                refreshPlaybackTraceProvenanceForCurrentStream()
                 val mediaSource = withContext(Dispatchers.IO) {
                     mediaSourceFactory.createMediaSource(url, newHeaders)
                 }
@@ -774,6 +775,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
         scope.launch {
             try {
                 val playerSettings = playerSettingsDataStore.playerSettings.first()
+                refreshPlaybackTraceProvenanceForCurrentStream()
                 val mediaSource = withContext(Dispatchers.IO) {
                     mediaSourceFactory.createMediaSource(url, newHeaders)
                 }

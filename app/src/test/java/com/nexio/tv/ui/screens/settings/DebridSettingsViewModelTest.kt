@@ -1,6 +1,11 @@
 package com.nexio.tv.ui.screens.settings
 
+import android.content.ContentResolver
+import android.content.Context
+import android.content.ContextWrapper
+import android.net.Uri
 import android.util.Log
+import com.nexio.tv.R
 import com.nexio.tv.data.local.EasyDebridSettings
 import com.nexio.tv.data.local.EasyDebridSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettings
@@ -16,6 +21,7 @@ import com.nexio.tv.data.repository.EasyDebridService
 import com.nexio.tv.data.repository.PremiumizeAccountState
 import com.nexio.tv.data.repository.PremiumizeService
 import com.nexio.tv.data.repository.RealDebridAuthService
+import com.nexio.tv.data.repository.RealDebridTokenPollResult
 import com.nexio.tv.data.repository.TorBoxAccountState
 import com.nexio.tv.data.repository.TorBoxService
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
@@ -34,6 +40,7 @@ import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkRuntimeState
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkService
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkSessionSummary
 import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkStatus
+import com.nexio.tv.instrumentation.PlaybackTracer
 import com.nexio.tv.instrumentation.PlaybackTraceToggle
 import io.mockk.coEvery
 import io.mockk.every
@@ -46,6 +53,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -53,11 +61,14 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import java.io.ByteArrayOutputStream
+import java.io.File
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import kotlin.io.path.createTempDirectory
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DebridSettingsViewModelTest {
@@ -595,8 +606,317 @@ class DebridSettingsViewModelTest {
         coVerify { playerSettingsDataStore.setDeterministicAutoplayEnabled(false) }
     }
 
+    @Test
+    fun `playback trace toggle seeds from in-memory tracer before flow rehydrates`() = runTest(dispatcher) {
+        PlaybackTracer.enabled = true
+        try {
+            val playbackTraceController =
+                mockk<com.nexio.tv.instrumentation.PlaybackTraceController>(relaxed = true).also {
+                    every { it.enabledFlow } returns emptyFlow()
+                    every { it.statusFlow } returns MutableStateFlow(
+                        com.nexio.tv.instrumentation.TraceStatus.EMPTY
+                    )
+                }
+            val playbackTraceAdbControlToggle =
+                mockk<com.nexio.tv.instrumentation.PlaybackTraceAdbControlToggle>(relaxed = true).also {
+                    every { it.enabledFlow } returns flowOf(false)
+                }
+
+            val viewModel = buildViewModel(
+                playbackTraceController = playbackTraceController,
+                playbackTraceAdbControlToggle = playbackTraceAdbControlToggle
+            )
+
+            assertEquals(true, viewModel.uiState.value.playbackTraceEnabled)
+        } finally {
+            PlaybackTracer.enabled = false
+        }
+    }
+
+    @Test
+    fun `playback trace enabled follows status flow when status disagrees with enabled flow`() = runTest(dispatcher) {
+        val statusFlow = MutableStateFlow(
+            com.nexio.tv.instrumentation.TraceStatus.EMPTY.copy(enabled = true)
+        )
+        val playbackTraceController =
+            mockk<com.nexio.tv.instrumentation.PlaybackTraceController>(relaxed = true).also {
+                every { it.enabledFlow } returns emptyFlow()
+                every { it.statusFlow } returns statusFlow
+            }
+
+        val viewModel = buildViewModel(playbackTraceController = playbackTraceController)
+
+        advanceUntilIdle()
+
+        assertEquals(true, viewModel.uiState.value.playbackTraceEnabled)
+        assertEquals(true, viewModel.uiState.value.playbackTraceStatus.enabled)
+    }
+
+    @Test
+    fun `playback trace state survives later combined ui recomputes`() = runTest(dispatcher) {
+        val playerSettingsFlow = MutableStateFlow(PlayerSettings())
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>(relaxed = true).also {
+            every { it.playerSettings } returns playerSettingsFlow
+        }
+        val statusFlow = MutableStateFlow(
+            com.nexio.tv.instrumentation.TraceStatus.EMPTY.copy(enabled = true)
+        )
+        val playbackTraceController =
+            mockk<com.nexio.tv.instrumentation.PlaybackTraceController>(relaxed = true).also {
+                every { it.enabledFlow } returns emptyFlow()
+                every { it.statusFlow } returns statusFlow
+            }
+
+        val viewModel = buildViewModel(
+            playerSettingsDataStore = playerSettingsDataStore,
+            playbackTraceController = playbackTraceController
+        )
+
+        advanceUntilIdle()
+        assertEquals(true, viewModel.uiState.value.playbackTraceEnabled)
+
+        playerSettingsFlow.value = PlayerSettings(serviceWrapEnabled = true)
+        advanceUntilIdle()
+
+        assertEquals(true, viewModel.uiState.value.playbackTraceEnabled)
+        assertEquals(true, viewModel.uiState.value.playbackTraceStatus.enabled)
+    }
+
+    @Test
+    fun `copy all traces zip delegates to controller refreshes status and emits success message`() = runTest(dispatcher) {
+        val destination = Uri.parse("content://tests/playback-traces.zip")
+        val appFilesDir = createTempDirectory("debrid-playback-trace-viewmodel-success").toFile()
+        File(appFilesDir, "playback-traces").apply {
+            mkdirs()
+            resolve("session-a.jsonl").writeText("{\"type\":\"started\"}\n")
+        }
+        val destinationBytes = ByteArrayOutputStream()
+        val contentResolver = mockk<ContentResolver>().also {
+            every { it.openOutputStream(destination) } returns destinationBytes
+        }
+        val playbackTraceController =
+            com.nexio.tv.instrumentation.PlaybackTraceController(
+                appContext = object : ContextWrapper(mockk(relaxed = true)) {
+                    override fun getFilesDir(): File = appFilesDir
+                    override fun getCacheDir(): File =
+                        createTempDirectory("debrid-playback-trace-viewmodel-success-cache").toFile()
+                    override fun getContentResolver(): ContentResolver = contentResolver
+                    override fun getPackageName(): String = "com.nexio.tv"
+                },
+                toggle = mockk<com.nexio.tv.instrumentation.PlaybackTraceToggle>(relaxed = true).also {
+                    every { it.enabledFlow } returns emptyFlow()
+                },
+            )
+
+        val viewModel = buildViewModel(playbackTraceController = playbackTraceController)
+        advanceUntilIdle()
+
+        val message = async { viewModel.messages.first() }
+
+        viewModel.copyAllTracesZipToDestination(destination)
+        advanceUntilIdle()
+
+        assertTrue(destinationBytes.size() > 0)
+        assertTrue(message.await().startsWith("Saved diagnostics zip ("))
+    }
+
+    @Test
+    fun `copy all traces zip emits no trace message when nothing was written`() = runTest(dispatcher) {
+        val destination = Uri.parse("content://tests/playback-traces.zip")
+        val appFilesDir = createTempDirectory("debrid-playback-trace-viewmodel-empty").toFile()
+        val playbackTraceController =
+            com.nexio.tv.instrumentation.PlaybackTraceController(
+                appContext = object : ContextWrapper(mockk(relaxed = true)) {
+                    override fun getFilesDir(): File = appFilesDir
+                    override fun getCacheDir(): File =
+                        createTempDirectory("debrid-playback-trace-viewmodel-empty-cache").toFile()
+                    override fun getContentResolver(): ContentResolver =
+                        mockk(relaxed = true)
+                    override fun getPackageName(): String = "com.nexio.tv"
+                },
+                toggle = mockk<com.nexio.tv.instrumentation.PlaybackTraceToggle>(relaxed = true).also {
+                    every { it.enabledFlow } returns emptyFlow()
+                },
+            )
+
+        val viewModel = buildViewModel(playbackTraceController = playbackTraceController)
+        advanceUntilIdle()
+
+        val message = async { viewModel.messages.first() }
+
+        viewModel.copyAllTracesZipToDestination(destination)
+        advanceUntilIdle()
+
+        assertEquals("No playback traces to export", message.await())
+    }
+
+    @Test
+    fun `copy all traces zip to downloads emits explicit success message`() = runTest(dispatcher) {
+        val playbackTraceController = mockk<com.nexio.tv.instrumentation.PlaybackTraceController>(relaxed = true)
+        every { playbackTraceController.enabledFlow } returns emptyFlow()
+        every { playbackTraceController.statusFlow } returns MutableStateFlow(
+            com.nexio.tv.instrumentation.TraceStatus.EMPTY
+        )
+        every { playbackTraceController.listTraces() } returns listOf(File("session-a.jsonl"))
+        coEvery { playbackTraceController.copyAllToDownloads(any()) } returns "Downloads/playback-traces.zip"
+
+        val viewModel = buildViewModel(playbackTraceController = playbackTraceController)
+        advanceUntilIdle()
+
+        val message = async { viewModel.messages.first() }
+
+        viewModel.copyAllTracesZipToDownloads()
+        advanceUntilIdle()
+
+        assertEquals("Saved diagnostics zip to Downloads", message.await())
+        coVerify { playbackTraceController.copyAllToDownloads(any()) }
+    }
+
+    @Test
+    fun `copy all traces zip to downloads emits explicit failure message`() = runTest(dispatcher) {
+        val playbackTraceController = mockk<com.nexio.tv.instrumentation.PlaybackTraceController>(relaxed = true)
+        every { playbackTraceController.enabledFlow } returns emptyFlow()
+        every { playbackTraceController.statusFlow } returns MutableStateFlow(
+            com.nexio.tv.instrumentation.TraceStatus.EMPTY
+        )
+        every { playbackTraceController.listTraces() } returns listOf(File("session-a.jsonl"))
+        coEvery { playbackTraceController.copyAllToDownloads(any()) } returns null
+
+        val viewModel = buildViewModel(playbackTraceController = playbackTraceController)
+        advanceUntilIdle()
+
+        val message = async { viewModel.messages.first() }
+
+        viewModel.copyAllTracesZipToDownloads()
+        advanceUntilIdle()
+
+        assertEquals("Failed to save diagnostics zip to Downloads", message.await())
+        coVerify { playbackTraceController.copyAllToDownloads(any()) }
+    }
+
+    @Test
+    fun `service wrap is disabled automatically when last provider disconnects`() = runTest(dispatcher) {
+        val rdAuthState = MutableStateFlow(
+            RealDebridAuthState(
+                userClientId = "id",
+                userClientSecret = "secret",
+                accessToken = "token",
+                refreshToken = "refresh"
+            )
+        )
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>(relaxed = true)
+        every { playerSettingsDataStore.playerSettings } returns flowOf(
+            PlayerSettings(serviceWrapEnabled = true)
+        )
+
+        buildViewModel(
+            realDebridAuthStateFlow = rdAuthState,
+            playerSettingsDataStore = playerSettingsDataStore
+        )
+        advanceUntilIdle()
+
+        rdAuthState.value = RealDebridAuthState()
+        advanceUntilIdle()
+
+        coVerify { playerSettingsDataStore.setServiceWrapEnabled(false) }
+    }
+
+    @Test
+    fun `auto-polling calls pollDeviceToken after 5 seconds when awaiting approval`() = runTest(dispatcher) {
+        val rdAuthService = mockk<RealDebridAuthService>(relaxed = true)
+        coEvery { rdAuthService.pollDeviceToken() } returns RealDebridTokenPollResult.Pending
+
+        buildViewModel(
+            realDebridAuthStateFlow = flowOf(
+                RealDebridAuthState(deviceCode = "dev-code", userCode = "ABC123", verificationUrl = "https://real-debrid.com/device")
+            ),
+            realDebridAuthService = rdAuthService
+        )
+        advanceUntilIdle()
+
+        testScheduler.advanceTimeBy(5_100)
+        advanceUntilIdle()
+
+        coVerify(atLeast = 1) { rdAuthService.pollDeviceToken() }
+    }
+
+    @Test
+    fun `auto-polling continues silently on Pending and polls again after another interval`() = runTest(dispatcher) {
+        val rdAuthService = mockk<RealDebridAuthService>(relaxed = true)
+        coEvery { rdAuthService.pollDeviceToken() } returns RealDebridTokenPollResult.Pending
+
+        val viewModel = buildViewModel(
+            realDebridAuthStateFlow = flowOf(
+                RealDebridAuthState(deviceCode = "dev-code", userCode = "ABC123", verificationUrl = "https://real-debrid.com/device")
+            ),
+            realDebridAuthService = rdAuthService
+        )
+        advanceUntilIdle()
+
+        testScheduler.advanceTimeBy(10_100)
+        advanceUntilIdle()
+
+        coVerify(exactly = 2) { rdAuthService.pollDeviceToken() }
+        assertEquals(DebridConnectionMode.AWAITING_APPROVAL, viewModel.uiState.value.realDebridMode)
+    }
+
+    @Test
+    fun `auto-polling transitions to connected and emits success message on Approved`() = runTest(dispatcher) {
+        val rdAuthState = MutableStateFlow(
+            RealDebridAuthState(deviceCode = "dev-code", userCode = "ABC123", verificationUrl = "https://real-debrid.com/device")
+        )
+        val rdAuthService = mockk<RealDebridAuthService>(relaxed = true)
+        coEvery { rdAuthService.pollDeviceToken() } coAnswers {
+            rdAuthState.value = RealDebridAuthState(
+                userClientId = "client-id",
+                userClientSecret = "client-secret",
+                accessToken = "token",
+                refreshToken = "refresh",
+                username = "rd-user"
+            )
+            RealDebridTokenPollResult.Approved("rd-user")
+        }
+
+        val viewModel = buildViewModel(
+            realDebridAuthStateFlow = rdAuthState,
+            realDebridAuthService = rdAuthService
+        )
+        advanceUntilIdle()
+
+        val message = async { viewModel.messages.first() }
+        testScheduler.advanceTimeBy(5_100)
+        advanceUntilIdle()
+
+        assertEquals("Connected to Real-Debrid as rd-user", message.await())
+        assertEquals(DebridConnectionMode.CONNECTED, viewModel.uiState.value.realDebridMode)
+    }
+
+    @Test
+    fun `auto-polling emits expired message and stops on Expired result`() = runTest(dispatcher) {
+        val rdAuthService = mockk<RealDebridAuthService>(relaxed = true)
+        coEvery { rdAuthService.pollDeviceToken() } returns RealDebridTokenPollResult.Expired
+
+        val viewModel = buildViewModel(
+            realDebridAuthStateFlow = flowOf(
+                RealDebridAuthState(deviceCode = "dev-code", userCode = "ABC123", verificationUrl = "https://real-debrid.com/device")
+            ),
+            realDebridAuthService = rdAuthService
+        )
+        advanceUntilIdle()
+
+        val message = async { viewModel.messages.first() }
+        testScheduler.advanceTimeBy(5_100)
+        advanceUntilIdle()
+
+        assertEquals("Real-Debrid device code expired", message.await())
+        // Only one poll fired — loop exited after Expired
+        coVerify(exactly = 1) { rdAuthService.pollDeviceToken() }
+    }
+
     private fun buildViewModel(
         realDebridConnected: Boolean = false,
+        realDebridAuthService: RealDebridAuthService? = null,
+        realDebridAuthStateFlow: kotlinx.coroutines.flow.Flow<RealDebridAuthState>? = null,
         premiumizeConnected: Boolean = false,
         torBoxConnected: Boolean = false,
         easyDebridConnected: Boolean = false,
@@ -612,10 +932,20 @@ class DebridSettingsViewModelTest {
         configBenchmarkService: DebridConfigBenchmarkService? = null,
         playerSettingsDataStore: PlayerSettingsDataStore? = null,
         collectorPublicDashboardLinkProvider: CollectorPublicDashboardLinkProvider? = null,
-        playbackTraceToggle: PlaybackTraceToggle? = null
+        playbackTraceToggle: PlaybackTraceToggle? = null,
+        playbackTraceController: com.nexio.tv.instrumentation.PlaybackTraceController? = null,
+        playbackTraceAdbControlToggle: com.nexio.tv.instrumentation.PlaybackTraceAdbControlToggle? = null
     ): DebridSettingsViewModel {
+        val appContext = mockk<Context>(relaxed = true).also {
+            every { it.getString(R.string.playback_diagnostics_export_all_downloads_success) } returns
+                "Saved diagnostics zip to Downloads"
+            every { it.getString(R.string.playback_diagnostics_export_all_downloads_failure) } returns
+                "Failed to save diagnostics zip to Downloads"
+            every { it.getString(R.string.playback_diagnostics_export_all_downloads_empty) } returns
+                "No playback traces to export"
+        }
         val realDebridAuthDataStore = mockk<RealDebridAuthDataStore>()
-        every { realDebridAuthDataStore.state } returns flowOf(
+        every { realDebridAuthDataStore.state } returns (realDebridAuthStateFlow ?: flowOf(
             if (realDebridConnected) {
                 RealDebridAuthState(
                     userClientId = "client-id",
@@ -627,7 +957,7 @@ class DebridSettingsViewModelTest {
             } else {
                 RealDebridAuthState()
             }
-        )
+        ))
 
         val premiumizeService = mockk<PremiumizeService>(relaxed = true)
         every { premiumizeService.observeAccountState() } returns flowOf(
@@ -707,19 +1037,20 @@ class DebridSettingsViewModelTest {
                 every { it.enabledFlow } returns flowOf(false)
             }
         val resolvedPlaybackTraceController =
-            mockk<com.nexio.tv.instrumentation.PlaybackTraceController>(relaxed = true).also {
+            playbackTraceController ?: mockk<com.nexio.tv.instrumentation.PlaybackTraceController>(relaxed = true).also {
                 every { it.enabledFlow } returns flowOf(false)
                 every { it.statusFlow } returns kotlinx.coroutines.flow.MutableStateFlow(
                     com.nexio.tv.instrumentation.TraceStatus.EMPTY
                 )
             }
         val resolvedPlaybackTraceAdbControlToggle =
-            mockk<com.nexio.tv.instrumentation.PlaybackTraceAdbControlToggle>(relaxed = true).also {
+            playbackTraceAdbControlToggle ?: mockk<com.nexio.tv.instrumentation.PlaybackTraceAdbControlToggle>(relaxed = true).also {
                 every { it.enabledFlow } returns flowOf(false)
             }
 
         return DebridSettingsViewModel(
-            realDebridAuthService = mockk<RealDebridAuthService>(relaxed = true),
+            appContext = appContext,
+            realDebridAuthService = realDebridAuthService ?: mockk<RealDebridAuthService>(relaxed = true),
             realDebridAuthDataStore = realDebridAuthDataStore,
             premiumizeService = premiumizeService,
             premiumizeSettingsDataStore = premiumizeSettingsDataStore,
@@ -733,7 +1064,8 @@ class DebridSettingsViewModelTest {
             collectorPublicDashboardLinkProvider = resolvedCollectorPublicDashboardLinkProvider,
             playbackTraceToggle = resolvedPlaybackTraceToggle,
             playbackTraceController = resolvedPlaybackTraceController,
-            playbackTraceAdbControlToggle = resolvedPlaybackTraceAdbControlToggle
+            playbackTraceAdbControlToggle = resolvedPlaybackTraceAdbControlToggle,
+            playbackDiagnosticsUploader = mockk<com.nexio.tv.data.repository.benchmark.PlaybackDiagnosticsUploader>(relaxed = true),
         )
     }
 

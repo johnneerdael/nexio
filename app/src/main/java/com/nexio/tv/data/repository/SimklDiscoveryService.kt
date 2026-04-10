@@ -199,6 +199,9 @@ class SimklDiscoveryService @Inject constructor(
         }
     }
 
+    /** Consistent with other discovery services. Simkl has no startup gate. */
+    suspend fun priorityFetch() = ensureFresh(force = true)
+
     suspend fun ensureFresh(force: Boolean) = withContext(Dispatchers.IO) {
         val prefs = simklSettingsDataStore.catalogPreferences.first()
         val now = System.currentTimeMillis()

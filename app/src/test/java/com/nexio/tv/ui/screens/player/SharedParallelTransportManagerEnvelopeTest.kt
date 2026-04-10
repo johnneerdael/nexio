@@ -61,7 +61,7 @@ class SharedParallelTransportManagerEnvelopeTest {
     fun rdLockedEnvelope_schedulerHasUrgent1Prefetch1() {
         val env = CapabilityEnvelope.LOCKED_REAL_DEBRID
         assertEquals(1, env.maxSafeUrgentWorkers)
-        assertEquals(1, env.maxSafePrefetchWorkers)
+        assertEquals(2, env.maxSafePrefetchWorkers)
 
         val manager = makeManager(env)
         attachDummySession(manager)

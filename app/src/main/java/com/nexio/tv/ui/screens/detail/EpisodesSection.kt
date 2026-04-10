@@ -28,6 +28,7 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,7 +39,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -762,24 +765,25 @@ private fun EpisodeCard(
             }
 
             if (showCompletedBadge) {
-                Box(
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = stringResource(R.string.episodes_cd_watched),
+                    tint = Color.White,
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(
                             start = cardMetrics.statusBadgeInset,
                             top = cardMetrics.statusBadgeInset
                         )
+                        .zIndex(2f)
                         .size(cardMetrics.statusBadgeSize)
-                        .background(NexioColors.Primary, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = stringResource(R.string.episodes_cd_watched),
-                        tint = Color.White,
-                        modifier = Modifier.size(cardMetrics.statusIconSize)
-                    )
-                }
+                        .drawBehind {
+                            drawCircle(
+                                color = Color.Black,
+                                radius = size.minDimension / 2f + 1.5f
+                            )
+                        }
+                )
             } else if (showNotStartedBadge) {
                 Box(
                     modifier = Modifier

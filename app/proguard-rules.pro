@@ -111,6 +111,12 @@
 -keepclassmembers class com.nexio.tv.instrumentation.PlaybackTracer {
     public static boolean enabled;
 }
+# JCTools queue internals use reflective/unsafe field-offset lookups on concrete queue fields.
+# Obfuscating or stripping those internals breaks SessionWriter startup in release builds.
+-keep class org.jctools.** { *; }
+# JCTools ships optional OSGi package annotations in package-info.class; they are not needed
+# on Android runtime and should not fail release shrinking.
+-dontwarn org.osgi.annotation.bundle.**
 
 # ── General ────────────────────────────────────────────────────────────────────
 # Keep line numbers for crash reports

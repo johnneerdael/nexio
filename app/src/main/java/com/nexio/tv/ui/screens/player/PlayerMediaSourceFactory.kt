@@ -164,6 +164,10 @@ internal class PlayerMediaSourceFactory(
     @Volatile var capabilityEnvelope: CapabilityEnvelope? = null
     @Volatile var transportPolicyProvider: () -> TransportPolicy? = { null }
     @Volatile var onTransportObservation: (RuntimeTransportObservation) -> Unit = {}
+    @Volatile var playbackTraceServiceKey: String? = null
+    @Volatile var playbackTraceProviderStorageKey: String? = null
+    @Volatile var playbackTraceBenchmarkSource: String? = null
+    @Volatile var playbackTraceBenchmarkResultId: String? = null
 
     fun configureSubtitleParsing(
         extractorsFactory: ExtractorsFactory?,
@@ -250,6 +254,7 @@ internal class PlayerMediaSourceFactory(
                             if (next > current) next else current
                         }
                     },
+                    allowStartupBootstrapReuse = true,
                     transportPolicyProvider = transportPolicyProvider
                 )
             }
@@ -294,7 +299,7 @@ internal class PlayerMediaSourceFactory(
         currentVodCacheActive = false
         currentProgressiveUpstreamFactory = progressiveUpstreamFactory
         currentWarmAheadUpstreamFactory = okHttpFactory // single-connection for warm-ahead
-        currentProgressiveIsEligibleForWarmAhead = useVodCache
+        currentProgressiveIsEligibleForWarmAhead = useVodCache && useParallelConnections
         val vodCacheMaxBytes = resolveVodCacheMaxBytes(context)
         if (useVodCache && !isVodCacheDisabled) {
             maybeApplyLiveVodCacheCapIncrease(
@@ -1080,24 +1085,33 @@ internal class PlayerMediaSourceFactory(
         envelope: com.nexio.tv.data.repository.benchmark.CapabilityEnvelope?,
         cacheActive: Boolean
     ) {
-        if (!com.nexio.tv.instrumentation.PlaybackTracer.enabled) return
+        if (!com.nexio.tv.instrumentation.PlaybackTracer.enabled) {
+            Log.i(
+                TAG,
+                "openPlaybackTraceSession skipped enabled=false host=${runCatching { Uri.parse(url).host }.getOrNull()} branch=$branch cacheActive=$cacheActive"
+            )
+            return
+        }
         runCatching {
             val sessionId = java.util.UUID.randomUUID().toString()
             val startedAtNanos = android.os.SystemClock.elapsedRealtimeNanos()
             val assetKeyHash = sha256Hex(url).take(12)
             val envelopeChunk = envelope?.maxSafeUrgentChunkBytes
                 ?: com.nexio.tv.data.repository.benchmark.CapabilityEnvelope.DEFAULT.maxSafeUrgentChunkBytes
+            val envelopeUrgentWorkers = envelope?.maxSafeUrgentWorkers ?: parallelConnectionCount
+            val envelopePrefetchWorkers = envelope?.maxSafePrefetchWorkers ?: 1
+            val envelopePrefetchChunk = envelope?.maxSafePrefetchChunkBytes ?: envelopeChunk
             val factoryArgs = com.nexio.tv.instrumentation.FactoryArgs(
                 activeChunkBytes = envelopeChunk,
-                parallelConnections = parallelConnectionCount,
+                parallelConnections = envelopeUrgentWorkers,
                 keepBehindBytes = 0L,
                 bootstrapBytes = 0L
             )
             val initialPolicy = com.nexio.tv.instrumentation.PolicySnapshot(
-                urgentWorkers = parallelConnectionCount,
-                prefetchWorkers = 1,
+                urgentWorkers = envelopeUrgentWorkers,
+                prefetchWorkers = envelopePrefetchWorkers,
                 urgentChunkBytes = envelopeChunk,
-                prefetchChunkBytes = envelopeChunk,
+                prefetchChunkBytes = envelopePrefetchChunk,
                 source = if (envelope != null) "envelope" else "fallback"
             )
             val clientIdentity = buildClientIdentitySnapshot()
@@ -1106,10 +1120,10 @@ internal class PlayerMediaSourceFactory(
                 sessionId = sessionId,
                 startedAtNanos = startedAtNanos,
                 assetKeyHash = assetKeyHash,
-                serviceKey = null,
-                provider = null,
-                benchmarkResultId = null,
-                benchmarkSource = null,
+                serviceKey = playbackTraceServiceKey,
+                provider = playbackTraceProviderStorageKey,
+                benchmarkResultId = playbackTraceBenchmarkResultId,
+                benchmarkSource = playbackTraceBenchmarkSource,
                 envelopePresent = envelope != null,
                 runtimeHintsPresent = false,
                 specializationState = "baseline",
@@ -1131,6 +1145,10 @@ internal class PlayerMediaSourceFactory(
             )
             com.nexio.tv.instrumentation.PlaybackTracer.beginSession(header)
             currentPlaybackTraceSessionId = sessionId
+            Log.i(
+                TAG,
+                "openPlaybackTraceSession started sessionId=$sessionId host=${runCatching { Uri.parse(url).host }.getOrNull()} branch=$branch cacheActive=$cacheActive serviceKey=$playbackTraceServiceKey provider=$playbackTraceProviderStorageKey benchmarkSource=$playbackTraceBenchmarkSource benchmarkResultId=$playbackTraceBenchmarkResultId"
+            )
             // WP3 — bind the sessionId on the runtime collector so its
             // rebuffer/decode events can be tagged with the same id.
             playbackTraceSessionBinder?.invoke(sessionId)
@@ -1142,6 +1160,7 @@ internal class PlayerMediaSourceFactory(
     /** WP3 — close the currently-open playback-trace session, if any. */
     internal fun endPlaybackTraceSession() {
         val sid = currentPlaybackTraceSessionId ?: return
+        Log.i(TAG, "endPlaybackTraceSession sessionId=$sid")
         runCatching {
             com.nexio.tv.instrumentation.PlaybackTracer.endSession(sid)
         }

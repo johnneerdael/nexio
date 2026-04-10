@@ -278,7 +278,14 @@ class BenchmarkAwareStreamScorerTest {
     fun `optimized transport is selected when direct and optimized are both viable`() {
         val event = scorer.score(
             request = request(runtimeMinutes = 120),
-            streams = listOf(streamCard(streamKey = "rd_stream", providerId = "RD")),
+            streams = listOf(
+                streamCard(
+                    streamKey = "rd_stream",
+                    providerId = "RD",
+                    sizeBytes = gib(2.0),
+                    durationMs = 120L * 60_000L
+                )
+            ),
             benchmarkSessions = mapOf(
                 DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(
                     provider = DebridBenchmarkProvider.REAL_DEBRID,
@@ -351,6 +358,31 @@ class BenchmarkAwareStreamScorerTest {
 
         assertEquals(DebridBenchmarkTransportMode.OPTIMIZED, event.selected?.transport)
         assertEquals(178.5, event.selected?.safeBudgetMbps ?: 0.0, 0.0)
+    }
+
+    @Test
+    fun `stream scorer carries constrained safe budget into autoplay option`() {
+        val event = scorer.score(
+            request = request(runtimeMinutes = 120),
+            streams = listOf(
+                streamCard(
+                    streamKey = "rd_stream",
+                    providerId = "RD",
+                    sizeBytes = gib(2.0),
+                    durationMs = 120L * 60_000L
+                )
+            ),
+            benchmarkSessions = mapOf(
+                DebridBenchmarkProvider.REAL_DEBRID to benchmarkResult(
+                    provider = DebridBenchmarkProvider.REAL_DEBRID,
+                    optimizedP10Mbps = 150.0,
+                    optimizedDecisionSafeBudgetMbps = 91.25
+                )
+            ),
+            activeTransportMode = DebridBenchmarkTransportMode.OPTIMIZED
+        )
+
+        assertEquals(91.25, event.selected?.safeBudgetMbps)
     }
 
     @Test
