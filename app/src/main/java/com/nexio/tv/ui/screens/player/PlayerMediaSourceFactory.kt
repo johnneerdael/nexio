@@ -62,6 +62,12 @@ internal class PlayerMediaSourceFactory(
         TRACED_RANGE
     }
 
+    internal enum class VodCacheAttachMode {
+        DISABLED,
+        READ_ONLY,
+        READ_WRITE
+    }
+
     // The base client is injected from DI (NetworkModule @Named("playback")).
     // It already has a bounded callTimeout, maxRequestsPerHost=12, and a ConnectionPool
     // that is shared with the benchmark transports so measurements are comparable to playback.
@@ -285,6 +291,10 @@ internal class PlayerMediaSourceFactory(
             !isHls &&
             !isDash &&
             shouldUseVodCache(url)
+        val cacheAttachMode = resolveVodCacheAttachMode(
+            useVodCache = useVodCache && !isVodCacheDisabled,
+            useParallelConnections = useParallelConnections
+        )
         // WP3 — open a playback-trace MediaSourceSession. Emits
         // `playback_session_started` with the full header and binds the
         // sessionId onto the runtime collector so rebuffer/decode events it
@@ -301,7 +311,8 @@ internal class PlayerMediaSourceFactory(
         currentVodCacheActive = false
         currentProgressiveUpstreamFactory = progressiveUpstreamFactory
         currentWarmAheadUpstreamFactory = okHttpFactory // single-connection for warm-ahead
-        currentProgressiveIsEligibleForWarmAhead = useVodCache && useParallelConnections
+        currentProgressiveIsEligibleForWarmAhead =
+            cacheAttachMode == VodCacheAttachMode.READ_WRITE && useParallelConnections
         val vodCacheMaxBytes = resolveVodCacheMaxBytes(context)
         if (useVodCache && !isVodCacheDisabled) {
             maybeApplyLiveVodCacheCapIncrease(
@@ -353,11 +364,11 @@ internal class PlayerMediaSourceFactory(
                 }
                 progressiveUpstreamFactory
             }
-        } else {
-            currentVodCacheActive = false
-            currentProgressiveIsEligibleForWarmAhead = false
-            emitCacheActive(active = false, source = "cache_disabled")
-            progressiveUpstreamFactory
+            } else {
+                currentVodCacheActive = false
+                currentProgressiveIsEligibleForWarmAhead = false
+                emitCacheActive(active = false, source = "cache_disabled")
+                progressiveUpstreamFactory
         }
 
         if (!isHls && !isDash) {
@@ -1276,6 +1287,17 @@ internal class PlayerMediaSourceFactory(
                 PlaybackClientMode.TRACED_RANGE
             } else {
                 PlaybackClientMode.BASE
+            }
+        }
+
+        internal fun resolveVodCacheAttachMode(
+            useVodCache: Boolean,
+            useParallelConnections: Boolean
+        ): VodCacheAttachMode {
+            return when {
+                !useVodCache -> VodCacheAttachMode.DISABLED
+                useParallelConnections -> VodCacheAttachMode.READ_WRITE
+                else -> VodCacheAttachMode.READ_ONLY
             }
         }
 
