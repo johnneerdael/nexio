@@ -25,6 +25,22 @@ class PlayerMediaSourceFactoryDirectPathRegressionTest {
     }
 
     @Test
+    fun `direct playback is read only cache plus no warm ahead`() {
+        val attachMode = PlayerMediaSourceFactory.resolveVodCacheAttachMode(
+            useVodCache = true,
+            useParallelConnections = false
+        )
+
+        assertEquals(PlayerMediaSourceFactory.VodCacheAttachMode.READ_ONLY, attachMode)
+        assertFalse(
+            PlayerMediaSourceFactory.shouldWriteCacheOnPlaybackPath(
+                attachMode = attachMode,
+                blockOnCache = false
+            )
+        )
+    }
+
+    @Test
     fun `disabled path does not start VOD warm ahead`() {
         val factory = PlayerMediaSourceFactory(
             context = ApplicationProvider.getApplicationContext(),
