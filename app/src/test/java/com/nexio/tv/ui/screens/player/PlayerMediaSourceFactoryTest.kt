@@ -76,6 +76,36 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun directPath_cacheFactoryDisablesForegroundWrites() {
+        assertFalse(
+            PlayerMediaSourceFactory.shouldWriteCacheOnPlaybackPath(
+                attachMode = PlayerMediaSourceFactory.VodCacheAttachMode.READ_ONLY,
+                blockOnCache = false
+            )
+        )
+    }
+
+    @Test
+    fun warmAhead_cacheFactoryStillWrites() {
+        assertTrue(
+            PlayerMediaSourceFactory.shouldWriteCacheOnPlaybackPath(
+                attachMode = PlayerMediaSourceFactory.VodCacheAttachMode.READ_ONLY,
+                blockOnCache = true
+            )
+        )
+    }
+
+    @Test
+    fun parallelPath_cacheFactoryStillWrites() {
+        assertTrue(
+            PlayerMediaSourceFactory.shouldWriteCacheOnPlaybackPath(
+                attachMode = PlayerMediaSourceFactory.VodCacheAttachMode.READ_WRITE,
+                blockOnCache = false
+            )
+        )
+    }
+
+    @Test
     fun cacheEventListener_emitsCacheEvents() {
         val sink = traceSink()
         PlaybackTracer.enabled = true

@@ -347,7 +347,11 @@ internal class PlayerMediaSourceFactory(
                     Log.d(TAG, "Using VOD cache for host=${Uri.parse(url).host ?: "unknown"}")
                     currentVodCacheActive = true
                     emitCacheActive(active = true, source = "progressive_attach", maxBytes = vodCacheMaxBytes)
-                    buildVodCacheDataSourceFactory(progressiveUpstreamFactory, cache)
+                    buildVodCacheDataSourceFactory(
+                        upstreamFactory = progressiveUpstreamFactory,
+                        cache = cache,
+                        attachMode = cacheAttachMode
+                    )
                 }.getOrElse { error ->
                     currentVodCacheActive = false
                     isVodCacheDisabled = true
@@ -963,6 +967,7 @@ internal class PlayerMediaSourceFactory(
                 val prefetchFactory = buildVodCacheDataSourceFactory(
                     upstreamFactory = upstreamFactory,
                     cache = cache,
+                    attachMode = VodCacheAttachMode.READ_WRITE,
                     blockOnCache = true
                 )
                 val writer = CacheWriter(prefetchFactory.createDataSource() as CacheDataSource, dataSpec, null, null)
@@ -1042,6 +1047,7 @@ internal class PlayerMediaSourceFactory(
     private fun buildVodCacheDataSourceFactory(
         upstreamFactory: DataSource.Factory,
         cache: SimpleCache,
+        attachMode: VodCacheAttachMode,
         blockOnCache: Boolean = false
     ): DataSource.Factory {
         val dataSinkFactory = CacheDataSink.Factory()
@@ -1054,9 +1060,11 @@ internal class PlayerMediaSourceFactory(
         return CacheDataSource.Factory()
             .setCache(cache)
             .setCacheKeyFactory(stableCacheKeyFactory)
-            .setCacheWriteDataSinkFactory(dataSinkFactory)
             .setUpstreamDataSourceFactory(upstreamFactory)
             .apply {
+                if (shouldWriteCacheOnPlaybackPath(attachMode, blockOnCache)) {
+                    setCacheWriteDataSinkFactory(dataSinkFactory)
+                }
                 if (shouldAttachCacheTraceListener(PlaybackTracer.enabled)) {
                     setEventListener(
                         PlaybackTraceCacheEventListener(
@@ -1303,6 +1311,13 @@ internal class PlayerMediaSourceFactory(
 
         internal fun shouldAttachCacheTraceListener(playbackTraceEnabled: Boolean): Boolean {
             return playbackTraceEnabled
+        }
+
+        internal fun shouldWriteCacheOnPlaybackPath(
+            attachMode: VodCacheAttachMode,
+            blockOnCache: Boolean
+        ): Boolean {
+            return blockOnCache || attachMode == VodCacheAttachMode.READ_WRITE
         }
 
         private const val TAG = "PlayerMediaSource"
