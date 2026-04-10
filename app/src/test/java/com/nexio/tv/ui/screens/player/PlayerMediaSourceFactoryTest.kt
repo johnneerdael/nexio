@@ -39,6 +39,12 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun cacheTraceListener_attachesOnlyWhenPlaybackDiagnosticsIsEnabled() {
+        assertFalse(PlayerMediaSourceFactory.shouldAttachCacheTraceListener(false))
+        assertTrue(PlayerMediaSourceFactory.shouldAttachCacheTraceListener(true))
+    }
+
+    @Test
     fun cacheEventListener_emitsCacheEvents() {
         val sink = traceSink()
         PlaybackTracer.enabled = true

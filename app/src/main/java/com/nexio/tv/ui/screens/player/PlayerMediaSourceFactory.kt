@@ -1045,7 +1045,15 @@ internal class PlayerMediaSourceFactory(
             .setCacheKeyFactory(stableCacheKeyFactory)
             .setCacheWriteDataSinkFactory(dataSinkFactory)
             .setUpstreamDataSourceFactory(upstreamFactory)
-            .setEventListener(PlaybackTraceCacheEventListener(if (blockOnCache) "warm_ahead" else "progressive"))
+            .apply {
+                if (shouldAttachCacheTraceListener(PlaybackTracer.enabled)) {
+                    setEventListener(
+                        PlaybackTraceCacheEventListener(
+                            if (blockOnCache) "warm_ahead" else "progressive"
+                        )
+                    )
+                }
+            }
             .setFlags(flags)
     }
 
@@ -1269,6 +1277,10 @@ internal class PlayerMediaSourceFactory(
             } else {
                 PlaybackClientMode.BASE
             }
+        }
+
+        internal fun shouldAttachCacheTraceListener(playbackTraceEnabled: Boolean): Boolean {
+            return playbackTraceEnabled
         }
 
         private const val TAG = "PlayerMediaSource"
