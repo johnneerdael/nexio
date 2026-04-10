@@ -45,6 +45,10 @@ class TransportValidationSessionStore @Inject constructor(
             "startSession sample resolved sampleId=${sample.id} codec=${sample.codecFamily} referenceAsset=${sample.referenceAssetPath}"
         )
         val settings = settingsStore.transportValidationSettings.first()
+        if (!settings.enabled) {
+            Log.w(TAG, "startSession rejected because transport validation is disabled")
+            return null
+        }
         Log.i(
             TAG,
             "startSession settings captureMode=${settings.captureMode} comparisonMode=${settings.comparisonMode} captureBurstCount=${settings.captureBurstCount} binaryDumps=${settings.binaryDumpsEnabled}"

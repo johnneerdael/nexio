@@ -194,7 +194,10 @@ class TransportValidationRuntimeCollectorTest {
         val collector = TransportValidationRuntimeCollector(mockk<Context>(relaxed = true))
         collector.beginSession(
             sample = sample(),
-            settings = TransportValidationSettings(runtimeValidationEnabled = true),
+            settings = TransportValidationSettings(
+                enabled = true,
+                runtimeValidationEnabled = true
+            ),
         )
         val session = activeSession(collector)
         val expectedStats =
@@ -213,11 +216,44 @@ class TransportValidationRuntimeCollectorTest {
     }
 
     @Test
+    fun `collector stays inactive when transport validation feature is disabled`() {
+        val collector = TransportValidationRuntimeCollector(mockk<Context>(relaxed = true))
+
+        collector.beginSession(
+            sample = sample(),
+            settings = TransportValidationSettings(
+                enabled = false,
+                runtimeValidationEnabled = true
+            )
+        )
+
+        assertFalse(collector.isSessionActive())
+    }
+
+    @Test
+    fun `collector becomes active only when transport validation is enabled`() {
+        val collector = TransportValidationRuntimeCollector(mockk<Context>(relaxed = true))
+
+        collector.beginSession(
+            sample = sample(),
+            settings = TransportValidationSettings(
+                enabled = true,
+                runtimeValidationEnabled = true
+            )
+        )
+
+        assertTrue(collector.isSessionActive())
+    }
+
+    @Test
     fun `transport specialization events are exported in analytics snapshot`() {
         val collector = TransportValidationRuntimeCollector(mockk<Context>(relaxed = true))
         collector.beginSession(
             sample = sample(),
-            settings = TransportValidationSettings(runtimeValidationEnabled = true),
+            settings = TransportValidationSettings(
+                enabled = true,
+                runtimeValidationEnabled = true
+            ),
         )
 
         collector.onTransportSpecializationEvent(
