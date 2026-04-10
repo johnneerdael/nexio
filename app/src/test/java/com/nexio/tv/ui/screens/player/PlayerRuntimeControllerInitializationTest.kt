@@ -433,6 +433,7 @@ class PlayerRuntimeControllerInitializationTest {
             debridConfigBenchmarkStore = debridConfigBenchmarkStore,
             debridBenchmarkStore = debridBenchmarkStore,
             playbackOkHttpClient = okhttp3.OkHttpClient(),
+            playbackTracedOkHttpClient = okhttp3.OkHttpClient(),
             savedStateHandle = SavedStateHandle(
                 mapOf(
                     "streamUrl" to "https://example.com/video.mkv",

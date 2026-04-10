@@ -54,12 +54,20 @@ import kotlin.io.deleteRecursively
 
 internal class PlayerMediaSourceFactory(
     private val context: Context,
-    private val sharedOkHttpClient: OkHttpClient
+    private val basePlaybackOkHttpClient: OkHttpClient,
+    private val tracedPlaybackOkHttpClient: OkHttpClient
 ) {
-    // The shared client is injected from DI (NetworkModule @Named("playback")).
+    internal enum class PlaybackClientMode {
+        BASE,
+        TRACED_RANGE
+    }
+
+    // The base client is injected from DI (NetworkModule @Named("playback")).
     // It already has a bounded callTimeout, maxRequestsPerHost=12, and a ConnectionPool
     // that is shared with the benchmark transports so measurements are comparable to playback.
-    private var okHttpClient: OkHttpClient? = sharedOkHttpClient
+    // The traced client derives from the same pool/dispatcher but adds the OkHttp event listener
+    // needed for playback diagnostics.
+    private var okHttpClient: OkHttpClient? = basePlaybackOkHttpClient
     private var customExtractorsFactory: ExtractorsFactory? = null
     private var customSubtitleParserFactory: SubtitleParser.Factory? = null
     private val loadErrorHandlingPolicy = PlayerLoadErrorHandlingPolicy()
@@ -184,17 +192,11 @@ internal class PlayerMediaSourceFactory(
     ): MediaSource {
         stopVodWarmAhead()
         val sanitizedHeaders = sanitizeHeaders(headers)
-        val okHttpFactory = OkHttpDataSource.Factory(
-            PlaybackRangeContextCallFactory(getOrCreateOkHttpClient())
-        ).apply {
-            setDefaultRequestProperties(sanitizedHeaders)
-            if (!sanitizedHeaders.containsKey("User-Agent")) {
-                setUserAgent(
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-                        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                )
-            }
-        }
+        val clientMode = resolvePlaybackClientMode(
+            useParallelConnections = useParallelConnections,
+            playbackTraceEnabled = PlaybackTracer.enabled
+        )
+        val okHttpFactory = createOkHttpDataSourceFactory(sanitizedHeaders, clientMode)
         val baseDataSourceFactory = DefaultDataSource.Factory(context, okHttpFactory)
         val lowerPath = extractPath(url).lowercase(Locale.US)
 
@@ -735,7 +737,27 @@ internal class PlayerMediaSourceFactory(
         // Returns the DI-provided shared client (set at construction time).
         // The redirect-following interceptor, callTimeout, dispatcher, and ConnectionPool
         // all live on the shared client provided by NetworkModule @Named("playback").
-        return okHttpClient ?: sharedOkHttpClient
+        return okHttpClient ?: basePlaybackOkHttpClient
+    }
+
+    private fun createOkHttpDataSourceFactory(
+        headers: Map<String, String>,
+        clientMode: PlaybackClientMode
+    ): OkHttpDataSource.Factory {
+        val callFactory = when (clientMode) {
+            PlaybackClientMode.BASE -> getOrCreateOkHttpClient()
+            PlaybackClientMode.TRACED_RANGE ->
+                PlaybackRangeContextCallFactory(tracedPlaybackOkHttpClient)
+        }
+        return OkHttpDataSource.Factory(callFactory).apply {
+            setDefaultRequestProperties(headers)
+            if (!headers.containsKey("User-Agent")) {
+                setUserAgent(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+                        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )
+            }
+        }
     }
 
     fun warmupVodCacheAsync() {
@@ -1238,6 +1260,17 @@ internal class PlayerMediaSourceFactory(
     }
 
     companion object {
+        internal fun resolvePlaybackClientMode(
+            useParallelConnections: Boolean,
+            playbackTraceEnabled: Boolean
+        ): PlaybackClientMode {
+            return if (useParallelConnections && playbackTraceEnabled) {
+                PlaybackClientMode.TRACED_RANGE
+            } else {
+                PlaybackClientMode.BASE
+            }
+        }
+
         private const val TAG = "PlayerMediaSource"
         private const val ENABLE_VOD_CACHE = true
         // v2: migrated from URL-based to stable identity cache keys (StableCacheKeyFactory)

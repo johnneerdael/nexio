@@ -63,6 +63,7 @@ class PlayerMediaSourceFactoryTest {
         val sid = PlaybackTracer.beginSession(fakeHeader())
         val factory = PlayerMediaSourceFactory(
             mockk(relaxed = true),
+            OkHttpClient(),
             OkHttpClient()
         )
 
