@@ -3,6 +3,7 @@ package com.nexio.tv.instrumentation
 import java.io.StringWriter
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import org.junit.After
 import org.json.JSONObject
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -11,6 +12,12 @@ import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class SessionWriterJsonlIntegrityTest {
+
+    @After
+    fun tearDown() {
+        PlaybackTracer.enabled = false
+        PlaybackTracer.resetCrashIsolationForTest()
+    }
 
     @Test(timeout = 20_000L)
     fun `concurrent prds range records always produce parseable jsonl lines`() {
@@ -56,5 +63,11 @@ class SessionWriterJsonlIntegrityTest {
             .forEach { line ->
                 JSONObject(line)
             }
+    }
+
+    @Test
+    fun `crash isolation profile disables atrace markers`() {
+        PlaybackTracer.applyCrashIsolationProfile()
+        assertTrue(!PlaybackTracer.atraceMarkersEnabled)
     }
 }

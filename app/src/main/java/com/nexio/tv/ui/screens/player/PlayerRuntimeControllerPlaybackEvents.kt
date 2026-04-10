@@ -24,19 +24,21 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
             if (playerDuration > lastKnownDuration) {
                 lastKnownDuration = playerDuration
             }
-            val displayPosition = pendingPreviewSeekPosition ?: pos
+            val progressState = progressUiState.value
             val controlsVisible = _uiState.value.showControls
             val progressUpdateIntervalMs =
-                if (controlsVisible || pendingPreviewSeekPosition != null) 500L else 1_000L
+                if (controlsVisible || progressState.pendingPreviewSeekPosition != null) 500L else 1_000L
             if (
                 nowUptime - lastProgressUiUpdateUptimeMs >= progressUpdateIntervalMs ||
-                _uiState.value.currentPosition != displayPosition ||
-                _uiState.value.duration != playerDuration
+                progressState.currentPosition != pos ||
+                progressState.duration != playerDuration ||
+                progressState.pendingPreviewSeekPosition != pendingPreviewSeekPosition
             ) {
                 lastProgressUiUpdateUptimeMs = nowUptime
-                _uiState.update {
+                _progressUiState.update {
                     it.copy(
-                        currentPosition = displayPosition,
+                        currentPosition = pos,
+                        pendingPreviewSeekPosition = pendingPreviewSeekPosition,
                         duration = playerDuration
                     )
                 }
@@ -500,7 +502,12 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 .coerceAtMost(maxDuration)
             beginSeekTelemetry(target)
             backendSeekTo(target)
-            _uiState.update { it.copy(currentPosition = target) }
+            _progressUiState.update {
+                it.copy(
+                    currentPosition = target,
+                    pendingPreviewSeekPosition = null
+                )
+            }
             scheduleProgressSyncAfterSeek()
             if (_uiState.value.showControls) {
                 showControlsTemporarily()
@@ -515,7 +522,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 .coerceAtLeast(0L)
                 .coerceAtMost(maxDuration)
             pendingPreviewSeekPosition = target
-            _uiState.update { it.copy(currentPosition = target) }
+            _progressUiState.update { it.copy(pendingPreviewSeekPosition = target) }
             if (_uiState.value.showControls) {
                 showControlsTemporarily()
             } else {
@@ -527,8 +534,13 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             if (target != null) {
                 beginSeekTelemetry(target)
                 backendSeekTo(target)
-                _uiState.update { it.copy(currentPosition = target) }
                 pendingPreviewSeekPosition = null
+                _progressUiState.update {
+                    it.copy(
+                        currentPosition = target,
+                        pendingPreviewSeekPosition = null
+                    )
+                }
                 scheduleProgressSyncAfterSeek()
                 if (_uiState.value.showControls) {
                     showControlsTemporarily()
@@ -541,7 +553,12 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
             pendingPreviewSeekPosition = null
             beginSeekTelemetry(event.position)
             backendSeekTo(event.position)
-            _uiState.update { it.copy(currentPosition = event.position) }
+            _progressUiState.update {
+                it.copy(
+                    currentPosition = event.position,
+                    pendingPreviewSeekPosition = null
+                )
+            }
             scheduleProgressSyncAfterSeek()
             if (_uiState.value.showControls) {
                 showControlsTemporarily()

@@ -1,0 +1,58 @@
+package com.nexio.tv.ui.screens.player
+
+import androidx.media3.common.text.Cue
+import com.nexio.tv.data.local.SubtitleStyleSettings
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class PlayerVideoSurfaceStateTest {
+
+    @Test
+    fun `addon overlay cues override built in ai cues`() {
+        val addonCue = Cue.Builder().setText("addon").build()
+        val aiCue = Cue.Builder().setText("ai").build()
+
+        val result = resolveOverlayCues(
+            useAiOverlay = true,
+            translatedBuiltInCues = listOf(aiCue),
+            addonOverlayCues = listOf(addonCue)
+        )
+
+        assertEquals(listOf(addonCue), result)
+    }
+
+    @Test
+    fun `mutation plan skips work when surface state is unchanged`() {
+        val state = PlayerSurfaceRenderState(
+            resizeMode = 1,
+            subtitleStyle = SubtitleStyleSettings(),
+            overlayCues = emptyList()
+        )
+
+        val plan = buildPlayerViewMutationPlan(previous = state, current = state)
+
+        assertFalse(plan.updateResizeMode)
+        assertFalse(plan.updateSubtitleStyle)
+        assertFalse(plan.updateOverlay)
+    }
+
+    @Test
+    fun `mutation plan updates overlay only when cues change`() {
+        val previous = PlayerSurfaceRenderState(
+            resizeMode = 1,
+            subtitleStyle = SubtitleStyleSettings(),
+            overlayCues = emptyList()
+        )
+        val current = previous.copy(
+            overlayCues = listOf(Cue.Builder().setText("Hello").build())
+        )
+
+        val plan = buildPlayerViewMutationPlan(previous = previous, current = current)
+
+        assertFalse(plan.updateResizeMode)
+        assertFalse(plan.updateSubtitleStyle)
+        assertTrue(plan.updateOverlay)
+    }
+}

@@ -43,6 +43,7 @@ class NexioApplication : Application(), ImageLoaderFactory {
         // to avoid an async race that drops the first session of every
         // process restart.
         PlaybackTracer.installFilesDir(this)
+        PlaybackTracer.applyCrashIsolationProfile()
         PlaybackTracer.enabled = runBlocking {
             playbackTraceToggle.enabledFlow.first()
         }

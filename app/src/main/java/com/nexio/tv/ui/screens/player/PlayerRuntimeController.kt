@@ -187,6 +187,8 @@ class PlayerRuntimeController(
         )
     )
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
+    internal val _progressUiState = MutableStateFlow(PlayerPlaybackProgressUiState())
+    val progressUiState: StateFlow<PlayerPlaybackProgressUiState> = _progressUiState.asStateFlow()
 
     internal val builtInSubtitleCueTranslator = GeminiBuiltInSubtitleCueTranslator(
         scope = scope,

@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.SystemClock
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.analytics.PlaybackStats
+import com.nexio.tv.instrumentation.PlaybackTracer
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -29,11 +30,13 @@ class TransportValidationRuntimeCollectorTest {
         Dispatchers.setMain(StandardTestDispatcher())
         mockkStatic(SystemClock::class)
         every { SystemClock.elapsedRealtime() } returns 10_000L
+        PlaybackTracer.resetCrashIsolationForTest()
     }
 
     @After
     fun tearDown() {
         unmockkStatic(SystemClock::class)
+        PlaybackTracer.resetCrashIsolationForTest()
         Dispatchers.resetMain()
     }
 
@@ -228,6 +231,24 @@ class TransportValidationRuntimeCollectorTest {
         )
 
         assertFalse(collector.isSessionActive())
+    }
+
+    @Test
+    fun `collector does not start device sampler when crash isolation disables it`() {
+        PlaybackTracer.deviceHealthSamplingEnabled = false
+        val collector = TransportValidationRuntimeCollector(mockk<Context>(relaxed = true))
+        var startCalls = 0
+        collector.onDeviceHealthSamplerStartForTest = { startCalls += 1 }
+
+        collector.beginSession(
+            sample = sample(),
+            settings = TransportValidationSettings(
+                enabled = true,
+                runtimeValidationEnabled = true
+            )
+        )
+
+        assertEquals(0, startCalls)
     }
 
     @Test

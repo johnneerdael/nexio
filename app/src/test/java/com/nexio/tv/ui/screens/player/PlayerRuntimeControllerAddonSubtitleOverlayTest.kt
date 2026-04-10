@@ -50,6 +50,34 @@ class PlayerRuntimeControllerAddonSubtitleOverlayTest {
     }
 
     @Test
+    fun `next overlay delay wakes at next cue start boundary`() {
+        val groups = listOf(
+            TimedAddonCueGroup(startMs = 1_000L, endMs = 2_000L, cues = listOf(cue("a"))),
+            TimedAddonCueGroup(startMs = 3_500L, endMs = 4_000L, cues = listOf(cue("b")))
+        )
+
+        assertEquals(250L, nextAddonOverlayUpdateDelayMs(groups, positionMs = 750L))
+    }
+
+    @Test
+    fun `next overlay delay wakes at next cue end boundary`() {
+        val groups = listOf(
+            TimedAddonCueGroup(startMs = 1_000L, endMs = 2_000L, cues = listOf(cue("a")))
+        )
+
+        assertEquals(200L, nextAddonOverlayUpdateDelayMs(groups, positionMs = 1_800L))
+    }
+
+    @Test
+    fun `next overlay delay falls back to bounded idle delay when no further cues exist`() {
+        val groups = listOf(
+            TimedAddonCueGroup(startMs = 1_000L, endMs = 2_000L, cues = listOf(cue("a")))
+        )
+
+        assertEquals(500L, nextAddonOverlayUpdateDelayMs(groups, positionMs = 5_000L))
+    }
+
+    @Test
     fun `srt parser fallback produces timed cue groups`() {
         val raw = """
             1

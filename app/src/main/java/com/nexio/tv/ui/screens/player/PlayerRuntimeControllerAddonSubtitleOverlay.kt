@@ -23,7 +23,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 
-private const val ADDON_SUBTITLE_OVERLAY_POLL_INTERVAL_MS = 150L
+private const val ADDON_SUBTITLE_OVERLAY_IDLE_DELAY_MS = 500L
+private const val ADDON_SUBTITLE_OVERLAY_MIN_DELAY_MS = 40L
 
 internal data class TimedAddonCueGroup(
     val startMs: Long,
@@ -156,16 +157,31 @@ private suspend fun PlayerRuntimeController.pollAddonSubtitleOverlayCues(
         currentCoroutineContext()[kotlinx.coroutines.Job]?.isActive != false &&
         isAddonSubtitleOverlayGenerationActive(generation, player)
     ) {
+        val positionMs = delayedAddonSubtitleOverlayPositionMs(player.currentPosition, subtitleDelayUs.get())
         val activeCues = activeAddonOverlayCuesAt(
             cueGroups = cueGroups,
-            positionMs = delayedAddonSubtitleOverlayPositionMs(player.currentPosition, subtitleDelayUs.get())
+            positionMs = positionMs
         )
         if (activeCues != lastCues) {
             lastCues = activeCues
             _uiState.update { it.copy(addonOverlayCues = activeCues) }
         }
-        delay(ADDON_SUBTITLE_OVERLAY_POLL_INTERVAL_MS)
+        delay(nextAddonOverlayUpdateDelayMs(cueGroups, positionMs))
     }
+}
+
+internal fun nextAddonOverlayUpdateDelayMs(
+    cueGroups: List<TimedAddonCueGroup>,
+    positionMs: Long
+): Long {
+    val nextBoundary = cueGroups
+        .asSequence()
+        .flatMap { sequenceOf(it.startMs, it.endMs) }
+        .filter { it > positionMs }
+        .minOrNull()
+        ?: return ADDON_SUBTITLE_OVERLAY_IDLE_DELAY_MS
+
+    return (nextBoundary - positionMs).coerceAtLeast(ADDON_SUBTITLE_OVERLAY_MIN_DELAY_MS)
 }
 
 internal suspend fun PlayerRuntimeController.loadAddonSubtitleOverlayCueGroups(
