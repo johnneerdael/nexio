@@ -8,6 +8,7 @@ import com.nexio.tv.instrumentation.PlaybackTracer
 import com.nexio.tv.instrumentation.PolicySnapshot
 import com.nexio.tv.instrumentation.SessionHeader
 import com.nexio.tv.instrumentation.SessionWriter
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.After
@@ -42,6 +43,36 @@ class PlayerMediaSourceFactoryTest {
     fun cacheTraceListener_attachesOnlyWhenPlaybackDiagnosticsIsEnabled() {
         assertFalse(PlayerMediaSourceFactory.shouldAttachCacheTraceListener(false))
         assertTrue(PlayerMediaSourceFactory.shouldAttachCacheTraceListener(true))
+    }
+
+    @Test
+    fun directPath_resolvesReadOnlyCacheAttachMode() {
+        val mode = PlayerMediaSourceFactory.resolveVodCacheAttachMode(
+            useVodCache = true,
+            useParallelConnections = false
+        )
+
+        assertEquals(PlayerMediaSourceFactory.VodCacheAttachMode.READ_ONLY, mode)
+    }
+
+    @Test
+    fun parallelPath_resolvesReadWriteCacheAttachMode() {
+        val mode = PlayerMediaSourceFactory.resolveVodCacheAttachMode(
+            useVodCache = true,
+            useParallelConnections = true
+        )
+
+        assertEquals(PlayerMediaSourceFactory.VodCacheAttachMode.READ_WRITE, mode)
+    }
+
+    @Test
+    fun cacheDisabled_resolvesDisabledAttachMode() {
+        val mode = PlayerMediaSourceFactory.resolveVodCacheAttachMode(
+            useVodCache = false,
+            useParallelConnections = false
+        )
+
+        assertEquals(PlayerMediaSourceFactory.VodCacheAttachMode.DISABLED, mode)
     }
 
     @Test
