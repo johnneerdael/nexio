@@ -24,11 +24,24 @@ class PlayerVideoSurfaceStateTest {
     }
 
     @Test
+    fun `ai overlay suppresses native subtitles while translated cues are pending`() {
+        val state = PlayerSurfaceRenderState(
+            resizeMode = 1,
+            subtitleStyle = SubtitleStyleSettings(),
+            overlayCues = emptyList(),
+            suppressNativeSubtitles = true
+        )
+
+        assertTrue(state.suppressNativeSubtitles)
+    }
+
+    @Test
     fun `mutation plan skips work when surface state is unchanged`() {
         val state = PlayerSurfaceRenderState(
             resizeMode = 1,
             subtitleStyle = SubtitleStyleSettings(),
-            overlayCues = emptyList()
+            overlayCues = emptyList(),
+            suppressNativeSubtitles = false
         )
 
         val plan = buildPlayerViewMutationPlan(previous = state, current = state)
@@ -43,11 +56,29 @@ class PlayerVideoSurfaceStateTest {
         val previous = PlayerSurfaceRenderState(
             resizeMode = 1,
             subtitleStyle = SubtitleStyleSettings(),
-            overlayCues = emptyList()
+            overlayCues = emptyList(),
+            suppressNativeSubtitles = false
         )
         val current = previous.copy(
             overlayCues = listOf(Cue.Builder().setText("Hello").build())
         )
+
+        val plan = buildPlayerViewMutationPlan(previous = previous, current = current)
+
+        assertFalse(plan.updateResizeMode)
+        assertFalse(plan.updateSubtitleStyle)
+        assertTrue(plan.updateOverlay)
+    }
+
+    @Test
+    fun `mutation plan updates overlay when native subtitle suppression changes`() {
+        val previous = PlayerSurfaceRenderState(
+            resizeMode = 1,
+            subtitleStyle = SubtitleStyleSettings(),
+            overlayCues = emptyList(),
+            suppressNativeSubtitles = false
+        )
+        val current = previous.copy(suppressNativeSubtitles = true)
 
         val plan = buildPlayerViewMutationPlan(previous = previous, current = current)
 
