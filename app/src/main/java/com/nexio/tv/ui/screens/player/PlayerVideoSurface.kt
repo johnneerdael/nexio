@@ -16,7 +16,8 @@ import com.nexio.tv.data.local.SubtitleStyleSettings
 internal data class PlayerSurfaceRenderState(
     val resizeMode: Int,
     val subtitleStyle: SubtitleStyleSettings,
-    val overlayCues: List<Cue>
+    val overlayCues: List<Cue>,
+    val suppressNativeSubtitles: Boolean
 )
 
 internal data class PlayerViewMutationPlan(
@@ -44,7 +45,8 @@ internal fun buildPlayerViewMutationPlan(
     return PlayerViewMutationPlan(
         updateResizeMode = previous?.resizeMode != current.resizeMode,
         updateSubtitleStyle = previous?.subtitleStyle != current.subtitleStyle,
-        updateOverlay = previous?.overlayCues != current.overlayCues
+        updateOverlay = previous?.overlayCues != current.overlayCues ||
+            previous.suppressNativeSubtitles != current.suppressNativeSubtitles
     )
 }
 
@@ -88,7 +90,11 @@ internal fun PlayerVideoSurface(
                     subtitleOverlay.visibility = if (hasCues) View.VISIBLE else View.GONE
                     subtitleOverlay.setCues(renderState.overlayCues)
                     playerView.subtitleView?.visibility =
-                        if (hasCues) View.INVISIBLE else View.VISIBLE
+                        if (hasCues || renderState.suppressNativeSubtitles) {
+                            View.INVISIBLE
+                        } else {
+                            View.VISIBLE
+                        }
                 }
             }
 

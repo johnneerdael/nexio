@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.lang.ref.WeakReference
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 class PlayerRuntimeController(
@@ -193,7 +194,10 @@ class PlayerRuntimeController(
     internal val builtInSubtitleCueTranslator = GeminiBuiltInSubtitleCueTranslator(
         scope = scope,
         translationService = geminiSubtitleTranslationService,
-        isEnabledProvider = { shouldUseBuiltInAiTranslation() },
+        // Built-in AI subtitles are rendered through the app overlay. Keeping
+        // Media3's native translator disabled prevents source/translated cue
+        // races and avoids double-translating cue text emitted by onCues.
+        isEnabledProvider = { false },
         apiKeyProvider = { geminiApiKey },
         targetLanguageProvider = { _uiState.value.subtitleStyle.preferredLanguage },
         onTranslatingChanged = { isTranslating ->
@@ -294,6 +298,7 @@ class PlayerRuntimeController(
     internal var aiTranslationSelectionGeneration: Long = 0L
     internal var currentCueGroup: CueGroup = CueGroup.EMPTY_TIME_ZERO
     internal var builtInAiCueGeneration: Long = 0L
+    internal val builtInAiCueTranslationCache = ConcurrentHashMap<String, String>()
     internal var addonSubtitleOverlayGeneration: Long = 0L
     internal var addonSubtitleOverlayCueGroups: List<TimedAddonCueGroup> = emptyList()
     internal val playbackSessionGuard = PlayerPlaybackSessionGuard()

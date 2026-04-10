@@ -565,7 +565,8 @@ fun PlayerScreen(
                         useAiOverlay = uiState.useBuiltInAiSubtitleOverlay,
                         translatedBuiltInCues = uiState.translatedBuiltInCues,
                         addonOverlayCues = uiState.addonOverlayCues
-                    )
+                    ),
+                    suppressNativeSubtitles = uiState.useBuiltInAiSubtitleOverlay
                 ),
                 modifier = Modifier.fillMaxSize()
             )
