@@ -15,6 +15,7 @@ class PlayerSettingsDataStoreMigrationTest {
     fun `stream selection migration forces requested defaults once`() {
         val prefs = mutablePreferencesOf(
             booleanPreferencesKey("migration_stream_selection_defaults_v2_enabled") to false,
+            booleanPreferencesKey("migration_disable_buggy_playback_path_done") to false,
             booleanPreferencesKey("uniform_stream_formatting_enabled") to false,
             booleanPreferencesKey("deduplicate_grouped_streams_enabled") to false,
             booleanPreferencesKey("filter_episode_mismatch_streams_enabled") to false,
@@ -31,14 +32,16 @@ class PlayerSettingsDataStoreMigrationTest {
         assertTrue(prefs[booleanPreferencesKey("deduplicate_grouped_streams_enabled")] == true)
         assertTrue(prefs[booleanPreferencesKey("filter_episode_mismatch_streams_enabled")] == true)
         assertTrue(prefs[booleanPreferencesKey("filter_movie_year_mismatch_streams_enabled")] == true)
-        assertTrue(prefs[booleanPreferencesKey("use_parallel_connections")] == true)
+        assertFalse(prefs[booleanPreferencesKey("use_parallel_connections")] ?: true)
         assertEquals(2, prefs[intPreferencesKey("parallel_connection_count")])
+        assertEquals(VodCacheSizeMode.OFF.name, prefs[stringPreferencesKey("vod_cache_size_mode")])
     }
 
     @Test
     fun `stream selection migration leaves later manual changes alone after one time upgrade`() {
         val prefs = mutablePreferencesOf(
             booleanPreferencesKey("migration_stream_selection_defaults_v2_enabled") to true,
+            booleanPreferencesKey("migration_disable_buggy_playback_path_done") to true,
             booleanPreferencesKey("uniform_stream_formatting_enabled") to false,
             booleanPreferencesKey("deduplicate_grouped_streams_enabled") to false,
             booleanPreferencesKey("filter_episode_mismatch_streams_enabled") to false,
@@ -113,5 +116,34 @@ class PlayerSettingsDataStoreMigrationTest {
         assertTrue(
             prefs[booleanPreferencesKey("migration_legacy_stream_autoplay_selection_retired_enabled")] == true
         )
+    }
+
+    @Test
+    fun `buggy playback path migration disables parallel connections and vod cache once`() {
+        val prefs = mutablePreferencesOf(
+            booleanPreferencesKey("migration_disable_buggy_playback_path_done") to false,
+            booleanPreferencesKey("use_parallel_connections") to true,
+            stringPreferencesKey("vod_cache_size_mode") to VodCacheSizeMode.ON.name
+        )
+
+        applyPlayerSettingsMigrations(prefs)
+
+        assertTrue(prefs[booleanPreferencesKey("migration_disable_buggy_playback_path_done")] == true)
+        assertFalse(prefs[booleanPreferencesKey("use_parallel_connections")] ?: true)
+        assertEquals(VodCacheSizeMode.OFF.name, prefs[stringPreferencesKey("vod_cache_size_mode")])
+    }
+
+    @Test
+    fun `buggy playback path migration leaves later manual changes alone after first upgrade`() {
+        val prefs = mutablePreferencesOf(
+            booleanPreferencesKey("migration_disable_buggy_playback_path_done") to true,
+            booleanPreferencesKey("use_parallel_connections") to true,
+            stringPreferencesKey("vod_cache_size_mode") to VodCacheSizeMode.ON.name
+        )
+
+        applyPlayerSettingsMigrations(prefs)
+
+        assertTrue(prefs[booleanPreferencesKey("use_parallel_connections")] == true)
+        assertEquals(VodCacheSizeMode.ON.name, prefs[stringPreferencesKey("vod_cache_size_mode")])
     }
 }
