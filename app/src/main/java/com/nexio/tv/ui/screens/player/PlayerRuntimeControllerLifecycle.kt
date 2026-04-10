@@ -6,7 +6,6 @@ import androidx.media3.common.C
 
 internal fun PlayerRuntimeController.releasePlayer() {
     flushPlaybackSnapshotForSwitchOrExit()
-    mediaSourceFactory.stopVodWarmAhead()
     playbackSessionGuard.onPlayerReleased()
     playbackIdleGateState.onPlayerSessionEnded()
     cancelFirstFrameWatchdog()
@@ -42,7 +41,6 @@ internal fun PlayerRuntimeController.releasePlayer() {
     nextEpisodeAutoPlayJob = null
     builtInAiSubtitleTranslationJob?.cancel()
     builtInAiSubtitleTranslationJob = null
-    transportValidationRuntimeCollector.detachPlayer(_exoPlayer)
     _exoPlayer?.release()
     _exoPlayer = null
 }

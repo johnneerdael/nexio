@@ -60,7 +60,7 @@ data class CapabilityEnvelope(
 
         /**
          * Returns the locked [CapabilityEnvelope] for the given provider key, or null if the
-         * provider has no locked shape. Provider keys match DebridConfigBenchmarkStore storage
+         * provider has no locked shape. Provider keys match benchmark storage
          * keys: "real_debrid", "premiumize", "torbox", "easy_debrid".
          */
         fun lockedFor(provider: String): CapabilityEnvelope? = when (provider) {

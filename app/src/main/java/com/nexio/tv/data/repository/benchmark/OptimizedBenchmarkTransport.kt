@@ -4,10 +4,6 @@ import androidx.media3.common.C
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.okhttp.OkHttpDataSource
-import com.nexio.tv.data.local.PlayerSettings
-import com.nexio.tv.ui.screens.player.ChunkTransferException
-import com.nexio.tv.ui.screens.player.ParallelRangeDataSource
-import com.nexio.tv.ui.screens.player.RuntimeTransportObservation
 import java.io.EOFException
 import java.io.InterruptedIOException
 import java.net.SocketException
@@ -38,31 +34,11 @@ internal interface OptimizedBenchmarkDataSourceFactoryBuilder {
         allowStartupBootstrapReuse: Boolean,
         transportSampleTimeMs: () -> Long,
         onTransportBytesDownloaded: (Long, Long) -> Unit,
-        onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit = { _, _, _, _, _ -> },
-        onTransportObservation: (RuntimeTransportObservation) -> Unit = {}
+        onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit = { _, _, _, _, _ -> }
     ): BenchmarkReadableSourceFactory
 }
 
 private const val BASE_CHUNK_WAIT_TIMEOUT_MS = 1_000L
-
-data class DebridConfigBenchmarkTransportResult(
-    val summary: DebridBenchmarkSummary,
-    val sustained: DebridBenchmarkSustainedMetrics,
-    val configSnapshot: DebridBenchmarkTransportConfigSnapshot,
-    val terminationReason: DebridBenchmarkTerminationReason,
-    val failure: DebridBenchmarkTransportFailure? = null,
-    val observedHostScope: String? = null,
-    val observedTransportClass: String? = null,
-    val negotiatedProtocol: String? = null,
-    val connectionHeader: String? = null
-) {
-    val averageThroughputMbps: Double?
-        get() = sustained.averageThroughputMbps
-    val transferredBytes: Long?
-        get() = sustained.bytesTransferred
-    val elapsedMs: Long?
-        get() = sustained.elapsedMs
-}
 
 class OptimizedBenchmarkTransport internal constructor(
     private val factoryBuilder: OptimizedBenchmarkDataSourceFactoryBuilder,
@@ -154,58 +130,6 @@ class OptimizedBenchmarkTransport internal constructor(
             ),
             terminationReason = sustainedPhase.terminationReason,
             failure = sustainedPhase.failure
-        )
-    }
-
-    suspend fun runConfigProfile(
-        candidate: DebridBenchmarkCandidate,
-        configSnapshot: DebridBenchmarkTransportConfigSnapshot,
-        observer: DebridBenchmarkObserver = DebridBenchmarkObserver {},
-        measurementDurationMs: Long = 30_000L
-    ): DebridConfigBenchmarkTransportResult = withContext(Dispatchers.IO) {
-        val effectiveConfigSnapshot = transportConfigWithBenchmarkTimeout(configSnapshot)
-        val collector = DebridBenchmarkMetricsCollector(
-            requiredTransferredBytes = 1L,
-            requiredElapsedMs = measurementDurationMs
-        )
-        var observedTransportObservation: RuntimeTransportObservation? = null
-        val sustainedReadableSourceFactory = factoryBuilder.create(
-            candidate = candidate,
-            configSnapshot = effectiveConfigSnapshot,
-            chunkWaitTimeoutMs = effectiveConfigSnapshot.chunkWaitTimeoutMs ?: BASE_CHUNK_WAIT_TIMEOUT_MS,
-            allowStartupBootstrapReuse = true,
-            transportSampleTimeMs = { nanosToMillis(nanoTimeNs()) },
-            onTransportBytesDownloaded = { bytesRead, sampleAtMs ->
-                collector.recordTransportBytesRead(bytesRead = bytesRead, sampleAtMs = sampleAtMs)
-            },
-            onChunkBytesDownloaded = { chunkIndex, chunkSize, offsetInChunk, bytesRead, sampleAtMs ->
-                collector.recordFrontierProgress(chunkIndex, chunkSize, offsetInChunk, bytesRead, sampleAtMs)
-            },
-            onTransportObservation = { observation ->
-                if (observedTransportObservation == null) {
-                    observedTransportObservation = observation
-                }
-            }
-        )
-        val sustainedPhase = runStartupAndSustainedPhase(
-            readableSourceFactory = sustainedReadableSourceFactory,
-            collector = collector,
-            observer = observer,
-            allowRecoverableRetries = false
-        )
-        DebridConfigBenchmarkTransportResult(
-            summary = collector.currentSummary(),
-            sustained = collector.finishSustained().copy(
-                recoverableFailureCount = sustainedPhase.recoverableFailureCount,
-                recoverableTimeoutCount = sustainedPhase.recoverableTimeoutCount
-            ),
-            configSnapshot = effectiveConfigSnapshot,
-            terminationReason = sustainedPhase.terminationReason,
-            failure = sustainedPhase.failure,
-            observedHostScope = observedTransportObservation?.hostScope,
-            observedTransportClass = observedTransportObservation?.transportClass,
-            negotiatedProtocol = observedTransportObservation?.negotiatedProtocol,
-            connectionHeader = observedTransportObservation?.connectionHeader
         )
     }
 
@@ -553,14 +477,10 @@ class OptimizedBenchmarkTransport internal constructor(
     ): DebridBenchmarkTransportFailure {
         val wrapper = unwrapTransportCause()
         val root = deepestCause(wrapper)
-        val chunkIndex = causesIncludingSelf(wrapper)
-            .filterIsInstance<ChunkTransferException>()
-            .firstOrNull()
-            ?.chunkIndex
         return DebridBenchmarkTransportFailure(
             exceptionClass = wrapper::class.java.simpleName,
             message = wrapper.message ?: root.message,
-            chunkIndex = chunkIndex,
+            chunkIndex = null,
             rootCauseClass = root::class.java.simpleName,
             rootCauseMessage = root.message,
             recoverableFailureCount = recoverableFailureCount,
@@ -574,7 +494,6 @@ class OptimizedBenchmarkTransport internal constructor(
             val next = when {
                 current is ExecutionException && current.cause != null -> current.cause
                 current.cause != null &&
-                    current !is ChunkTransferException &&
                     current !is InterruptedIOException -> current.cause
                 else -> null
             } ?: return current
@@ -621,16 +540,12 @@ internal fun transportConfigWithBenchmarkTimeout(
 ): DebridBenchmarkTransportConfigSnapshot {
     if (snapshot.chunkWaitTimeoutMs != null) return snapshot
     return snapshot.copy(
-        chunkWaitTimeoutMs = benchmarkChunkWaitTimeoutMs(
-            parallelChunkSizeMb = snapshot.parallelChunkSizeMb
-        )
+        chunkWaitTimeoutMs = benchmarkChunkWaitTimeoutMs()
     )
 }
 
-internal fun benchmarkChunkWaitTimeoutMs(
-    parallelChunkSizeMb: Int?
-): Long {
-    val effectiveChunkSizeMb = (parallelChunkSizeMb ?: PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB).coerceAtLeast(1)
+internal fun benchmarkChunkWaitTimeoutMs(): Long {
+    val effectiveChunkSizeMb = 16
     val chunkGroups = (effectiveChunkSizeMb + 7L).div(8L)
     return (BASE_CHUNK_WAIT_TIMEOUT_MS * chunkGroups).coerceAtMost(6_000L)
 }
@@ -663,39 +578,14 @@ private class DefaultOptimizedBenchmarkDataSourceFactoryBuilder(
         allowStartupBootstrapReuse: Boolean,
         transportSampleTimeMs: () -> Long,
         onTransportBytesDownloaded: (Long, Long) -> Unit,
-        onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit,
-        onTransportObservation: (RuntimeTransportObservation) -> Unit
+        onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit
     ): BenchmarkReadableSourceFactory {
         val upstreamFactory = OkHttpDataSource.Factory(okHttpClient).apply {
             setDefaultRequestProperties(candidate.headers)
         }
-        val dataSourceFactory: DataSource.Factory = if (configSnapshot.useParallelConnections == false) {
-            upstreamFactory
-        } else {
-            val benchmarkConnections = (configSnapshot.parallelConnectionCount
-                ?: PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT).coerceAtLeast(2)
-            val benchmarkChunkBytes = (configSnapshot.parallelChunkSizeMb
-                ?: PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB).toLong() * 1024L * 1024L
-            val benchmarkEnvelope = CapabilityEnvelope.DEFAULT.copy(
-                maxSafeUrgentWorkers = benchmarkConnections,
-                maxSafeUrgentChunkBytes = benchmarkChunkBytes,
-                maxSafePrefetchChunkBytes = benchmarkChunkBytes
-            )
-            ParallelRangeDataSource.Factory(
-                upstreamFactory = upstreamFactory,
-                envelope = benchmarkEnvelope,
-                chunkSize = benchmarkChunkBytes,
-                chunkWaitTimeoutMs = chunkWaitTimeoutMs,
-                transportSampleTimeMs = transportSampleTimeMs,
-                onTransportBytesDownloaded = onTransportBytesDownloaded,
-                onChunkBytesDownloaded = onChunkBytesDownloaded,
-                onTransportObservation = onTransportObservation,
-                allowStartupBootstrapReuse = allowStartupBootstrapReuse
-            )
-        }
         return BenchmarkReadableSourceFactory {
             Media3BenchmarkReadableSource(
-                dataSource = dataSourceFactory.createDataSource(),
+                dataSource = upstreamFactory.createDataSource(),
                 candidate = candidate
             )
         }

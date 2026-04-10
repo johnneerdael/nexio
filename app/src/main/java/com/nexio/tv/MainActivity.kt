@@ -135,8 +135,6 @@ import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.ThemeDataStore
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkRuntimeState
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
-import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkRuntimeState
-import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkService
 import com.nexio.tv.data.repository.IdleScreensaverRepository
 import com.nexio.tv.data.repository.TrackingProgressService
 import com.nexio.tv.data.trailer.TrailerService
@@ -209,12 +207,6 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_RECOMMENDATION_CONTENT_ID = "recommendation_content_id"
         const val EXTRA_RECOMMENDATION_CONTENT_TYPE = "recommendation_content_type"
         const val EXTRA_RECOMMENDATION_ADDON_BASE_URL = "recommendation_addon_base_url"
-        const val EXTRA_TRANSPORT_VALIDATION_COMMAND = "transport_validation_command"
-        const val EXTRA_TRANSPORT_VALIDATION_SAMPLE_ID = "transport_validation_sample_id"
-        const val EXTRA_TRANSPORT_VALIDATION_SAMPLE_TITLE = "transport_validation_sample_title"
-        const val EXTRA_TRANSPORT_VALIDATION_ASSET_PATH = "transport_validation_asset_path"
-        const val TRANSPORT_VALIDATION_COMMAND_START = "start"
-        const val TRANSPORT_VALIDATION_COMMAND_STOP = "stop"
         private const val STARTUP_PERF_WINDOW_MS = 12_000L
         private const val STARTUP_DEFERRED_WORK_MIN_DELAY_MS = 2_000L
         private const val IDLE_SCREENSAVER_TIMEOUT_MS = 2L * 60 * 1000L
@@ -278,15 +270,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var debridBenchmarkService: DebridBenchmarkService
 
-    @Inject
-    lateinit var debridConfigBenchmarkService: DebridConfigBenchmarkService
-
     private lateinit var jankStats: JankStats
     private val pendingRecommendationNavigation = mutableStateOf<RecommendationNavigation?>(null)
     private val pendingFeedNavigation = mutableStateOf<RecommendationFeedNavigation?>(null)
-    private val pendingTransportValidationNavigation =
-        mutableStateOf<TransportValidationPlaybackNavigation?>(null)
-    private val pendingTransportValidationStop = mutableStateOf(false)
     private var pendingBrowsableChannelId: Long? = null
     private var channelBrowsableRequestInFlight: Boolean = false
     @Volatile
@@ -350,7 +336,6 @@ class MainActivity : ComponentActivity() {
         shouldRunDeferredStartupWorkThisStart = !processDeferredStartupWorkCompleted
         idleScreensaverColdBootRefreshPending = !processDeferredStartupWorkCompleted
         handleRecommendationIntent(intent)
-        handleTransportValidationIntent(intent)
         logStartupPerf(
             "launch_disposition",
             buildString {
@@ -497,8 +482,6 @@ class MainActivity : ComponentActivity() {
                     val currentRoute = navBackStackEntry?.destination?.route
                     val pendingRecommendation by pendingRecommendationNavigation
                     val pendingFeed by pendingFeedNavigation
-                    val pendingTransportValidation by pendingTransportValidationNavigation
-                    val pendingValidationStop by pendingTransportValidationStop
                     val lifecycleOwner = LocalLifecycleOwner.current
                     val rootView = LocalView.current
                     val initialSplashDismissed = remember {
@@ -516,7 +499,6 @@ class MainActivity : ComponentActivity() {
                     val idleLastInteractionAtMs by idleScreensaverController.lastInteractionAtMs.collectAsState()
                     val playbackIdleSnapshot by playbackIdleGateState.snapshot.collectAsState()
                     val debridBenchmarkRuntimeState by debridBenchmarkService.activeState.collectAsState()
-                    val debridConfigBenchmarkRuntimeState by debridConfigBenchmarkService.activeState.collectAsState()
                     val idleTrailerCandidates = remember(
                         idleTrailerRepositoryCandidates,
                         idleScreensaverSlides
@@ -532,8 +514,7 @@ class MainActivity : ComponentActivity() {
                     var previousBenchmarkActive by remember { mutableStateOf(false) }
                     var idleTrailerSessionStart by remember { mutableStateOf<IdleTrailerScreensaverSessionStart?>(null) }
                     val benchmarkActive =
-                        debridBenchmarkRuntimeState is DebridBenchmarkRuntimeState.Running ||
-                            debridConfigBenchmarkRuntimeState is DebridConfigBenchmarkRuntimeState.Running
+                        debridBenchmarkRuntimeState is DebridBenchmarkRuntimeState.Running
 
                     LaunchedEffect(pendingRecommendation) {
                         val navigation = pendingRecommendation ?: return@LaunchedEffect
@@ -559,29 +540,6 @@ class MainActivity : ComponentActivity() {
                         val navigation = pendingFeed ?: return@LaunchedEffect
                         navController.navigate(Screen.AndroidTvFeed.createRoute(navigation.feedKey))
                         pendingFeedNavigation.value = null
-                    }
-
-                    LaunchedEffect(pendingTransportValidation) {
-                        val navigation = pendingTransportValidation ?: return@LaunchedEffect
-                        val localFile = File(navigation.assetPath)
-                        navController.navigate(
-                            Screen.Player.createRoute(
-                                streamUrl = Uri.fromFile(localFile).toString(),
-                                title = navigation.title,
-                                streamName = "Passthrough Transport Validation",
-                                playerBackend = "INTERNAL",
-                                filename = localFile.name
-                            )
-                        )
-                        pendingTransportValidationNavigation.value = null
-                    }
-
-                    LaunchedEffect(pendingValidationStop, currentRoute) {
-                        if (!pendingValidationStop) return@LaunchedEffect
-                        if (currentRoute == Screen.Player.route) {
-                            navController.popBackStack()
-                        }
-                        pendingTransportValidationStop.value = false
                     }
 
                     val idleScreensaverEligible = remember(
@@ -1097,7 +1055,6 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleRecommendationIntent(intent)
-        handleTransportValidationIntent(intent)
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -1140,9 +1097,6 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         debridBenchmarkService.onAppBackgrounded()
-        lifecycleScope.launch {
-            debridConfigBenchmarkService.cancel()
-        }
         startupPerfWindowOpen = false
         deferredStartupWorkJob?.cancel()
         deferredBrowsableRequestJob?.cancel()
@@ -1287,42 +1241,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun handleTransportValidationIntent(intent: Intent?) {
-        val actualIntent = intent ?: return
-        when (actualIntent.getStringExtra(EXTRA_TRANSPORT_VALIDATION_COMMAND)?.trim()) {
-            TRANSPORT_VALIDATION_COMMAND_START -> {
-                val sampleId = actualIntent.getStringExtra(EXTRA_TRANSPORT_VALIDATION_SAMPLE_ID)
-                    ?.trim()
-                    .orEmpty()
-                val title = actualIntent.getStringExtra(EXTRA_TRANSPORT_VALIDATION_SAMPLE_TITLE)
-                    ?.trim()
-                    .orEmpty()
-                val assetPath = actualIntent.getStringExtra(EXTRA_TRANSPORT_VALIDATION_ASSET_PATH)
-                    ?.trim()
-                    .orEmpty()
-                if (sampleId.isNotEmpty() && title.isNotEmpty() && assetPath.isNotEmpty()) {
-                    Log.i(
-                        "TransportValidation",
-                        "MainActivity received start command sampleId=$sampleId assetPath=$assetPath"
-                    )
-                    pendingTransportValidationNavigation.value = TransportValidationPlaybackNavigation(
-                        sampleId = sampleId,
-                        title = title,
-                        assetPath = assetPath
-                    )
-                }
-            }
-            TRANSPORT_VALIDATION_COMMAND_STOP -> {
-                Log.i("TransportValidation", "MainActivity received stop command")
-                pendingTransportValidationStop.value = true
-            }
-        }
-        actualIntent.removeExtra(EXTRA_TRANSPORT_VALIDATION_COMMAND)
-        actualIntent.removeExtra(EXTRA_TRANSPORT_VALIDATION_SAMPLE_ID)
-        actualIntent.removeExtra(EXTRA_TRANSPORT_VALIDATION_SAMPLE_TITLE)
-        actualIntent.removeExtra(EXTRA_TRANSPORT_VALIDATION_ASSET_PATH)
-    }
-
     private fun maybeLaunchPendingBrowsableChannelRequest() {
         if (channelBrowsableRequestInFlight) return
         lifecycleScope.launch {
@@ -1383,12 +1301,6 @@ private data class RecommendationNavigation(
 
 private data class RecommendationFeedNavigation(
     val feedKey: String
-)
-
-private data class TransportValidationPlaybackNavigation(
-    val sampleId: String,
-    val title: String,
-    val assetPath: String,
 )
 
 internal fun shouldLogIdleScreensaverDiagnostics(isDebugBuild: Boolean): Boolean = isDebugBuild

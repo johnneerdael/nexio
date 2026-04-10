@@ -43,12 +43,6 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                     )
                 }
             }
-            // Feed buffer-ahead into TransportPolicyController for stable/steady transitions
-            _exoPlayer?.let { player ->
-                val bufferAheadMs = (player.bufferedPosition - player.currentPosition).coerceAtLeast(0L)
-                transportPolicyController?.onStable(bufferAheadMs)
-                transportPolicyController?.onSteady(bufferAheadMs)
-            }
             if (nowUptime - lastSkipIntervalEvaluationUptimeMs >= 1_000L) {
                 lastSkipIntervalEvaluationUptimeMs = nowUptime
                 updateActiveSkipInterval(pos)
@@ -63,7 +57,6 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
 
             if (backendIsPlaying() && bufferLogsEnabled) {
                     val now = System.currentTimeMillis()
-                    maybeRefreshVodTelemetry(now)
                     if (now - lastBufferLogTimeMs >= 30_000 && bufferLogJob?.isActive != true) {
                         lastBufferLogTimeMs = now
                         val player = _exoPlayer
@@ -76,7 +69,6 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                         val runtime = Runtime.getRuntime()
                         val usedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
                         val maxMb = runtime.maxMemory() / (1024 * 1024)
-                        val vodCache = cachedVodCacheLogState
                         val signalingRewrites =
                             MatroskaDolbyVisionHookInstaller.getCodecStringRewriteCount()
                         val sourceProfile =
@@ -111,7 +103,7 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                             }
                             Log.d(
                                 PlayerRuntimeController.TAG,
-                                "BUFFER: ahead=${bufAhead}s, loading=$loading, heap=${usedMb}/${maxMb}MB, pos=${pos / 1000}s, $vodCache, $dv7doviState"
+                                "BUFFER: ahead=${bufAhead}s, loading=$loading, heap=${usedMb}/${maxMb}MB, pos=${pos / 1000}s, playback=standard, $dv7doviState"
                             )
                         }
                     }
@@ -124,8 +116,6 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
 internal fun PlayerRuntimeController.stopProgressUpdates() {
     progressJob?.cancel()
     progressJob = null
-    vodTelemetryJob?.cancel()
-    vodTelemetryJob = null
     bufferLogJob?.cancel()
     bufferLogJob = null
 }
@@ -173,21 +163,6 @@ internal fun PlayerRuntimeController.getEffectiveDuration(position: Long): Long 
     if (!isEnded && effectiveDuration < position) return 0L
 
     return effectiveDuration
-}
-
-private fun PlayerRuntimeController.maybeRefreshVodTelemetry(now: Long) {
-    if (vodTelemetryJob?.isActive == true) return
-    if (now - lastVodTelemetryRefreshTimeMs < 30_000) return
-    lastVodTelemetryRefreshTimeMs = now
-    val streamUrl = currentStreamUrl
-    vodTelemetryJob = scope.launch(Dispatchers.IO) {
-        val nextState = runCatching {
-            mediaSourceFactory.getVodCacheLogState(streamUrl)
-        }.getOrElse {
-            cachedVodCacheLogState
-        }
-        cachedVodCacheLogState = nextState
-    }
 }
 
 internal fun PlayerRuntimeController.saveWatchProgressInternal(position: Long, duration: Long, syncRemote: Boolean = true) {

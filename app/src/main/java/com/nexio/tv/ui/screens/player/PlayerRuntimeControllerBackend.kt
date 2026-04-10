@@ -33,7 +33,6 @@ internal fun PlayerRuntimeController.backendStop() {
 }
 
 internal fun PlayerRuntimeController.backendSeekTo(positionMs: Long) {
-    transportPolicyController?.onSeek()
     _exoPlayer?.seekTo(positionMs)
 }
 

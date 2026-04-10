@@ -450,9 +450,6 @@ private fun DebridBenchmarkTransportProfile.toJsonObject(): JsonObject {
         }
         configSnapshot?.let { config ->
             add("configSnapshot", JsonObject().apply {
-                config.useParallelConnections?.let { addProperty("useParallelConnections", it) }
-                config.parallelConnectionCount?.let { addProperty("parallelConnectionCount", it) }
-                config.parallelChunkSizeMb?.let { addProperty("parallelChunkSizeMb", it) }
                 config.chunkWaitTimeoutMs?.let { addProperty("chunkWaitTimeoutMs", it) }
             })
         }

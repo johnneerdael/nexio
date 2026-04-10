@@ -8,46 +8,21 @@ import coil.memory.MemoryCache
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import com.nexio.tv.core.sync.StartupSyncService
-import com.nexio.tv.instrumentation.PlaybackTraceToggle
-import com.nexio.tv.instrumentation.PlaybackTracer
 import dagger.hilt.android.HiltAndroidApp
-import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 @HiltAndroidApp
 class NexioApplication : Application(), ImageLoaderFactory {
-    companion object {
-        private const val TAG = "NexioApp"
-    }
-
     @Inject lateinit var startupSyncService: StartupSyncService
-    @Inject lateinit var playbackTraceToggle: PlaybackTraceToggle
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
-        // Prepare the playback-trace files directory and restore the
-        // persisted on/off state synchronously before any player code
-        // runs. `PlayerMediaSourceFactory.openPlaybackTraceSession` early-
-        // returns if `PlaybackTracer.enabled` is false, so we have to beat
-        // the first `createMediaSource` with the DataStore-restored value.
-        // Using `runBlocking` on onCreate adds ~2-10 ms of cold-start cost
-        // — a one-time read of a single DataStore key — which is worth it
-        // to avoid an async race that drops the first session of every
-        // process restart.
-        PlaybackTracer.installFilesDir(this)
-        PlaybackTracer.applyCrashIsolationProfile()
-        PlaybackTracer.enabled = runBlocking {
-            playbackTraceToggle.enabledFlow.first()
-        }
-        Log.i(TAG, "playback trace restored enabled=${PlaybackTracer.enabled}")
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(this))
         }
