@@ -68,6 +68,7 @@ class PlayerRuntimeController(
     internal val debridConfigBenchmarkStore: DebridConfigBenchmarkStore,
     internal val debridBenchmarkStore: DebridBenchmarkStore,
     internal val playbackOkHttpClient: OkHttpClient,
+    internal val playbackTracedOkHttpClient: OkHttpClient,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {
@@ -115,7 +116,11 @@ class PlayerRuntimeController(
     internal val initialEpisodeTitle: String? = navigationArgs.initialEpisodeTitle
     internal val rememberedAudioLanguage: String? = navigationArgs.rememberedAudioLanguage
     internal val rememberedAudioName: String? = navigationArgs.rememberedAudioName
-    internal val mediaSourceFactory = PlayerMediaSourceFactory(context.applicationContext, playbackOkHttpClient).apply {
+    internal val mediaSourceFactory = PlayerMediaSourceFactory(
+        context = context.applicationContext,
+        basePlaybackOkHttpClient = playbackOkHttpClient,
+        tracedPlaybackOkHttpClient = playbackTracedOkHttpClient
+    ).apply {
         // WP3 — wire collector binding so its rebuffer/decode events
         // share the same playback-trace sessionId as the JSONL writer.
         playbackTraceSessionBinder = { sid -> transportValidationRuntimeCollector.bindSession(sid) }

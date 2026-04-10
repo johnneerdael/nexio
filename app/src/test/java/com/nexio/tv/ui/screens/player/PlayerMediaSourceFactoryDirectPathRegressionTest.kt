@@ -17,7 +17,8 @@ class PlayerMediaSourceFactoryDirectPathRegressionTest {
     fun `disabled path does not start VOD warm ahead`() {
         val factory = PlayerMediaSourceFactory(
             context = ApplicationProvider.getApplicationContext(),
-            sharedOkHttpClient = OkHttpClient()
+            basePlaybackOkHttpClient = OkHttpClient(),
+            tracedPlaybackOkHttpClient = OkHttpClient()
         ).apply {
             useParallelConnections = false
             vodCacheSizeMode = VodCacheSizeMode.ON
