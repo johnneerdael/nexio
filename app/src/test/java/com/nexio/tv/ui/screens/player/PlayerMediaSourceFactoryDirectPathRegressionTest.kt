@@ -4,6 +4,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.nexio.tv.data.local.VodCacheSizeMode
 import java.util.concurrent.Future
 import okhttp3.OkHttpClient
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -12,6 +13,16 @@ import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class PlayerMediaSourceFactoryDirectPathRegressionTest {
+
+    @Test
+    fun `direct path never resolves traced range mode`() {
+        val mode = PlayerMediaSourceFactory.resolvePlaybackClientMode(
+            useParallelConnections = false,
+            playbackTraceEnabled = true
+        )
+
+        assertEquals(PlayerMediaSourceFactory.PlaybackClientMode.BASE, mode)
+    }
 
     @Test
     fun `disabled path does not start VOD warm ahead`() {

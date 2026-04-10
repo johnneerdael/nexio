@@ -64,6 +64,14 @@ compiles to a single volatile-read + early return. With the toggle on,
 the hot path is a lock-free MPSC ring enqueue; there is no disk I/O on
 the producer side.
 
+## Direct-Path Observability Rules
+
+- Direct playback uses the base playback OkHttp client.
+- Direct playback does not use the traced range client.
+- `PlaybackRangeContextCallFactory` is only used for traced parallel-range playback.
+- Cache event listeners are attached only when playback diagnostics is enabled.
+- Transport-validation runtime hooks are active only during an enabled transport-validation session.
+
 ---
 
 ## Path A — In-app UI (canonical)
