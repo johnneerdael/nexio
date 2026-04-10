@@ -119,13 +119,20 @@ internal class SessionWriter(
             val snapshot = File(snapshotRunDir, current.name)
             try {
                 sink.flush()
-                current.inputStream().use { input ->
-                    snapshot.outputStream().buffered().use { output ->
-                        input.copyTo(output)
-                    }
+                val bytes = current.readBytes()
+                val safeLength = bytes.indexOfLast { it == '\n'.code.toByte() } + 1
+                if (safeLength <= 0) {
+                    snapshot.delete()
+                    snapshotRunDir.delete()
+                    return null
+                }
+                snapshot.outputStream().buffered().use { output ->
+                    output.write(bytes, 0, safeLength)
+                    output.flush()
                 }
             } catch (_: Exception) {
                 snapshot.delete()
+                snapshotRunDir.delete()
                 return null
             }
             return FileSnapshot(

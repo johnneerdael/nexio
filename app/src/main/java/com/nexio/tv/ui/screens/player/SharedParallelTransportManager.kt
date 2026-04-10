@@ -280,10 +280,11 @@ internal class SharedParallelTransportManager(
         ) 1 else 0
         val maxAheadForLog = maxOf(envelope.maxSafeUrgentWorkers + 1, chunksPerPageForLog + 1) + connectionCloseBonusForLog
         val urgentCountForLog = policy?.urgentWorkers ?: envelope.maxSafeUrgentWorkers
+        val prefetchWorkersForLog = policy?.prefetchWorkers ?: envelope.maxSafePrefetchWorkers
         PlayerTransportTelemetry.logThrottled("sptm.promote", 1000L, mapOf(
             "maxAhead" to maxAheadForLog,
             "policy" to (policy?.javaClass?.simpleName ?: "null"),
-            "prefetchWorkers" to envelope.maxSafePrefetchWorkers,
+            "prefetchWorkers" to prefetchWorkersForLog,
             "urgentCount" to urgentCountForLog,
             "urgentWorkers" to envelope.maxSafeUrgentWorkers
         ))
@@ -315,6 +316,8 @@ internal class SharedParallelTransportManager(
         ) 1 else 0
         val maxAhead = maxOf(envelope.maxSafeUrgentWorkers + 1, chunksPerPage + 1) + connectionCloseBonus
         val urgentCount = policy?.urgentWorkers ?: envelope.maxSafeUrgentWorkers
+        val runtimePrefetchWorkers = policy?.prefetchWorkers ?: envelope.maxSafePrefetchWorkers
+        val allowPrefetch = runtimePrefetchWorkers > 0
         val currentFrontier = store?.frontier ?: 0L
         var remainingUrgentBudget = urgentCount
 
@@ -336,6 +339,7 @@ internal class SharedParallelTransportManager(
             // reader waits for an atomic prefetch publish at the frontier boundary.
             val uncovered = end > currentFrontier
             val urgent = uncovered && remainingUrgentBudget > 0
+            if (!urgent && !allowPrefetch) continue
             submit(ci, start, end, urgent)
             if (urgent) remainingUrgentBudget--
         }
@@ -476,12 +480,6 @@ internal class SharedParallelTransportManager(
                     val sampleTime = transportSampleTimeMs()
                     onTransportBytesDownloaded(read.toLong(), sampleTime)
                     onChunkBytesDownloaded(chunkIndex, chunkSize, offsetInChunk, read, sampleTime)
-                    emitRangeContextEvent("range_http_body", attemptContext) {
-                        putInt("bytesRead", read)
-                        putInt("totalRead", totalRead)
-                        putLong("offsetInChunk", offsetInChunk)
-                        putLong("sampleTimeMs", sampleTime)
-                    }
                     val nextProgressMilestone = nextBodyProgressMilestone(
                         totalRead = totalRead,
                         expectedBytes = expectedBytes,
@@ -489,6 +487,12 @@ internal class SharedParallelTransportManager(
                     )
                     if (nextProgressMilestone != null) {
                         lastBodyProgressMilestone = nextProgressMilestone
+                        emitRangeContextEvent("range_http_body", attemptContext) {
+                            putInt("bytesRead", read)
+                            putInt("totalRead", totalRead)
+                            putLong("offsetInChunk", offsetInChunk)
+                            putLong("sampleTimeMs", sampleTime)
+                        }
                         emitRangeContextEvent("range_http_body_progress", attemptContext) {
                             putInt("bytesRead", read)
                             putInt("totalRead", totalRead)
@@ -716,12 +720,6 @@ internal class SharedParallelTransportManager(
                     val sampleTime = transportSampleTimeMs()
                     onTransportBytesDownloaded(read.toLong(), sampleTime)
                     onChunkBytesDownloaded(chunkIndex, chunkSize, offsetInChunk, read, sampleTime)
-                    emitRangeContextEvent("range_http_body", attemptContext) {
-                        putInt("bytesRead", read)
-                        putInt("totalRead", handle.totalRead)
-                        putLong("offsetInChunk", offsetInChunk)
-                        putLong("sampleTimeMs", sampleTime)
-                    }
                     val nextProgressMilestone = nextBodyProgressMilestone(
                         totalRead = handle.totalRead,
                         expectedBytes = expectedBytes,
@@ -729,6 +727,12 @@ internal class SharedParallelTransportManager(
                     )
                     if (nextProgressMilestone != null) {
                         lastBodyProgressMilestone = nextProgressMilestone
+                        emitRangeContextEvent("range_http_body", attemptContext) {
+                            putInt("bytesRead", read)
+                            putInt("totalRead", handle.totalRead)
+                            putLong("offsetInChunk", offsetInChunk)
+                            putLong("sampleTimeMs", sampleTime)
+                        }
                         emitRangeContextEvent("range_http_body_progress", attemptContext) {
                             putInt("bytesRead", read)
                             putInt("totalRead", handle.totalRead)

@@ -317,6 +317,42 @@ class PagedFrontierBufferTest {
         assertTrue("stall band traces should stay coarse, got $stallCount", stallCount <= 3)
     }
 
+    @Test(timeout = 8_000L)
+    fun `frontier no progress emits at stall milestones not fixed cadence`() {
+        val sink = StringWriter()
+        PlaybackTracer.installWriterFactory { header ->
+            SessionWriter(
+                header = header,
+                baseFile = null,
+                capacity = 4096,
+                testSink = sink,
+                rotationBytes = Long.MAX_VALUE,
+                parkNanos = 1_000_000L,
+                overflowReportIntervalNanos = Long.MAX_VALUE
+            )
+        }
+        PlaybackTracer.enabled = true
+        val sid = PlaybackTracer.beginSession(fakeHeader())
+
+        val buffer = PagedFrontierBuffer()
+        buffer.setTotalLength(PAGE_SIZE.toLong())
+        buffer.writePage(0, 0x33)
+        buffer.setAtomicLongField("lastFrontierAdvanceNanos", -2_000_000_000L)
+        val dest = ByteArray(16)
+        repeat(12) {
+            Thread.sleep(600L)
+            assertEquals(16, buffer.read(0L, dest, 0, dest.size))
+        }
+        PlaybackTracer.endSession(sid)
+
+        val stallLines = sink.toString()
+            .lineSequence()
+            .filter { it.contains("\"ev\":\"frontier_no_progress_band\"") }
+            .toList()
+
+        assertTrue("expected milestone stall reporting, got ${stallLines.size}", stallLines.size <= 5)
+    }
+
     private fun PagedFrontierBuffer.setAtomicLongField(name: String, value: Long) {
         val field = PagedFrontierBuffer::class.java.getDeclaredField(name)
         field.isAccessible = true

@@ -31,17 +31,50 @@ internal class DefaultSequentialReadCursor(
     private val keepBehindBytes: Long,
     private val chunkWaitTimeoutMs: Long
 ) : SequentialReadCursor {
+    companion object {
+        private const val STAGED_READ_BUFFER_BYTES = 32 * 1024
+    }
 
     @Volatile private var _position: Long = session.startPosition
     @Volatile private var _bytesRemaining: Long = session.openLength
     @Volatile private var closed: Boolean = false
+    private val stagedBuffer = ByteArray(STAGED_READ_BUFFER_BYTES)
+    private var stagedLength: Int = 0
+    private var stagedOffset: Int = 0
 
     override val position: Long get() = _position
     override val bytesRemaining: Long get() = _bytesRemaining
 
+    private fun consumeRead(count: Int) {
+        _position += count
+        if (_bytesRemaining != C.LENGTH_UNSET.toLong()) {
+            _bytesRemaining -= count
+        }
+        onPositionAdvanced(_position)
+        store.evictBefore(_position - keepBehindBytes)
+    }
+
+    private fun tryReadFromStage(buffer: ByteArray, offset: Int, length: Int): Int {
+        if (stagedOffset >= stagedLength) return 0
+        val toCopy = minOf(length, stagedLength - stagedOffset)
+        System.arraycopy(stagedBuffer, stagedOffset, buffer, offset, toCopy)
+        stagedOffset += toCopy
+        consumeRead(toCopy)
+        return toCopy
+    }
+
+    private fun refillStage(maxBytes: Int): Int {
+        stagedOffset = 0
+        stagedLength = store.read(_position, stagedBuffer, 0, minOf(stagedBuffer.size, maxBytes))
+        return stagedLength
+    }
+
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
         if (length == 0) return 0
         if (_bytesRemaining == 0L) return C.RESULT_END_OF_INPUT
+
+        val stagedRead = tryReadFromStage(buffer, offset, length)
+        if (stagedRead > 0) return stagedRead
 
         val toRead = if (_bytesRemaining == C.LENGTH_UNSET.toLong()) {
             length
@@ -51,14 +84,12 @@ internal class DefaultSequentialReadCursor(
 
         val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(chunkWaitTimeoutMs)
         while (!closed) {
+            if (toRead <= stagedBuffer.size && refillStage(stagedBuffer.size) > 0) {
+                return tryReadFromStage(buffer, offset, length)
+            }
             val read = store.read(_position, buffer, offset, toRead)
             if (read > 0) {
-                _position += read
-                if (_bytesRemaining != C.LENGTH_UNSET.toLong()) {
-                    _bytesRemaining -= read
-                }
-                onPositionAdvanced(_position)
-                store.evictBefore(_position - keepBehindBytes)
+                consumeRead(read)
                 return read
             }
             when (waitForBytes(_position, deadline)) {

@@ -58,6 +58,7 @@ internal class ParallelRangeDataSource(
         internal const val DEFAULT_CHUNK_WAIT_TIMEOUT_MS = 60_000L
         private const val STARTUP_WATCHDOG_DELAY_MS = 5_000L
         private const val CONNECTION_CLOSE_FRONTIER_PAGE_SIZE = 64 * 1024
+        private const val MAX_REUSABLE_PROBE_OPEN_BYTES = 512L * 1024L
         private const val READ_RETURN_TRACE_MIN_CALLS = 32
         private const val READ_RETURN_TRACE_MIN_INTERVAL_MS = 500L
     }
@@ -583,6 +584,24 @@ internal class ParallelRangeDataSource(
         return store.readableContiguousBytesFrom(dataSpec.position) > 0L
     }
 
+    private fun isBoundedProbeOpen(dataSpec: DataSpec): Boolean {
+        val requestedLength = dataSpec.length
+        if (requestedLength == C.LENGTH_UNSET.toLong()) return false
+        return requestedLength in 1L..MAX_REUSABLE_PROBE_OPEN_BYTES
+    }
+
+    private fun canReuseForProbeOpen(dataSpec: DataSpec): Boolean {
+        if (!readerClosed.get()) return false
+        val session = openSession ?: return false
+        if (continuationSource != null || fallbackSource != null) return false
+        if (!transportManager.isAttached()) return false
+        if (!isBoundedProbeOpen(dataSpec)) return false
+        if (session.requestSpec.uri != dataSpec.uri) return false
+        if (dataSpec.position < session.startPosition) return false
+        val requestedEndExclusive = dataSpec.position + dataSpec.length
+        return requestedEndExclusive <= store.frontier
+    }
+
     private fun reopenFromRetainedCoverage(dataSpec: DataSpec): Long {
         val previousSession = openSession ?: error("openSession required for retained reopen")
         closed.set(false)
@@ -620,6 +639,37 @@ internal class ParallelRangeDataSource(
         return bytesRemaining
     }
 
+    private fun reopenFromRetainedProbeWindow(dataSpec: DataSpec): Long {
+        val previousSession = openSession ?: error("openSession required for retained probe reopen")
+        closed.set(false)
+        readerClosed.set(false)
+        position = dataSpec.position
+        resolvedUri = previousSession.resolvedUri ?: resolvedUri ?: dataSpec.uri
+        totalFileLength = previousSession.totalFileLength
+        bytesRemaining = dataSpec.length
+        val reopenedSession = previousSession.copy(
+            requestSpec = dataSpec,
+            startPosition = dataSpec.position,
+            openLength = dataSpec.length
+        )
+        openSession = reopenedSession
+        cursor?.close()
+        cursor = DefaultSequentialReadCursor(
+            session = reopenedSession,
+            store = store,
+            waitForBytes = ::waitForBytesAt,
+            onPositionAdvanced = onReadPositionAdvanced,
+            keepBehindBytes = keepBehindBytes,
+            chunkWaitTimeoutMs = chunkWaitTimeoutMs
+        )
+        beginPrdsOpenTrace(dataSpec, ReopenCause.SEEK_LIKE_REOPEN)
+        maybeLogFirstReadableBytes("retained_probe_reopen")
+        fireTransferStarted(dataSpec)
+        emitPrdsOpenSuccess("parallel_probe_reuse", dataSpec.length, reopenedSession.acceptsRanges.toString())
+        startStartupWatchdog()
+        return dataSpec.length
+    }
+
     private fun canPreserveOpenStateOnClose(): Boolean {
         if (continuationSource != null || fallbackSource != null) return false
         if (!transportManager.isAttached()) return false
@@ -650,6 +700,9 @@ internal class ParallelRangeDataSource(
         transferInitializing(dataSpec)
         if (canReuseOpenSession(dataSpec)) {
             return reopenFromRetainedCoverage(dataSpec)
+        }
+        if (canReuseForProbeOpen(dataSpec)) {
+            return reopenFromRetainedProbeWindow(dataSpec)
         }
 
         readerClosed.set(false)

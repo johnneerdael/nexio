@@ -311,23 +311,18 @@ class PlaybackTraceController @Inject constructor(
 
     private inline fun <T> exportStableFiles(files: List<File>, block: (List<File>) -> T): T {
         if (files.isEmpty()) return block(files)
-        val snapshot = activeSnapshotForExport(files.maxByOrNull { it.lastModified() } ?: return block(files))
-        val exportFiles = if (snapshot == null) {
-            files
-        } else {
-            files.map { file ->
-                if (file.absoluteFile == snapshot.originalFile.absoluteFile) {
-                    snapshot.snapshotFile
-                } else {
-                    file
-                }
-            }
+        val snapshots = files.mapNotNull { file -> activeSnapshotForExport(file) }
+        val snapshotByOriginalPath = snapshots.associateBy { it.originalFile.absolutePath }
+        val exportFiles = files.map { file ->
+            snapshotByOriginalPath[file.absolutePath]?.snapshotFile ?: file
         }
         return try {
             block(exportFiles)
         } finally {
-            snapshot?.snapshotFile?.delete()
-            snapshot?.snapshotFile?.parentFile?.delete()
+            snapshots.forEach { snapshot ->
+                snapshot.snapshotFile.delete()
+                snapshot.snapshotFile.parentFile?.delete()
+            }
         }
     }
 
