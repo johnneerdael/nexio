@@ -59,14 +59,21 @@ class TransportValidationRuntimeCollector @Inject constructor(
         boundPlaybackSessionId = sessionId
     }
 
+    fun isSessionActive(): Boolean = activeSession != null
+
     fun beginSession(
         sample: TransportValidationSample,
         settings: TransportValidationSettings,
     ) {
         clearSession()
-        // WP8 — start the device-health sampler tied to this session.
-        // Best-effort: any failure is swallowed inside DeviceHealthSampler.
-        deviceHealthSampler.start()
+        if (!settings.enabled) {
+            return
+        }
+        if (settings.runtimeValidationEnabled) {
+            // WP8 — start the device-health sampler tied to this session.
+            // Best-effort: any failure is swallowed inside DeviceHealthSampler.
+            deviceHealthSampler.start()
+        }
         activeSession =
             ActiveRuntimeSession(
                 sampleId = sample.id,
