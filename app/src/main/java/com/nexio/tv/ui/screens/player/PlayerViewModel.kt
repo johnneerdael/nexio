@@ -10,9 +10,7 @@ import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.DebridBenchmarkStore
-import com.nexio.tv.data.local.DebridConfigBenchmarkStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
-import com.nexio.tv.debug.passthrough.TransportValidationRuntimeCollector
 import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
 import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.TrackingScrobbleService
@@ -46,11 +44,8 @@ class PlayerViewModel @Inject constructor(
     private val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
     private val geminiSubtitleTranslationService: GeminiSubtitleTranslationService,
     private val playbackIdleGateState: PlaybackIdleGateState,
-    private val transportValidationRuntimeCollector: TransportValidationRuntimeCollector,
-    private val debridConfigBenchmarkStore: DebridConfigBenchmarkStore,
     private val debridBenchmarkStore: DebridBenchmarkStore,
     @Named("playback") private val playbackOkHttpClient: OkHttpClient,
-    @Named("playbackTraced") private val playbackTracedOkHttpClient: OkHttpClient,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val controller = PlayerRuntimeController(
@@ -70,11 +65,8 @@ class PlayerViewModel @Inject constructor(
         layoutPreferenceDataStore = layoutPreferenceDataStore,
         geminiSubtitleTranslationService = geminiSubtitleTranslationService,
         playbackIdleGateState = playbackIdleGateState,
-        transportValidationRuntimeCollector = transportValidationRuntimeCollector,
-        debridConfigBenchmarkStore = debridConfigBenchmarkStore,
         debridBenchmarkStore = debridBenchmarkStore,
         playbackOkHttpClient = playbackOkHttpClient,
-        playbackTracedOkHttpClient = playbackTracedOkHttpClient,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope
     )

@@ -108,11 +108,7 @@ class DebridBenchmarkSessionRunner internal constructor(
     }
 
     private fun PlayerSettings.toBenchmarkTransportConfigSnapshot(): DebridBenchmarkTransportConfigSnapshot {
-        return DebridBenchmarkTransportConfigSnapshot(
-            useParallelConnections = useParallelConnections,
-            parallelConnectionCount = parallelConnectionCount,
-            parallelChunkSizeMb = parallelChunkSizeMb
-        )
+        return DebridBenchmarkTransportConfigSnapshot()
     }
 
     private fun benchmarkSessionMetadata(
@@ -210,10 +206,6 @@ private fun deriveSteadyStateBudgetMbps(
         sustained.p50ThroughputMbps,
         sustained.averageThroughputMbps
     ).minOrNull() ?: return startupBudgetMbps
-
-    if (profile.configSnapshot?.useParallelConnections != true) {
-        return startupBudgetMbps ?: baseline
-    }
 
     var penalty = 0.0
     val measurementWindowSeconds = ((summaryElapsedMs ?: sustained.elapsedMs ?: 120_000L)

@@ -1450,11 +1450,7 @@ private fun PlayerSettings.toStreamFeatureFlags(): StreamFeatureFlags {
 }
 
 private fun PlayerSettings.toShadowActiveTransportMode(): DebridBenchmarkTransportMode {
-    return if (useParallelConnections) {
-        DebridBenchmarkTransportMode.OPTIMIZED
-    } else {
-        DebridBenchmarkTransportMode.DIRECT
-    }
+    return DebridBenchmarkTransportMode.DIRECT
 }
 
 internal fun deterministicAutoplayEarlyFinishSatisfied(

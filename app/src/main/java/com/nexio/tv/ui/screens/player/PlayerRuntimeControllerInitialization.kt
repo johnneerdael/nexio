@@ -52,10 +52,6 @@ import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.domain.model.Subtitle
 import io.github.peerless2012.ass.media.type.AssRenderType
-import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
-import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
-import com.nexio.tv.data.repository.benchmark.benchmarkProviderForServiceKey
-import com.nexio.tv.data.repository.benchmark.toCapabilityEnvelope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -72,75 +68,6 @@ internal data class StartupSubtitlePreparation(
     val attachedSubtitles: List<Subtitle>,
     val fetchCompleted: Boolean
 )
-
-internal suspend fun PlayerRuntimeController.refreshPlaybackTraceProvenanceForCurrentStream() {
-    currentRuntimeTransportObservation = null
-    currentRuntimeTransportSpecializationStatus = null
-    val latestResultsByProvider = DebridBenchmarkProvider.entries.associateWith { provider ->
-        runCatching {
-            debridConfigBenchmarkStore.latestResult(provider).first()
-        }.getOrNull()
-    }
-    val fallbackResultsByProvider = DebridBenchmarkProvider.entries.associateWith { provider ->
-        runCatching {
-            debridBenchmarkStore.latestResult(provider).first()
-        }.getOrNull()
-    }
-    val selectedTransportBenchmark = selectTransportBenchmarkForServiceKey(
-        serviceKey = currentStreamServiceKey,
-        latestResults = latestResultsByProvider,
-        fallbackResults = fallbackResultsByProvider
-    )
-    currentRuntimeTransportHints = selectedTransportBenchmark?.runtimeTransportHints
-    // For providers with a locked shape (RD, PM), always resolve via lockedFor so
-    // the no-arg TransportPolicyController() fallback is unreachable on these paths.
-    val providerStorageKey = benchmarkProviderForServiceKey(currentStreamServiceKey)?.storageKey
-    val lockedEnvelope = providerStorageKey?.let { CapabilityEnvelope.lockedFor(it) }
-    val envelope = selectedTransportBenchmark?.capabilityEnvelope
-        ?: lockedEnvelope
-    val benchmarkProvenance = selectedBenchmarkProvenanceForServiceKey(
-        serviceKey = currentStreamServiceKey,
-        selectedTransportBenchmark = selectedTransportBenchmark,
-        lockedEnvelope = lockedEnvelope
-    )
-    mediaSourceFactory.playbackTraceServiceKey = currentStreamServiceKey
-    mediaSourceFactory.playbackTraceProviderStorageKey =
-        selectedTransportBenchmark?.providerStorageKey ?: providerStorageKey
-    mediaSourceFactory.playbackTraceBenchmarkSource = benchmarkProvenance.toTraceSourceOrNull()
-    mediaSourceFactory.playbackTraceBenchmarkResultId =
-        selectedTransportBenchmark?.benchmarkResultId
-    if (envelope != null) {
-        // For providers with a locked shape, assert the merged envelope matches before
-        // constructing the controller. This is the one-shot init site — guards here are
-        // safe; they must never be placed on the DataSource.open/read call stacks.
-        if (lockedEnvelope != null) {
-            require(lockedEnvelope.matchesLockedShape(envelope)) {
-                "CapabilityEnvelope shape drift for provider=$providerStorageKey"
-            }
-        }
-        mediaSourceFactory.capabilityEnvelope = envelope
-        Log.d(
-            PlayerRuntimeController.TAG,
-            "TRANSPORT_ENVELOPE provenance=${benchmarkProvenance.traceSource} " +
-                "serviceKey=${mediaSourceFactory.playbackTraceServiceKey ?: "unknown"} " +
-                "provider=${mediaSourceFactory.playbackTraceProviderStorageKey ?: "unknown"} " +
-                "resultId=${mediaSourceFactory.playbackTraceBenchmarkResultId ?: "none"} " +
-                "urgentWorkers=${envelope.maxSafeUrgentWorkers} prefetchWorkers=${envelope.maxSafePrefetchWorkers} " +
-                "urgentChunkBytes=${envelope.maxSafeUrgentChunkBytes} prefetchChunkBytes=${envelope.maxSafePrefetchChunkBytes}"
-        )
-        transportPolicyController = TransportPolicyController(envelope, providerStorageKey)
-    } else {
-        mediaSourceFactory.capabilityEnvelope = null
-        Log.d(
-            PlayerRuntimeController.TAG,
-            "TRANSPORT_ENVELOPE provenance=${benchmarkProvenance.traceSource} " +
-                "serviceKey=${mediaSourceFactory.playbackTraceServiceKey ?: "unknown"} " +
-                "provider=${mediaSourceFactory.playbackTraceProviderStorageKey ?: "unknown"} " +
-                "resultId=${mediaSourceFactory.playbackTraceBenchmarkResultId ?: "none"}"
-        )
-        transportPolicyController = TransportPolicyController()
-    }
-}
 
 @androidx.annotation.OptIn(UnstableApi::class)
 internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<String, String>) {
@@ -272,39 +199,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             )
             val loadControl = DefaultLoadControl.Builder().build()
 
-            mediaSourceFactory.useParallelConnections = playerSettings.useParallelConnections
-            mediaSourceFactory.parallelConnectionCount = playerSettings.parallelConnectionCount
-            mediaSourceFactory.parallelChunkSizeMb = playerSettings.parallelChunkSizeMb
-            mediaSourceFactory.vodCacheSizeMode = playerSettings.vodCacheSizeMode
-            mediaSourceFactory.vodCacheSizeMb = playerSettings.vodCacheSizeMb
-            refreshPlaybackTraceProvenanceForCurrentStream()
-            mediaSourceFactory.onTransportObservation = { observation ->
-                currentRuntimeTransportObservation = observation
-                val transition = nextRuntimeTransportSpecializationTransition(
-                    previousStatus = currentRuntimeTransportSpecializationStatus,
-                    enabled = runtimeTransportSpecializationEnabled,
-                    activeServiceKey = currentStreamServiceKey,
-                    runtimeHints = currentRuntimeTransportHints,
-                    observation = observation
-                )
-                currentRuntimeTransportSpecializationStatus = transition.status
-                transition.events.forEach { event ->
-                    Log.d(PlayerRuntimeController.TAG, "RUNTIME_TRANSPORT ${event.type} ${event.detail}")
-                    transportValidationRuntimeCollector.onTransportSpecializationEvent(
-                        type = event.type,
-                        detail = event.detail
-                    )
-                }
-            }
-            mediaSourceFactory.transportPolicyProvider = {
-                effectiveRuntimeTransportPolicy(
-                    basePolicy = transportPolicyController?.currentPolicy,
-                    enabled = runtimeTransportSpecializationEnabled,
-                    activeServiceKey = currentStreamServiceKey,
-                    runtimeHints = currentRuntimeTransportHints,
-                    observation = currentRuntimeTransportObservation
-                )
-            }
             if (kodiCustomAudioSinkEnabled) {
                 safeAudioForcedStreamUrls.remove(url)
                 audioDisabledForcedStreamUrls.remove(url)
@@ -629,10 +523,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             it.copy(duration = playerDuration.coerceAtLeast(0L))
                         }
 
-                        if (playbackState == Player.STATE_BUFFERING && hasRenderedFirstFrame) {
-                            transportPolicyController?.onRebuffer()
-                            mediaSourceFactory.notifyRebuffer()
-                        }
                         if (playbackState == Player.STATE_BUFFERING && !hasRenderedFirstFrame) {
                             _uiState.update { state ->
                                 // Suppress the full-screen loading overlay
@@ -755,8 +645,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     override fun onRenderedFirstFrame() {
                         if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
                         cancelFirstFrameWatchdog()
-                        transportPolicyController?.onFirstFrame()
-                        mediaSourceFactory.notifyPlaybackFirstFrameRendered()
                         val startupMs = (System.currentTimeMillis() - playerInitializationStartedAtMs)
                             .coerceAtLeast(0L)
                         val conversionCalls = DoviBridge.getConversionCallCount()
@@ -1001,9 +889,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     }
                 }
                 addListener(playerListener)
-                if (transportValidationRuntimeCollector.isSessionActive()) {
-                    transportValidationRuntimeCollector.attachPlayer(this, url)
-                }
                 if (dv5HardwareToneMapActive) {
                     setVideoFrameMetadataListener { presentationTimeUs, _, _, _ ->
                         Dv5HardwareToneMapRpuTap.onFrameAboutToRender(presentationTimeUs)
@@ -1018,9 +903,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 }
                 setMediaSource(initialMediaSource)
                 playWhenReady = true
-                if (transportValidationRuntimeCollector.isSessionActive()) {
-                    transportValidationRuntimeCollector.onPrepareRequested(url)
-                }
                 prepare()
                 launchStartupPreparationTasks(
                     url = url,

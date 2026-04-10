@@ -5,13 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
-import com.nexio.tv.debug.passthrough.TransportValidationCatalog
-import com.nexio.tv.debug.passthrough.TransportValidationCaptureMode
-import com.nexio.tv.debug.passthrough.TransportValidationComparisonMode
-import com.nexio.tv.debug.passthrough.TransportValidationController
-import com.nexio.tv.debug.passthrough.TransportValidationPlaybackLauncher
-import com.nexio.tv.debug.passthrough.TransportValidationSampleOption
-import com.nexio.tv.debug.passthrough.TransportValidationSessionStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,10 +19,6 @@ class DebugSettingsViewModel @Inject constructor(
     private val dataStore: DebugSettingsDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val authManager: AuthManager,
-    private val transportValidationController: TransportValidationController,
-    private val transportValidationCatalog: TransportValidationCatalog,
-    private val transportValidationPlaybackLauncher: TransportValidationPlaybackLauncher,
-    private val transportValidationSessionStore: TransportValidationSessionStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DebugSettingsUiState())
@@ -59,39 +48,6 @@ class DebugSettingsViewModel @Inject constructor(
                 }
             }
         }
-        viewModelScope.launch {
-            transportValidationController.state.collectLatest { controllerState ->
-                _uiState.update {
-                    it.copy(
-                        transportValidationEnabled = controllerState.settings.enabled,
-                        transportValidationSelectedSampleId =
-                            controllerState.settings.selectedSampleId,
-                        transportValidationComparisonMode =
-                            controllerState.settings.comparisonMode,
-                        transportValidationCaptureMode = controllerState.settings.captureMode,
-                        transportValidationCaptureBurstCount =
-                            controllerState.settings.captureBurstCount,
-                        transportValidationBinaryDumpsEnabled =
-                            controllerState.settings.binaryDumpsEnabled,
-                        transportValidationRuntimeValidationEnabled =
-                            controllerState.settings.runtimeValidationEnabled,
-                        transportValidationRuntimeStartupTimeoutMs =
-                            controllerState.settings.runtimeStartupTimeoutMs,
-                        transportValidationRuntimeObservationWindowMs =
-                            controllerState.settings.runtimeObservationWindowMs,
-                        transportValidationExportRequestCount =
-                            controllerState.settings.exportRequestCount,
-                    )
-                }
-            }
-        }
-        viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    transportValidationAvailableSamples = transportValidationCatalog.availableSamples()
-                )
-            }
-        }
     }
 
     fun onEvent(event: DebugSettingsEvent) {
@@ -109,7 +65,11 @@ class DebugSettingsViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             signInLoading = false,
-                            signInResult = if (result.isSuccess) "Signed in successfully" else "Failed: ${result.exceptionOrNull()?.message}"
+                            signInResult = if (result.isSuccess) {
+                                "Signed in successfully"
+                            } else {
+                                "Failed: ${result.exceptionOrNull()?.message}"
+                            }
                         )
                     }
                 }
@@ -135,122 +95,6 @@ class DebugSettingsViewModel @Inject constructor(
                         .setExperimentalDv5HardwareToneMapCpuFallbackEnabled(event.enabled)
                 }
             }
-            is DebugSettingsEvent.ToggleTransportValidationEnabled -> {
-                viewModelScope.launch {
-                    transportValidationController.setEnabled(event.enabled)
-                }
-            }
-            is DebugSettingsEvent.SelectTransportValidationSample -> {
-                viewModelScope.launch {
-                    transportValidationController.selectSample(event.sampleId)
-                }
-            }
-            is DebugSettingsEvent.SelectTransportValidationComparisonMode -> {
-                viewModelScope.launch {
-                    transportValidationController.setComparisonMode(event.mode)
-                }
-            }
-            is DebugSettingsEvent.SelectTransportValidationCaptureMode -> {
-                viewModelScope.launch {
-                    transportValidationController.setCaptureMode(event.mode)
-                }
-            }
-            is DebugSettingsEvent.SetTransportValidationBurstCount -> {
-                viewModelScope.launch {
-                    transportValidationController.setCaptureBurstCount(event.count)
-                }
-            }
-            is DebugSettingsEvent.ToggleTransportValidationBinaryDumps -> {
-                viewModelScope.launch {
-                    transportValidationController.setBinaryDumpsEnabled(event.enabled)
-                }
-            }
-            is DebugSettingsEvent.ToggleTransportValidationRuntimeValidation -> {
-                viewModelScope.launch {
-                    transportValidationController.setRuntimeValidationEnabled(event.enabled)
-                }
-            }
-            is DebugSettingsEvent.SetTransportValidationRuntimeStartupTimeoutMs -> {
-                viewModelScope.launch {
-                    transportValidationController.setRuntimeStartupTimeoutMs(event.timeoutMs)
-                }
-            }
-            is DebugSettingsEvent.SetTransportValidationRuntimeObservationWindowMs -> {
-                viewModelScope.launch {
-                    transportValidationController
-                        .setRuntimeObservationWindowMs(event.observationWindowMs)
-                }
-            }
-            DebugSettingsEvent.RequestTransportValidationExport -> {
-                viewModelScope.launch {
-                    transportValidationController.requestExport()
-                    transportValidationSessionStore.exportCurrentSession()
-                }
-            }
-            DebugSettingsEvent.AdvanceTransportValidationSample -> {
-                val samples = uiState.value.transportValidationAvailableSamples
-                if (samples.isEmpty()) return
-                val currentIndex =
-                    samples.indexOfFirst { it.id == uiState.value.transportValidationSelectedSampleId }
-                val next = samples[(currentIndex + 1).floorMod(samples.size)]
-                viewModelScope.launch {
-                    transportValidationController.selectSample(next.id)
-                }
-            }
-            DebugSettingsEvent.AdvanceTransportValidationComparisonMode -> {
-                val modes = TransportValidationComparisonMode.entries
-                val currentIndex = modes.indexOf(uiState.value.transportValidationComparisonMode)
-                val next = modes[(currentIndex + 1).floorMod(modes.size)]
-                viewModelScope.launch {
-                    transportValidationController.setComparisonMode(next)
-                }
-            }
-            DebugSettingsEvent.AdvanceTransportValidationCaptureMode -> {
-                val modes = TransportValidationCaptureMode.entries
-                val currentIndex = modes.indexOf(uiState.value.transportValidationCaptureMode)
-                val next = modes[(currentIndex + 1).floorMod(modes.size)]
-                viewModelScope.launch {
-                    transportValidationController.setCaptureMode(next)
-                }
-            }
-            DebugSettingsEvent.AdvanceTransportValidationBurstCount -> {
-                val allowedCounts = listOf(1, 4, 8, 16, 32)
-                val currentIndex =
-                    allowedCounts.indexOf(uiState.value.transportValidationCaptureBurstCount)
-                val next = allowedCounts[(currentIndex + 1).floorMod(allowedCounts.size)]
-                viewModelScope.launch {
-                    transportValidationController.setCaptureBurstCount(next)
-                }
-            }
-            DebugSettingsEvent.AdvanceTransportValidationRuntimeStartupTimeout -> {
-                val allowedTimeoutsMs = listOf(3_000, 5_000, 8_000, 12_000)
-                val currentIndex =
-                    allowedTimeoutsMs.indexOf(uiState.value.transportValidationRuntimeStartupTimeoutMs)
-                val next = allowedTimeoutsMs[(currentIndex + 1).floorMod(allowedTimeoutsMs.size)]
-                viewModelScope.launch {
-                    transportValidationController.setRuntimeStartupTimeoutMs(next)
-                }
-            }
-            DebugSettingsEvent.AdvanceTransportValidationRuntimeObservationWindow -> {
-                val allowedWindowsMs = listOf(10_000, 15_000, 30_000, 60_000)
-                val currentIndex =
-                    allowedWindowsMs.indexOf(
-                        uiState.value.transportValidationRuntimeObservationWindowMs
-                    )
-                val next = allowedWindowsMs[(currentIndex + 1).floorMod(allowedWindowsMs.size)]
-                viewModelScope.launch {
-                    transportValidationController.setRuntimeObservationWindowMs(next)
-                }
-            }
-            DebugSettingsEvent.StartTransportValidationPlayback -> {
-                val sampleId = uiState.value.transportValidationSelectedSampleId ?: return
-                viewModelScope.launch {
-                    transportValidationPlaybackLauncher.launchSelectedSample(sampleId)
-                }
-            }
-            DebugSettingsEvent.StopTransportValidationPlayback -> {
-                transportValidationPlaybackLauncher.stopPlayback()
-            }
         }
     }
 }
@@ -261,19 +105,6 @@ data class DebugSettingsUiState(
     val dv5ToneMapToSdrEnabled: Boolean = false,
     val dv5HardwareToneMapToSdrEnabled: Boolean = false,
     val dv5HardwareToneMapCpuFallbackEnabled: Boolean = false,
-    val transportValidationEnabled: Boolean = false,
-    val transportValidationSelectedSampleId: String? = null,
-    val transportValidationComparisonMode: TransportValidationComparisonMode =
-        TransportValidationComparisonMode.FULL_BURST_COMPARE,
-    val transportValidationCaptureMode: TransportValidationCaptureMode =
-        TransportValidationCaptureMode.FIRST_N_BURSTS,
-    val transportValidationCaptureBurstCount: Int = 8,
-    val transportValidationBinaryDumpsEnabled: Boolean = false,
-    val transportValidationRuntimeValidationEnabled: Boolean = true,
-    val transportValidationRuntimeStartupTimeoutMs: Int = 5000,
-    val transportValidationRuntimeObservationWindowMs: Int = 30000,
-    val transportValidationExportRequestCount: Int = 0,
-    val transportValidationAvailableSamples: List<TransportValidationSampleOption> = emptyList(),
     val signInLoading: Boolean = false,
     val signInResult: String? = null
 )
@@ -284,36 +115,5 @@ sealed class DebugSettingsEvent {
     data class ToggleDv5ToneMapToSdr(val enabled: Boolean) : DebugSettingsEvent()
     data class ToggleDv5HardwareToneMapToSdr(val enabled: Boolean) : DebugSettingsEvent()
     data class ToggleDv5HardwareToneMapCpuFallback(val enabled: Boolean) : DebugSettingsEvent()
-    data class ToggleTransportValidationEnabled(val enabled: Boolean) : DebugSettingsEvent()
-    data class SelectTransportValidationSample(val sampleId: String?) : DebugSettingsEvent()
-    data class SelectTransportValidationComparisonMode(
-        val mode: TransportValidationComparisonMode
-    ) : DebugSettingsEvent()
-    data class SelectTransportValidationCaptureMode(
-        val mode: TransportValidationCaptureMode
-    ) : DebugSettingsEvent()
-    data class SetTransportValidationBurstCount(val count: Int) : DebugSettingsEvent()
-    data class ToggleTransportValidationBinaryDumps(val enabled: Boolean) : DebugSettingsEvent()
-    data class ToggleTransportValidationRuntimeValidation(val enabled: Boolean) :
-        DebugSettingsEvent()
-    data class SetTransportValidationRuntimeStartupTimeoutMs(val timeoutMs: Int) :
-        DebugSettingsEvent()
-    data class SetTransportValidationRuntimeObservationWindowMs(val observationWindowMs: Int) :
-        DebugSettingsEvent()
-    data object RequestTransportValidationExport : DebugSettingsEvent()
-    data object AdvanceTransportValidationSample : DebugSettingsEvent()
-    data object AdvanceTransportValidationComparisonMode : DebugSettingsEvent()
-    data object AdvanceTransportValidationCaptureMode : DebugSettingsEvent()
-    data object AdvanceTransportValidationBurstCount : DebugSettingsEvent()
-    data object AdvanceTransportValidationRuntimeStartupTimeout : DebugSettingsEvent()
-    data object AdvanceTransportValidationRuntimeObservationWindow : DebugSettingsEvent()
-    data object StartTransportValidationPlayback : DebugSettingsEvent()
-    data object StopTransportValidationPlayback : DebugSettingsEvent()
     data class SignIn(val email: String, val password: String) : DebugSettingsEvent()
-}
-
-private fun Int.floorMod(size: Int): Int {
-    if (size <= 0) return 0
-    val remainder = this % size
-    return if (remainder < 0) remainder + size else remainder
 }

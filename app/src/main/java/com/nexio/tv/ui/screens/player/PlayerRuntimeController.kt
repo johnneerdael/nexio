@@ -26,10 +26,7 @@ import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.local.DebridBenchmarkStore
-import com.nexio.tv.data.local.DebridConfigBenchmarkStore
-import com.nexio.tv.data.repository.benchmark.RuntimeTransportHintsV2
 import okhttp3.OkHttpClient
-import com.nexio.tv.debug.passthrough.TransportValidationRuntimeCollector
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.AddonRepository
@@ -65,11 +62,8 @@ class PlayerRuntimeController(
     internal val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
     internal val geminiSubtitleTranslationService: GeminiSubtitleTranslationService,
     internal val playbackIdleGateState: PlaybackIdleGateState,
-    internal val transportValidationRuntimeCollector: TransportValidationRuntimeCollector,
-    internal val debridConfigBenchmarkStore: DebridConfigBenchmarkStore,
     internal val debridBenchmarkStore: DebridBenchmarkStore,
     internal val playbackOkHttpClient: OkHttpClient,
-    internal val playbackTracedOkHttpClient: OkHttpClient,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope
 ) {
@@ -119,19 +113,8 @@ class PlayerRuntimeController(
     internal val rememberedAudioName: String? = navigationArgs.rememberedAudioName
     internal val mediaSourceFactory = PlayerMediaSourceFactory(
         context = context.applicationContext,
-        basePlaybackOkHttpClient = playbackOkHttpClient,
-        tracedPlaybackOkHttpClient = playbackTracedOkHttpClient
-    ).apply {
-        // WP3 — wire collector binding so its rebuffer/decode events
-        // share the same playback-trace sessionId as the JSONL writer.
-        playbackTraceSessionBinder = { sid -> transportValidationRuntimeCollector.bindSession(sid) }
-    }
-    internal var transportPolicyController: TransportPolicyController? = null
-    internal var currentRuntimeTransportHints: RuntimeTransportHintsV2? = null
-    internal var currentRuntimeTransportObservation: RuntimeTransportObservation? = null
-    internal var currentRuntimeTransportSpecializationStatus: RuntimeTransportSpecializationStatus? = null
-    internal var runtimeTransportSpecializationEnabled: Boolean = true
-
+        playbackOkHttpClient = playbackOkHttpClient
+    )
     internal var currentVideoHash: String? = navigationArgs.videoHash
     internal var currentVideoSize: Long? = navigationArgs.videoSize
     internal var currentFilename: String? = navigationArgs.filename
@@ -159,11 +142,6 @@ class PlayerRuntimeController(
         endDisplayModeSessionForExit()
         Dv5HardwareToneMapRpuTap.setEnabledForPlayback(enabled = false, streamUrl = currentStreamUrl)
         releasePlayer()
-        // Flush the active playback trace when the user explicitly exits playback.
-        // Relying on ViewModel.onCleared() leaves the JSONL session open while the
-        // user is already back in settings, so diagnostics appear missing.
-        mediaSourceFactory.endPlaybackTraceSession()
-        mediaSourceFactory.stopVodWarmAhead()
     }
 
     internal var currentVideoId: String? = videoId
@@ -391,7 +369,6 @@ class PlayerRuntimeController(
     init {
         playbackIdleGateState.onPlayerSessionStarted()
         refreshScrobbleItem()
-        mediaSourceFactory.warmupVodCacheAsync()
         if (!navigationArgs.startFromBeginning) {
             loadSavedProgressFor(currentSeason, currentEpisode)
         }
@@ -410,10 +387,6 @@ class PlayerRuntimeController(
         endDisplayModeSessionForExit()
         releasePlayer()
         vodTelemetryJob?.cancel()
-        // WP3 — close the playback-trace MediaSourceSession (emits
-        // playback_session_ended + tracer_overflow_summary and flushes the
-        // JSONL writer) before the factory shuts down.
-        mediaSourceFactory.endPlaybackTraceSession()
         mediaSourceFactory.shutdown()
         sourceChipErrorDismissJob?.cancel()
     }

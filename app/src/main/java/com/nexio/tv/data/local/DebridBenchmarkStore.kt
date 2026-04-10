@@ -132,7 +132,7 @@ class DebridBenchmarkStore internal constructor(
                 if (sk.seekFailRate == null) checks += "seek.failRate=null"
             }
             profile.configSnapshot?.let { cs ->
-                if (cs.useParallelConnections == null) checks += "config.useParallel=null"
+                cs.chunkWaitTimeoutMs?.let { if (it <= 0L) checks += "config.chunkWaitTimeoutMs=$it" }
             }
             profile.rawSamples.throughputBuckets.forEachIndexed { i, b ->
                 if (!b.throughputMbps.isFinite() || b.throughputMbps < 0.0) {
@@ -405,9 +405,7 @@ class DebridBenchmarkStore internal constructor(
     }
 
     private fun DebridBenchmarkTransportConfigSnapshot.isValid(): Boolean {
-        return useParallelConnections != null &&
-            parallelConnectionCount?.let { it > 0 } != false &&
-            parallelChunkSizeMb?.let { it > 0 } != false
+        return chunkWaitTimeoutMs?.let { it > 0L } != false
     }
 
     private fun DebridBenchmarkTransportDecisionMetrics.isValid(): Boolean {
@@ -723,9 +721,7 @@ class DebridBenchmarkStore internal constructor(
             },
             configSnapshot = profileJson.optionalObject("configSnapshot")?.let { configJson ->
                 DebridBenchmarkTransportConfigSnapshot(
-                    useParallelConnections = configJson.optionalStrictBooleanOrNull("useParallelConnections"),
-                    parallelConnectionCount = configJson.optionalStrictIntegralIntOrNull("parallelConnectionCount"),
-                    parallelChunkSizeMb = configJson.optionalStrictIntegralIntOrNull("parallelChunkSizeMb")
+                    chunkWaitTimeoutMs = configJson.optionalStrictIntegralLongOrNull("chunkWaitTimeoutMs")
                 )
             },
             rawSamples = DebridBenchmarkRawSamples(

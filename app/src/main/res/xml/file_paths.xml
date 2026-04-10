@@ -6,7 +6,4 @@
     <external-cache-path
         name="external_cache"
         path="." />
-    <files-path
-        name="playback-traces"
-        path="playback-traces/" />
 </paths>

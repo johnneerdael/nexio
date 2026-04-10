@@ -78,11 +78,6 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkSummary
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
 import com.nexio.tv.data.repository.benchmark.CollectorPublicDashboardLinkProvider
 import com.nexio.tv.data.repository.benchmark.CollectorPublicDashboardLinkResult
-import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkProfileResult
-import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkResult
-import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkRuntimeState
-import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkService
-import com.nexio.tv.data.repository.benchmark.DebridConfigBenchmarkStatus
 import com.nexio.tv.core.qr.QrCodeGenerator
 import com.nexio.tv.data.repository.benchmark.safeSustainedBudgetMbps
 import com.nexio.tv.data.repository.benchmark.playbackStability
@@ -120,15 +115,11 @@ internal data class DebridUiState(
     val realDebridUserCode: String? = null,
     val realDebridVerificationUrl: String? = null,
     val realDebridBenchmark: DebridProviderBenchmarkUi = DebridProviderBenchmarkUi(),
-    val realDebridConfigBenchmark: DebridProviderConfigBenchmarkUi = DebridProviderConfigBenchmarkUi(),
     val premiumizeConnected: Boolean = false,
     val premiumizeCustomerId: Int? = null,
     val premiumizeBenchmark: DebridProviderBenchmarkUi = DebridProviderBenchmarkUi(),
-    val premiumizeConfigBenchmark: DebridProviderConfigBenchmarkUi = DebridProviderConfigBenchmarkUi(),
     val torBoxBenchmark: DebridProviderBenchmarkUi = DebridProviderBenchmarkUi(),
-    val torBoxConfigBenchmark: DebridProviderConfigBenchmarkUi = DebridProviderConfigBenchmarkUi(),
     val easyDebridBenchmark: DebridProviderBenchmarkUi = DebridProviderBenchmarkUi(),
-    val easyDebridConfigBenchmark: DebridProviderConfigBenchmarkUi = DebridProviderConfigBenchmarkUi(),
     val serviceWrapEnabled: Boolean = false,
     val serviceWrapAvailable: Boolean = false,
     val shadowAutoplayDataCollectionEnabled: Boolean = false,
@@ -139,34 +130,12 @@ internal data class DebridUiState(
     val deterministicAutoplayEnabled: Boolean = false,
     val deterministicAutoplayAvailable: Boolean = false,
     val benchmarkResultDialog: DebridBenchmarkResultDialogUi? = null,
-    val configBenchmarkResultDialog: DebridConfigBenchmarkResultDialogUi? = null,
     val torBoxConnected: Boolean = false,
     val torBoxEmail: String? = null,
     val torBoxPlan: String? = null,
     val easyDebridConnected: Boolean = false,
     val easyDebridUserId: String? = null,
     val easyDebridPaidUntil: String? = null,
-    // WP2 — playback diagnostics trace (gated by PLAYBACK_TRACE_UI_ENABLED)
-    val playbackTraceEnabled: Boolean = false,
-    val playbackTraceAdbControlEnabled: Boolean = false,
-    val playbackTraceStatus: com.nexio.tv.instrumentation.TraceStatus =
-        com.nexio.tv.instrumentation.TraceStatus.EMPTY,
-    val lastTraceSummary: TraceFileSummary? = null,
-    val diagnosticsUploadInProgress: Boolean = false,
-    val diagnosticsUploadResult: com.nexio.tv.data.repository.benchmark.DiagnosticsUploadResult? = null,
-)
-
-/**
- * WP2 — small read-only summary of the most recent playback trace file shown
- * under the debrid diagnostics section. Lifetime-tied to a single `sessionId`
- * so the UI can render "Last session: <sid> · <size> · <event count>" after
- * the writer thread finalizes the JSONL.
- */
-internal data class TraceFileSummary(
-    val sessionId: String,
-    val path: String,
-    val sizeBytes: Long,
-    val eventCount: Int
 )
 
 internal data class DebridProviderBenchmarkUi(
@@ -180,26 +149,6 @@ internal data class DebridProviderBenchmarkUi(
 
 internal data class DebridBenchmarkResultDialogUi(
     val result: DebridBenchmarkResult
-)
-
-internal data class DebridProviderConfigBenchmarkUi(
-    val isVisible: Boolean = false,
-    val canRun: Boolean = false,
-    val isRunning: Boolean = false,
-    val blockedByActiveRun: Boolean = false,
-    val latestResult: DebridConfigBenchmarkResult? = null,
-    val activeProfileLabel: String? = null,
-    val activeSummary: DebridBenchmarkSummary? = null
-)
-
-internal data class DebridConfigBenchmarkChunkGroupUi(
-    val chunkSizeMb: Int,
-    val rows: List<DebridConfigBenchmarkProfileResult>
-)
-
-internal data class DebridConfigBenchmarkResultDialogUi(
-    val result: DebridConfigBenchmarkResult,
-    val chunkGroups: List<DebridConfigBenchmarkChunkGroupUi>
 )
 
 private data class DebridConnectionSnapshot(
@@ -225,17 +174,8 @@ private data class DebridBenchmarkSnapshot(
     val activeState: DebridBenchmarkRuntimeState
 )
 
-private data class DebridConfigBenchmarkSnapshot(
-    val latestRealDebridResult: DebridConfigBenchmarkResult?,
-    val latestPremiumizeResult: DebridConfigBenchmarkResult?,
-    val latestTorBoxResult: DebridConfigBenchmarkResult?,
-    val latestEasyDebridResult: DebridConfigBenchmarkResult?,
-    val activeState: DebridConfigBenchmarkRuntimeState
-)
-
 private data class DebridDialogSnapshot(
-    val benchmarkResultDialog: DebridBenchmarkResultDialogUi?,
-    val configBenchmarkResultDialog: DebridConfigBenchmarkResultDialogUi?
+    val benchmarkResultDialog: DebridBenchmarkResultDialogUi?
 )
 
 private data class DebridCollectorDashboardSnapshot(
@@ -254,8 +194,7 @@ private data class DebridSettingsToggleSnapshot(
 
 private data class DebridUiBaseSnapshot(
     val connection: DebridConnectionSnapshot,
-    val benchmark: DebridBenchmarkSnapshot,
-    val configBenchmark: DebridConfigBenchmarkSnapshot
+    val benchmark: DebridBenchmarkSnapshot
 )
 
 @Composable
@@ -478,31 +417,6 @@ internal fun DebridSettingsContent(
                     }
                 }
 
-                if (uiState.torBoxConfigBenchmark.isVisible) {
-                    val latestTorBoxConfigResult = uiState.torBoxConfigBenchmark.latestResult
-                    item(key = "debrid_tb_config_benchmark") {
-                        DebridConfigBenchmarkRow(
-                            provider = DebridBenchmarkProvider.TORBOX,
-                            benchmark = uiState.torBoxConfigBenchmark,
-                            onStart = { viewModel.startConfigBenchmark(DebridBenchmarkProvider.TORBOX) },
-                            onCancel = { viewModel.cancelConfigBenchmark() }
-                        )
-                    }
-                    if (latestTorBoxConfigResult != null) {
-                        item(key = "debrid_tb_config_benchmark_result") {
-                            DebridConfigBenchmarkResultRow(
-                                provider = DebridBenchmarkProvider.TORBOX,
-                                result = latestTorBoxConfigResult,
-                                onOpen = {
-                                    viewModel.openLatestConfigBenchmarkResult(
-                                        DebridBenchmarkProvider.TORBOX
-                                    )
-                                }
-                            )
-                        }
-                    }
-                }
-
                 item(key = "debrid_ed") {
                     SettingsActionRow(
                         title = stringResource(R.string.debrid_easydebrid_title),
@@ -542,30 +456,6 @@ internal fun DebridSettingsContent(
                     }
                 }
 
-                if (uiState.easyDebridConfigBenchmark.isVisible) {
-                    val latestEasyDebridConfigResult = uiState.easyDebridConfigBenchmark.latestResult
-                    item(key = "debrid_ed_config_benchmark") {
-                        DebridConfigBenchmarkRow(
-                            provider = DebridBenchmarkProvider.EASY_DEBRID,
-                            benchmark = uiState.easyDebridConfigBenchmark,
-                            onStart = { viewModel.startConfigBenchmark(DebridBenchmarkProvider.EASY_DEBRID) },
-                            onCancel = { viewModel.cancelConfigBenchmark() }
-                        )
-                    }
-                    if (latestEasyDebridConfigResult != null) {
-                        item(key = "debrid_ed_config_benchmark_result") {
-                            DebridConfigBenchmarkResultRow(
-                                provider = DebridBenchmarkProvider.EASY_DEBRID,
-                                result = latestEasyDebridConfigResult,
-                                onOpen = {
-                                    viewModel.openLatestConfigBenchmarkResult(
-                                        DebridBenchmarkProvider.EASY_DEBRID
-                                    )
-                                }
-                            )
-                        }
-                    }
-                }
             }
         }
     }
@@ -621,13 +511,6 @@ internal fun DebridSettingsContent(
             onDismiss = viewModel::dismissBenchmarkResultDialog
         )
     }
-    uiState.configBenchmarkResultDialog?.let { dialog ->
-        DebridConfigBenchmarkResultDialog(
-            dialog = dialog,
-            onDismiss = viewModel::dismissConfigBenchmarkResultDialog
-        )
-    }
-
     if (showRealDebridActivationQr) {
         RealDebridActivationQrDialog(
             url = uiState.realDebridVerificationUrl,
@@ -911,39 +794,6 @@ private fun DebridBenchmarkRow(
 }
 
 @Composable
-private fun DebridConfigBenchmarkRow(
-    provider: DebridBenchmarkProvider,
-    benchmark: DebridProviderConfigBenchmarkUi,
-    onStart: () -> Unit,
-    onCancel: () -> Unit
-) {
-    SettingsActionRow(
-        title = when (provider) {
-            DebridBenchmarkProvider.REAL_DEBRID -> stringResource(R.string.debrid_real_debrid_config_benchmark_title)
-            DebridBenchmarkProvider.PREMIUMIZE -> stringResource(R.string.debrid_premiumize_config_benchmark_title)
-            DebridBenchmarkProvider.TORBOX -> "TorBox Config Benchmark"
-            DebridBenchmarkProvider.EASY_DEBRID -> "EasyDebrid Config Benchmark"
-        },
-        subtitle = configBenchmarkRowSubtitle(benchmark),
-        value = stringResource(
-            if (benchmark.isRunning) {
-                R.string.debrid_benchmark_cancel_action
-            } else {
-                R.string.debrid_config_benchmark_run_action
-            }
-        ),
-        enabled = benchmark.isRunning || benchmark.canRun,
-        onClick = {
-            if (benchmark.isRunning) {
-                onCancel()
-            } else {
-                onStart()
-            }
-        }
-    )
-}
-
-@Composable
 private fun DebridBenchmarkResultRow(
     provider: DebridBenchmarkProvider,
     result: DebridBenchmarkResult,
@@ -961,29 +811,6 @@ private fun DebridBenchmarkResultRow(
                 "EasyDebrid Benchmark Result"
         },
         subtitle = formatLatestBenchmarkSummary(result),
-        value = stringResource(R.string.debrid_benchmark_view_action),
-        onClick = onOpen
-    )
-}
-
-@Composable
-private fun DebridConfigBenchmarkResultRow(
-    provider: DebridBenchmarkProvider,
-    result: DebridConfigBenchmarkResult,
-    onOpen: () -> Unit
-) {
-    SettingsActionRow(
-        title = when (provider) {
-            DebridBenchmarkProvider.REAL_DEBRID ->
-                stringResource(R.string.debrid_real_debrid_config_benchmark_result_title)
-            DebridBenchmarkProvider.PREMIUMIZE ->
-                stringResource(R.string.debrid_premiumize_config_benchmark_result_title)
-            DebridBenchmarkProvider.TORBOX ->
-                "TorBox Config Benchmark Result"
-            DebridBenchmarkProvider.EASY_DEBRID ->
-                "EasyDebrid Config Benchmark Result"
-        },
-        subtitle = formatLatestConfigBenchmarkSummary(result),
         value = stringResource(R.string.debrid_benchmark_view_action),
         onClick = onOpen
     )
@@ -1099,117 +926,6 @@ private fun DebridBenchmarkResultDialog(
             ) {
                 Text(stringResource(R.string.action_close))
             }
-        }
-    }
-}
-
-@Composable
-private fun DebridConfigBenchmarkResultDialog(
-    dialog: DebridConfigBenchmarkResultDialogUi,
-    onDismiss: () -> Unit
-) {
-    val result = dialog.result
-    val providerName = stringResource(
-        when (result.provider) {
-            DebridBenchmarkProvider.REAL_DEBRID -> R.string.debrid_real_debrid_title
-            DebridBenchmarkProvider.PREMIUMIZE -> R.string.debrid_premiumize_title
-            DebridBenchmarkProvider.TORBOX -> R.string.debrid_torbox_title
-            DebridBenchmarkProvider.EASY_DEBRID -> R.string.debrid_easydebrid_title
-        }
-    )
-    NexioDialog(
-        onDismiss = onDismiss,
-        title = stringResource(R.string.debrid_config_benchmark_results_title, providerName),
-        subtitle = null,
-        width = 1360.dp
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 620.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(18.dp)
-            ) {
-                DebridBenchmarkHeaderMetric(
-                    modifier = Modifier.fillMaxWidth(),
-                    label = stringResource(R.string.debrid_benchmark_label_measured_at),
-                    value = formatBenchmarkMeasuredAt(result.measuredAtMs)
-                )
-                DebridBenchmarkCompactMetricRow(
-                    label = stringResource(R.string.debrid_config_benchmark_best_profile_label),
-                    value = formatConfigBenchmarkBestProfile(result)
-                )
-                dialog.chunkGroups.chunked(2).forEach { rowGroups ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(18.dp)
-                    ) {
-                        rowGroups.forEach { group ->
-                            DebridConfigBenchmarkChunkCard(
-                                modifier = Modifier.weight(1f),
-                                group = group
-                            )
-                        }
-                        if (rowGroups.size == 1) {
-                            Spacer(modifier = Modifier.weight(1f))
-                        }
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 18.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Button(
-                    onClick = onDismiss,
-                    colors = ButtonDefaults.colors(
-                        containerColor = NexioColors.BackgroundCard,
-                        contentColor = NexioColors.TextPrimary
-                    )
-                ) {
-                    Text(stringResource(R.string.action_close))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DebridConfigBenchmarkChunkCard(
-    modifier: Modifier,
-    group: DebridConfigBenchmarkChunkGroupUi
-) {
-    Column(
-        modifier = modifier
-            .background(
-                color = NexioColors.BackgroundCard,
-                shape = RoundedCornerShape(14.dp)
-            )
-            .border(
-                width = 1.dp,
-                color = NexioColors.Border,
-                shape = RoundedCornerShape(14.dp)
-            )
-            .padding(horizontal = 18.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.debrid_config_benchmark_chunk_group_title, group.chunkSizeMb),
-            style = MaterialTheme.typography.titleSmall,
-            color = NexioColors.TextPrimary
-        )
-        group.rows.sortedBy { it.parallelConnectionCount }.forEach { row ->
-            DebridBenchmarkCompactMetricRow(
-                label = stringResource(
-                    R.string.debrid_config_benchmark_profile_label,
-                    row.parallelConnectionCount
-                ),
-                value = formatConfigBenchmarkProfileValue(row)
-            )
         }
     }
 }
@@ -1398,19 +1114,6 @@ private fun benchmarkRowSubtitle(benchmark: DebridProviderBenchmarkUi): String {
     }
 }
 
-@Composable
-private fun configBenchmarkRowSubtitle(benchmark: DebridProviderConfigBenchmarkUi): String {
-    return when {
-        benchmark.isRunning -> formatRunningConfigBenchmarkSummary(
-            profileLabel = benchmark.activeProfileLabel,
-            summary = benchmark.activeSummary
-        )
-        benchmark.latestResult != null -> formatLatestConfigBenchmarkSummary(benchmark.latestResult)
-        benchmark.blockedByActiveRun -> stringResource(R.string.debrid_benchmark_busy)
-        else -> stringResource(R.string.debrid_config_benchmark_description)
-    }
-}
-
 private fun formatRunningBenchmarkSummary(summary: DebridBenchmarkSummary?): String {
     if (summary == null) {
         return "Measuring"
@@ -1430,52 +1133,6 @@ private fun formatLatestBenchmarkSummary(result: DebridBenchmarkResult): String 
     val throughput = result.summary.sustainedThroughputMbps?.let { formatBenchmarkThroughput(it) }
     val startup = result.summary.startupTimeMs?.let { formatBenchmarkStartup(it) }
     return listOfNotNull("Latest", safeBudget, throughput?.plus(" sustained"), startup).joinToString(" | ")
-}
-
-private fun formatLatestConfigBenchmarkSummary(result: DebridConfigBenchmarkResult): String {
-    val bestProfile = result.summary.bestProfile ?: return "Latest | No successful profile"
-    val throughput = bestProfile.averageThroughputMbps?.let(::formatBenchmarkThroughput) ?: "Unknown"
-    return "Latest | ${bestProfile.parallelConnectionCount}x / ${bestProfile.chunkSizeMb} MB | $throughput"
-}
-
-private fun formatRunningConfigBenchmarkSummary(
-    profileLabel: String?,
-    summary: DebridBenchmarkSummary?
-): String {
-    val prefix = profileLabel ?: "Testing profile"
-    if (summary == null) {
-        return prefix
-    }
-    val elapsed = formatBenchmarkElapsed(summary.elapsedMs)
-    val throughput = summary.sustainedThroughputMbps?.let(::formatBenchmarkThroughput)
-    return listOfNotNull(prefix, elapsed, throughput).joinToString(" | ")
-}
-
-private fun formatConfigBenchmarkBestProfile(result: DebridConfigBenchmarkResult): String {
-    val bestProfile = result.summary.bestProfile ?: return "No successful profile"
-    val throughput = bestProfile.averageThroughputMbps?.let(::formatBenchmarkThroughput) ?: "Unknown"
-    return "${bestProfile.parallelConnectionCount}x / ${bestProfile.chunkSizeMb} MB | $throughput"
-}
-
-private fun formatConfigBenchmarkProfileValue(
-    result: DebridConfigBenchmarkProfileResult
-): String {
-    return when (result.status) {
-        DebridConfigBenchmarkStatus.SUCCESS ->
-            result.averageThroughputMbps?.let(::formatBenchmarkThroughput) ?: "Unknown"
-        DebridConfigBenchmarkStatus.FAILED ->
-            truncateConfigBenchmarkFailureReason(result.failureReason ?: "Failed")
-        DebridConfigBenchmarkStatus.UNSUPPORTED ->
-            truncateConfigBenchmarkFailureReason(result.unsupportedReason ?: "Unsupported")
-    }
-}
-
-private fun truncateConfigBenchmarkFailureReason(value: String, maxLength: Int = 32): String {
-    return if (value.length <= maxLength) {
-        value
-    } else {
-        value.take(maxLength - 1).trimEnd() + "…"
-    }
 }
 
 private fun formatBenchmarkThroughput(mbps: Double): String {
@@ -1557,15 +1214,8 @@ private fun formatBenchmarkMeasuredAt(measuredAtMs: Long): String {
 private fun formatBenchmarkConfigSnapshot(
     snapshot: com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportConfigSnapshot
 ): String {
-    return if (snapshot.useParallelConnections == false) {
-        stringResource(R.string.debrid_benchmark_config_parallel_off)
-    } else {
-        stringResource(
-            R.string.debrid_benchmark_config_snapshot,
-            snapshot.parallelConnectionCount ?: 0,
-            snapshot.parallelChunkSizeMb ?: 0
-        )
-    }
+    return snapshot.chunkWaitTimeoutMs?.let { "${it} ms wait" }
+        ?: stringResource(R.string.debrid_benchmark_config_parallel_off)
 }
 
 private fun formatBenchmarkElapsed(elapsedMs: Long): String {
@@ -1600,111 +1250,11 @@ internal class DebridSettingsViewModel @Inject internal constructor(
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val collectorPublicDashboardLinkProvider: CollectorPublicDashboardLinkProvider,
     private val debridBenchmarkService: DebridBenchmarkService,
-    private val debridConfigBenchmarkService: DebridConfigBenchmarkService,
-    private val playbackTraceToggle: com.nexio.tv.instrumentation.PlaybackTraceToggle,
-    private val playbackTraceController: com.nexio.tv.instrumentation.PlaybackTraceController,
-    private val playbackTraceAdbControlToggle:
-        com.nexio.tv.instrumentation.PlaybackTraceAdbControlToggle,
-    private val playbackDiagnosticsUploader: com.nexio.tv.data.repository.benchmark.PlaybackDiagnosticsUploader,
 ) : ViewModel() {
-
-    // Playback diagnostics trace plumbing. The composable section in
-    // DebridSettingsContent collects [uiState] for status, then calls these
-    // action methods which delegate to [PlaybackTraceController]. The
-    // controller is the single source of truth shared with the optional
-    // ADB receiver.
-    internal val playbackTraceEnabled: kotlinx.coroutines.flow.Flow<Boolean> =
-        playbackTraceController.enabledFlow
-
-    internal fun setPlaybackTraceEnabled(value: Boolean) {
-        // Use setEnabledAsync (controller-scoped) instead of viewModelScope so
-        // navigating away before the DataStore write dispatches cannot cancel it.
-        playbackTraceController.setEnabledAsync(value)
-    }
-
-    internal fun setPlaybackTraceAdbControlEnabled(value: Boolean) {
-        viewModelScope.launch {
-            playbackTraceAdbControlToggle.setEnabled(value)
-        }
-    }
-
-    /**
-     * Build the share intent for the latest session and pass it back to the
-     * Composable so it can call `context.startActivity`. Activity dispatch
-     * lives in the UI layer, not the ViewModel.
-     */
-    internal fun exportLastSession(launchIntent: (android.content.Intent) -> Unit) {
-        viewModelScope.launch {
-            val intent = playbackTraceController.exportLast() ?: return@launch
-            launchIntent(intent)
-        }
-    }
-
-    /**
-     * Write the latest session bytes into the SAF-picked Uri. Caller is the
-     * Composable's ActivityResult callback for `ACTION_CREATE_DOCUMENT`.
-     */
-    internal fun copyLastTraceToDownloads(target: android.net.Uri) {
-        viewModelScope.launch {
-            playbackTraceController.copyLastToDestination(target)
-            playbackTraceController.refreshStatus()
-        }
-    }
-
-    internal fun copyAllTracesZipToDestination(target: android.net.Uri) {
-        viewModelScope.launch {
-            val bytes = playbackTraceController.copyAllToDestination(target)
-            playbackTraceController.refreshStatus()
-            if (bytes > 0L) {
-                messages.tryEmit("Saved diagnostics zip (${bytes / 1024L} KiB)")
-            } else {
-                messages.tryEmit("No playback traces to export")
-            }
-        }
-    }
-
-    internal fun copyAllTracesZipToDownloads() {
-        viewModelScope.launch {
-            if (playbackTraceController.listTraces().isEmpty()) {
-                playbackTraceController.refreshStatus()
-                messages.tryEmit(appContext.getString(R.string.playback_diagnostics_export_all_downloads_empty))
-                return@launch
-            }
-            val adbPath = playbackTraceController.copyAllToDownloads()
-            playbackTraceController.refreshStatus()
-            if (adbPath != null) {
-                messages.tryEmit(appContext.getString(R.string.playback_diagnostics_export_all_downloads_success))
-            } else {
-                messages.tryEmit(appContext.getString(R.string.playback_diagnostics_export_all_downloads_failure))
-            }
-        }
-    }
-
-    internal fun clearAllTraces() {
-        viewModelScope.launch {
-            playbackTraceController.clearAll()
-        }
-    }
-
-    internal fun uploadLastSessionToDeveloper() {
-        if (_uiState.value.diagnosticsUploadInProgress) return
-        viewModelScope.launch {
-            _uiState.update {
-                it.copy(diagnosticsUploadInProgress = true, diagnosticsUploadResult = null)
-            }
-            val result = playbackDiagnosticsUploader.uploadLastSession()
-            _uiState.update {
-                it.copy(diagnosticsUploadInProgress = false, diagnosticsUploadResult = result)
-            }
-            kotlinx.coroutines.delay(4_000)
-            _uiState.update { it.copy(diagnosticsUploadResult = null) }
-        }
-    }
 
     private var rdPollingJob: Job? = null
     private val _uiState = MutableStateFlow(DebridUiState())
     private val benchmarkResultDialog = MutableStateFlow<DebridBenchmarkResultDialogUi?>(null)
-    private val configBenchmarkResultDialog = MutableStateFlow<DebridConfigBenchmarkResultDialogUi?>(null)
     private val collectorDashboardLink = MutableStateFlow<CollectorPublicDashboardLinkResult>(
         CollectorPublicDashboardLinkResult.Unavailable(
             CollectorPublicDashboardLinkResult.Reason.BASE_URL_MISSING
@@ -1720,37 +1270,6 @@ internal class DebridSettingsViewModel @Inject internal constructor(
     internal val easyDebridApiKey = easyDebridSettingsDataStore.settings.map { it.apiKey }
 
     init {
-        // Playback diagnostics trace — refresh the on-disk status snapshot
-        // every time the master toggle flips, plus once at startup so the
-        // section shows accurate data on first open. The status flow is a
-        // StateFlow on the controller; the toggle flow is the canonical
-        // source of `enabled`.
-        _uiState.update {
-            it.copy(playbackTraceEnabled = com.nexio.tv.instrumentation.PlaybackTracer.enabled)
-        }
-        viewModelScope.launch {
-            playbackTraceController.refreshStatus()
-            playbackTraceController.statusFlow.collect { status ->
-                _uiState.update {
-                    it.copy(
-                        playbackTraceStatus = status,
-                        playbackTraceEnabled = status.enabled
-                    )
-                }
-            }
-        }
-        viewModelScope.launch {
-            playbackTraceController.enabledFlow.collect { enabled ->
-                _uiState.update { it.copy(playbackTraceEnabled = enabled) }
-                playbackTraceController.refreshStatus()
-            }
-        }
-        viewModelScope.launch {
-            playbackTraceAdbControlToggle.enabledFlow.collect { adbEnabled ->
-                _uiState.update { it.copy(playbackTraceAdbControlEnabled = adbEnabled) }
-            }
-        }
-
         val connectionState = combine(
             realDebridAuthDataStore.state,
             premiumizeService.observeAccountState(),
@@ -1821,29 +1340,9 @@ internal class DebridSettingsViewModel @Inject internal constructor(
                 ) && serviceWrapEnabled
         }
 
-        val configBenchmarkState = combine(
-            debridConfigBenchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID),
-            debridConfigBenchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE),
-            debridConfigBenchmarkService.latestResult(DebridBenchmarkProvider.TORBOX),
-            debridConfigBenchmarkService.latestResult(DebridBenchmarkProvider.EASY_DEBRID),
-            debridConfigBenchmarkService.activeState
-        ) { latestRealDebridResult, latestPremiumizeResult, latestTorBoxResult, latestEasyDebridResult, activeState ->
-            DebridConfigBenchmarkSnapshot(
-                latestRealDebridResult = latestRealDebridResult,
-                latestPremiumizeResult = latestPremiumizeResult,
-                latestTorBoxResult = latestTorBoxResult,
-                latestEasyDebridResult = latestEasyDebridResult,
-                activeState = activeState
-            )
-        }
-
-        val dialogState = combine(
-            benchmarkResultDialog,
-            configBenchmarkResultDialog
-        ) { benchmarkDialog, configDialog ->
+        val dialogState = benchmarkResultDialog.map { benchmarkDialog ->
             DebridDialogSnapshot(
-                benchmarkResultDialog = benchmarkDialog,
-                configBenchmarkResultDialog = configDialog
+                benchmarkResultDialog = benchmarkDialog
             )
         }
 
@@ -1868,12 +1367,9 @@ internal class DebridSettingsViewModel @Inject internal constructor(
                 connectionState,
                 benchmarkState
             ) { connection, benchmark ->
-                connection to benchmark
-            }.combine(configBenchmarkState) { (connection, benchmark), configBenchmark ->
                 DebridUiBaseSnapshot(
                     connection = connection,
-                    benchmark = benchmark,
-                    configBenchmark = configBenchmark
+                    benchmark = benchmark
                 )
             }
 
@@ -1908,15 +1404,7 @@ internal class DebridSettingsViewModel @Inject internal constructor(
                         provider = DebridBenchmarkProvider.REAL_DEBRID,
                         isVisible = base.connection.realDebridMode == DebridConnectionMode.CONNECTED,
                         latestResult = base.benchmark.latestRealDebridResult,
-                        activeState = base.benchmark.activeState,
-                        configBenchmarkActive = base.configBenchmark.activeState
-                    ),
-                    realDebridConfigBenchmark = buildConfigBenchmarkUi(
-                        provider = DebridBenchmarkProvider.REAL_DEBRID,
-                        isVisible = base.connection.realDebridMode == DebridConnectionMode.CONNECTED,
-                        latestResult = base.configBenchmark.latestRealDebridResult,
-                        activeState = base.configBenchmark.activeState,
-                        benchmarkActive = base.benchmark.activeState
+                        activeState = base.benchmark.activeState
                     ),
                     premiumizeConnected = base.connection.premiumizeConnected,
                     premiumizeCustomerId = base.connection.premiumizeCustomerId,
@@ -1924,43 +1412,19 @@ internal class DebridSettingsViewModel @Inject internal constructor(
                         provider = DebridBenchmarkProvider.PREMIUMIZE,
                         isVisible = base.connection.premiumizeConnected,
                         latestResult = base.benchmark.latestPremiumizeResult,
-                        activeState = base.benchmark.activeState,
-                        configBenchmarkActive = base.configBenchmark.activeState
-                    ),
-                    premiumizeConfigBenchmark = buildConfigBenchmarkUi(
-                        provider = DebridBenchmarkProvider.PREMIUMIZE,
-                        isVisible = base.connection.premiumizeConnected,
-                        latestResult = base.configBenchmark.latestPremiumizeResult,
-                        activeState = base.configBenchmark.activeState,
-                        benchmarkActive = base.benchmark.activeState
+                        activeState = base.benchmark.activeState
                     ),
                     torBoxBenchmark = buildDebridBenchmarkUi(
                         provider = DebridBenchmarkProvider.TORBOX,
                         isVisible = base.connection.torBoxConnected,
                         latestResult = base.benchmark.latestTorBoxResult,
-                        activeState = base.benchmark.activeState,
-                        configBenchmarkActive = base.configBenchmark.activeState
-                    ),
-                    torBoxConfigBenchmark = buildConfigBenchmarkUi(
-                        provider = DebridBenchmarkProvider.TORBOX,
-                        isVisible = base.connection.torBoxConnected,
-                        latestResult = base.configBenchmark.latestTorBoxResult,
-                        activeState = base.configBenchmark.activeState,
-                        benchmarkActive = base.benchmark.activeState
+                        activeState = base.benchmark.activeState
                     ),
                     easyDebridBenchmark = buildDebridBenchmarkUi(
                         provider = DebridBenchmarkProvider.EASY_DEBRID,
                         isVisible = base.connection.easyDebridConnected,
                         latestResult = base.benchmark.latestEasyDebridResult,
-                        activeState = base.benchmark.activeState,
-                        configBenchmarkActive = base.configBenchmark.activeState
-                    ),
-                    easyDebridConfigBenchmark = buildConfigBenchmarkUi(
-                        provider = DebridBenchmarkProvider.EASY_DEBRID,
-                        isVisible = base.connection.easyDebridConnected,
-                        latestResult = base.configBenchmark.latestEasyDebridResult,
-                        activeState = base.configBenchmark.activeState,
-                        benchmarkActive = base.benchmark.activeState
+                        activeState = base.benchmark.activeState
                     ),
                     serviceWrapEnabled = settings.serviceWrapEnabled,
                     serviceWrapAvailable = base.connection.realDebridMode == DebridConnectionMode.CONNECTED ||
@@ -1975,7 +1439,6 @@ internal class DebridSettingsViewModel @Inject internal constructor(
                     deterministicAutoplayEnabled = settings.deterministicAutoplayEnabled,
                     deterministicAutoplayAvailable = settings.deterministicAutoplayAvailable,
                     benchmarkResultDialog = dialogs.benchmarkResultDialog,
-                    configBenchmarkResultDialog = dialogs.configBenchmarkResultDialog,
                     torBoxConnected = base.connection.torBoxConnected,
                     torBoxEmail = base.connection.torBoxEmail,
                     torBoxPlan = base.connection.torBoxPlan,
@@ -1984,16 +1447,7 @@ internal class DebridSettingsViewModel @Inject internal constructor(
                     easyDebridPaidUntil = base.connection.easyDebridPaidUntil
                 )
             }.collect { next ->
-                _uiState.update { current ->
-                    next.copy(
-                        playbackTraceEnabled = current.playbackTraceEnabled,
-                        playbackTraceAdbControlEnabled = current.playbackTraceAdbControlEnabled,
-                        playbackTraceStatus = current.playbackTraceStatus,
-                        lastTraceSummary = current.lastTraceSummary,
-                        diagnosticsUploadInProgress = current.diagnosticsUploadInProgress,
-                        diagnosticsUploadResult = current.diagnosticsUploadResult,
-                    )
-                }
+                _uiState.value = next
             }
         }
 
@@ -2065,39 +1519,6 @@ internal class DebridSettingsViewModel @Inject internal constructor(
                 }
         }
 
-        viewModelScope.launch {
-            debridConfigBenchmarkService.outcomes.collect { outcome ->
-                when (outcome.terminationReason) {
-                    DebridBenchmarkTerminationReason.COMPLETED -> {
-                        outcome.result?.let { result ->
-                            setConfigBenchmarkResultDialog(
-                                DebridConfigBenchmarkResultDialogUi(
-                                    result = result,
-                                    chunkGroups = result.profiles
-                                        .groupBy { it.chunkSizeMb }
-                                        .toSortedMap()
-                                        .map { (chunkSizeMb, rows) ->
-                                            DebridConfigBenchmarkChunkGroupUi(chunkSizeMb, rows)
-                                        }
-                                )
-                            )
-                        }
-                    }
-                    DebridBenchmarkTerminationReason.NO_LARGE_DOWNLOAD ->
-                        messages.tryEmit(
-                            "No large ${outcome.provider.displayName()} download found for config benchmarking"
-                        )
-                    DebridBenchmarkTerminationReason.NO_PLAYABLE_LIBRARY_ITEM ->
-                        messages.tryEmit(
-                            "No playable ${outcome.provider.displayName()} library item available for config benchmarking"
-                        )
-                    DebridBenchmarkTerminationReason.CANCELED ->
-                        messages.tryEmit("${outcome.provider.displayName()} config benchmark canceled")
-                    else ->
-                        messages.tryEmit("${outcome.provider.displayName()} config benchmark failed")
-                }
-            }
-        }
     }
 
     fun startRealDebrid() {
@@ -2183,28 +1604,6 @@ internal class DebridSettingsViewModel @Inject internal constructor(
         }
     }
 
-    fun startConfigBenchmark(provider: DebridBenchmarkProvider) {
-        viewModelScope.launch {
-            val providerUi = when (provider) {
-                DebridBenchmarkProvider.REAL_DEBRID -> uiState.value.realDebridConfigBenchmark
-                DebridBenchmarkProvider.PREMIUMIZE -> uiState.value.premiumizeConfigBenchmark
-                DebridBenchmarkProvider.TORBOX -> uiState.value.torBoxConfigBenchmark
-                DebridBenchmarkProvider.EASY_DEBRID -> uiState.value.easyDebridConfigBenchmark
-            }
-            if (!providerUi.canRun) return@launch
-            val started = debridConfigBenchmarkService.start(provider)
-            if (!started) {
-                messages.tryEmit("A provider benchmark is already running")
-            }
-        }
-    }
-
-    fun cancelConfigBenchmark() {
-        viewModelScope.launch {
-            debridConfigBenchmarkService.cancel()
-        }
-    }
-
     fun openLatestBenchmarkResult(provider: DebridBenchmarkProvider) {
         val latestResult = when (provider) {
             DebridBenchmarkProvider.REAL_DEBRID -> uiState.value.realDebridBenchmark.latestResult
@@ -2219,28 +1618,6 @@ internal class DebridSettingsViewModel @Inject internal constructor(
 
     fun dismissBenchmarkResultDialog() {
         setBenchmarkResultDialog(null)
-    }
-
-    fun openLatestConfigBenchmarkResult(provider: DebridBenchmarkProvider) {
-        val latestResult = when (provider) {
-            DebridBenchmarkProvider.REAL_DEBRID -> uiState.value.realDebridConfigBenchmark.latestResult
-            DebridBenchmarkProvider.PREMIUMIZE -> uiState.value.premiumizeConfigBenchmark.latestResult
-            DebridBenchmarkProvider.TORBOX -> uiState.value.torBoxConfigBenchmark.latestResult
-            DebridBenchmarkProvider.EASY_DEBRID -> uiState.value.easyDebridConfigBenchmark.latestResult
-        } ?: return
-        setConfigBenchmarkResultDialog(
-            DebridConfigBenchmarkResultDialogUi(
-                result = latestResult,
-                chunkGroups = latestResult.profiles
-                    .groupBy { it.chunkSizeMb }
-                    .toSortedMap()
-                    .map { (chunkSizeMb, rows) -> DebridConfigBenchmarkChunkGroupUi(chunkSizeMb, rows) }
-            )
-        )
-    }
-
-    fun dismissConfigBenchmarkResultDialog() {
-        setConfigBenchmarkResultDialog(null)
     }
 
     fun setDeterministicAutoplayEnabled(enabled: Boolean) {
@@ -2332,12 +1709,10 @@ internal class DebridSettingsViewModel @Inject internal constructor(
         isVisible: Boolean,
         latestResult: DebridBenchmarkResult?,
         activeState: DebridBenchmarkRuntimeState,
-        configBenchmarkActive: DebridConfigBenchmarkRuntimeState
     ): DebridProviderBenchmarkUi {
         val activeRun = activeState as? DebridBenchmarkRuntimeState.Running
         val isRunning = activeRun?.provider == provider
-        val configActiveRun = configBenchmarkActive as? DebridConfigBenchmarkRuntimeState.Running
-        val blockedByActiveRun = (activeRun != null && activeRun.provider != provider) || configActiveRun != null
+        val blockedByActiveRun = activeRun != null && activeRun.provider != provider
         return DebridProviderBenchmarkUi(
             isVisible = isVisible,
             canRun = isVisible && !isRunning && !blockedByActiveRun,
@@ -2345,31 +1720,6 @@ internal class DebridSettingsViewModel @Inject internal constructor(
             blockedByActiveRun = blockedByActiveRun,
             latestResult = latestResult,
             activeSummary = if (isRunning) activeRun.summary else null
-        )
-    }
-
-    private fun buildConfigBenchmarkUi(
-        provider: DebridBenchmarkProvider,
-        isVisible: Boolean,
-        latestResult: DebridConfigBenchmarkResult?,
-        activeState: DebridConfigBenchmarkRuntimeState,
-        benchmarkActive: DebridBenchmarkRuntimeState
-    ): DebridProviderConfigBenchmarkUi {
-        val activeRun = activeState as? DebridConfigBenchmarkRuntimeState.Running
-        val isRunning = activeRun?.provider == provider
-        val transportBenchmarkActive = benchmarkActive as? DebridBenchmarkRuntimeState.Running
-        val blockedByActiveRun =
-            (activeRun != null && activeRun.provider != provider) || transportBenchmarkActive != null
-        return DebridProviderConfigBenchmarkUi(
-            isVisible = isVisible,
-            canRun = isVisible && !isRunning && !blockedByActiveRun,
-            isRunning = isRunning,
-            blockedByActiveRun = blockedByActiveRun,
-            latestResult = latestResult,
-            activeProfileLabel = activeRun?.currentProfile?.let { profile ->
-                "Testing ${profile.parallelConnectionCount}x / ${profile.chunkSizeMb} MB (${activeRun.completedProfiles + 1} of ${activeRun.totalProfiles})"
-            },
-            activeSummary = activeRun?.summary
         )
     }
 
@@ -2385,10 +1735,5 @@ internal class DebridSettingsViewModel @Inject internal constructor(
     private fun setBenchmarkResultDialog(dialog: DebridBenchmarkResultDialogUi?) {
         benchmarkResultDialog.value = dialog
         _uiState.value = _uiState.value.copy(benchmarkResultDialog = dialog)
-    }
-
-    private fun setConfigBenchmarkResultDialog(dialog: DebridConfigBenchmarkResultDialogUi?) {
-        configBenchmarkResultDialog.value = dialog
-        _uiState.value = _uiState.value.copy(configBenchmarkResultDialog = dialog)
     }
 }

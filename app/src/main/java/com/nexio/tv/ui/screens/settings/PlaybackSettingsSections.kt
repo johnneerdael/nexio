@@ -56,16 +56,12 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import android.net.Uri
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
-import com.nexio.tv.data.repository.benchmark.DiagnosticsUploadResult
-import com.nexio.tv.instrumentation.TraceStatus
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.TrailerSettings
-import com.nexio.tv.data.local.VodCacheSizeMode
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 
@@ -74,7 +70,6 @@ private enum class PlaybackSection {
     STREAM_SELECTION,
     AUDIO,
     SUBTITLES,
-    BUFFER_NETWORK,
     LOGGING
 }
 
@@ -161,38 +156,18 @@ internal fun PlaybackSettingsSections(
     onSetSubtitleOutlineEnabled: (Boolean) -> Unit,
     onSetUseLibass: (Boolean) -> Unit,
     onSetLibassRenderType: (com.nexio.tv.data.local.LibassRenderType) -> Unit,
-    onSetUseParallelConnections: (Boolean) -> Unit,
-    onSetParallelConnectionCount: (Int) -> Unit,
-    onSetParallelChunkSizeMb: (Int) -> Unit,
-    onSetVodCacheSizeMode: (VodCacheSizeMode) -> Unit,
-    onSetVodCacheSizeMb: (Int) -> Unit,
-    onResetNetworkSettingsToDefaults: () -> Unit,
     // Troubleshooting — data collection
     shadowAutoplayDataCollectionEnabled: Boolean,
     onSetShadowAutoplayDataCollectionEnabled: (Boolean) -> Unit,
     debridBenchmarkDataCollectionEnabled: Boolean,
     onSetDebridBenchmarkDataCollectionEnabled: (Boolean) -> Unit,
     onShowCollectorDashboardQr: () -> Unit,
-    // Troubleshooting — playback diagnostics
-    playbackTraceEnabled: Boolean,
-    playbackTraceAdbControlEnabled: Boolean,
-    playbackTraceStatus: TraceStatus,
-    onTogglePlaybackTrace: () -> Unit,
-    onTogglePlaybackTraceAdbControl: () -> Unit,
-    onExportLastSession: () -> Unit,
-    onExportAllToDownloads: () -> Unit,
-    onCopyLastTraceToDownloads: (Uri) -> Unit,
-    onClearAllTraces: () -> Unit,
-    onSendToDeveloper: () -> Unit,
-    diagnosticsUploadInProgress: Boolean,
-    diagnosticsUploadResult: DiagnosticsUploadResult?,
 ) {
     var generalExpanded by rememberSaveable { mutableStateOf(false) }
     var afrExpanded by rememberSaveable { mutableStateOf(false) }
     var streamExpanded by rememberSaveable { mutableStateOf(false) }
     var audioExpanded by rememberSaveable { mutableStateOf(false) }
     var subtitlesExpanded by rememberSaveable { mutableStateOf(false) }
-    var bufferAndNetworkExpanded by rememberSaveable { mutableStateOf(false) }
     var loggingExpanded by rememberSaveable { mutableStateOf(false) }
 
     val defaultGeneralHeaderFocus = remember { FocusRequester() }
@@ -200,7 +175,6 @@ internal fun PlaybackSettingsSections(
     val streamHeaderFocus = remember { FocusRequester() }
     val audioHeaderFocus = remember { FocusRequester() }
     val subtitlesHeaderFocus = remember { FocusRequester() }
-    val bufferAndNetworkHeaderFocus = remember { FocusRequester() }
     val loggingHeaderFocus = remember { FocusRequester() }
     val generalHeaderFocus = initialFocusRequester ?: defaultGeneralHeaderFocus
 
@@ -217,8 +191,6 @@ internal fun PlaybackSettingsSections(
     val strSectionAudioDesc = stringResource(R.string.playback_section_audio_desc)
     val strSectionSubtitles = stringResource(R.string.playback_section_subtitles)
     val strSectionSubtitlesDesc = stringResource(R.string.playback_section_subtitles_desc)
-    val strSectionNetworkCache = stringResource(R.string.playback_section_network_cache)
-    val strSectionNetworkCacheDesc = stringResource(R.string.playback_section_network_cache_desc)
     val strSectionLogging = stringResource(R.string.playback_section_logging)
     val strSectionLoggingDesc = stringResource(R.string.playback_section_logging_desc)
     val generalUi = PlaybackGeneralUi(
@@ -256,11 +228,6 @@ internal fun PlaybackSettingsSections(
     LaunchedEffect(subtitlesExpanded, focusedSection) {
         if (!subtitlesExpanded && focusedSection == PlaybackSection.SUBTITLES) {
             subtitlesHeaderFocus.requestFocus()
-        }
-    }
-    LaunchedEffect(bufferAndNetworkExpanded, focusedSection) {
-        if (!bufferAndNetworkExpanded && focusedSection == PlaybackSection.BUFFER_NETWORK) {
-            bufferAndNetworkHeaderFocus.requestFocus()
         }
     }
     LaunchedEffect(loggingExpanded, focusedSection) {
@@ -485,26 +452,6 @@ internal fun PlaybackSettingsSections(
         }
 
         playbackCollapsibleSection(
-            keyPrefix = "buffer_network",
-            title = strSectionNetworkCache,
-            description = strSectionNetworkCacheDesc,
-            expanded = bufferAndNetworkExpanded,
-            onToggle = { bufferAndNetworkExpanded = !bufferAndNetworkExpanded },
-            focusRequester = bufferAndNetworkHeaderFocus,
-            onHeaderFocused = { focusedSection = PlaybackSection.BUFFER_NETWORK }
-        ) {
-            bufferAndNetworkSettingsItems(
-                playerSettings = playerSettings,
-                onSetVodCacheSizeMode = onSetVodCacheSizeMode,
-                onSetVodCacheSizeMb = onSetVodCacheSizeMb,
-                onSetUseParallelConnections = onSetUseParallelConnections,
-                onSetParallelConnectionCount = onSetParallelConnectionCount,
-                onSetParallelChunkSizeMb = onSetParallelChunkSizeMb,
-                onResetNetworkToDefaults = onResetNetworkSettingsToDefaults
-            )
-        }
-
-        playbackCollapsibleSection(
             keyPrefix = "logging",
             title = strSectionLogging,
             description = strSectionLoggingDesc,
@@ -585,24 +532,6 @@ internal fun PlaybackSettingsSections(
                     subtitle = stringResource(R.string.debrid_data_collection_analyse_subtitle),
                     value = stringResource(R.string.debrid_data_collection_view_qr_action),
                     onClick = onShowCollectorDashboardQr
-                )
-            }
-
-            @Suppress("KotlinConstantConditions")
-            if (com.nexio.tv.instrumentation.PLAYBACK_TRACE_UI_ENABLED) {
-                playbackDiagnosticsItems(
-                    enabled = playbackTraceEnabled,
-                    adbControlEnabled = playbackTraceAdbControlEnabled,
-                    status = playbackTraceStatus,
-                    onToggleEnabled = onTogglePlaybackTrace,
-                    onToggleAdbControl = onTogglePlaybackTraceAdbControl,
-                    onExportLast = onExportLastSession,
-                    onExportAllToDownloads = onExportAllToDownloads,
-                    onCopyToDownloads = onCopyLastTraceToDownloads,
-                    onClearAll = onClearAllTraces,
-                    onSendToDeveloper = onSendToDeveloper,
-                    diagnosticsUploadInProgress = diagnosticsUploadInProgress,
-                    diagnosticsUploadResult = diagnosticsUploadResult,
                 )
             }
         }

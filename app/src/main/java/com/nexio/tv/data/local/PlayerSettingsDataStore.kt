@@ -238,27 +238,10 @@ data class PlayerSettings(
     val filterEpisodeMismatchStreamsEnabled: Boolean = true,
     val filterMovieYearMismatchStreamsEnabled: Boolean = true,
     val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.BY_LANGUAGE,
-    // Networking
-    val vodCacheSizeMode: VodCacheSizeMode = DEFAULT_VOD_CACHE_SIZE_MODE,
-    val vodCacheSizeMb: Int = DEFAULT_VOD_CACHE_SIZE_MB,
-    val useParallelConnections: Boolean = DEFAULT_USE_PARALLEL_CONNECTIONS,
-    val parallelConnectionCount: Int = DEFAULT_PARALLEL_CONNECTION_COUNT,
-    val parallelChunkSizeMb: Int = DEFAULT_PARALLEL_CHUNK_SIZE_MB,
     val addonSubtitleStartupMode: AddonSubtitleStartupMode = AddonSubtitleStartupMode.ALL_SUBTITLES,
     val enableBufferLogs: Boolean = false
 ) {
     companion object {
-        const val DEFAULT_VOD_CACHE_SIZE_MB = 500
-        const val MIN_VOD_CACHE_SIZE_MB = 100
-        const val MAX_VOD_CACHE_SIZE_MB = 65_536
-        val DEFAULT_VOD_CACHE_SIZE_MODE: VodCacheSizeMode = VodCacheSizeMode.ON
-        const val DEFAULT_USE_PARALLEL_CONNECTIONS = true
-        const val DEFAULT_PARALLEL_CONNECTION_COUNT = 2
-        const val DEFAULT_PARALLEL_CHUNK_SIZE_MB = 16
-        const val MIN_PARALLEL_CONNECTION_COUNT = 2
-        const val MAX_PARALLEL_CONNECTION_COUNT = 4
-        const val MIN_PARALLEL_CHUNK_SIZE_MB = 8
-        const val MAX_PARALLEL_CHUNK_SIZE_MB = 128
     }
 }
 
@@ -274,10 +257,6 @@ private val filterEpisodeMismatchStreamsEnabledMigrationKey =
     booleanPreferencesKey("filter_episode_mismatch_streams_enabled")
 private val filterMovieYearMismatchStreamsEnabledMigrationKey =
     booleanPreferencesKey("filter_movie_year_mismatch_streams_enabled")
-private val useParallelConnectionsMigrationKey =
-    booleanPreferencesKey("use_parallel_connections")
-private val parallelConnectionCountMigrationKey =
-    intPreferencesKey("parallel_connection_count")
 private val migrationPreferredAudioOriginalEnabledKey =
     booleanPreferencesKey("migration_preferred_audio_original_enabled")
 private val migrationLegacyStreamAutoplaySelectionRetiredEnabledKey =
@@ -291,8 +270,6 @@ private val streamAutoPlaySourceMigrationKey = stringPreferencesKey("stream_auto
 private val streamAutoPlaySelectedAddonsMigrationKey =
     stringSetPreferencesKey("stream_auto_play_selected_addons")
 private val streamAutoPlayRegexMigrationKey = stringPreferencesKey("stream_auto_play_regex")
-private val vodCacheSizeModeMigrationKey = stringPreferencesKey("vod_cache_size_mode")
-
 internal fun applyPlayerSettingsMigrations(prefs: MutablePreferences) {
     val streamSelectionDefaultsEnabled =
         prefs[migrationStreamSelectionDefaultsV2EnabledKey] ?: false
@@ -302,8 +279,6 @@ internal fun applyPlayerSettingsMigrations(prefs: MutablePreferences) {
         prefs[deduplicateGroupedStreamsEnabledMigrationKey] = true
         prefs[filterEpisodeMismatchStreamsEnabledMigrationKey] = true
         prefs[filterMovieYearMismatchStreamsEnabledMigrationKey] = true
-        prefs[useParallelConnectionsMigrationKey] = true
-        prefs[parallelConnectionCountMigrationKey] = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT
         prefs[migrationStreamSelectionDefaultsV2EnabledKey] = true
     } else if (prefs[groupStreamsAcrossAddonsEnabledMigrationKey] != true) {
         prefs[groupStreamsAcrossAddonsEnabledMigrationKey] = true
@@ -328,8 +303,6 @@ internal fun applyPlayerSettingsMigrations(prefs: MutablePreferences) {
 
     val disableBuggyPlaybackPathDone = prefs[migrationDisableBuggyPlaybackPathDoneKey] ?: false
     if (!disableBuggyPlaybackPathDone) {
-        prefs[useParallelConnectionsMigrationKey] = false
-        prefs[vodCacheSizeModeMigrationKey] = VodCacheSizeMode.OFF.name
         prefs[migrationDisableBuggyPlaybackPathDoneKey] = true
     }
 }
@@ -345,11 +318,6 @@ enum class StreamAutoPlayMode {
 enum class StreamAutoPlaySource {
     ALL_SOURCES,
     INSTALLED_ADDONS_ONLY
-}
-
-enum class VodCacheSizeMode {
-    OFF,
-    ON
 }
 
 enum class FrameRateMatchingMode {
@@ -495,11 +463,6 @@ class PlayerSettingsDataStore @Inject constructor(
     private val filterEpisodeMismatchStreamsEnabledKey = booleanPreferencesKey("filter_episode_mismatch_streams_enabled")
     private val filterMovieYearMismatchStreamsEnabledKey = booleanPreferencesKey("filter_movie_year_mismatch_streams_enabled")
     private val subtitleOrganizationModeKey = stringPreferencesKey("subtitle_organization_mode")
-    private val vodCacheSizeModeKey = stringPreferencesKey("vod_cache_size_mode")
-    private val vodCacheSizeMbKey = intPreferencesKey("vod_cache_size_mb")
-    private val useParallelConnectionsKey = booleanPreferencesKey("use_parallel_connections")
-    private val parallelConnectionCountKey = intPreferencesKey("parallel_connection_count")
-    private val parallelChunkSizeMbKey = intPreferencesKey("parallel_chunk_size_mb")
     private val addonSubtitleStartupModeKey = stringPreferencesKey("addon_subtitle_startup_mode")
     private val enableBufferLogsKey = booleanPreferencesKey("enable_buffer_logs")
 
@@ -616,22 +579,6 @@ class PlayerSettingsDataStore @Inject constructor(
                 val max = prefs[maxBufferMsKey]
                 if (min != null && max != null && max < min) {
                     prefs[maxBufferMsKey] = min
-                }
-
-                prefs[vodCacheSizeMbKey]?.let { current ->
-                    val normalized = current.coerceIn(
-                        PlayerSettings.MIN_VOD_CACHE_SIZE_MB,
-                        PlayerSettings.MAX_VOD_CACHE_SIZE_MB
-                    )
-                    if (normalized != current) {
-                        prefs[vodCacheSizeMbKey] = normalized
-                    }
-                }
-                prefs[vodCacheSizeModeKey]?.let { raw ->
-                    val normalized = parseVodCacheSizeMode(raw).name
-                    if (normalized != raw) {
-                        prefs[vodCacheSizeModeKey] = normalized
-                    }
                 }
 
                 val preferredAudioLanguage = prefs[preferredAudioLanguageKey]
@@ -805,20 +752,6 @@ class PlayerSettingsDataStore @Inject constructor(
                 filterEpisodeMismatchStreamsEnabled = prefs[filterEpisodeMismatchStreamsEnabledKey] ?: true,
                 filterMovieYearMismatchStreamsEnabled = prefs[filterMovieYearMismatchStreamsEnabledKey] ?: true,
                 subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
-                vodCacheSizeMode = parseVodCacheSizeMode(prefs[vodCacheSizeModeKey]),
-                vodCacheSizeMb = (prefs[vodCacheSizeMbKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB)
-                    .coerceIn(PlayerSettings.MIN_VOD_CACHE_SIZE_MB, PlayerSettings.MAX_VOD_CACHE_SIZE_MB),
-                useParallelConnections = prefs[useParallelConnectionsKey] ?: PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS,
-                parallelConnectionCount = (prefs[parallelConnectionCountKey]
-                    ?: PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT).coerceIn(
-                    PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT,
-                    PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT
-                ),
-                parallelChunkSizeMb = (prefs[parallelChunkSizeMbKey]
-                    ?: PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB).coerceIn(
-                    PlayerSettings.MIN_PARALLEL_CHUNK_SIZE_MB,
-                    PlayerSettings.MAX_PARALLEL_CHUNK_SIZE_MB
-                ),
                 addonSubtitleStartupMode = parseAddonSubtitleStartupMode(prefs[addonSubtitleStartupModeKey]),
                 enableBufferLogs = prefs[enableBufferLogsKey] ?: false,
                 subtitleStyle = SubtitleStyleSettings(
@@ -1169,14 +1102,6 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
-    private fun parseVodCacheSizeMode(value: String?): VodCacheSizeMode {
-        return when (value?.trim()?.uppercase()) {
-            "ON", "AUTO", "MANUAL" -> VodCacheSizeMode.ON
-            "OFF" -> VodCacheSizeMode.OFF
-            else -> PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE
-        }
-    }
-
     private fun normalizeSelectableLanguageCode(language: String): String {
         val code = language.trim().lowercase()
         return when (code) {
@@ -1477,76 +1402,11 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
-    suspend fun resetNetworkSettingsToDefaults() {
-        store().edit { prefs ->
-            prefs[vodCacheSizeModeKey] = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE.name
-            prefs[vodCacheSizeMbKey] = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB
-            prefs[useParallelConnectionsKey] = PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS
-            prefs[parallelConnectionCountKey] = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT
-            prefs[parallelChunkSizeMbKey] = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB
-        }
-    }
-
-    suspend fun setVodCacheSizeMode(mode: VodCacheSizeMode) {
-        store().edit { prefs ->
-            prefs[vodCacheSizeModeKey] = mode.name
-        }
-    }
-
-    suspend fun setVodCacheSizeMb(mb: Int) {
-        store().edit { prefs ->
-            prefs[vodCacheSizeMbKey] = mb.coerceIn(
-                PlayerSettings.MIN_VOD_CACHE_SIZE_MB,
-                PlayerSettings.MAX_VOD_CACHE_SIZE_MB
-            )
-        }
-    }
-
-    suspend fun setUseParallelConnections(enabled: Boolean) {
-        store().edit { prefs ->
-            prefs[useParallelConnectionsKey] = enabled
-        }
-    }
-
-    suspend fun setParallelConnectionCount(count: Int) {
-        store().edit { prefs ->
-            prefs[parallelConnectionCountKey] = count.coerceIn(
-                PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT,
-                PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT
-            )
-        }
-    }
-
-    suspend fun setParallelChunkSizeMb(mb: Int) {
-        store().edit { prefs ->
-            prefs[parallelChunkSizeMbKey] = mb.coerceIn(
-                PlayerSettings.MIN_PARALLEL_CHUNK_SIZE_MB,
-                PlayerSettings.MAX_PARALLEL_CHUNK_SIZE_MB
-            )
-        }
-    }
-
     suspend fun updateMemorySettings(
         targetBufferSizeMb: Int? = null,
-        useParallelConnections: Boolean? = null,
-        parallelConnectionCount: Int? = null,
-        parallelChunkSizeMb: Int? = null
     ) {
         store().edit { prefs ->
             targetBufferSizeMb?.let { prefs[targetBufferSizeMbKey] = it.coerceAtLeast(0) }
-            useParallelConnections?.let { prefs[useParallelConnectionsKey] = it }
-            parallelConnectionCount?.let {
-                prefs[parallelConnectionCountKey] = it.coerceIn(
-                    PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT,
-                    PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT
-                )
-            }
-            parallelChunkSizeMb?.let {
-                prefs[parallelChunkSizeMbKey] = it.coerceIn(
-                    PlayerSettings.MIN_PARALLEL_CHUNK_SIZE_MB,
-                    PlayerSettings.MAX_PARALLEL_CHUNK_SIZE_MB
-                )
-            }
         }
     }
 }

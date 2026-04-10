@@ -37,7 +37,6 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Switch
 import androidx.tv.material3.SwitchDefaults
 import androidx.tv.material3.Text
-import com.nexio.tv.BuildConfig
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.screens.account.InputField
 import com.nexio.tv.ui.theme.NexioColors
@@ -117,201 +116,40 @@ fun DebugSettingsContent(
                 )
             }
 
-            if (BuildConfig.IS_DEBUG_BUILD) {
-                item(key = "debug_transport_validation_header") {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(R.string.debug_section_transport_validation),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = NexioColors.TextTertiary,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
-                }
+            item(key = "debug_toggle_dv5_sw_tonemap") {
+                DebugToggleCard(
+                    title = stringResource(R.string.audio_dv5_tonemap_title),
+                    subtitle = stringResource(R.string.audio_dv5_tonemap_sub),
+                    checked = uiState.dv5ToneMapToSdrEnabled,
+                    onToggle = {
+                        viewModel.onEvent(DebugSettingsEvent.ToggleDv5ToneMapToSdr(it))
+                    }
+                )
+            }
 
-                item(key = "debug_transport_validation_enabled") {
-                    DebugToggleCard(
-                        title = stringResource(R.string.debug_transport_validation_enabled_title),
-                        subtitle = stringResource(R.string.debug_transport_validation_enabled_subtitle),
-                        checked = uiState.transportValidationEnabled,
-                        onToggle = {
-                            viewModel.onEvent(
-                                DebugSettingsEvent.ToggleTransportValidationEnabled(it)
-                            )
-                        }
-                    )
-                }
+            item(key = "debug_toggle_dv5_hw_tonemap") {
+                DebugToggleCard(
+                    title = stringResource(R.string.audio_dv5_hw_tonemap_title),
+                    subtitle = stringResource(R.string.audio_dv5_hw_tonemap_sub),
+                    checked = uiState.dv5HardwareToneMapToSdrEnabled,
+                    onToggle = {
+                        viewModel.onEvent(DebugSettingsEvent.ToggleDv5HardwareToneMapToSdr(it))
+                    }
+                )
+            }
 
-                item(key = "debug_transport_validation_sample") {
-                    DebugActionCard(
-                        title = stringResource(R.string.debug_transport_validation_sample_title),
-                        subtitle = uiState.transportValidationAvailableSamples
-                            .firstOrNull { it.id == uiState.transportValidationSelectedSampleId }
-                            ?.displayName
-                            ?: stringResource(R.string.debug_transport_validation_sample_unset),
-                        onClick = {
-                            viewModel.onEvent(DebugSettingsEvent.AdvanceTransportValidationSample)
-                        }
-                    )
-                }
-
-                item(key = "debug_transport_validation_comparison_mode") {
-                    DebugActionCard(
-                        title = stringResource(R.string.debug_transport_validation_comparison_mode_title),
-                        subtitle = uiState.transportValidationComparisonMode.name,
-                        onClick = {
-                            viewModel.onEvent(
-                                DebugSettingsEvent.AdvanceTransportValidationComparisonMode
-                            )
-                        }
-                    )
-                }
-
-                item(key = "debug_transport_validation_capture_mode") {
-                    DebugActionCard(
-                        title = stringResource(R.string.debug_transport_validation_capture_mode_title),
-                        subtitle = uiState.transportValidationCaptureMode.name,
-                        onClick = {
-                            viewModel.onEvent(
-                                DebugSettingsEvent.AdvanceTransportValidationCaptureMode
-                            )
-                        }
-                    )
-                }
-
-                item(key = "debug_transport_validation_burst_count") {
-                    DebugActionCard(
-                        title = stringResource(R.string.debug_transport_validation_burst_count_title),
-                        subtitle = uiState.transportValidationCaptureBurstCount.toString(),
-                        onClick = {
-                            viewModel.onEvent(DebugSettingsEvent.AdvanceTransportValidationBurstCount)
-                        }
-                    )
-                }
-
-                item(key = "debug_transport_validation_binary_dumps") {
-                    DebugToggleCard(
-                        title = stringResource(R.string.debug_transport_validation_binary_dumps_title),
-                        subtitle = stringResource(R.string.debug_transport_validation_binary_dumps_subtitle),
-                        checked = uiState.transportValidationBinaryDumpsEnabled,
-                        onToggle = {
-                            viewModel.onEvent(
-                                DebugSettingsEvent.ToggleTransportValidationBinaryDumps(it)
-                            )
-                        }
-                    )
-                }
-
-                item(key = "debug_transport_validation_runtime_enabled") {
-                    DebugToggleCard(
-                        title = stringResource(R.string.debug_transport_validation_runtime_enabled_title),
-                        subtitle = stringResource(R.string.debug_transport_validation_runtime_enabled_subtitle),
-                        checked = uiState.transportValidationRuntimeValidationEnabled,
-                        onToggle = {
-                            viewModel.onEvent(
-                                DebugSettingsEvent.ToggleTransportValidationRuntimeValidation(it)
-                            )
-                        }
-                    )
-                }
-
-                item(key = "debug_transport_validation_runtime_startup_timeout") {
-                    DebugActionCard(
-                        title = stringResource(R.string.debug_transport_validation_runtime_startup_timeout_title),
-                        subtitle = stringResource(
-                            R.string.debug_transport_validation_runtime_timeout_value,
-                            uiState.transportValidationRuntimeStartupTimeoutMs
-                        ),
-                        onClick = {
-                            viewModel.onEvent(
-                                DebugSettingsEvent.AdvanceTransportValidationRuntimeStartupTimeout
-                            )
-                        }
-                    )
-                }
-
-                item(key = "debug_transport_validation_runtime_observation_window") {
-                    DebugActionCard(
-                        title = stringResource(R.string.debug_transport_validation_runtime_observation_window_title),
-                        subtitle = stringResource(
-                            R.string.debug_transport_validation_runtime_timeout_value,
-                            uiState.transportValidationRuntimeObservationWindowMs
-                        ),
-                        onClick = {
-                            viewModel.onEvent(
-                                DebugSettingsEvent.AdvanceTransportValidationRuntimeObservationWindow
-                            )
-                        }
-                    )
-                }
-
-                item(key = "debug_transport_validation_export") {
-                    DebugActionCard(
-                        title = stringResource(R.string.debug_transport_validation_export_title),
-                        subtitle = stringResource(
-                            R.string.debug_transport_validation_export_subtitle,
-                            uiState.transportValidationExportRequestCount
-                        ),
-                        onClick = {
-                            viewModel.onEvent(DebugSettingsEvent.RequestTransportValidationExport)
-                        }
-                    )
-                }
-
-                item(key = "debug_transport_validation_start") {
-                    DebugActionCard(
-                        title = stringResource(R.string.debug_transport_validation_start_title),
-                        subtitle = stringResource(R.string.debug_transport_validation_start_subtitle),
-                        onClick = {
-                            viewModel.onEvent(DebugSettingsEvent.StartTransportValidationPlayback)
-                        }
-                    )
-                }
-
-                item(key = "debug_transport_validation_stop") {
-                    DebugActionCard(
-                        title = stringResource(R.string.debug_transport_validation_stop_title),
-                        subtitle = stringResource(R.string.debug_transport_validation_stop_subtitle),
-                        onClick = {
-                            viewModel.onEvent(DebugSettingsEvent.StopTransportValidationPlayback)
-                        }
-                    )
-                }
-
-                item(key = "debug_toggle_dv5_sw_tonemap") {
-                    DebugToggleCard(
-                        title = stringResource(R.string.audio_dv5_tonemap_title),
-                        subtitle = stringResource(R.string.audio_dv5_tonemap_sub),
-                        checked = uiState.dv5ToneMapToSdrEnabled,
-                        onToggle = {
-                            viewModel.onEvent(DebugSettingsEvent.ToggleDv5ToneMapToSdr(it))
-                        }
-                    )
-                }
-
-                item(key = "debug_toggle_dv5_hw_tonemap") {
-                    DebugToggleCard(
-                        title = stringResource(R.string.audio_dv5_hw_tonemap_title),
-                        subtitle = stringResource(R.string.audio_dv5_hw_tonemap_sub),
-                        checked = uiState.dv5HardwareToneMapToSdrEnabled,
-                        onToggle = {
-                            viewModel.onEvent(DebugSettingsEvent.ToggleDv5HardwareToneMapToSdr(it))
-                        }
-                    )
-                }
-
-                item(key = "debug_toggle_dv5_hw_cpu_fallback") {
-                    DebugToggleCard(
-                        title = stringResource(R.string.audio_dv5_hw_tonemap_cpu_fallback_title),
-                        subtitle = stringResource(R.string.audio_dv5_hw_tonemap_cpu_fallback_sub),
-                        checked = uiState.dv5HardwareToneMapCpuFallbackEnabled,
-                        enabled = uiState.dv5HardwareToneMapToSdrEnabled,
-                        onToggle = {
-                            viewModel.onEvent(
-                                DebugSettingsEvent.ToggleDv5HardwareToneMapCpuFallback(it)
-                            )
-                        }
-                    )
-                }
+            item(key = "debug_toggle_dv5_hw_cpu_fallback") {
+                DebugToggleCard(
+                    title = stringResource(R.string.audio_dv5_hw_tonemap_cpu_fallback_title),
+                    subtitle = stringResource(R.string.audio_dv5_hw_tonemap_cpu_fallback_sub),
+                    checked = uiState.dv5HardwareToneMapCpuFallbackEnabled,
+                    enabled = uiState.dv5HardwareToneMapToSdrEnabled,
+                    onToggle = {
+                        viewModel.onEvent(
+                            DebugSettingsEvent.ToggleDv5HardwareToneMapCpuFallback(it)
+                        )
+                    }
+                )
             }
 
             // ── Manual Sign In ──

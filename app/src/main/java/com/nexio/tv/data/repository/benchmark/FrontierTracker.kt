@@ -7,7 +7,7 @@ import java.util.BitSet
  *
  * Maintains a BitSet of 128KB page completions and computes the contiguous frontier —
  * the highest byte offset where all preceding pages are complete from byte 0. Called
- * concurrently from ParallelRangeDataSource's executor thread pool (2–4 threads).
+ * concurrently from benchmark transport worker threads.
  */
 class FrontierTracker(
     private val pageSize: Int = 128 * 1024
