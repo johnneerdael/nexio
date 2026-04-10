@@ -92,13 +92,15 @@ The tile has three export buttons and one clear button:
 - **Export last** — FileProvider + `ACTION_SEND` share sheet for the
   most recently-written JSONL. Pick any installed share target. Works
   on TVs without a keyboard (up / down / select only).
-- **Export all (.zip)** — bundles every retained session (up to 20)
-  into a single zip under `cacheDir/playback-trace-exports/` and shares
-  it the same way. Use this if support asks for "everything you've got".
+- **Export all to Downloads** — bundles every retained session (up to
+  20) into a single zip and saves it to Downloads, which is the primary
+  destination for the main export flow. Use this if support asks for
+  "everything you've got".
 - **Copy to…** — launches the SAF (`ACTION_CREATE_DOCUMENT`) document
   picker, letting you write the latest JSONL to any location the
   document picker exposes (Downloads, external USB, Google Drive, etc).
-  This path is useful on Fire TV where the share sheet is sparse.
+  This path is useful on Fire TV where the share sheet is sparse and
+  remains the single-trace path when you need a custom destination.
 - **Clear traces** — deletes every `.jsonl` under `playback-traces/`.
   Use this if you want to guarantee a clean capture before reproducing
   a new problem.
@@ -212,9 +214,8 @@ debrid settings)`, the **Allow ADB control** switch is still off.
 
 ### Pulling a file off the device
 
-The ADB path does not move bytes over adb directly — the export
-commands run the same system share sheet the in-app UI uses. If you
-want a workstation-side pull without going through the share sheet:
+The ADB path does not move bytes over adb directly. If you want a
+workstation-side pull without going through the share sheet:
 
 ```sh
 # List available sessions.
@@ -263,8 +264,9 @@ Minimum viable bug report:
 
 Optional but helpful:
 
-5. **`Export all (.zip)`** if the problem is intermittent and you want
-   to give support multiple recent sessions to compare against.
+5. **`Export all to Downloads`** if the problem is intermittent and
+   you want to give support multiple recent sessions to compare
+   against.
 6. **Perfetto trace** if support asks — the v1 tracer writes atrace
    markers for `FRONTIER`, `RANGE`, and `REBUFFER` families whenever
    systrace is active, so a system trace captured with
@@ -301,10 +303,10 @@ ADB control** on and retry. This is the by-design security posture:
 the receiver has to be explicitly armed before it does anything.
 
 **"I don't see a share target on Fire TV"**
-— Fire TV's share sheet is sparse. Use **Copy to…** instead — the SAF
-document picker exposes Downloads, USB storage, and cloud providers.
-On most Fire TV units, Amazon Downloader + a USB stick is the most
-reliable way to get the file off-device.
+— Fire TV's share sheet is sparse. Use **Export all to Downloads** for
+the multi-session bundle, or **Copy to…** for the latest single trace
+via the SAF picker. On most Fire TV units, Amazon Downloader + a USB
+stick is the most reliable way to get the file off-device.
 
 ---
 

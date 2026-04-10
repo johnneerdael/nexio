@@ -56,7 +56,10 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import android.net.Uri
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
+import com.nexio.tv.data.repository.benchmark.DiagnosticsUploadResult
+import com.nexio.tv.instrumentation.TraceStatus
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.PlayerPreference
@@ -163,7 +166,26 @@ internal fun PlaybackSettingsSections(
     onSetParallelChunkSizeMb: (Int) -> Unit,
     onSetVodCacheSizeMode: (VodCacheSizeMode) -> Unit,
     onSetVodCacheSizeMb: (Int) -> Unit,
-    onResetNetworkSettingsToDefaults: () -> Unit
+    onResetNetworkSettingsToDefaults: () -> Unit,
+    // Troubleshooting — data collection
+    shadowAutoplayDataCollectionEnabled: Boolean,
+    onSetShadowAutoplayDataCollectionEnabled: (Boolean) -> Unit,
+    debridBenchmarkDataCollectionEnabled: Boolean,
+    onSetDebridBenchmarkDataCollectionEnabled: (Boolean) -> Unit,
+    onShowCollectorDashboardQr: () -> Unit,
+    // Troubleshooting — playback diagnostics
+    playbackTraceEnabled: Boolean,
+    playbackTraceAdbControlEnabled: Boolean,
+    playbackTraceStatus: TraceStatus,
+    onTogglePlaybackTrace: () -> Unit,
+    onTogglePlaybackTraceAdbControl: () -> Unit,
+    onExportLastSession: () -> Unit,
+    onExportAllToDownloads: () -> Unit,
+    onCopyLastTraceToDownloads: (Uri) -> Unit,
+    onClearAllTraces: () -> Unit,
+    onSendToDeveloper: () -> Unit,
+    diagnosticsUploadInProgress: Boolean,
+    diagnosticsUploadResult: DiagnosticsUploadResult?,
 ) {
     var generalExpanded by rememberSaveable { mutableStateOf(false) }
     var afrExpanded by rememberSaveable { mutableStateOf(false) }
@@ -532,6 +554,55 @@ internal fun PlaybackSettingsSections(
                     isChecked = startupPerfTelemetryEnabled,
                     onCheckedChange = onSetStartupPerfTelemetryEnabled,
                     onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
+
+            item(key = "troubleshooting_shadow_data_collection") {
+                SettingsToggleRow(
+                    title = stringResource(R.string.debrid_shadow_autoplay_title),
+                    subtitle = stringResource(R.string.debrid_shadow_autoplay_subtitle),
+                    checked = shadowAutoplayDataCollectionEnabled,
+                    enabled = true,
+                    onToggle = { onSetShadowAutoplayDataCollectionEnabled(!shadowAutoplayDataCollectionEnabled) },
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
+
+            item(key = "troubleshooting_benchmark_data_collection") {
+                SettingsToggleRow(
+                    title = stringResource(R.string.debrid_benchmark_title),
+                    subtitle = stringResource(R.string.debrid_benchmark_subtitle),
+                    checked = debridBenchmarkDataCollectionEnabled,
+                    enabled = true,
+                    onToggle = { onSetDebridBenchmarkDataCollectionEnabled(!debridBenchmarkDataCollectionEnabled) },
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
+
+            item(key = "troubleshooting_data_collection_qr") {
+                SettingsActionRow(
+                    title = stringResource(R.string.debrid_data_collection_analyse_title),
+                    subtitle = stringResource(R.string.debrid_data_collection_analyse_subtitle),
+                    value = stringResource(R.string.debrid_data_collection_view_qr_action),
+                    onClick = onShowCollectorDashboardQr
+                )
+            }
+
+            @Suppress("KotlinConstantConditions")
+            if (com.nexio.tv.instrumentation.PLAYBACK_TRACE_UI_ENABLED) {
+                playbackDiagnosticsItems(
+                    enabled = playbackTraceEnabled,
+                    adbControlEnabled = playbackTraceAdbControlEnabled,
+                    status = playbackTraceStatus,
+                    onToggleEnabled = onTogglePlaybackTrace,
+                    onToggleAdbControl = onTogglePlaybackTraceAdbControl,
+                    onExportLast = onExportLastSession,
+                    onExportAllToDownloads = onExportAllToDownloads,
+                    onCopyToDownloads = onCopyLastTraceToDownloads,
+                    onClearAll = onClearAllTraces,
+                    onSendToDeveloper = onSendToDeveloper,
+                    diagnosticsUploadInProgress = diagnosticsUploadInProgress,
+                    diagnosticsUploadResult = diagnosticsUploadResult,
                 )
             }
         }

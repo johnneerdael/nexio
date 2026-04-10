@@ -46,7 +46,8 @@ data class SimklUiState(
 class SimklViewModel @Inject constructor(
     private val simklAuthService: SimklAuthService,
     private val simklAuthDataStore: SimklAuthDataStore,
-    private val simklSettingsDataStore: SimklSettingsDataStore
+    private val simklSettingsDataStore: SimklSettingsDataStore,
+    private val catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SimklUiState())
     val uiState: StateFlow<SimklUiState> = _uiState.asStateFlow()
@@ -98,6 +99,7 @@ class SimklViewModel @Inject constructor(
         if (catalogId !in SimklCatalogIds.BUILT_IN_ORDER) return
         viewModelScope.launch {
             simklSettingsDataStore.setCatalogEnabled(catalogId, enabled)
+            if (enabled) catalogPriorityHydrationNotifier.notifyPriorityHydrationRequired()
             _uiState.update { it.copy(statusMessage = "SIMKL catalogs updated") }
         }
     }

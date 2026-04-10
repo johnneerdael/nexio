@@ -86,6 +86,7 @@ class CatalogSelectionPersistenceTest {
             traktDiscoveryService = traktDiscoveryService,
             traktScrobbleService = traktScrobbleService,
             traktSettingsDataStore = traktSettingsDataStore,
+            catalogPriorityHydrationNotifier = mockk(relaxed = true),
             context = context
         )
 
@@ -94,9 +95,6 @@ class CatalogSelectionPersistenceTest {
 
         coVerify(exactly = 1) {
             traktSettingsDataStore.setPopularListSelected("popular:anime", true)
-        }
-        coVerify(exactly = 1) {
-            traktDiscoveryService.ensureFresh(force = true)
         }
     }
 
@@ -116,7 +114,8 @@ class CatalogSelectionPersistenceTest {
         val viewModel = MDBListSettingsViewModel(
             dataStore = dataStore,
             mdbListApi = mockk<MDBListApi>(relaxed = true),
-            mdbListDiscoveryService = discoveryService
+            mdbListDiscoveryService = discoveryService,
+            catalogPriorityHydrationNotifier = mockk(relaxed = true)
         )
 
         viewModel.onEvent(MDBListSettingsEvent.ToggleTopList(listKey = "top:thrillers", enabled = true))
@@ -124,9 +123,6 @@ class CatalogSelectionPersistenceTest {
 
         coVerify(exactly = 1) {
             dataStore.setTopListSelected("top:thrillers", true)
-        }
-        coVerify(exactly = 1) {
-            discoveryService.ensureFresh(force = true)
         }
     }
 }

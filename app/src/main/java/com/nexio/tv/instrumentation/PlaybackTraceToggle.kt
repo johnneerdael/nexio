@@ -1,6 +1,7 @@
 package com.nexio.tv.instrumentation
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -23,15 +24,38 @@ internal val Context.playbackTraceDataStore: DataStore<Preferences> by preferenc
  * starts a new session.
  */
 @Singleton
-class PlaybackTraceToggle @Inject constructor(
-    @ApplicationContext private val appContext: Context
+class PlaybackTraceToggle internal constructor(
+    private val dataStore: DataStore<Preferences>
 ) {
-    private val dataStore: DataStore<Preferences> = appContext.playbackTraceDataStore
+    companion object {
+        private const val TAG = "PlaybackTraceToggle"
+        private val KEY = booleanPreferencesKey("playback_trace_enabled")
+    }
+
+    @Inject
+    constructor(
+        @ApplicationContext appContext: Context
+    ) : this(appContext.playbackTraceDataStore)
 
     val enabledFlow: Flow<Boolean> = dataStore.data.map { it[KEY] ?: false }
 
     suspend fun setEnabled(value: Boolean) {
-        dataStore.edit { it[KEY] = value }
+        val previous = PlaybackTracer.enabled
+        val activeSessionId = PlaybackTracer.currentInternal()?.sessionId
+        val callerSummary = Throwable().stackTrace
+            .drop(1)
+            .take(4)
+            .joinToString(" <- ") { frame ->
+                "${frame.className}.${frame.methodName}:${frame.lineNumber}"
+            }
+        Log.i(
+            TAG,
+            "setEnabled requested value=$value previous=$previous activeSession=$activeSessionId " +
+                "caller=$callerSummary"
+        )
+        // Set the hot-path gate before publishing the persisted state so any
+        // immediate observer refresh sees the new in-memory value.
+        PlaybackTracer.enabled = value
         if (!value) {
             // On toggle-off, end any active session before flipping the gate so
             // the writer thread captures `playback_session_ended` deterministically.
@@ -40,10 +64,10 @@ class PlaybackTraceToggle @Inject constructor(
                 PlaybackTracer.endSession(active.sessionId)
             }
         }
-        PlaybackTracer.enabled = value
-    }
-
-    companion object {
-        private val KEY = booleanPreferencesKey("playback_trace_enabled")
+        dataStore.edit { it[KEY] = value }
+        Log.i(
+            TAG,
+            "setEnabled committed value=$value current=${PlaybackTracer.enabled} activeSession=${PlaybackTracer.currentInternal()?.sessionId}"
+        )
     }
 }

@@ -210,6 +210,12 @@ class TraktDiscoveryService @Inject constructor(
         }
     }
 
+    /** Bypasses the startup refresh gate. Only call from explicit UI actions. */
+    suspend fun priorityFetch() {
+        startupRefreshGateUntilElapsedMs = 0L
+        ensureFresh(force = true)
+    }
+
     suspend fun ensureFresh(force: Boolean) = withContext(Dispatchers.IO) {
         ensureStartupGateInitialized()
         if (isStartupRefreshGated()) {
@@ -224,13 +230,13 @@ class TraktDiscoveryService @Inject constructor(
         activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
 
         val now = System.currentTimeMillis()
-        if (!force && now - lastRefreshMs < minRefreshIntervalMs && rawSnapshotState.value.updatedAtMs > 0L) {
+        if (now - lastRefreshMs < minRefreshIntervalMs && rawSnapshotState.value.updatedAtMs > 0L) {
             return@withContext
         }
 
         refreshMutex.withLock {
             val lockedNow = System.currentTimeMillis()
-            if (!force && lockedNow - lastRefreshMs < minRefreshIntervalMs && rawSnapshotState.value.updatedAtMs > 0L) {
+            if (lockedNow - lastRefreshMs < minRefreshIntervalMs && rawSnapshotState.value.updatedAtMs > 0L) {
                 return@withLock
             }
             val snapshot = rawSnapshotState.value

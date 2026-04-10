@@ -13,15 +13,14 @@ data class CapabilityEnvelope(
     val seekTtfbP50Ms: Long? = null,
     val stabilityPenalty: Double = 0.0,
     val supportsRangeRequests: Boolean = true,
-    val measuredAtMs: Long,
-    val legacyBestProfile: DebridConfigBenchmarkProfileResult? = null
+    val measuredAtMs: Long
 ) {
     companion object {
         val DEFAULT = CapabilityEnvelope(
-            maxSafeUrgentWorkers = 2,
+            maxSafeUrgentWorkers = 1,
             maxSafePrefetchWorkers = 1,
-            maxSafeUrgentChunkBytes = 8L * 1024L * 1024L,
-            maxSafePrefetchChunkBytes = 16L * 1024L * 1024L,
+            maxSafeUrgentChunkBytes = 24L * 1024L * 1024L,
+            maxSafePrefetchChunkBytes = 24L * 1024L * 1024L,
             sustainedThroughputMbps = 50.0,
             stabilityPenalty = 0.5,
             measuredAtMs = 0L
@@ -34,7 +33,7 @@ data class CapabilityEnvelope(
          */
         val LOCKED_REAL_DEBRID = CapabilityEnvelope(
             maxSafeUrgentWorkers = 1,
-            maxSafePrefetchWorkers = 1,
+            maxSafePrefetchWorkers = 2,
             maxSafeUrgentChunkBytes = 33_554_432L,
             maxSafePrefetchChunkBytes = 67_108_864L,
             sustainedThroughputMbps = 0.0,

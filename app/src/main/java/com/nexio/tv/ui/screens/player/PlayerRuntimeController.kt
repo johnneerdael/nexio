@@ -153,6 +153,10 @@ class PlayerRuntimeController(
         endDisplayModeSessionForExit()
         Dv5HardwareToneMapRpuTap.setEnabledForPlayback(enabled = false, streamUrl = currentStreamUrl)
         releasePlayer()
+        // Flush the active playback trace when the user explicitly exits playback.
+        // Relying on ViewModel.onCleared() leaves the JSONL session open while the
+        // user is already back in settings, so diagnostics appear missing.
+        mediaSourceFactory.endPlaybackTraceSession()
         mediaSourceFactory.stopVodWarmAhead()
     }
 

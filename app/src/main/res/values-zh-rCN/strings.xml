@@ -910,8 +910,8 @@
     <string name="playback_autoplay_trailers_sub">允许详情页和主页的预告片预览在设定延迟后自动开始。</string>
     <string name="playback_trailer_delay">预告片延迟</string>
     <string name="playback_trailer_delay_sub">自动开始预告片预览前的等待时间。</string>
-    <string name="playback_section_logging">日志记录</string>
-    <string name="playback_section_logging_desc">缓冲、流获取和原生音频输出的运行时诊断。</string>
+    <string name="playback_section_logging">故障排除</string>
+    <string name="playback_section_logging_desc">运行时诊断、播放追踪、数据收集和原生音频输出日志。</string>
     <string name="playback_logging_buffer_title">启用 VOD 缓存/并行下载日志</string>
     <string name="playback_logging_buffer_subtitle">定期向 logcat 发送缓存、缓冲和并行下载诊断信息。</string>
     <string name="playback_logging_iec_title">启用原生 AudioSink/IEC 打包器日志</string>
@@ -1081,6 +1081,9 @@
     <string name="debrid_data_collection_view_qr_action">查看二维码</string>
     <string name="debrid_data_collection_qr_title">收集器仪表板二维码</string>
     <string name="debrid_data_collection_qr_subtitle">扫描此二维码或在其他设备上打开该网址。</string>
+    <string name="debrid_rd_activation_qr_title">Real-Debrid 激活</string>
+    <string name="debrid_rd_activation_qr_subtitle">扫描此二维码，在手机上打开激活页面。</string>
+    <string name="debrid_rd_activation_qr_instruction">扫描二维码以自动将您的设备验证到 Real-Debrid。</string>
     <string name="debrid_data_collection_qr_unavailable">二维码不可用</string>
     <string name="debrid_data_collection_qr_code_content_description">收集器仪表板二维码</string>
     <string name="debrid_data_collection_qr_base_url_missing">收集器仪表板基础 URL 未配置。</string>
@@ -1246,6 +1249,7 @@
     <string name="cd_voice_search">语音搜索</string>
     <string name="cd_trakt_logo">Trakt 徽标</string>
     <string name="cd_trakt_activation_qr">Trakt 激活二维码</string>
+    <string name="cd_real_debrid_activation_qr">扫描以打开 Real-Debrid 激活页面</string>
     <string name="filter_all">全部</string>
     <string name="account_sign_in_title">登录 / 创建账户</string>
     <string name="account_generate_sync_code_title">生成同步代码</string>
@@ -1281,14 +1285,32 @@
     <string name="playback_diagnostics_trace_subtitle">将每个播放会话记录为 JSONL 文件,可导出以获取支持</string>
     <string name="playback_diagnostics_export_last_title">导出最近会话</string>
     <string name="playback_diagnostics_export_last_subtitle">分享最新的 playback-trace JSONL 文件</string>
-    <string name="playback_diagnostics_export_all_title">导出所有会话</string>
-    <string name="playback_diagnostics_export_all_subtitle">将每个保留的会话打包为 .zip 并分享</string>
+    <string name="playback_diagnostics_export_all_title">全部导出到下载目录</string>
+    <string name="playback_diagnostics_export_all_subtitle">将每个保留的会话打包为 .zip 并保存到下载目录,这是主要目标位置</string>
+    <string name="playback_diagnostics_export_all_downloads_success">已将诊断 zip 保存到下载目录</string>
+    <string name="playback_diagnostics_export_all_downloads_failure">无法将诊断 zip 保存到下载目录</string>
+    <string name="playback_diagnostics_export_all_downloads_empty">没有可导出的播放跟踪</string>
+    <string name="playback_diagnostics_export_all_value_format">%1$d · %2$.1f MiB</string>
+    <string name="playback_diagnostics_uploading">上传中…</string>
+    <string name="playback_diagnostics_upload_sent">已发送</string>
+    <string name="playback_diagnostics_upload_no_trace">没有跟踪</string>
+    <string name="playback_diagnostics_upload_failed">失败: %1$s</string>
+    <string name="playback_diagnostics_status_prefix">跟踪器处于</string>
+    <string name="playback_diagnostics_status_enabled">已启用</string>
+    <string name="playback_diagnostics_status_disabled">已停用</string>
+    <string name="playback_diagnostics_status_total_format">%1$.1f MiB 总计</string>
+    <plurals name="playback_diagnostics_status_session_count">
+        <item quantity="one">%d 个会话</item>
+        <item quantity="other">%d 个会话</item>
+    </plurals>
     <string name="playback_diagnostics_copy_latest_title">复制最新到\u2026</string>
     <string name="playback_diagnostics_copy_latest_subtitle">将最新会话写入任意存储位置(下载、USB、云)</string>
     <string name="playback_diagnostics_clear_title">清除所有跟踪</string>
     <string name="playback_diagnostics_clear_subtitle">删除 playback-traces/ 下所有保留的 .jsonl 文件</string>
     <string name="playback_diagnostics_adb_title">允许 ADB 控制</string>
     <string name="playback_diagnostics_adb_subtitle">允许工作站的 ADB 命令驱动相同的跟踪操作</string>
+    <string name="playback_diagnostics_send_to_developer_title">发送给开发者</string>
+    <string name="playback_diagnostics_send_to_developer_subtitle">将最近一次会话上传到开发者的收集器以供分析</string>
     <string name="error_missing_tracking_ids">缺少签到所需的跟踪 ID</string>
     <string name="error_tracking_check_in_failed">跟踪签到失败</string>
 </resources>

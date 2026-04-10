@@ -73,6 +73,75 @@ internal data class StartupSubtitlePreparation(
     val fetchCompleted: Boolean
 )
 
+internal suspend fun PlayerRuntimeController.refreshPlaybackTraceProvenanceForCurrentStream() {
+    currentRuntimeTransportObservation = null
+    currentRuntimeTransportSpecializationStatus = null
+    val latestResultsByProvider = DebridBenchmarkProvider.entries.associateWith { provider ->
+        runCatching {
+            debridConfigBenchmarkStore.latestResult(provider).first()
+        }.getOrNull()
+    }
+    val fallbackResultsByProvider = DebridBenchmarkProvider.entries.associateWith { provider ->
+        runCatching {
+            debridBenchmarkStore.latestResult(provider).first()
+        }.getOrNull()
+    }
+    val selectedTransportBenchmark = selectTransportBenchmarkForServiceKey(
+        serviceKey = currentStreamServiceKey,
+        latestResults = latestResultsByProvider,
+        fallbackResults = fallbackResultsByProvider
+    )
+    currentRuntimeTransportHints = selectedTransportBenchmark?.runtimeTransportHints
+    // For providers with a locked shape (RD, PM), always resolve via lockedFor so
+    // the no-arg TransportPolicyController() fallback is unreachable on these paths.
+    val providerStorageKey = benchmarkProviderForServiceKey(currentStreamServiceKey)?.storageKey
+    val lockedEnvelope = providerStorageKey?.let { CapabilityEnvelope.lockedFor(it) }
+    val envelope = selectedTransportBenchmark?.capabilityEnvelope
+        ?: lockedEnvelope
+    val benchmarkProvenance = selectedBenchmarkProvenanceForServiceKey(
+        serviceKey = currentStreamServiceKey,
+        selectedTransportBenchmark = selectedTransportBenchmark,
+        lockedEnvelope = lockedEnvelope
+    )
+    mediaSourceFactory.playbackTraceServiceKey = currentStreamServiceKey
+    mediaSourceFactory.playbackTraceProviderStorageKey =
+        selectedTransportBenchmark?.providerStorageKey ?: providerStorageKey
+    mediaSourceFactory.playbackTraceBenchmarkSource = benchmarkProvenance.toTraceSourceOrNull()
+    mediaSourceFactory.playbackTraceBenchmarkResultId =
+        selectedTransportBenchmark?.benchmarkResultId
+    if (envelope != null) {
+        // For providers with a locked shape, assert the merged envelope matches before
+        // constructing the controller. This is the one-shot init site — guards here are
+        // safe; they must never be placed on the DataSource.open/read call stacks.
+        if (lockedEnvelope != null) {
+            require(lockedEnvelope.matchesLockedShape(envelope)) {
+                "CapabilityEnvelope shape drift for provider=$providerStorageKey"
+            }
+        }
+        mediaSourceFactory.capabilityEnvelope = envelope
+        Log.d(
+            PlayerRuntimeController.TAG,
+            "TRANSPORT_ENVELOPE provenance=${benchmarkProvenance.traceSource} " +
+                "serviceKey=${mediaSourceFactory.playbackTraceServiceKey ?: "unknown"} " +
+                "provider=${mediaSourceFactory.playbackTraceProviderStorageKey ?: "unknown"} " +
+                "resultId=${mediaSourceFactory.playbackTraceBenchmarkResultId ?: "none"} " +
+                "urgentWorkers=${envelope.maxSafeUrgentWorkers} prefetchWorkers=${envelope.maxSafePrefetchWorkers} " +
+                "urgentChunkBytes=${envelope.maxSafeUrgentChunkBytes} prefetchChunkBytes=${envelope.maxSafePrefetchChunkBytes}"
+        )
+        transportPolicyController = TransportPolicyController(envelope, providerStorageKey)
+    } else {
+        mediaSourceFactory.capabilityEnvelope = null
+        Log.d(
+            PlayerRuntimeController.TAG,
+            "TRANSPORT_ENVELOPE provenance=${benchmarkProvenance.traceSource} " +
+                "serviceKey=${mediaSourceFactory.playbackTraceServiceKey ?: "unknown"} " +
+                "provider=${mediaSourceFactory.playbackTraceProviderStorageKey ?: "unknown"} " +
+                "resultId=${mediaSourceFactory.playbackTraceBenchmarkResultId ?: "none"}"
+        )
+        transportPolicyController = TransportPolicyController()
+    }
+}
+
 @androidx.annotation.OptIn(UnstableApi::class)
 internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<String, String>) {
     if (url.isEmpty()) {
@@ -208,45 +277,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             mediaSourceFactory.parallelChunkSizeMb = playerSettings.parallelChunkSizeMb
             mediaSourceFactory.vodCacheSizeMode = playerSettings.vodCacheSizeMode
             mediaSourceFactory.vodCacheSizeMb = playerSettings.vodCacheSizeMb
-            currentRuntimeTransportObservation = null
-            currentRuntimeTransportSpecializationStatus = null
-            val latestResultsByProvider = DebridBenchmarkProvider.entries.associateWith { provider ->
-                runCatching {
-                    debridConfigBenchmarkStore.latestResult(provider).first()
-                }.getOrNull()
-            }
-            val fallbackResultsByProvider = DebridBenchmarkProvider.entries.associateWith { provider ->
-                runCatching {
-                    debridBenchmarkStore.latestResult(provider).first()
-                }.getOrNull()
-            }
-            val selectedTransportBenchmark = selectTransportBenchmarkForServiceKey(
-                serviceKey = currentStreamServiceKey,
-                latestResults = latestResultsByProvider,
-                fallbackResults = fallbackResultsByProvider
-            )
-            currentRuntimeTransportHints = selectedTransportBenchmark?.runtimeTransportHints
-            // For providers with a locked shape (RD, PM), always resolve via lockedFor so
-            // the no-arg TransportPolicyController() fallback is unreachable on these paths.
-            val providerStorageKey = benchmarkProviderForServiceKey(currentStreamServiceKey)?.storageKey
-            val lockedEnvelope = providerStorageKey?.let { CapabilityEnvelope.lockedFor(it) }
-            val envelope = selectedTransportBenchmark?.capabilityEnvelope
-                ?: lockedEnvelope
-            if (envelope != null) {
-                // For providers with a locked shape, assert the merged envelope matches before
-                // constructing the controller. This is the one-shot init site — guards here are
-                // safe; they must never be placed on the DataSource.open/read call stacks.
-                if (lockedEnvelope != null) {
-                    require(lockedEnvelope.matchesLockedShape(envelope)) {
-                        "CapabilityEnvelope shape drift for provider=$providerStorageKey"
-                    }
-                }
-                mediaSourceFactory.capabilityEnvelope = envelope
-                transportPolicyController = TransportPolicyController(envelope, providerStorageKey)
-            } else {
-                mediaSourceFactory.capabilityEnvelope = null
-                transportPolicyController = TransportPolicyController()
-            }
+            refreshPlaybackTraceProvenanceForCurrentStream()
             mediaSourceFactory.onTransportObservation = { observation ->
                 currentRuntimeTransportObservation = observation
                 val transition = nextRuntimeTransportSpecializationTransition(

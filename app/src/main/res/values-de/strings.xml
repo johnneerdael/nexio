@@ -910,8 +910,8 @@
     <string name="playback_autoplay_trailers_sub">Erlaubt das automatische Starten von Detail- und Home-Trailer-Vorschauen nach der konfigurierten Verzögerung.</string>
     <string name="playback_trailer_delay">Trailer-Verzögerung</string>
     <string name="playback_trailer_delay_sub">Wie lange gewartet wird, bevor eine Trailer-Vorschau automatisch startet.</string>
-    <string name="playback_section_logging">Protokollierung</string>
-    <string name="playback_section_logging_desc">Laufzeit-Diagnose für Pufferung, Stream-Abruf und den nativen Audio-Sink.</string>
+    <string name="playback_section_logging">Fehlerbehebung</string>
+    <string name="playback_section_logging_desc">Laufzeit-Diagnose, Wiedergabe-Tracing, Datenerfassung und nativer Audio-Sink-Log.</string>
     <string name="playback_logging_buffer_title">Protokollierung für VOD-Cache/paralleles Herunterladen aktivieren</string>
     <string name="playback_logging_buffer_subtitle">Periodische Cache-, Puffer- und Parallel-Download-Diagnose an Logcat senden.</string>
     <string name="playback_logging_iec_title">Protokolle für nativen AudioSink/IEC-Packer aktivieren</string>
@@ -1081,6 +1081,9 @@
     <string name="debrid_data_collection_view_qr_action">QR anzeigen</string>
     <string name="debrid_data_collection_qr_title">Collector-Dashboard-QR</string>
     <string name="debrid_data_collection_qr_subtitle">Diesen QR-Code scannen oder die URL auf einem anderen Gerät öffnen.</string>
+    <string name="debrid_rd_activation_qr_title">Real-Debrid-Aktivierung</string>
+    <string name="debrid_rd_activation_qr_subtitle">Diesen QR-Code scannen, um die Aktivierungsseite auf dem Handy zu öffnen.</string>
+    <string name="debrid_rd_activation_qr_instruction">QR-Code scannen, um das Gerät automatisch bei Real-Debrid zu authentifizieren.</string>
     <string name="debrid_data_collection_qr_unavailable">QR-Code ist nicht verfügbar</string>
     <string name="debrid_data_collection_qr_code_content_description">Collector-Dashboard-QR-Code</string>
     <string name="debrid_data_collection_qr_base_url_missing">Collector-Dashboard-Basis-URL ist nicht konfiguriert.</string>
@@ -1246,6 +1249,7 @@
     <string name="cd_voice_search">Sprachsuche</string>
     <string name="cd_trakt_logo">Trakt-Logo</string>
     <string name="cd_trakt_activation_qr">Trakt-Aktivierungs-QR</string>
+    <string name="cd_real_debrid_activation_qr">Scannen, um die Real-Debrid-Aktivierungsseite zu öffnen</string>
     <string name="filter_all">Alle</string>
     <string name="account_sign_in_title">Anmelden / Konto erstellen</string>
     <string name="account_generate_sync_code_title">Sync-Code generieren</string>
@@ -1281,14 +1285,32 @@
     <string name="playback_diagnostics_trace_subtitle">Zeichnet jede Wiedergabesitzung als JSONL-Datei auf, die du für den Support exportieren kannst</string>
     <string name="playback_diagnostics_export_last_title">Letzte Sitzung exportieren</string>
     <string name="playback_diagnostics_export_last_subtitle">Teile die neueste Playback-Trace-JSONL-Datei</string>
-    <string name="playback_diagnostics_export_all_title">Alle Sitzungen exportieren</string>
-    <string name="playback_diagnostics_export_all_subtitle">Bündle jede gespeicherte Sitzung in eine .zip und teile sie</string>
+    <string name="playback_diagnostics_export_all_title">Alles in Downloads exportieren</string>
+    <string name="playback_diagnostics_export_all_subtitle">Bündle jede gespeicherte Sitzung in eine .zip und speichere sie in Downloads, dem Hauptziel</string>
+    <string name="playback_diagnostics_export_all_downloads_success">Diagnose-Zip in Downloads gespeichert</string>
+    <string name="playback_diagnostics_export_all_downloads_failure">Diagnose-Zip konnte nicht in Downloads gespeichert werden</string>
+    <string name="playback_diagnostics_export_all_downloads_empty">Keine Wiedergabetraces zum Exportieren</string>
+    <string name="playback_diagnostics_export_all_value_format">%1$d · %2$.1f MiB</string>
+    <string name="playback_diagnostics_uploading">Wird hochgeladen…</string>
+    <string name="playback_diagnostics_upload_sent">Gesendet</string>
+    <string name="playback_diagnostics_upload_no_trace">Keine Spur</string>
+    <string name="playback_diagnostics_upload_failed">Fehlgeschlagen: %1$s</string>
+    <string name="playback_diagnostics_status_prefix">Tracer ist</string>
+    <string name="playback_diagnostics_status_enabled">aktiviert</string>
+    <string name="playback_diagnostics_status_disabled">deaktiviert</string>
+    <string name="playback_diagnostics_status_total_format">%1$.1f MiB gesamt</string>
+    <plurals name="playback_diagnostics_status_session_count">
+        <item quantity="one">%d Sitzung</item>
+        <item quantity="other">%d Sitzungen</item>
+    </plurals>
     <string name="playback_diagnostics_copy_latest_title">Neueste kopieren nach\u2026</string>
     <string name="playback_diagnostics_copy_latest_subtitle">Schreibe die neueste Sitzung an einen beliebigen Speicherort (Downloads, USB, Cloud)</string>
     <string name="playback_diagnostics_clear_title">Alle Traces löschen</string>
     <string name="playback_diagnostics_clear_subtitle">Lösche jede gespeicherte .jsonl-Datei unter playback-traces/</string>
     <string name="playback_diagnostics_adb_title">ADB-Steuerung erlauben</string>
     <string name="playback_diagnostics_adb_subtitle">Lässt Workstation-ADB-Befehle dieselben Tracer-Operationen steuern</string>
+    <string name="playback_diagnostics_send_to_developer_title">An Entwickler senden</string>
+    <string name="playback_diagnostics_send_to_developer_subtitle">Lade die letzte Sitzung zur Analyse in den Collector des Entwicklers hoch</string>
     <string name="error_missing_tracking_ids">Fehlende Tracking-IDs für Check-in</string>
     <string name="error_tracking_check_in_failed">Tracking-Check-in fehlgeschlagen</string>
 </resources>

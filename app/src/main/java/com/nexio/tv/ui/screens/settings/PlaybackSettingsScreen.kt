@@ -63,6 +63,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -104,6 +105,7 @@ import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.launch
+import android.widget.Toast
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Timer
@@ -127,14 +129,22 @@ fun PlaybackSettingsScreen(
 }
 
 @Composable
-fun PlaybackSettingsContent(
+internal fun PlaybackSettingsContent(
     viewModel: PlaybackSettingsViewModel = hiltViewModel(),
+    debridViewModel: DebridSettingsViewModel = hiltViewModel(),
     initialFocusRequester: FocusRequester? = null
 ) {
     val playerSettings by viewModel.playerSettings.collectAsStateWithLifecycle(initialValue = PlayerSettings())
     val trailerSettings by viewModel.trailerSettings.collectAsStateWithLifecycle(initialValue = TrailerSettings())
     val streamDiagnosticsEnabled by viewModel.streamDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val startupPerfTelemetryEnabled by viewModel.startupPerfTelemetryEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val debridUiState by debridViewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    LaunchedEffect(debridViewModel) {
+        debridViewModel.messages.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
     val trackingProviderSelectorState by viewModel.trackingProviderSelectorState.collectAsStateWithLifecycle(
         initialValue = TrackingProviderSelectorState()
     )
@@ -158,6 +168,7 @@ fun PlaybackSettingsContent(
     var showNextEpisodeThresholdModeDialog by remember { mutableStateOf(false) }
     var showReuseLastLinkCacheDialog by remember { mutableStateOf(false) }
     var showPlayerPreferenceDialog by remember { mutableStateOf(false) }
+    var showCollectorDashboardDialog by remember { mutableStateOf(false) }
 
     fun dismissAllDialogs() {
         showLanguageDialog = false
@@ -354,7 +365,36 @@ fun PlaybackSettingsContent(
                 onResetNetworkSettingsToDefaults = {
                     coroutineScope.launch { viewModel.resetNetworkSettingsToDefaults() }
                     memoryUsageTrigger++
-                }
+                },
+                shadowAutoplayDataCollectionEnabled = debridUiState.shadowAutoplayDataCollectionEnabled,
+                onSetShadowAutoplayDataCollectionEnabled = { debridViewModel.setShadowAutoplayDataCollectionEnabled(it) },
+                debridBenchmarkDataCollectionEnabled = debridUiState.debridBenchmarkDataCollectionEnabled,
+                onSetDebridBenchmarkDataCollectionEnabled = { debridViewModel.setDebridBenchmarkDataCollectionEnabled(it) },
+                onShowCollectorDashboardQr = {
+                    debridViewModel.refreshPublicCollectorDashboardLink()
+                    showCollectorDashboardDialog = true
+                },
+                playbackTraceEnabled = debridUiState.playbackTraceStatus.enabled || debridUiState.playbackTraceEnabled,
+                playbackTraceAdbControlEnabled = debridUiState.playbackTraceAdbControlEnabled,
+                playbackTraceStatus = debridUiState.playbackTraceStatus,
+                onTogglePlaybackTrace = {
+                    val current = debridUiState.playbackTraceStatus.enabled || debridUiState.playbackTraceEnabled
+                    debridViewModel.setPlaybackTraceEnabled(!current)
+                },
+                onTogglePlaybackTraceAdbControl = {
+                    debridViewModel.setPlaybackTraceAdbControlEnabled(!debridUiState.playbackTraceAdbControlEnabled)
+                },
+                onExportLastSession = {
+                    debridViewModel.exportLastSession { intent -> context.startActivity(intent) }
+                },
+                onExportAllToDownloads = {
+                    debridViewModel.copyAllTracesZipToDownloads()
+                },
+                onCopyLastTraceToDownloads = { uri -> debridViewModel.copyLastTraceToDownloads(uri) },
+                onClearAllTraces = { debridViewModel.clearAllTraces() },
+                onSendToDeveloper = { debridViewModel.uploadLastSessionToDeveloper() },
+                diagnosticsUploadInProgress = debridUiState.diagnosticsUploadInProgress,
+                diagnosticsUploadResult = debridUiState.diagnosticsUploadResult,
             )
         }
 
@@ -467,6 +507,14 @@ fun PlaybackSettingsContent(
         onDismissNextEpisodeThresholdModeDialog = ::dismissAllDialogs,
         onDismissReuseLastLinkCacheDialog = ::dismissAllDialogs
     )
+
+    if (showCollectorDashboardDialog) {
+        CollectorDashboardQrDialog(
+            url = debridUiState.collectorDashboardUrl,
+            unavailableReason = debridUiState.collectorDashboardUnavailableReason,
+            onDismiss = { showCollectorDashboardDialog = false }
+        )
+    }
 
     if (showTrackingProviderDialog) {
         NexioDialog(

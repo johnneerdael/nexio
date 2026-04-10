@@ -252,6 +252,9 @@ class MainActivity : ComponentActivity() {
     lateinit var appOnboardingDataStore: AppOnboardingDataStore
 
     @Inject
+    lateinit var catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier
+
+    @Inject
     lateinit var androidTvRecommendationsDataStore: AndroidTvRecommendationsDataStore
 
     @Inject
@@ -396,6 +399,10 @@ class MainActivity : ComponentActivity() {
                 if (hasSeenAuthQrOnFirstLaunch == false && authState is AuthState.FullAccount) {
                     appOnboardingDataStore.setHasSeenAuthQrOnFirstLaunch(true)
                     onboardingCompletedThisSession = true
+                    // Immediately priority-hydrate all enabled catalog feeds on first login.
+                    // Boot-safe: hasSeenAuthQrOnFirstLaunch is now true, so this branch
+                    // never executes again on subsequent boots.
+                    catalogPriorityHydrationNotifier.notifyPriorityHydrationRequired()
                 }
             }
 
@@ -445,9 +452,11 @@ class MainActivity : ComponentActivity() {
                     }
 
                     if (
-                        hasSeenAuthQrOnFirstLaunch == false &&
-                        authState !is AuthState.FullAccount &&
-                        !onboardingCompletedThisSession
+                        shouldShowAuthQrOnStartup(
+                            hasSeenAuthQrOnFirstLaunch = hasSeenAuthQrOnFirstLaunch,
+                            authState = authState,
+                            onboardingCompletedThisSession = onboardingCompletedThisSession
+                        )
                     ) {
                         AuthQrSignInScreen(
                             onBackPress = {},

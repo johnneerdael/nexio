@@ -114,6 +114,12 @@ class MDBListDiscoveryService @Inject constructor(
         }
     }
 
+    /** Bypasses the startup refresh gate. Only call from explicit UI actions. */
+    suspend fun priorityFetch() {
+        startupRefreshGateUntilElapsedMs = 0L
+        ensureFresh(force = true)
+    }
+
     suspend fun ensureFresh(force: Boolean) = withContext(Dispatchers.IO) {
         ensureStartupGateInitialized()
         if (isStartupRefreshGated()) {
@@ -131,14 +137,13 @@ class MDBListDiscoveryService @Inject constructor(
         }
 
         val now = System.currentTimeMillis()
-        if (!force && now - lastRefreshMs < minRefreshIntervalMs && snapshotState.value.updatedAtMs > 0L) {
+        if (now - lastRefreshMs < minRefreshIntervalMs && snapshotState.value.updatedAtMs > 0L) {
             return@withContext
         }
 
         refreshMutex.withLock {
             val lockedNow = System.currentTimeMillis()
-            if (!force &&
-                lockedNow - lastRefreshMs < minRefreshIntervalMs &&
+            if (lockedNow - lastRefreshMs < minRefreshIntervalMs &&
                 snapshotState.value.updatedAtMs > 0L
             ) {
                 return@withLock

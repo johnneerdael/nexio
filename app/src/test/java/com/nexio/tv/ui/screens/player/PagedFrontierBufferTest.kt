@@ -141,6 +141,23 @@ class PagedFrontierBufferTest {
         for (i in half until PAGE_SIZE) assertEquals(0x22.toByte(), dest[i])
     }
 
+    @Test
+    fun `startup path can advance reader visibility before a full page is filled`() {
+        val buffer = PagedFrontierBuffer()
+        val start = 1_048_576L
+        val payload = ByteArray(73_728) { 0x2A }
+        buffer.setTotalLength(4L * PAGE_SIZE)
+        buffer.setBasePosition(start)
+
+        buffer.publishStartupWindow(start, payload, 0, payload.size)
+
+        assertTrue(buffer.readableContiguousBytesFrom(start) > 0L)
+        val dest = ByteArray(payload.size)
+        val read = buffer.read(start, dest, 0, dest.size)
+        assertEquals(payload.size, read)
+        assertArrayEquals(payload, dest)
+    }
+
     // -------------------------------------------------------------------------
     // 5. reset() clears all state
     // -------------------------------------------------------------------------
@@ -264,6 +281,40 @@ class PagedFrontierBufferTest {
         assertTrue(out.contains("\"ev\":\"store_write_ms\""))
         assertTrue(out.contains("\"ev\":\"store_read_ms\""))
         assertTrue(out.contains("\"ev\":\"frontier_no_progress_band\""))
+    }
+
+    @Test(timeout = 5_000L)
+    fun `frontier no progress band emits at coarse intervals under sustained stall`() {
+        val sink = StringWriter()
+        PlaybackTracer.installWriterFactory { header ->
+            SessionWriter(
+                header = header,
+                baseFile = null,
+                capacity = 4096,
+                testSink = sink,
+                rotationBytes = Long.MAX_VALUE,
+                parkNanos = 1_000_000L,
+                overflowReportIntervalNanos = Long.MAX_VALUE
+            )
+        }
+        PlaybackTracer.enabled = true
+        val sid = PlaybackTracer.beginSession(fakeHeader())
+
+        val buffer = PagedFrontierBuffer()
+        buffer.setTotalLength(PAGE_SIZE.toLong())
+        buffer.writePage(0, 0x55)
+        val dest = ByteArray(16)
+        buffer.setAtomicLongField("lastFrontierAdvanceNanos", -2_000_000_000L)
+        repeat(5) {
+            Thread.sleep(120L)
+            assertEquals(16, buffer.read(0L, dest, 0, dest.size))
+        }
+        PlaybackTracer.endSession(sid)
+
+        val stallCount = sink.toString()
+            .lineSequence()
+            .count { it.contains("\"ev\":\"frontier_no_progress_band\"") }
+        assertTrue("stall band traces should stay coarse, got $stallCount", stallCount <= 3)
     }
 
     private fun PagedFrontierBuffer.setAtomicLongField(name: String, value: Long) {

@@ -393,6 +393,74 @@ class DebridBenchmarkSessionRunnerTest {
         assertEquals(fixture.parallelChunkSizeMb, degradedProfileSummary?.configSnapshot?.parallelChunkSizeMb)
     }
 
+    @Test
+    fun `decision metrics expose whether shadow or legacy path constrained the budget`() = runTest {
+        val directTransport = mockk<DirectProfileBenchmarkTransport>()
+        val optimizedTransport = mockk<OptimizedBenchmarkTransport>()
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
+        val deviceCapabilitySnapshotProvider = mockk<DeviceCapabilitySnapshotProvider>()
+        val playerSettings = PlayerSettings()
+        every { playerSettingsDataStore.playerSettings } returns flowOf(playerSettings)
+        every { deviceCapabilitySnapshotProvider.capture(playerSettings) } returns sampleDeviceSnapshot()
+
+        val baseProfile = profile(
+            startupMs = 180L,
+            averageMbps = 200.0,
+            p10Mbps = 150.0,
+            actionable = true
+        )
+        val frontierEvents = (1..10).map { index ->
+            FrontierEvent(
+                tMs = index * 1_000L,
+                contiguousFrontierBytes = index * 8L * 1024L * 1024L,
+                deltaContiguousBytes = 8L * 1024L * 1024L
+            )
+        }
+        val optimizedProfile = baseProfile.copy(
+            sustained = baseProfile.sustained.copy(
+                steadyStateReferenceMbps = 190.0,
+                p50ThroughputMbps = 200.0
+            ),
+            configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                useParallelConnections = true,
+                parallelConnectionCount = 3,
+                parallelChunkSizeMb = 24
+            ),
+            rawSamples = DebridBenchmarkRawSamples(frontierEvents = frontierEvents)
+        )
+
+        coEvery { optimizedTransport.runProfile(any(), any(), any(), any()) } returns
+            DebridBenchmarkTransportProfileResult(
+                summary = DebridBenchmarkSummary(
+                    startupTimeMs = 180L,
+                    sustainedThroughputMbps = 200.0,
+                    transferredBytes = 2_000_000_000L,
+                    elapsedMs = 120_000L
+                ),
+                profile = optimizedProfile,
+                terminationReason = DebridBenchmarkTerminationReason.COMPLETED
+            )
+
+        val runner = DebridBenchmarkSessionRunner(
+            directTransport = directTransport,
+            optimizedTransport = optimizedTransport,
+            playerSettingsDataStore = playerSettingsDataStore,
+            deviceCapabilitySnapshotProvider = deviceCapabilitySnapshotProvider,
+            nowMs = { 5678L }
+        )
+
+        val result = runner.run(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            candidate = candidate(),
+            observer = DebridBenchmarkObserver {}
+        )
+
+        val decision = result.result?.optimized?.decision
+        assertNotNull(decision?.legacyBudgetMbps)
+        assertNotNull(decision?.budgetDivergenceRatio)
+        assertNotNull(decision?.shadowPlayerResult)
+    }
+
     private fun candidate(): DebridBenchmarkCandidate {
         return DebridBenchmarkCandidate(
             provider = DebridBenchmarkProvider.REAL_DEBRID,

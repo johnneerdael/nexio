@@ -1,6 +1,7 @@
 package com.nexio.tv.instrumentation
 
-import org.jctools.queues.MpscArrayQueue
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Pooled record carried through the MPSC ring. Steady-state hot path performs
@@ -8,7 +9,7 @@ import org.jctools.queues.MpscArrayQueue
  *
  * Pool shape (spec §A.3 amendment A7):
  *  - per-thread `ArrayDeque<TraceRecord>` capped at 64
- *  - shared spill freelist `MpscArrayQueue<TraceRecord>` capacity 1024
+ *  - shared spill freelist capacity 1024
  */
 class TraceRecord internal constructor() {
     @JvmField var family: EventFamily = EventFamily.TRACER
@@ -24,6 +25,10 @@ class TraceRecord internal constructor() {
     }
 
     fun recycle() {
+        family = EventFamily.TRACER
+        type = ""
+        tNanos = 0L
+        thread = ""
         resetPayload()
         TraceRecordPool.release(this)
     }
@@ -45,8 +50,8 @@ class TraceRecord internal constructor() {
 /**
  * Two-tier free pool for [TraceRecord]:
  *  1. Per-thread `ArrayDeque` (cap 64) — lock-free for the owning thread.
- *  2. Shared `MpscArrayQueue` (cap 1024) — used when a thread's local deque
- *     overflows on recycle or is empty on acquire.
+ *  2. Shared freelist (cap 1024) — used when a thread's local deque overflows
+ *     on recycle or is empty on acquire.
  *
  * Once each producer thread has warmed its thread-local pool, both `acquire()`
  * and `release()` are zero-allocation. New `TraceRecord` instances are only
@@ -56,7 +61,8 @@ internal object TraceRecordPool {
     private const val THREAD_LOCAL_CAP = 64
     private const val SHARED_CAP = 1024
 
-    private val sharedFreelist = MpscArrayQueue<TraceRecord>(SHARED_CAP)
+    private val sharedFreelist = ConcurrentLinkedQueue<TraceRecord>()
+    private val sharedFreelistSize = AtomicInteger(0)
 
     private val local = object : ThreadLocal<ArrayDeque<TraceRecord>>() {
         override fun initialValue(): ArrayDeque<TraceRecord> = ArrayDeque(THREAD_LOCAL_CAP)
@@ -67,7 +73,10 @@ internal object TraceRecordPool {
         val tl = deque.removeLastOrNull()
         if (tl != null) return tl
         val shared = sharedFreelist.poll()
-        if (shared != null) return shared
+        if (shared != null) {
+            sharedFreelistSize.decrementAndGet()
+            return shared
+        }
         return TraceRecord()
     }
 
@@ -77,7 +86,12 @@ internal object TraceRecordPool {
             deque.addLast(rec)
             return
         }
-        // Local pool full — spill to shared. If shared is also full, drop on the floor.
-        sharedFreelist.offer(rec)
+        while (true) {
+            val currentSharedSize = sharedFreelistSize.get()
+            if (currentSharedSize >= SHARED_CAP) return
+            if (!sharedFreelistSize.compareAndSet(currentSharedSize, currentSharedSize + 1)) continue
+            sharedFreelist.offer(rec)
+            return
+        }
     }
 }

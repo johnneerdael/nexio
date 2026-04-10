@@ -65,6 +65,7 @@ class TraktViewModel @Inject constructor(
     private val traktDiscoveryService: TraktDiscoveryService,
     private val traktScrobbleService: TraktScrobbleService,
     private val traktSettingsDataStore: TraktSettingsDataStore,
+    private val catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TraktUiState())
@@ -253,7 +254,7 @@ class TraktViewModel @Inject constructor(
         if (catalogId !in TraktCatalogIds.BUILT_IN_ORDER) return
         viewModelScope.launch {
             traktSettingsDataStore.setCatalogEnabled(catalogId, enabled)
-            traktDiscoveryService.ensureFresh(force = true)
+            if (enabled) catalogPriorityHydrationNotifier.notifyPriorityHydrationRequired()
             _uiState.update {
                 it.copy(statusMessage = context.getString(R.string.trakt_catalogs_updated))
             }
@@ -272,7 +273,7 @@ class TraktViewModel @Inject constructor(
         if (listKey.isBlank()) return
         viewModelScope.launch {
             traktSettingsDataStore.setPopularListSelected(listKey, selected)
-            traktDiscoveryService.ensureFresh(force = true)
+            if (selected) catalogPriorityHydrationNotifier.notifyPriorityHydrationRequired()
             _uiState.update {
                 it.copy(statusMessage = context.getString(R.string.trakt_catalogs_updated))
             }

@@ -13,9 +13,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.nexio.tv.R
+import com.nexio.tv.ui.theme.NexioColors
+import com.nexio.tv.data.repository.benchmark.DiagnosticsUploadResult
 import com.nexio.tv.instrumentation.TraceStatus
 
 /**
@@ -46,9 +49,12 @@ internal fun LazyListScope.playbackDiagnosticsItems(
     onToggleEnabled: () -> Unit,
     onToggleAdbControl: () -> Unit,
     onExportLast: () -> Unit,
-    onExportAll: () -> Unit,
+    onExportAllToDownloads: () -> Unit,
     onCopyToDownloads: (Uri) -> Unit,
     onClearAll: () -> Unit,
+    onSendToDeveloper: () -> Unit = {},
+    diagnosticsUploadInProgress: Boolean = false,
+    diagnosticsUploadResult: DiagnosticsUploadResult? = null,
 ) {
     // Section title + status line. Non-interactive — acts as a visual header
     // separating the diagnostics block from the rest of the debrid settings.
@@ -57,11 +63,13 @@ internal fun LazyListScope.playbackDiagnosticsItems(
         Text(
             text = stringResource(R.string.playback_diagnostics_section_title),
             style = MaterialTheme.typography.titleSmall,
+            color = NexioColors.TextPrimary,
             modifier = Modifier.padding(horizontal = 18.dp),
         )
         Text(
             text = formatStatusLine(status),
             style = MaterialTheme.typography.bodySmall,
+            color = NexioColors.TextSecondary,
             modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp),
         )
         Spacer(Modifier.height(4.dp))
@@ -80,9 +88,9 @@ internal fun LazyListScope.playbackDiagnosticsItems(
         )
     }
 
-    // Export actions. Disabled until there is at least one session on disk
-    // (the Card's onClick guard handles this, but we also grey the value
-    // text out for visual feedback).
+    // Export actions. The main all-sessions path writes directly to
+    // Downloads; the Card's onClick guard handles the "has sessions"
+    // case, and we grey the value text out for visual feedback.
     item(key = "playback_diagnostics_export_last") {
         SettingsActionRow(
             title = stringResource(R.string.playback_diagnostics_export_last_title),
@@ -93,15 +101,42 @@ internal fun LazyListScope.playbackDiagnosticsItems(
         )
     }
 
+    item(key = "playback_diagnostics_send_to_developer") {
+        val valueText = when {
+            diagnosticsUploadInProgress -> stringResource(R.string.playback_diagnostics_uploading)
+            diagnosticsUploadResult is DiagnosticsUploadResult.Success ->
+                stringResource(R.string.playback_diagnostics_upload_sent)
+            diagnosticsUploadResult is DiagnosticsUploadResult.NoTrace ->
+                stringResource(R.string.playback_diagnostics_upload_no_trace)
+            diagnosticsUploadResult is DiagnosticsUploadResult.Error ->
+                stringResource(
+                    R.string.playback_diagnostics_upload_failed,
+                    diagnosticsUploadResult.message
+                )
+            else -> null
+        }
+        SettingsActionRow(
+            title = stringResource(R.string.playback_diagnostics_send_to_developer_title),
+            subtitle = stringResource(R.string.playback_diagnostics_send_to_developer_subtitle),
+            value = valueText,
+            enabled = status.lastSessionFileName != null && !diagnosticsUploadInProgress,
+            onClick = onSendToDeveloper,
+        )
+    }
+
     item(key = "playback_diagnostics_export_all") {
         SettingsActionRow(
             title = stringResource(R.string.playback_diagnostics_export_all_title),
             subtitle = stringResource(R.string.playback_diagnostics_export_all_subtitle),
             value = if (status.sessionCount > 0) {
-                "${status.sessionCount} · ${"%.1f".format(status.totalBytes / (1024.0 * 1024.0))} MiB"
+                stringResource(
+                    R.string.playback_diagnostics_export_all_value_format,
+                    status.sessionCount,
+                    status.totalBytes / (1024.0 * 1024.0)
+                )
             } else null,
             enabled = status.sessionCount > 0,
-            onClick = onExportAll,
+            onClick = onExportAllToDownloads,
         )
     }
 
@@ -162,7 +197,7 @@ internal fun PlaybackDiagnosticsSection(
     onToggleEnabled: (Boolean) -> Unit,
     onToggleAdbControl: (Boolean) -> Unit,
     onExportLast: () -> Unit,
-    onExportAll: () -> Unit,
+    onExportAllToDownloads: () -> Unit,
     onCopyToDownloads: (Uri) -> Unit,
     onClearAll: () -> Unit,
     onShareIntent: (Intent) -> Unit,
@@ -176,16 +211,32 @@ internal fun PlaybackDiagnosticsSection(
     )
 }
 
+@Composable
 private fun formatStatusLine(status: TraceStatus): String {
-    val totalMib = status.totalBytes.toDouble() / (1024.0 * 1024.0)
-    val sessions = status.sessionCount
-    val sessionWord = if (sessions == 1) "session" else "sessions"
-    val state = if (status.enabled) "enabled" else "disabled"
-    val sb = StringBuilder()
-    sb.append("Tracer is ").append(state).append(" · ")
-    sb.append(sessions).append(' ').append(sessionWord)
-    if (sessions > 0) {
-        sb.append(" · ").append("%.1f".format(totalMib)).append(" MiB total")
+    val state = if (status.enabled) {
+        stringResource(R.string.playback_diagnostics_status_enabled)
+    } else {
+        stringResource(R.string.playback_diagnostics_status_disabled)
     }
-    return sb.toString()
+    val sessionText = pluralStringResource(
+        R.plurals.playback_diagnostics_status_session_count,
+        status.sessionCount,
+        status.sessionCount
+    )
+    return buildString {
+        append(stringResource(R.string.playback_diagnostics_status_prefix))
+        append(' ')
+        append(state)
+        append(" · ")
+        append(sessionText)
+        if (status.sessionCount > 0) {
+            append(" · ")
+            append(
+                stringResource(
+                    R.string.playback_diagnostics_status_total_format,
+                    status.totalBytes / (1024.0 * 1024.0)
+                )
+            )
+        }
+    }
 }

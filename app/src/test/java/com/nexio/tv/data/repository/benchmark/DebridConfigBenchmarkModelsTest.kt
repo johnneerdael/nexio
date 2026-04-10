@@ -84,8 +84,8 @@ class DebridConfigBenchmarkModelsTest {
         // No 8 MiB clamp: urgent must be 32 MiB (locked), NOT min(64, 8)*1024^2
         assertEquals(33_554_432L, result.maxSafeUrgentChunkBytes)   // 32 MiB
         assertEquals(67_108_864L, result.maxSafePrefetchChunkBytes)  // 64 MiB
-        // prefetchWorkers must be 1 (locked), not derived from profile
-        assertEquals(1, result.maxSafePrefetchWorkers)
+        // prefetchWorkers must be 2 (locked), not derived from profile
+        assertEquals(2, result.maxSafePrefetchWorkers)
         // urgentWorkers must be 1 (locked), not min(8, 3)
         assertEquals(1, result.maxSafeUrgentWorkers)
     }

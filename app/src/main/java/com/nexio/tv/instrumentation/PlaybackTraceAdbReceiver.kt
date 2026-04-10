@@ -32,6 +32,9 @@ import kotlinx.coroutines.launch
  *  - `com.nexio.tv.action.PLAYBACK_TRACE_STATUS`       — refresh status snapshot
  *  - `com.nexio.tv.action.PLAYBACK_TRACE_EXPORT_LAST`  — share latest via FileProvider
  *  - `com.nexio.tv.action.PLAYBACK_TRACE_EXPORT_ALL`   — share zip via FileProvider
+ *  - `com.nexio.tv.action.PLAYBACK_TRACE_COPY_LAST`    — copy latest JSONL into Downloads
+ *  - `com.nexio.tv.action.PLAYBACK_TRACE_COPY_ALL`     — copy zipped bundle into Downloads
+ *  - `com.nexio.tv.action.PLAYBACK_TRACE_COPY_LATEST_SESSION` — copy only the latest session family into Downloads
  *  - `com.nexio.tv.action.PLAYBACK_TRACE_CLEAR`        — delete every retained JSONL
  *
  * ### Example
@@ -120,6 +123,30 @@ class PlaybackTraceAdbReceiver : BroadcastReceiver() {
                     Log.i(TAG, "ADB: export_all — no traces available")
                 }
             }
+            ACTION_COPY_LAST -> {
+                val adbPath = controller.copyLastToDownloads()
+                if (adbPath != null) {
+                    Log.i(TAG, "ADB: copy_last — wrote $adbPath")
+                } else {
+                    Log.i(TAG, "ADB: copy_last — no trace available")
+                }
+            }
+            ACTION_COPY_ALL -> {
+                val adbPath = controller.copyAllToDownloads()
+                if (adbPath != null) {
+                    Log.i(TAG, "ADB: copy_all — wrote $adbPath")
+                } else {
+                    Log.i(TAG, "ADB: copy_all — no traces available")
+                }
+            }
+            ACTION_COPY_LATEST_SESSION -> {
+                val adbPath = controller.copyLatestSessionToDownloads()
+                if (adbPath != null) {
+                    Log.i(TAG, "ADB: copy_latest_session — wrote $adbPath")
+                } else {
+                    Log.i(TAG, "ADB: copy_latest_session — no trace available")
+                }
+            }
             ACTION_CLEAR -> {
                 val deleted = controller.clearAll()
                 Log.i(TAG, "ADB: clear — deleted $deleted file(s)")
@@ -135,6 +162,9 @@ class PlaybackTraceAdbReceiver : BroadcastReceiver() {
         const val ACTION_STATUS = "com.nexio.tv.action.PLAYBACK_TRACE_STATUS"
         const val ACTION_EXPORT_LAST = "com.nexio.tv.action.PLAYBACK_TRACE_EXPORT_LAST"
         const val ACTION_EXPORT_ALL = "com.nexio.tv.action.PLAYBACK_TRACE_EXPORT_ALL"
+        const val ACTION_COPY_LAST = "com.nexio.tv.action.PLAYBACK_TRACE_COPY_LAST"
+        const val ACTION_COPY_ALL = "com.nexio.tv.action.PLAYBACK_TRACE_COPY_ALL"
+        const val ACTION_COPY_LATEST_SESSION = "com.nexio.tv.action.PLAYBACK_TRACE_COPY_LATEST_SESSION"
         const val ACTION_CLEAR = "com.nexio.tv.action.PLAYBACK_TRACE_CLEAR"
 
         private val SUPPORTED_ACTIONS: Set<String> = setOf(
@@ -143,6 +173,9 @@ class PlaybackTraceAdbReceiver : BroadcastReceiver() {
             ACTION_STATUS,
             ACTION_EXPORT_LAST,
             ACTION_EXPORT_ALL,
+            ACTION_COPY_LAST,
+            ACTION_COPY_ALL,
+            ACTION_COPY_LATEST_SESSION,
             ACTION_CLEAR,
         )
     }

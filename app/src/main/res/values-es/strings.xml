@@ -910,8 +910,8 @@
     <string name="playback_autoplay_trailers_sub">Permite que las vistas previas de tráilers en detalles y en el inicio comiencen automáticamente tras el retraso configurado.</string>
     <string name="playback_trailer_delay">Retraso del tráiler</string>
     <string name="playback_trailer_delay_sub">Tiempo de espera antes de que empiece automáticamente una vista previa de tráiler.</string>
-    <string name="playback_section_logging">Registro</string>
-    <string name="playback_section_logging_desc">Diagnósticos en tiempo de ejecución para el almacenamiento en búfer, la obtención de streams y el sumidero de audio nativo.</string>
+    <string name="playback_section_logging">Solución de problemas</string>
+    <string name="playback_section_logging_desc">Diagnósticos en tiempo de ejecución, trazado de reproducción, recopilación de datos y registro del sumidero de audio nativo.</string>
     <string name="playback_logging_buffer_title">Habilitar registro de caché VOD/descarga paralela</string>
     <string name="playback_logging_buffer_subtitle">Emitir diagnósticos periódicos de caché, almacenamiento en búfer y descarga paralela en logcat.</string>
     <string name="playback_logging_iec_title">Habilitar registros para AudioSink/IEC Packer nativo</string>
@@ -1081,6 +1081,9 @@
     <string name="debrid_data_collection_view_qr_action">Ver QR</string>
     <string name="debrid_data_collection_qr_title">QR del panel del colector</string>
     <string name="debrid_data_collection_qr_subtitle">Escanea este código QR o abre la URL en otro dispositivo.</string>
+    <string name="debrid_rd_activation_qr_title">Activación de Real-Debrid</string>
+    <string name="debrid_rd_activation_qr_subtitle">Escanea este código QR para abrir la página de activación en tu teléfono.</string>
+    <string name="debrid_rd_activation_qr_instruction">Escanea el código QR para autenticar automáticamente tu dispositivo en Real-Debrid.</string>
     <string name="debrid_data_collection_qr_unavailable">El código QR no está disponible</string>
     <string name="debrid_data_collection_qr_code_content_description">Código QR del panel del colector</string>
     <string name="debrid_data_collection_qr_base_url_missing">La URL base del panel del colector no está configurada.</string>
@@ -1246,6 +1249,7 @@
     <string name="cd_voice_search">Búsqueda por voz</string>
     <string name="cd_trakt_logo">Logotipo de Trakt</string>
     <string name="cd_trakt_activation_qr">QR de activación de Trakt</string>
+    <string name="cd_real_debrid_activation_qr">Escanear para abrir la página de activación de Real-Debrid</string>
     <string name="filter_all">Todo</string>
     <string name="account_sign_in_title">Iniciar sesión / Crear cuenta</string>
     <string name="account_generate_sync_code_title">Generar código de sincronización</string>
@@ -1281,14 +1285,32 @@
     <string name="playback_diagnostics_trace_subtitle">Registra cada sesión de reproducción como un archivo JSONL que puedes exportar para soporte</string>
     <string name="playback_diagnostics_export_last_title">Exportar última sesión</string>
     <string name="playback_diagnostics_export_last_subtitle">Comparte el último archivo JSONL de playback-trace</string>
-    <string name="playback_diagnostics_export_all_title">Exportar todas las sesiones</string>
-    <string name="playback_diagnostics_export_all_subtitle">Agrupa cada sesión guardada en un .zip y compártelo</string>
+    <string name="playback_diagnostics_export_all_title">Exportar todo a Descargas</string>
+    <string name="playback_diagnostics_export_all_subtitle">Agrupa cada sesión guardada en un .zip y guárdalo en Descargas, el destino principal</string>
+    <string name="playback_diagnostics_export_all_downloads_success">Se guardó el zip de diagnóstico en Descargas</string>
+    <string name="playback_diagnostics_export_all_downloads_failure">No se pudo guardar el zip de diagnóstico en Descargas</string>
+    <string name="playback_diagnostics_export_all_downloads_empty">No hay trazas de reproducción para exportar</string>
+    <string name="playback_diagnostics_export_all_value_format">%1$d · %2$.1f MiB</string>
+    <string name="playback_diagnostics_uploading">Subiendo…</string>
+    <string name="playback_diagnostics_upload_sent">Enviado</string>
+    <string name="playback_diagnostics_upload_no_trace">Sin traza</string>
+    <string name="playback_diagnostics_upload_failed">Error: %1$s</string>
+    <string name="playback_diagnostics_status_prefix">El trazador está</string>
+    <string name="playback_diagnostics_status_enabled">habilitado</string>
+    <string name="playback_diagnostics_status_disabled">deshabilitado</string>
+    <string name="playback_diagnostics_status_total_format">%1$.1f MiB totales</string>
+    <plurals name="playback_diagnostics_status_session_count">
+        <item quantity="one">%d sesión</item>
+        <item quantity="other">%d sesiones</item>
+    </plurals>
     <string name="playback_diagnostics_copy_latest_title">Copiar la última a\u2026</string>
     <string name="playback_diagnostics_copy_latest_subtitle">Escribe la última sesión en cualquier ubicación de almacenamiento (Descargas, USB, nube)</string>
     <string name="playback_diagnostics_clear_title">Borrar todas las trazas</string>
     <string name="playback_diagnostics_clear_subtitle">Elimina todos los archivos .jsonl guardados en playback-traces/</string>
     <string name="playback_diagnostics_adb_title">Permitir control ADB</string>
     <string name="playback_diagnostics_adb_subtitle">Permite que los comandos ADB de la estación de trabajo controlen las mismas operaciones de trazado</string>
+    <string name="playback_diagnostics_send_to_developer_title">Enviar al desarrollador</string>
+    <string name="playback_diagnostics_send_to_developer_subtitle">Sube la última sesión al recopilador del desarrollador para su análisis</string>
     <string name="error_missing_tracking_ids">Faltan IDs de seguimiento para el check-in</string>
     <string name="error_tracking_check_in_failed">El check-in de seguimiento falló</string>
 </resources>

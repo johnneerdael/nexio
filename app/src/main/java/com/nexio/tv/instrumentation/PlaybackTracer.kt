@@ -85,6 +85,17 @@ object PlaybackTracer {
     @PublishedApi
     internal fun currentInternal(): SessionWriter? = current
 
+    @Synchronized
+    internal fun endCurrentSessionIfAny(): String? {
+        val active = current ?: return null
+        endSession(active.sessionId)
+        return active.sessionId
+    }
+
+    internal fun snapshotCurrentTraceFile(requestedFile: File, snapshotDir: File): SessionWriter.FileSnapshot? {
+        return currentInternal()?.snapshotIfCurrentFile(requestedFile, snapshotDir)
+    }
+
     private fun defaultWriter(header: SessionHeader): SessionWriter {
         val dir = filesDir
         val file = if (dir != null) {

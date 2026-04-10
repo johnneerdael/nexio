@@ -146,7 +146,10 @@ class TransportPolicyControllerTest {
             runtimeHints = hints()
         )
 
-        assertEquals(8L * 1024L * 1024L, effective.urgentChunkBytes)
+        // Baseline specialization no longer clamps urgentChunkBytes — the locked-envelope
+        // chunk size (here 16 MiB from the base policy) is preserved as-is. The STARTUP
+        // 2 MiB clamp is applied earlier by policyForState(STARTUP), not here.
+        assertEquals(16L * 1024L * 1024L, effective.urgentChunkBytes)
         assertEquals(null, effective.connectionBudgetHint)
         assertEquals(RuntimeTransportRetryMode.DEFAULT, effective.retryMode)
     }
@@ -257,7 +260,7 @@ class TransportPolicyControllerTest {
 
         assertEquals(3, effective.urgentWorkers) // unchanged from base
         assertEquals(2, effective.prefetchWorkers) // unchanged from base
-        assertEquals(8L * 1024L * 1024L, effective.urgentChunkBytes) // clamped to 8MiB
+        assertEquals(16L * 1024L * 1024L, effective.urgentChunkBytes) // preserved from base (no 8 MiB clamp)
         assertEquals(32L * 1024L * 1024L, effective.prefetchChunkBytes) // unchanged
         assertEquals(null, effective.connectionBudgetHint)
         assertEquals(RuntimeTransportRetryMode.DEFAULT, effective.retryMode)

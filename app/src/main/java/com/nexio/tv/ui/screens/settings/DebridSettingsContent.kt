@@ -3,6 +3,7 @@
 package com.nexio.tv.ui.screens.settings
 
 import android.view.KeyEvent
+import android.content.Context
 import androidx.compose.ui.Alignment
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -88,9 +89,13 @@ import com.nexio.tv.data.repository.benchmark.playbackStability
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -146,7 +151,9 @@ internal data class DebridUiState(
     val playbackTraceAdbControlEnabled: Boolean = false,
     val playbackTraceStatus: com.nexio.tv.instrumentation.TraceStatus =
         com.nexio.tv.instrumentation.TraceStatus.EMPTY,
-    val lastTraceSummary: TraceFileSummary? = null
+    val lastTraceSummary: TraceFileSummary? = null,
+    val diagnosticsUploadInProgress: Boolean = false,
+    val diagnosticsUploadResult: com.nexio.tv.data.repository.benchmark.DiagnosticsUploadResult? = null,
 )
 
 /**
@@ -267,7 +274,7 @@ internal fun DebridSettingsContent(
     var showPremiumizeDialog by remember { mutableStateOf(false) }
     var showTorBoxDialog by remember { mutableStateOf(false) }
     var showEasyDebridDialog by remember { mutableStateOf(false) }
-    var showCollectorDashboardDialog by remember { mutableStateOf(false) }
+    val showRealDebridActivationQr = uiState.realDebridMode == DebridConnectionMode.AWAITING_APPROVAL
     val premiumizeCustomerId = uiState.premiumizeCustomerId
 
     LaunchedEffect(Unit) {
@@ -329,16 +336,6 @@ internal fun DebridSettingsContent(
                     )
                 }
 
-                if (uiState.realDebridMode == DebridConnectionMode.AWAITING_APPROVAL) {
-                    item(key = "debrid_rd_code") {
-                        SettingsActionRow(
-                            title = stringResource(R.string.debrid_activation_code_title),
-                            subtitle = uiState.realDebridVerificationUrl ?: "https://real-debrid.com/device",
-                            value = uiState.realDebridUserCode ?: "",
-                            onClick = { viewModel.pollRealDebrid() }
-                        )
-                    }
-                }
 
                 if (uiState.realDebridBenchmark.isVisible) {
                     val latestRealDebridResult = uiState.realDebridBenchmark.latestResult
@@ -357,31 +354,6 @@ internal fun DebridSettingsContent(
                                 result = latestRealDebridResult,
                                 onOpen = {
                                     viewModel.openLatestBenchmarkResult(
-                                        DebridBenchmarkProvider.REAL_DEBRID
-                                    )
-                                }
-                            )
-                        }
-                    }
-                }
-
-                if (uiState.realDebridConfigBenchmark.isVisible) {
-                    val latestRealDebridConfigResult = uiState.realDebridConfigBenchmark.latestResult
-                    item(key = "debrid_rd_config_benchmark") {
-                        DebridConfigBenchmarkRow(
-                            provider = DebridBenchmarkProvider.REAL_DEBRID,
-                            benchmark = uiState.realDebridConfigBenchmark,
-                            onStart = { viewModel.startConfigBenchmark(DebridBenchmarkProvider.REAL_DEBRID) },
-                            onCancel = { viewModel.cancelConfigBenchmark() }
-                        )
-                    }
-                    if (latestRealDebridConfigResult != null) {
-                        item(key = "debrid_rd_config_benchmark_result") {
-                            DebridConfigBenchmarkResultRow(
-                                provider = DebridBenchmarkProvider.REAL_DEBRID,
-                                result = latestRealDebridConfigResult,
-                                onOpen = {
-                                    viewModel.openLatestConfigBenchmarkResult(
                                         DebridBenchmarkProvider.REAL_DEBRID
                                     )
                                 }
@@ -424,46 +396,6 @@ internal fun DebridSettingsContent(
                     )
                 }
 
-                item(key = "debrid_shadow_data_collection") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.debrid_shadow_autoplay_title),
-                        subtitle = stringResource(R.string.debrid_shadow_autoplay_subtitle),
-                        checked = uiState.shadowAutoplayDataCollectionEnabled,
-                        enabled = true,
-                        onToggle = {
-                            viewModel.setShadowAutoplayDataCollectionEnabled(
-                                !uiState.shadowAutoplayDataCollectionEnabled
-                            )
-                        }
-                    )
-                }
-
-                item(key = "debrid_benchmark_data_collection") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.debrid_benchmark_title),
-                        subtitle = stringResource(R.string.debrid_benchmark_subtitle),
-                        checked = uiState.debridBenchmarkDataCollectionEnabled,
-                        enabled = true,
-                        onToggle = {
-                            viewModel.setDebridBenchmarkDataCollectionEnabled(
-                                !uiState.debridBenchmarkDataCollectionEnabled
-                            )
-                        }
-                    )
-                }
-
-                item(key = "debrid_data_collection_qr") {
-                    SettingsActionRow(
-                        title = stringResource(R.string.debrid_data_collection_analyse_title),
-                        subtitle = stringResource(R.string.debrid_data_collection_analyse_subtitle),
-                        value = stringResource(R.string.debrid_data_collection_view_qr_action),
-                        onClick = {
-                            viewModel.refreshPublicCollectorDashboardLink()
-                            showCollectorDashboardDialog = true
-                        }
-                    )
-                }
-
                 item(key = "debrid_pm") {
                     SettingsActionRow(
                         title = stringResource(R.string.debrid_premiumize_title),
@@ -495,31 +427,6 @@ internal fun DebridSettingsContent(
                                 result = latestPremiumizeResult,
                                 onOpen = {
                                     viewModel.openLatestBenchmarkResult(
-                                        DebridBenchmarkProvider.PREMIUMIZE
-                                    )
-                                }
-                            )
-                        }
-                    }
-                }
-
-                if (uiState.premiumizeConfigBenchmark.isVisible) {
-                    val latestPremiumizeConfigResult = uiState.premiumizeConfigBenchmark.latestResult
-                    item(key = "debrid_pm_config_benchmark") {
-                        DebridConfigBenchmarkRow(
-                            provider = DebridBenchmarkProvider.PREMIUMIZE,
-                            benchmark = uiState.premiumizeConfigBenchmark,
-                            onStart = { viewModel.startConfigBenchmark(DebridBenchmarkProvider.PREMIUMIZE) },
-                            onCancel = { viewModel.cancelConfigBenchmark() }
-                        )
-                    }
-                    if (latestPremiumizeConfigResult != null) {
-                        item(key = "debrid_pm_config_benchmark_result") {
-                            DebridConfigBenchmarkResultRow(
-                                provider = DebridBenchmarkProvider.PREMIUMIZE,
-                                result = latestPremiumizeConfigResult,
-                                onOpen = {
-                                    viewModel.openLatestConfigBenchmarkResult(
                                         DebridBenchmarkProvider.PREMIUMIZE
                                     )
                                 }
@@ -659,52 +566,7 @@ internal fun DebridSettingsContent(
                         }
                     }
                 }
-                // Playback diagnostics trace. Compile-time elided when
-                // `PLAYBACK_TRACE_UI_ENABLED` is false. Each interactive
-                // element is emitted as its own LazyColumn item so the
-                // Fire TV d-pad can focus rows individually — see the
-                // header comment on [playbackDiagnosticsItems].
-                @Suppress("KotlinConstantConditions")
-                if (com.nexio.tv.instrumentation.PLAYBACK_TRACE_UI_ENABLED) {
-                    playbackDiagnosticsItems(
-                        enabled = uiState.playbackTraceEnabled,
-                        adbControlEnabled = uiState.playbackTraceAdbControlEnabled,
-                        status = uiState.playbackTraceStatus,
-                        onToggleEnabled = {
-                            viewModel.setPlaybackTraceEnabled(
-                                !uiState.playbackTraceEnabled
-                            )
-                        },
-                        onToggleAdbControl = {
-                            viewModel.setPlaybackTraceAdbControlEnabled(
-                                !uiState.playbackTraceAdbControlEnabled
-                            )
-                        },
-                        onExportLast = {
-                            viewModel.exportLastSession { intent ->
-                                context.startActivity(intent)
-                            }
-                        },
-                        onExportAll = {
-                            viewModel.exportAllSessions { intent ->
-                                context.startActivity(intent)
-                            }
-                        },
-                        onCopyToDownloads = { uri ->
-                            viewModel.copyLastTraceToDownloads(uri)
-                        },
-                        onClearAll = { viewModel.clearAllTraces() },
-                    )
-                }
             }
-        }
-
-        if (showCollectorDashboardDialog) {
-            CollectorDashboardQrDialog(
-                url = uiState.collectorDashboardUrl,
-                unavailableReason = uiState.collectorDashboardUnavailableReason,
-                onDismiss = { showCollectorDashboardDialog = false }
-            )
         }
     }
 
@@ -765,10 +627,66 @@ internal fun DebridSettingsContent(
             onDismiss = viewModel::dismissConfigBenchmarkResultDialog
         )
     }
+
+    if (showRealDebridActivationQr) {
+        RealDebridActivationQrDialog(
+            url = uiState.realDebridVerificationUrl,
+            onDismiss = {}
+        )
+    }
 }
 
 @Composable
-private fun CollectorDashboardQrDialog(
+private fun RealDebridActivationQrDialog(
+    url: String?,
+    onDismiss: () -> Unit
+) {
+    val qrBitmap = remember(url) {
+        runCatching { url?.let { QrCodeGenerator.generate(it, 420) } }.getOrNull()
+    }
+
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.debrid_rd_activation_qr_title),
+        subtitle = stringResource(R.string.debrid_rd_activation_qr_subtitle),
+        width = 700.dp
+    ) {
+        if (qrBitmap == null) {
+            Text(
+                text = url ?: "",
+                style = MaterialTheme.typography.bodyLarge,
+                color = NexioColors.TextPrimary,
+                textAlign = TextAlign.Center
+            )
+            return@NexioDialog
+        }
+
+        Image(
+            bitmap = qrBitmap.asImageBitmap(),
+            contentDescription = stringResource(R.string.cd_real_debrid_activation_qr),
+            modifier = Modifier
+                .heightIn(max = 260.dp)
+                .fillMaxWidth(),
+            alignment = Alignment.Center
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text(
+            text = stringResource(R.string.debrid_rd_activation_qr_instruction),
+            style = MaterialTheme.typography.bodyMedium,
+            color = NexioColors.TextSecondary,
+            textAlign = TextAlign.Center
+        )
+
+        Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Text(text = stringResource(R.string.action_cancel))
+        }
+    }
+}
+
+@Composable
+internal fun CollectorDashboardQrDialog(
     url: String?,
     unavailableReason: CollectorPublicDashboardLinkResult.Reason?,
     onDismiss: () -> Unit
@@ -1670,6 +1588,7 @@ private fun formatBenchmarkBytes(bytes: Long): String {
 
 @HiltViewModel
 internal class DebridSettingsViewModel @Inject internal constructor(
+    @ApplicationContext private val appContext: Context,
     private val realDebridAuthService: RealDebridAuthService,
     realDebridAuthDataStore: RealDebridAuthDataStore,
     private val premiumizeService: PremiumizeService,
@@ -1685,7 +1604,8 @@ internal class DebridSettingsViewModel @Inject internal constructor(
     private val playbackTraceToggle: com.nexio.tv.instrumentation.PlaybackTraceToggle,
     private val playbackTraceController: com.nexio.tv.instrumentation.PlaybackTraceController,
     private val playbackTraceAdbControlToggle:
-        com.nexio.tv.instrumentation.PlaybackTraceAdbControlToggle
+        com.nexio.tv.instrumentation.PlaybackTraceAdbControlToggle,
+    private val playbackDiagnosticsUploader: com.nexio.tv.data.repository.benchmark.PlaybackDiagnosticsUploader,
 ) : ViewModel() {
 
     // Playback diagnostics trace plumbing. The composable section in
@@ -1697,9 +1617,9 @@ internal class DebridSettingsViewModel @Inject internal constructor(
         playbackTraceController.enabledFlow
 
     internal fun setPlaybackTraceEnabled(value: Boolean) {
-        viewModelScope.launch {
-            playbackTraceController.setEnabled(value)
-        }
+        // Use setEnabledAsync (controller-scoped) instead of viewModelScope so
+        // navigating away before the DataStore write dispatches cannot cancel it.
+        playbackTraceController.setEnabledAsync(value)
     }
 
     internal fun setPlaybackTraceAdbControlEnabled(value: Boolean) {
@@ -1720,13 +1640,6 @@ internal class DebridSettingsViewModel @Inject internal constructor(
         }
     }
 
-    internal fun exportAllSessions(launchIntent: (android.content.Intent) -> Unit) {
-        viewModelScope.launch {
-            val intent = playbackTraceController.exportAll() ?: return@launch
-            launchIntent(intent)
-        }
-    }
-
     /**
      * Write the latest session bytes into the SAF-picked Uri. Caller is the
      * Composable's ActivityResult callback for `ACTION_CREATE_DOCUMENT`.
@@ -1738,12 +1651,57 @@ internal class DebridSettingsViewModel @Inject internal constructor(
         }
     }
 
+    internal fun copyAllTracesZipToDestination(target: android.net.Uri) {
+        viewModelScope.launch {
+            val bytes = playbackTraceController.copyAllToDestination(target)
+            playbackTraceController.refreshStatus()
+            if (bytes > 0L) {
+                messages.tryEmit("Saved diagnostics zip (${bytes / 1024L} KiB)")
+            } else {
+                messages.tryEmit("No playback traces to export")
+            }
+        }
+    }
+
+    internal fun copyAllTracesZipToDownloads() {
+        viewModelScope.launch {
+            if (playbackTraceController.listTraces().isEmpty()) {
+                playbackTraceController.refreshStatus()
+                messages.tryEmit(appContext.getString(R.string.playback_diagnostics_export_all_downloads_empty))
+                return@launch
+            }
+            val adbPath = playbackTraceController.copyAllToDownloads()
+            playbackTraceController.refreshStatus()
+            if (adbPath != null) {
+                messages.tryEmit(appContext.getString(R.string.playback_diagnostics_export_all_downloads_success))
+            } else {
+                messages.tryEmit(appContext.getString(R.string.playback_diagnostics_export_all_downloads_failure))
+            }
+        }
+    }
+
     internal fun clearAllTraces() {
         viewModelScope.launch {
             playbackTraceController.clearAll()
         }
     }
 
+    internal fun uploadLastSessionToDeveloper() {
+        if (_uiState.value.diagnosticsUploadInProgress) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(diagnosticsUploadInProgress = true, diagnosticsUploadResult = null)
+            }
+            val result = playbackDiagnosticsUploader.uploadLastSession()
+            _uiState.update {
+                it.copy(diagnosticsUploadInProgress = false, diagnosticsUploadResult = result)
+            }
+            kotlinx.coroutines.delay(4_000)
+            _uiState.update { it.copy(diagnosticsUploadResult = null) }
+        }
+    }
+
+    private var rdPollingJob: Job? = null
     private val _uiState = MutableStateFlow(DebridUiState())
     private val benchmarkResultDialog = MutableStateFlow<DebridBenchmarkResultDialogUi?>(null)
     private val configBenchmarkResultDialog = MutableStateFlow<DebridConfigBenchmarkResultDialogUi?>(null)
@@ -1767,10 +1725,18 @@ internal class DebridSettingsViewModel @Inject internal constructor(
         // section shows accurate data on first open. The status flow is a
         // StateFlow on the controller; the toggle flow is the canonical
         // source of `enabled`.
+        _uiState.update {
+            it.copy(playbackTraceEnabled = com.nexio.tv.instrumentation.PlaybackTracer.enabled)
+        }
         viewModelScope.launch {
             playbackTraceController.refreshStatus()
             playbackTraceController.statusFlow.collect { status ->
-                _uiState.update { it.copy(playbackTraceStatus = status) }
+                _uiState.update {
+                    it.copy(
+                        playbackTraceStatus = status,
+                        playbackTraceEnabled = status.enabled
+                    )
+                }
             }
         }
         viewModelScope.launch {
@@ -2017,7 +1983,18 @@ internal class DebridSettingsViewModel @Inject internal constructor(
                     easyDebridUserId = base.connection.easyDebridUserId,
                     easyDebridPaidUntil = base.connection.easyDebridPaidUntil
                 )
-            }.collect { _uiState.value = it }
+            }.collect { next ->
+                _uiState.update { current ->
+                    next.copy(
+                        playbackTraceEnabled = current.playbackTraceEnabled,
+                        playbackTraceAdbControlEnabled = current.playbackTraceAdbControlEnabled,
+                        playbackTraceStatus = current.playbackTraceStatus,
+                        lastTraceSummary = current.lastTraceSummary,
+                        diagnosticsUploadInProgress = current.diagnosticsUploadInProgress,
+                        diagnosticsUploadResult = current.diagnosticsUploadResult,
+                    )
+                }
+            }
         }
 
         viewModelScope.launch {
@@ -2055,6 +2032,38 @@ internal class DebridSettingsViewModel @Inject internal constructor(
         }
 
         refreshPublicCollectorDashboardLink()
+
+        viewModelScope.launch {
+            uiState
+                .map { it.realDebridMode }
+                .distinctUntilChanged()
+                .collect { mode ->
+                    if (mode == DebridConnectionMode.AWAITING_APPROVAL) {
+                        if (rdPollingJob?.isActive != true) {
+                            startRdPollingLoop()
+                        }
+                    } else {
+                        rdPollingJob?.cancel()
+                        rdPollingJob = null
+                    }
+                }
+        }
+
+        viewModelScope.launch {
+            connectionState
+                .map { conn ->
+                    conn.realDebridMode == DebridConnectionMode.CONNECTED ||
+                        conn.premiumizeConnected ||
+                        conn.torBoxConnected ||
+                        conn.easyDebridConnected
+                }
+                .distinctUntilChanged()
+                .collect { anyConnected ->
+                    if (!anyConnected) {
+                        setServiceWrapEnabled(false)
+                    }
+                }
+        }
 
         viewModelScope.launch {
             debridConfigBenchmarkService.outcomes.collect { outcome ->
@@ -2097,6 +2106,34 @@ internal class DebridSettingsViewModel @Inject internal constructor(
                 .onFailure { error ->
                     messages.tryEmit(error.message ?: "Failed to start Real-Debrid auth")
                 }
+        }
+    }
+
+    private fun startRdPollingLoop() {
+        rdPollingJob?.cancel()
+        rdPollingJob = viewModelScope.launch {
+            while (true) {
+                delay(5_000)
+                when (val result = realDebridAuthService.pollDeviceToken()) {
+                    RealDebridTokenPollResult.Pending -> { /* keep polling */ }
+                    RealDebridTokenPollResult.Expired -> {
+                        messages.tryEmit("Real-Debrid device code expired")
+                        break
+                    }
+                    RealDebridTokenPollResult.Denied -> {
+                        messages.tryEmit("Real-Debrid authorization denied")
+                        break
+                    }
+                    is RealDebridTokenPollResult.Approved -> {
+                        messages.tryEmit("Connected to Real-Debrid as ${result.username ?: "user"}")
+                        break
+                    }
+                    is RealDebridTokenPollResult.Failed -> {
+                        messages.tryEmit(result.reason)
+                        break
+                    }
+                }
+            }
         }
     }
 

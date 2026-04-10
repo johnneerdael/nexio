@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.security.utils import get_authorization_scheme_param
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -136,6 +136,15 @@ def init_db() -> None:
                 device_manufacturer TEXT,
                 raw_json TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS playback_diagnostics (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                received_at_ms     INTEGER NOT NULL,
+                device_token       TEXT    NOT NULL UNIQUE,
+                device_model       TEXT,
+                app_version        TEXT,
+                content_size_bytes INTEGER,
+                content            BLOB    NOT NULL
+            );
             """
         )
         ensure_column(conn, "shadow_autoplay_events", "client_android_id", "TEXT")
@@ -152,6 +161,7 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_benchmark_measured_at ON debrid_benchmark_events(measured_at_ms DESC);
             CREATE INDEX IF NOT EXISTS idx_benchmark_device_model ON debrid_benchmark_events(device_model);
             CREATE INDEX IF NOT EXISTS idx_benchmark_android_id ON debrid_benchmark_events(client_android_id);
+            CREATE INDEX IF NOT EXISTS idx_diagnostics_received_at ON playback_diagnostics(received_at_ms DESC);
             """
         )
         conn.commit()
@@ -252,6 +262,14 @@ def derive_public_dashboard_tokens(android_id: str) -> set[str]:
         .rstrip("=")
         for algorithm in PUBLIC_DASHBOARD_HASH_ALGORITHMS
     }
+
+
+_TOKEN_RE = re.compile(r'^[A-Za-z0-9_\-]{80,120}$')
+
+
+def is_valid_public_token(token: str) -> bool:
+    """Reject tokens that don't match the base64url/SHA3-512 shape."""
+    return bool(_TOKEN_RE.match(token))
 
 
 def resolve_public_token_android_id(
@@ -1379,6 +1397,89 @@ def public_event_detail(request: Request, token: str, event_id: int):
             "token": token,
             "benchmarks": benchmarks,
         },
+    )
+
+
+MAX_DIAGNOSTICS_BYTES = 32 * 1024 * 1024  # 32 MiB hard limit
+
+
+@app.post("/public/{token}/diagnostics")
+async def upload_diagnostics(request: Request, token: str):
+    if not is_valid_public_token(token):
+        raise HTTPException(status_code=400, detail="Invalid token format")
+
+    content_type = request.headers.get("content-type", "")
+    if "ndjson" not in content_type and "json" not in content_type:
+        raise HTTPException(status_code=415, detail="Expected application/x-ndjson")
+
+    body = await request.body()
+    if len(body) == 0:
+        raise HTTPException(status_code=400, detail="Empty body")
+    if len(body) > MAX_DIAGNOSTICS_BYTES:
+        raise HTTPException(status_code=413, detail="Payload too large")
+
+    app_version = request.headers.get("X-App-Version")
+    device_model = request.headers.get("X-Device-Model")
+
+    with closing(db()) as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO playback_diagnostics
+                (received_at_ms, device_token, device_model, app_version,
+                 content_size_bytes, content)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (int(time.time() * 1000), token, device_model, app_version, len(body), body),
+        )
+        conn.commit()
+
+    return {"ok": True}
+
+
+@app.get("/diagnostics", response_class=HTMLResponse)
+def list_diagnostics(request: Request):
+    require_session(request)
+    with closing(db()) as conn:
+        rows = conn.execute(
+            """SELECT id, device_token, received_at_ms, device_model,
+                      app_version, content_size_bytes
+               FROM playback_diagnostics ORDER BY received_at_ms DESC"""
+        ).fetchall()
+    items = [
+        {
+            "id": r["id"],
+            "device_token_prefix": r["device_token"][:12] + "\u2026",
+            "received_at_label": datetime.fromtimestamp(
+                r["received_at_ms"] / 1000, tz=timezone.utc
+            ).strftime("%Y-%m-%d %H:%M UTC"),
+            "device_model": r["device_model"] or "\u2014",
+            "app_version": r["app_version"] or "\u2014",
+            "size_label": f"{r['content_size_bytes'] // 1024} KiB" if r["content_size_bytes"] else "\u2014",
+        }
+        for r in rows
+    ]
+    return TEMPLATES.TemplateResponse(
+        request, "diagnostics.html", {"items": items, "count": len(items)}
+    )
+
+
+@app.get("/diagnostics/{item_id}/download")
+def download_diagnostics(request: Request, item_id: int):
+    require_session(request)
+    with closing(db()) as conn:
+        row = conn.execute(
+            "SELECT device_token, app_version, content FROM playback_diagnostics WHERE id = ?",
+            (item_id,),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    token_prefix = row["device_token"][:12]
+    version_slug = re.sub(r'[^a-zA-Z0-9._-]', '_', row["app_version"] or "unknown")
+    filename = f"diagnostics-{token_prefix}-{version_slug}.jsonl"
+    return Response(
+        content=bytes(row["content"]),
+        media_type="application/x-ndjson",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

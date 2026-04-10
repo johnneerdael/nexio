@@ -26,7 +26,7 @@ internal class PagedFrontierBuffer(
     companion object {
         const val PAGE_SIZE = 128 * 1024 // 128KB
         private const val HISTOGRAM_DRAIN_INTERVAL_NANOS = 1_000_000_000L
-        private const val FRONTIER_STALL_POLL_NANOS = 100_000_000L
+        private const val FRONTIER_STALL_POLL_NANOS = 500_000_000L
     }
 
     // Page index → page data
@@ -51,6 +51,7 @@ internal class PagedFrontierBuffer(
     // Tracks the contiguous frontier in bytes (absolute position, starts at the basePosition
     // passed to setBasePosition, or 0 for zero-position opens).
     private var contiguousFrontierBytes: Long = 0L
+    private var startupReadableUntilBytes: Long = 0L
 
     private val lockWaitHistogram = HotPathHistogram()
     private val writeHistogram = HotPathHistogram()
@@ -61,7 +62,7 @@ internal class PagedFrontierBuffer(
     private val lastObservedFrontier = AtomicLong(0L)
 
     val frontier: Long
-        get() = synchronized(this) { contiguousFrontierBytes }
+        get() = synchronized(this) { maxOf(contiguousFrontierBytes, startupReadableUntilBytes) }
 
     private fun emitHistogramIfPresent(event: String, snapshot: HistogramSnapshot) {
         if (snapshot.count <= 0L) return
@@ -132,6 +133,7 @@ internal class PagedFrontierBuffer(
         synchronized(this) {
             require(pages.isEmpty()) { "setBasePosition must be called before any writes" }
             contiguousFrontierBytes = position
+            startupReadableUntilBytes = position
             lastObservedFrontier.set(position)
             lastFrontierAdvanceNanos.set(SystemClock.elapsedRealtimeNanos())
             // If basePosition is not page-aligned, pre-initialize the first page's lowWater
@@ -212,13 +214,26 @@ internal class PagedFrontierBuffer(
     }
 
     /**
+     * Startup-specialized publish path that exposes contiguous bytes as soon as they are
+     * written, even if the current page has not yet reached full-page completion.
+     */
+    fun publishStartupWindow(absoluteOffset: Long, data: ByteArray, dataOffset: Int, length: Int) {
+        if (length <= 0) return
+        onBytesWritten(absoluteOffset, data, dataOffset, length)
+        synchronized(this) {
+            advanceStartupReadableFrontier()
+        }
+    }
+
+    /**
      * Returns the number of contiguous readable bytes starting from [position].
      * Only counts bytes within pages that are complete and contiguous from [position].
      */
     fun readableContiguousBytesFrom(position: Long): Long {
         synchronized(this) {
-            if (contiguousFrontierBytes <= position) return 0L
-            return contiguousFrontierBytes - position
+            val readableFrontier = maxOf(contiguousFrontierBytes, startupReadableUntilBytes)
+            if (readableFrontier <= position) return 0L
+            return readableFrontier - position
         }
     }
 
@@ -237,7 +252,7 @@ internal class PagedFrontierBuffer(
                 lockAcquiredNanos = SystemClock.elapsedRealtimeNanos()
                 lockWaitHistogram.recordNanos(lockAcquiredNanos - waitStartNanos)
             }
-            currentFrontier = contiguousFrontierBytes
+            currentFrontier = maxOf(contiguousFrontierBytes, startupReadableUntilBytes)
             if (currentFrontier <= position) {
                 if (PlaybackTracer.enabled) {
                     readHistogram.recordNanos(SystemClock.elapsedRealtimeNanos() - lockAcquiredNanos)
@@ -250,7 +265,6 @@ internal class PagedFrontierBuffer(
 
             while (totalCopied < length) {
                 val pageIndex = (currentPos / pageSize).toInt()
-                if (!completedPages[pageIndex]) break
                 if (currentPos >= currentFrontier) break
 
                 val pageBuf = pages[pageIndex] ?: break
@@ -380,9 +394,25 @@ internal class PagedFrontierBuffer(
             completedPages.clear()
             pageFills.clear()
             contiguousFrontierBytes = 0L
+            startupReadableUntilBytes = 0L
             totalLength = -1L
             lastObservedFrontier.set(0L)
             lastFrontierAdvanceNanos.set(SystemClock.elapsedRealtimeNanos())
+        }
+    }
+
+    private fun advanceStartupReadableFrontier() {
+        var readableFrontier = maxOf(contiguousFrontierBytes, startupReadableUntilBytes)
+        while (true) {
+            val pageIndex = (readableFrontier / pageSize).toInt()
+            val pageStart = pageIndex.toLong() * pageSize
+            val fill = pageFills[pageIndex] ?: break
+            val pageReadableEnd = pageStart + fill.lowWater.toLong()
+            val boundedReadableEnd = minOf(pageReadableEnd, pageStart + expectedBytesForPage(pageIndex).toLong())
+            if (boundedReadableEnd <= readableFrontier) break
+            startupReadableUntilBytes = boundedReadableEnd
+            readableFrontier = boundedReadableEnd
+            if (boundedReadableEnd < pageStart + expectedBytesForPage(pageIndex).toLong()) break
         }
     }
 

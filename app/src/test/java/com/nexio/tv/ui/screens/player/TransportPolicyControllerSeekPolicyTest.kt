@@ -5,9 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Verifies that [TransportPolicyController.onSeek] selects the SEEK preset, which uses the
- * full envelope urgent chunk (not the 2 MiB STARTUP clamp). This ensures post-seek throughput
- * recovers immediately when Media3 reopens ParallelRangeDataSource after a non-contiguous seek.
+ * Verifies provider-aware startup and seek policy behavior.
  */
 class TransportPolicyControllerSeekPolicyTest {
 
@@ -18,11 +16,32 @@ class TransportPolicyControllerSeekPolicyTest {
     private val pmEnvelope = CapabilityEnvelope.LOCKED_PREMIUMIZE
 
     @Test
-    fun `cold start uses STARTUP state with clamped 2 MiB urgent chunk (RD envelope)`() {
+    fun `cold start uses locked RD startup shape immediately`() {
         val controller = TransportPolicyController(rdEnvelope, provider = "real_debrid")
 
         assertEquals(TransportState.STARTUP, controller.state)
-        assertEquals(STARTUP_URGENT_CHUNK_BYTES, controller.currentPolicy.urgentChunkBytes)
+        assertEquals(33_554_432L, controller.currentPolicy.urgentChunkBytes)
+        assertEquals(1, controller.currentPolicy.urgentWorkers)
+        assertEquals(0, controller.currentPolicy.prefetchWorkers)
+    }
+
+    @Test
+    fun `cold start uses locked PM startup shape immediately`() {
+        val controller = TransportPolicyController(pmEnvelope, provider = "premiumize")
+
+        assertEquals(TransportState.STARTUP, controller.state)
+        assertEquals(16_777_216L, controller.currentPolicy.urgentChunkBytes)
+        assertEquals(2, controller.currentPolicy.urgentWorkers)
+        assertEquals(0, controller.currentPolicy.prefetchWorkers)
+    }
+
+    @Test
+    fun `cold start uses conservative unknown-provider default startup shape`() {
+        val controller = TransportPolicyController()
+
+        assertEquals(TransportState.STARTUP, controller.state)
+        assertEquals(25_165_824L, controller.currentPolicy.urgentChunkBytes)
+        assertEquals(1, controller.currentPolicy.urgentWorkers)
         assertEquals(0, controller.currentPolicy.prefetchWorkers)
     }
 
@@ -53,7 +72,7 @@ class TransportPolicyControllerSeekPolicyTest {
         controller.onSeek()
 
         assertEquals(TransportState.SEEK, controller.state)
-        // Must use full envelope chunk, NOT the 2 MiB STARTUP clamp
+        // Must use full envelope chunk
         assertEquals(33_554_432L, controller.currentPolicy.urgentChunkBytes)
         // Prefetch suppressed until onFirstFrame() transitions back to STABILIZING
         assertEquals(0, controller.currentPolicy.prefetchWorkers)
@@ -69,24 +88,22 @@ class TransportPolicyControllerSeekPolicyTest {
         controller.onSeek()
 
         assertEquals(TransportState.SEEK, controller.state)
-        // Must use full envelope chunk, NOT the 2 MiB STARTUP clamp
+        // Must use full envelope chunk
         assertEquals(16_777_216L, controller.currentPolicy.urgentChunkBytes)
         assertEquals(0, controller.currentPolicy.prefetchWorkers)
     }
 
     @Test
-    fun `SEEK urgent chunk is strictly larger than STARTUP urgent chunk (RD envelope)`() {
+    fun `SEEK urgent chunk stays equal to STARTUP urgent chunk for locked RD`() {
         val controller = TransportPolicyController(rdEnvelope, provider = "real_debrid")
 
         val startupChunk = controller.currentPolicy.urgentChunkBytes
-        assertEquals(STARTUP_URGENT_CHUNK_BYTES, startupChunk)
+        assertEquals(33_554_432L, startupChunk)
 
         controller.onSeek()
         val seekChunk = controller.currentPolicy.urgentChunkBytes
 
-        assert(seekChunk > startupChunk) {
-            "SEEK urgentChunkBytes ($seekChunk) must be > STARTUP urgentChunkBytes ($startupChunk)"
-        }
+        assertEquals(startupChunk, seekChunk)
     }
 
     @Test

@@ -20,6 +20,48 @@ import org.junit.Test
 class OptimizedBenchmarkTransportTest {
 
     @Test
+    fun `optimized transport materially improves sustained throughput over direct path`() = runTest {
+        val optimizedClock = FakeBenchmarkClock()
+        val directClock = FakeBenchmarkClock()
+        val optimizedTransport = buildTransport(
+            builder = ThroughputProfileBuilder(
+                clock = optimizedClock,
+                bytesPerRead = 64 * 1024,
+                advancePerReadMs = 250L
+            ),
+            clock = optimizedClock,
+            sustainedThresholdBytes = 256L * 1024L,
+            sustainedThresholdElapsedMs = 2_000L
+        )
+        val directTransport = DirectProfileBenchmarkTransport(
+            delegate = buildTransport(
+                builder = ThroughputProfileBuilder(
+                    clock = directClock,
+                    bytesPerRead = 16 * 1024,
+                    advancePerReadMs = 1_000L
+                ),
+                clock = directClock,
+                sustainedThresholdBytes = 256L * 1024L,
+                sustainedThresholdElapsedMs = 2_000L
+            )
+        )
+
+        val optimizedResult = optimizedTransport.runProfile(
+            candidate = candidate(),
+            configSnapshot = DebridBenchmarkTransportConfigSnapshot(
+                useParallelConnections = true,
+                parallelConnectionCount = 3,
+                parallelChunkSizeMb = 24
+            )
+        )
+        val directResult = directTransport.runProfile(candidate())
+
+        val optimizedMbps = optimizedResult.summary.sustainedThroughputMbps ?: 0.0
+        val directMbps = directResult.summary.sustainedThroughputMbps ?: 0.0
+        assertTrue(optimizedMbps > directMbps * 1.15)
+    }
+
+    @Test
     fun `optimized transport freezes the player parallel config at benchmark start`() = runTest {
         val clock = FakeBenchmarkClock()
         val builder = RecordingFactoryBuilder(clock)
@@ -1007,6 +1049,56 @@ class OptimizedBenchmarkTransportTest {
             bootstrapReuseFlags += allowStartupBootstrapReuse
             return BenchmarkReadableSourceFactory {
                 FakeBenchmarkDataSource(clock = clock)
+            }
+        }
+    }
+
+    private class ThroughputProfileBuilder(
+        private val clock: FakeBenchmarkClock,
+        private val bytesPerRead: Int,
+        private val advancePerReadMs: Long
+    ) : OptimizedBenchmarkDataSourceFactoryBuilder {
+        private val contentBytes = ByteArray(2 * 1024 * 1024) { (it % 251).toByte() }
+
+        override fun create(
+            candidate: DebridBenchmarkCandidate,
+            configSnapshot: DebridBenchmarkTransportConfigSnapshot,
+            chunkWaitTimeoutMs: Long,
+            allowStartupBootstrapReuse: Boolean,
+            transportSampleTimeMs: () -> Long,
+            onTransportBytesDownloaded: (Long, Long) -> Unit,
+            onChunkBytesDownloaded: (Long, Long, Long, Int, Long) -> Unit,
+            onTransportObservation: (RuntimeTransportObservation) -> Unit
+        ): BenchmarkReadableSourceFactory {
+            return BenchmarkReadableSourceFactory {
+                object : BenchmarkReadableSource {
+                    private var position = 0
+                    private var limit = 0
+
+                    override fun open(position: Long, length: Long): Long {
+                        val contentLength = contentBytes.size
+                        this.position = position.toInt().coerceAtMost(contentLength)
+                        limit = when {
+                            length == C.LENGTH_UNSET.toLong() -> contentLength
+                            else -> (this.position + length.toInt()).coerceAtMost(contentLength)
+                        }
+                        clock.advanceMs(50L)
+                        return (limit - this.position).coerceAtLeast(0).toLong()
+                    }
+
+                    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                        if (position >= limit) {
+                            return C.RESULT_END_OF_INPUT
+                        }
+                        val bytesToRead = minOf(length, limit - position, bytesPerRead)
+                        System.arraycopy(contentBytes, position, buffer, offset, bytesToRead)
+                        position += bytesToRead
+                        clock.advanceMs(advancePerReadMs)
+                        return bytesToRead
+                    }
+
+                    override fun close() = Unit
+                }
             }
         }
     }

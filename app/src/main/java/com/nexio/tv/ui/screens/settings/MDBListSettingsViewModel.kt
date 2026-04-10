@@ -25,7 +25,8 @@ import javax.inject.Inject
 class MDBListSettingsViewModel @Inject constructor(
     private val dataStore: MDBListSettingsDataStore,
     private val mdbListApi: MDBListApi,
-    private val mdbListDiscoveryService: MDBListDiscoveryService
+    private val mdbListDiscoveryService: MDBListDiscoveryService,
+    private val catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MDBListSettingsUiState())
@@ -74,13 +75,13 @@ class MDBListSettingsViewModel @Inject constructor(
             is MDBListSettingsEvent.TogglePersonalList -> {
                 update {
                     dataStore.setPersonalListEnabled(event.listKey, event.enabled)
-                    mdbListDiscoveryService.ensureFresh(force = true)
+                    if (event.enabled) catalogPriorityHydrationNotifier.notifyPriorityHydrationRequired()
                 }
             }
             is MDBListSettingsEvent.ToggleTopList -> {
                 update {
                     dataStore.setTopListSelected(event.listKey, event.enabled)
-                    mdbListDiscoveryService.ensureFresh(force = true)
+                    if (event.enabled) catalogPriorityHydrationNotifier.notifyPriorityHydrationRequired()
                 }
             }
             is MDBListSettingsEvent.MoveCatalogUp -> moveCatalog(event.listKey, -1)
@@ -123,7 +124,6 @@ class MDBListSettingsViewModel @Inject constructor(
         if (listKey !in activeKeys) return
         viewModelScope.launch {
             dataStore.moveCatalog(listKey = listKey, direction = direction, availableKeys = activeKeys)
-            mdbListDiscoveryService.ensureFresh(force = true)
         }
     }
 }

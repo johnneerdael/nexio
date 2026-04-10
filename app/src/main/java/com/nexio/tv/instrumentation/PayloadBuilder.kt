@@ -63,11 +63,26 @@ value class PayloadBuilder(private val record: TraceRecord) {
                 c == '\n' -> sb.append("\\n")
                 c == '\r' -> sb.append("\\r")
                 c == '\t' -> sb.append("\\t")
-                c.code < 0x20 -> sb.append("\\u%04x".format(c.code))
+                c.code < 0x20 -> appendUnicodeEscape(sb, c.code)
                 else -> sb.append(c)
             }
             i++
         }
+    }
+
+    private fun appendUnicodeEscape(sb: StringBuilder, codePoint: Int) {
+        sb.append("\\u")
+        sb.append(HEX_DIGITS[(codePoint ushr 12) and 0xF])
+        sb.append(HEX_DIGITS[(codePoint ushr 8) and 0xF])
+        sb.append(HEX_DIGITS[(codePoint ushr 4) and 0xF])
+        sb.append(HEX_DIGITS[codePoint and 0xF])
+    }
+
+    companion object {
+        private val HEX_DIGITS = charArrayOf(
+            '0', '1', '2', '3', '4', '5', '6', '7',
+            '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
+        )
     }
 }
 

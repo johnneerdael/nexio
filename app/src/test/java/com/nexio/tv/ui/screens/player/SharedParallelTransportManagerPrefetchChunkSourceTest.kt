@@ -55,6 +55,8 @@ class SharedParallelTransportManagerPrefetchChunkSourceTest {
         override val frontier: Long get() = inner.frontier
         override fun writeAt(absoluteOffset: Long, data: ByteArray, dataOffset: Int, length: Int) =
             inner.writeAt(absoluteOffset, data, dataOffset, length)
+        override fun publishStartupWindow(absoluteOffset: Long, data: ByteArray, dataOffset: Int, length: Int) =
+            inner.publishStartupWindow(absoluteOffset, data, dataOffset, length)
         override fun publishCompleteChunk(absoluteStart: Long, chunk: ByteArray, length: Int) {
             publishedChunkLengths.add(length)
             inner.publishCompleteChunk(absoluteStart, chunk, length)

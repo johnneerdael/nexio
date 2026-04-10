@@ -1,8 +1,13 @@
 package com.nexio.tv.instrumentation
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.util.Log
 import androidx.core.content.FileProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -12,11 +17,14 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -32,7 +40,8 @@ import kotlinx.coroutines.withContext
  *  - [refreshStatus] — re-read the on-disk trace files into [statusFlow]
  *  - [exportLast] / [exportAll] — build `Intent.ACTION_SEND` payloads via the
  *    app's [FileProvider]
- *  - [copyLastToDestination] — write the latest JSONL into a SAF-picked Uri
+ *  - [copyLastToDestination] / [copyAllToDestination] — write the latest JSONL
+ *    or a ZIP of all traces into a SAF-picked Uri
  *  - [clearAll] — delete every trace file under `playback-traces/`
  *
  * The controller never blocks on the calling thread; file I/O runs on
@@ -43,12 +52,32 @@ class PlaybackTraceController @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val toggle: PlaybackTraceToggle,
 ) {
+    companion object {
+        private const val TAG = "PlaybackTraceCtrl"
+    }
 
     /** Current toggle state, mirrored from [PlaybackTraceToggle.enabledFlow]. */
     val enabledFlow: Flow<Boolean> = toggle.enabledFlow
 
     private val _status = MutableStateFlow(TraceStatus.EMPTY)
     val statusFlow: StateFlow<TraceStatus> = _status.asStateFlow()
+
+    /**
+     * Application-scoped scope for toggle writes. Using a scope tied to this
+     * singleton (rather than the calling ViewModel's viewModelScope) ensures
+     * that navigating away from Settings before the DataStore write completes
+     * cannot cancel the operation and leave the toggle in a false-disabled state.
+     */
+    private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * Fire-and-forget variant of [setEnabled] for UI callers. Prefer this over
+     * launching [setEnabled] in a ViewModel scope — the ViewModel may be
+     * cleared before the DataStore write dispatches, silently losing the toggle.
+     */
+    fun setEnabledAsync(enabled: Boolean) {
+        controllerScope.launch { setEnabled(enabled) }
+    }
 
     /** Idempotent. Called from app startup so the tracer's file dir is set. */
     fun installFilesDirOnce() {
@@ -62,6 +91,7 @@ class PlaybackTraceController @Inject constructor(
      * closes the file before the boolean flag flips.
      */
     suspend fun setEnabled(enabled: Boolean) {
+        Log.i(TAG, "setEnabled enabled=$enabled before=${PlaybackTracer.enabled}")
         toggle.setEnabled(enabled)
         refreshStatus()
     }
@@ -81,6 +111,11 @@ class PlaybackTraceController @Inject constructor(
             lastSessionFileName = lastFile?.name,
             lastSessionSizeBytes = lastFile?.length() ?: 0L,
         )
+        Log.i(
+            TAG,
+            "refreshStatus enabled=${_status.value.enabled} sessions=${_status.value.sessionCount} " +
+                "bytes=${_status.value.totalBytes} last=${_status.value.lastSessionFileName}"
+        )
     }
 
     /** Build the share intent for the most recent JSONL. */
@@ -97,15 +132,7 @@ class PlaybackTraceController @Inject constructor(
     suspend fun exportAll(): Intent? = withContext(Dispatchers.IO) {
         val files = listTraces()
         if (files.isEmpty()) return@withContext null
-        val exportsDir = File(appContext.cacheDir, "playback-trace-exports").apply { mkdirs() }
-        val zipFile = File(exportsDir, "playback-traces-${System.currentTimeMillis()}.zip")
-        ZipOutputStream(FileOutputStream(zipFile).buffered()).use { zip ->
-            for (f in files) {
-                zip.putNextEntry(ZipEntry(f.name))
-                FileInputStream(f).use { it.copyTo(zip) }
-                zip.closeEntry()
-            }
-        }
+        val zipFile = buildAllSessionsZip(files)
         buildShareIntentForFile(zipFile)
     }
 
@@ -115,19 +142,98 @@ class PlaybackTraceController @Inject constructor(
      */
     suspend fun copyLastToDestination(destinationUri: Uri): Long = withContext(Dispatchers.IO) {
         val last = listTraces().maxByOrNull { it.lastModified() } ?: return@withContext 0L
-        appContext.contentResolver.openOutputStream(destinationUri)?.use { out ->
-            FileInputStream(last).use { it.copyTo(out) }
-        } ?: return@withContext 0L
-        return@withContext last.length()
+        exportStableFile(last) { exportFile ->
+            appContext.contentResolver.openOutputStream(destinationUri)?.use { out ->
+                FileInputStream(exportFile).use { it.copyTo(out) }
+            } ?: return@exportStableFile 0L
+            Log.i(
+                TAG,
+                "copyLastToDestination sourceCount=1 copiedBytes=${exportFile.length()} destinationScheme=${destinationUri.scheme}"
+            )
+            exportFile.length()
+        }
+    }
+
+    /**
+     * Copy the latest JSONL into public Downloads and return the expected adb-pull path.
+     */
+    suspend fun copyLastToDownloads(): String? = withContext(Dispatchers.IO) {
+        val last = listTraces().maxByOrNull { it.lastModified() } ?: return@withContext null
+        exportStableFile(last) { exportFile ->
+            writeFileToDownloads(
+                sourceFile = exportFile,
+                displayName = last.name,
+                mimeType = "application/json",
+            )
+        }
+    }
+
+    /**
+     * Copy a ZIP containing every retained trace into the SAF [destinationUri]
+     * picked via `ACTION_CREATE_DOCUMENT`. Returns the byte count written.
+     */
+    suspend fun copyAllToDestination(destinationUri: Uri): Long = withContext(Dispatchers.IO) {
+        val files = listTraces()
+        if (files.isEmpty()) return@withContext 0L
+        exportStableFiles(files) { exportFiles ->
+            val zipFile = buildAllSessionsZip(exportFiles)
+            appContext.contentResolver.openOutputStream(destinationUri)?.use { out ->
+                FileInputStream(zipFile).use { it.copyTo(out) }
+            } ?: return@exportStableFiles 0L
+            Log.i(
+                TAG,
+                "copyAllToDestination sourceCount=${files.size} zipBytes=${zipFile.length()} copiedBytes=${zipFile.length()} destinationScheme=${destinationUri.scheme}"
+            )
+            zipFile.length()
+        }
+    }
+
+    /**
+     * Copy the ZIP bundle of all retained sessions into public Downloads and return the
+     * expected adb-pull path. Returns null if Downloads cannot be opened for writing.
+     */
+    suspend fun copyAllToDownloads(nowMs: Long = System.currentTimeMillis()): String? = withContext(Dispatchers.IO) {
+        val files = listTraces()
+        if (files.isEmpty()) return@withContext null
+        exportStableFiles(files) { exportFiles ->
+            val zipFile = buildAllSessionsZip(exportFiles, nowMs)
+            writeFileToDownloads(
+                sourceFile = zipFile,
+                displayName = zipFile.name,
+                mimeType = "application/zip",
+            )
+        }
+    }
+
+    /**
+     * Copy a ZIP containing only the most recent session family into public Downloads.
+     * This is the authoritative capture path when the caller wants one fresh playback run.
+     */
+    suspend fun copyLatestSessionToDownloads(nowMs: Long = System.currentTimeMillis()): String? = withContext(Dispatchers.IO) {
+        val files = listLatestSessionFiles()
+        if (files.isEmpty()) return@withContext null
+        exportStableFiles(files) { exportFiles ->
+            val zipFile = buildSessionsZip(
+                files = exportFiles,
+                displayName = suggestedLatestSessionExportFileName(nowMs)
+            )
+            writeFileToDownloads(
+                sourceFile = zipFile,
+                displayName = zipFile.name,
+                mimeType = "application/zip",
+            )
+        }
     }
 
     /** Delete every JSONL under `playback-traces/`. Returns the number deleted. */
     suspend fun clearAll(): Int = withContext(Dispatchers.IO) {
+        PlaybackTracer.endCurrentSessionIfAny()
         val files = listTraces()
         var deleted = 0
         for (f in files) {
             if (f.delete()) deleted++
         }
+        clearExportArtifacts()
         refreshStatus()
         deleted
     }
@@ -144,6 +250,13 @@ class PlaybackTraceController @Inject constructor(
             ?.toList()
             ?.sortedByDescending { it.lastModified() }
             ?: emptyList()
+    }
+
+    internal fun listLatestSessionFiles(files: List<File> = listTraces()): List<File> {
+        val newest = files.maxByOrNull { it.lastModified() } ?: return emptyList()
+        val latestSessionStem = sessionStem(newest)
+        return files.filter { file -> sessionStem(file) == latestSessionStem }
+            .sortedBy { it.name }
     }
 
     /** Returns the on-disk trace directory, or null if not yet installed. */
@@ -168,6 +281,66 @@ class PlaybackTraceController @Inject constructor(
         }
     }
 
+    private fun buildAllSessionsZip(files: List<File>, nowMs: Long = System.currentTimeMillis()): File {
+        return buildSessionsZip(files, suggestedAllExportFileName(nowMs))
+    }
+
+    private fun buildSessionsZip(files: List<File>, displayName: String): File {
+        val exportsDir = File(appContext.cacheDir, "playback-trace-exports").apply { mkdirs() }
+        val zipFile = File(exportsDir, displayName)
+        ZipOutputStream(FileOutputStream(zipFile).buffered()).use { zip ->
+            for (file in files) {
+                zip.putNextEntry(ZipEntry(file.name))
+                FileInputStream(file).use { input -> input.copyTo(zip) }
+                zip.closeEntry()
+            }
+        }
+        return zipFile
+    }
+
+    private inline fun <T> exportStableFile(file: File, block: (File) -> T): T {
+        val snapshot = activeSnapshotForExport(file)
+        val exportFile = snapshot?.snapshotFile ?: file
+        return try {
+            block(exportFile)
+        } finally {
+            snapshot?.snapshotFile?.delete()
+            snapshot?.snapshotFile?.parentFile?.delete()
+        }
+    }
+
+    private inline fun <T> exportStableFiles(files: List<File>, block: (List<File>) -> T): T {
+        if (files.isEmpty()) return block(files)
+        val snapshot = activeSnapshotForExport(files.maxByOrNull { it.lastModified() } ?: return block(files))
+        val exportFiles = if (snapshot == null) {
+            files
+        } else {
+            files.map { file ->
+                if (file.absoluteFile == snapshot.originalFile.absoluteFile) {
+                    snapshot.snapshotFile
+                } else {
+                    file
+                }
+            }
+        }
+        return try {
+            block(exportFiles)
+        } finally {
+            snapshot?.snapshotFile?.delete()
+            snapshot?.snapshotFile?.parentFile?.delete()
+        }
+    }
+
+    private fun activeSnapshotForExport(file: File): SessionWriter.FileSnapshot? {
+        val snapshotDir = File(appContext.cacheDir, "playback-trace-export-snapshots").apply { mkdirs() }
+        return PlaybackTracer.snapshotCurrentTraceFile(file, snapshotDir)
+    }
+
+    private fun clearExportArtifacts() {
+        File(appContext.cacheDir, "playback-trace-exports").deleteRecursively()
+        File(appContext.cacheDir, "playback-trace-export-snapshots").deleteRecursively()
+    }
+
     /**
      * Group the trace files by session id (rotated parts of one session
      * share a prefix) so the status report shows distinct session count
@@ -185,6 +358,60 @@ class PlaybackTraceController @Inject constructor(
                 name
             }
         }.toSet().size
+    }
+
+    internal fun suggestedAllExportFileName(nowMs: Long = System.currentTimeMillis()): String {
+        return "playback-traces-$nowMs.zip"
+    }
+
+    internal fun suggestedLatestSessionExportFileName(nowMs: Long = System.currentTimeMillis()): String {
+        return "playback-trace-latest-$nowMs.zip"
+    }
+
+    private fun sessionStem(file: File): String {
+        val name = file.nameWithoutExtension
+        val dashIdx = name.lastIndexOf('-')
+        return if (dashIdx > 0 && name.substring(dashIdx + 1).all { it.isDigit() }) {
+            name.substring(0, dashIdx)
+        } else {
+            name
+        }
+    }
+
+    private fun writeFileToDownloads(
+        sourceFile: File,
+        displayName: String,
+        mimeType: String,
+    ): String? {
+        val resolver = appContext.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            }
+        }
+        val destinationUri = resolver.insert(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            values
+        ) ?: return null
+        val copied = try {
+            resolver.openOutputStream(destinationUri)?.use { out ->
+                FileInputStream(sourceFile).use { input -> input.copyTo(out) }
+            } != null
+        } catch (_: Exception) {
+            resolver.delete(destinationUri, null, null)
+            return null
+        }
+        if (!copied) {
+            resolver.delete(destinationUri, null, null)
+            return null
+        }
+        Log.i(
+            TAG,
+            "writeFileToDownloads displayName=$displayName mimeType=$mimeType copiedBytes=${sourceFile.length()} destinationScheme=${destinationUri.scheme}"
+        )
+        return "/sdcard/Download/$displayName"
     }
 }
 

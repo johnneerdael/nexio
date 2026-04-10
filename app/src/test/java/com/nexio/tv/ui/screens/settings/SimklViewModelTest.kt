@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.settings
 
+import com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier
 import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklAuthState
 import com.nexio.tv.data.local.SimklSettingsDataStore
@@ -11,6 +12,8 @@ import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -53,7 +56,7 @@ class SimklViewModelTest {
         every { dataStore.state } returns authState
         every { settingsDataStore.catalogPreferences } returns MutableStateFlow(com.nexio.tv.data.local.SimklCatalogPreferences())
 
-        val viewModel = SimklViewModel(service, dataStore, settingsDataStore)
+        val viewModel = SimklViewModel(service, dataStore, settingsDataStore, mockk(relaxed = true))
         advanceUntilIdle()
 
         assertEquals(SimklConnectionMode.CONNECTED, viewModel.uiState.value.mode)
@@ -71,7 +74,7 @@ class SimklViewModelTest {
         every { dataStore.state } returns authState
         every { settingsDataStore.catalogPreferences } returns MutableStateFlow(com.nexio.tv.data.local.SimklCatalogPreferences())
 
-        val viewModel = SimklViewModel(service, dataStore, settingsDataStore)
+        val viewModel = SimklViewModel(service, dataStore, settingsDataStore, mockk(relaxed = true))
         viewModel.onConnectClick()
         advanceUntilIdle()
 
@@ -91,10 +94,56 @@ class SimklViewModelTest {
         every { settingsDataStore.catalogPreferences } returns MutableStateFlow(com.nexio.tv.data.local.SimklCatalogPreferences())
         coEvery { service.revokeAndLogout() } returns Unit
 
-        val viewModel = SimklViewModel(service, dataStore, settingsDataStore)
+        val viewModel = SimklViewModel(service, dataStore, settingsDataStore, mockk(relaxed = true))
         viewModel.onDisconnectClick()
         advanceUntilIdle()
 
         coVerify(exactly = 1) { service.revokeAndLogout() }
+    }
+
+    @Test
+    fun `onCatalogEnabledChanged with enabled true fires priority hydration notifier`() = runTest(dispatcher) {
+        val notifier = CatalogPriorityHydrationNotifier()
+        val authState = MutableStateFlow(SimklAuthState())
+        val service = mockk<SimklAuthService>()
+        val dataStore = mockk<SimklAuthDataStore>()
+        val settingsDataStore = mockk<SimklSettingsDataStore>(relaxed = true)
+        every { service.hasRequiredCredentials() } returns true
+        every { dataStore.state } returns authState
+        every { settingsDataStore.catalogPreferences } returns MutableStateFlow(com.nexio.tv.data.local.SimklCatalogPreferences())
+
+        val viewModel = SimklViewModel(service, dataStore, settingsDataStore, notifier)
+
+        val events = mutableListOf<Long>()
+        val job = launch { notifier.events.collect { events.add(it) } }
+
+        viewModel.onCatalogEnabledChanged(com.nexio.tv.data.local.SimklCatalogIds.TV_TRENDING_TODAY, enabled = true)
+        advanceUntilIdle()
+
+        assertTrue(events.isNotEmpty())
+        job.cancel()
+    }
+
+    @Test
+    fun `onCatalogEnabledChanged with enabled false does not fire priority hydration notifier`() = runTest(dispatcher) {
+        val notifier = CatalogPriorityHydrationNotifier()
+        val authState = MutableStateFlow(SimklAuthState())
+        val service = mockk<SimklAuthService>()
+        val dataStore = mockk<SimklAuthDataStore>()
+        val settingsDataStore = mockk<SimklSettingsDataStore>(relaxed = true)
+        every { service.hasRequiredCredentials() } returns true
+        every { dataStore.state } returns authState
+        every { settingsDataStore.catalogPreferences } returns MutableStateFlow(com.nexio.tv.data.local.SimklCatalogPreferences())
+
+        val viewModel = SimklViewModel(service, dataStore, settingsDataStore, notifier)
+
+        val events = mutableListOf<Long>()
+        val job = launch { notifier.events.collect { events.add(it) } }
+
+        viewModel.onCatalogEnabledChanged(com.nexio.tv.data.local.SimklCatalogIds.TV_TRENDING_TODAY, enabled = false)
+        advanceUntilIdle()
+
+        assertTrue(events.isEmpty())
+        job.cancel()
     }
 }

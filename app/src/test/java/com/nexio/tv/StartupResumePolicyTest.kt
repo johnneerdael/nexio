@@ -1,5 +1,6 @@
 package com.nexio.tv
 
+import com.nexio.tv.domain.model.AuthState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -46,6 +47,56 @@ class StartupResumePolicyTest {
                 processUiBootstrapped = true,
                 hasSeenAuthQrOnFirstLaunch = null,
                 hasChosenLayout = true
+            )
+        )
+    }
+
+    @Test
+    fun `auth qr onboarding only shows after auth confirms user is signed out`() {
+        assertTrue(
+            shouldShowAuthQrOnStartup(
+                hasSeenAuthQrOnFirstLaunch = false,
+                authState = AuthState.SignedOut,
+                onboardingCompletedThisSession = false
+            )
+        )
+        assertFalse(
+            shouldShowAuthQrOnStartup(
+                hasSeenAuthQrOnFirstLaunch = false,
+                authState = AuthState.Loading,
+                onboardingCompletedThisSession = false
+            )
+        )
+        assertFalse(
+            shouldShowAuthQrOnStartup(
+                hasSeenAuthQrOnFirstLaunch = false,
+                authState = AuthState.FullAccount(userId = "user", email = "user@example.com"),
+                onboardingCompletedThisSession = false
+            )
+        )
+    }
+
+    @Test
+    fun `auth qr onboarding stays hidden once onboarding is complete or state is unknown`() {
+        assertFalse(
+            shouldShowAuthQrOnStartup(
+                hasSeenAuthQrOnFirstLaunch = true,
+                authState = AuthState.SignedOut,
+                onboardingCompletedThisSession = false
+            )
+        )
+        assertFalse(
+            shouldShowAuthQrOnStartup(
+                hasSeenAuthQrOnFirstLaunch = false,
+                authState = AuthState.SignedOut,
+                onboardingCompletedThisSession = true
+            )
+        )
+        assertFalse(
+            shouldShowAuthQrOnStartup(
+                hasSeenAuthQrOnFirstLaunch = null,
+                authState = AuthState.SignedOut,
+                onboardingCompletedThisSession = false
             )
         )
     }
