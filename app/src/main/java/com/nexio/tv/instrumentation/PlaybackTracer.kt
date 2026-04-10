@@ -11,10 +11,29 @@ import java.io.File
  * the player/scheduler/frontier files happens in WP3-WP8.
  */
 object PlaybackTracer {
+    private val ESSENTIAL_PRDS_EVENTS = setOf(
+        "prds_open_start",
+        "prds_open_mode",
+        "prds_open_resolved",
+        "prds_open_error",
+        "prds_close",
+    )
 
     @JvmField
     @Volatile
     var enabled: Boolean = false
+
+    @JvmField
+    @Volatile
+    var essentialEventsOnly: Boolean = false
+
+    @JvmField
+    @Volatile
+    var atraceMarkersEnabled: Boolean = true
+
+    @JvmField
+    @Volatile
+    var deviceHealthSamplingEnabled: Boolean = true
 
     @Volatile
     private var current: SessionWriter? = null
@@ -70,15 +89,38 @@ object PlaybackTracer {
     /** Hot-path entry. Toggle-off compiles to `if (false) ...`. */
     @Suppress("NOTHING_TO_INLINE")
     inline fun emit(family: EventFamily, type: String, noinline build: PayloadBuilder.() -> Unit) {
-        if (!enabled) return
+        if (!shouldEmit(family, type)) return
         val w = currentInternal() ?: return
         w.enqueue(family, type, build)
     }
 
     @Suppress("NOTHING_TO_INLINE")
     inline fun emit(family: EventFamily, type: String) {
-        if (!enabled) return
+        if (!shouldEmit(family, type)) return
         currentInternal()?.enqueueEmpty(family, type)
+    }
+
+    @PublishedApi
+    internal fun shouldEmit(family: EventFamily, type: String): Boolean {
+        if (!enabled) return false
+        if (!essentialEventsOnly) return true
+        return when (family) {
+            EventFamily.SESSION, EventFamily.TRACER -> true
+            EventFamily.PRDS -> type in ESSENTIAL_PRDS_EVENTS
+            else -> false
+        }
+    }
+
+    fun applyCrashIsolationProfile() {
+        essentialEventsOnly = true
+        atraceMarkersEnabled = false
+        deviceHealthSamplingEnabled = false
+    }
+
+    internal fun resetCrashIsolationForTest() {
+        essentialEventsOnly = false
+        atraceMarkersEnabled = true
+        deviceHealthSamplingEnabled = true
     }
 
     /** Visible for `inline` callers — do not use directly. */

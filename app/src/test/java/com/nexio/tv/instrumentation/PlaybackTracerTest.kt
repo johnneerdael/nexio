@@ -35,11 +35,13 @@ class PlaybackTracerTest {
             w
         }
         PlaybackTracer.enabled = false
+        PlaybackTracer.resetCrashIsolationForTest()
     }
 
     @After
     fun tearDown() {
         PlaybackTracer.enabled = false
+        PlaybackTracer.resetCrashIsolationForTest()
         PlaybackTracer.currentInternal()?.let { PlaybackTracer.endSession(it.sessionId) }
         PlaybackTracer.installWriterFactory(null)
     }
@@ -114,5 +116,24 @@ class PlaybackTracerTest {
         assertEquals("no overflow expected at this load", 0L, overflow)
         // session_started + 50 emits + session_ended (+ optional tail summary)
         assertTrue("emitted=$emitted expected ≥ 51", emitted >= 51L)
+    }
+
+    @Test
+    fun essentialOnlyModeSuppressesNonessentialFamiliesButKeepsPrdsLifecycle() {
+        PlaybackTracer.enabled = true
+        PlaybackTracer.applyCrashIsolationProfile()
+        val sid = PlaybackTracer.beginSession(fakeHeader())
+        PlaybackTracer.emit(EventFamily.RANGE, "submit_urgent") {
+            putInt("chunk", 7)
+        }
+        PlaybackTracer.emit(EventFamily.PRDS, "prds_open_start") {
+            putLong("pos", 42L)
+        }
+        PlaybackTracer.endSession(sid)
+        val out = sinks.last().toString()
+        assertTrue(out.contains("playback_session_started"))
+        assertTrue(out.contains("playback_session_ended"))
+        assertTrue(out.contains("prds_open_start"))
+        assertFalse(out.contains("submit_urgent"))
     }
 }

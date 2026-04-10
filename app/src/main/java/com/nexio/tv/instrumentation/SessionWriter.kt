@@ -224,6 +224,7 @@ internal class SessionWriter(
         }
         if (!traceEnabled) return
         if (!PlaybackTracer.enabled) return
+        if (!PlaybackTracer.atraceMarkersEnabled) return
         when (rec.family) {
             EventFamily.FRONTIER, EventFamily.RANGE, EventFamily.REBUFFER -> {
                 // Point event: post-hoc Perfetto correlation joins on

@@ -21,8 +21,6 @@ data class PlayerUiState(
     val isBuffering: Boolean = true,
     val isSwappingAddonSubtitle: Boolean = false,
     val playbackEnded: Boolean = false,
-    val currentPosition: Long = 0L,
-    val duration: Long = 0L,
     val title: String = "",
     val contentName: String? = null, // Series/show name (for series content)
     val releaseYear: String? = null, // Release year for movies
@@ -35,7 +33,6 @@ data class PlayerUiState(
     val castMembers: List<MetaCastMember> = emptyList(),
     val showControls: Boolean = true,
     val showSeekOverlay: Boolean = false,
-    val pendingPreviewSeekPosition: Long? = null,
     val playbackSpeed: Float = 1f,
     val loadingOverlayEnabled: Boolean = true,
     val showLoadingOverlay: Boolean = true,

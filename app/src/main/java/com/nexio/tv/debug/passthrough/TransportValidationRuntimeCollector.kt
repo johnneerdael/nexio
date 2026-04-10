@@ -27,6 +27,7 @@ class TransportValidationRuntimeCollector @Inject constructor(
     @ApplicationContext private val appContext: Context,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    internal var onDeviceHealthSamplerStartForTest: () -> Unit = {}
 
     // WP8 — device-health sampler tied to the playback-trace MediaSourceSession.
     // Starts on `beginSession`, stops on `clearSession`. Lazy so the collector
@@ -69,10 +70,11 @@ class TransportValidationRuntimeCollector @Inject constructor(
         if (!settings.enabled) {
             return
         }
-        if (settings.runtimeValidationEnabled) {
+        if (settings.runtimeValidationEnabled && com.nexio.tv.instrumentation.PlaybackTracer.deviceHealthSamplingEnabled) {
             // WP8 — start the device-health sampler tied to this session.
             // Best-effort: any failure is swallowed inside DeviceHealthSampler.
             deviceHealthSampler.start()
+            onDeviceHealthSamplerStartForTest()
         }
         activeSession =
             ActiveRuntimeSession(

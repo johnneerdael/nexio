@@ -622,9 +622,11 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         _uiState.update { 
                             it.copy(
                                 isBuffering = isBuffering,
-                                playbackEnded = playbackState == Player.STATE_ENDED,
-                                duration = playerDuration.coerceAtLeast(0L)
+                                playbackEnded = playbackState == Player.STATE_ENDED
                             )
+                        }
+                        _progressUiState.update {
+                            it.copy(duration = playerDuration.coerceAtLeast(0L))
                         }
 
                         if (playbackState == Player.STATE_BUFFERING && hasRenderedFirstFrame) {
