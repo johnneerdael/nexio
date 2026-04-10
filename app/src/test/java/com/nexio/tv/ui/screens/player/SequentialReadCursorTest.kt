@@ -35,6 +35,7 @@ class SequentialReadCursorTest {
 
     /** In-memory store whose "available" window can be grown on demand. */
     private class FakeStore(val content: ByteArray, var available: Long = 0L) : AbsoluteByteStore {
+        var readCallCount: Int = 0
         override val frontier: Long get() = available
         override fun writeAt(absoluteOffset: Long, data: ByteArray, dataOffset: Int, length: Int) {
             System.arraycopy(data, dataOffset, content, absoluteOffset.toInt(), length)
@@ -44,6 +45,7 @@ class SequentialReadCursorTest {
             writeAt(absoluteOffset, data, dataOffset, length)
         }
         override fun read(position: Long, dest: ByteArray, destOffset: Int, length: Int): Int {
+            readCallCount += 1
             if (position >= available) return 0
             val n = minOf(length.toLong(), available - position).toInt()
             System.arraycopy(content, position.toInt(), dest, destOffset, n)
@@ -171,5 +173,19 @@ class SequentialReadCursorTest {
         })
         assertEquals(8, c.read(ByteArray(8), 0, 8))
         assertTrue("cursor must have waited at least once", waits >= 1)
+    }
+
+    @Test
+    fun `tiny reads are served from a staged window`() {
+        val store = FakeStore(ByteArray(64 * 1024) { 7 }, available = 64L * 1024L)
+        val c = cursor(store, length = 64L * 1024L)
+        val one = ByteArray(1)
+
+        repeat(512) {
+            assertEquals(1, c.read(one, 0, 1))
+            assertEquals(7.toByte(), one[0])
+        }
+
+        assertTrue("expected staged reads to reduce store calls, got ${store.readCallCount}", store.readCallCount < 64)
     }
 }

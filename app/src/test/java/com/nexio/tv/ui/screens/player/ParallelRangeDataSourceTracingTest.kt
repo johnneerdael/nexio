@@ -113,9 +113,11 @@ class ParallelRangeDataSourceTracingTest {
     fun `prds trace churn stays bounded under small reads`() {
         val out = runTinyReadPrdsTrace()
         val readReturnCount = out.lineSequence().count { it.contains("\"ev\":\"read_return_agg\"") }
+        val bodyEventCount = out.lineSequence().count { it.contains("\"ev\":\"range_http_body\"") }
         val bodyProgressCount = out.lineSequence().count { it.contains("\"ev\":\"range_http_body_progress\"") }
 
         assertTrue("Aggregated read traces should stay bounded, got $readReturnCount", readReturnCount < 500)
+        assertTrue("Body traces should stay bounded, got $bodyEventCount", bodyEventCount < 500)
         assertTrue("Body-progress traces should stay bounded, got $bodyProgressCount", bodyProgressCount < 500)
     }
 
@@ -153,6 +155,22 @@ class ParallelRangeDataSourceTracingTest {
 
         assertTrue(lastWriter.get()?.awaitDrained() == true)
         assertOpenSequenceCause(sinks.last().toString(), "seek_like_reopen")
+    }
+
+    @Test(timeout = 15_000L)
+    fun `rebuffer policy with zero prefetch workers does not submit prefetch`() {
+        val trace = runTraceWithRuntimePolicy(
+            TransportPolicy(
+                urgentWorkers = 2,
+                prefetchWorkers = 0,
+                urgentChunkBytes = 16L * 1024L * 1024L,
+                prefetchChunkBytes = 0L,
+                warmAheadEnabled = false,
+            )
+        )
+
+        assertFalse(trace.contains("\"ev\":\"submit_prefetch\""))
+        assertFalse(trace.contains("\"lane\":\"prefetch\""))
     }
 
     @Test(timeout = 10_000L)
@@ -371,6 +389,54 @@ class ParallelRangeDataSourceTracingTest {
                     if (read == C.RESULT_END_OF_INPUT) return@repeat
                 }
                 Thread.sleep(1_500L)
+            } finally {
+                dataSource.close()
+            }
+        } finally {
+            server.shutdown()
+            PlaybackTracer.endSession(sid)
+        }
+
+        assertTrue(lastWriter.get()?.awaitDrained() == true)
+        return sinks.last().toString()
+    }
+
+    private fun runTraceWithRuntimePolicy(policy: TransportPolicy): String {
+        val content = ByteArray(18 * 1024 * 1024) { (it % 251).toByte() }
+        val server = startThrottledRangeProgressServer(content)
+        val sid = PlaybackTracer.beginSession(fakeHeader())
+        try {
+            val dataSource = ParallelRangeDataSource(
+                upstreamFactory = OkHttpDataSource.Factory(
+                    PlaybackRangeContextCallFactory(
+                        OkHttpClient.Builder()
+                            .connectTimeout(5, TimeUnit.SECONDS)
+                            .readTimeout(5, TimeUnit.SECONDS)
+                            .writeTimeout(5, TimeUnit.SECONDS)
+                            .eventListenerFactory(PlaybackOkHttpEventListener.FACTORY)
+                            .build()
+                    )
+                ),
+                envelope = CapabilityEnvelope.LOCKED_PREMIUMIZE,
+                parallelConnections = 2,
+                chunkSize = 16L * 1024L * 1024L,
+                chunkWaitTimeoutMs = 5_000L,
+                transportPolicyProvider = { policy }
+            )
+            dataSource.open(
+                DataSpec.Builder()
+                    .setUri(server.url("/media.bin").toString())
+                    .setPosition(0L)
+                    .setLength(C.LENGTH_UNSET.toLong())
+                    .build()
+            )
+            try {
+                val buffer = ByteArray(1024)
+                repeat(512) {
+                    val read = dataSource.read(buffer, 0, buffer.size)
+                    if (read == C.RESULT_END_OF_INPUT) return@repeat
+                }
+                Thread.sleep(1_000L)
             } finally {
                 dataSource.close()
             }

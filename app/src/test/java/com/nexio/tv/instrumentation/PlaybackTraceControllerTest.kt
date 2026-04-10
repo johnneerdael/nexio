@@ -374,6 +374,51 @@ class PlaybackTraceControllerTest {
         }
     }
 
+    @Test
+    fun `copyLatestSessionToDownloads snapshots active rotated traces without partial lines`() = runTest {
+        val appFilesDir = createTempDirectory("playback-trace-controller-live-latest-files").toFile()
+        val cacheDir = createTempDirectory("playback-trace-controller-live-latest-cache").toFile()
+        val insertedUri = Uri.parse("content://tests/downloads/live-latest.zip")
+        val destinationBytes = ByteArrayOutputStream()
+        val contentResolver = mockk<ContentResolver>()
+        every { contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, any<ContentValues>()) } returns insertedUri
+        every { contentResolver.openOutputStream(insertedUri) } returns destinationBytes
+
+        val controller = buildController(appFilesDir, cacheDir, contentResolver)
+        controller.installFilesDirOnce()
+        PlaybackTracer.enabled = true
+        val sessionId = PlaybackTracer.beginSession(fakeHeader("live-latest"))
+        repeat(1500) { index ->
+            PlaybackTracer.emit(EventFamily.RANGE, "range_http_body_progress") {
+                putLong("chunkIndex", 1L)
+                putString("lane", "urgent")
+                putInt("bytesRead", 8192)
+                putInt("totalRead", index + 1)
+            }
+        }
+        Thread.sleep(150L)
+
+        try {
+            val adbPath = controller.copyLatestSessionToDownloads(nowMs = 99L)
+            assertEquals("/sdcard/Download/playback-trace-latest-99.zip", adbPath)
+        } finally {
+            PlaybackTracer.endSession(sessionId)
+        }
+
+        ZipInputStream(ByteArrayInputStream(destinationBytes.toByteArray())).use { zip ->
+            val entries = mutableListOf<String>()
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                entries += entry.name
+                zip.readBytes().decodeToString()
+                    .lineSequence()
+                    .filter { it.isNotBlank() }
+                    .forEach { JSONObject(it) }
+            }
+            assertTrue(entries.all { it.startsWith("live-latest") })
+        }
+    }
+
     private fun buildController(
         filesDir: File,
         cacheDir: File,

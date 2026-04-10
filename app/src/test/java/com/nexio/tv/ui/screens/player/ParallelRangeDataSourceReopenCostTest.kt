@@ -47,6 +47,37 @@ class ParallelRangeDataSourceReopenCostTest {
         assertEquals(0, probe.storeResetCount)
     }
 
+    @Test(timeout = 10_000L)
+    fun `bounded extractor probe reopen does not rebuild transport`() {
+        val content = ByteArray(2 * 1024 * 1024) { (it % 251).toByte() }
+        val server = startRangeServer(content)
+        val probe = ReopenCostProbe()
+        val dataSource = newInstrumentedDataSource(probe)
+
+        try {
+            dataSource.open(spec(server, position = 0L))
+            dataSource.close()
+
+            val reopenedLength = dataSource.open(
+                spec(
+                    server = server,
+                    position = content.size.toLong() - 64L * 1024L,
+                    length = 64L * 1024L,
+                )
+            )
+            try {
+                assertEquals(64L * 1024L, reopenedLength)
+            } finally {
+                dataSource.close()
+            }
+        } finally {
+            server.shutdown()
+        }
+
+        assertEquals(1, probe.transportAttachCount)
+        assertEquals(0, probe.storeResetCount)
+    }
+
     private fun newInstrumentedDataSource(probe: ReopenCostProbe): ParallelRangeDataSource {
         return ParallelRangeDataSource(
             upstreamFactory = OkHttpDataSource.Factory(
@@ -65,11 +96,11 @@ class ParallelRangeDataSourceReopenCostTest {
         )
     }
 
-    private fun spec(server: MockWebServer, position: Long): DataSpec {
+    private fun spec(server: MockWebServer, position: Long, length: Long = C.LENGTH_UNSET.toLong()): DataSpec {
         return DataSpec.Builder()
             .setUri(server.url("/media.bin").toString())
             .setPosition(position)
-            .setLength(C.LENGTH_UNSET.toLong())
+            .setLength(length)
             .build()
     }
 

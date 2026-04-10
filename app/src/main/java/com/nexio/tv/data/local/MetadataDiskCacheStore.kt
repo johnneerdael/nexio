@@ -15,9 +15,16 @@ import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaCompanyKind
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Singleton
 class MetadataDiskCacheStore @Inject constructor(
@@ -39,6 +46,66 @@ class MetadataDiskCacheStore @Inject constructor(
     }
 
     private val gson = Gson()
+    private var ioScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var debounceMs: Long = 250L
+    private val pendingWrites = ConcurrentHashMap<String, String?>()
+    private val flushScheduled = AtomicBoolean(false)
+
+    internal constructor(
+        context: Context,
+        ioScope: CoroutineScope,
+        debounceMs: Long,
+    ) : this(context) {
+        this.ioScope = ioScope
+        this.debounceMs = debounceMs
+    }
+
+    private fun readPendingEntry(key: String): JsonObject? {
+        val pending = pendingWrites[key] ?: return null
+        return gson.fromJson(pending, JsonObject::class.java)
+    }
+
+    private fun enqueueWrite(key: String, payload: JsonObject) {
+        pendingWrites[key] = gson.toJson(payload)
+        scheduleFlush()
+    }
+
+    private fun scheduleFlush() {
+        if (!flushScheduled.compareAndSet(false, true)) return
+        ioScope.launch {
+            if (debounceMs > 0L) delay(debounceMs)
+            flushPendingWrites()
+        }
+    }
+
+    internal fun flushPendingWritesForTest() {
+        flushPendingWrites()
+    }
+
+    private fun flushPendingWrites() {
+        val snapshot = pendingWrites.entries.toList()
+        if (snapshot.isEmpty()) {
+            flushScheduled.set(false)
+            return
+        }
+        runCatching {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val editor = prefs.edit()
+            snapshot.forEach { (key, value) ->
+                if (value == null) editor.remove(key) else editor.putString(key, value)
+            }
+            editor.apply()
+            snapshot.forEach { (key, value) ->
+                pendingWrites.remove(key, value)
+            }
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to flush pending metadata disk writes", error)
+        }
+        flushScheduled.set(false)
+        if (pendingWrites.isNotEmpty()) {
+            scheduleFlush()
+        }
+    }
 
     fun currentLanguageEpoch(): Int {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -59,9 +126,11 @@ class MetadataDiskCacheStore @Inject constructor(
     fun readMeta(itemKey: String, languageTag: String, providerToken: String): Meta? {
         val key = buildMetaKey(itemKey = itemKey, languageTag = languageTag, providerToken = providerToken)
         return runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
-            val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
+            val root = readPendingEntry(key) ?: run {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
+                gson.fromJson(raw, JsonObject::class.java)
+            } ?: return null
             val epoch = root.get("languageEpoch")?.asInt ?: 0
             if (epoch != currentLanguageEpoch()) return null
             val schemaVersion = root.get("metaSchemaVersion")?.asInt ?: 0
@@ -75,14 +144,13 @@ class MetadataDiskCacheStore @Inject constructor(
     fun writeMeta(itemKey: String, languageTag: String, providerToken: String, meta: Meta) {
         val key = buildMetaKey(itemKey = itemKey, languageTag = languageTag, providerToken = providerToken)
         runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
                 add("value", gson.toJsonTree(meta))
                 addProperty("languageEpoch", currentLanguageEpoch())
                 addProperty("metaSchemaVersion", META_CACHE_SCHEMA_VERSION)
                 addProperty("updatedAtMs", System.currentTimeMillis())
             }
-            prefs.edit().putString(key, gson.toJson(payload)).apply()
+            enqueueWrite(key, payload)
         }.onFailure { error ->
             Log.w(TAG, "Failed to write disk metadata entry", error)
         }
@@ -91,9 +159,11 @@ class MetadataDiskCacheStore @Inject constructor(
     fun readTmdbEnrichment(tmdbKey: String, languageTag: String, providerToken: String): TmdbEnrichment? {
         val key = buildTmdbKey(tmdbKey = tmdbKey, languageTag = languageTag, providerToken = providerToken)
         return runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
-            val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
+            val root = readPendingEntry(key) ?: run {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
+                gson.fromJson(raw, JsonObject::class.java)
+            } ?: return null
             val epoch = root.get("languageEpoch")?.asInt ?: 0
             if (epoch != currentLanguageEpoch()) return null
             val schemaVersion = root.get("tmdbSchemaVersion")?.asInt ?: 0
@@ -112,14 +182,13 @@ class MetadataDiskCacheStore @Inject constructor(
     ) {
         val key = buildTmdbKey(tmdbKey = tmdbKey, languageTag = languageTag, providerToken = providerToken)
         runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
                 add("value", gson.toJsonTree(enrichment))
                 addProperty("languageEpoch", currentLanguageEpoch())
                 addProperty("tmdbSchemaVersion", TMDB_CACHE_SCHEMA_VERSION)
                 addProperty("updatedAtMs", System.currentTimeMillis())
             }
-            prefs.edit().putString(key, gson.toJson(payload)).apply()
+            enqueueWrite(key, payload)
         }.onFailure { error ->
             Log.w(TAG, "Failed to write TMDB enrichment disk cache entry", error)
         }
@@ -391,9 +460,11 @@ class MetadataDiskCacheStore @Inject constructor(
 
     private fun readTmdbVideosEntry(key: String): List<TmdbVideoResult>? {
         return runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
-            val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
+            val root = readPendingEntry(key) ?: run {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
+                gson.fromJson(raw, JsonObject::class.java)
+            } ?: return null
             val epoch = root.get("languageEpoch")?.asInt ?: 0
             if (epoch != currentLanguageEpoch()) return null
             val schemaVersion = root.get("tmdbVideoSchemaVersion")?.asInt ?: 0
@@ -408,7 +479,6 @@ class MetadataDiskCacheStore @Inject constructor(
 
     private fun writeTmdbVideosEntry(key: String, videos: List<TmdbVideoResult>) {
         runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val filteredVideos = filterCacheableTmdbTrailerVideos(videos)
             val payload = JsonObject().apply {
                 add("value", gson.toJsonTree(filteredVideos))
@@ -416,7 +486,7 @@ class MetadataDiskCacheStore @Inject constructor(
                 addProperty("tmdbVideoSchemaVersion", TMDB_VIDEO_CACHE_SCHEMA_VERSION)
                 addProperty("updatedAtMs", System.currentTimeMillis())
             }
-            prefs.edit().putString(key, gson.toJson(payload)).apply()
+            enqueueWrite(key, payload)
         }.onFailure { error ->
             Log.w(TAG, "Failed to write TMDB videos disk cache entry", error)
         }
