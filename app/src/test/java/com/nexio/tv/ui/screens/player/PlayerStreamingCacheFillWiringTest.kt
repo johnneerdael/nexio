@@ -23,6 +23,20 @@ class PlayerStreamingCacheFillWiringTest {
         )
     }
 
+    @Test
+    fun `cache fill playback byte provider reads atomic snapshot`() {
+        val source = sourceFile(
+            "com/nexio/tv/ui/screens/player/PlayerRuntimeController.kt"
+        ).toFile().readText()
+        val maybeStartBlock = source.substringAfter("internal fun maybeStartStreamingCacheFillForCurrentStream()")
+            .substringBefore("fun stopAndRelease()")
+
+        assertTrue(
+            "CacheFillWorker playbackByteProvider must not call ExoPlayer from CacheFill-0",
+            maybeStartBlock.contains("playbackByteProvider = { streamingCachePlaybackBytePosition.get() }")
+        )
+    }
+
     private fun sourceFile(relativePath: String): Path {
         val cwd = Paths.get("").toAbsolutePath().normalize()
         val relative = Paths.get("app", "src", "main", "java")

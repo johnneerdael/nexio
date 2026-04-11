@@ -144,7 +144,7 @@ class PlayerRuntimeController(
             url = currentStreamUrl,
             headers = currentHeaders,
             contentLength = currentVideoSize,
-            playbackByteProvider = { estimateBufferedBytePosition() }
+            playbackByteProvider = { streamingCachePlaybackBytePosition.get() }
         )
     }
 
@@ -248,6 +248,7 @@ class PlayerRuntimeController(
     internal var lastSavedPosition: Long = 0L
     internal val saveThresholdMs = 5000L 
     internal var lastKnownDuration: Long = 0L
+    internal val streamingCachePlaybackBytePosition = AtomicLong(0L)
 
     
     internal var hasRenderedFirstFrame = false
@@ -448,4 +449,20 @@ internal fun PlayerRuntimeController.estimateBufferedBytePosition(): Long {
     if (duration <= 0L || duration == C.TIME_UNSET) return 0L
     val bufferedMs = player.bufferedPosition.coerceAtLeast(player.currentPosition)
     return (size * bufferedMs / duration).coerceIn(0L, size)
+}
+
+internal fun PlayerRuntimeController.updateStreamingCachePlaybackBytePosition(
+    positionMs: Long,
+    durationMs: Long
+) {
+    val size = currentVideoSize ?: run {
+        streamingCachePlaybackBytePosition.set(0L)
+        return
+    }
+    if (durationMs <= 0L || durationMs == C.TIME_UNSET) {
+        streamingCachePlaybackBytePosition.set(0L)
+        return
+    }
+    val bytePosition = (size * positionMs.coerceAtLeast(0L) / durationMs).coerceIn(0L, size)
+    streamingCachePlaybackBytePosition.set(bytePosition)
 }
