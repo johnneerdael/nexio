@@ -381,7 +381,11 @@ class PlayerRuntimeController(
         observeTheIntroDbSettings()
         streamingCacheFlagJob = scope.launch {
             debugSettingsDataStore.streamingCacheEnabled.collect { enabled ->
-                mediaSourceFactory.streamingCacheEnabled = enabled
+                val decision = StreamingCacheKillSwitch.evaluate(context, enabled)
+                mediaSourceFactory.streamingCacheEnabled = decision.enabled
+                if (enabled && decision.blockedByKillSwitch) {
+                    debugSettingsDataStore.setStreamingCacheEnabled(false)
+                }
             }
         }
         fetchMetaDetails(contentId, contentType)
