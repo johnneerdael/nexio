@@ -77,7 +77,7 @@ private enum class IntegrationSettingsSection {
     Imdb,
     MdbList,
     AnimeSkip,
-    Gemini,
+    SubtitleTranslation,
     PosterRatings
 }
 
@@ -206,7 +206,7 @@ fun SettingsScreen(
     val integrationImdbFocusRequester = remember { FocusRequester() }
     val integrationMdbListFocusRequester = remember { FocusRequester() }
     val integrationAnimeSkipFocusRequester = remember { FocusRequester() }
-    val integrationGeminiFocusRequester = remember { FocusRequester() }
+    val integrationSubtitleTranslationFocusRequester = remember { FocusRequester() }
     val integrationPosterRatingsFocusRequester = remember { FocusRequester() }
     var integrationSection by remember { mutableStateOf(IntegrationSettingsSection.Hub) }
     var pendingContentFocusCategory by remember { mutableStateOf<SettingsCategory?>(null) }
@@ -392,7 +392,7 @@ fun SettingsScreen(
                             imdbFocusRequester = integrationImdbFocusRequester,
                             mdbListFocusRequester = integrationMdbListFocusRequester,
                             animeSkipFocusRequester = integrationAnimeSkipFocusRequester,
-                            geminiFocusRequester = integrationGeminiFocusRequester,
+                            subtitleTranslationFocusRequester = integrationSubtitleTranslationFocusRequester,
                             posterRatingsFocusRequester = integrationPosterRatingsFocusRequester,
                             autoFocusEnabled = allowDetailAutofocus
                         )
@@ -456,7 +456,7 @@ private fun IntegrationSettingsContent(
     imdbFocusRequester: FocusRequester,
     mdbListFocusRequester: FocusRequester,
     animeSkipFocusRequester: FocusRequester,
-    geminiFocusRequester: FocusRequester,
+    subtitleTranslationFocusRequester: FocusRequester,
     posterRatingsFocusRequester: FocusRequester,
     autoFocusEnabled: Boolean
 ) {
@@ -478,7 +478,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.Imdb -> imdbFocusRequester
             IntegrationSettingsSection.MdbList -> mdbListFocusRequester
             IntegrationSettingsSection.AnimeSkip -> animeSkipFocusRequester
-            IntegrationSettingsSection.Gemini -> geminiFocusRequester
+            IntegrationSettingsSection.SubtitleTranslation -> subtitleTranslationFocusRequester
             IntegrationSettingsSection.PosterRatings -> posterRatingsFocusRequester
         }
         runCatching { requester.requestFocus() }
@@ -567,11 +567,11 @@ private fun IntegrationSettingsContent(
                                 onClick = { onSelectSection(IntegrationSettingsSection.AnimeSkip) }
                             )
                         }
-                        item(key = "integration_hub_gemini") {
+                        item(key = "integration_hub_subtitle_translation") {
                             SettingsActionRow(
-                                title = "Google Gemini",
-                                subtitle = stringResource(R.string.settings_gemini_subtitle),
-                                onClick = { onSelectSection(IntegrationSettingsSection.Gemini) }
+                                title = stringResource(R.string.subtitle_translation_title),
+                                subtitle = stringResource(R.string.settings_subtitle_translation_subtitle),
+                                onClick = { onSelectSection(IntegrationSettingsSection.SubtitleTranslation) }
                             )
                         }
                         item(key = "integration_hub_youtube_trailer_login") {
@@ -647,9 +647,9 @@ private fun IntegrationSettingsContent(
             )
         }
 
-        IntegrationSettingsSection.Gemini -> {
-            GeminiSettingsContent(
-                initialFocusRequester = geminiFocusRequester
+        IntegrationSettingsSection.SubtitleTranslation -> {
+            SubtitleTranslationSettingsContent(
+                initialFocusRequester = subtitleTranslationFocusRequester
             )
         }
 
