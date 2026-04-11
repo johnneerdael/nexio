@@ -135,14 +135,18 @@ internal class CacheFillWorker(
                 val end = (start + profile.chunkBytes).coerceAtMost(contentLength)
                 if (end <= start) break
 
+                val chunkEpoch = transferEpoch.get()
                 if (rangeCoordinator.isOwnedByPlaybackFallback(start, end)) {
-                    fillFrontier = end
+                    if (canApplyChunkProgress(workerGeneration, chunkEpoch)) {
+                        fillFrontier = end
+                    } else {
+                        restartRequested = false
+                    }
                     continue
                 }
 
-                val chunkEpoch = transferEpoch.get()
                 val bytesWritten = try {
-                    downloadChunkToCache(url, headers, start, end, workerGeneration)
+                    downloadChunkToCache(url, headers, start, end, workerGeneration, chunkEpoch)
                 } catch (e: IOException) {
                     if (restartRequested || isPaused) {
                         restartRequested = false
@@ -182,13 +186,14 @@ internal class CacheFillWorker(
         headers: Map<String, String>,
         start: Long,
         end: Long,
-        workerGeneration: Long = generation.get()
+        workerGeneration: Long = generation.get(),
+        chunkEpoch: Long = transferEpoch.get()
     ): Long {
         if (end <= start) return 0L
 
         val call = okHttpClient.newCall(buildRequest(url, headers, start, end))
         synchronized(callLock) {
-            if (!isCurrentGeneration(workerGeneration)) {
+            if (!canUseCall(workerGeneration, chunkEpoch)) {
                 call.cancel()
                 return 0L
             }
@@ -200,7 +205,7 @@ internal class CacheFillWorker(
             if (!isValidResponse) {
                 throw IOException("Unexpected cache fill response ${response.code}")
             }
-            if (response.code == 206 && response.header("Content-Range")?.startsWith("bytes $start-") != true) {
+            if (response.code == 206 && !isValidContentRange(response.header("Content-Range"), start)) {
                 throw IOException("Malformed cache fill Content-Range ${response.header("Content-Range")}")
             }
 
@@ -264,11 +269,22 @@ internal class CacheFillWorker(
         return generation.get() == workerGeneration
     }
 
-    private fun canApplyChunkProgress(workerGeneration: Long, chunkEpoch: Long): Boolean {
+    private fun canUseCall(workerGeneration: Long, chunkEpoch: Long): Boolean {
         return isCurrentGeneration(workerGeneration) &&
-            transferEpoch.get() == chunkEpoch &&
+            transferEpoch.get() == chunkEpoch
+    }
+
+    private fun canApplyChunkProgress(workerGeneration: Long, chunkEpoch: Long): Boolean {
+        return canUseCall(workerGeneration, chunkEpoch) &&
             !restartRequested &&
             !isPaused
+    }
+
+    private fun isValidContentRange(contentRange: String?, requestedStart: Long): Boolean {
+        val match = CONTENT_RANGE_PATTERN.matchEntire(contentRange ?: return false) ?: return false
+        val responseStart = match.groupValues[1].toLongOrNull() ?: return false
+        val responseEnd = match.groupValues[2].toLongOrNull() ?: return false
+        return responseStart == requestedStart && responseEnd >= requestedStart
     }
 
     private fun reserveCacheSpan(start: Long, end: Long): CacheSpan {
@@ -328,5 +344,6 @@ internal class CacheFillWorker(
         const val READ_BUFFER_SIZE = MemoryBudget.FILL_WORKER_READ_BUFFER_BYTES
         const val THREAD_NAME = "CacheFill-0"
         private const val PAUSE_SLEEP_MS = 20L
+        private val CONTENT_RANGE_PATTERN = Regex("""bytes\s+(\d+)-(\d+)/.+""")
     }
 }
