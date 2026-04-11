@@ -426,6 +426,60 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun startStreamingCacheFill_afterMissingContentLength_startsWhenSizeBecomesAvailable() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "media-source-fill-late-length-${System.nanoTime()}"
+        )
+        val requestEntered = CountDownLatch(1)
+        val releaseRequest = CountDownLatch(1)
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                requestEntered.countDown()
+                while (!releaseRequest.await(10L, TimeUnit.MILLISECONDS)) {
+                    // Keep the worker active until the test shuts it down.
+                }
+                throw IOException("stopped")
+            }
+            .build()
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = client,
+            streamingCacheProvider = provider
+        )
+
+        try {
+            factory.streamingCacheEnabled = true
+
+            factory.startStreamingCacheFill(
+                url = "https://example.com/movie.mkv",
+                headers = emptyMap(),
+                contentLength = null,
+                playbackByteProvider = { 0L }
+            )
+
+            assertFalse(provider.hasCacheInstance)
+            assertFalse(factory.hasActiveFillSession)
+
+            factory.startStreamingCacheFill(
+                url = "https://example.com/movie.mkv",
+                headers = emptyMap(),
+                contentLength = 32L * 1024L * 1024L,
+                playbackByteProvider = { 0L }
+            )
+
+            assertTrue(requestEntered.await(1L, TimeUnit.SECONDS))
+            assertTrue(provider.hasCacheInstance)
+            assertTrue(factory.hasActiveFillSession)
+        } finally {
+            releaseRequest.countDown()
+            factory.shutdown()
+            provider.cacheDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun startStreamingCacheFill_hlsManifest_doesNotOpenCacheOrStartFill() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val provider = StreamingCacheProvider(

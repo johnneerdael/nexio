@@ -447,12 +447,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
                 player.setMediaSource(mediaSource)
                 player.playWhenReady = true
                 player.prepare()
-                mediaSourceFactory.startStreamingCacheFill(
-                    url = url,
-                    headers = newHeaders,
-                    contentLength = currentVideoSize,
-                    playbackByteProvider = { estimateBufferedBytePosition() }
-                )
+                maybeStartStreamingCacheFillForCurrentStream()
                 launchStartupAfrPreflight(
                     url = url,
                     headers = newHeaders,
@@ -788,12 +783,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
                 player.setMediaSource(mediaSource)
                 player.playWhenReady = true
                 player.prepare()
-                mediaSourceFactory.startStreamingCacheFill(
-                    url = url,
-                    headers = newHeaders,
-                    contentLength = currentVideoSize,
-                    playbackByteProvider = { estimateBufferedBytePosition() }
-                )
+                maybeStartStreamingCacheFillForCurrentStream()
                 launchStartupAfrPreflight(
                     url = url,
                     headers = newHeaders,
