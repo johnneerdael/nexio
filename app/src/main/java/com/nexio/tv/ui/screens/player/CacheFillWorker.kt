@@ -123,7 +123,7 @@ internal class CacheFillWorker(
         } else {
             true
         }
-        if (workerStopped && workerThread === threadToStop) {
+        if (joinWorker && workerStopped && workerThread === threadToStop) {
             workerThread = null
         }
         return workerStopped
@@ -204,11 +204,15 @@ internal class CacheFillWorker(
             }
         } catch (_: IOException) {
         } finally {
+            val currentThread = Thread.currentThread()
             if (isCurrentGeneration(workerGeneration)) {
                 isActive = false
                 synchronized(callLock) {
                     activeCall = null
                 }
+            }
+            if (workerThread === currentThread) {
+                workerThread = null
             }
         }
     }

@@ -500,6 +500,82 @@ class CacheFillWorkerTest {
     }
 
     @Test
+    fun stopThenImmediateStart_doesNotReplaceStillRunningWorker() {
+        val chunkBytes = 64L
+        val firstRequestEntered = CountDownLatch(1)
+        val releaseFirstRequest = CountDownLatch(1)
+        val requestCount = AtomicInteger(0)
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                if (requestCount.incrementAndGet() == 1) {
+                    firstRequestEntered.countDown()
+                    while (releaseFirstRequest.count > 0L) {
+                        try {
+                            releaseFirstRequest.await(10L, TimeUnit.MILLISECONDS)
+                        } catch (_: InterruptedException) {
+                            // Keep simulating cleanup that ignores interrupts until the test releases it.
+                        }
+                    }
+                    throw IOException("stopped")
+                }
+
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(206)
+                    .message("Partial Content")
+                    .header("Content-Range", "bytes 0-63/128")
+                    .body(ByteArray(chunkBytes.toInt()) { 1 }.toResponseBody())
+                    .build()
+            }
+            .build()
+        val profile = ProviderProfile(
+            chunkBytes = chunkBytes,
+            normalFragmentBytes = chunkBytes,
+            fillHorizonBytes = chunkBytes * 16L,
+            lowWaterBytes = chunkBytes,
+            retainBehindBytes = 0L
+        )
+        val worker = worker(
+            cacheKey = "movie-stop-start-still-running",
+            profile = profile,
+            okHttpClient = client,
+            safetyGapBytes = 0L
+        )
+        var firstWorkerThread: Thread? = null
+
+        try {
+            worker.start(
+                url = server.url("/movie").toString(),
+                headers = emptyMap(),
+                contentLength = chunkBytes * 2L,
+                startPosition = 0L
+            )
+            assertTrue(firstRequestEntered.await(1, TimeUnit.SECONDS))
+            firstWorkerThread = liveCacheFillThreads().single()
+
+            worker.stop()
+            assertTrue(firstWorkerThread.isAlive)
+
+            worker.start(
+                url = server.url("/movie").toString(),
+                headers = emptyMap(),
+                contentLength = chunkBytes * 2L,
+                startPosition = 0L
+            )
+
+            assertEquals(1, requestCount.get())
+            assertEquals(listOf(firstWorkerThread), liveCacheFillThreads())
+        } finally {
+            releaseFirstRequest.countDown()
+            worker.stop()
+            firstWorkerThread?.let { thread ->
+                assertTrue(waitUntil { !thread.isAlive })
+            }
+        }
+    }
+
+    @Test
     fun readBuffer_staysAt512Kb() {
         assertEquals(512 * 1024, CacheFillWorker.READ_BUFFER_SIZE)
     }
