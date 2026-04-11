@@ -28,6 +28,7 @@ class DebugSettingsDataStore @Inject constructor(
     private val accountTabEnabledKey = booleanPreferencesKey("account_tab_enabled")
     private val syncCodeFeaturesEnabledKey = booleanPreferencesKey("sync_code_features_enabled")
     private val streamDiagnosticsEnabledKey = booleanPreferencesKey("stream_diagnostics_enabled")
+    private val streamingCacheEnabledKey = booleanPreferencesKey("streaming_cache_enabled")
     private val startupPerfTelemetryEnabledKey = booleanPreferencesKey("startup_perf_telemetry_enabled")
     private val diskFirstHomeStartupEnabledKey = booleanPreferencesKey("disk_first_home_startup_enabled")
     private val diskFirstHomeStartupDefaultAppliedKey =
@@ -57,6 +58,10 @@ class DebugSettingsDataStore @Inject constructor(
         prefs[streamDiagnosticsEnabledKey] ?: false
     }
 
+    val streamingCacheEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[streamingCacheEnabledKey] ?: false
+    }
+
     val startupPerfTelemetryEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[startupPerfTelemetryEnabledKey] ?: false
     }
@@ -80,6 +85,12 @@ class DebugSettingsDataStore @Inject constructor(
     suspend fun setStreamDiagnosticsEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[streamDiagnosticsEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setStreamingCacheEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[streamingCacheEnabledKey] = enabled
         }
     }
 

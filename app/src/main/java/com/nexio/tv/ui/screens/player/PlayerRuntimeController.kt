@@ -40,7 +40,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -225,6 +227,7 @@ class PlayerRuntimeController(
     internal var nextEpisodeAutoPlayJob: Job? = null
     internal var sourceStreamsJob: Job? = null
     internal var sourceChipErrorDismissJob: Job? = null
+    internal var streamingCacheFlagJob: Job? = null
     internal var aiSubtitleTranslationJob: Job? = null
     internal var builtInAiSubtitleTranslationJob: Job? = null
     internal var addonSubtitleOverlayJob: Job? = null
@@ -376,6 +379,11 @@ class PlayerRuntimeController(
         observeSubtitleSettings()
         observeGeminiSettings()
         observeTheIntroDbSettings()
+        streamingCacheFlagJob = scope.launch {
+            debugSettingsDataStore.streamingCacheEnabled.collect { enabled ->
+                mediaSourceFactory.streamingCacheEnabled = enabled
+            }
+        }
         fetchMetaDetails(contentId, contentType)
         observeBlurUnwatchedEpisodes()
         observeEpisodeWatchProgress()
@@ -388,6 +396,8 @@ class PlayerRuntimeController(
         releasePlayer()
         vodTelemetryJob?.cancel()
         mediaSourceFactory.shutdown()
+        streamingCacheFlagJob?.cancel()
+        streamingCacheFlagJob = null
         sourceChipErrorDismissJob?.cancel()
     }
 
