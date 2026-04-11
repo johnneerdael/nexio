@@ -122,6 +122,16 @@ internal class PlayerMediaSourceFactory(
             return
         }
 
+        val resolvedMimeType = inferMimeType(
+            url = url,
+            filename = url.substringBefore('?').substringAfterLast('/', "").takeIf { it.isNotBlank() },
+            responseHeaders = null
+        )
+        if (resolvedMimeType == MimeTypes.APPLICATION_M3U8 || resolvedMimeType == MimeTypes.APPLICATION_MPD) {
+            stopStreamingCacheFill()
+            return
+        }
+
         val session = fillSession ?: StreamingCacheFillSession(
             cache = streamingCacheProvider.getOrCreateCache(),
             cacheKeyFactory = cacheKeyFactory,
@@ -138,14 +148,19 @@ internal class PlayerMediaSourceFactory(
         )
     }
 
-    fun stopStreamingCacheFill() {
-        fillSession?.stop()
-        fillSession = null
+    fun stopStreamingCacheFill(): Boolean {
+        val session = fillSession ?: return true
+        val stopped = session.stop()
+        if (stopped) {
+            fillSession = null
+        }
+        return stopped
     }
 
     fun shutdown() {
-        stopStreamingCacheFill()
-        streamingCacheProvider.release()
+        if (stopStreamingCacheFill()) {
+            streamingCacheProvider.release()
+        }
     }
 
     private fun createDefaultExtractorsFactory(): ExtractorsFactory {

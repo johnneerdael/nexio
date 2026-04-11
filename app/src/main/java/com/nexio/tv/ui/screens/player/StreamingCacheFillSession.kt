@@ -35,6 +35,8 @@ internal class StreamingCacheFillSession(
             return
         }
 
+        if (!stop()) return
+
         val cacheKey = cacheKeyFactory.buildCacheKey(
             DataSpec.Builder()
                 .setUri(Uri.parse(url))
@@ -58,7 +60,6 @@ internal class StreamingCacheFillSession(
             playbackByteProvider = playbackByteProvider
         )
 
-        stop()
         fillController = controller
         worker = nextWorker
         nextWorker.start(
@@ -77,9 +78,12 @@ internal class StreamingCacheFillSession(
         fillController?.onMemoryWarning()
     }
 
-    fun stop() {
-        worker?.stop()
-        worker = null
-        fillController = null
+    fun stop(): Boolean {
+        val stopped = worker?.stopAndJoin() ?: true
+        if (stopped) {
+            worker = null
+            fillController = null
+        }
+        return stopped
     }
 }
