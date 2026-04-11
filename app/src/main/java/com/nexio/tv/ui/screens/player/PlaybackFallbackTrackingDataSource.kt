@@ -20,7 +20,13 @@ internal class PlaybackFallbackTrackingDataSource(
             dataSpec.position + dataSpec.length
         }
         ownershipToken = coordinator.markFallbackOwned(dataSpec.position, end)
-        return upstream.open(dataSpec)
+        try {
+            return upstream.open(dataSpec)
+        } catch (error: Throwable) {
+            ownershipToken?.let(coordinator::clearFallbackOwnership)
+            ownershipToken = null
+            throw error
+        }
     }
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int =

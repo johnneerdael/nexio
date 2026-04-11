@@ -33,4 +33,13 @@ class StreamingRangeCoordinatorTest {
         assertFalse(coordinator.isOwnedByPlaybackFallback(start = 0, endExclusive = 100))
         assertFalse(coordinator.isOwnedByPlaybackFallback(start = 200, endExclusive = 300))
     }
+
+    @Test
+    fun earlierLongFallbackRange_overlapsAfterLaterShortFallbackRange() {
+        val coordinator = StreamingRangeCoordinator()
+        coordinator.markFallbackOwned(start = 0, endExclusive = 1000)
+        coordinator.markFallbackOwned(start = 500, endExclusive = 600)
+
+        assertTrue(coordinator.isOwnedByPlaybackFallback(start = 800, endExclusive = 900))
+    }
 }
