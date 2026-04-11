@@ -179,7 +179,12 @@ internal class StreamingCacheFillSession(
             val cachedLength = cache.getCachedLength(cacheKey, normalizedPosition, normalizedLength)
             if (cachedLength >= normalizedLength) return true
             if (System.nanoTime() > deadlineNs) return false
-            Thread.sleep(25L)
+            try {
+                Thread.sleep(25L)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
         }
     }
 

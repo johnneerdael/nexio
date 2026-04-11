@@ -28,6 +28,7 @@ internal class CoverageAwareDataSource(
     override fun open(dataSpec: DataSpec): Long {
         closeActiveSegment()
         currentUri = dataSpec.uri
+        responseHeaders = emptyMap()
         currentCacheKey = cacheKeyFactory.buildCacheKey(dataSpec)
         pendingSpec = dataSpec.takeIf { it.length != 0L }
         openNextSegment(allowUrgentFill = true)
@@ -61,6 +62,7 @@ internal class CoverageAwareDataSource(
         closeActiveSegment()
         pendingSpec = null
         currentCacheKey = null
+        responseHeaders = emptyMap()
     }
 
     private fun openNextSegment(allowUrgentFill: Boolean) {
