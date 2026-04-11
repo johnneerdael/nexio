@@ -19,6 +19,7 @@ internal class CoverageAwareDataSource(
 ) : DataSource {
     private var activeSource: DataSource? = null
     private var pendingSpec: DataSpec? = null
+    private var currentCacheKey: String? = null
     private var currentToken: String? = null
     private var currentUri: Uri? = null
     private var responseHeaders: Map<String, List<String>> = emptyMap()
@@ -27,7 +28,8 @@ internal class CoverageAwareDataSource(
     override fun open(dataSpec: DataSpec): Long {
         closeActiveSegment()
         currentUri = dataSpec.uri
-        pendingSpec = dataSpec
+        currentCacheKey = cacheKeyFactory.buildCacheKey(dataSpec)
+        pendingSpec = dataSpec.takeIf { it.length != 0L }
         openNextSegment(allowUrgentFill = true)
         return dataSpec.length
     }
@@ -57,24 +59,25 @@ internal class CoverageAwareDataSource(
     override fun close() {
         closeActiveSegment()
         pendingSpec = null
+        currentCacheKey = null
     }
 
     private fun openNextSegment(allowUrgentFill: Boolean) {
         val spec = pendingSpec ?: return
-        val cacheKey = cacheKeyFactory.buildCacheKey(spec)
+        val cacheKey = currentCacheKey ?: cacheKeyFactory.buildCacheKey(spec).also { currentCacheKey = it }
         val queryLength = queryLength(spec)
         val cachedLength = cache.getCachedLength(cacheKey, spec.position, queryLength)
 
         when {
             isFullyCached(spec, cachedLength, queryLength) -> {
                 StreamingMetrics.cacheHits.incrementAndGet()
-                openSegment(cacheReadDataSourceFactory.createDataSource(), spec)
+                openSegment(cacheReadDataSourceFactory.createDataSource(), spec.withCacheKey(cacheKey))
                 pendingSpec = null
             }
             cachedLength > 0L -> {
                 StreamingMetrics.cacheHits.incrementAndGet()
                 val segmentLength = cachedLength.coerceAtMost(queryLength)
-                openSegment(cacheReadDataSourceFactory.createDataSource(), spec.withSegmentLength(segmentLength))
+                openSegment(cacheReadDataSourceFactory.createDataSource(), spec.withSegmentLength(segmentLength, cacheKey))
                 pendingSpec = spec.afterSegment(segmentLength)
             }
             else -> openHoleSegment(
@@ -104,16 +107,19 @@ internal class CoverageAwareDataSource(
                 openNextSegment(allowUrgentFill = false)
                 return
             }
-            StreamingMetrics.coordinatorWaitTimeouts.incrementAndGet()
         }
 
-        val segmentSpec = spec.withSegmentLength(segmentLength)
+        val segmentSpec = if (spec.length == C.LENGTH_UNSET.toLong()) {
+            spec.withCacheKey(cacheKey)
+        } else {
+            spec.withSegmentLength(segmentLength, cacheKey)
+        }
         val endExclusive = spec.position + segmentLength
         val token = coordinator.markFallbackOwned(spec.position, endExclusive)
         try {
             openSegment(upstreamDataSourceFactory.createDataSource(), segmentSpec)
             currentToken = token
-            pendingSpec = spec.afterSegment(segmentLength)
+            pendingSpec = if (spec.length == C.LENGTH_UNSET.toLong()) null else spec.afterSegment(segmentLength)
         } catch (error: Throwable) {
             coordinator.clearFallbackOwnership(token)
             throw error
@@ -169,10 +175,17 @@ internal class CoverageAwareDataSource(
         return (fillTimeMs * 3L / 2L).coerceIn(MIN_WAIT_TIMEOUT_MS, MAX_WAIT_TIMEOUT_MS)
     }
 
-    private fun DataSpec.withSegmentLength(segmentLength: Long): DataSpec {
+    private fun DataSpec.withSegmentLength(segmentLength: Long, cacheKey: String): DataSpec {
         return buildUpon()
             .setPosition(position)
             .setLength(segmentLength)
+            .setKey(cacheKey)
+            .build()
+    }
+
+    private fun DataSpec.withCacheKey(cacheKey: String): DataSpec {
+        return buildUpon()
+            .setKey(cacheKey)
             .build()
     }
 
