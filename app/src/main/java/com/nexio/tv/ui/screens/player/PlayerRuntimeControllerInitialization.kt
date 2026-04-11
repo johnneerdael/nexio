@@ -17,7 +17,6 @@ import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.text.CueGroup
-import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ForwardingRenderer
@@ -204,7 +203,13 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     "bridge=${dv7ToDv81Probe.bridgeVersion ?: "n/a"} " +
                     "host=${url.safeHost()}"
             )
-            val loadControl = DefaultLoadControl.Builder().build()
+            val loadControl = if (streamingCacheDecision.enabled) {
+                PlayerLoadControlFactory.buildBudgetedLoadControl(
+                    effectiveSampleQueueBytes = MemoryBudget(context).effectiveSampleQueueBytes
+                )
+            } else {
+                PlayerLoadControlFactory.buildDefaultLoadControl()
+            }
 
             if (kodiCustomAudioSinkEnabled) {
                 safeAudioForcedStreamUrls.remove(url)

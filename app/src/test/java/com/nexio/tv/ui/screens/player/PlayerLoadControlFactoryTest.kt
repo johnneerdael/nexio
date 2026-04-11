@@ -1,5 +1,9 @@
 package com.nexio.tv.ui.screens.player
 
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import kotlin.io.path.invariantSeparatorsPathString
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -61,5 +65,39 @@ class PlayerLoadControlFactoryTest {
         )
 
         assertTrue(loadControl is androidx.media3.exoplayer.DefaultLoadControl)
+    }
+
+    @Test
+    fun `player initialization uses default load control when streaming cache disabled`() {
+        val source = sourceFile(
+            "com/nexio/tv/ui/screens/player/PlayerRuntimeControllerInitialization.kt"
+        ).toFile().readText()
+
+        assertTrue(source.contains("PlayerLoadControlFactory.buildDefaultLoadControl()"))
+    }
+
+    @Test
+    fun `player initialization uses budgeted load control when streaming cache enabled`() {
+        val source = sourceFile(
+            "com/nexio/tv/ui/screens/player/PlayerRuntimeControllerInitialization.kt"
+        ).toFile().readText()
+
+        assertTrue(source.contains("PlayerLoadControlFactory.buildBudgetedLoadControl("))
+        assertTrue(source.contains("MemoryBudget(context).effectiveSampleQueueBytes"))
+    }
+
+    private fun sourceFile(relativePath: String): Path {
+        val cwd = Paths.get("").toAbsolutePath().normalize()
+        val relative = Paths.get("app", "src", "main", "java")
+        val directCandidate = cwd.resolve(relative)
+        val parentCandidate = cwd.resolve("..").resolve(relative).normalize()
+        val sourceRoot = when {
+            Files.exists(directCandidate) -> directCandidate
+            Files.exists(parentCandidate) -> parentCandidate
+            else -> error("Unable to locate app/src/main/java from working directory $cwd")
+        }
+        return sourceRoot.resolve(relativePath).also { path ->
+            require(path.invariantSeparatorsPathString.endsWith(relativePath))
+        }
     }
 }
