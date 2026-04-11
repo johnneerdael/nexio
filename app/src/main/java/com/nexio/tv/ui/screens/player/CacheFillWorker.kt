@@ -56,7 +56,7 @@ internal class CacheFillWorker(
     fun start(url: String, headers: Map<String, String>, contentLength: Long, startPosition: Long) {
         if (contentLength <= 0L) return
 
-        stop()
+        stop(joinWorker = true)
 
         val workerGeneration = generation.incrementAndGet()
         commandSerial.incrementAndGet()
@@ -98,6 +98,11 @@ internal class CacheFillWorker(
     }
 
     fun stop() {
+        stop(joinWorker = false)
+    }
+
+    private fun stop(joinWorker: Boolean) {
+        val threadToStop = workerThread
         generation.incrementAndGet()
         commandSerial.incrementAndGet()
         stopRequested.set(true)
@@ -106,8 +111,13 @@ internal class CacheFillWorker(
         pendingSeekTarget.set(NO_PENDING_SEEK)
         fillController.stop()
         cancelActiveCall()
-        workerThread?.interrupt()
-        workerThread = null
+        threadToStop?.interrupt()
+        if (joinWorker) {
+            joinWorkerThread(threadToStop)
+        }
+        if (workerThread === threadToStop) {
+            workerThread = null
+        }
     }
 
     private fun run(url: String, headers: Map<String, String>, contentLength: Long, workerGeneration: Long) {
@@ -452,10 +462,21 @@ internal class CacheFillWorker(
         }
     }
 
+    private fun joinWorkerThread(thread: Thread?) {
+        if (thread == null || thread === Thread.currentThread()) return
+
+        try {
+            thread.join(STOP_JOIN_TIMEOUT_MS)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+    }
+
     companion object {
         const val READ_BUFFER_SIZE = MemoryBudget.FILL_WORKER_READ_BUFFER_BYTES
         const val THREAD_NAME = "CacheFill-0"
         private const val PAUSE_SLEEP_MS = 20L
+        private const val STOP_JOIN_TIMEOUT_MS = 500L
         private const val NO_PENDING_SEEK = Long.MIN_VALUE
         private val CONTENT_RANGE_PATTERN = Regex("""bytes\s+(\d+)-(\d+)/(\*|\d+)""")
     }
