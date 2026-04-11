@@ -11,6 +11,7 @@ import androidx.media3.datasource.cache.ContentMetadataMutations
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.test.core.app.ApplicationProvider
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -147,7 +148,115 @@ class CoverageAwareDataSourceTest {
         assertArrayEquals(byteArrayOf(1, 2, 3, 4, 5, 6), buffer)
     }
 
+    @Test
+    fun open_partialCacheThenFallback_reusesOriginalCacheKeyForInternalSegments() {
+        val uri = Uri.parse("https://example.com/movie.mkv")
+        val originalLengthKeyFactory = object : CacheKeyFactory {
+            override fun buildCacheKey(dataSpec: DataSpec): String {
+                return dataSpec.key ?: "${dataSpec.uri}:${dataSpec.length}"
+            }
+        }
+        val spec = DataSpec.Builder().setUri(uri).setPosition(0L).setLength(6L).build()
+        val cacheKey = originalLengthKeyFactory.buildCacheKey(spec)
+        writeCacheSpan(uri = uri, cacheKey = cacheKey, position = 0L, bytes = byteArrayOf(1, 2))
+        val requestedUrgentKey = AtomicReference<String>()
+        val coordinator = StreamingCacheMissCoordinator(StreamingRangeCoordinator())
+        coordinator.attachUrgentFillHandler(object : StreamingCacheMissCoordinator.UrgentFillHandler {
+            override fun prioritize(position: Long) = Unit
+
+            override fun awaitSpanCommitted(
+                cacheKey: String,
+                position: Long,
+                minLength: Long,
+                timeoutMs: Long
+            ): Boolean {
+                requestedUrgentKey.set(cacheKey)
+                return false
+            }
+
+            override fun estimatedBytesPerSecond(): Long = 8L * 1024L * 1024L
+        })
+        val source = dataSource(
+            cacheKeyFactory = originalLengthKeyFactory,
+            coordinator = coordinator,
+            upstream = FakeDataSource(byteArrayOf(3, 4, 5, 6), AtomicInteger(0)),
+            startup = false
+        )
+
+        source.open(spec)
+        val buffer = ByteArray(6)
+        assertEquals(2, source.read(buffer, 0, 6))
+        assertEquals(4, source.read(buffer, 2, 4))
+        source.close()
+
+        assertArrayEquals(byteArrayOf(1, 2, 3, 4, 5, 6), buffer)
+        assertEquals(cacheKey, requestedUrgentKey.get())
+    }
+
+    @Test
+    fun open_unboundedShorterThanSyntheticSegment_readsOnceThenEnds() {
+        val uri = Uri.parse("https://example.com/movie.mkv")
+        val spec = DataSpec.Builder().setUri(uri).setPosition(0L).setLength(C.LENGTH_UNSET.toLong()).build()
+        val upstreamOpens = AtomicInteger(0)
+        val source = dataSource(
+            upstream = FakeDataSource(byteArrayOf(1, 2, 3), upstreamOpens),
+            startup = true
+        )
+
+        assertEquals(C.LENGTH_UNSET.toLong(), source.open(spec))
+        val buffer = ByteArray(3)
+        assertEquals(3, source.read(buffer, 0, 3))
+        assertEquals(C.RESULT_END_OF_INPUT, source.read(buffer, 0, 3))
+        source.close()
+
+        assertArrayEquals(byteArrayOf(1, 2, 3), buffer)
+        assertEquals(1, upstreamOpens.get())
+    }
+
+    @Test
+    fun open_zeroLengthSpec_returnsZeroAndDoesNotOpenAnySegment() {
+        val uri = Uri.parse("https://example.com/movie.mkv")
+        val spec = zeroLengthDataSpec(uri)
+        val upstreamOpens = AtomicInteger(0)
+        val source = dataSource(
+            upstream = FakeDataSource(byteArrayOf(1), upstreamOpens),
+            startup = true
+        )
+
+        assertEquals(0L, source.open(spec))
+        assertEquals(C.RESULT_END_OF_INPUT, source.read(ByteArray(1), 0, 1))
+        source.close()
+
+        assertEquals(0, upstreamOpens.get())
+    }
+
+    @Test
+    fun open_steadyHoleWithoutActualAwaitTimeout_doesNotIncrementCoordinatorWaitTimeouts() {
+        StreamingMetrics.coordinatorWaitTimeouts.set(0L)
+        val uri = Uri.parse("https://example.com/movie.mkv")
+        val spec = DataSpec.Builder().setUri(uri).setPosition(0L).setLength(4L).build()
+        val source = dataSource(
+            upstream = FakeDataSource(byteArrayOf(1, 2, 3, 4), AtomicInteger(0)),
+            startup = false
+        )
+
+        source.open(spec)
+        source.close()
+
+        assertEquals(0L, StreamingMetrics.coordinatorWaitTimeouts.get())
+    }
+
+    private fun zeroLengthDataSpec(uri: Uri): DataSpec {
+        val spec = DataSpec.Builder().setUri(uri).setPosition(0L).setLength(1L).build()
+        DataSpec::class.java.getDeclaredField("length").let { field ->
+            field.isAccessible = true
+            field.setLong(spec, 0L)
+        }
+        return spec
+    }
+
     private fun dataSource(
+        cacheKeyFactory: CacheKeyFactory = this.cacheKeyFactory,
         coordinator: StreamingCacheMissCoordinator = StreamingCacheMissCoordinator(StreamingRangeCoordinator()),
         upstream: DataSource,
         startup: Boolean = true
