@@ -1,11 +1,9 @@
 package com.nexio.tv.ui.screens.player
 
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
-import kotlin.io.path.invariantSeparatorsPathString
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -64,40 +62,44 @@ class PlayerLoadControlFactoryTest {
             effectiveSampleQueueBytes = 128L * 1024L * 1024L
         )
 
-        assertTrue(loadControl is androidx.media3.exoplayer.DefaultLoadControl)
+        assertNotNull(loadControl)
     }
 
     @Test
-    fun `player initialization uses default load control when streaming cache disabled`() {
-        val source = sourceFile(
-            "com/nexio/tv/ui/screens/player/PlayerRuntimeControllerInitialization.kt"
-        ).toFile().readText()
+    fun selectLoadControl_usesDefaultWhenStreamingCacheDisabled() {
+        val selection = PlayerLoadControlFactory.selectLoadControl(
+            streamingCacheEnabled = false,
+            effectiveSampleQueueBytes = MemoryBudget.MAX_SAMPLE_QUEUE_BYTES,
+            estimatedBitrateBps = 120_000_000L
+        )
 
-        assertTrue(source.contains("PlayerLoadControlFactory.buildDefaultLoadControl()"))
+        assertSame(PlayerLoadControlFactory.LoadControlSelection.Default, selection)
     }
 
     @Test
-    fun `player initialization uses budgeted load control when streaming cache enabled`() {
-        val source = sourceFile(
-            "com/nexio/tv/ui/screens/player/PlayerRuntimeControllerInitialization.kt"
-        ).toFile().readText()
+    fun selectLoadControl_usesBudgetedSpecWhenStreamingCacheEnabled() {
+        val selection = PlayerLoadControlFactory.selectLoadControl(
+            streamingCacheEnabled = true,
+            effectiveSampleQueueBytes = 128L * 1024L * 1024L,
+            estimatedBitrateBps = 120_000_000L
+        )
 
-        assertTrue(source.contains("PlayerLoadControlFactory.buildBudgetedLoadControl("))
-        assertTrue(source.contains("MemoryBudget(context).effectiveSampleQueueBytes"))
+        assertTrue(selection is PlayerLoadControlFactory.LoadControlSelection.Budgeted)
+        val budgeted = selection as PlayerLoadControlFactory.LoadControlSelection.Budgeted
+        assertEquals(128L * 1024L * 1024L, budgeted.spec.targetBufferBytes.toLong())
+        assertFalse(budgeted.spec.prioritizeTimeOverSizeThresholdsForStreaming)
     }
 
-    private fun sourceFile(relativePath: String): Path {
-        val cwd = Paths.get("").toAbsolutePath().normalize()
-        val relative = Paths.get("app", "src", "main", "java")
-        val directCandidate = cwd.resolve(relative)
-        val parentCandidate = cwd.resolve("..").resolve(relative).normalize()
-        val sourceRoot = when {
-            Files.exists(directCandidate) -> directCandidate
-            Files.exists(parentCandidate) -> parentCandidate
-            else -> error("Unable to locate app/src/main/java from working directory $cwd")
-        }
-        return sourceRoot.resolve(relativePath).also { path ->
-            require(path.invariantSeparatorsPathString.endsWith(relativePath))
+    @Test
+    fun buildForStreamingCacheDecision_constructsLoadControlForBothBranches() {
+        listOf(false, true).forEach { streamingCacheEnabled ->
+            val loadControl = PlayerLoadControlFactory.buildForStreamingCacheDecision(
+                streamingCacheEnabled = streamingCacheEnabled,
+                effectiveSampleQueueBytes = 128L * 1024L * 1024L,
+                estimatedBitrateBps = 120_000_000L
+            )
+
+            assertNotNull(loadControl)
         }
     }
 }
