@@ -8,14 +8,13 @@ import androidx.media3.datasource.TransferListener
 
 internal class PlaybackFallbackTrackingDataSource(
     private val upstream: DataSource,
-    private val coordinator: StreamingRangeCoordinator,
-    private val defaultFallbackBytes: Long = DEFAULT_FALLBACK_BYTES
+    private val coordinator: StreamingRangeCoordinator
 ) : DataSource {
     private var ownershipToken: String? = null
 
     override fun open(dataSpec: DataSpec): Long {
         val end = if (dataSpec.length == C.LENGTH_UNSET.toLong()) {
-            dataSpec.position + defaultFallbackBytes
+            Long.MAX_VALUE
         } else {
             dataSpec.position + dataSpec.length
         }
@@ -49,7 +48,4 @@ internal class PlaybackFallbackTrackingDataSource(
         }
     }
 
-    companion object {
-        const val DEFAULT_FALLBACK_BYTES = 16L * 1024L * 1024L
-    }
 }
