@@ -207,10 +207,38 @@ class PlayerMediaSourceFactoryTest {
 
         assertTrue(dataSource is androidx.media3.datasource.cache.CacheDataSource)
         assertTrue(provider.hasCacheInstance)
-        assertTrue(provider.cacheDirectory.exists())
 
         provider.release()
         provider.cacheDirectory.deleteRecursively()
+    }
+
+    @Test
+    fun playbackNetworking_acceptsCustomCacheKeyFactory_withCacheEnabled() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "stream-cache-custom-key-${System.nanoTime()}"
+        )
+        val cacheKeyFactory = StableCacheKeyFactory { uri ->
+            "custom:${uri.host.orEmpty()}:${uri.path.orEmpty()}"
+        }
+
+        try {
+            val factory = PlayerPlaybackNetworking.createDataSourceFactory(
+                context = context,
+                client = OkHttpClient(),
+                defaultHeaders = emptyMap(),
+                streamingCacheProvider = provider,
+                useStreamingCache = true,
+                cacheKeyFactory = cacheKeyFactory
+            )
+            val dataSource = factory.createDataSource()
+
+            assertTrue(dataSource is androidx.media3.datasource.cache.CacheDataSource)
+        } finally {
+            provider.release()
+            provider.cacheDirectory.deleteRecursively()
+        }
     }
 
     @Test

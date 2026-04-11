@@ -5,6 +5,7 @@ import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.cache.CacheKeyFactory
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import okhttp3.OkHttpClient
@@ -21,6 +22,8 @@ internal object PlayerPlaybackNetworking {
         defaultHeaders: Map<String, String> = emptyMap(),
         streamingCacheProvider: StreamingCacheProvider? = null,
         useStreamingCache: Boolean = false,
+        cacheKeyFactory: CacheKeyFactory = StableCacheKeyFactory(),
+        rangeCoordinator: StreamingRangeCoordinator? = null,
     ): DataSource.Factory {
         val httpFactory = OkHttpDataSource.Factory(client).apply {
             setDefaultRequestProperties(defaultHeaders)
@@ -30,9 +33,18 @@ internal object PlayerPlaybackNetworking {
         if (!useStreamingCache || streamingCacheProvider == null) {
             return upstreamFactory
         }
+        val trackedUpstreamFactory = DataSource.Factory {
+            val upstream = upstreamFactory.createDataSource()
+            if (rangeCoordinator == null) {
+                upstream
+            } else {
+                PlaybackFallbackTrackingDataSource(upstream, rangeCoordinator)
+            }
+        }
         return CacheDataSource.Factory()
             .setCache(streamingCacheProvider.getOrCreateCache())
-            .setUpstreamDataSourceFactory(upstreamFactory)
+            .setCacheKeyFactory(cacheKeyFactory)
+            .setUpstreamDataSourceFactory(trackedUpstreamFactory)
             .setCacheWriteDataSinkFactory(null)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
     }
