@@ -850,6 +850,59 @@ class CacheFillWorkerTest {
     }
 
     @Test
+    fun prioritize_retriesBlockedUrgentTargetAfterFallbackOwnershipClears() {
+        val chunkBytes = 64L
+        val contentLength = 128L
+        val urgentStart = 32L
+        val urgentEndExclusive = urgentStart + chunkBytes
+        val coordinator = StreamingRangeCoordinator()
+        val ownershipToken = coordinator.markFallbackOwned(
+            start = urgentStart,
+            endExclusive = urgentEndExclusive
+        )
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(206)
+                .setHeader("Content-Range", "bytes 32-95/128")
+                .setBody(BufferFactory.body(ByteArray(chunkBytes.toInt()) { it.toByte() }))
+        )
+        val worker = worker(
+            cacheKey = "movie-urgent-retry",
+            profile = ProviderProfile(
+                chunkBytes = chunkBytes,
+                normalFragmentBytes = chunkBytes,
+                fillHorizonBytes = chunkBytes * 4L,
+                lowWaterBytes = chunkBytes,
+                retainBehindBytes = 0L
+            ),
+            rangeCoordinator = coordinator,
+            playbackByteProvider = { 0L },
+            safetyGapBytes = chunkBytes
+        )
+
+        try {
+            worker.start(
+                url = server.url("/movie").toString(),
+                headers = emptyMap(),
+                contentLength = contentLength,
+                startPosition = 0L
+            )
+
+            worker.prioritize(position = urgentStart)
+
+            assertTrue(waitUntil { worker.fillFrontierPosition == urgentStart })
+            assertEquals(null, server.takeRequest(200, TimeUnit.MILLISECONDS))
+
+            coordinator.clearFallbackOwnership(ownershipToken)
+
+            val request = server.takeRequest(1, TimeUnit.SECONDS)
+            assertEquals("bytes=32-95", request?.getHeader("Range"))
+        } finally {
+            worker.stopAndJoin()
+        }
+    }
+
+    @Test
     fun downloadChunkToCache_usesUrgentFragmentSizeWhenProvided() {
         val data = ByteArray((CacheFillWorker.URGENT_FRAGMENT_SIZE + 512L).toInt()) { it.toByte() }
         server.enqueue(

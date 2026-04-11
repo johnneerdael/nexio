@@ -176,7 +176,7 @@ internal class StreamingCacheFillSession(
         val deadlineMs = android.os.SystemClock.elapsedRealtime() + timeoutMs.coerceAtLeast(0L)
         while (android.os.SystemClock.elapsedRealtime() <= deadlineMs) {
             val cachedLength = cache.getCachedLength(cacheKey, normalizedPosition, normalizedLength)
-            if (cachedLength > 0L) return true
+            if (cachedLength >= normalizedLength) return true
             Thread.sleep(25L)
         }
         return false
