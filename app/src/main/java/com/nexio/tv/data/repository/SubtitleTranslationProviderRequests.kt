@@ -1,0 +1,150 @@
+package com.nexio.tv.data.repository
+
+import com.nexio.tv.domain.model.SubtitleTranslationDefaults
+import com.nexio.tv.domain.model.SubtitleTranslationProvider
+import com.nexio.tv.domain.model.SubtitleTranslationSettings
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
+
+private const val ANTHROPIC_VERSION = "2023-06-01"
+
+internal fun providerEndpoint(settings: SubtitleTranslationSettings): String {
+    val rawRoot = settings.baseUrl.trim().trimEnd('/').ifBlank {
+        when (settings.provider) {
+            SubtitleTranslationProvider.OPENAI -> SubtitleTranslationDefaults.OPENAI_BASE_URL
+            SubtitleTranslationProvider.ANTHROPIC -> SubtitleTranslationDefaults.ANTHROPIC_BASE_URL
+            SubtitleTranslationProvider.GEMINI -> SubtitleTranslationDefaults.GEMINI_BASE_URL
+        }
+    }
+    return when (settings.provider) {
+        SubtitleTranslationProvider.OPENAI -> {
+            val root = if (rawRoot == "https://api.openai.com") SubtitleTranslationDefaults.OPENAI_BASE_URL else rawRoot
+            if (root.endsWith("/chat/completions")) root else "$root/chat/completions"
+        }
+        SubtitleTranslationProvider.ANTHROPIC -> {
+            val root = if (rawRoot == "https://api.anthropic.com") SubtitleTranslationDefaults.ANTHROPIC_BASE_URL else rawRoot
+            if (root.endsWith("/messages")) root else "$root/messages"
+        }
+        SubtitleTranslationProvider.GEMINI ->
+            if (rawRoot.contains("/models/") || rawRoot.endsWith(":generateContent")) {
+                if (rawRoot.endsWith(":generateContent")) rawRoot else "$rawRoot:generateContent"
+            } else {
+                "$rawRoot/models/${settings.model}:generateContent"
+            }
+    }
+}
+
+internal fun buildOpenAiChatCompletionRequest(
+    settings: SubtitleTranslationSettings,
+    systemPrompt: String,
+    userPayload: String,
+    includeJsonMode: Boolean = true
+): JSONObject {
+    val systemMessage = JSONObject()
+    systemMessage.put("role", "system")
+    systemMessage.put("content", systemPrompt)
+
+    val userMessage = JSONObject()
+    userMessage.put("role", "user")
+    userMessage.put("content", userPayload)
+
+    val messages = JSONArray()
+    messages.put(systemMessage)
+    messages.put(userMessage)
+
+    val body = JSONObject()
+    body.put("model", settings.model)
+    body.put("temperature", 0.2)
+    body.put("messages", messages)
+
+    if (includeJsonMode) {
+        val responseFormat = JSONObject()
+        responseFormat.put("type", "json_object")
+        body.put("response_format", responseFormat)
+    }
+
+    return body
+}
+
+internal fun buildAnthropicMessagesRequest(
+    settings: SubtitleTranslationSettings,
+    systemPrompt: String,
+    userPayload: String
+): JSONObject {
+    val contentItem = JSONObject()
+    contentItem.put("type", "text")
+    contentItem.put("text", userPayload)
+
+    val content = JSONArray()
+    content.put(contentItem)
+
+    val userMessage = JSONObject()
+    userMessage.put("role", "user")
+    userMessage.put("content", content)
+
+    val messages = JSONArray()
+    messages.put(userMessage)
+
+    val body = JSONObject()
+    body.put("model", settings.model)
+    body.put("max_tokens", 8192)
+    body.put("temperature", 0.2)
+    body.put("system", systemPrompt)
+    body.put("messages", messages)
+    return body
+}
+
+internal fun openAiRequest(endpoint: String, apiKey: String, body: JSONObject): Request {
+    return Request.Builder()
+        .url(endpoint)
+        .header("Authorization", "Bearer ${apiKey.trim()}")
+        .header("Content-Type", "application/json")
+        .post(body.toString().toRequestBody("application/json".toMediaType()))
+        .build()
+}
+
+internal fun anthropicRequest(endpoint: String, apiKey: String, body: JSONObject): Request {
+    return Request.Builder()
+        .url(endpoint)
+        .header("x-api-key", apiKey.trim())
+        .header("anthropic-version", ANTHROPIC_VERSION)
+        .header("Content-Type", "application/json")
+        .post(body.toString().toRequestBody("application/json".toMediaType()))
+        .build()
+}
+
+internal fun parseOpenAiResponseText(raw: String): String? {
+    val payload = JSONObject(raw)
+    return payload.optJSONArray("choices")
+        ?.optJSONObject(0)
+        ?.optJSONObject("message")
+        ?.optString("content")
+        ?.let(::sanitizeJsonResponse)
+        ?.takeIf(String::isNotBlank)
+}
+
+internal fun parseAnthropicResponseText(raw: String): String? {
+    val content = JSONObject(raw).optJSONArray("content") ?: return null
+    for (index in 0 until content.length()) {
+        val item = content.optJSONObject(index) ?: continue
+        val text = item.optString("text").takeIf(String::isNotBlank)?.let(::sanitizeJsonResponse)
+        if (text != null) return text
+    }
+    return null
+}
+
+internal fun sanitizeJsonResponse(text: String): String {
+    val trimmed = text.trim()
+    if (!trimmed.startsWith("```")) return trimmed
+    val withoutOpeningFence = trimmed
+        .removePrefix("```json")
+        .removePrefix("```JSON")
+        .removePrefix("```")
+        .trimStart()
+    return withoutOpeningFence
+        .removeSuffix("```")
+        .trim()
+}
