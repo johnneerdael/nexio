@@ -45,6 +45,8 @@ internal class CacheFillWorker(
     @Volatile
     private var workerThread: Thread? = null
 
+    private var pendingStart: PendingStart? = null
+
     @Volatile
     private var activeCall: Call? = null
 
@@ -55,28 +57,22 @@ internal class CacheFillWorker(
         get() = isActive
 
     fun start(url: String, headers: Map<String, String>, contentLength: Long, startPosition: Long) {
+        val request = StartRequest(url, headers, contentLength, startPosition)
+        val stopRequest = synchronized(controlLock) {
+            requestStopLocked(stopFillController = false)
+        }
+        joinWorkerThread(stopRequest.workerThread)
+
         synchronized(controlLock) {
-            if (!cancelExistingWorkerForReplacement()) return
-
-            if (contentLength <= 0L) return
-
-            val workerGeneration = generation.incrementAndGet()
-            commandSerial.incrementAndGet()
-            pendingSeekTarget.set(NO_PENDING_SEEK)
-            pauseRequested.set(false)
-            stopRequested.set(false)
-            fillFrontier = maxOf(startPosition, safeStart()).coerceAtMost(contentLength)
-            isActive = true
-            fillController.onStart()
-
-            workerThread = Thread(
-                {
-                    run(url = url, headers = headers, contentLength = contentLength, workerGeneration = workerGeneration)
-                },
-                THREAD_NAME
-            ).apply {
-                isDaemon = true
-                start()
+            if (commandSerial.get() != stopRequest.commandSerial) return
+            val threadToStop = stopRequest.workerThread
+            if (threadToStop != null && !threadToStop.isAlive && workerThread === threadToStop) {
+                workerThread = null
+            }
+            if (workerThread == null) {
+                launchStartLocked(request)
+            } else if (request.contentLength > 0L && workerThread === threadToStop) {
+                pendingStart = PendingStart(request, stopRequest.commandSerial)
             }
         }
     }
@@ -108,18 +104,15 @@ internal class CacheFillWorker(
 
     fun stop() {
         synchronized(controlLock) {
-            stop(joinWorker = false, stopFillController = true)
+            requestStopLocked(stopFillController = true)
         }
     }
 
-    private fun cancelExistingWorkerForReplacement(): Boolean {
-        return stop(joinWorker = true, stopFillController = false)
-    }
-
-    private fun stop(joinWorker: Boolean, stopFillController: Boolean): Boolean {
+    private fun requestStopLocked(stopFillController: Boolean): StopRequest {
         val threadToStop = workerThread
         generation.incrementAndGet()
-        commandSerial.incrementAndGet()
+        val stopCommandSerial = commandSerial.incrementAndGet()
+        pendingStart = null
         stopRequested.set(true)
         isActive = false
         pauseRequested.set(false)
@@ -129,15 +122,35 @@ internal class CacheFillWorker(
         }
         cancelActiveCall()
         threadToStop?.interrupt()
-        val workerStopped = if (joinWorker) {
-            joinWorkerThread(threadToStop)
-        } else {
-            true
+        return StopRequest(threadToStop, stopCommandSerial)
+    }
+
+    private fun launchStartLocked(request: StartRequest) {
+        if (request.contentLength <= 0L) return
+
+        val workerGeneration = generation.incrementAndGet()
+        commandSerial.incrementAndGet()
+        pendingSeekTarget.set(NO_PENDING_SEEK)
+        pauseRequested.set(false)
+        stopRequested.set(false)
+        fillFrontier = maxOf(request.startPosition, safeStart()).coerceAtMost(request.contentLength)
+        isActive = true
+        fillController.onStart()
+
+        workerThread = Thread(
+            {
+                run(
+                    url = request.url,
+                    headers = request.headers,
+                    contentLength = request.contentLength,
+                    workerGeneration = workerGeneration
+                )
+            },
+            THREAD_NAME
+        ).apply {
+            isDaemon = true
+            start()
         }
-        if (joinWorker && workerStopped && workerThread === threadToStop) {
-            workerThread = null
-        }
-        return workerStopped
     }
 
     private fun run(url: String, headers: Map<String, String>, contentLength: Long, workerGeneration: Long) {
@@ -215,8 +228,17 @@ internal class CacheFillWorker(
                     activeCall = null
                 }
             }
-            if (workerThread === currentThread) {
-                workerThread = null
+            synchronized(controlLock) {
+                if (workerThread === currentThread) {
+                    workerThread = null
+                    val pending = pendingStart
+                    if (pending != null) {
+                        pendingStart = null
+                        if (pending.commandSerial == commandSerial.get()) {
+                            launchStartLocked(pending.request)
+                        }
+                    }
+                }
             }
         }
     }
@@ -544,5 +566,22 @@ internal class CacheFillWorker(
         val start: Long,
         val end: Long,
         val bytesWritten: Long
+    )
+
+    private data class StartRequest(
+        val url: String,
+        val headers: Map<String, String>,
+        val contentLength: Long,
+        val startPosition: Long
+    )
+
+    private data class PendingStart(
+        val request: StartRequest,
+        val commandSerial: Long
+    )
+
+    private data class StopRequest(
+        val workerThread: Thread?,
+        val commandSerial: Long
     )
 }
