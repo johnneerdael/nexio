@@ -46,6 +46,18 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun streamingCacheProvider_doesNotCreateCacheUntilRequested() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "stream-cache-lazy-${System.nanoTime()}"
+        )
+
+        assertFalse(provider.hasCacheInstance)
+        assertFalse(provider.cacheDirectory.exists())
+    }
+
+    @Test
     fun progressivePlayback_usesPlainMedia3DatasourceWithoutCacheOrPrds() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
