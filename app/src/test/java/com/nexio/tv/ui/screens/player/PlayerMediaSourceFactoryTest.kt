@@ -140,16 +140,18 @@ class PlayerMediaSourceFactoryTest {
             streamingCacheProvider = provider
         )
 
-        factory.streamingCacheEnabled = true
-        factory.createMediaSource(
-            url = "https://example.com/movie.mkv",
-            headers = emptyMap()
-        )
+        try {
+            factory.streamingCacheEnabled = true
+            factory.createMediaSource(
+                url = "https://example.com/movie.mkv",
+                headers = emptyMap()
+            )
 
-        assertTrue(provider.hasCacheInstance)
-        assertTrue(provider.cacheDirectory.exists())
-        factory.shutdown()
-        provider.cacheDirectory.deleteRecursively()
+            assertTrue(provider.hasCacheInstance)
+        } finally {
+            factory.shutdown()
+            provider.cacheDirectory.deleteRecursively()
+        }
     }
 
     @Test
@@ -165,15 +167,18 @@ class PlayerMediaSourceFactoryTest {
             streamingCacheProvider = provider
         )
 
-        factory.streamingCacheEnabled = true
-        factory.createMediaSource(
-            url = "asset:///movie.mkv",
-            headers = emptyMap()
-        )
+        try {
+            factory.streamingCacheEnabled = true
+            factory.createMediaSource(
+                url = "asset:///movie.mkv",
+                headers = emptyMap()
+            )
 
-        assertFalse(provider.hasCacheInstance)
-        assertFalse(provider.cacheDirectory.exists())
-        factory.shutdown()
+            assertFalse(provider.hasCacheInstance)
+            assertFalse(provider.cacheDirectory.exists())
+        } finally {
+            factory.shutdown()
+        }
     }
 
     @Test
