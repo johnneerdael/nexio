@@ -214,20 +214,38 @@ class CoverageAwareDataSourceTest {
     }
 
     @Test
-    fun open_zeroLengthSpec_returnsZeroAndDoesNotOpenAnySegment() {
+    fun open_unboundedLongRead_marksFallbackThroughFarFutureUntilClose() {
         val uri = Uri.parse("https://example.com/movie.mkv")
-        val spec = zeroLengthDataSpec(uri)
+        val spec = DataSpec.Builder().setUri(uri).setPosition(0L).setLength(C.LENGTH_UNSET.toLong()).build()
+        val probeStart = CoverageAwareDataSource.OPEN_ENDED_SEGMENT_BYTES + 1L
+        val probeEnd = probeStart + 1L
+        val upstreamBytes = ByteArray((CoverageAwareDataSource.OPEN_ENDED_SEGMENT_BYTES + 32L).toInt()) { index ->
+            (index % 251).toByte()
+        }
         val upstreamOpens = AtomicInteger(0)
+        val coordinator = StreamingCacheMissCoordinator(StreamingRangeCoordinator())
         val source = dataSource(
-            upstream = FakeDataSource(byteArrayOf(1), upstreamOpens),
+            coordinator = coordinator,
+            upstream = FakeDataSource(upstreamBytes, upstreamOpens) {
+                assertTrue(coordinator.isOwnedByPlaybackFallback(probeStart, probeEnd))
+            },
             startup = true
         )
 
-        assertEquals(0L, source.open(spec))
-        assertEquals(C.RESULT_END_OF_INPUT, source.read(ByteArray(1), 0, 1))
+        assertEquals(C.LENGTH_UNSET.toLong(), source.open(spec))
+        assertTrue(coordinator.isOwnedByPlaybackFallback(probeStart, probeEnd))
+        val buffer = ByteArray(64 * 1024)
+        var totalRead = 0
+        while (true) {
+            val read = source.read(buffer, 0, buffer.size)
+            if (read == C.RESULT_END_OF_INPUT) break
+            totalRead += read
+        }
         source.close()
 
-        assertEquals(0, upstreamOpens.get())
+        assertEquals(upstreamBytes.size, totalRead)
+        assertEquals(1, upstreamOpens.get())
+        assertFalse(coordinator.isOwnedByPlaybackFallback(probeStart, probeEnd))
     }
 
     @Test
@@ -244,15 +262,6 @@ class CoverageAwareDataSourceTest {
         source.close()
 
         assertEquals(0L, StreamingMetrics.coordinatorWaitTimeouts.get())
-    }
-
-    private fun zeroLengthDataSpec(uri: Uri): DataSpec {
-        val spec = DataSpec.Builder().setUri(uri).setPosition(0L).setLength(1L).build()
-        DataSpec::class.java.getDeclaredField("length").let { field ->
-            field.isAccessible = true
-            field.setLong(spec, 0L)
-        }
-        return spec
     }
 
     private fun dataSource(
