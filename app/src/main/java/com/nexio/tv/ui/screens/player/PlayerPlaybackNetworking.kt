@@ -23,7 +23,8 @@ internal object PlayerPlaybackNetworking {
         streamingCacheProvider: StreamingCacheProvider? = null,
         useStreamingCache: Boolean = false,
         cacheKeyFactory: CacheKeyFactory = StableCacheKeyFactory(),
-        rangeCoordinator: StreamingRangeCoordinator? = null,
+        missCoordinator: StreamingCacheMissCoordinator? = null,
+        isStartupProvider: () -> Boolean = { true },
     ): DataSource.Factory {
         val httpFactory = OkHttpDataSource.Factory(client).apply {
             setDefaultRequestProperties(defaultHeaders)
@@ -33,19 +34,19 @@ internal object PlayerPlaybackNetworking {
         if (!useStreamingCache || streamingCacheProvider == null) {
             return upstreamFactory
         }
-        val trackedUpstreamFactory = DataSource.Factory {
-            val upstream = upstreamFactory.createDataSource()
-            if (rangeCoordinator == null) {
-                upstream
-            } else {
-                PlaybackFallbackTrackingDataSource(upstream, rangeCoordinator)
-            }
-        }
-        return CacheDataSource.Factory()
-            .setCache(streamingCacheProvider.getOrCreateCache())
+        val cache = streamingCacheProvider.getOrCreateCache()
+        val coordinator = missCoordinator ?: StreamingCacheMissCoordinator(StreamingRangeCoordinator())
+        val cacheReadFactory = CacheDataSource.Factory()
+            .setCache(cache)
             .setCacheKeyFactory(cacheKeyFactory)
-            .setUpstreamDataSourceFactory(trackedUpstreamFactory)
             .setCacheWriteDataSinkFactory(null)
-            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+        return CoverageAwareDataSource.Factory(
+            cache = cache,
+            cacheKeyFactory = cacheKeyFactory,
+            cacheReadDataSourceFactory = cacheReadFactory,
+            upstreamDataSourceFactory = upstreamFactory,
+            coordinator = coordinator,
+            isStartupProvider = isStartupProvider
+        )
     }
 }

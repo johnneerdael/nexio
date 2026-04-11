@@ -204,7 +204,7 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
-    fun playbackNetworking_flagOn_returnsReadOnlyCacheDataSource_andOpensCache() {
+    fun playbackNetworking_flagOn_returnsCoverageAwareDataSource_andOpensCache() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val provider = StreamingCacheProvider(
             context = context,
@@ -220,7 +220,35 @@ class PlayerMediaSourceFactoryTest {
         )
         val dataSource = factory.createDataSource()
 
-        assertTrue(dataSource is androidx.media3.datasource.cache.CacheDataSource)
+        assertTrue(dataSource is CoverageAwareDataSource)
+        assertTrue(provider.hasCacheInstance)
+
+        provider.release()
+        provider.cacheDirectory.deleteRecursively()
+    }
+
+    @Test
+    fun playbackNetworking_flagOn_usesCoverageAwareDataSourceWithoutPlaybackCacheWrites() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "stream-cache-coverage-aware-${System.nanoTime()}"
+        )
+        val coordinator = StreamingCacheMissCoordinator(StreamingRangeCoordinator())
+
+        val factory = PlayerPlaybackNetworking.createDataSourceFactory(
+            context = context,
+            client = OkHttpClient(),
+            defaultHeaders = emptyMap(),
+            streamingCacheProvider = provider,
+            useStreamingCache = true,
+            cacheKeyFactory = StableCacheKeyFactory(),
+            missCoordinator = coordinator,
+            isStartupProvider = { true }
+        )
+        val dataSource = factory.createDataSource()
+
+        assertTrue(dataSource is CoverageAwareDataSource)
         assertTrue(provider.hasCacheInstance)
 
         provider.release()
@@ -249,7 +277,7 @@ class PlayerMediaSourceFactoryTest {
             )
             val dataSource = factory.createDataSource()
 
-            assertTrue(dataSource is androidx.media3.datasource.cache.CacheDataSource)
+            assertTrue(dataSource is CoverageAwareDataSource)
         } finally {
             provider.release()
             provider.cacheDirectory.deleteRecursively()
@@ -300,6 +328,35 @@ class PlayerMediaSourceFactoryTest {
             )
 
             assertTrue(provider.hasCacheInstance)
+        } finally {
+            factory.shutdown()
+            provider.cacheDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun mediaSourceFactory_resetsStartupPhaseForNewMediaSourceAndClearsAfterFirstFrame() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "media-source-startup-phase-${System.nanoTime()}"
+        )
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = OkHttpClient(),
+            streamingCacheProvider = provider
+        )
+        factory.streamingCacheEnabled = true
+
+        try {
+            factory.createMediaSource(url = "https://example.com/movie.mkv", headers = emptyMap())
+            assertTrue(factory.isStreamingCacheStartupForTesting)
+
+            factory.onStreamingCacheFirstFrameRendered()
+            assertFalse(factory.isStreamingCacheStartupForTesting)
+
+            factory.createMediaSource(url = "https://example.com/other.mkv", headers = emptyMap())
+            assertTrue(factory.isStreamingCacheStartupForTesting)
         } finally {
             factory.shutdown()
             provider.cacheDirectory.deleteRecursively()

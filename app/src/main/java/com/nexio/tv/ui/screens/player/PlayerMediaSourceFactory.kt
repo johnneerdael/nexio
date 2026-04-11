@@ -33,12 +33,21 @@ internal class PlayerMediaSourceFactory(
     private val loadErrorHandlingPolicy = DefaultLoadErrorHandlingPolicy()
     private val cacheKeyFactory = StableCacheKeyFactory()
     private val rangeCoordinator = StreamingRangeCoordinator()
+    private val missCoordinator = StreamingCacheMissCoordinator(rangeCoordinator)
+    private val streamingBandwidthMonitor = BandwidthMonitor()
     private val memoryBudget = MemoryBudget(context)
     private var fillSession: StreamingCacheFillSession? = null
+
+    @Volatile
+    private var streamingCacheStartup = true
 
     @VisibleForTesting
     internal val hasActiveFillSession: Boolean
         get() = fillSession?.isActive == true
+
+    @VisibleForTesting
+    internal val isStreamingCacheStartupForTesting: Boolean
+        get() = streamingCacheStartup
 
     fun configureSubtitleParsing(
         extractorsFactory: ExtractorsFactory?,
@@ -63,7 +72,8 @@ internal class PlayerMediaSourceFactory(
                 streamingCacheProvider = streamingCacheProvider,
                 useStreamingCache = true,
                 cacheKeyFactory = cacheKeyFactory,
-                rangeCoordinator = rangeCoordinator
+                missCoordinator = missCoordinator,
+                isStartupProvider = { streamingCacheStartup }
             )
         } else {
             PlayerPlaybackNetworking.createDataSourceFactory(
@@ -73,6 +83,9 @@ internal class PlayerMediaSourceFactory(
                 streamingCacheProvider = streamingCacheProvider,
                 useStreamingCache = false
             )
+        }
+        if (useStreamingCache) {
+            streamingCacheStartup = true
         }
         val resolvedMimeType = inferMimeType(
             url = url,
@@ -144,7 +157,9 @@ internal class PlayerMediaSourceFactory(
             cacheKeyFactory = cacheKeyFactory,
             okHttpClient = playbackOkHttpClient,
             memoryBudget = memoryBudget,
-            rangeCoordinator = rangeCoordinator
+            rangeCoordinator = missCoordinator,
+            missCoordinator = missCoordinator,
+            bandwidthMonitor = streamingBandwidthMonitor
         ).also { fillSession = it }
 
         session.start(
@@ -154,6 +169,10 @@ internal class PlayerMediaSourceFactory(
             playbackByteProvider = playbackByteProvider
         )
         Log.d(TAG, "STREAM_CACHE_FILL start contentLength=$contentLength mime=$resolvedMimeType")
+    }
+
+    fun onStreamingCacheFirstFrameRendered() {
+        streamingCacheStartup = false
     }
 
     fun stopStreamingCacheFill(): Boolean {
