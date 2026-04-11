@@ -2,7 +2,6 @@ package com.nexio.tv.core.sync
 
 import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
-import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
@@ -11,9 +10,11 @@ import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklSettingsDataStore
+import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.data.local.normalizeSubtitleTranslationSettings
 import com.nexio.tv.data.remote.supabase.AccountAddonPayload
 import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
 import com.nexio.tv.data.remote.supabase.CatalogSyncSettings
@@ -25,9 +26,11 @@ import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.PlaybackConfigSyncSettings
 import com.nexio.tv.data.remote.supabase.SimklCatalogSyncSettings
 import com.nexio.tv.data.remote.supabase.StreamSelectionConfigSyncSettings
+import com.nexio.tv.data.remote.supabase.SubtitleTranslationSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktCatalogSyncSettings
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.ImdbSettings
+import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import com.nexio.tv.domain.model.TrackingProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -37,7 +40,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 5
+internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 6
 
 internal fun observeAccountConfigSyncChanges(
     heroCatalogSelections: Flow<Unit>,
@@ -50,7 +53,7 @@ internal fun observeAccountConfigSyncChanges(
     theIntroDbSettings: Flow<Unit>,
     animeSkipEnabled: Flow<Unit>,
     animeSkipClientId: Flow<Unit>,
-    geminiSettings: Flow<Unit>,
+    subtitleTranslationSettings: Flow<Unit>,
     imdbSettings: Flow<Unit>,
     posterRatingsSettings: Flow<Unit>,
     premiumizeSettings: Flow<Unit>,
@@ -77,7 +80,7 @@ internal fun observeAccountConfigSyncChanges(
         theIntroDbSettings,
         animeSkipEnabled,
         animeSkipClientId,
-        geminiSettings,
+        subtitleTranslationSettings,
         imdbSettings,
         posterRatingsSettings,
         premiumizeSettings,
@@ -113,7 +116,11 @@ internal fun buildAccountConfigSyncPayload(
 ): AccountConfigSyncPayload {
     return AccountConfigSyncPayload(
         schemaVersion = ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION,
-        integrations = integrations,
+        integrations = integrations.copy(
+            gemini = integrations.gemini.copy(
+                enabled = integrations.subtitleTranslation.enabled
+            )
+        ),
         catalogs = CatalogSyncSettings(
             home = HomeCatalogSyncSettings(
                 heroCatalogKeys = heroCatalogKeys,
@@ -200,6 +207,16 @@ internal suspend fun applyImdbSyncSettings(
     imdbSettingsDataStore.setBaseUrl(settings.baseUrl)
 }
 
+internal fun SubtitleTranslationSyncSettings.toDomainSettings(apiKey: String = ""): SubtitleTranslationSettings {
+    return normalizeSubtitleTranslationSettings(
+        enabled = enabled,
+        providerName = provider,
+        apiKey = apiKey,
+        model = model,
+        baseUrl = baseUrl
+    )
+}
+
 internal suspend fun applyAccountConfigSyncSettings(
     settings: AccountConfigSyncPayload,
     layoutPreferenceDataStore: LayoutPreferenceDataStore,
@@ -208,7 +225,7 @@ internal suspend fun applyAccountConfigSyncSettings(
     omdbSettingsDataStore: OmdbSettingsDataStore,
     theIntroDbSettingsDataStore: TheIntroDbSettingsDataStore,
     animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
-    geminiSettingsDataStore: GeminiSettingsDataStore,
+    subtitleTranslationSettingsDataStore: SubtitleTranslationSettingsDataStore,
     imdbSettingsDataStore: ImdbSettingsDataStore,
     posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     traktSettingsDataStore: TraktSettingsDataStore,
@@ -255,7 +272,13 @@ internal suspend fun applyAccountConfigSyncSettings(
     animeSkipSettingsDataStore.setEnabled(settings.integrations.animeSkip.enabled)
     animeSkipSettingsDataStore.setClientId(settings.integrations.animeSkip.clientId)
 
-    geminiSettingsDataStore.setEnabled(settings.integrations.gemini.enabled)
+    val remoteTranslation = settings.integrations.subtitleTranslation
+    subtitleTranslationSettingsDataStore.saveSyncedPublicSettings(
+        enabled = remoteTranslation.enabled,
+        provider = remoteTranslation.toDomainSettings().provider,
+        model = remoteTranslation.model,
+        baseUrl = remoteTranslation.baseUrl
+    )
 
     posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
     posterRatingsSettingsDataStore.setTopPostersEnabled(settings.integrations.posterRatings.topPostersEnabled)

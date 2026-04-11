@@ -10,7 +10,6 @@ import com.nexio.tv.data.local.AnimeSkipSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.EasyDebridSettingsDataStore
 import com.nexio.tv.data.local.FrameRateMatchingMode
-import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.MDBListSettingsDataStore
@@ -25,6 +24,7 @@ import com.nexio.tv.data.local.SimklSettingsDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.data.local.SubtitleOrganizationMode
+import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.local.ThemeDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
@@ -70,6 +70,7 @@ import com.nexio.tv.data.remote.supabase.RealDebridSyncSettings
 import com.nexio.tv.data.remote.supabase.SimklAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.StreamSelectionSettings
 import com.nexio.tv.data.remote.supabase.SubtitleSyncSettings
+import com.nexio.tv.data.remote.supabase.SubtitleTranslationSyncSettings
 import com.nexio.tv.data.remote.supabase.TheIntroDbSyncSettings
 import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.TorBoxSyncSettings
@@ -112,6 +113,8 @@ private const val OMDB_SECRET_TYPE = "omdb_api_key"
 private const val OMDB_SECRET_REF = "integration:omdb"
 private const val IMDB_SECRET_TYPE = "imdb_api_key"
 private const val IMDB_SECRET_REF = "integration:imdb"
+private const val TRANSLATION_SECRET_TYPE = "translation_api_key"
+private const val TRANSLATION_SECRET_REF = "integration:subtitle-translation"
 private const val GEMINI_SECRET_TYPE = "gemini_api_key"
 private const val GEMINI_SECRET_REF = "integration:gemini"
 private const val RPDB_SECRET_TYPE = "rpdb_api_key"
@@ -133,6 +136,25 @@ private const val TRAKT_SECRET_REF = "integration:trakt"
 private const val SIMKL_ACCESS_SECRET_TYPE = "simkl_access_token"
 private const val SIMKL_SECRET_REF = "integration:simkl"
 
+internal fun selectSubtitleTranslationApiKeySecret(
+    genericTranslationKey: String?,
+    legacyGeminiKey: String?,
+    allowLegacyFallback: Boolean
+): String? {
+    if (genericTranslationKey == null) return null
+    if (genericTranslationKey.isNotBlank()) return genericTranslationKey
+    return legacyGeminiKey
+        ?.takeIf { allowLegacyFallback && it.isNotBlank() }
+        ?: genericTranslationKey
+}
+
+internal fun legacyGeminiApiKeySecretForPush(
+    providerName: String,
+    translationApiKey: String
+): String? {
+    return translationApiKey.takeIf { providerName.equals("GEMINI", ignoreCase = true) }
+}
+
 @Singleton
 class AccountSettingsSyncService @Inject constructor(
     private val authManager: AuthManager,
@@ -144,7 +166,7 @@ class AccountSettingsSyncService @Inject constructor(
     private val omdbSettingsDataStore: OmdbSettingsDataStore,
     private val theIntroDbSettingsDataStore: TheIntroDbSettingsDataStore,
     private val animeSkipSettingsDataStore: AnimeSkipSettingsDataStore,
-    private val geminiSettingsDataStore: GeminiSettingsDataStore,
+    private val subtitleTranslationSettingsDataStore: SubtitleTranslationSettingsDataStore,
     private val imdbSettingsDataStore: ImdbSettingsDataStore,
     private val posterRatingsSettingsDataStore: PosterRatingsSettingsDataStore,
     private val premiumizeSettingsDataStore: PremiumizeSettingsDataStore,
@@ -197,7 +219,7 @@ class AccountSettingsSyncService @Inject constructor(
                     .map { Unit },
                 animeSkipEnabled = animeSkipSettingsDataStore.enabled.drop(1).map { Unit },
                 animeSkipClientId = animeSkipSettingsDataStore.clientId.drop(1).map { Unit },
-                geminiSettings = geminiSettingsDataStore.settings.drop(1).map { Unit },
+                subtitleTranslationSettings = subtitleTranslationSettingsDataStore.settings.drop(1).map { Unit },
                 imdbSettings = imdbSettingsDataStore.settings.drop(1).map { Unit },
                 posterRatingsSettings = posterRatingsSettingsDataStore.settings.drop(1).map { Unit },
                 premiumizeSettings = premiumizeSettingsDataStore.settings.drop(1).map { Unit },
@@ -253,11 +275,22 @@ class AccountSettingsSyncService @Inject constructor(
                 ).decodeList<AccountSyncMutationResult>()
             }
 
+            val subtitleTranslationSettings = subtitleTranslationSettingsDataStore.settings.first()
             syncApiKeySecretToRemote(TMDB_SECRET_TYPE, TMDB_SECRET_REF, tmdbSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, mdbListSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(OMDB_SECRET_TYPE, OMDB_SECRET_REF, omdbSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(IMDB_SECRET_TYPE, IMDB_SECRET_REF, imdbSettingsDataStore.settings.first().apiKey)
-            syncApiKeySecretToRemote(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF, geminiSettingsDataStore.settings.first().apiKey)
+            syncApiKeySecretToRemote(
+                TRANSLATION_SECRET_TYPE,
+                TRANSLATION_SECRET_REF,
+                subtitleTranslationSettings.apiKey
+            )
+            legacyGeminiApiKeySecretForPush(
+                providerName = subtitleTranslationSettings.provider.name,
+                translationApiKey = subtitleTranslationSettings.apiKey
+            )?.let { legacyGeminiKey ->
+                syncApiKeySecretToRemote(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF, legacyGeminiKey)
+            }
             syncApiKeySecretToRemote(RPDB_SECRET_TYPE, RPDB_SECRET_REF, posterRatingsSettingsDataStore.settings.first().rpdbApiKey)
             syncApiKeySecretToRemote(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF, posterRatingsSettingsDataStore.settings.first().topPostersApiKey)
             syncApiKeySecretToRemote(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF, premiumizeSettingsDataStore.settings.first().apiKey)
@@ -293,7 +326,7 @@ class AccountSettingsSyncService @Inject constructor(
                     omdbSettingsDataStore = omdbSettingsDataStore,
                     theIntroDbSettingsDataStore = theIntroDbSettingsDataStore,
                     animeSkipSettingsDataStore = animeSkipSettingsDataStore,
-                    geminiSettingsDataStore = geminiSettingsDataStore,
+                    subtitleTranslationSettingsDataStore = subtitleTranslationSettingsDataStore,
                     imdbSettingsDataStore = imdbSettingsDataStore,
                     posterRatingsSettingsDataStore = posterRatingsSettingsDataStore,
                     traktSettingsDataStore = traktSettingsDataStore,
@@ -319,7 +352,7 @@ class AccountSettingsSyncService @Inject constructor(
         val theIntroDb = theIntroDbSettingsDataStore.settings.first()
         val animeSkipEnabled = animeSkipSettingsDataStore.enabled.first()
         val animeSkipClientId = animeSkipSettingsDataStore.clientId.first()
-        val gemini = geminiSettingsDataStore.settings.first()
+        val subtitleTranslation = subtitleTranslationSettingsDataStore.settings.first()
         val posterRatings = posterRatingsSettingsDataStore.settings.first()
         val playerSettings = playerSettingsDataStore.playerSettings.first()
         val premiumize = premiumizeSettingsDataStore.settings.first()
@@ -398,8 +431,14 @@ class AccountSettingsSyncService @Inject constructor(
                     enabled = animeSkipEnabled,
                     clientId = animeSkipClientId
                 ),
+                subtitleTranslation = SubtitleTranslationSyncSettings(
+                    enabled = subtitleTranslation.enabled,
+                    provider = subtitleTranslation.provider.name,
+                    model = subtitleTranslation.model,
+                    baseUrl = subtitleTranslation.baseUrl
+                ),
                 gemini = GeminiSyncSettings(
-                    enabled = gemini.enabled
+                    enabled = subtitleTranslation.enabled
                 ),
                 posterRatings = PosterRatingsSyncSettings(
                     rpdbEnabled = posterRatings.rpdbEnabled,
@@ -521,7 +560,13 @@ class AccountSettingsSyncService @Inject constructor(
         animeSkipSettingsDataStore.setEnabled(settings.integrations.animeSkip.enabled)
         animeSkipSettingsDataStore.setClientId(settings.integrations.animeSkip.clientId)
 
-        geminiSettingsDataStore.setEnabled(settings.integrations.gemini.enabled)
+        val remoteTranslation = settings.integrations.subtitleTranslation
+        subtitleTranslationSettingsDataStore.saveSyncedPublicSettings(
+            enabled = remoteTranslation.enabled,
+            provider = remoteTranslation.toDomainSettings().provider,
+            model = remoteTranslation.model,
+            baseUrl = remoteTranslation.baseUrl
+        )
 
         posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
         posterRatingsSettingsDataStore.setTopPostersEnabled(settings.integrations.posterRatings.topPostersEnabled)
@@ -816,7 +861,19 @@ class AccountSettingsSyncService @Inject constructor(
         resolveApiKeySecretOrNull(OMDB_SECRET_TYPE, OMDB_SECRET_REF)?.let { omdbSettingsDataStore.setApiKey(it) }
         resolveApiKeySecretOrNull(IMDB_SECRET_TYPE, IMDB_SECRET_REF)?.let { imdbSettingsDataStore.setApiKey(it) }
         imdbSettingsDataStore.setBaseUrl(settings.integrations.imdb.baseUrl)
-        resolveApiKeySecretOrNull(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF)?.let { geminiSettingsDataStore.setApiKey(it) }
+        val genericTranslationKey = resolveApiKeySecretOrNull(TRANSLATION_SECRET_TYPE, TRANSLATION_SECRET_REF)
+        val allowLegacyFallback = settings.integrations.subtitleTranslation.provider.equals("GEMINI", ignoreCase = true)
+        val legacyGeminiKey = if (genericTranslationKey != null && genericTranslationKey.isBlank() && allowLegacyFallback) {
+            resolveApiKeySecretOrNull(GEMINI_SECRET_TYPE, GEMINI_SECRET_REF)
+        } else {
+            null
+        }
+        val translationKey = selectSubtitleTranslationApiKeySecret(
+            genericTranslationKey = genericTranslationKey,
+            legacyGeminiKey = legacyGeminiKey,
+            allowLegacyFallback = allowLegacyFallback
+        )
+        translationKey?.let { subtitleTranslationSettingsDataStore.setApiKey(it) }
         resolveApiKeySecretOrNull(RPDB_SECRET_TYPE, RPDB_SECRET_REF)?.let { posterRatingsSettingsDataStore.setRpdbApiKey(it) }
         resolveApiKeySecretOrNull(TOP_POSTERS_SECRET_TYPE, TOP_POSTERS_SECRET_REF)?.let { posterRatingsSettingsDataStore.setTopPostersApiKey(it) }
         resolveApiKeySecretOrNull(PREMIUMIZE_SECRET_TYPE, PREMIUMIZE_SECRET_REF)?.let { premiumizeSettingsDataStore.setApiKey(it) }

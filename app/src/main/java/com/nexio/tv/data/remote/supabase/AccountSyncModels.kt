@@ -55,7 +55,7 @@ data class AccountAddonSecretPayload(
 @Serializable
 data class AccountConfigSyncPayload(
     @EncodeDefault
-    val schemaVersion: Int = 4,
+    val schemaVersion: Int = 6,
     val integrations: IntegrationSettings = IntegrationSettings(),
     val catalogs: CatalogSyncSettings = CatalogSyncSettings(),
     val playback: PlaybackConfigSyncSettings = PlaybackConfigSyncSettings(),
@@ -173,6 +173,9 @@ data class IntegrationSettings(
     val imdb: ImdbSyncSettings = ImdbSyncSettings(),
     val mdblist: MDBListSyncSettings = MDBListSyncSettings(),
     val animeSkip: AnimeSkipSyncSettings = AnimeSkipSyncSettings(),
+    @EncodeDefault
+    val subtitleTranslation: SubtitleTranslationSyncSettings = SubtitleTranslationSyncSettings(),
+    @EncodeDefault
     val gemini: GeminiSyncSettings = GeminiSyncSettings(),
     val posterRatings: PosterRatingsSyncSettings = PosterRatingsSyncSettings(),
     val traktAuth: TraktAuthSyncSettings = TraktAuthSyncSettings(),
@@ -278,6 +281,18 @@ data class AnimeSkipSyncSettings(
 @Serializable
 data class GeminiSyncSettings(
     val enabled: Boolean = false
+)
+
+@Serializable
+data class SubtitleTranslationSyncSettings(
+    @EncodeDefault
+    val enabled: Boolean = false,
+    @EncodeDefault
+    val provider: String = "OPENAI",
+    @EncodeDefault
+    val model: String = "gpt-5-nano",
+    @EncodeDefault
+    val baseUrl: String = "https://api.openai.com/v1"
 )
 
 @Serializable
