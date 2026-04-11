@@ -930,6 +930,7 @@ fun NexioNavHost(
                                 logo = entry.logo,
                                 videoId = entry.id,
                                 filename = entry.playbackFilename,
+                                videoSize = entry.playbackSizeBytes,
                                 headers = entry.playbackHeaders,
                                 launchSource = PlayerLaunchSource.LIBRARY_DIRECT
                             )

@@ -139,6 +139,15 @@ class PlayerRuntimeController(
     fun getCurrentStreamUrl(): String = currentStreamUrl
     fun getCurrentHeaders(): Map<String, String> = currentHeaders
 
+    internal fun maybeStartStreamingCacheFillForCurrentStream() {
+        mediaSourceFactory.startStreamingCacheFill(
+            url = currentStreamUrl,
+            headers = currentHeaders,
+            contentLength = currentVideoSize,
+            playbackByteProvider = { estimateBufferedBytePosition() }
+        )
+    }
+
     fun stopAndRelease() {
         beginPlayerExit()
         endDisplayModeSessionForExit()

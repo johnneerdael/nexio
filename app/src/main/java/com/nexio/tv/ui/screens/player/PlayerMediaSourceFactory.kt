@@ -3,6 +3,7 @@
 package com.nexio.tv.ui.screens.player
 
 import android.content.Context
+import android.util.Log
 import androidx.annotation.VisibleForTesting
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -118,6 +119,11 @@ internal class PlayerMediaSourceFactory(
             contentLength == null ||
             contentLength <= 0L
         ) {
+            Log.d(
+                TAG,
+                "STREAM_CACHE_FILL skip enabled=$streamingCacheEnabled " +
+                    "http=${usesHttpUpstream(url)} contentLength=$contentLength"
+            )
             stopStreamingCacheFill()
             return
         }
@@ -128,6 +134,7 @@ internal class PlayerMediaSourceFactory(
             responseHeaders = null
         )
         if (resolvedMimeType == MimeTypes.APPLICATION_M3U8 || resolvedMimeType == MimeTypes.APPLICATION_MPD) {
+            Log.d(TAG, "STREAM_CACHE_FILL skip adaptive mime=$resolvedMimeType")
             stopStreamingCacheFill()
             return
         }
@@ -146,6 +153,7 @@ internal class PlayerMediaSourceFactory(
             contentLength = contentLength,
             playbackByteProvider = playbackByteProvider
         )
+        Log.d(TAG, "STREAM_CACHE_FILL start contentLength=$contentLength mime=$resolvedMimeType")
     }
 
     fun stopStreamingCacheFill(): Boolean {
@@ -170,6 +178,8 @@ internal class PlayerMediaSourceFactory(
     }
 
     companion object {
+        private const val TAG = "PlayerMediaSourceFactory"
+
         fun sanitizeHeaders(headers: Map<String, String>?): Map<String, String> {
             val raw: Map<*, *> = headers ?: return emptyMap()
             if (raw.isEmpty()) return emptyMap()

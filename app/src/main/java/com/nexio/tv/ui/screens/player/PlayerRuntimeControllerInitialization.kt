@@ -911,12 +911,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 setMediaSource(initialMediaSource)
                 playWhenReady = true
                 prepare()
-                mediaSourceFactory.startStreamingCacheFill(
-                    url = url,
-                    headers = headers,
-                    contentLength = currentVideoSize,
-                    playbackByteProvider = { estimateBufferedBytePosition() }
-                )
+                maybeStartStreamingCacheFillForCurrentStream()
                 launchStartupPreparationTasks(
                     url = url,
                     headers = headers,
