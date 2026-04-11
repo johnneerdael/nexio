@@ -251,7 +251,6 @@
   <string name="settings_integrations_section_subtitle">Konfiguriere externe Metadaten und Poster-Integrationen</string>
   <string name="settings_tmdb_subtitle">Einstellungen zur Metadaten-Anreicherung</string>
   <string name="settings_mdblist_subtitle">Externe Bewertungsanbieter</string>
-  <string name="settings_gemini_subtitle">KI-Untertitelübersetzung mit Gemini</string>
   <string name="playback_title">Wiedergabeeinstellungen</string>
   <string name="playback_subtitle">Konfiguriere Videowiedergabe- und Untertiteloptionen</string>
   <string name="cd_decrease">Verringern</string>
@@ -680,16 +679,6 @@
   <string name="subtitle_ai_translate_missing_target">Wähle eine primäre Untertitelsprache, bevor du die KI-Übersetzung aktivierst.</string>
   <string name="subtitle_ai_translate_unsupported_format">Dieses Untertitelformat wird für die KI-Übersetzung noch nicht unterstützt.</string>
   <string name="subtitle_ai_translate_failed">Untertitel konnte nicht übersetzt werden.</string>
-  <string name="gemini_title">Google Gemini</string>
-  <string name="gemini_subtitle">AI Studio-Key und KI-Untertitelübersetzung</string>
-  <string name="gemini_enable_title">Gemini aktivieren</string>
-  <string name="gemini_enable_subtitle">KI-Untertitelübersetzung während der Wiedergabe erlauben</string>
-  <string name="gemini_api_key_title">AI Studio API-Schlüssel</string>
-  <string name="gemini_api_key_subtitle">Wird über die Nexio-Kontosynchronisierung gespeichert und für die Untertitelübersetzung verwendet</string>
-  <string name="gemini_dialog_title">Google AI Studio API-Schlüssel</string>
-  <string name="gemini_dialog_subtitle">Füge deinen Gemini-API-Schlüssel aus Google AI Studio ein</string>
-  <string name="gemini_dialog_placeholder">Gib den Google AI Studio API-Schlüssel ein</string>
-  <string name="gemini_missing_api_key">Gib einen API-Schlüssel ein, bevor du Gemini aktivierst.</string>
   <string name="subtitle_all">Alle</string>
   <string name="subtitle_section_core">Kern-Einstellungen</string>
   <string name="subtitle_section_advanced">Erweitert</string>
