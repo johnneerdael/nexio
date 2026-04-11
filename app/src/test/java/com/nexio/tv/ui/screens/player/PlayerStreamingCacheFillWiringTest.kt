@@ -4,6 +4,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import kotlin.io.path.invariantSeparatorsPathString
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -34,6 +35,26 @@ class PlayerStreamingCacheFillWiringTest {
         assertTrue(
             "CacheFillWorker playbackByteProvider must not call ExoPlayer from CacheFill-0",
             maybeStartBlock.contains("playbackByteProvider = { streamingCachePlaybackBytePosition.get() }")
+        )
+    }
+
+    @Test
+    fun `streaming cache playback wiring uses coverage aware data source without upstream cache factory`() {
+        val source = sourceFile(
+            "com/nexio/tv/ui/screens/player/PlayerPlaybackNetworking.kt"
+        ).toFile().readText()
+
+        assertFalse(
+            "Streaming cache playback must not use CacheDataSource.setUpstreamDataSourceFactory(...)",
+            source.contains("setUpstreamDataSourceFactory")
+        )
+        assertTrue(
+            "Streaming cache playback must still construct CoverageAwareDataSource.Factory",
+            source.contains("return CoverageAwareDataSource.Factory(")
+        )
+        assertTrue(
+            "Streaming cache read path must keep cache writes disabled",
+            source.contains(".setCacheWriteDataSinkFactory(null)")
         )
     }
 
