@@ -151,7 +151,6 @@
   <string name="settings_trakt_subtitle">Open het Trakt-verbindingsscherm.</string>
   <string name="settings_tmdb_subtitle">Instellingen voor metadata-verrijking</string>
   <string name="settings_mdblist_subtitle">Externe beoordelingsproviders</string>
-  <string name="settings_gemini_subtitle">AI-ondertitelvertaling met Gemini</string>
   <string name="about_title">Over</string>
   <string name="about_subtitle">Appinformatie, updates en juridische links</string>
   <string name="about_made_with_love">Forked from Tapframe, Made by johnneerdael</string>
@@ -187,8 +186,6 @@
   <string name="playback_buffer_info">Status: %1$s. Bereik: %2$d-%3$d MB. Houdt ongeveer %4$dMB vrije ruimte aan. Beschikbare vrije schijfruimte: %5$s.</string>
   <string name="playback_memory_usage_estimate">Geschat geheugengebruik: %1$d / %2$d MB</string>
   <string name="sub_mode_overlay_canvas_sub">HDR-ondersteuning met canvas-rendering. Kan de UI-thread blokkeren.</string>
-  <string name="gemini_title">Google Gemini</string>
-  <string name="gemini_subtitle">AI Studio-sleutel en instellingen voor AI-ondertitelvertaling</string>
   <string name="trakt_popular_lists_search_hint">Zoek populaire lijsten</string>
   <string name="trakt_popular_lists_empty">Nog geen populaire lijsten beschikbaar. Synchroniseer Trakt en probeer opnieuw.</string>
   <string name="trakt_popular_lists_no_search_results">Geen populaire lijsten gevonden voor je zoekopdracht.</string>
@@ -682,14 +679,6 @@
   <string name="subtitle_ai_translate_missing_target">Kies een primaire ondertiteltaal voordat je AI-vertaling inschakelt.</string>
   <string name="subtitle_ai_translate_unsupported_format">Dit ondertitelformaat wordt nog niet ondersteund voor AI-vertaling.</string>
   <string name="subtitle_ai_translate_failed">Kan de ondertitel niet vertalen.</string>
-  <string name="gemini_enable_title">Schakel Gemini in</string>
-  <string name="gemini_enable_subtitle">Sta vertaling van AI-ondertitels toe tijdens het afspelen</string>
-  <string name="gemini_api_key_title">AI Studio API-sleutel</string>
-  <string name="gemini_api_key_subtitle">Opgeslagen via Nexio-accountsynchronisatie en gebruikt voor vertaling van ondertitels</string>
-  <string name="gemini_dialog_title">API-sleutel van Google AI Studio</string>
-  <string name="gemini_dialog_subtitle">Plak je Gemini API-sleutel uit Google AI Studio</string>
-  <string name="gemini_dialog_placeholder">Voer de Google AI Studio API-sleutel in</string>
-  <string name="gemini_missing_api_key">Voer een API-sleutel in voordat je Gemini inschakelt.</string>
   <string name="subtitle_all">Alle</string>
   <string name="subtitle_section_core">Kern</string>
   <string name="subtitle_section_advanced">Geavanceerd</string>
