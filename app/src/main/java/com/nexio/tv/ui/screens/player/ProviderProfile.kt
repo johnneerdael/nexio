@@ -14,6 +14,8 @@ internal data class ProviderProfile(
         require(fillHorizonBytes > 0L)
         require(lowWaterBytes >= 0L)
         require(retainBehindBytes >= 0L)
+        require(lowWaterBytes <= fillHorizonBytes)
+        require(retainBehindBytes <= fillHorizonBytes)
         require(maxConnections == 1)
     }
 }
