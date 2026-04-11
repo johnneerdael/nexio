@@ -58,6 +58,36 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun streamingCacheKillSwitch_allowsWhenEnabledAndNoBadExit() {
+        assertTrue(
+            StreamingCacheKillSwitch.shouldEnable(
+                requested = true,
+                hasRecentLowMemoryOrSignaledExit = false
+            )
+        )
+    }
+
+    @Test
+    fun streamingCacheKillSwitch_disablesWhenRequestedFalse() {
+        assertFalse(
+            StreamingCacheKillSwitch.shouldEnable(
+                requested = false,
+                hasRecentLowMemoryOrSignaledExit = false
+            )
+        )
+    }
+
+    @Test
+    fun streamingCacheKillSwitch_disablesWhenRecentBadExitExists() {
+        assertFalse(
+            StreamingCacheKillSwitch.shouldEnable(
+                requested = true,
+                hasRecentLowMemoryOrSignaledExit = true
+            )
+        )
+    }
+
+    @Test
     fun playbackNetworking_flagOff_returnsPlainDefaultDataSource_andDoesNotOpenCache() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val provider = StreamingCacheProvider(
