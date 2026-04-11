@@ -116,6 +116,15 @@ fun DebugSettingsContent(
                 )
             }
 
+            item(key = "debug_toggle_streaming_cache") {
+                DebugToggleCard(
+                    title = stringResource(R.string.debug_streaming_cache_title),
+                    subtitle = stringResource(R.string.debug_streaming_cache_subtitle),
+                    checked = uiState.streamingCacheEnabled,
+                    onToggle = { viewModel.onEvent(DebugSettingsEvent.ToggleStreamingCache(it)) }
+                )
+            }
+
             item(key = "debug_toggle_dv5_sw_tonemap") {
                 DebugToggleCard(
                     title = stringResource(R.string.audio_dv5_tonemap_title),
