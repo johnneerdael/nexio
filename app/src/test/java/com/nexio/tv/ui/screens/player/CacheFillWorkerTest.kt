@@ -802,6 +802,78 @@ class CacheFillWorkerTest {
     }
 
     @Test
+    fun prioritizeForPlaybackHole_fillsExactPositionWithoutSafetyGap() {
+        val chunkBytes = 64L
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(206)
+                .setHeader("Content-Range", "bytes 64-127/128")
+                .setBodyDelay(2L, TimeUnit.SECONDS)
+                .setBody(BufferFactory.body(ByteArray(chunkBytes.toInt()) { it.toByte() }))
+        )
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(206)
+                .setHeader("Content-Range", "bytes 32-95/128")
+                .setBody(BufferFactory.body(ByteArray(chunkBytes.toInt()) { it.toByte() }))
+        )
+        val cache = provider.getOrCreateCache()
+        val cacheKey = "movie-urgent-priority"
+        val worker = worker(
+            cacheKey = cacheKey,
+            profile = ProviderProfile(
+                chunkBytes = chunkBytes,
+                normalFragmentBytes = chunkBytes,
+                fillHorizonBytes = chunkBytes * 4L,
+                lowWaterBytes = chunkBytes,
+                retainBehindBytes = 0L
+            ),
+            playbackByteProvider = { 0L },
+            safetyGapBytes = 64L
+        )
+
+        worker.start(
+            url = server.url("/movie").toString(),
+            headers = emptyMap(),
+            contentLength = 128L,
+            startPosition = 0L
+        )
+        val initialRequest = server.takeRequest(1, TimeUnit.SECONDS)
+        assertEquals("bytes=64-127", initialRequest?.getHeader("Range"))
+
+        worker.prioritize(position = 32L)
+
+        assertTrue(waitUntil { cache.isCached(cacheKey, 32L, chunkBytes) })
+        val request = server.takeRequest(1, TimeUnit.SECONDS)
+        assertEquals("bytes=32-95", request?.getHeader("Range"))
+        worker.stopAndJoin()
+    }
+
+    @Test
+    fun downloadChunkToCache_usesUrgentFragmentSizeWhenProvided() {
+        val data = ByteArray((CacheFillWorker.URGENT_FRAGMENT_SIZE + 512L).toInt()) { it.toByte() }
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(206)
+                .setHeader("Content-Range", "bytes 0-${data.lastIndex}/${data.size}")
+                .setBody(BufferFactory.body(data))
+        )
+        val cache = provider.getOrCreateCache()
+        val cacheKey = "movie-urgent-fragment"
+        val worker = worker(cacheKey = cacheKey)
+
+        worker.downloadChunkToCache(
+            url = server.url("/movie").toString(),
+            headers = emptyMap(),
+            start = 0L,
+            end = data.size.toLong(),
+            fragmentBytes = CacheFillWorker.URGENT_FRAGMENT_SIZE
+        )
+
+        assertTrue(cache.isCached(cacheKey, 0L, data.size.toLong()))
+    }
+
+    @Test
     fun readBuffer_staysAt512Kb() {
         assertEquals(512 * 1024, CacheFillWorker.READ_BUFFER_SIZE)
     }
@@ -815,6 +887,7 @@ class CacheFillWorkerTest {
         profile: ProviderProfile = ProviderProfile(),
         rangeCoordinator: StreamingRangeCoordinator = StreamingRangeCoordinator(),
         okHttpClient: OkHttpClient = OkHttpClient(),
+        playbackByteProvider: () -> Long = { 0L },
         fillController: FillController? = null,
         safetyGapBytes: Long = 0L
     ): CacheFillWorker {
@@ -829,10 +902,10 @@ class CacheFillWorkerTest {
                 profile = profile,
                 cache = cache,
                 cacheKey = cacheKey,
-                playbackByteProvider = { 0L }
+                playbackByteProvider = playbackByteProvider
             ),
             rangeCoordinator = rangeCoordinator,
-            playbackByteProvider = { 0L },
+            playbackByteProvider = playbackByteProvider,
             safetyGapBytes = safetyGapBytes
         )
     }

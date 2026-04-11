@@ -23,7 +23,7 @@ internal class CacheFillWorker(
     private val okHttpClient: OkHttpClient,
     private val bandwidthMonitor: BandwidthMonitor,
     private val fillController: FillController,
-    private val rangeCoordinator: StreamingRangeCoordinator,
+    private val rangeCoordinator: PlaybackFallbackRangeChecker,
     private val playbackByteProvider: () -> Long,
     private val safetyGapBytes: Long = 8L * 1024L * 1024L
 ) {
@@ -32,6 +32,7 @@ internal class CacheFillWorker(
     private val commandSerial = AtomicLong(0L)
     private val startSerial = AtomicLong(0L)
     private val pendingSeekTarget = AtomicLong(NO_PENDING_SEEK)
+    private val pendingUrgentTarget = AtomicLong(NO_PENDING_SEEK)
     private val pauseRequested = AtomicBoolean(false)
     private val stopRequested = AtomicBoolean(false)
     private val controlLock = Any()
@@ -89,6 +90,15 @@ internal class CacheFillWorker(
         }
     }
 
+    fun prioritize(position: Long) {
+        synchronized(controlLock) {
+            pendingUrgentTarget.set(position.coerceAtLeast(0L))
+            commandSerial.incrementAndGet()
+            pauseRequested.set(false)
+            cancelActiveCall()
+        }
+    }
+
     fun pause() {
         synchronized(controlLock) {
             pauseRequested.set(true)
@@ -137,6 +147,7 @@ internal class CacheFillWorker(
         isActive = false
         pauseRequested.set(false)
         pendingSeekTarget.set(NO_PENDING_SEEK)
+        pendingUrgentTarget.set(NO_PENDING_SEEK)
         if (stopFillController) {
             fillController.stop()
         }
@@ -151,6 +162,7 @@ internal class CacheFillWorker(
         val workerGeneration = generation.incrementAndGet()
         commandSerial.incrementAndGet()
         pendingSeekTarget.set(NO_PENDING_SEEK)
+        pendingUrgentTarget.set(NO_PENDING_SEEK)
         pauseRequested.set(false)
         stopRequested.set(false)
         fillFrontier = maxOf(request.startPosition, safeStart()).coerceAtMost(request.contentLength)
@@ -182,6 +194,15 @@ internal class CacheFillWorker(
                 fillFrontier < contentLength &&
                 !Thread.currentThread().isInterrupted
             ) {
+                var fragmentBytes = profile.normalFragmentBytes
+                var urgentChunk = false
+                val urgentTarget = pendingUrgentTarget.getAndSet(NO_PENDING_SEEK)
+                if (urgentTarget != NO_PENDING_SEEK) {
+                    fillFrontier = urgentTarget.coerceAtMost(contentLength)
+                    fragmentBytes = URGENT_FRAGMENT_SIZE
+                    urgentChunk = true
+                }
+
                 val seekTarget = pendingSeekTarget.getAndSet(NO_PENDING_SEEK)
                 if (seekTarget != NO_PENDING_SEEK) {
                     fillFrontier = maxOf(seekTarget, safeStart()).coerceAtMost(contentLength)
@@ -193,9 +214,11 @@ internal class CacheFillWorker(
                     continue
                 }
 
-                val safeStart = safeStart()
-                if (fillFrontier < safeStart) {
-                    fillFrontier = safeStart.coerceAtMost(contentLength)
+                if (!urgentChunk) {
+                    val safeStart = safeStart()
+                    if (fillFrontier < safeStart) {
+                        fillFrontier = safeStart.coerceAtMost(contentLength)
+                    }
                 }
 
                 if (fillController.shouldPause(fillFrontier)) {
@@ -220,7 +243,8 @@ internal class CacheFillWorker(
                         start = start,
                         end = end,
                         workerGeneration = workerGeneration,
-                        resultCommandSerial = resultCommandSerial
+                        resultCommandSerial = resultCommandSerial,
+                        fragmentBytes = fragmentBytes
                     )
                 } catch (e: IOException) {
                     if (shouldYieldChunk(workerGeneration, resultCommandSerial)) {
@@ -270,7 +294,8 @@ internal class CacheFillWorker(
         start: Long,
         end: Long,
         workerGeneration: Long = generation.get(),
-        resultCommandSerial: Long = commandSerial.get()
+        resultCommandSerial: Long = commandSerial.get(),
+        fragmentBytes: Long = profile.normalFragmentBytes
     ): ChunkResult {
         if (end <= start) {
             return ChunkResult(workerGeneration, resultCommandSerial, start, end, 0L)
@@ -337,7 +362,7 @@ internal class CacheFillWorker(
                     .setPosition(start)
                     .setLength(downloadLength)
                     .build()
-                val sink = CacheDataSink(cache, profile.normalFragmentBytes)
+                val sink = CacheDataSink(cache, fragmentBytes)
                 var totalRead = 0L
 
                 var failure: Throwable? = null
@@ -428,7 +453,8 @@ internal class CacheFillWorker(
             commandSerial.get() == resultCommandSerial &&
             !stopRequested.get() &&
             !pauseRequested.get() &&
-            pendingSeekTarget.get() == NO_PENDING_SEEK
+            pendingSeekTarget.get() == NO_PENDING_SEEK &&
+            pendingUrgentTarget.get() == NO_PENDING_SEEK
     }
 
     private fun shouldYieldChunk(workerGeneration: Long, resultCommandSerial: Long): Boolean {
@@ -436,7 +462,8 @@ internal class CacheFillWorker(
             commandSerial.get() != resultCommandSerial ||
             stopRequested.get() ||
             pauseRequested.get() ||
-            pendingSeekTarget.get() != NO_PENDING_SEEK
+            pendingSeekTarget.get() != NO_PENDING_SEEK ||
+            pendingUrgentTarget.get() != NO_PENDING_SEEK
     }
 
     private fun applyChunkResult(result: ChunkResult): Boolean {
@@ -550,6 +577,7 @@ internal class CacheFillWorker(
 
     companion object {
         const val READ_BUFFER_SIZE = MemoryBudget.FILL_WORKER_READ_BUFFER_BYTES
+        const val URGENT_FRAGMENT_SIZE = 2L * 1024L * 1024L
         const val THREAD_NAME = "CacheFill-0"
         private const val PAUSE_SLEEP_MS = 20L
         private const val STOP_JOIN_TIMEOUT_MS = 500L
