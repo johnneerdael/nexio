@@ -24,6 +24,10 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
             if (playerDuration > lastKnownDuration) {
                 lastKnownDuration = playerDuration
             }
+            updateStreamingCachePlaybackBytePosition(
+                positionMs = pos,
+                durationMs = playerDuration
+            )
             val progressState = progressUiState.value
             val controlsVisible = _uiState.value.showControls
             val progressUpdateIntervalMs =
