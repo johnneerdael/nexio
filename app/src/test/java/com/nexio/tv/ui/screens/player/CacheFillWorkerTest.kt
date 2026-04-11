@@ -662,6 +662,61 @@ class CacheFillWorkerTest {
     }
 
     @Test
+    fun stopAndJoin_waitsForWorkerThreadToExit() {
+        val chunkBytes = 64L
+        val requestEntered = CountDownLatch(1)
+        val releaseRequest = CountDownLatch(1)
+        val requestCount = AtomicInteger(0)
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                requestCount.incrementAndGet()
+                requestEntered.countDown()
+                while (!releaseRequest.await(10L, TimeUnit.MILLISECONDS)) {
+                    // Keep the worker active until the test releases the request.
+                }
+
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(206)
+                    .message("Partial Content")
+                    .header("Content-Range", "bytes 0-63/128")
+                    .body(ByteArray(chunkBytes.toInt()) { 1 }.toResponseBody())
+                    .build()
+            }
+            .build()
+        val profile = ProviderProfile(
+            chunkBytes = chunkBytes,
+            normalFragmentBytes = chunkBytes,
+            fillHorizonBytes = chunkBytes * 16L,
+            lowWaterBytes = chunkBytes,
+            retainBehindBytes = 0L
+        )
+        val worker = worker(
+            cacheKey = "movie-stop-and-join",
+            profile = profile,
+            okHttpClient = client,
+            safetyGapBytes = 0L
+        )
+
+        worker.start(
+            url = server.url("/movie").toString(),
+            headers = emptyMap(),
+            contentLength = chunkBytes * 2L,
+            startPosition = 0L
+        )
+        assertTrue(requestEntered.await(1, TimeUnit.SECONDS))
+        val workerThread = liveCacheFillThreads().single()
+
+        releaseRequest.countDown()
+
+        assertTrue(worker.stopAndJoin())
+        assertFalse(workerThread.isAlive)
+        assertFalse(worker.active)
+        assertEquals(1, requestCount.get())
+    }
+
+    @Test
     fun concurrentStart_doesNotRunOverlappingWorkers() {
         val chunkBytes = 64L
         val requestEntered = CountDownLatch(1)

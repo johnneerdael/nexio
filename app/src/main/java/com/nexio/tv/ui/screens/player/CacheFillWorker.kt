@@ -111,6 +111,23 @@ internal class CacheFillWorker(
         }
     }
 
+    fun stopAndJoin(): Boolean {
+        val stopRequest = synchronized(controlLock) {
+            requestStopLocked(stopFillController = true).also {
+                startSerial.incrementAndGet()
+            }
+        }
+        val stopped = joinWorkerThread(stopRequest.workerThread)
+        if (stopped) {
+            synchronized(controlLock) {
+                if (workerThread === stopRequest.workerThread) {
+                    workerThread = null
+                }
+            }
+        }
+        return stopped
+    }
+
     private fun requestStopLocked(stopFillController: Boolean): StopRequest {
         val threadToStop = workerThread
         generation.incrementAndGet()

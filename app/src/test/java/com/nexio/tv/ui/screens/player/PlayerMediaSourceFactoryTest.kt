@@ -415,6 +415,68 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun startStreamingCacheFill_hlsManifest_doesNotOpenCacheOrStartFill() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "media-source-fill-hls-${System.nanoTime()}"
+        )
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = OkHttpClient(),
+            streamingCacheProvider = provider
+        )
+
+        try {
+            factory.streamingCacheEnabled = true
+
+            factory.startStreamingCacheFill(
+                url = "https://example.com/master.m3u8",
+                headers = emptyMap(),
+                contentLength = 32L * 1024L * 1024L,
+                playbackByteProvider = { 0L }
+            )
+
+            assertFalse(provider.hasCacheInstance)
+            assertFalse(provider.cacheDirectory.exists())
+            assertFalse(factory.hasActiveFillSession)
+        } finally {
+            factory.shutdown()
+        }
+    }
+
+    @Test
+    fun startStreamingCacheFill_dashManifest_doesNotOpenCacheOrStartFill() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "media-source-fill-dash-${System.nanoTime()}"
+        )
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = OkHttpClient(),
+            streamingCacheProvider = provider
+        )
+
+        try {
+            factory.streamingCacheEnabled = true
+
+            factory.startStreamingCacheFill(
+                url = "https://example.com/manifest.mpd",
+                headers = emptyMap(),
+                contentLength = 32L * 1024L * 1024L,
+                playbackByteProvider = { 0L }
+            )
+
+            assertFalse(provider.hasCacheInstance)
+            assertFalse(provider.cacheDirectory.exists())
+            assertFalse(factory.hasActiveFillSession)
+        } finally {
+            factory.shutdown()
+        }
+    }
+
+    @Test
     fun shutdown_stopsStreamingCacheFill() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val provider = StreamingCacheProvider(
