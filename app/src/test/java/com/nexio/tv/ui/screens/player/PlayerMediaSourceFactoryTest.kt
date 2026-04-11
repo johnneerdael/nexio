@@ -1,5 +1,10 @@
 package com.nexio.tv.ui.screens.player
 
+import android.net.Uri
+import androidx.media3.common.C
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.cache.ContentMetadata
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -7,7 +12,12 @@ import io.mockk.mockk
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -16,6 +26,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
+@androidx.annotation.OptIn(UnstableApi::class)
 @RunWith(RobolectricTestRunner::class)
 class PlayerMediaSourceFactoryTest {
 
@@ -525,6 +536,137 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun streamingCacheFillSession_startSetsContentLengthMetadataForFillCacheKey() {
+        val context = appContext()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "media-source-fill-metadata-${System.nanoTime()}"
+        )
+        val cache = provider.getOrCreateCache()
+        val cacheKeyFactory = StableCacheKeyFactory()
+        val contentLength = 12_345L
+        val url = "https://example.com/movie.mkv"
+        val session = StreamingCacheFillSession(
+            cache = cache,
+            cacheKeyFactory = cacheKeyFactory,
+            okHttpClient = OkHttpClient(),
+            memoryBudget = MemoryBudget(context),
+            rangeCoordinator = StreamingRangeCoordinator()
+        )
+
+        try {
+            session.start(
+                url = url,
+                headers = emptyMap(),
+                contentLength = contentLength,
+                playbackByteProvider = { contentLength }
+            )
+
+            assertEquals(
+                contentLength,
+                ContentMetadata.getContentLength(cache.getContentMetadata(cacheKey(cacheKeyFactory, url)))
+            )
+        } finally {
+            session.stop()
+            provider.release()
+            provider.cacheDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun streamingCacheFillSession_startAfterSlowStopStartsLatestPendingRequestWithoutOverlap() {
+        val context = appContext()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "media-source-fill-pending-start-${System.nanoTime()}"
+        )
+        val chunkBytes = 64L
+        val contentLength = 16L * 1024L * 1024L
+        val firstRequestEntered = CountDownLatch(1)
+        val releaseFirstRequest = CountDownLatch(1)
+        val requestCount = AtomicInteger(0)
+        val replacementHeader = AtomicReference<String?>()
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                if (requestCount.incrementAndGet() == 1) {
+                    firstRequestEntered.countDown()
+                    while (releaseFirstRequest.count > 0L) {
+                        try {
+                            releaseFirstRequest.await(10L, TimeUnit.MILLISECONDS)
+                        } catch (_: InterruptedException) {
+                            // Simulate teardown that outlives the session's bounded stop join.
+                        }
+                    }
+                    throw IOException("slow to stop")
+                }
+
+                replacementHeader.set(chain.request().header("X-Replacement"))
+                val requestedRange = requireNotNull(chain.request().header("Range"))
+                val (start, endInclusive) = parseRange(requestedRange)
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(206)
+                    .message("Partial Content")
+                    .header("Content-Range", "bytes $start-$endInclusive/$contentLength")
+                    .body(ByteArray((endInclusive - start + 1L).toInt()) { 1 }.toResponseBody())
+                    .build()
+            }
+            .build()
+        val session = StreamingCacheFillSession(
+            cache = provider.getOrCreateCache(),
+            cacheKeyFactory = StableCacheKeyFactory(),
+            okHttpClient = client,
+            memoryBudget = MemoryBudget(context),
+            rangeCoordinator = StreamingRangeCoordinator(),
+            profile = ProviderProfile(
+                chunkBytes = chunkBytes,
+                normalFragmentBytes = chunkBytes,
+                fillHorizonBytes = contentLength,
+                lowWaterBytes = chunkBytes,
+                retainBehindBytes = 0L
+            )
+        )
+
+        try {
+            session.start(
+                url = "https://example.com/movie.mkv",
+                headers = emptyMap(),
+                contentLength = contentLength,
+                playbackByteProvider = { 0L }
+            )
+            assertTrue(firstRequestEntered.await(1, TimeUnit.SECONDS))
+            val firstWorkerThread = liveCacheFillThreads().single()
+
+            session.start(
+                url = "https://example.com/movie.mkv",
+                headers = mapOf("X-Replacement" to "stale"),
+                contentLength = contentLength,
+                playbackByteProvider = { 0L }
+            )
+            session.start(
+                url = "https://example.com/movie.mkv",
+                headers = mapOf("X-Replacement" to "latest"),
+                contentLength = contentLength,
+                playbackByteProvider = { 0L }
+            )
+
+            assertEquals(1, requestCount.get())
+            assertEquals(listOf(firstWorkerThread), liveCacheFillThreads())
+
+            releaseFirstRequest.countDown()
+
+            assertTrue(waitUntil { replacementHeader.get() == "latest" })
+        } finally {
+            releaseFirstRequest.countDown()
+            session.stop()
+            provider.release()
+            provider.cacheDirectory.deleteRecursively()
+            assertTrue(waitUntil { liveCacheFillThreads().isEmpty() })
+        }
+    }
+
+    @Test
     fun progressivePlayback_usesPlainMedia3DatasourceWithoutCacheOrPrds() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
@@ -567,5 +709,37 @@ class PlayerMediaSourceFactoryTest {
         )
 
         assertTrue(mediaSource is DashMediaSource)
+    }
+
+    private fun appContext(): android.content.Context {
+        return androidx.test.core.app.ApplicationProvider.getApplicationContext()
+    }
+
+    private fun cacheKey(cacheKeyFactory: StableCacheKeyFactory, url: String): String {
+        return cacheKeyFactory.buildCacheKey(
+            DataSpec.Builder()
+                .setUri(Uri.parse(url))
+                .setLength(C.LENGTH_UNSET.toLong())
+                .build()
+        )
+    }
+
+    private fun parseRange(rangeHeader: String): Pair<Long, Long> {
+        val values = rangeHeader.removePrefix("bytes=").split("-")
+        return values[0].toLong() to values[1].toLong()
+    }
+
+    private fun waitUntil(condition: () -> Boolean): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+        while (System.nanoTime() < deadline) {
+            if (condition()) return true
+            Thread.sleep(10L)
+        }
+        return condition()
+    }
+
+    private fun liveCacheFillThreads(): List<Thread> {
+        return Thread.getAllStackTraces().keys
+            .filter { thread -> thread.name == CacheFillWorker.THREAD_NAME && thread.isAlive }
     }
 }
