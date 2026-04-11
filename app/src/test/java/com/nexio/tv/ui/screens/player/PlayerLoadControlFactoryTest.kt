@@ -8,13 +8,25 @@ import org.junit.Test
 class PlayerLoadControlFactoryTest {
 
     @Test
-    fun budgetedSpec_capsTargetBufferToMemoryBudget() {
+    fun budgetedSpec_clampsTargetBufferToMemoryBudget_minimum() {
         val spec = PlayerLoadControlFactory.buildBudgetedSpec(
-            effectiveSampleQueueBytes = 128L * 1024L * 1024L,
+            effectiveSampleQueueBytes = 16L * 1024L * 1024L,
             estimatedBitrateBps = 120_000_000L
         )
 
-        assertEquals(128 * 1024 * 1024, spec.targetBufferBytes)
+        assertEquals(MemoryBudget.MIN_SAMPLE_QUEUE_BYTES.toInt(), spec.targetBufferBytes)
+        assertFalse(spec.prioritizeTimeOverSizeThresholdsForStreaming)
+        assertTrue(spec.maxBufferMs in 8_000..30_000)
+    }
+
+    @Test
+    fun budgetedSpec_clampsTargetBufferToMemoryBudget_maximum() {
+        val spec = PlayerLoadControlFactory.buildBudgetedSpec(
+            effectiveSampleQueueBytes = 512L * 1024L * 1024L,
+            estimatedBitrateBps = 120_000_000L
+        )
+
+        assertEquals(MemoryBudget.MAX_SAMPLE_QUEUE_BYTES.toInt(), spec.targetBufferBytes)
         assertFalse(spec.prioritizeTimeOverSizeThresholdsForStreaming)
         assertTrue(spec.maxBufferMs in 8_000..30_000)
     }
