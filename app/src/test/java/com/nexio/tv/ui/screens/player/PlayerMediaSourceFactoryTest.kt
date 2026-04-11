@@ -4,6 +4,9 @@ import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import io.mockk.mockk
+import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -315,6 +318,147 @@ class PlayerMediaSourceFactoryTest {
             assertFalse(provider.cacheDirectory.exists())
         } finally {
             factory.shutdown()
+        }
+    }
+
+    @Test
+    fun startStreamingCacheFill_flagOff_doesNotOpenCacheOrStartFill() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "media-source-fill-flag-off-${System.nanoTime()}"
+        )
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = OkHttpClient(),
+            streamingCacheProvider = provider
+        )
+
+        try {
+            factory.streamingCacheEnabled = false
+
+            factory.startStreamingCacheFill(
+                url = "https://example.com/movie.mkv",
+                headers = emptyMap(),
+                contentLength = 32L * 1024L * 1024L,
+                playbackByteProvider = { 0L }
+            )
+
+            assertFalse(provider.hasCacheInstance)
+            assertFalse(provider.cacheDirectory.exists())
+            assertFalse(factory.hasActiveFillSession)
+        } finally {
+            factory.shutdown()
+        }
+    }
+
+    @Test
+    fun startStreamingCacheFill_assetUrl_doesNotOpenCacheOrStartFill() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "media-source-fill-asset-${System.nanoTime()}"
+        )
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = OkHttpClient(),
+            streamingCacheProvider = provider
+        )
+
+        try {
+            factory.streamingCacheEnabled = true
+
+            factory.startStreamingCacheFill(
+                url = "asset:///movie.mkv",
+                headers = emptyMap(),
+                contentLength = 32L * 1024L * 1024L,
+                playbackByteProvider = { 0L }
+            )
+
+            assertFalse(provider.hasCacheInstance)
+            assertFalse(provider.cacheDirectory.exists())
+            assertFalse(factory.hasActiveFillSession)
+        } finally {
+            factory.shutdown()
+        }
+    }
+
+    @Test
+    fun startStreamingCacheFill_withoutContentLength_doesNotOpenCacheOrStartFill() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "media-source-fill-no-length-${System.nanoTime()}"
+        )
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = OkHttpClient(),
+            streamingCacheProvider = provider
+        )
+
+        try {
+            factory.streamingCacheEnabled = true
+
+            factory.startStreamingCacheFill(
+                url = "https://example.com/movie.mkv",
+                headers = emptyMap(),
+                contentLength = null,
+                playbackByteProvider = { 0L }
+            )
+
+            assertFalse(provider.hasCacheInstance)
+            assertFalse(provider.cacheDirectory.exists())
+            assertFalse(factory.hasActiveFillSession)
+        } finally {
+            factory.shutdown()
+        }
+    }
+
+    @Test
+    fun shutdown_stopsStreamingCacheFill() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "media-source-fill-shutdown-${System.nanoTime()}"
+        )
+        val requestEntered = CountDownLatch(1)
+        val releaseRequest = CountDownLatch(1)
+        val client = OkHttpClient.Builder()
+            .addInterceptor {
+                requestEntered.countDown()
+                while (!releaseRequest.await(10L, TimeUnit.MILLISECONDS)) {
+                    // Keep the worker active until shutdown cancels the session.
+                }
+                throw IOException("stopped")
+            }
+            .build()
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = client,
+            streamingCacheProvider = provider
+        )
+
+        try {
+            factory.streamingCacheEnabled = true
+
+            factory.startStreamingCacheFill(
+                url = "https://example.com/movie.mkv",
+                headers = emptyMap(),
+                contentLength = 32L * 1024L * 1024L,
+                playbackByteProvider = { 0L }
+            )
+
+            assertTrue(requestEntered.await(1L, TimeUnit.SECONDS))
+            assertTrue(factory.hasActiveFillSession)
+
+            factory.shutdown()
+
+            assertFalse(factory.hasActiveFillSession)
+            assertFalse(provider.hasCacheInstance)
+        } finally {
+            releaseRequest.countDown()
+            factory.shutdown()
+            provider.cacheDirectory.deleteRecursively()
         }
     }
 

@@ -3,6 +3,7 @@
 package com.nexio.tv.ui.screens.player
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.dash.DashMediaSource
@@ -29,6 +30,14 @@ internal class PlayerMediaSourceFactory(
     private var customExtractorsFactory: ExtractorsFactory? = null
     private var customSubtitleParserFactory: SubtitleParser.Factory? = null
     private val loadErrorHandlingPolicy = DefaultLoadErrorHandlingPolicy()
+    private val cacheKeyFactory = StableCacheKeyFactory()
+    private val rangeCoordinator = StreamingRangeCoordinator()
+    private val memoryBudget = MemoryBudget(context)
+    private var fillSession: StreamingCacheFillSession? = null
+
+    @VisibleForTesting
+    internal val hasActiveFillSession: Boolean
+        get() = fillSession?.isActive == true
 
     fun configureSubtitleParsing(
         extractorsFactory: ExtractorsFactory?,
@@ -44,13 +53,26 @@ internal class PlayerMediaSourceFactory(
         subtitleConfigurations: List<MediaItem.SubtitleConfiguration> = emptyList()
     ): MediaSource {
         val sanitizedHeaders = sanitizeHeaders(headers)
-        val dataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(
-            context = context,
-            client = playbackOkHttpClient,
-            defaultHeaders = sanitizedHeaders,
-            streamingCacheProvider = streamingCacheProvider,
-            useStreamingCache = streamingCacheEnabled && usesHttpUpstream(url)
-        )
+        val useStreamingCache = streamingCacheEnabled && usesHttpUpstream(url)
+        val dataSourceFactory = if (useStreamingCache) {
+            PlayerPlaybackNetworking.createDataSourceFactory(
+                context = context,
+                client = playbackOkHttpClient,
+                defaultHeaders = sanitizedHeaders,
+                streamingCacheProvider = streamingCacheProvider,
+                useStreamingCache = true,
+                cacheKeyFactory = cacheKeyFactory,
+                rangeCoordinator = rangeCoordinator
+            )
+        } else {
+            PlayerPlaybackNetworking.createDataSourceFactory(
+                context = context,
+                client = playbackOkHttpClient,
+                defaultHeaders = sanitizedHeaders,
+                streamingCacheProvider = streamingCacheProvider,
+                useStreamingCache = false
+            )
+        }
         val resolvedMimeType = inferMimeType(
             url = url,
             filename = url.substringBefore('?').substringAfterLast('/', "").takeIf { it.isNotBlank() },
@@ -84,7 +106,45 @@ internal class PlayerMediaSourceFactory(
         }
     }
 
+    fun startStreamingCacheFill(
+        url: String,
+        headers: Map<String, String>,
+        contentLength: Long?,
+        playbackByteProvider: () -> Long
+    ) {
+        if (
+            !streamingCacheEnabled ||
+            !usesHttpUpstream(url) ||
+            contentLength == null ||
+            contentLength <= 0L
+        ) {
+            stopStreamingCacheFill()
+            return
+        }
+
+        val session = fillSession ?: StreamingCacheFillSession(
+            cache = streamingCacheProvider.getOrCreateCache(),
+            cacheKeyFactory = cacheKeyFactory,
+            okHttpClient = playbackOkHttpClient,
+            memoryBudget = memoryBudget,
+            rangeCoordinator = rangeCoordinator
+        ).also { fillSession = it }
+
+        session.start(
+            url = url,
+            headers = sanitizeHeaders(headers),
+            contentLength = contentLength,
+            playbackByteProvider = playbackByteProvider
+        )
+    }
+
+    fun stopStreamingCacheFill() {
+        fillSession?.stop()
+        fillSession = null
+    }
+
     fun shutdown() {
+        stopStreamingCacheFill()
         streamingCacheProvider.release()
     }
 

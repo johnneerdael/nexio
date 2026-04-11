@@ -383,6 +383,9 @@ class PlayerRuntimeController(
             debugSettingsDataStore.streamingCacheEnabled.collect { enabled ->
                 val decision = StreamingCacheKillSwitch.evaluate(context, enabled)
                 mediaSourceFactory.streamingCacheEnabled = decision.enabled
+                if (!decision.enabled) {
+                    mediaSourceFactory.stopStreamingCacheFill()
+                }
                 if (enabled && decision.blockedByKillSwitch) {
                     debugSettingsDataStore.setStreamingCacheEnabled(false)
                 }
@@ -427,4 +430,13 @@ class PlayerRuntimeController(
             com.nexio.tv.core.player.FrameRateUtils.clearOriginalDisplayMode()
         }
     }
+}
+
+internal fun PlayerRuntimeController.estimateBufferedBytePosition(): Long {
+    val player = _exoPlayer ?: return 0L
+    val size = currentVideoSize ?: return 0L
+    val duration = player.duration
+    if (duration <= 0L || duration == C.TIME_UNSET) return 0L
+    val bufferedMs = player.bufferedPosition.coerceAtLeast(player.currentPosition)
+    return (size * bufferedMs / duration).coerceIn(0L, size)
 }
