@@ -89,12 +89,10 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             playerInitializationStartedAtMs = System.currentTimeMillis()
             val playerSettings = playerSettingsDataStore.playerSettings.first()
             val requestedStreamingCache = debugSettingsDataStore.streamingCacheEnabled.first()
-            val blockedByKillSwitch = StreamingCacheKillSwitch.hasRecentLowMemoryOrSignaledExit(context)
-            mediaSourceFactory.streamingCacheEnabled = StreamingCacheKillSwitch.shouldEnable(
-                requested = requestedStreamingCache,
-                hasRecentLowMemoryOrSignaledExit = blockedByKillSwitch
-            )
-            if (requestedStreamingCache && blockedByKillSwitch) {
+            val streamingCacheDecision =
+                StreamingCacheKillSwitch.evaluate(context, requestedStreamingCache)
+            mediaSourceFactory.streamingCacheEnabled = streamingCacheDecision.enabled
+            if (requestedStreamingCache && streamingCacheDecision.blockedByKillSwitch) {
                 debugSettingsDataStore.setStreamingCacheEnabled(false)
             }
             lastPreferredAudioLanguage = playerSettings.preferredAudioLanguage
