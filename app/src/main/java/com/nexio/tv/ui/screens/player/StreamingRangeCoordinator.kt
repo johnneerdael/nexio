@@ -4,7 +4,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentSkipListMap
 
-internal class StreamingRangeCoordinator {
+internal class StreamingRangeCoordinator : PlaybackFallbackRangeChecker {
     private val fallbackOwnedRegions = ConcurrentSkipListMap<Long, ConcurrentHashMap<String, Region>>()
     private val coveredRegions = ConcurrentSkipListMap<Long, CoveredRegion>()
     private val tokenIndex = ConcurrentHashMap<String, Region>()
@@ -39,7 +39,7 @@ internal class StreamingRangeCoordinator {
         }
     }
 
-    fun isOwnedByPlaybackFallback(start: Long, endExclusive: Long): Boolean {
+    override fun isOwnedByPlaybackFallback(start: Long, endExclusive: Long): Boolean {
         val normalizedStart = start.coerceAtLeast(0L)
         val normalizedEnd = endExclusive.coerceAtLeast(normalizedStart)
         if (normalizedEnd <= normalizedStart) return false

@@ -15,10 +15,11 @@ internal class StreamingCacheFillSession(
     private val cacheKeyFactory: CacheKeyFactory,
     private val okHttpClient: OkHttpClient,
     private val memoryBudget: MemoryBudget,
-    private val rangeCoordinator: StreamingRangeCoordinator,
+    private val rangeCoordinator: PlaybackFallbackRangeChecker,
+    private val missCoordinator: StreamingCacheMissCoordinator? = rangeCoordinator as? StreamingCacheMissCoordinator,
     private val bandwidthMonitor: BandwidthMonitor = BandwidthMonitor(),
     private val profile: ProviderProfile = ProviderProfile()
-) {
+) : StreamingCacheMissCoordinator.UrgentFillHandler {
     private val sessionLock = Any()
     private var fillController: FillController? = null
     private var worker: CacheFillWorker? = null
@@ -92,6 +93,7 @@ internal class StreamingCacheFillSession(
 
         fillController = controller
         worker = nextWorker
+        missCoordinator?.attachUrgentFillHandler(this)
         nextWorker.start(
             url = request.url,
             headers = request.headers,
@@ -149,11 +151,39 @@ internal class StreamingCacheFillSession(
             pendingStart = null
             val stopped = worker?.stopAndJoin() ?: true
             if (stopped) {
+                missCoordinator?.detachUrgentFillHandler(this)
                 worker = null
                 fillController = null
             }
             return stopped
         }
+    }
+
+    override fun prioritize(position: Long) {
+        synchronized(sessionLock) {
+            worker?.prioritize(position)
+        }
+    }
+
+    override fun awaitSpanCommitted(
+        cacheKey: String,
+        position: Long,
+        minLength: Long,
+        timeoutMs: Long
+    ): Boolean {
+        val normalizedPosition = position.coerceAtLeast(0L)
+        val normalizedLength = minLength.coerceAtLeast(1L)
+        val deadlineMs = android.os.SystemClock.elapsedRealtime() + timeoutMs.coerceAtLeast(0L)
+        while (android.os.SystemClock.elapsedRealtime() <= deadlineMs) {
+            val cachedLength = cache.getCachedLength(cacheKey, normalizedPosition, normalizedLength)
+            if (cachedLength > 0L) return true
+            Thread.sleep(25L)
+        }
+        return false
+    }
+
+    override fun estimatedBytesPerSecond(): Long {
+        return bandwidthMonitor.estimatedBytesPerSecond()
     }
 
     private fun cacheKey(url: String): String {
