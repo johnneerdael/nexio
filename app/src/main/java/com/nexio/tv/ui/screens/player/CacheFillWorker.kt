@@ -33,6 +33,7 @@ internal class CacheFillWorker(
     private val pendingSeekTarget = AtomicLong(NO_PENDING_SEEK)
     private val pauseRequested = AtomicBoolean(false)
     private val stopRequested = AtomicBoolean(false)
+    private val controlLock = Any()
     private val callLock = Any()
 
     @Volatile
@@ -54,51 +55,61 @@ internal class CacheFillWorker(
         get() = isActive
 
     fun start(url: String, headers: Map<String, String>, contentLength: Long, startPosition: Long) {
-        if (!cancelExistingWorkerForReplacement()) return
+        synchronized(controlLock) {
+            if (!cancelExistingWorkerForReplacement()) return
 
-        if (contentLength <= 0L) return
+            if (contentLength <= 0L) return
 
-        val workerGeneration = generation.incrementAndGet()
-        commandSerial.incrementAndGet()
-        pendingSeekTarget.set(NO_PENDING_SEEK)
-        pauseRequested.set(false)
-        stopRequested.set(false)
-        fillFrontier = maxOf(startPosition, safeStart()).coerceAtMost(contentLength)
-        isActive = true
-        fillController.onStart()
+            val workerGeneration = generation.incrementAndGet()
+            commandSerial.incrementAndGet()
+            pendingSeekTarget.set(NO_PENDING_SEEK)
+            pauseRequested.set(false)
+            stopRequested.set(false)
+            fillFrontier = maxOf(startPosition, safeStart()).coerceAtMost(contentLength)
+            isActive = true
+            fillController.onStart()
 
-        workerThread = Thread(
-            {
-                run(url = url, headers = headers, contentLength = contentLength, workerGeneration = workerGeneration)
-            },
-            THREAD_NAME
-        ).apply {
-            isDaemon = true
-            start()
+            workerThread = Thread(
+                {
+                    run(url = url, headers = headers, contentLength = contentLength, workerGeneration = workerGeneration)
+                },
+                THREAD_NAME
+            ).apply {
+                isDaemon = true
+                start()
+            }
         }
     }
 
     fun seekTo(newPosition: Long) {
-        pendingSeekTarget.set(newPosition.coerceAtLeast(0L))
-        commandSerial.incrementAndGet()
-        pauseRequested.set(false)
-        fillController.onSeek()
-        cancelActiveCall()
+        synchronized(controlLock) {
+            pendingSeekTarget.set(newPosition.coerceAtLeast(0L))
+            commandSerial.incrementAndGet()
+            pauseRequested.set(false)
+            fillController.onSeek()
+            cancelActiveCall()
+        }
     }
 
     fun pause() {
-        pauseRequested.set(true)
-        commandSerial.incrementAndGet()
-        cancelActiveCall()
+        synchronized(controlLock) {
+            pauseRequested.set(true)
+            commandSerial.incrementAndGet()
+            cancelActiveCall()
+        }
     }
 
     fun resume() {
-        pauseRequested.set(false)
-        commandSerial.incrementAndGet()
+        synchronized(controlLock) {
+            pauseRequested.set(false)
+            commandSerial.incrementAndGet()
+        }
     }
 
     fun stop() {
-        stop(joinWorker = false, stopFillController = true)
+        synchronized(controlLock) {
+            stop(joinWorker = false, stopFillController = true)
+        }
     }
 
     private fun cancelExistingWorkerForReplacement(): Boolean {

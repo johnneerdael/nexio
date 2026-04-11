@@ -576,6 +576,91 @@ class CacheFillWorkerTest {
     }
 
     @Test
+    fun concurrentStart_doesNotRunOverlappingWorkers() {
+        val chunkBytes = 64L
+        val requestEntered = CountDownLatch(1)
+        val releaseRequest = CountDownLatch(1)
+        val startReady = CountDownLatch(2)
+        val releaseStarts = CountDownLatch(1)
+        val requestCount = AtomicInteger(0)
+        val threadFailure = AtomicBoolean(false)
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                requestCount.incrementAndGet()
+                requestEntered.countDown()
+                while (releaseRequest.count > 0L) {
+                    try {
+                        releaseRequest.await(10L, TimeUnit.MILLISECONDS)
+                    } catch (_: InterruptedException) {
+                        // Keep the first worker alive past a competing start's bounded join.
+                    }
+                }
+
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(206)
+                    .message("Partial Content")
+                    .header("Content-Range", "bytes 0-63/128")
+                    .body(ByteArray(chunkBytes.toInt()) { 1 }.toResponseBody())
+                    .build()
+            }
+            .build()
+        val profile = ProviderProfile(
+            chunkBytes = chunkBytes,
+            normalFragmentBytes = chunkBytes,
+            fillHorizonBytes = chunkBytes * 16L,
+            lowWaterBytes = chunkBytes,
+            retainBehindBytes = 0L
+        )
+        val worker = worker(
+            cacheKey = "movie-concurrent-start",
+            profile = profile,
+            okHttpClient = client,
+            safetyGapBytes = 0L
+        )
+
+        fun startThread(): Thread {
+            return Thread {
+                try {
+                    startReady.countDown()
+                    releaseStarts.await(1, TimeUnit.SECONDS)
+                    worker.start(
+                        url = server.url("/movie").toString(),
+                        headers = emptyMap(),
+                        contentLength = chunkBytes * 2L,
+                        startPosition = 0L
+                    )
+                } catch (_: Throwable) {
+                    threadFailure.set(true)
+                }
+            }.apply { start() }
+        }
+
+        val firstStart = startThread()
+        val secondStart = startThread()
+
+        try {
+            assertTrue(startReady.await(1, TimeUnit.SECONDS))
+            releaseStarts.countDown()
+            assertTrue(requestEntered.await(1, TimeUnit.SECONDS))
+            firstStart.join(2_000L)
+            secondStart.join(2_000L)
+
+            assertFalse(threadFailure.get())
+            assertFalse(firstStart.isAlive)
+            assertFalse(secondStart.isAlive)
+            assertEquals(1, requestCount.get())
+        } finally {
+            releaseRequest.countDown()
+            worker.stop()
+            firstStart.join(2_000L)
+            secondStart.join(2_000L)
+            assertTrue(waitUntil { liveCacheFillThreads().isEmpty() })
+        }
+    }
+
+    @Test
     fun readBuffer_staysAt512Kb() {
         assertEquals(512 * 1024, CacheFillWorker.READ_BUFFER_SIZE)
     }
