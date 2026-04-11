@@ -54,9 +54,9 @@ internal class CacheFillWorker(
         get() = isActive
 
     fun start(url: String, headers: Map<String, String>, contentLength: Long, startPosition: Long) {
-        if (contentLength <= 0L) return
+        if (!cancelExistingWorkerForReplacement()) return
 
-        stop(joinWorker = true)
+        if (contentLength <= 0L) return
 
         val workerGeneration = generation.incrementAndGet()
         commandSerial.incrementAndGet()
@@ -98,10 +98,14 @@ internal class CacheFillWorker(
     }
 
     fun stop() {
-        stop(joinWorker = false)
+        stop(joinWorker = false, stopFillController = true)
     }
 
-    private fun stop(joinWorker: Boolean) {
+    private fun cancelExistingWorkerForReplacement(): Boolean {
+        return stop(joinWorker = true, stopFillController = false)
+    }
+
+    private fun stop(joinWorker: Boolean, stopFillController: Boolean): Boolean {
         val threadToStop = workerThread
         generation.incrementAndGet()
         commandSerial.incrementAndGet()
@@ -109,15 +113,20 @@ internal class CacheFillWorker(
         isActive = false
         pauseRequested.set(false)
         pendingSeekTarget.set(NO_PENDING_SEEK)
-        fillController.stop()
+        if (stopFillController) {
+            fillController.stop()
+        }
         cancelActiveCall()
         threadToStop?.interrupt()
-        if (joinWorker) {
+        val workerStopped = if (joinWorker) {
             joinWorkerThread(threadToStop)
+        } else {
+            true
         }
-        if (workerThread === threadToStop) {
+        if (workerStopped && workerThread === threadToStop) {
             workerThread = null
         }
+        return workerStopped
     }
 
     private fun run(url: String, headers: Map<String, String>, contentLength: Long, workerGeneration: Long) {
@@ -257,7 +266,7 @@ internal class CacheFillWorker(
 
         try {
             call.execute().use { response ->
-                validateResponse(response, start)
+                validateResponse(response, start, chunkEnd)
 
                 val downloadLength = chunkEnd - start
                 val bodyStream = response.body?.byteStream()
@@ -389,21 +398,36 @@ internal class CacheFillWorker(
         return true
     }
 
-    private fun validateResponse(response: Response, requestedStart: Long) {
+    private fun validateResponse(response: Response, requestedStart: Long, requestedEndExclusive: Long) {
         if (response.code == 200 && requestedStart == 0L) return
-        if (response.code == 206 && isValidContentRange(response.header("Content-Range"), requestedStart)) return
+        if (
+            response.code == 206 &&
+            isValidContentRange(response.header("Content-Range"), requestedStart, requestedEndExclusive - 1L)
+        ) {
+            return
+        }
         if (response.code == 206) {
             throw IOException("Malformed cache fill Content-Range ${response.header("Content-Range")}")
         }
         throw IOException("Unexpected cache fill response ${response.code}")
     }
 
-    private fun isValidContentRange(contentRange: String?, requestedStart: Long): Boolean {
+    private fun isValidContentRange(
+        contentRange: String?,
+        requestedStart: Long,
+        requestedEndInclusive: Long
+    ): Boolean {
         val match = CONTENT_RANGE_PATTERN.matchEntire(contentRange ?: return false) ?: return false
         val responseStart = match.groupValues[1].toLongOrNull() ?: return false
         val responseEnd = match.groupValues[2].toLongOrNull() ?: return false
         val total = match.groupValues[3]
-        if (responseStart != requestedStart || responseEnd < responseStart) return false
+        if (
+            responseStart != requestedStart ||
+            responseEnd < responseStart ||
+            responseEnd < requestedEndInclusive
+        ) {
+            return false
+        }
         if (total == "*") return true
         val numericTotal = total.toLongOrNull() ?: return false
         return numericTotal >= responseEnd + 1L
@@ -462,14 +486,16 @@ internal class CacheFillWorker(
         }
     }
 
-    private fun joinWorkerThread(thread: Thread?) {
-        if (thread == null || thread === Thread.currentThread()) return
+    private fun joinWorkerThread(thread: Thread?): Boolean {
+        if (thread == null) return true
+        if (thread === Thread.currentThread()) return false
 
         try {
             thread.join(STOP_JOIN_TIMEOUT_MS)
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         }
+        return !thread.isAlive
     }
 
     companion object {

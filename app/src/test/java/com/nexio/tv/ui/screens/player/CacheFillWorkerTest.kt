@@ -6,6 +6,7 @@ import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Response
@@ -96,6 +97,32 @@ class CacheFillWorkerTest {
     }
 
     @Test
+    fun contentRange_mustCoverRequestedEnd() {
+        val data = ByteArray(64) { it.toByte() }
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(206)
+                .setHeader("Content-Range", "bytes 0-0/128")
+                .setBody(BufferFactory.body(data))
+        )
+        val cache = provider.getOrCreateCache()
+        val cacheKey = "movie-short-content-range"
+        val worker = worker(cacheKey = cacheKey)
+
+        try {
+            worker.downloadChunkToCache(
+                url = server.url("/movie").toString(),
+                headers = emptyMap(),
+                start = 0L,
+                end = data.size.toLong()
+            )
+            throw AssertionError("Expected short Content-Range to fail")
+        } catch (_: IOException) {
+            assertFalse(cache.isCached(cacheKey, 0L, data.size.toLong()))
+        }
+    }
+
+    @Test
     fun downloadChunkToCache_ignoresExtraBytesWhenOriginReturnsFullBody() {
         val requestedBytes = 64L
         val fullBody = ByteArray(128) { it.toByte() }
@@ -159,6 +186,138 @@ class CacheFillWorkerTest {
 
         assertEquals("bytes=64-127", request?.getHeader("Range"))
         assertTrue(worker.fillFrontierPosition >= chunkBytes)
+    }
+
+    @Test
+    fun start_withInvalidContentLength_stopsExistingWorker() {
+        val chunkBytes = 64L
+        val firstRequestEntered = CountDownLatch(1)
+        val requestCount = AtomicInteger(0)
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                requestCount.incrementAndGet()
+                firstRequestEntered.countDown()
+                try {
+                    while (true) {
+                        Thread.sleep(10L)
+                    }
+                } catch (_: InterruptedException) {
+                    throw IOException("interrupted")
+                }
+                throw IOException("unreachable")
+            }
+            .build()
+        val profile = ProviderProfile(
+            chunkBytes = chunkBytes,
+            normalFragmentBytes = chunkBytes,
+            fillHorizonBytes = chunkBytes * 16L,
+            lowWaterBytes = chunkBytes,
+            retainBehindBytes = 0L
+        )
+        val worker = worker(
+            cacheKey = "movie-invalid-content-length",
+            profile = profile,
+            okHttpClient = client,
+            safetyGapBytes = 0L
+        )
+
+        try {
+            worker.start(
+                url = server.url("/movie").toString(),
+                headers = emptyMap(),
+                contentLength = chunkBytes * 2L,
+                startPosition = 0L
+            )
+            assertTrue(firstRequestEntered.await(1, TimeUnit.SECONDS))
+
+            worker.start(
+                url = server.url("/movie").toString(),
+                headers = emptyMap(),
+                contentLength = 0L,
+                startPosition = 0L
+            )
+
+            assertFalse(worker.active)
+            assertEquals(1, requestCount.get())
+        } finally {
+            worker.stop()
+        }
+    }
+
+    @Test
+    fun start_preservesMemoryPressureAcrossReplacementStart() {
+        val chunkBytes = 64L
+        val firstRequestEntered = CountDownLatch(1)
+        val requestCount = AtomicInteger(0)
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                if (requestCount.incrementAndGet() == 1) {
+                    firstRequestEntered.countDown()
+                    try {
+                        while (true) {
+                            Thread.sleep(10L)
+                        }
+                    } catch (_: InterruptedException) {
+                        throw IOException("interrupted")
+                    }
+                    throw IOException("unreachable")
+                }
+
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(206)
+                    .message("Partial Content")
+                    .header("Content-Range", "bytes 0-63/128")
+                    .body(ByteArray(chunkBytes.toInt()) { 1 }.toResponseBody())
+                    .build()
+            }
+            .build()
+        val profile = ProviderProfile(
+            chunkBytes = chunkBytes,
+            normalFragmentBytes = chunkBytes,
+            fillHorizonBytes = chunkBytes * 16L,
+            lowWaterBytes = chunkBytes,
+            retainBehindBytes = 0L
+        )
+        val cache = provider.getOrCreateCache()
+        val cacheKey = "movie-memory-pressure-replacement"
+        val fillController = FillController(
+            profile = profile,
+            cache = cache,
+            cacheKey = cacheKey,
+            playbackByteProvider = { 0L }
+        )
+        val worker = worker(
+            cacheKey = cacheKey,
+            profile = profile,
+            okHttpClient = client,
+            fillController = fillController,
+            safetyGapBytes = 0L
+        )
+
+        try {
+            worker.start(
+                url = server.url("/movie").toString(),
+                headers = emptyMap(),
+                contentLength = chunkBytes * 2L,
+                startPosition = 0L
+            )
+            assertTrue(firstRequestEntered.await(1, TimeUnit.SECONDS))
+
+            fillController.onMemoryWarning()
+            worker.start(
+                url = server.url("/movie").toString(),
+                headers = emptyMap(),
+                contentLength = chunkBytes * 2L,
+                startPosition = 0L
+            )
+
+            assertEquals(FillController.State.MEMORY_PRESSURE, fillController.state)
+            assertEquals(1, requestCount.get())
+        } finally {
+            worker.stop()
+        }
     }
 
     @Test
@@ -269,6 +428,78 @@ class CacheFillWorkerTest {
     }
 
     @Test
+    fun start_doesNotStartReplacementWhenPreviousWorkerOutlivesJoinTimeout() {
+        val chunkBytes = 64L
+        val firstRequestEntered = CountDownLatch(1)
+        val requestCount = AtomicInteger(0)
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                if (requestCount.incrementAndGet() == 1) {
+                    firstRequestEntered.countDown()
+                    val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(1_200L)
+                    while (System.nanoTime() < deadline) {
+                        try {
+                            Thread.sleep(10L)
+                        } catch (_: InterruptedException) {
+                            // Keep the worker alive past the bounded join timeout.
+                        }
+                    }
+                    throw IOException("slow to stop")
+                }
+
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(206)
+                    .message("Partial Content")
+                    .header("Content-Range", "bytes 0-63/128")
+                    .body(ByteArray(chunkBytes.toInt()) { 1 }.toResponseBody())
+                    .build()
+            }
+            .build()
+        val profile = ProviderProfile(
+            chunkBytes = chunkBytes,
+            normalFragmentBytes = chunkBytes,
+            fillHorizonBytes = chunkBytes * 16L,
+            lowWaterBytes = chunkBytes,
+            retainBehindBytes = 0L
+        )
+        val worker = worker(
+            cacheKey = "movie-no-overlap-start",
+            profile = profile,
+            okHttpClient = client,
+            safetyGapBytes = 0L
+        )
+        var firstWorkerThread: Thread? = null
+
+        try {
+            worker.start(
+                url = server.url("/movie").toString(),
+                headers = emptyMap(),
+                contentLength = chunkBytes * 2L,
+                startPosition = 0L
+            )
+            assertTrue(firstRequestEntered.await(1, TimeUnit.SECONDS))
+            firstWorkerThread = liveCacheFillThreads().single()
+
+            worker.start(
+                url = server.url("/movie").toString(),
+                headers = emptyMap(),
+                contentLength = chunkBytes * 2L,
+                startPosition = 0L
+            )
+
+            assertEquals(1, requestCount.get())
+            assertTrue(firstWorkerThread.isAlive)
+        } finally {
+            worker.stop()
+            firstWorkerThread?.let { thread ->
+                assertTrue(waitUntil { !thread.isAlive })
+            }
+        }
+    }
+
+    @Test
     fun readBuffer_staysAt512Kb() {
         assertEquals(512 * 1024, CacheFillWorker.READ_BUFFER_SIZE)
     }
@@ -282,6 +513,7 @@ class CacheFillWorkerTest {
         profile: ProviderProfile = ProviderProfile(),
         rangeCoordinator: StreamingRangeCoordinator = StreamingRangeCoordinator(),
         okHttpClient: OkHttpClient = OkHttpClient(),
+        fillController: FillController? = null,
         safetyGapBytes: Long = 0L
     ): CacheFillWorker {
         val cache = provider.getOrCreateCache()
@@ -291,7 +523,7 @@ class CacheFillWorkerTest {
             cacheKey = cacheKey,
             okHttpClient = okHttpClient,
             bandwidthMonitor = BandwidthMonitor(),
-            fillController = FillController(
+            fillController = fillController ?: FillController(
                 profile = profile,
                 cache = cache,
                 cacheKey = cacheKey,
