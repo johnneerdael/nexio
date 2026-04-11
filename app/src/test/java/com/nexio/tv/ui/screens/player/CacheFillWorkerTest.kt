@@ -510,6 +510,82 @@ class CacheFillWorkerTest {
     }
 
     @Test
+    fun pendingReplacementStart_survivesPauseResumeAndSeek() {
+        val chunkBytes = 64L
+        val firstRequestEntered = CountDownLatch(1)
+        val releaseFirstRequest = CountDownLatch(1)
+        val requestCount = AtomicInteger(0)
+        val replacementHeader = AtomicReference<String?>()
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                if (requestCount.incrementAndGet() == 1) {
+                    firstRequestEntered.countDown()
+                    while (releaseFirstRequest.count > 0L) {
+                        try {
+                            releaseFirstRequest.await(10L, TimeUnit.MILLISECONDS)
+                        } catch (_: InterruptedException) {
+                            // Keep the worker alive while control commands churn.
+                        }
+                    }
+                    throw IOException("slow to stop")
+                }
+
+                replacementHeader.set(chain.request().header("X-Replacement"))
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(206)
+                    .message("Partial Content")
+                    .header("Content-Range", "bytes 0-63/64")
+                    .body(ByteArray(chunkBytes.toInt()) { 1 }.toResponseBody())
+                    .build()
+            }
+            .build()
+        val profile = ProviderProfile(
+            chunkBytes = chunkBytes,
+            normalFragmentBytes = chunkBytes,
+            fillHorizonBytes = chunkBytes * 16L,
+            lowWaterBytes = chunkBytes,
+            retainBehindBytes = 0L
+        )
+        val worker = worker(
+            cacheKey = "movie-pending-start-survives-controls",
+            profile = profile,
+            okHttpClient = client,
+            safetyGapBytes = 0L
+        )
+
+        try {
+            worker.start(
+                url = server.url("/movie").toString(),
+                headers = emptyMap(),
+                contentLength = chunkBytes,
+                startPosition = 0L
+            )
+            assertTrue(firstRequestEntered.await(1, TimeUnit.SECONDS))
+
+            worker.start(
+                url = server.url("/movie").toString(),
+                headers = mapOf("X-Replacement" to "pending"),
+                contentLength = chunkBytes,
+                startPosition = 0L
+            )
+
+            worker.pause()
+            worker.resume()
+            worker.seekTo(chunkBytes / 2L)
+
+            releaseFirstRequest.countDown()
+
+            assertTrue(waitUntil { requestCount.get() == 2 })
+            assertEquals("pending", replacementHeader.get())
+        } finally {
+            releaseFirstRequest.countDown()
+            worker.stop()
+        }
+    }
+
+    @Test
     fun stopThenImmediateStart_doesNotReplaceStillRunningWorker() {
         val chunkBytes = 64L
         val firstRequestEntered = CountDownLatch(1)

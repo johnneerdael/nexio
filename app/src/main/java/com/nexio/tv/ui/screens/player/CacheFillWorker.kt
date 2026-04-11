@@ -30,6 +30,7 @@ internal class CacheFillWorker(
     private val readBuffer = ByteArray(READ_BUFFER_SIZE)
     private val generation = AtomicLong(0L)
     private val commandSerial = AtomicLong(0L)
+    private val startSerial = AtomicLong(0L)
     private val pendingSeekTarget = AtomicLong(NO_PENDING_SEEK)
     private val pauseRequested = AtomicBoolean(false)
     private val stopRequested = AtomicBoolean(false)
@@ -58,6 +59,7 @@ internal class CacheFillWorker(
 
     fun start(url: String, headers: Map<String, String>, contentLength: Long, startPosition: Long) {
         val request = StartRequest(url, headers, contentLength, startPosition)
+        val requestStartSerial = startSerial.incrementAndGet()
         val stopRequest = synchronized(controlLock) {
             requestStopLocked(stopFillController = false)
         }
@@ -72,7 +74,7 @@ internal class CacheFillWorker(
             if (workerThread == null) {
                 launchStartLocked(request)
             } else if (request.contentLength > 0L && workerThread === threadToStop) {
-                pendingStart = PendingStart(request, stopRequest.commandSerial)
+                pendingStart = PendingStart(request, requestStartSerial)
             }
         }
     }
@@ -105,6 +107,7 @@ internal class CacheFillWorker(
     fun stop() {
         synchronized(controlLock) {
             requestStopLocked(stopFillController = true)
+            startSerial.incrementAndGet()
         }
     }
 
@@ -234,7 +237,7 @@ internal class CacheFillWorker(
                     val pending = pendingStart
                     if (pending != null) {
                         pendingStart = null
-                        if (pending.commandSerial == commandSerial.get()) {
+                        if (pending.startSerial == startSerial.get()) {
                             launchStartLocked(pending.request)
                         }
                     }
@@ -577,7 +580,7 @@ internal class CacheFillWorker(
 
     private data class PendingStart(
         val request: StartRequest,
-        val commandSerial: Long
+        val startSerial: Long
     )
 
     private data class StopRequest(
