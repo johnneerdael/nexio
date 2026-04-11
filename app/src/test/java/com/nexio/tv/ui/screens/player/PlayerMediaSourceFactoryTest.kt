@@ -105,6 +105,78 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun mediaSourceFactory_flagOff_doesNotOpenStreamingCache() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "media-source-cache-off-${System.nanoTime()}"
+        )
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = OkHttpClient(),
+            streamingCacheProvider = provider
+        )
+
+        factory.createMediaSource(
+            url = "https://example.com/movie.mkv",
+            headers = emptyMap()
+        )
+
+        assertFalse(provider.hasCacheInstance)
+        assertFalse(provider.cacheDirectory.exists())
+        factory.shutdown()
+    }
+
+    @Test
+    fun mediaSourceFactory_flagOnForHttp_opensStreamingCache() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "media-source-cache-on-${System.nanoTime()}"
+        )
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = OkHttpClient(),
+            streamingCacheProvider = provider
+        )
+
+        factory.streamingCacheEnabled = true
+        factory.createMediaSource(
+            url = "https://example.com/movie.mkv",
+            headers = emptyMap()
+        )
+
+        assertTrue(provider.hasCacheInstance)
+        assertTrue(provider.cacheDirectory.exists())
+        factory.shutdown()
+        provider.cacheDirectory.deleteRecursively()
+    }
+
+    @Test
+    fun mediaSourceFactory_flagOnForAsset_doesNotOpenStreamingCache() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "media-source-cache-asset-${System.nanoTime()}"
+        )
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = OkHttpClient(),
+            streamingCacheProvider = provider
+        )
+
+        factory.streamingCacheEnabled = true
+        factory.createMediaSource(
+            url = "asset:///movie.mkv",
+            headers = emptyMap()
+        )
+
+        assertFalse(provider.hasCacheInstance)
+        assertFalse(provider.cacheDirectory.exists())
+        factory.shutdown()
+    }
+
+    @Test
     fun progressivePlayback_usesPlainMedia3DatasourceWithoutCacheOrPrds() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),

@@ -22,7 +22,10 @@ import okhttp3.OkHttpClient
 internal class PlayerMediaSourceFactory(
     private val context: Context,
     private val playbackOkHttpClient: OkHttpClient,
+    private val streamingCacheProvider: StreamingCacheProvider = StreamingCacheProvider(context),
 ) {
+    var streamingCacheEnabled: Boolean = false
+
     private var customExtractorsFactory: ExtractorsFactory? = null
     private var customSubtitleParserFactory: SubtitleParser.Factory? = null
     private val loadErrorHandlingPolicy = DefaultLoadErrorHandlingPolicy()
@@ -44,7 +47,9 @@ internal class PlayerMediaSourceFactory(
         val dataSourceFactory = PlayerPlaybackNetworking.createDataSourceFactory(
             context = context,
             client = playbackOkHttpClient,
-            defaultHeaders = sanitizedHeaders
+            defaultHeaders = sanitizedHeaders,
+            streamingCacheProvider = streamingCacheProvider,
+            useStreamingCache = streamingCacheEnabled && usesHttpUpstream(url)
         )
         val resolvedMimeType = inferMimeType(
             url = url,
@@ -79,7 +84,9 @@ internal class PlayerMediaSourceFactory(
         }
     }
 
-    fun shutdown() = Unit
+    fun shutdown() {
+        streamingCacheProvider.release()
+    }
 
     private fun createDefaultExtractorsFactory(): ExtractorsFactory {
         return DefaultExtractorsFactory()
