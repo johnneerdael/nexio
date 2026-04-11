@@ -58,6 +58,53 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun playbackNetworking_flagOff_returnsPlainDefaultDataSource_andDoesNotOpenCache() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "stream-cache-off-${System.nanoTime()}"
+        )
+
+        val factory = PlayerPlaybackNetworking.createDataSourceFactory(
+            context = context,
+            client = OkHttpClient(),
+            defaultHeaders = emptyMap(),
+            streamingCacheProvider = provider,
+            useStreamingCache = false
+        )
+        val dataSource = factory.createDataSource()
+
+        assertFalse(dataSource is androidx.media3.datasource.cache.CacheDataSource)
+        assertFalse(provider.hasCacheInstance)
+        assertFalse(provider.cacheDirectory.exists())
+    }
+
+    @Test
+    fun playbackNetworking_flagOn_returnsReadOnlyCacheDataSource_andOpensCache() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "stream-cache-on-${System.nanoTime()}"
+        )
+
+        val factory = PlayerPlaybackNetworking.createDataSourceFactory(
+            context = context,
+            client = OkHttpClient(),
+            defaultHeaders = emptyMap(),
+            streamingCacheProvider = provider,
+            useStreamingCache = true
+        )
+        val dataSource = factory.createDataSource()
+
+        assertTrue(dataSource is androidx.media3.datasource.cache.CacheDataSource)
+        assertTrue(provider.hasCacheInstance)
+        assertTrue(provider.cacheDirectory.exists())
+
+        provider.release()
+        provider.cacheDirectory.deleteRecursively()
+    }
+
+    @Test
     fun progressivePlayback_usesPlainMedia3DatasourceWithoutCacheOrPrds() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
