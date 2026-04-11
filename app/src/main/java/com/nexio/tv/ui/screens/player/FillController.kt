@@ -16,10 +16,12 @@ internal class FillController(
         private set
 
     fun onStart() {
+        if (state == State.MEMORY_PRESSURE) return
         state = State.FILLING
     }
 
     fun onSeek() {
+        if (state == State.MEMORY_PRESSURE) return
         state = State.SEEK
     }
 

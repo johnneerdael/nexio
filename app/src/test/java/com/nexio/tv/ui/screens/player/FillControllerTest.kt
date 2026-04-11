@@ -90,6 +90,39 @@ class FillControllerTest {
     }
 
     @Test
+    fun memoryPressure_staysStickyAcrossSeekAndStart() {
+        val provider = StreamingCacheProvider(
+            context = appContext(),
+            cacheDirectoryName = "fill-controller-sticky-${System.nanoTime()}"
+        )
+        val cache = provider.getOrCreateCache()
+        val controller = FillController(
+            profile = ProviderProfile(
+                fillHorizonBytes = 100L,
+                lowWaterBytes = 50L,
+                retainBehindBytes = 16L
+            ),
+            cache = cache,
+            cacheKey = "movie",
+            playbackByteProvider = { 0L }
+        )
+
+        try {
+            controller.onMemoryWarning()
+            controller.onSeek()
+            controller.onStart()
+
+            assertEquals(FillController.State.MEMORY_PRESSURE, controller.state)
+            assertTrue(controller.shouldPause(fillFrontier = 1000L))
+            assertEquals(FillController.State.MEMORY_PRESSURE, controller.state)
+        } finally {
+            controller.stop()
+            provider.release()
+            provider.cacheDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun evictBehindPlayback_removesSpansFullyBehindPlaybackAndKeepsAheadSpans() {
         val cacheDirectoryName = "fill-controller-evict-${System.nanoTime()}"
         val provider = StreamingCacheProvider(
@@ -143,16 +176,16 @@ class FillControllerTest {
             .setPosition(position)
             .setLength(bytes.size.toLong())
             .build()
-        sink.open(spec)
         try {
-            sink.write(bytes, 0, bytes.size)
-        } finally {
+            sink.open(spec)
             try {
-                sink.close()
+                sink.write(bytes, 0, bytes.size)
             } finally {
-                if (lockedSpan.isHoleSpan) {
-                    cache.releaseHoleSpan(lockedSpan)
-                }
+                sink.close()
+            }
+        } finally {
+            if (lockedSpan.isHoleSpan) {
+                cache.releaseHoleSpan(lockedSpan)
             }
         }
     }
