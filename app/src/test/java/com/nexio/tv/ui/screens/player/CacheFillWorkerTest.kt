@@ -7,6 +7,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Response
@@ -422,18 +423,19 @@ class CacheFillWorkerTest {
     }
 
     @Test
-    fun start_doesNotStartReplacementWhenPreviousWorkerOutlivesJoinTimeout() {
+    fun start_defersLatestReplacementUntilPreviousWorkerExits() {
         val chunkBytes = 64L
         val firstRequestEntered = CountDownLatch(1)
+        val releaseFirstRequest = CountDownLatch(1)
         val requestCount = AtomicInteger(0)
+        val replacementHeader = AtomicReference<String?>()
         val client = OkHttpClient.Builder()
             .addInterceptor { chain ->
                 if (requestCount.incrementAndGet() == 1) {
                     firstRequestEntered.countDown()
-                    val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(1_200L)
-                    while (System.nanoTime() < deadline) {
+                    while (releaseFirstRequest.count > 0L) {
                         try {
-                            Thread.sleep(10L)
+                            releaseFirstRequest.await(10L, TimeUnit.MILLISECONDS)
                         } catch (_: InterruptedException) {
                             // Keep the worker alive past the bounded join timeout.
                         }
@@ -441,12 +443,13 @@ class CacheFillWorkerTest {
                     throw IOException("slow to stop")
                 }
 
+                replacementHeader.set(chain.request().header("X-Replacement"))
                 Response.Builder()
                     .request(chain.request())
                     .protocol(Protocol.HTTP_1_1)
                     .code(206)
                     .message("Partial Content")
-                    .header("Content-Range", "bytes 0-63/128")
+                    .header("Content-Range", "bytes 0-63/64")
                     .body(ByteArray(chunkBytes.toInt()) { 1 }.toResponseBody())
                     .build()
             }
@@ -470,7 +473,7 @@ class CacheFillWorkerTest {
             worker.start(
                 url = server.url("/movie").toString(),
                 headers = emptyMap(),
-                contentLength = chunkBytes * 2L,
+                contentLength = chunkBytes,
                 startPosition = 0L
             )
             assertTrue(firstRequestEntered.await(1, TimeUnit.SECONDS))
@@ -478,14 +481,27 @@ class CacheFillWorkerTest {
 
             worker.start(
                 url = server.url("/movie").toString(),
-                headers = emptyMap(),
-                contentLength = chunkBytes * 2L,
+                headers = mapOf("X-Replacement" to "stale"),
+                contentLength = chunkBytes,
+                startPosition = 0L
+            )
+            worker.start(
+                url = server.url("/movie").toString(),
+                headers = mapOf("X-Replacement" to "latest"),
+                contentLength = chunkBytes,
                 startPosition = 0L
             )
 
             assertEquals(1, requestCount.get())
             assertTrue(firstWorkerThread.isAlive)
+            assertEquals(listOf(firstWorkerThread), liveCacheFillThreads())
+
+            releaseFirstRequest.countDown()
+
+            assertTrue(waitUntil { requestCount.get() == 2 })
+            assertEquals("latest", replacementHeader.get())
         } finally {
+            releaseFirstRequest.countDown()
             worker.stop()
             firstWorkerThread?.let { thread ->
                 assertTrue(waitUntil { !thread.isAlive })
