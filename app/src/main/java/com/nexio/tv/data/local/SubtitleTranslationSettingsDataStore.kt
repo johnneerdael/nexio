@@ -130,6 +130,20 @@ class SubtitleTranslationSettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun saveSyncedPublicSettings(
+        enabled: Boolean,
+        provider: SubtitleTranslationProvider,
+        model: String,
+        baseUrl: String
+    ) {
+        store().edit { prefs ->
+            prefs[enabledKey] = enabled
+            prefs[providerKey] = provider.name
+            prefs[modelKey] = model.trim()
+            prefs[baseUrlKey] = baseUrl.trim()
+        }
+    }
+
     suspend fun saveConfiguration(
         provider: SubtitleTranslationProvider,
         apiKey: String,

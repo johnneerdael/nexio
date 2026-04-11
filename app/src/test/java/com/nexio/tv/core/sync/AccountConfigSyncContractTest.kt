@@ -7,6 +7,7 @@ import com.nexio.tv.data.local.MDBListSettingsDataStore
 import com.nexio.tv.data.local.OmdbSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
+import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -25,12 +26,14 @@ import com.nexio.tv.data.remote.supabase.PosterRatingsSyncSettings
 import com.nexio.tv.data.remote.supabase.PremiumizeSyncSettings
 import com.nexio.tv.data.remote.supabase.RealDebridSyncSettings
 import com.nexio.tv.data.remote.supabase.SimklAuthSyncSettings
+import com.nexio.tv.data.remote.supabase.SubtitleTranslationSyncSettings
 import com.nexio.tv.data.remote.supabase.TheIntroDbSyncSettings
 import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
-import com.nexio.tv.domain.model.TrackingProvider
-import com.nexio.tv.domain.model.ImdbSettings
 import com.nexio.tv.domain.model.AddonParserPreset
+import com.nexio.tv.domain.model.ImdbSettings
+import com.nexio.tv.domain.model.SubtitleTranslationProvider
+import com.nexio.tv.domain.model.TrackingProvider
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -48,6 +51,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -76,6 +80,12 @@ class AccountConfigSyncContractTest {
                 animeSkip = com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings(
                     enabled = true,
                     clientId = "anime-client"
+                ),
+                subtitleTranslation = SubtitleTranslationSyncSettings(
+                    enabled = true,
+                    provider = "OPENAI",
+                    model = "openai/gpt-5.2",
+                    baseUrl = "https://openrouter.ai/api/v1"
                 ),
                 gemini = GeminiSyncSettings(enabled = true),
                 posterRatings = PosterRatingsSyncSettings(rpdbEnabled = true, topPostersEnabled = true),
@@ -109,13 +119,23 @@ class AccountConfigSyncContractTest {
         val json = Json.encodeToJsonElement(AccountConfigSyncPayload.serializer(), payload) as JsonObject
 
         assertEquals(setOf("schemaVersion", "integrations", "catalogs", "playback", "formatter"), json.keys)
-        assertEquals(5, json["schemaVersion"]?.toString()?.toInt())
+        assertEquals(6, json["schemaVersion"]?.toString()?.toInt())
         assertEquals("\"custom\"", json["formatter"]?.jsonObject?.get("selectedTemplateId")?.toString())
         assertEquals(
             "\"SIMKL\"",
             json["playback"]?.jsonObject?.get("streamSelection")?.jsonObject?.get("trackingProvider")?.toString()
         )
         assertEquals("true", json["integrations"]?.jsonObject?.get("omdb")?.jsonObject?.get("enabled")?.toString())
+        val subtitleTranslation = json["integrations"]!!
+            .jsonObject["subtitleTranslation"]!!
+            .jsonObject
+        assertEquals("\"OPENAI\"", subtitleTranslation["provider"].toString())
+        assertEquals("\"openai/gpt-5.2\"", subtitleTranslation["model"].toString())
+        assertEquals("\"https://openrouter.ai/api/v1\"", subtitleTranslation["baseUrl"].toString())
+        assertEquals(
+            "true",
+            json["integrations"]?.jsonObject?.get("gemini")?.jsonObject?.get("enabled")?.toString()
+        )
         assertEquals(
             "https://custom.imdb.example",
             json["integrations"]?.jsonObject?.get("imdb")?.jsonObject?.get("baseUrl")?.toString()?.trim('"')
@@ -129,7 +149,32 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
-    fun `build account config sync rpc params includes contract version 3`() {
+    fun `buildAccountConfigSyncPayload mirrors subtitle translation enabled into legacy gemini`() {
+        val payload = buildAccountConfigSyncPayload(
+            integrations = IntegrationSettings(
+                subtitleTranslation = SubtitleTranslationSyncSettings(enabled = false),
+                gemini = GeminiSyncSettings(enabled = true)
+            ),
+            heroCatalogKeys = emptyList(),
+            homeCatalogOrderKeys = emptyList(),
+            disabledHomeCatalogKeys = emptyList(),
+            traktCatalogEnabledSet = emptyList(),
+            traktCatalogOrder = emptyList(),
+            traktSelectedPopularListKeys = emptyList(),
+            simklCatalogEnabledSet = emptyList(),
+            simklCatalogOrder = emptyList(),
+            mdbListHiddenPersonalListKeys = emptyList(),
+            mdbListSelectedTopListKeys = emptyList(),
+            mdbListCatalogOrder = emptyList(),
+            trackingProvider = TrackingProvider.TRAKT,
+            formatter = FormatterSyncSettings()
+        )
+
+        assertFalse(payload.integrations.gemini.enabled)
+    }
+
+    @Test
+    fun `build account config sync rpc params includes contract version 6`() {
         val payload = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(),
             heroCatalogKeys = listOf("hero-a"),
@@ -154,6 +199,7 @@ class AccountConfigSyncContractTest {
         assertEquals("\"app\"", pushParams["p_source"].toString())
         assertTrue(pushParams.containsKey("p_settings_payload"))
         assertEquals(ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION, pullParams["p_contract_version"]?.toString()?.toInt())
+        assertEquals(6, buildAccountConfigSyncPullParams()["p_contract_version"]?.toString()?.toInt())
     }
 
     @Test
@@ -188,6 +234,104 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `selectSubtitleTranslationApiKeySecret prefers generic when it is configured`() {
+        assertEquals(
+            "generic-key",
+            selectSubtitleTranslationApiKeySecret(
+                genericTranslationKey = "generic-key",
+                legacyGeminiKey = "legacy-key",
+                allowLegacyFallback = false
+            )
+        )
+    }
+
+    @Test
+    fun `selectSubtitleTranslationApiKeySecret returns null for generic resolve failure`() {
+        assertNull(
+            selectSubtitleTranslationApiKeySecret(
+                genericTranslationKey = null,
+                legacyGeminiKey = "legacy-key",
+                allowLegacyFallback = true
+            )
+        )
+        assertNull(
+            selectSubtitleTranslationApiKeySecret(
+                genericTranslationKey = null,
+                legacyGeminiKey = "",
+                allowLegacyFallback = true
+            )
+        )
+    }
+
+    @Test
+    fun `selectSubtitleTranslationApiKeySecret falls back to legacy when generic is blank and fallback is allowed`() {
+        assertEquals(
+            "legacy-key",
+            selectSubtitleTranslationApiKeySecret(
+                genericTranslationKey = "",
+                legacyGeminiKey = "legacy-key",
+                allowLegacyFallback = true
+            )
+        )
+    }
+
+    @Test
+    fun `selectSubtitleTranslationApiKeySecret preserves blank generic when fallback is not allowed`() {
+        assertEquals(
+            "",
+            selectSubtitleTranslationApiKeySecret(
+                genericTranslationKey = "",
+                legacyGeminiKey = "legacy-key",
+                allowLegacyFallback = false
+            )
+        )
+    }
+
+    @Test
+    fun `selectSubtitleTranslationApiKeySecret preserves blank generic when both remote keys are blank`() {
+        assertEquals(
+            "",
+            selectSubtitleTranslationApiKeySecret(
+                genericTranslationKey = "",
+                legacyGeminiKey = "",
+                allowLegacyFallback = true
+            )
+        )
+    }
+
+    @Test
+    fun `legacyGeminiApiKeySecretForPush syncs Gemini provider key to legacy slot`() {
+        assertEquals(
+            "gemini-key",
+            legacyGeminiApiKeySecretForPush(
+                providerName = "GEMINI",
+                translationApiKey = "gemini-key"
+            )
+        )
+    }
+
+    @Test
+    fun `legacyGeminiApiKeySecretForPush clears legacy slot for blank Gemini provider key`() {
+        assertEquals(
+            "",
+            legacyGeminiApiKeySecretForPush(
+                providerName = "GEMINI",
+                translationApiKey = ""
+            )
+        )
+    }
+
+    @Test
+    fun `legacyGeminiApiKeySecretForPush leaves legacy slot untouched for non Gemini providers`() {
+        assertNull(
+            legacyGeminiApiKeySecretForPush(
+                providerName = "OPENAI",
+                translationApiKey = "openai-key"
+            )
+        )
+    }
+
+    @Test
     fun `observeAccountConfigSyncChanges emits for account owned change signals`() = runTest {
         val heroCatalogSelections = MutableSharedFlow<Unit>(replay = 1)
         val homeCatalogOrderKeys = MutableSharedFlow<Unit>(replay = 1)
@@ -199,7 +343,7 @@ class AccountConfigSyncContractTest {
         val theIntroDbSettings = MutableSharedFlow<Unit>(replay = 1)
         val animeSkipEnabled = MutableSharedFlow<Unit>(replay = 1)
         val animeSkipClientId = MutableSharedFlow<Unit>(replay = 1)
-        val geminiSettings = MutableSharedFlow<Unit>(replay = 1)
+        val subtitleTranslationSettings = MutableSharedFlow<Unit>(replay = 1)
         val imdbSettings = MutableSharedFlow<Unit>(replay = 1)
         val posterRatingsSettings = MutableSharedFlow<Unit>(replay = 1)
         val premiumizeSettings = MutableSharedFlow<Unit>(replay = 1)
@@ -225,7 +369,7 @@ class AccountConfigSyncContractTest {
                 theIntroDbSettings = theIntroDbSettings,
                 animeSkipEnabled = animeSkipEnabled,
                 animeSkipClientId = animeSkipClientId,
-                geminiSettings = geminiSettings,
+                subtitleTranslationSettings = subtitleTranslationSettings,
                 imdbSettings = imdbSettings,
                 posterRatingsSettings = posterRatingsSettings,
                 premiumizeSettings = premiumizeSettings,
@@ -265,7 +409,7 @@ class AccountConfigSyncContractTest {
                 theIntroDbSettings = MutableSharedFlow<Unit>(),
                 animeSkipEnabled = MutableSharedFlow<Unit>(),
                 animeSkipClientId = MutableSharedFlow<Unit>(),
-                geminiSettings = MutableSharedFlow<Unit>(),
+                subtitleTranslationSettings = MutableSharedFlow<Unit>(),
                 imdbSettings = imdbSettings,
                 posterRatingsSettings = MutableSharedFlow<Unit>(),
                 premiumizeSettings = MutableSharedFlow<Unit>(),
@@ -339,7 +483,7 @@ class AccountConfigSyncContractTest {
         val omdbSettingsDataStore = mockk<OmdbSettingsDataStore>(relaxed = true)
         val theIntroDbSettingsDataStore = mockk<TheIntroDbSettingsDataStore>(relaxed = true)
         val animeSkipSettingsDataStore = mockk<AnimeSkipSettingsDataStore>(relaxed = true)
-        val geminiSettingsDataStore = mockk<com.nexio.tv.data.local.GeminiSettingsDataStore>(relaxed = true)
+        val subtitleTranslationSettingsDataStore = mockk<SubtitleTranslationSettingsDataStore>(relaxed = true)
         val imdbSettingsDataStore = mockk<ImdbSettingsDataStore>(relaxed = true)
         val posterRatingsSettingsDataStore = mockk<PosterRatingsSettingsDataStore>(relaxed = true)
         val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true)
@@ -368,6 +512,12 @@ class AccountConfigSyncContractTest {
                 ),
                 omdb = OmdbSyncSettings(enabled = true),
                 animeSkip = com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings(enabled = true, clientId = "anime-client"),
+                subtitleTranslation = SubtitleTranslationSyncSettings(
+                    enabled = true,
+                    provider = "OPENAI",
+                    model = "openai/gpt-5.2",
+                    baseUrl = "https://openrouter.ai/api/v1"
+                ),
                 gemini = GeminiSyncSettings(enabled = true),
                 posterRatings = PosterRatingsSyncSettings(rpdbEnabled = true, topPostersEnabled = false)
             ),
@@ -405,7 +555,7 @@ class AccountConfigSyncContractTest {
             omdbSettingsDataStore = omdbSettingsDataStore,
             theIntroDbSettingsDataStore = theIntroDbSettingsDataStore,
             animeSkipSettingsDataStore = animeSkipSettingsDataStore,
-            geminiSettingsDataStore = geminiSettingsDataStore,
+            subtitleTranslationSettingsDataStore = subtitleTranslationSettingsDataStore,
             imdbSettingsDataStore = imdbSettingsDataStore,
             posterRatingsSettingsDataStore = posterRatingsSettingsDataStore,
             traktSettingsDataStore = traktSettingsDataStore,
@@ -425,6 +575,14 @@ class AccountConfigSyncContractTest {
         coVerify(exactly = 1) { theIntroDbSettingsDataStore.setShowRecapButton(false) }
         coVerify(exactly = 1) { theIntroDbSettingsDataStore.setShowCreditsButton(true) }
         coVerify(exactly = 1) { theIntroDbSettingsDataStore.setShowPreviewButton(false) }
+        coVerify(exactly = 1) {
+            subtitleTranslationSettingsDataStore.saveSyncedPublicSettings(
+                enabled = true,
+                provider = SubtitleTranslationProvider.OPENAI,
+                model = "openai/gpt-5.2",
+                baseUrl = "https://openrouter.ai/api/v1"
+            )
+        }
         coVerify(exactly = 1) { mdbListSettingsDataStore.setCatalogPreferences(setOf("personal-hidden"), setOf("top-selected"), listOf("mdb-top")) }
         coVerify(exactly = 1) {
             traktSettingsDataStore.setCatalogPreferences(
