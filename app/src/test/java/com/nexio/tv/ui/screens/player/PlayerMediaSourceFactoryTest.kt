@@ -7,6 +7,7 @@ import io.mockk.mockk
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -55,6 +56,84 @@ class PlayerMediaSourceFactoryTest {
 
         assertFalse(provider.hasCacheInstance)
         assertFalse(provider.cacheDirectory.exists())
+    }
+
+    @Test
+    fun streamingCacheProvider_sharesCacheAcrossProvidersForSameDirectory() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val cacheDirectoryName = "stream-cache-shared-${System.nanoTime()}"
+        val firstProvider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = cacheDirectoryName
+        )
+        val secondProvider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = cacheDirectoryName
+        )
+
+        try {
+            val firstCache = firstProvider.getOrCreateCache()
+            val secondCache = secondProvider.getOrCreateCache()
+
+            assertSame(firstCache, secondCache)
+            assertTrue(firstProvider.hasCacheInstance)
+            assertTrue(secondProvider.hasCacheInstance)
+        } finally {
+            firstProvider.release()
+            secondProvider.release()
+            firstProvider.cacheDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun streamingCacheProvider_releaseKeepsSharedCacheAliveUntilLastOwnerReleases() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val cacheDirectoryName = "stream-cache-refcount-${System.nanoTime()}"
+        val firstProvider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = cacheDirectoryName
+        )
+        val secondProvider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = cacheDirectoryName
+        )
+
+        try {
+            assertSame(firstProvider.getOrCreateCache(), secondProvider.getOrCreateCache())
+
+            firstProvider.release()
+
+            assertFalse(firstProvider.hasCacheInstance)
+            assertTrue(secondProvider.hasCacheInstance)
+
+            secondProvider.getOrCreateCache()
+            assertTrue(secondProvider.hasCacheInstance)
+        } finally {
+            firstProvider.release()
+            secondProvider.release()
+            firstProvider.cacheDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun streamingCacheProvider_releaseIsIdempotent() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "stream-cache-idempotent-${System.nanoTime()}"
+        )
+
+        try {
+            provider.getOrCreateCache()
+
+            provider.release()
+            provider.release()
+
+            assertFalse(provider.hasCacheInstance)
+        } finally {
+            provider.release()
+            provider.cacheDirectory.deleteRecursively()
+        }
     }
 
     @Test
