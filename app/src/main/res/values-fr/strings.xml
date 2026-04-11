@@ -723,7 +723,6 @@
   <string name="settings_profiles">Profils</string>
   <string name="settings_profiles_subtitle">Gérer les profils utilisateur.</string>
   <string name="account_stat_addons">addons</string>
-  <string name="settings_gemini_subtitle">Traduction de sous-titres par IA avec Gemini</string>
   <string name="playback_section_network_cache">Réseau et cache</string>
   <string name="playback_section_network_cache_desc">Configure le cache VOD sur disque et les paramètres de transfert de flux progressif.</string>
   <string name="playback_buffer_disk_cache_title">Cache disque</string>
@@ -800,16 +799,6 @@
   <string name="subtitle_ai_translate_missing_target">Choisis une langue de sous-titres principale avant d\'activer la traduction par IA.</string>
   <string name="subtitle_ai_translate_unsupported_format">Ce format de sous-titres n\'est pas encore pris en charge pour la traduction par IA.</string>
   <string name="subtitle_ai_translate_failed">Échec de la traduction des sous-titres.</string>
-  <string name="gemini_title">Google Gemini</string>
-  <string name="gemini_subtitle">Clé AI Studio et traduction des sous-titres par IA</string>
-  <string name="gemini_enable_title">Activer Gemini</string>
-  <string name="gemini_enable_subtitle">Autorise la traduction des sous-titres par IA pendant la lecture</string>
-  <string name="gemini_api_key_title">Clé API Google AI Studio</string>
-  <string name="gemini_api_key_subtitle">Stockée via la synchronisation de ton compte Nexio et utilisée pour la traduction</string>
-  <string name="gemini_dialog_title">Clé API Google AI Studio</string>
-  <string name="gemini_dialog_subtitle">Colle ta clé API Gemini depuis Google AI Studio</string>
-  <string name="gemini_dialog_placeholder">Saisis la clé API de Google AI Studio</string>
-  <string name="gemini_missing_api_key">Entre une clé API avant d\'activer Gemini.</string>
   <string name="subtitle_all">Tous</string>
   <string name="subtitle_section_core">Base</string>
   <string name="subtitle_section_advanced">Avancé</string>

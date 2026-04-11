@@ -722,7 +722,6 @@
   <string name="settings_profiles">Perfiles</string>
   <string name="settings_profiles_subtitle">Administrar perfiles de usuario.</string>
   <string name="account_stat_addons">complementos</string>
-  <string name="settings_gemini_subtitle">Traducción de subtítulos mediante IA con Gemini</string>
   <string name="playback_section_network_cache">Red y caché</string>
   <string name="playback_section_network_cache_desc">Configura la caché VOD de disco y los ajustes de transferencia de streams progresivos.</string>
   <string name="playback_buffer_disk_cache_title">Caché de disco</string>
@@ -799,16 +798,6 @@
   <string name="subtitle_ai_translate_missing_target">Elige un idioma de subtítulos principal antes de habilitar la traducción por IA.</string>
   <string name="subtitle_ai_translate_unsupported_format">Este formato de subtítulos aún no es compatible con la traducción por IA.</string>
   <string name="subtitle_ai_translate_failed">No se pudo traducir el subtítulo.</string>
-  <string name="gemini_title">Google Gemini</string>
-  <string name="gemini_subtitle">Clave de AI Studio y traducción de subtítulos</string>
-  <string name="gemini_enable_title">Habilitar Gemini</string>
-  <string name="gemini_enable_subtitle">Permite la traducción de subtítulos por IA durante la reproducción</string>
-  <string name="gemini_api_key_title">Clave API de AI Studio</string>
-  <string name="gemini_api_key_subtitle">Almacenada a través de la sincronización de tu cuenta de Nexio y usada para la traducción</string>
-  <string name="gemini_dialog_title">Clave API de Google AI Studio</string>
-  <string name="gemini_dialog_subtitle">Pega tu clave API de Gemini generada en Google AI Studio</string>
-  <string name="gemini_dialog_placeholder">Introduce la clave API de Google AI Studio</string>
-  <string name="gemini_missing_api_key">Introduce una clave API antes de habilitar Gemini.</string>
   <string name="subtitle_all">Todos</string>
   <string name="subtitle_section_core">Básico</string>
   <string name="subtitle_section_advanced">Avanzado</string>
