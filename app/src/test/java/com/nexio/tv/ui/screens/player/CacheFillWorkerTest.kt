@@ -8,6 +8,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -62,6 +63,33 @@ class CacheFillWorkerTest {
     }
 
     @Test
+    fun downloadChunkToCache_ignoresExtraBytesWhenOriginReturnsFullBody() {
+        val requestedBytes = 64L
+        val fullBody = ByteArray(128) { it.toByte() }
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(BufferFactory.body(fullBody))
+        )
+        val cache = provider.getOrCreateCache()
+        val cacheKey = "movie-range-ignored"
+        val worker = worker(cacheKey = cacheKey)
+
+        val bytesWritten = worker.downloadChunkToCache(
+            url = server.url("/movie").toString(),
+            headers = emptyMap(),
+            start = 0L,
+            end = requestedBytes
+        )
+
+        val request = server.takeRequest(1, TimeUnit.SECONDS)
+        assertEquals("bytes=0-63", request?.getHeader("Range"))
+        assertEquals(requestedBytes, bytesWritten)
+        assertTrue(cache.isCached(cacheKey, 0L, requestedBytes))
+        assertFalse(cache.isCached(cacheKey, requestedBytes, fullBody.size - requestedBytes))
+    }
+
+    @Test
     fun start_skipsPlaybackOwnedRange() {
         val chunkBytes = 64L
         val profile = ProviderProfile(
@@ -95,9 +123,8 @@ class CacheFillWorkerTest {
         val request = server.takeRequest(1, TimeUnit.SECONDS)
         worker.stop()
 
-        val startsAfterOwnedRange = request?.getHeader("Range") == "bytes=64-127"
-        assertTrue(worker.fillFrontierPosition >= chunkBytes || startsAfterOwnedRange)
-        assertTrue(request == null || startsAfterOwnedRange)
+        assertEquals("bytes=64-127", request?.getHeader("Range"))
+        assertTrue(worker.fillFrontierPosition >= chunkBytes)
     }
 
     @Test
