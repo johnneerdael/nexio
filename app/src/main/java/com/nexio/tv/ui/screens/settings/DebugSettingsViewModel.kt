@@ -36,6 +36,11 @@ class DebugSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            dataStore.streamingCacheEnabled.collectLatest { enabled ->
+                _uiState.update { it.copy(streamingCacheEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
             playerSettingsDataStore.playerSettings.collectLatest { settings ->
                 _uiState.update {
                     it.copy(
@@ -57,6 +62,9 @@ class DebugSettingsViewModel @Inject constructor(
             }
             is DebugSettingsEvent.ToggleSyncCodeFeatures -> {
                 viewModelScope.launch { dataStore.setSyncCodeFeaturesEnabled(event.enabled) }
+            }
+            is DebugSettingsEvent.ToggleStreamingCache -> {
+                viewModelScope.launch { dataStore.setStreamingCacheEnabled(event.enabled) }
             }
             is DebugSettingsEvent.SignIn -> {
                 viewModelScope.launch {
@@ -102,6 +110,7 @@ class DebugSettingsViewModel @Inject constructor(
 data class DebugSettingsUiState(
     val accountTabEnabled: Boolean = false,
     val syncCodeFeaturesEnabled: Boolean = false,
+    val streamingCacheEnabled: Boolean = false,
     val dv5ToneMapToSdrEnabled: Boolean = false,
     val dv5HardwareToneMapToSdrEnabled: Boolean = false,
     val dv5HardwareToneMapCpuFallbackEnabled: Boolean = false,
@@ -112,6 +121,7 @@ data class DebugSettingsUiState(
 sealed class DebugSettingsEvent {
     data class ToggleAccountTab(val enabled: Boolean) : DebugSettingsEvent()
     data class ToggleSyncCodeFeatures(val enabled: Boolean) : DebugSettingsEvent()
+    data class ToggleStreamingCache(val enabled: Boolean) : DebugSettingsEvent()
     data class ToggleDv5ToneMapToSdr(val enabled: Boolean) : DebugSettingsEvent()
     data class ToggleDv5HardwareToneMapToSdr(val enabled: Boolean) : DebugSettingsEvent()
     data class ToggleDv5HardwareToneMapCpuFallback(val enabled: Boolean) : DebugSettingsEvent()
