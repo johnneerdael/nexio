@@ -8,6 +8,7 @@ import androidx.media3.datasource.cache.CacheDataSink
 import androidx.media3.datasource.cache.CacheSpan
 import androidx.media3.datasource.cache.SimpleCache
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicLong
 import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -25,6 +26,7 @@ internal class CacheFillWorker(
     private val safetyGapBytes: Long = 8L * 1024L * 1024L
 ) {
     private val readBuffer = ByteArray(READ_BUFFER_SIZE)
+    private val generation = AtomicLong(0L)
 
     @Volatile
     private var fillFrontier: Long = 0L
@@ -55,6 +57,7 @@ internal class CacheFillWorker(
 
         stop()
 
+        val workerGeneration = generation.incrementAndGet()
         fillFrontier = maxOf(startPosition, safeStart())
         isActive = true
         isPaused = false
@@ -62,7 +65,7 @@ internal class CacheFillWorker(
 
         workerThread = Thread(
             {
-                run(url = url, headers = headers, contentLength = contentLength)
+                run(url = url, headers = headers, contentLength = contentLength, workerGeneration = workerGeneration)
             },
             THREAD_NAME
         ).apply {
@@ -89,6 +92,7 @@ internal class CacheFillWorker(
     }
 
     fun stop() {
+        generation.incrementAndGet()
         isActive = false
         isPaused = false
         restartRequested = false
@@ -98,9 +102,14 @@ internal class CacheFillWorker(
         workerThread = null
     }
 
-    private fun run(url: String, headers: Map<String, String>, contentLength: Long) {
+    private fun run(url: String, headers: Map<String, String>, contentLength: Long, workerGeneration: Long) {
         try {
-            while (isActive && fillFrontier < contentLength && !Thread.currentThread().isInterrupted) {
+            while (
+                isCurrentGeneration(workerGeneration) &&
+                isActive &&
+                fillFrontier < contentLength &&
+                !Thread.currentThread().isInterrupted
+            ) {
                 if (isPaused) {
                     sleepBriefly()
                     continue
@@ -126,7 +135,7 @@ internal class CacheFillWorker(
                 }
 
                 val bytesWritten = try {
-                    downloadChunkToCache(url, headers, start, end)
+                    downloadChunkToCache(url, headers, start, end, workerGeneration)
                 } catch (e: IOException) {
                     if (restartRequested || isPaused) {
                         restartRequested = false
@@ -146,12 +155,14 @@ internal class CacheFillWorker(
                 }
             }
         } catch (e: IOException) {
-            if (isActive) {
+            if (isCurrentGeneration(workerGeneration) && isActive) {
                 isActive = false
             }
         } finally {
-            isActive = false
-            activeCall = null
+            if (isCurrentGeneration(workerGeneration)) {
+                isActive = false
+                activeCall = null
+            }
         }
     }
 
@@ -160,11 +171,16 @@ internal class CacheFillWorker(
         url: String,
         headers: Map<String, String>,
         start: Long,
-        end: Long
+        end: Long,
+        workerGeneration: Long = generation.get()
     ): Long {
         if (end <= start) return 0L
 
         val call = okHttpClient.newCall(buildRequest(url, headers, start, end))
+        if (!isCurrentGeneration(workerGeneration)) {
+            call.cancel()
+            return 0L
+        }
         activeCall = call
 
         call.execute().use { response ->
@@ -180,19 +196,23 @@ internal class CacheFillWorker(
                 .setPosition(start)
                 .setLength(end - start)
                 .build()
-            val sink = CacheDataSink(cache, profile.normalFragmentBytes, READ_BUFFER_SIZE)
+            val sink = CacheDataSink(cache, profile.normalFragmentBytes)
             val lockedSpan = reserveCacheSpan(start, end)
             var totalRead = 0L
 
-            sink.open(dataSpec)
+            var failure: Throwable? = null
             try {
+                sink.open(dataSpec)
                 while (!call.isCanceled()) {
+                    val remainingBytes = end - start - totalRead
+                    if (remainingBytes <= 0L) break
+
                     if (rangeCoordinator.isOwnedByPlaybackFallback(start + totalRead, end)) {
                         call.cancel()
                         break
                     }
 
-                    val read = bodyStream.read(readBuffer, 0, readBuffer.size)
+                    val read = bodyStream.read(readBuffer, 0, minOf(readBuffer.size.toLong(), remainingBytes).toInt())
                     if (read == -1) break
 
                     sink.write(readBuffer, 0, read)
@@ -200,16 +220,31 @@ internal class CacheFillWorker(
                     bandwidthMonitor.onBytesTransferred(read.toLong())
                     StreamingMetrics.fillWorkerBytesWritten.addAndGet(read.toLong())
                 }
+            } catch (t: Throwable) {
+                failure = t
+                throw t
             } finally {
-                sink.close()
-                releaseHoleSpan(lockedSpan)
-                if (activeCall === call) {
+                try {
+                    sink.close()
+                } catch (closeFailure: Throwable) {
+                    if (failure == null) {
+                        throw closeFailure
+                    }
+                    failure.addSuppressed(closeFailure)
+                } finally {
+                    releaseHoleSpan(lockedSpan)
+                }
+                if (isCurrentGeneration(workerGeneration) && activeCall === call) {
                     activeCall = null
                 }
             }
 
             return totalRead
         }
+    }
+
+    private fun isCurrentGeneration(workerGeneration: Long): Boolean {
+        return generation.get() == workerGeneration
     }
 
     private fun reserveCacheSpan(start: Long, end: Long): CacheSpan {
