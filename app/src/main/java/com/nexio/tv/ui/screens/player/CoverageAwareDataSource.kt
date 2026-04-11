@@ -114,7 +114,11 @@ internal class CoverageAwareDataSource(
         } else {
             spec.withSegmentLength(segmentLength, cacheKey)
         }
-        val endExclusive = spec.position + segmentLength
+        val endExclusive = if (spec.length == C.LENGTH_UNSET.toLong()) {
+            Long.MAX_VALUE
+        } else {
+            spec.position + segmentLength
+        }
         val token = coordinator.markFallbackOwned(spec.position, endExclusive)
         try {
             openSegment(upstreamDataSourceFactory.createDataSource(), segmentSpec)
