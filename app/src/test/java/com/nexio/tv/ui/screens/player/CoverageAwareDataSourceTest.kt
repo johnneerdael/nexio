@@ -149,6 +149,34 @@ class CoverageAwareDataSourceTest {
     }
 
     @Test
+    fun open_finiteLongRequestReadsCachedPrefixThenUpstreamSuffix() {
+        val uri = Uri.parse("https://example.com/movie.mkv")
+        val requestLength = CoverageAwareDataSource.OPEN_ENDED_SEGMENT_BYTES + 1L
+        val spec = DataSpec.Builder().setUri(uri).setPosition(0L).setLength(requestLength).build()
+        val cacheKey = cacheKeyFactory.buildCacheKey(spec)
+        val cachedPrefix = ByteArray(CoverageAwareDataSource.OPEN_ENDED_SEGMENT_BYTES.toInt()) { 1 }
+        val upstreamSuffix = byteArrayOf(2)
+        writeCacheSpan(uri = uri, cacheKey = cacheKey, position = 0L, bytes = cachedPrefix)
+        val upstreamOpens = AtomicInteger(0)
+        val source = dataSource(
+            upstream = FakeDataSource(upstreamSuffix, upstreamOpens),
+            startup = true
+        )
+
+        assertEquals(requestLength, source.open(spec))
+        val prefixBuffer = ByteArray(cachedPrefix.size)
+        assertEquals(cachedPrefix.size, source.read(prefixBuffer, 0, prefixBuffer.size))
+        assertArrayEquals(cachedPrefix, prefixBuffer)
+        val suffixBuffer = ByteArray(upstreamSuffix.size)
+        assertEquals(upstreamSuffix.size, source.read(suffixBuffer, 0, suffixBuffer.size))
+        assertArrayEquals(upstreamSuffix, suffixBuffer)
+        assertEquals(C.RESULT_END_OF_INPUT, source.read(suffixBuffer, 0, suffixBuffer.size))
+        source.close()
+
+        assertEquals(1, upstreamOpens.get())
+    }
+
+    @Test
     fun open_partialCacheThenFallback_reusesOriginalCacheKeyForInternalSegments() {
         val uri = Uri.parse("https://example.com/movie.mkv")
         val originalLengthKeyFactory = object : CacheKeyFactory {
@@ -191,6 +219,26 @@ class CoverageAwareDataSourceTest {
 
         assertArrayEquals(byteArrayOf(1, 2, 3, 4, 5, 6), buffer)
         assertEquals(cacheKey, requestedUrgentKey.get())
+    }
+
+    @Test
+    fun read_zeroLengthReturnsZeroEvenWithoutSourceOrAfterEof() {
+        val uri = Uri.parse("https://example.com/movie.mkv")
+        val spec = DataSpec.Builder().setUri(uri).setPosition(0L).setLength(3L).build()
+        val source = dataSource(
+            upstream = FakeDataSource(byteArrayOf(1, 2, 3), AtomicInteger(0)),
+            startup = true
+        )
+        val buffer = ByteArray(3)
+
+        assertEquals(0, source.read(buffer, 0, 0))
+
+        source.open(spec)
+        assertEquals(0, source.read(buffer, 0, 0))
+        assertEquals(3, source.read(buffer, 0, buffer.size))
+        assertEquals(C.RESULT_END_OF_INPUT, source.read(buffer, 0, buffer.size))
+        assertEquals(0, source.read(buffer, 0, 0))
+        source.close()
     }
 
     @Test
