@@ -232,6 +232,9 @@ internal class CacheFillWorker(
 
                 val resultCommandSerial = commandSerial.get()
                 if (rangeCoordinator.isOwnedByPlaybackFallback(start, end)) {
+                    if (urgentChunk) {
+                        pendingUrgentTarget.compareAndSet(NO_PENDING_SEEK, urgentTarget)
+                    }
                     sleepBriefly()
                     continue
                 }
@@ -257,6 +260,9 @@ internal class CacheFillWorker(
                     continue
                 } else if (result.bytesWritten <= 0L) {
                     if (rangeCoordinator.isOwnedByPlaybackFallback(start, end)) {
+                        if (urgentChunk) {
+                            pendingUrgentTarget.compareAndSet(NO_PENDING_SEEK, urgentTarget)
+                        }
                         sleepBriefly()
                         continue
                     }
