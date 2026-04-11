@@ -88,7 +88,15 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             resetLoadingOverlayForNewStream()
             playerInitializationStartedAtMs = System.currentTimeMillis()
             val playerSettings = playerSettingsDataStore.playerSettings.first()
-            mediaSourceFactory.streamingCacheEnabled = debugSettingsDataStore.streamingCacheEnabled.first()
+            val requestedStreamingCache = debugSettingsDataStore.streamingCacheEnabled.first()
+            val blockedByKillSwitch = StreamingCacheKillSwitch.hasRecentLowMemoryOrSignaledExit(context)
+            mediaSourceFactory.streamingCacheEnabled = StreamingCacheKillSwitch.shouldEnable(
+                requested = requestedStreamingCache,
+                hasRecentLowMemoryOrSignaledExit = blockedByKillSwitch
+            )
+            if (requestedStreamingCache && blockedByKillSwitch) {
+                debugSettingsDataStore.setStreamingCacheEnabled(false)
+            }
             lastPreferredAudioLanguage = playerSettings.preferredAudioLanguage
             lastSecondaryPreferredAudioLanguage = playerSettings.secondaryPreferredAudioLanguage
             val experimentalFireOsIecPassthroughEnabled =
