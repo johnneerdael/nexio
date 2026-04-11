@@ -35,6 +35,7 @@ internal class CoverageAwareDataSource(
     }
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        if (length == 0) return 0
         while (true) {
             val source = activeSource ?: return C.RESULT_END_OF_INPUT
             val read = source.read(buffer, offset, length)
@@ -69,7 +70,7 @@ internal class CoverageAwareDataSource(
         val cachedLength = cache.getCachedLength(cacheKey, spec.position, queryLength)
 
         when {
-            isFullyCached(spec, cachedLength, queryLength) -> {
+            isFullyCached(spec, cachedLength) -> {
                 StreamingMetrics.cacheHits.incrementAndGet()
                 openSegment(cacheReadDataSourceFactory.createDataSource(), spec.withCacheKey(cacheKey))
                 pendingSpec = null
@@ -160,8 +161,8 @@ internal class CoverageAwareDataSource(
         }
     }
 
-    private fun isFullyCached(spec: DataSpec, cachedLength: Long, queryLength: Long): Boolean {
-        return spec.length != C.LENGTH_UNSET.toLong() && cachedLength >= queryLength
+    private fun isFullyCached(spec: DataSpec, cachedLength: Long): Boolean {
+        return spec.length != C.LENGTH_UNSET.toLong() && cachedLength >= spec.length
     }
 
     private fun queryLength(spec: DataSpec): Long {
