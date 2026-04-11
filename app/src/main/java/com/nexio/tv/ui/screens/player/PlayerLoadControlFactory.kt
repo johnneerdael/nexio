@@ -19,6 +19,45 @@ internal object PlayerLoadControlFactory {
         val prioritizeTimeOverSizeThresholdsForStreaming: Boolean
     )
 
+    sealed interface LoadControlSelection {
+        data object Default : LoadControlSelection
+        data class Budgeted(val spec: LoadControlSpec) : LoadControlSelection
+    }
+
+    fun selectLoadControl(
+        streamingCacheEnabled: Boolean,
+        effectiveSampleQueueBytes: Long,
+        estimatedBitrateBps: Long = DEFAULT_ESTIMATED_BITRATE_BPS
+    ): LoadControlSelection {
+        return if (streamingCacheEnabled) {
+            LoadControlSelection.Budgeted(
+                buildBudgetedSpec(
+                    effectiveSampleQueueBytes = effectiveSampleQueueBytes,
+                    estimatedBitrateBps = estimatedBitrateBps
+                )
+            )
+        } else {
+            LoadControlSelection.Default
+        }
+    }
+
+    fun buildForStreamingCacheDecision(
+        streamingCacheEnabled: Boolean,
+        effectiveSampleQueueBytes: Long,
+        estimatedBitrateBps: Long = DEFAULT_ESTIMATED_BITRATE_BPS
+    ): DefaultLoadControl {
+        return when (
+            val selection = selectLoadControl(
+                streamingCacheEnabled = streamingCacheEnabled,
+                effectiveSampleQueueBytes = effectiveSampleQueueBytes,
+                estimatedBitrateBps = estimatedBitrateBps
+            )
+        ) {
+            LoadControlSelection.Default -> buildDefaultLoadControl()
+            is LoadControlSelection.Budgeted -> buildBudgetedLoadControl(selection.spec)
+        }
+    }
+
     fun buildDefaultLoadControl(): DefaultLoadControl {
         return DefaultLoadControl.Builder().build()
     }
@@ -31,6 +70,10 @@ internal object PlayerLoadControlFactory {
             effectiveSampleQueueBytes = effectiveSampleQueueBytes,
             estimatedBitrateBps = estimatedBitrateBps
         )
+        return buildBudgetedLoadControl(spec)
+    }
+
+    private fun buildBudgetedLoadControl(spec: LoadControlSpec): DefaultLoadControl {
         return DefaultLoadControl.Builder()
             .setBufferDurationsMsForStreaming(
                 spec.minBufferMs,

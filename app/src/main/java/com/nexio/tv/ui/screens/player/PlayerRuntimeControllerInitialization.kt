@@ -203,13 +203,10 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     "bridge=${dv7ToDv81Probe.bridgeVersion ?: "n/a"} " +
                     "host=${url.safeHost()}"
             )
-            val loadControl = if (streamingCacheDecision.enabled) {
-                PlayerLoadControlFactory.buildBudgetedLoadControl(
-                    effectiveSampleQueueBytes = MemoryBudget(context).effectiveSampleQueueBytes
-                )
-            } else {
-                PlayerLoadControlFactory.buildDefaultLoadControl()
-            }
+            val loadControl = PlayerLoadControlFactory.buildForStreamingCacheDecision(
+                streamingCacheEnabled = streamingCacheDecision.enabled,
+                effectiveSampleQueueBytes = MemoryBudget(context).effectiveSampleQueueBytes
+            )
 
             if (kodiCustomAudioSinkEnabled) {
                 safeAudioForcedStreamUrls.remove(url)
