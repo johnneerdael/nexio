@@ -4,12 +4,11 @@ import android.net.Uri
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSpec
-import androidx.media3.datasource.cache.CacheDataSink
 import androidx.media3.datasource.cache.ContentMetadata
-import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import io.mockk.every
 import io.mockk.mockk
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
@@ -632,14 +631,9 @@ class PlayerMediaSourceFactoryTest {
     @Test
     fun streamingCacheFillSession_awaitSpanCommitted_requiresFullMinLength() {
         val context = appContext()
-        val provider = StreamingCacheProvider(
-            context = context,
-            cacheDirectoryName = "media-source-fill-await-span-${System.nanoTime()}"
-        )
-        val cache = provider.getOrCreateCache()
+        val cache = mockk<androidx.media3.datasource.cache.SimpleCache>(relaxed = true)
         val cacheKeyFactory = StableCacheKeyFactory()
-        val url = "https://example.com/movie.mkv"
-        val cacheKey = cacheKey(cacheKeyFactory, url)
+        val cacheKey = "movie"
         val session = StreamingCacheFillSession(
             cache = cache,
             cacheKeyFactory = cacheKeyFactory,
@@ -649,7 +643,7 @@ class PlayerMediaSourceFactoryTest {
         )
 
         try {
-            writeSpan(cache, cacheKey, position = 0L, bytes = ByteArray(8) { 1 })
+            every { cache.getCachedLength(cacheKey, 0L, 16L) } returns 8L
 
             assertFalse(
                 session.awaitSpanCommitted(
@@ -660,7 +654,7 @@ class PlayerMediaSourceFactoryTest {
                 )
             )
 
-            writeSpan(cache, cacheKey, position = 8L, bytes = ByteArray(8) { 2 })
+            every { cache.getCachedLength(cacheKey, 0L, 16L) } returns 16L
 
             assertTrue(
                 session.awaitSpanCommitted(
@@ -672,8 +666,6 @@ class PlayerMediaSourceFactoryTest {
             )
         } finally {
             session.stop()
-            provider.release()
-            provider.cacheDirectory.deleteRecursively()
         }
     }
 
@@ -847,30 +839,4 @@ class PlayerMediaSourceFactoryTest {
             .filter { thread -> thread.name == CacheFillWorker.THREAD_NAME && thread.isAlive }
     }
 
-    private fun writeSpan(cache: SimpleCache, key: String, position: Long, bytes: ByteArray) {
-        val lockedSpan = try {
-            cache.startReadWrite(key, position, bytes.size.toLong())
-        } catch (e: InterruptedException) {
-            throw AssertionError("unexpected interruption while reserving cache span", e)
-        }
-        val sink = CacheDataSink(cache, 8L * 1024L * 1024L)
-        val spec = DataSpec.Builder()
-            .setUri(Uri.parse("https://example.com/movie.mkv"))
-            .setKey(key)
-            .setPosition(position)
-            .setLength(bytes.size.toLong())
-            .build()
-        try {
-            sink.open(spec)
-            try {
-                sink.write(bytes, 0, bytes.size)
-            } finally {
-                sink.close()
-            }
-        } finally {
-            if (lockedSpan.isHoleSpan) {
-                cache.releaseHoleSpan(lockedSpan)
-            }
-        }
-    }
 }

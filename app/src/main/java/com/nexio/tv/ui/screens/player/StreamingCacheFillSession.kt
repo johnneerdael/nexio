@@ -7,6 +7,7 @@ import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.cache.CacheKeyFactory
 import androidx.media3.datasource.cache.ContentMetadataMutations
 import androidx.media3.datasource.cache.SimpleCache
+import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -173,13 +174,13 @@ internal class StreamingCacheFillSession(
     ): Boolean {
         val normalizedPosition = position.coerceAtLeast(0L)
         val normalizedLength = minLength.coerceAtLeast(1L)
-        val deadlineMs = android.os.SystemClock.elapsedRealtime() + timeoutMs.coerceAtLeast(0L)
-        while (android.os.SystemClock.elapsedRealtime() <= deadlineMs) {
+        val deadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs.coerceAtLeast(0L))
+        while (true) {
             val cachedLength = cache.getCachedLength(cacheKey, normalizedPosition, normalizedLength)
             if (cachedLength >= normalizedLength) return true
+            if (System.nanoTime() > deadlineNs) return false
             Thread.sleep(25L)
         }
-        return false
     }
 
     override fun estimatedBytesPerSecond(): Long {
