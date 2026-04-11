@@ -176,15 +176,7 @@ internal class CacheFillWorker(
 
                 val resultCommandSerial = commandSerial.get()
                 if (rangeCoordinator.isOwnedByPlaybackFallback(start, end)) {
-                    applyChunkResult(
-                        ChunkResult(
-                            generation = workerGeneration,
-                            commandSerial = resultCommandSerial,
-                            start = start,
-                            end = end,
-                            bytesWritten = end - start
-                        )
-                    )
+                    sleepBriefly()
                     continue
                 }
 
@@ -208,6 +200,7 @@ internal class CacheFillWorker(
                     continue
                 } else if (result.bytesWritten <= 0L) {
                     if (rangeCoordinator.isOwnedByPlaybackFallback(start, end)) {
+                        sleepBriefly()
                         continue
                     }
                     break
@@ -439,7 +432,7 @@ internal class CacheFillWorker(
         if (
             responseStart != requestedStart ||
             responseEnd < responseStart ||
-            responseEnd < requestedEndInclusive
+            responseEnd != requestedEndInclusive
         ) {
             return false
         }

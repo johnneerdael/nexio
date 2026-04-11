@@ -102,7 +102,7 @@ class CacheFillWorkerTest {
         server.enqueue(
             MockResponse()
                 .setResponseCode(206)
-                .setHeader("Content-Range", "bytes 0-0/128")
+                .setHeader("Content-Range", "bytes 0-999/1000")
                 .setBody(BufferFactory.body(data))
         )
         val cache = provider.getOrCreateCache()
@@ -150,7 +150,7 @@ class CacheFillWorkerTest {
     }
 
     @Test
-    fun start_skipsPlaybackOwnedRange() {
+    fun start_yieldsPlaybackOwnedRangeWithoutAdvancingFrontier() {
         val chunkBytes = 64L
         val profile = ProviderProfile(
             chunkBytes = chunkBytes,
@@ -161,12 +161,6 @@ class CacheFillWorkerTest {
         )
         val coordinator = StreamingRangeCoordinator()
         coordinator.markFallbackOwned(start = 0L, endExclusive = chunkBytes)
-        server.enqueue(
-            MockResponse()
-                .setResponseCode(206)
-                .setHeader("Content-Range", "bytes 64-127/128")
-                .setBody(BufferFactory.body(ByteArray(chunkBytes.toInt()) { 1 }))
-        )
         val worker = worker(
             cacheKey = "movie-skip",
             profile = profile,
@@ -181,11 +175,11 @@ class CacheFillWorkerTest {
             startPosition = 0L
         )
 
-        val request = server.takeRequest(1, TimeUnit.SECONDS)
+        val request = server.takeRequest(200, TimeUnit.MILLISECONDS)
         worker.stop()
 
-        assertEquals("bytes=64-127", request?.getHeader("Range"))
-        assertTrue(worker.fillFrontierPosition >= chunkBytes)
+        assertEquals(null, request)
+        assertEquals(0L, worker.fillFrontierPosition)
     }
 
     @Test
