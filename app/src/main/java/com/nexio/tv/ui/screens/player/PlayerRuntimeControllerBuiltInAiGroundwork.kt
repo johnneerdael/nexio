@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.player
 
 import androidx.media3.common.text.Cue
 import com.nexio.tv.R
+import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.update
@@ -42,8 +43,12 @@ internal fun PlayerRuntimeController.refreshBuiltInAiOverlayState() {
 
 internal fun builtInCueTranslationCacheKey(
     text: String,
-    targetLanguage: String
-): String = "${targetLanguage.trim().lowercase()}|${text.trim()}"
+    targetLanguage: String,
+    settings: SubtitleTranslationSettings
+): String {
+    val settingsSignature = "${settings.provider}|${settings.model.trim()}|${settings.baseUrl.trim()}"
+    return "${targetLanguage.trim().lowercase()}|$settingsSignature|${text.trim()}"
+}
 
 internal fun translateBuiltInCuesWhenAllTextsReady(
     cues: List<Cue>,
@@ -107,9 +112,12 @@ internal fun PlayerRuntimeController.handleBuiltInCueGroupUpdate() {
     }
 
     val targetLanguage = _uiState.value.subtitleStyle.preferredLanguage.trim()
+    val settings = subtitleTranslationSettings
     val sourceTexts = currentBuiltInCueTexts().distinct()
     val cachedTranslations = sourceTexts.mapNotNull { text ->
-        builtInAiCueTranslationCache[builtInCueTranslationCacheKey(text, targetLanguage)]
+        builtInAiCueTranslationCache[
+            builtInCueTranslationCacheKey(text, targetLanguage, settings)
+        ]
             ?.let { translatedText -> text to translatedText }
     }.toMap()
     val cachedCues = translateBuiltInCuesWhenAllTextsReady(cueGroup.cues, cachedTranslations)
@@ -141,10 +149,10 @@ internal fun PlayerRuntimeController.handleBuiltInCueGroupUpdate() {
     }
 
     builtInAiSubtitleTranslationJob = scope.launch {
-        val result = geminiSubtitleTranslationService.translateCueTexts(
+        val result = subtitleTranslationService.translateCueTexts(
             texts = sourceTexts,
             targetLanguageCode = targetLanguage,
-            apiKey = geminiApiKey
+            settings = settings
         )
         if (requestGeneration != builtInAiCueGeneration) {
             return@launch
@@ -154,7 +162,7 @@ internal fun PlayerRuntimeController.handleBuiltInCueGroupUpdate() {
                 translatedTexts.forEach { (sourceText, translatedText) ->
                     if (translatedText.isNotBlank()) {
                         builtInAiCueTranslationCache[
-                            builtInCueTranslationCacheKey(sourceText, targetLanguage)
+                            builtInCueTranslationCacheKey(sourceText, targetLanguage, settings)
                         ] = translatedText
                     }
                 }

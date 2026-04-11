@@ -1069,7 +1069,8 @@ internal fun PlayerRuntimeController.tryAutoSelectPreferredSubtitleFromAvailable
         playerReady = backendIsReady(),
         addonSubtitleDiscoveryPending =
             state.isLoadingAddonSubtitles || startupSubtitlePreparationJob?.isActive == true,
-        aiTranslationConfigured = geminiEnabled && geminiApiKey.isNotBlank(),
+        aiTranslationConfigured =
+            subtitleTranslationSettings.enabled && subtitleTranslationSettings.apiKey.isNotBlank(),
         startupPhase = allowStartupAiFallback,
         videoRelease = currentParsedRelease
     )

@@ -2,7 +2,7 @@ package com.nexio.tv.ui.screens.player
 
 import androidx.media3.common.MimeTypes
 import com.nexio.tv.R
-import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
+import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.domain.model.Subtitle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -58,7 +58,7 @@ internal fun PlayerRuntimeController.clearAiTranslationStateSilently() {
 }
 
 internal fun PlayerRuntimeController.enableAiSubtitles() {
-    if (!geminiEnabled || geminiApiKey.isBlank()) {
+    if (!subtitleTranslationSettings.enabled || subtitleTranslationSettings.apiKey.isBlank()) {
         _uiState.update {
             it.copy(
                 aiSubtitlesEnabled = false,
@@ -180,10 +180,10 @@ internal fun PlayerRuntimeController.translateAndSelectAddonSubtitle(sourceSubti
             return@launch
         }
 
-        val result = geminiSubtitleTranslationService.translateSubtitle(
+        val result = subtitleTranslationService.translateSubtitle(
             sourceSubtitle = sourceSubtitle,
             targetLanguageCode = targetLanguage,
-            apiKey = geminiApiKey
+            settings = subtitleTranslationSettings
         )
 
         if (requestGeneration != aiTranslationSelectionGeneration) {
@@ -231,11 +231,11 @@ private suspend fun PlayerRuntimeController.translateAndActivateAddonOverlayCues
     if (sourceTexts.isEmpty()) {
         throw UnsupportedOperationException(context.getString(R.string.subtitle_ai_translate_unsupported_format))
     }
-    val translatedTexts = geminiSubtitleTranslationService.translateCueTexts(
+    val translatedTexts = subtitleTranslationService.translateCueTexts(
         texts = sourceTexts,
         targetLanguageCode = targetLanguage,
-        apiKey = geminiApiKey,
-        chunkConfig = GeminiSubtitleTranslationService.ADDON_OVERLAY_CUE_CHUNK_CONFIG
+        settings = subtitleTranslationSettings,
+        chunkConfig = SubtitleTranslationService.ADDON_OVERLAY_CUE_CHUNK_CONFIG
     ).getOrThrow()
 
     if (requestGeneration != aiTranslationSelectionGeneration) {
