@@ -70,7 +70,7 @@ class CacheFillWorkerTest {
         server.enqueue(
             MockResponse()
                 .setResponseCode(206)
-                .setHeader("Content-Range", "bytes 10-73/128")
+                .setHeader("Content-Range", "bytes 0-63/32")
                 .setBody(BufferFactory.body(data))
         )
         val cache = provider.getOrCreateCache()
@@ -103,7 +103,7 @@ class CacheFillWorkerTest {
         val cacheKey = "movie-range-ignored"
         val worker = worker(cacheKey = cacheKey)
 
-        val bytesWritten = worker.downloadChunkToCache(
+        val result = worker.downloadChunkToCache(
             url = server.url("/movie").toString(),
             headers = emptyMap(),
             start = 0L,
@@ -112,7 +112,7 @@ class CacheFillWorkerTest {
 
         val request = server.takeRequest(1, TimeUnit.SECONDS)
         assertEquals("bytes=0-63", request?.getHeader("Range"))
-        assertEquals(requestedBytes, bytesWritten)
+        assertEquals(requestedBytes, result.bytesWritten)
         assertTrue(cache.isCached(cacheKey, 0L, requestedBytes))
         assertFalse(cache.isCached(cacheKey, requestedBytes, fullBody.size - requestedBytes))
     }
@@ -157,6 +157,50 @@ class CacheFillWorkerTest {
     }
 
     @Test
+    fun staleChunkProgressCannotOverwriteProcessedSeek() {
+        val chunkBytes = 64L
+        val seekTarget = chunkBytes * 4L
+        val profile = ProviderProfile(
+            chunkBytes = chunkBytes,
+            normalFragmentBytes = chunkBytes,
+            fillHorizonBytes = chunkBytes * 16L,
+            lowWaterBytes = chunkBytes,
+            retainBehindBytes = 0L
+        )
+        val worker = worker(
+            cacheKey = "movie-command-seek",
+            profile = profile,
+            safetyGapBytes = 0L
+        )
+
+        worker.start(
+            url = server.url("/movie").toString(),
+            headers = emptyMap(),
+            contentLength = seekTarget + chunkBytes,
+            startPosition = 0L
+        )
+        val staleCommandSerial = worker.commandSerialForTesting()
+
+        worker.seekTo(seekTarget)
+        assertTrue(
+            waitUntil {
+                worker.fillFrontierPosition == seekTarget
+            }
+        )
+
+        val applied = worker.applyChunkResultForTesting(
+            resultStart = 0L,
+            resultEnd = chunkBytes,
+            bytesWritten = chunkBytes,
+            resultCommandSerial = staleCommandSerial
+        )
+        worker.stop()
+
+        assertFalse(applied)
+        assertEquals(seekTarget, worker.fillFrontierPosition)
+    }
+
+    @Test
     fun readBuffer_staysAt512Kb() {
         assertEquals(512 * 1024, CacheFillWorker.READ_BUFFER_SIZE)
     }
@@ -188,6 +232,15 @@ class CacheFillWorkerTest {
             playbackByteProvider = { 0L },
             safetyGapBytes = safetyGapBytes
         )
+    }
+
+    private fun waitUntil(condition: () -> Boolean): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+        while (System.nanoTime() < deadline) {
+            if (condition()) return true
+            Thread.sleep(10L)
+        }
+        return condition()
     }
 
     private object BufferFactory {
