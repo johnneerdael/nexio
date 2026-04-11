@@ -3,8 +3,13 @@ package com.nexio.tv.ui.screens.player
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import java.io.IOException
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
@@ -201,6 +206,69 @@ class CacheFillWorkerTest {
     }
 
     @Test
+    fun start_waitsForPreviousWorkerThreadToExitBeforeStartingAgain() {
+        val chunkBytes = 64L
+        val firstRequestEntered = CountDownLatch(1)
+        val isFirstRequest = AtomicBoolean(true)
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                if (isFirstRequest.getAndSet(false)) {
+                    firstRequestEntered.countDown()
+                    try {
+                        while (true) {
+                            Thread.sleep(10L)
+                        }
+                    } catch (_: InterruptedException) {
+                        Thread.sleep(150L)
+                        throw IOException("interrupted")
+                    }
+                }
+
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(206)
+                    .message("Partial Content")
+                    .header("Content-Range", "bytes 0-63/128")
+                    .body(ByteArray(chunkBytes.toInt()) { 1 }.toResponseBody())
+                    .build()
+            }
+            .build()
+        val profile = ProviderProfile(
+            chunkBytes = chunkBytes,
+            normalFragmentBytes = chunkBytes,
+            fillHorizonBytes = chunkBytes * 16L,
+            lowWaterBytes = chunkBytes,
+            retainBehindBytes = 0L
+        )
+        val worker = worker(
+            cacheKey = "movie-serialized-start",
+            profile = profile,
+            okHttpClient = client,
+            safetyGapBytes = 0L
+        )
+
+        worker.start(
+            url = server.url("/movie").toString(),
+            headers = emptyMap(),
+            contentLength = chunkBytes * 2L,
+            startPosition = 0L
+        )
+        assertTrue(firstRequestEntered.await(1, TimeUnit.SECONDS))
+        val firstWorkerThread = liveCacheFillThreads().single()
+
+        worker.start(
+            url = server.url("/movie").toString(),
+            headers = emptyMap(),
+            contentLength = chunkBytes * 2L,
+            startPosition = 0L
+        )
+        worker.stop()
+
+        assertFalse(firstWorkerThread.isAlive)
+    }
+
+    @Test
     fun readBuffer_staysAt512Kb() {
         assertEquals(512 * 1024, CacheFillWorker.READ_BUFFER_SIZE)
     }
@@ -213,6 +281,7 @@ class CacheFillWorkerTest {
         cacheKey: String,
         profile: ProviderProfile = ProviderProfile(),
         rangeCoordinator: StreamingRangeCoordinator = StreamingRangeCoordinator(),
+        okHttpClient: OkHttpClient = OkHttpClient(),
         safetyGapBytes: Long = 0L
     ): CacheFillWorker {
         val cache = provider.getOrCreateCache()
@@ -220,7 +289,7 @@ class CacheFillWorkerTest {
             profile = profile,
             cache = cache,
             cacheKey = cacheKey,
-            okHttpClient = OkHttpClient(),
+            okHttpClient = okHttpClient,
             bandwidthMonitor = BandwidthMonitor(),
             fillController = FillController(
                 profile = profile,
@@ -241,6 +310,11 @@ class CacheFillWorkerTest {
             Thread.sleep(10L)
         }
         return condition()
+    }
+
+    private fun liveCacheFillThreads(): List<Thread> {
+        return Thread.getAllStackTraces().keys
+            .filter { thread -> thread.name == CacheFillWorker.THREAD_NAME && thread.isAlive }
     }
 
     private object BufferFactory {
