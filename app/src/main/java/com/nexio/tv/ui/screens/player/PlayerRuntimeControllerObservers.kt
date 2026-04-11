@@ -289,12 +289,11 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
     }
 }
 
-internal fun PlayerRuntimeController.observeGeminiSettings() {
+internal fun PlayerRuntimeController.observeSubtitleTranslationSettings() {
     scope.launch {
-        geminiSettingsDataStore.settings.collectLatest { settings ->
-            geminiEnabled = settings.enabled
-            geminiApiKey = settings.apiKey.trim()
-            val configured = geminiEnabled && geminiApiKey.isNotBlank()
+        subtitleTranslationSettingsDataStore.settings.collectLatest { settings ->
+            subtitleTranslationSettings = settings
+            val configured = settings.enabled && settings.apiKey.isNotBlank()
             val wasEnabled = _uiState.value.aiSubtitlesEnabled
             if (!configured && wasEnabled) {
                 disableAiSubtitles()

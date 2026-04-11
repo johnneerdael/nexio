@@ -3,7 +3,8 @@ package com.nexio.tv.ui.screens.player
 import androidx.media3.common.Format
 import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.text.CueGroupSubtitleTranslator
-import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
+import com.nexio.tv.data.repository.SubtitleTranslationService
+import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -11,11 +12,11 @@ import java.util.concurrent.atomic.AtomicInteger
 
 private const val BUILT_IN_SUBTITLE_PREFETCH_DURATION_US = 20_000_000L
 
-internal class GeminiBuiltInSubtitleCueTranslator(
+internal class BuiltInSubtitleCueTranslator(
     private val scope: CoroutineScope,
-    private val translationService: GeminiSubtitleTranslationService,
+    private val translationService: SubtitleTranslationService,
     private val isEnabledProvider: () -> Boolean,
-    private val apiKeyProvider: () -> String,
+    private val settingsProvider: () -> SubtitleTranslationSettings,
     private val targetLanguageProvider: () -> String?,
     private val onTranslatingChanged: (Boolean) -> Unit,
     private val onTranslationError: (String?) -> Unit
@@ -27,12 +28,12 @@ internal class GeminiBuiltInSubtitleCueTranslator(
         if (!isEnabledProvider()) {
             return null
         }
-        val apiKey = apiKeyProvider().trim()
+        val settings = settingsProvider()
         val targetLanguage = targetLanguageProvider()?.trim().orEmpty()
-        if (apiKey.isBlank() || targetLanguage.isBlank()) {
+        if (!settings.enabled || settings.apiKey.isBlank() || targetLanguage.isBlank()) {
             return null
         }
-        return "${format.sampleMimeType}|$targetLanguage|${apiKey.hashCode()}"
+        return "${format.sampleMimeType}|$targetLanguage|${settings.provider}|${settings.model}|${settings.baseUrl}|${settings.apiKey.hashCode()}"
     }
 
     override fun getPrefetchDurationUs(): Long = BUILT_IN_SUBTITLE_PREFETCH_DURATION_US
@@ -42,9 +43,9 @@ internal class GeminiBuiltInSubtitleCueTranslator(
         cueGroups: List<CueGroup>,
         callback: CueGroupSubtitleTranslator.TranslationCallback
     ) {
-        val apiKey = apiKeyProvider().trim()
+        val settings = settingsProvider()
         val targetLanguage = targetLanguageProvider()?.trim().orEmpty()
-        if (!isEnabledProvider() || apiKey.isBlank() || targetLanguage.isBlank()) {
+        if (!isEnabledProvider() || !settings.enabled || settings.apiKey.isBlank() || targetLanguage.isBlank()) {
             callback.onFailure(IllegalStateException("Built-in subtitle translation is not configured."))
             return
         }
@@ -71,7 +72,7 @@ internal class GeminiBuiltInSubtitleCueTranslator(
                 translationService.translateCueTexts(
                     texts = sourceTexts,
                     targetLanguageCode = targetLanguage,
-                    apiKey = apiKey
+                    settings = settings
                 ).onSuccess { translatedTexts ->
                     val translatedCueGroups = cueGroups.map { cueGroup ->
                         CueGroup(
