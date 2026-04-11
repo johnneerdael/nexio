@@ -708,6 +708,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                                     "host=${currentStreamUrl.safeHost()}"
                             )
                         }
+                        mediaSourceFactory.onStreamingCacheFirstFrameRendered()
                         hasRenderedFirstFrame = true
                         _uiState.update { it.copy(showLoadingOverlay = false) }
                     }
