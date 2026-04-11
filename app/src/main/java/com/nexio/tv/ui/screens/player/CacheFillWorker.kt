@@ -27,6 +27,8 @@ internal class CacheFillWorker(
 ) {
     private val readBuffer = ByteArray(READ_BUFFER_SIZE)
     private val generation = AtomicLong(0L)
+    private val transferEpoch = AtomicLong(0L)
+    private val callLock = Any()
 
     @Volatile
     private var fillFrontier: Long = 0L
@@ -58,6 +60,7 @@ internal class CacheFillWorker(
         stop()
 
         val workerGeneration = generation.incrementAndGet()
+        transferEpoch.incrementAndGet()
         fillFrontier = maxOf(startPosition, safeStart())
         isActive = true
         isPaused = false
@@ -77,6 +80,7 @@ internal class CacheFillWorker(
     fun seekTo(newPosition: Long) {
         fillController.onSeek()
         restartRequested = true
+        transferEpoch.incrementAndGet()
         cancelActiveCall()
         fillFrontier = maxOf(newPosition, safeStart())
         isPaused = false
@@ -84,6 +88,7 @@ internal class CacheFillWorker(
 
     fun pause() {
         isPaused = true
+        transferEpoch.incrementAndGet()
         cancelActiveCall()
     }
 
@@ -93,6 +98,7 @@ internal class CacheFillWorker(
 
     fun stop() {
         generation.incrementAndGet()
+        transferEpoch.incrementAndGet()
         isActive = false
         isPaused = false
         restartRequested = false
@@ -134,6 +140,7 @@ internal class CacheFillWorker(
                     continue
                 }
 
+                val chunkEpoch = transferEpoch.get()
                 val bytesWritten = try {
                     downloadChunkToCache(url, headers, start, end, workerGeneration)
                 } catch (e: IOException) {
@@ -143,7 +150,10 @@ internal class CacheFillWorker(
                     }
                     throw e
                 }
-                if (bytesWritten > 0L) {
+                if (!canApplyChunkProgress(workerGeneration, chunkEpoch)) {
+                    restartRequested = false
+                    continue
+                } else if (bytesWritten > 0L) {
                     fillFrontier = maxOf(fillFrontier, start + bytesWritten)
                 } else if (restartRequested || isPaused) {
                     restartRequested = false
@@ -177,16 +187,21 @@ internal class CacheFillWorker(
         if (end <= start) return 0L
 
         val call = okHttpClient.newCall(buildRequest(url, headers, start, end))
-        if (!isCurrentGeneration(workerGeneration)) {
-            call.cancel()
-            return 0L
+        synchronized(callLock) {
+            if (!isCurrentGeneration(workerGeneration)) {
+                call.cancel()
+                return 0L
+            }
+            activeCall = call
         }
-        activeCall = call
 
         call.execute().use { response ->
             val isValidResponse = response.code == 206 || (response.code == 200 && start == 0L)
             if (!isValidResponse) {
                 throw IOException("Unexpected cache fill response ${response.code}")
+            }
+            if (response.code == 206 && response.header("Content-Range")?.startsWith("bytes $start-") != true) {
+                throw IOException("Malformed cache fill Content-Range ${response.header("Content-Range")}")
             }
 
             val bodyStream = response.body?.byteStream() ?: return 0L
@@ -234,8 +249,10 @@ internal class CacheFillWorker(
                 } finally {
                     releaseHoleSpan(lockedSpan)
                 }
-                if (isCurrentGeneration(workerGeneration) && activeCall === call) {
-                    activeCall = null
+                synchronized(callLock) {
+                    if (isCurrentGeneration(workerGeneration) && activeCall === call) {
+                        activeCall = null
+                    }
                 }
             }
 
@@ -245,6 +262,13 @@ internal class CacheFillWorker(
 
     private fun isCurrentGeneration(workerGeneration: Long): Boolean {
         return generation.get() == workerGeneration
+    }
+
+    private fun canApplyChunkProgress(workerGeneration: Long, chunkEpoch: Long): Boolean {
+        return isCurrentGeneration(workerGeneration) &&
+            transferEpoch.get() == chunkEpoch &&
+            !restartRequested &&
+            !isPaused
     }
 
     private fun reserveCacheSpan(start: Long, end: Long): CacheSpan {
@@ -282,8 +306,10 @@ internal class CacheFillWorker(
     }
 
     private fun cancelActiveCall() {
-        activeCall?.cancel()
-        activeCall = null
+        synchronized(callLock) {
+            activeCall?.cancel()
+            activeCall = null
+        }
     }
 
     private fun safeStart(): Long {

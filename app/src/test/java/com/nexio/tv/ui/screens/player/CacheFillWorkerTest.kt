@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.player
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -43,6 +44,7 @@ class CacheFillWorkerTest {
         server.enqueue(
             MockResponse()
                 .setResponseCode(206)
+                .setHeader("Content-Range", "bytes 0-63/64")
                 .setBody(BufferFactory.body(data))
         )
         val cache = provider.getOrCreateCache()
@@ -60,6 +62,32 @@ class CacheFillWorkerTest {
         assertEquals("bytes=0-63", request?.getHeader("Range"))
         assertEquals("Bearer token", request?.getHeader("Authorization"))
         assertTrue(cache.isCached(cacheKey, 0L, data.size.toLong()))
+    }
+
+    @Test
+    fun downloadChunkToCache_rejectsMalformedContentRange() {
+        val data = ByteArray(64) { it.toByte() }
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(206)
+                .setHeader("Content-Range", "bytes 10-73/128")
+                .setBody(BufferFactory.body(data))
+        )
+        val cache = provider.getOrCreateCache()
+        val cacheKey = "movie-bad-content-range"
+        val worker = worker(cacheKey = cacheKey)
+
+        try {
+            worker.downloadChunkToCache(
+                url = server.url("/movie").toString(),
+                headers = emptyMap(),
+                start = 0L,
+                end = data.size.toLong()
+            )
+            throw AssertionError("Expected malformed Content-Range to fail")
+        } catch (_: IOException) {
+            assertFalse(cache.isCached(cacheKey, 0L, data.size.toLong()))
+        }
     }
 
     @Test
@@ -104,6 +132,7 @@ class CacheFillWorkerTest {
         server.enqueue(
             MockResponse()
                 .setResponseCode(206)
+                .setHeader("Content-Range", "bytes 64-127/128")
                 .setBody(BufferFactory.body(ByteArray(chunkBytes.toInt()) { 1 }))
         )
         val worker = worker(
