@@ -1,29 +1,29 @@
 package com.nexio.tv.ui.screens.player
 
-import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentSkipListMap
+import java.util.HashMap
+import java.util.LinkedHashMap
+import java.util.TreeMap
+import java.util.concurrent.atomic.AtomicLong
 
 internal class StreamingRangeCoordinator : PlaybackFallbackRangeChecker {
-    private val fallbackOwnedRegions = ConcurrentSkipListMap<Long, ConcurrentHashMap<String, Region>>()
-    private val coveredRegions = ConcurrentSkipListMap<Long, CoveredRegion>()
-    private val tokenIndex = ConcurrentHashMap<String, Region>()
+    private val fallbackOwnedRegions = TreeMap<Long, LinkedHashMap<String, Region>>()
+    private val coveredRegions = TreeMap<Long, CoveredRegion>()
+    private val tokenIndex = HashMap<String, Region>()
+    private val nextTokenId = AtomicLong(0L)
     private val lock = Any()
 
     fun markFallbackOwned(start: Long, endExclusive: Long): String {
         val normalizedStart = start.coerceAtLeast(0L)
         val normalizedEnd = endExclusive.coerceAtLeast(normalizedStart)
-        val token = UUID.randomUUID().toString()
+        val token = nextTokenId.incrementAndGet().toString()
         val region = Region(token, normalizedStart, normalizedEnd)
 
         synchronized(lock) {
-            fallbackOwnedRegions.compute(normalizedStart) { _, existing ->
-                (existing ?: ConcurrentHashMap()).apply {
-                    put(token, region)
-                }
-            }
+            fallbackOwnedRegions.getOrPut(normalizedStart) {
+                LinkedHashMap()
+            }[token] = region
             tokenIndex[token] = region
-            addCoveredRegion(region)
+            addCoveredRegion(region.start, region.endExclusive)
         }
         return token
     }
@@ -31,11 +31,13 @@ internal class StreamingRangeCoordinator : PlaybackFallbackRangeChecker {
     fun clearFallbackOwnership(token: String) {
         synchronized(lock) {
             val region = tokenIndex.remove(token) ?: return
-            fallbackOwnedRegions.computeIfPresent(region.start) { _, regions ->
+            fallbackOwnedRegions[region.start]?.let { regions ->
                 regions.remove(token)
-                if (regions.isEmpty()) null else regions
+                if (regions.isEmpty()) {
+                    fallbackOwnedRegions.remove(region.start)
+                }
             }
-            rebuildCoveredRegions()
+            clearCoveredRegion(region)
         }
     }
 
@@ -53,11 +55,14 @@ internal class StreamingRangeCoordinator : PlaybackFallbackRangeChecker {
         }
     }
 
-    private fun addCoveredRegion(region: Region) {
-        if (region.endExclusive <= region.start) return
+    private fun addCoveredRegion(start: Long, endExclusive: Long) {
+        if (endExclusive <= start) return
 
-        var mergedStart = region.start
-        var mergedEnd = region.endExclusive
+        var mergedStart = start
+        var mergedEnd = endExclusive
+
+        splitCoveredRegionAt(mergedStart)
+        splitCoveredRegionAt(mergedEnd)
 
         val floor = coveredRegions.floorEntry(mergedStart)
         if (floor != null && floor.value.endExclusive > mergedStart) {
@@ -76,11 +81,32 @@ internal class StreamingRangeCoordinator : PlaybackFallbackRangeChecker {
         coveredRegions[mergedStart] = CoveredRegion(mergedStart, mergedEnd)
     }
 
-    private fun rebuildCoveredRegions() {
-        coveredRegions.clear()
-        tokenIndex.values
-            .sortedBy { it.start }
-            .forEach(::addCoveredRegion)
+    private fun clearCoveredRegion(region: Region) {
+        if (region.endExclusive <= region.start) return
+
+        splitCoveredRegionAt(region.start)
+        splitCoveredRegionAt(region.endExclusive)
+        coveredRegions.subMap(region.start, true, region.endExclusive, false).clear()
+
+        for (regionsAtStart in fallbackOwnedRegions.headMap(region.endExclusive, false).values) {
+            for (activeRegion in regionsAtStart.values) {
+                val overlapStart = maxOf(region.start, activeRegion.start)
+                val overlapEnd = minOf(region.endExclusive, activeRegion.endExclusive)
+                if (overlapEnd > overlapStart) {
+                    addCoveredRegion(overlapStart, overlapEnd)
+                }
+            }
+        }
+    }
+
+    private fun splitCoveredRegionAt(point: Long) {
+        val floor = coveredRegions.floorEntry(point) ?: return
+        val region = floor.value
+        if (point <= region.start || point >= region.endExclusive) return
+
+        coveredRegions.remove(floor.key)
+        coveredRegions[region.start] = CoveredRegion(region.start, point)
+        coveredRegions[point] = CoveredRegion(point, region.endExclusive)
     }
 
     private data class Region(

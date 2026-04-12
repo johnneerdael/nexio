@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.player
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.runner.RunWith
 import org.junit.Test
@@ -8,6 +9,30 @@ import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class StreamingRangeCoordinatorTest {
+
+    @Test
+    fun fallbackTokens_areMonotonicStringsWithoutUuidFormat() {
+        val coordinator = StreamingRangeCoordinator()
+
+        val first = coordinator.markFallbackOwned(0L, 10L)
+        val second = coordinator.markFallbackOwned(20L, 30L)
+
+        assertEquals("1", first)
+        assertEquals("2", second)
+    }
+
+    @Test
+    fun clearingOneOverlappingRangeKeepsOtherRangeActive() {
+        val coordinator = StreamingRangeCoordinator()
+        val first = coordinator.markFallbackOwned(0L, 100L)
+        val second = coordinator.markFallbackOwned(50L, 150L)
+
+        coordinator.clearFallbackOwnership(first)
+
+        assertTrue(coordinator.isOwnedByPlaybackFallback(75L, 80L))
+        coordinator.clearFallbackOwnership(second)
+        assertFalse(coordinator.isOwnedByPlaybackFallback(75L, 80L))
+    }
 
     @Test
     fun fallbackRange_overlapsContainedFillRange() {
