@@ -222,11 +222,11 @@ data class PlayerSettings(
     val streamAutoPlayRegex: String = "",
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
     val streamAutoPlayPreferBingeGroupForNextEpisode: Boolean = true,
-    val deterministicAutoplayEnabled: Boolean = false,
+    val deterministicAutoplayEnabled: Boolean = true,
     val autoplayMaxBitrateEnabled: Boolean = true,
     val autoplayMaxBitrateMbps: Double? = null,
-    val autoplayBandwidthMode: AutoplayBandwidthMode = AutoplayBandwidthMode.AUTO,
-    val manualBitrateLimitMbps: Double = 20.0,
+    val autoplayBandwidthMode: AutoplayBandwidthMode = AutoplayBandwidthMode.MANUAL,
+    val manualBitrateLimitMbps: Double = 40.0,
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
     val nextEpisodeThresholdPercent: Float = 99f,
     val nextEpisodeThresholdMinutesBeforeEnd: Float = 2f,
@@ -284,6 +284,8 @@ private val migrationLegacyStreamAutoplaySelectionRetiredEnabledKey =
     booleanPreferencesKey("migration_legacy_stream_autoplay_selection_retired_enabled")
 private val migrationDisableBuggyPlaybackPathDoneKey =
     booleanPreferencesKey("migration_disable_buggy_playback_path_done")
+private val migrationAutoplayManualDefaultsDoneKey =
+    booleanPreferencesKey("migration_autoplay_manual_defaults_done")
 private val preferredAudioLanguageMigrationKey =
     stringPreferencesKey("preferred_audio_language")
 private val streamAutoPlayModeMigrationKey = stringPreferencesKey("stream_auto_play_mode")
@@ -291,6 +293,10 @@ private val streamAutoPlaySourceMigrationKey = stringPreferencesKey("stream_auto
 private val streamAutoPlaySelectedAddonsMigrationKey =
     stringSetPreferencesKey("stream_auto_play_selected_addons")
 private val streamAutoPlayRegexMigrationKey = stringPreferencesKey("stream_auto_play_regex")
+private val deterministicAutoplayEnabledMigrationKey =
+    booleanPreferencesKey("deterministic_autoplay_enabled")
+private val autoplayBandwidthModeMigrationKey = stringPreferencesKey("autoplay_bandwidth_mode")
+private val manualBitrateLimitMbpsMigrationKey = doublePreferencesKey("manual_bitrate_limit_mbps")
 internal fun applyPlayerSettingsMigrations(prefs: MutablePreferences) {
     val streamSelectionDefaultsEnabled =
         prefs[migrationStreamSelectionDefaultsV2EnabledKey] ?: false
@@ -325,6 +331,14 @@ internal fun applyPlayerSettingsMigrations(prefs: MutablePreferences) {
     val disableBuggyPlaybackPathDone = prefs[migrationDisableBuggyPlaybackPathDoneKey] ?: false
     if (!disableBuggyPlaybackPathDone) {
         prefs[migrationDisableBuggyPlaybackPathDoneKey] = true
+    }
+
+    val autoplayManualDefaultsDone = prefs[migrationAutoplayManualDefaultsDoneKey] ?: false
+    if (!autoplayManualDefaultsDone) {
+        prefs[deterministicAutoplayEnabledMigrationKey] = true
+        prefs[autoplayBandwidthModeMigrationKey] = AutoplayBandwidthMode.MANUAL.name
+        prefs[manualBitrateLimitMbpsMigrationKey] = 40.0
+        prefs[migrationAutoplayManualDefaultsDoneKey] = true
     }
 }
 
@@ -754,14 +768,14 @@ class PlayerSettingsDataStore @Inject constructor(
                 streamAutoPlayNextEpisodeEnabled = prefs[streamAutoPlayNextEpisodeEnabledKey] ?: false,
                 streamAutoPlayPreferBingeGroupForNextEpisode =
                     prefs[streamAutoPlayPreferBingeGroupForNextEpisodeKey] ?: true,
-                deterministicAutoplayEnabled = prefs[deterministicAutoplayEnabledKey] ?: false,
+                deterministicAutoplayEnabled = prefs[deterministicAutoplayEnabledKey] ?: true,
                 autoplayMaxBitrateEnabled = prefs[autoplayMaxBitrateEnabledKey] ?: true,
                 autoplayMaxBitrateMbps = prefs[autoplayMaxBitrateMbpsKey]?.takeIf { it.isFinite() && it > 0.0 },
                 autoplayBandwidthMode = prefs[autoplayBandwidthModeKey]?.let {
-                    runCatching { AutoplayBandwidthMode.valueOf(it) }.getOrDefault(AutoplayBandwidthMode.AUTO)
-                } ?: AutoplayBandwidthMode.AUTO,
+                    runCatching { AutoplayBandwidthMode.valueOf(it) }.getOrDefault(AutoplayBandwidthMode.MANUAL)
+                } ?: AutoplayBandwidthMode.MANUAL,
                 manualBitrateLimitMbps = normalizeManualBitrateLimit(
-                    prefs[manualBitrateLimitMbpsKey] ?: 20.0
+                    prefs[manualBitrateLimitMbpsKey] ?: 40.0
                 ),
                 nextEpisodeThresholdMode = prefs[nextEpisodeThresholdModeKey]?.let {
                     runCatching { NextEpisodeThresholdMode.valueOf(it) }.getOrDefault(NextEpisodeThresholdMode.PERCENTAGE)
@@ -1039,7 +1053,7 @@ class PlayerSettingsDataStore @Inject constructor(
     }
 
     private fun normalizeManualBitrateLimit(mbps: Double): Double {
-        if (!mbps.isFinite()) return 20.0
+        if (!mbps.isFinite()) return 40.0
         return mbps.coerceIn(5.0, 200.0)
     }
 

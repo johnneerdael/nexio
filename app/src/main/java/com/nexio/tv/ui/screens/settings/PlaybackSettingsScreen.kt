@@ -136,6 +136,7 @@ internal fun PlaybackSettingsContent(
     val trailerSettings by viewModel.trailerSettings.collectAsStateWithLifecycle(initialValue = TrailerSettings())
     val streamDiagnosticsEnabled by viewModel.streamDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val startupPerfTelemetryEnabled by viewModel.startupPerfTelemetryEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val autoplayBenchmarkAvailable by viewModel.autoplayBenchmarkAvailable.collectAsStateWithLifecycle(initialValue = false)
     val debridUiState by debridViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LaunchedEffect(debridViewModel) {
@@ -225,9 +226,13 @@ internal fun PlaybackSettingsContent(
                 },
                 trackingProviderEnabled = trackingProviderSelectorState.canChoose,
                 trackingProviderVisible = trackingProviderSelectorState.hasAnyConfiguredProvider,
+                autoplayBenchmarkAvailable = autoplayBenchmarkAvailable,
                 onShowAutoplayBandwidthModeDialog = { openDialog { showAutoplayBandwidthModeDialog = true } },
                 onShowNextEpisodeThresholdModeDialog = { openDialog { showNextEpisodeThresholdModeDialog = true } },
                 onShowReuseLastLinkCacheDialog = { openDialog { showReuseLastLinkCacheDialog = true } },
+                onSetDeterministicAutoplayEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setDeterministicAutoplayEnabled(enabled) }
+                },
                 onSetManualBitrateLimitMbps = { mbps ->
                     coroutineScope.launch { viewModel.setManualBitrateLimitMbps(mbps) }
                 },
@@ -377,6 +382,7 @@ internal fun PlaybackSettingsContent(
         showAutoplayBandwidthModeDialog = showAutoplayBandwidthModeDialog,
         showNextEpisodeThresholdModeDialog = showNextEpisodeThresholdModeDialog,
         showReuseLastLinkCacheDialog = showReuseLastLinkCacheDialog,
+        autoplayBenchmarkAvailable = autoplayBenchmarkAvailable,
         onSetPlayerPreference = { preference ->
             coroutineScope.launch { viewModel.setPlayerPreference(preference) }
         },
