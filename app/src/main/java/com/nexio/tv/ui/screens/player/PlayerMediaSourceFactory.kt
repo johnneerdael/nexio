@@ -143,13 +143,7 @@ internal class PlayerMediaSourceFactory(
                 runCatching {
                     Log.d(TAG, "Using VOD cache for host=${Uri.parse(url).host ?: "unknown"}")
                     currentVodCacheActive = true
-                    buildVodCacheDataSourceFactory(
-                        upstreamFactory = progressiveUpstreamFactory,
-                        cache = cache,
-                        writeMode = resolvePlaybackVodCacheWriteMode(
-                            parallelConnectionsEnabled = useParallelConnections
-                        )
-                    )
+                    buildVodCacheDataSourceFactory(progressiveUpstreamFactory, cache)
                 }.getOrElse { error ->
                     currentVodCacheActive = false
                     isVodCacheDisabled = true
@@ -278,13 +272,7 @@ internal class PlayerMediaSourceFactory(
                 null
             }
         return if (cache != null) {
-            buildVodCacheDataSourceFactory(
-                upstreamFactory = progressiveUpstreamFactory,
-                cache = cache,
-                writeMode = resolvePlaybackVodCacheWriteMode(
-                    parallelConnectionsEnabled = parallelConnectionsEnabled
-                )
-            )
+            buildVodCacheDataSourceFactory(progressiveUpstreamFactory, cache)
         } else {
             progressiveUpstreamFactory
         }
@@ -438,7 +426,6 @@ internal class PlayerMediaSourceFactory(
             val prefetchFactory = buildVodCacheDataSourceFactory(
                 upstreamFactory = upstreamFactory,
                 cache = cache,
-                writeMode = VodCacheWriteMode.WRITE_THROUGH,
                 blockOnCache = true
             )
             val writer = CacheWriter(prefetchFactory.createDataSource() as CacheDataSource, dataSpec, null, null)
@@ -494,7 +481,6 @@ internal class PlayerMediaSourceFactory(
     private fun buildVodCacheDataSourceFactory(
         upstreamFactory: DataSource.Factory,
         cache: SimpleCache,
-        writeMode: VodCacheWriteMode,
         blockOnCache: Boolean = false
     ): DataSource.Factory {
         val dataSinkFactory = CacheDataSink.Factory()
@@ -506,14 +492,8 @@ internal class PlayerMediaSourceFactory(
         }
         return CacheDataSource.Factory()
             .setCache(cache)
+            .setCacheWriteDataSinkFactory(dataSinkFactory)
             .setUpstreamDataSourceFactory(upstreamFactory)
-            .apply {
-                if (shouldInstallVodCacheWriter(writeMode, blockOnCache)) {
-                    setCacheWriteDataSinkFactory(dataSinkFactory)
-                } else {
-                    setCacheWriteDataSinkFactory(null)
-                }
-            }
             .setFlags(flags)
     }
 
