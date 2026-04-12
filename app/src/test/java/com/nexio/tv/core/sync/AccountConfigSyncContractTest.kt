@@ -243,6 +243,20 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `applyImdbSyncSettings skips empty baseUrl`() = runTest {
+        val imdbSettingsDataStore = mockk<ImdbSettingsDataStore>(relaxed = true)
+        val settings = ImdbSyncSettings(
+            enabled = false,
+            baseUrl = "   "
+        )
+
+        applyImdbSyncSettings(settings, imdbSettingsDataStore)
+
+        coVerify(exactly = 1) { imdbSettingsDataStore.setEnabled(false) }
+        coVerify(exactly = 0) { imdbSettingsDataStore.setBaseUrl(any()) }
+    }
+
+    @Test
     fun `selectSubtitleTranslationApiKeySecret prefers generic when it is configured`() {
         assertEquals(
             "generic-key",

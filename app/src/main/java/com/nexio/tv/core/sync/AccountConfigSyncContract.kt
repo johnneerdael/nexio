@@ -204,7 +204,10 @@ internal suspend fun applyImdbSyncSettings(
     imdbSettingsDataStore: ImdbSettingsDataStore
 ) {
     imdbSettingsDataStore.setEnabled(settings.enabled)
-    imdbSettingsDataStore.setBaseUrl(settings.baseUrl)
+    val trimmedBaseUrl = settings.baseUrl.trim()
+    if (trimmedBaseUrl.isNotBlank()) {
+        imdbSettingsDataStore.setBaseUrl(trimmedBaseUrl)
+    }
 }
 
 internal fun SubtitleTranslationSyncSettings.toDomainSettings(apiKey: String = ""): SubtitleTranslationSettings {
