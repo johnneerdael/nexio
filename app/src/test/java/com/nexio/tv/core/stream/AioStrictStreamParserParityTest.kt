@@ -78,6 +78,25 @@ class AioStrictStreamParserParityTest {
     }
 
     @Test
+    fun `stream parser trusts wrapped provider id over debrid text matches`() {
+        val stream = stream(
+            filename = "Movie.Title.2023.2160p.BluRay.HEVC.TrueHD.Atmos.7.1-GROUP.mkv",
+            description = """
+                📄 Movie.Title.2023.2160p.BluRay.HEVC.TrueHD.Atmos.7.1-GROUP.mkv
+                🔍 TorBox
+            """.trimIndent(),
+            name = "TorBox",
+            wrappedProviderId = "RD"
+        )
+
+        val parsed = AioStrictStreamParser.parse(stream)
+
+        assertEquals("RD", parsed.serviceId)
+        assertEquals(false, parsed.isCached)
+        assertEquals(StreamTransportKind.UNCACHED, parsed.transportKind)
+    }
+
+    @Test
     fun `stream parser uses aio style release group extraction`() {
         val parsed = AioStrictFileParser.parse("Movie.Title.2023.2160p.BluRay.HEVC.TrueHD.Atmos.7.1-GROUP[rarbg].mkv")
 
@@ -164,7 +183,8 @@ class AioStrictStreamParserParityTest {
         filename: String,
         description: String,
         name: String? = null,
-        preset: AddonParserPreset = AddonParserPreset.GENERIC
+        preset: AddonParserPreset = AddonParserPreset.GENERIC,
+        wrappedProviderId: String? = null
     ): Stream {
         return Stream(
             name = name,
@@ -186,7 +206,8 @@ class AioStrictStreamParserParityTest {
             ),
             addonName = "Test Addon",
             addonLogo = null,
-            addonParserPreset = preset
+            addonParserPreset = preset,
+            wrappedProviderId = wrappedProviderId
         )
     }
 }

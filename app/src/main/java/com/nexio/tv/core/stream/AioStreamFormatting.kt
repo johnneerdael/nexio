@@ -1386,6 +1386,8 @@ object AioParseValueFactory {
     }
 
     private fun deriveServiceId(stream: Stream): String? {
+        stream.wrappedProviderId?.takeIf { it.isNotBlank() }?.let { return it }
+
         val lowered = listOfNotNull(stream.name, stream.description, stream.addonName)
             .joinToString(" ")
             .lowercase(Locale.US)
