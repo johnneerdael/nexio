@@ -76,10 +76,7 @@ fun InlineIconText(
             .mapIndexedNotNull { index, segment ->
                 val iconSegment = segment as? InlineIconSegment.IconSegment ?: return@mapIndexedNotNull null
                 val token = iconSegment.token
-                val scale = when (token.scaleClass) {
-                    ScaleClass.TITLE_PROMINENT -> 1.1f
-                    ScaleClass.INLINE -> 1.0f
-                }
+                val scale = inlineIconScale(iconSegment)
                 val height = baseFontSize * scale
                 val width = baseFontSize * (scale * token.aspectRatio)
                 "inline-icon-$index" to InlineTextContent(
@@ -113,6 +110,15 @@ fun InlineIconText(
         overflow = overflow,
         inlineContent = inlineContent
     )
+}
+
+internal fun inlineIconScale(iconSegment: InlineIconSegment.IconSegment): Float {
+    iconSegment.scaleOverride?.let { return it }
+
+    return when (iconSegment.token.scaleClass) {
+        ScaleClass.TITLE_PROMINENT -> 1.1f
+        ScaleClass.INLINE -> 1.0f
+    }
 }
 
 private fun decodeBitmapResource(context: Context, drawableRes: Int): android.graphics.Bitmap? {

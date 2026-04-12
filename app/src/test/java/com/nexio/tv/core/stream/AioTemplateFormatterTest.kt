@@ -90,12 +90,15 @@ class AioTemplateFormatterTest {
         assertTrue(titleLine.contains("[[icon:4k]]"))
         assertTrue(titleLine.contains(" Movie Title (2023)"))
         assertFalse(titleLine.startsWith("⭐"))
-        assertTrue(detailLine.contains("[[icon:netflix]] Netflix"))
-        assertTrue(detailLine.contains("[[icon:atmos]]"))
-        assertTrue(detailLine.contains("[[icon:truehd]]"))
-        assertTrue(detailLine.contains("[[icon:dovi]]"))
-        assertTrue(detailLine.contains("💾 10.74 GB"))
-        assertTrue(detailLine.contains("[[icon:realdebrid]] Real-Debrid"))
+        assertEquals(
+            listOf(
+                "💾 10.74 GB",
+                "[[icon:netflix]] Netflix • [[icon:realdebrid]] Real-Debrid",
+                "📄 Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.NF.mkv",
+                "[[icon:dovi:1.75]] [[icon:atmos:1.75]] [[icon:truehd:1.75]]"
+            ),
+            detailLine.lines()
+        )
     }
 
     @Test

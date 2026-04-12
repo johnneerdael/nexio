@@ -19,11 +19,14 @@ data class InlineIconToken(
 
 sealed interface InlineIconSegment {
     data class TextSegment(val text: String) : InlineIconSegment
-    data class IconSegment(val token: InlineIconToken) : InlineIconSegment
+    data class IconSegment(
+        val token: InlineIconToken,
+        val scaleOverride: Float? = null
+    ) : InlineIconSegment
 }
 
 object InlineIconTokenRegistry {
-    private val tokenPattern = Regex("""\[\[icon:([a-z0-9_]+)\]\]""", RegexOption.IGNORE_CASE)
+    private val tokenPattern = Regex("""\[\[icon:([a-z0-9_]+)(?::([0-9]+(?:\.[0-9]+)?))?\]\]""", RegexOption.IGNORE_CASE)
 
     private val tokens = listOf(
         InlineIconToken("netflix", R.drawable.formatter_icon_netflix, "Netflix", ScaleClass.INLINE),
@@ -83,9 +86,13 @@ object InlineIconTokenRegistry {
             }
 
             val rawTokenId = match.groupValues[1]
+            val rawScaleOverride = match.groups[2]?.value
             val token = resolve(rawTokenId)
             if (token != null) {
-                segments += InlineIconSegment.IconSegment(token)
+                segments += InlineIconSegment.IconSegment(
+                    token = token,
+                    scaleOverride = rawScaleOverride?.toFloatOrNull()
+                )
             } else {
                 segments.appendText(rawTokenId)
             }
