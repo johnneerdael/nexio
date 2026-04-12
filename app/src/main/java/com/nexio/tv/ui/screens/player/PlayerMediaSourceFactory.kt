@@ -552,7 +552,7 @@ internal class PlayerMediaSourceFactory(
     ): DataSource.Factory {
         val dataSinkFactory = CacheDataSink.Factory()
             .setCache(cache)
-            .setFragmentSize(2L * 1024L * 1024L)
+            .setFragmentSize(VOD_CACHE_FRAGMENT_BYTES_FOR_TESTING)
         var flags = CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR
         if (blockOnCache) {
             flags = flags or CacheDataSource.FLAG_BLOCK_ON_CACHE
@@ -715,6 +715,7 @@ internal class PlayerMediaSourceFactory(
         private const val VOD_CACHE_FREE_SPACE_RESERVE_BYTES = 1024L * 1024L * 1024L
         private const val MIN_RUNTIME_VOD_CACHE_BYTES = 1L * 1024L * 1024L
         private const val PREFETCH_BLOCK_BYTES = 16L * 1024L * 1024L
+        internal const val VOD_CACHE_FRAGMENT_BYTES_FOR_TESTING = 8L * 1024L * 1024L
         private const val PREFETCH_ACTIVE_GUARD_BYTES = 8L * 1024L * 1024L
         private const val PREFETCH_REBASE_SLEEP_MS = 100L
         private const val PREFETCH_IDLE_SLEEP_MS = 250L

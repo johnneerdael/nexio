@@ -107,6 +107,14 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun vodCacheFragmentSize_usesEightMbFragments() {
+        assertEquals(
+            8L * 1024L * 1024L,
+            PlayerMediaSourceFactory.VOD_CACHE_FRAGMENT_BYTES_FOR_TESTING
+        )
+    }
+
+    @Test
     fun progressivePlaybackStillUsesParallelRangeDatasourceWhenWarmAheadIsDisabled() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
