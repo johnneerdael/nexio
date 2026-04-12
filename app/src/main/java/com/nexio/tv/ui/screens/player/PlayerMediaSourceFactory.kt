@@ -48,7 +48,7 @@ internal class PlayerMediaSourceFactory(
     private var customSubtitleParserFactory: SubtitleParser.Factory? = null
     private val loadErrorHandlingPolicy = DefaultLoadErrorHandlingPolicy()
     @Volatile private var currentVodCacheUrl: String? = null
-    @Volatile private var currentVodCacheResolvedUrl: String? = null
+    @Volatile private var currentVodCacheResolvedUrl: ResolvedVodCacheUrl? = null
     @Volatile private var currentVodCacheActive: Boolean = false
     @Volatile private var currentProgressiveUpstreamFactory: DataSource.Factory? = null
     @Volatile private var currentProgressiveIsEligibleForWarmAhead: Boolean = false
@@ -338,7 +338,7 @@ internal class PlayerMediaSourceFactory(
             }
             addKey(streamUrl)
             addKey(currentVodCacheUrl)
-            addKey(currentVodCacheResolvedUrl)
+            addKey(currentVodCacheResolvedUrl?.resolvedUrl)
             val bytes = keys.sumOf { key ->
                 cache.getCachedSpans(key).sumOf { span -> span.length.coerceAtLeast(0L) }
             }
@@ -396,19 +396,25 @@ internal class PlayerMediaSourceFactory(
 
     private fun resolveWarmAheadRequestUrl(streamUrl: String): String? {
         if (currentVodCacheUrl != streamUrl) return null
-        val resolvedUrl = currentVodCacheResolvedUrl
+        val resolvedUrl = currentVodCacheResolvedUrl?.takeIf { it.playbackUrl == streamUrl }?.resolvedUrl
         if (currentVodCacheUrl != streamUrl) return null
         return resolvedUrl ?: streamUrl
     }
 
     internal fun setWarmAheadStateForTesting(
         streamUrl: String?,
+        resolvedPlaybackUrl: String? = streamUrl,
         resolvedUrl: String?,
         eligible: Boolean,
         active: Boolean
     ) {
         currentVodCacheUrl = streamUrl
-        currentVodCacheResolvedUrl = resolvedUrl
+        currentVodCacheResolvedUrl = resolvedPlaybackUrl?.let {
+            ResolvedVodCacheUrl(
+                playbackUrl = it,
+                resolvedUrl = resolvedUrl
+            )
+        }
         currentProgressiveIsEligibleForWarmAhead = eligible
         currentVodCacheActive = active
     }
@@ -630,7 +636,10 @@ internal class PlayerMediaSourceFactory(
                     transportSampleTimeMs = transportSampleTimeMs,
                     onTransportBytesDownloaded = onTransportBytesDownloaded,
                     onResolvedUri = { resolved ->
-                        currentVodCacheResolvedUrl = resolved?.toString()
+                        currentVodCacheResolvedUrl = ResolvedVodCacheUrl(
+                            playbackUrl = url,
+                            resolvedUrl = resolved?.toString()
+                        )
                     },
                     onReadPositionAdvanced = { position ->
                         activeReadBytePosition.accumulateAndGet(position) { current, next ->
@@ -652,6 +661,11 @@ internal class PlayerMediaSourceFactory(
     private data class ParallelProviderProfile(
         val connectionCount: Int,
         val chunkSizeMb: Int
+    )
+
+    private data class ResolvedVodCacheUrl(
+        val playbackUrl: String,
+        val resolvedUrl: String?
     )
 
     private fun resolveParallelProviderProfile(
