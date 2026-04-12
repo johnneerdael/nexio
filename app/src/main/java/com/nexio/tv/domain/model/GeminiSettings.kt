@@ -7,8 +7,8 @@ enum class SubtitleTranslationProvider {
 }
 
 object SubtitleTranslationDefaults {
-    const val OPENAI_MODEL = "gpt-5-nano"
-    const val OPENAI_BASE_URL = "https://api.openai.com/v1"
+    const val OPENAI_MODEL = "openrouter/free"
+    const val OPENAI_BASE_URL = "https://openrouter.ai/api/v1"
     const val ANTHROPIC_MODEL = "claude-haiku-4-5"
     const val ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
     const val GEMINI_MODEL = "gemini-2.5-flash"

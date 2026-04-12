@@ -10,6 +10,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 private const val ANTHROPIC_VERSION = "2023-06-01"
+private const val OPENAI_NATIVE_BASE_URL = "https://api.openai.com/v1"
 
 internal fun providerEndpoint(settings: SubtitleTranslationSettings): String {
     val rawRoot = settings.baseUrl.trim().trimEnd('/').ifBlank {
@@ -21,7 +22,7 @@ internal fun providerEndpoint(settings: SubtitleTranslationSettings): String {
     }
     return when (settings.provider) {
         SubtitleTranslationProvider.OPENAI -> {
-            val root = if (rawRoot == "https://api.openai.com") SubtitleTranslationDefaults.OPENAI_BASE_URL else rawRoot
+            val root = if (rawRoot == "https://api.openai.com") OPENAI_NATIVE_BASE_URL else rawRoot
             if (root.endsWith("/chat/completions")) root else "$root/chat/completions"
         }
         SubtitleTranslationProvider.ANTHROPIC -> {

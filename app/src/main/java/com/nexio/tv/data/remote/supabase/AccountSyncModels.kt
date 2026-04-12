@@ -290,9 +290,9 @@ data class SubtitleTranslationSyncSettings(
     @EncodeDefault
     val provider: String = "OPENAI",
     @EncodeDefault
-    val model: String = "gpt-5-nano",
+    val model: String = "openrouter/free",
     @EncodeDefault
-    val baseUrl: String = "https://api.openai.com/v1"
+    val baseUrl: String = "https://openrouter.ai/api/v1"
 )
 
 @Serializable
