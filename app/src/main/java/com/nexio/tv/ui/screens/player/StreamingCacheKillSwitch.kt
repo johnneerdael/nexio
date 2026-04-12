@@ -20,23 +20,43 @@ internal object StreamingCacheKillSwitch {
         return requested && !hasRecentLowMemoryOrSignaledExit
     }
 
-    fun hasRecentLowMemoryOrSignaledExit(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT < 30) return false
-        val activityManager = context.getSystemService(ActivityManager::class.java) ?: return false
+    fun shouldEnable(
+        requested: Boolean,
+        latestBadExitTimestampMs: Long,
+        manualEnableTimestampMs: Long
+    ): Boolean {
+        return requested && latestBadExitTimestampMs <= manualEnableTimestampMs
+    }
+
+    fun latestBadExitTimestampMs(context: Context): Long {
+        if (Build.VERSION.SDK_INT < 30) return 0L
+        val activityManager = context.getSystemService(ActivityManager::class.java) ?: return 0L
         return activityManager
             .getHistoricalProcessExitReasons(null, 0, 5)
-            .any { exit ->
+            .filter { exit ->
                 exit.reason == ApplicationExitInfo.REASON_LOW_MEMORY ||
                     exit.reason == ApplicationExitInfo.REASON_SIGNALED
             }
+            .maxOfOrNull { exit -> exit.timestamp }
+            ?: 0L
     }
 
-    fun evaluate(context: Context, requested: Boolean): Decision {
-        val blockedByKillSwitch = hasRecentLowMemoryOrSignaledExit(context)
+    fun hasRecentLowMemoryOrSignaledExit(context: Context): Boolean {
+        return latestBadExitTimestampMs(context) > 0L
+    }
+
+    fun evaluate(
+        context: Context,
+        requested: Boolean,
+        manualEnableTimestampMs: Long = 0L
+    ): Decision {
+        val latestBadExitTimestampMs = latestBadExitTimestampMs(context)
+        val blockedByKillSwitch = requested && latestBadExitTimestampMs > manualEnableTimestampMs
         return Decision(
             enabled = shouldEnable(
                 requested = requested,
-                hasRecentLowMemoryOrSignaledExit = blockedByKillSwitch
+                latestBadExitTimestampMs = latestBadExitTimestampMs,
+                manualEnableTimestampMs = manualEnableTimestampMs
             ),
             blockedByKillSwitch = blockedByKillSwitch
         )

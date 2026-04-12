@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
@@ -390,16 +391,24 @@ class PlayerRuntimeController(
         observeGeminiSettings()
         observeTheIntroDbSettings()
         streamingCacheFlagJob = scope.launch {
-            debugSettingsDataStore.streamingCacheEnabled.collect { enabled ->
-                val decision = StreamingCacheKillSwitch.evaluate(context, enabled)
-                mediaSourceFactory.streamingCacheEnabled = decision.enabled
-                if (!decision.enabled) {
-                    mediaSourceFactory.stopStreamingCacheFill()
+            debugSettingsDataStore.streamingCacheEnabled
+                .combine(debugSettingsDataStore.streamingCacheManualEnableTimestampMs) { enabled, manualEnableTimestampMs ->
+                    enabled to manualEnableTimestampMs
                 }
-                if (enabled && decision.blockedByKillSwitch) {
-                    debugSettingsDataStore.setStreamingCacheEnabled(false)
+                .collect { (enabled, manualEnableTimestampMs) ->
+                    val decision = StreamingCacheKillSwitch.evaluate(
+                        context = context,
+                        requested = enabled,
+                        manualEnableTimestampMs = manualEnableTimestampMs
+                    )
+                    mediaSourceFactory.streamingCacheEnabled = decision.enabled
+                    if (!decision.enabled) {
+                        mediaSourceFactory.stopStreamingCacheFill()
+                    }
+                    if (enabled && decision.blockedByKillSwitch) {
+                        debugSettingsDataStore.setStreamingCacheEnabled(false)
+                    }
                 }
-            }
         }
         fetchMetaDetails(contentId, contentType)
         observeBlurUnwatchedEpisodes()

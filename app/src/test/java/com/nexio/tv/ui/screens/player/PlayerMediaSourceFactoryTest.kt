@@ -176,7 +176,30 @@ class PlayerMediaSourceFactoryTest {
         assertFalse(
             StreamingCacheKillSwitch.shouldEnable(
                 requested = true,
-                hasRecentLowMemoryOrSignaledExit = true
+                latestBadExitTimestampMs = 1_000L,
+                manualEnableTimestampMs = 0L
+            )
+        )
+    }
+
+    @Test
+    fun streamingCacheKillSwitch_allowsManualReenableAfterOlderBadExit() {
+        assertTrue(
+            StreamingCacheKillSwitch.shouldEnable(
+                requested = true,
+                latestBadExitTimestampMs = 1_000L,
+                manualEnableTimestampMs = 2_000L
+            )
+        )
+    }
+
+    @Test
+    fun streamingCacheKillSwitch_disablesWhenBadExitIsNewerThanManualReenable() {
+        assertFalse(
+            StreamingCacheKillSwitch.shouldEnable(
+                requested = true,
+                latestBadExitTimestampMs = 3_000L,
+                manualEnableTimestampMs = 2_000L
             )
         )
     }

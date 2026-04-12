@@ -88,8 +88,13 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             playerInitializationStartedAtMs = System.currentTimeMillis()
             val playerSettings = playerSettingsDataStore.playerSettings.first()
             val requestedStreamingCache = debugSettingsDataStore.streamingCacheEnabled.first()
-            val streamingCacheDecision =
-                StreamingCacheKillSwitch.evaluate(context, requestedStreamingCache)
+            val streamingCacheManualEnableTimestampMs =
+                debugSettingsDataStore.streamingCacheManualEnableTimestampMs.first()
+            val streamingCacheDecision = StreamingCacheKillSwitch.evaluate(
+                context = context,
+                requested = requestedStreamingCache,
+                manualEnableTimestampMs = streamingCacheManualEnableTimestampMs
+            )
             mediaSourceFactory.streamingCacheEnabled = streamingCacheDecision.enabled
             if (requestedStreamingCache && streamingCacheDecision.blockedByKillSwitch) {
                 debugSettingsDataStore.setStreamingCacheEnabled(false)
