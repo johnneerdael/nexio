@@ -46,7 +46,39 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
-    fun progressivePlayback_usesPlainMedia3DatasourceWithoutCacheOrPrds() {
+    fun progressivePlayback_usesParallelRangeDatasourceWhenEnabled() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+
+        val dataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video.mkv",
+            headers = mapOf("Authorization" to "Bearer token"),
+        )
+
+        assertTrue(dataSourceFactory is ParallelRangeDataSource.Factory)
+    }
+
+    @Test
+    fun progressivePlayback_usesPlainHttpDatasourceWhenParallelDisabled() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        ).apply {
+            useParallelConnections = false
+        }
+
+        val dataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video.mkv",
+            headers = emptyMap(),
+        )
+
+        assertFalse(dataSourceFactory is ParallelRangeDataSource.Factory)
+    }
+
+    @Test
+    fun progressivePlayback_returnsProgressiveMediaSource() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
             playbackOkHttpClient = OkHttpClient()
@@ -73,6 +105,12 @@ class PlayerMediaSourceFactoryTest {
         )
 
         assertTrue(mediaSource is HlsMediaSource)
+        assertFalse(
+            factory.progressiveUpstreamFactoryForTesting(
+                url = "https://example.com/master.m3u8",
+                headers = emptyMap(),
+            ) is ParallelRangeDataSource.Factory
+        )
     }
 
     @Test

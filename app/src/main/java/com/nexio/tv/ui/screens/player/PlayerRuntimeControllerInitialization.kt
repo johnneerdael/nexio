@@ -199,6 +199,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             )
             val loadControl = DefaultLoadControl.Builder().build()
 
+            mediaSourceFactory.useParallelConnections = playerSettings.useParallelConnections
+            mediaSourceFactory.parallelConnectionCount = playerSettings.parallelConnectionCount
+            mediaSourceFactory.parallelChunkSizeMb = playerSettings.parallelChunkSizeMb
             if (kodiCustomAudioSinkEnabled) {
                 safeAudioForcedStreamUrls.remove(url)
                 audioDisabledForcedStreamUrls.remove(url)
