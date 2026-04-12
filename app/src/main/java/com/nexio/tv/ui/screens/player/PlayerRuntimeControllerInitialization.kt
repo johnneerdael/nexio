@@ -214,7 +214,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             )
             val loadControl = PlayerLoadControlFactory.buildForStreamingCacheDecision(
                 streamingCacheEnabled = streamingCacheDecision.enabled,
-                effectiveSampleQueueBytes = MemoryBudget(context).effectiveSampleQueueBytes
+                effectiveSampleQueueBytes = mediaSourceFactory.memoryBudget.effectiveSampleQueueBytes
             )
 
             if (kodiCustomAudioSinkEnabled) {
