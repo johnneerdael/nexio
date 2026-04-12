@@ -352,6 +352,9 @@ internal fun PlaybackSettingsContent(
                 onSetVodCacheSizeMb = { mb ->
                     coroutineScope.launch { viewModel.setVodCacheSizeMb(mb) }
                 },
+                onSetVodCacheWarmAheadEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setVodCacheWarmAheadEnabled(enabled) }
+                },
                 shadowAutoplayDataCollectionEnabled = debridUiState.shadowAutoplayDataCollectionEnabled,
                 onSetShadowAutoplayDataCollectionEnabled = { debridViewModel.setShadowAutoplayDataCollectionEnabled(it) },
                 debridBenchmarkDataCollectionEnabled = debridUiState.debridBenchmarkDataCollectionEnabled,

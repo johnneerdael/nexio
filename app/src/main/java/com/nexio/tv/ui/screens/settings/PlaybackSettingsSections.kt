@@ -166,6 +166,7 @@ internal fun PlaybackSettingsSections(
     onSetUseParallelConnections: (Boolean) -> Unit,
     onSetVodCacheSizeMode: (VodCacheSizeMode) -> Unit,
     onSetVodCacheSizeMb: (Int) -> Unit,
+    onSetVodCacheWarmAheadEnabled: (Boolean) -> Unit,
     // Troubleshooting — data collection
     shadowAutoplayDataCollectionEnabled: Boolean,
     onSetShadowAutoplayDataCollectionEnabled: (Boolean) -> Unit,
@@ -487,6 +488,7 @@ internal fun PlaybackSettingsSections(
                 playerSettings = playerSettings,
                 onSetVodCacheSizeMode = onSetVodCacheSizeMode,
                 onSetVodCacheSizeMb = onSetVodCacheSizeMb,
+                onSetVodCacheWarmAheadEnabled = onSetVodCacheWarmAheadEnabled,
                 onSetUseParallelConnections = onSetUseParallelConnections,
                 onItemFocused = { focusedSection = PlaybackSection.BUFFER_NETWORK }
             )

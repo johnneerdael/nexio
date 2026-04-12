@@ -315,6 +315,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setVodCacheSizeMode(mode)
     }
 
+    suspend fun setVodCacheWarmAheadEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setVodCacheWarmAheadEnabled(enabled)
+    }
+
     suspend fun setVodCacheSizeMb(mb: Int) {
         playerSettingsDataStore.setVodCacheSizeMb(mb)
     }
