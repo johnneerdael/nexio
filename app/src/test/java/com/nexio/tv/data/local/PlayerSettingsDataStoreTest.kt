@@ -111,4 +111,36 @@ class PlayerSettingsDataStoreTest {
         dataStore.setVodCacheSizeMode(VodCacheSizeMode.OFF)
         assertNull(dataStore.playerSettings.first().autoplayMaxBitrateMbps)
     }
+
+    @Test
+    fun `vod cache warm ahead defaults to enabled`() = runTest {
+        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+
+        val settings = dataStore.playerSettings.first()
+
+        assertTrue(settings.vodCacheWarmAheadEnabled)
+    }
+
+    @Test
+    fun `vod cache warm ahead persists disabled selection`() = runTest {
+        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+
+        dataStore.setVodCacheWarmAheadEnabled(false)
+        assertEquals(false, dataStore.playerSettings.first().vodCacheWarmAheadEnabled)
+
+        dataStore.setVodCacheWarmAheadEnabled(true)
+        assertEquals(true, dataStore.playerSettings.first().vodCacheWarmAheadEnabled)
+    }
+
+    @Test
+    fun `changing vod cache warm ahead clears persisted autoplay max bitrate`() = runTest {
+        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+
+        dataStore.setAutoplayMaxBitrate(42.0)
+        assertEquals(42.0, dataStore.playerSettings.first().autoplayMaxBitrateMbps ?: -1.0, 0.0)
+
+        dataStore.setVodCacheWarmAheadEnabled(false)
+
+        assertNull(dataStore.playerSettings.first().autoplayMaxBitrateMbps)
+    }
 }
