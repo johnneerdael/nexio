@@ -4,9 +4,12 @@ import android.net.Uri
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.cache.Cache
+import androidx.media3.datasource.cache.CacheSpan
 import androidx.media3.datasource.cache.CacheKeyFactory
 import androidx.media3.datasource.cache.ContentMetadataMutations
 import androidx.media3.datasource.cache.SimpleCache
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 
@@ -174,17 +177,36 @@ internal class StreamingCacheFillSession(
     ): Boolean {
         val normalizedPosition = position.coerceAtLeast(0L)
         val normalizedLength = minLength.coerceAtLeast(1L)
-        val deadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs.coerceAtLeast(0L))
-        while (true) {
-            val cachedLength = cache.getCachedLength(cacheKey, normalizedPosition, normalizedLength)
-            if (cachedLength >= normalizedLength) return true
-            if (System.nanoTime() > deadlineNs) return false
-            try {
-                Thread.sleep(25L)
+        if (hasCommittedSpan(cacheKey, normalizedPosition, normalizedLength)) return true
+
+        val waitMs = timeoutMs.coerceIn(0L, MAX_URGENT_WAIT_MS)
+        if (waitMs <= 0L) return false
+
+        val latch = CountDownLatch(1)
+        val listener = object : Cache.Listener {
+            override fun onSpanAdded(cache: Cache, span: CacheSpan) {
+                if (hasCommittedSpan(cacheKey, normalizedPosition, normalizedLength)) {
+                    latch.countDown()
+                }
+            }
+
+            override fun onSpanRemoved(cache: Cache, span: CacheSpan) = Unit
+
+            override fun onSpanTouched(cache: Cache, oldSpan: CacheSpan, newSpan: CacheSpan) = Unit
+        }
+
+        cache.addListener(cacheKey, listener)
+        try {
+            if (hasCommittedSpan(cacheKey, normalizedPosition, normalizedLength)) return true
+            return try {
+                latch.await(waitMs, TimeUnit.MILLISECONDS)
+                hasCommittedSpan(cacheKey, normalizedPosition, normalizedLength)
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
-                return false
+                false
             }
+        } finally {
+            cache.removeListener(cacheKey, listener)
         }
     }
 
@@ -201,6 +223,10 @@ internal class StreamingCacheFillSession(
         )
     }
 
+    private fun hasCommittedSpan(cacheKey: String, position: Long, minLength: Long): Boolean {
+        return cache.getCachedLength(cacheKey, position, minLength) >= minLength
+    }
+
     private data class StartRequest(
         val url: String,
         val headers: Map<String, String>,
@@ -211,5 +237,6 @@ internal class StreamingCacheFillSession(
 
     private companion object {
         const val PENDING_START_THREAD_NAME = "StreamingCacheFillSession-pending-start"
+        const val MAX_URGENT_WAIT_MS = 50L
     }
 }
