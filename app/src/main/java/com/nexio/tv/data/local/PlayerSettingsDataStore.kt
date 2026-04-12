@@ -225,6 +225,8 @@ data class PlayerSettings(
     val deterministicAutoplayEnabled: Boolean = false,
     val autoplayMaxBitrateEnabled: Boolean = true,
     val autoplayMaxBitrateMbps: Double? = null,
+    val autoplayBandwidthMode: AutoplayBandwidthMode = AutoplayBandwidthMode.AUTO,
+    val manualBitrateLimitMbps: Double = 20.0,
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
     val nextEpisodeThresholdPercent: Float = 99f,
     val nextEpisodeThresholdMinutesBeforeEnd: Float = 2f,
@@ -332,6 +334,11 @@ enum class StreamAutoPlayMode {
     MANUAL,
     FIRST_STREAM,
     REGEX_MATCH
+}
+
+enum class AutoplayBandwidthMode {
+    AUTO,
+    MANUAL
 }
 
 enum class StreamAutoPlaySource {
@@ -467,6 +474,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val deterministicAutoplayEnabledKey = booleanPreferencesKey("deterministic_autoplay_enabled")
     private val autoplayMaxBitrateEnabledKey = booleanPreferencesKey("autoplay_max_bitrate_enabled")
     private val autoplayMaxBitrateMbpsKey = doublePreferencesKey("autoplay_max_bitrate_mbps")
+    private val autoplayBandwidthModeKey = stringPreferencesKey("autoplay_bandwidth_mode")
+    private val manualBitrateLimitMbpsKey = doublePreferencesKey("manual_bitrate_limit_mbps")
     private val nextEpisodeThresholdModeKey = stringPreferencesKey("next_episode_threshold_mode")
     private val nextEpisodeThresholdPercentLegacyKey = intPreferencesKey("next_episode_threshold_percent")
     private val nextEpisodeThresholdMinutesBeforeEndLegacyKey = intPreferencesKey("next_episode_threshold_minutes_before_end")
@@ -748,6 +757,12 @@ class PlayerSettingsDataStore @Inject constructor(
                 deterministicAutoplayEnabled = prefs[deterministicAutoplayEnabledKey] ?: false,
                 autoplayMaxBitrateEnabled = prefs[autoplayMaxBitrateEnabledKey] ?: true,
                 autoplayMaxBitrateMbps = prefs[autoplayMaxBitrateMbpsKey]?.takeIf { it.isFinite() && it > 0.0 },
+                autoplayBandwidthMode = prefs[autoplayBandwidthModeKey]?.let {
+                    runCatching { AutoplayBandwidthMode.valueOf(it) }.getOrDefault(AutoplayBandwidthMode.AUTO)
+                } ?: AutoplayBandwidthMode.AUTO,
+                manualBitrateLimitMbps = normalizeManualBitrateLimit(
+                    prefs[manualBitrateLimitMbpsKey] ?: 20.0
+                ),
                 nextEpisodeThresholdMode = prefs[nextEpisodeThresholdModeKey]?.let {
                     runCatching { NextEpisodeThresholdMode.valueOf(it) }.getOrDefault(NextEpisodeThresholdMode.PERCENTAGE)
                 } ?: NextEpisodeThresholdMode.PERCENTAGE,
@@ -1009,6 +1024,23 @@ class PlayerSettingsDataStore @Inject constructor(
                 prefs.remove(autoplayMaxBitrateMbpsKey)
             }
         }
+    }
+
+    suspend fun setAutoplayBandwidthMode(mode: AutoplayBandwidthMode) {
+        store().edit { prefs ->
+            prefs[autoplayBandwidthModeKey] = mode.name
+        }
+    }
+
+    suspend fun setManualBitrateLimitMbps(mbps: Double) {
+        store().edit { prefs ->
+            prefs[manualBitrateLimitMbpsKey] = normalizeManualBitrateLimit(mbps)
+        }
+    }
+
+    private fun normalizeManualBitrateLimit(mbps: Double): Double {
+        if (!mbps.isFinite()) return 20.0
+        return mbps.coerceIn(5.0, 200.0)
     }
 
     suspend fun setNextEpisodeThresholdMode(mode: NextEpisodeThresholdMode) {

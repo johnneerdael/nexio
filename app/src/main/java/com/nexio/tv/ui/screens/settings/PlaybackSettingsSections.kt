@@ -57,6 +57,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
+import com.nexio.tv.data.local.AutoplayBandwidthMode
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.PlayerPreference
@@ -112,8 +113,10 @@ internal fun PlaybackSettingsSections(
     trackingProviderLabel: String,
     trackingProviderEnabled: Boolean,
     trackingProviderVisible: Boolean,
+    onShowAutoplayBandwidthModeDialog: () -> Unit,
     onShowNextEpisodeThresholdModeDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
+    onSetManualBitrateLimitMbps: (Double) -> Unit,
     onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
     onSetStreamAutoPlayPreferBingeGroupForNextEpisode: (Boolean) -> Unit,
     onSetNextEpisodeThresholdPercent: (Float) -> Unit,
@@ -375,8 +378,10 @@ internal fun PlaybackSettingsSections(
 
             autoPlaySettingsItems(
                 playerSettings = playerSettings,
+                onShowAutoplayBandwidthModeDialog = onShowAutoplayBandwidthModeDialog,
                 onShowNextEpisodeThresholdModeDialog = onShowNextEpisodeThresholdModeDialog,
                 onShowReuseLastLinkCacheDialog = onShowReuseLastLinkCacheDialog,
+                onSetManualBitrateLimitMbps = onSetManualBitrateLimitMbps,
                 onSetStreamAutoPlayNextEpisodeEnabled = onSetStreamAutoPlayNextEpisodeEnabled,
                 onSetStreamAutoPlayPreferBingeGroupForNextEpisode = onSetStreamAutoPlayPreferBingeGroupForNextEpisode,
                 onSetNextEpisodeThresholdPercent = onSetNextEpisodeThresholdPercent,
@@ -699,6 +704,7 @@ internal fun PlaybackSettingsDialogsHost(
     showSecondaryAudioLanguageDialog: Boolean,
     showDecoderPriorityDialog: Boolean,
     showIecPackerChannelLayoutDialog: Boolean,
+    showAutoplayBandwidthModeDialog: Boolean,
     showNextEpisodeThresholdModeDialog: Boolean,
     showReuseLastLinkCacheDialog: Boolean,
     onSetPlayerPreference: (PlayerPreference) -> Unit,
@@ -713,6 +719,7 @@ internal fun PlaybackSettingsDialogsHost(
     onSetSecondaryPreferredAudioLanguage: (String?) -> Unit,
     onSetDecoderPriority: (Int) -> Unit,
     onSetIecPackerMaxPcmChannelLayout: (IecPackerChannelLayout) -> Unit,
+    onSetAutoplayBandwidthMode: (AutoplayBandwidthMode) -> Unit,
     onSetNextEpisodeThresholdMode: (com.nexio.tv.data.local.NextEpisodeThresholdMode) -> Unit,
     onSetReuseLastLinkCacheHours: (Int) -> Unit,
     onDismissLanguageDialog: () -> Unit,
@@ -725,6 +732,7 @@ internal fun PlaybackSettingsDialogsHost(
     onDismissSecondaryAudioLanguageDialog: () -> Unit,
     onDismissDecoderPriorityDialog: () -> Unit,
     onDismissIecPackerChannelLayoutDialog: () -> Unit,
+    onDismissAutoplayBandwidthModeDialog: () -> Unit,
     onDismissNextEpisodeThresholdModeDialog: () -> Unit,
     onDismissReuseLastLinkCacheDialog: () -> Unit
 ) {
@@ -781,12 +789,15 @@ internal fun PlaybackSettingsDialogsHost(
     )
 
     AutoPlaySettingsDialogs(
+        showAutoplayBandwidthModeDialog = showAutoplayBandwidthModeDialog,
         showNextEpisodeThresholdModeDialog = showNextEpisodeThresholdModeDialog,
         showReuseLastLinkCacheDialog = showReuseLastLinkCacheDialog,
         playerSettings = playerSettings,
         installedAddonNames = installedAddonNames,
+        onSetAutoplayBandwidthMode = onSetAutoplayBandwidthMode,
         onSetNextEpisodeThresholdMode = onSetNextEpisodeThresholdMode,
         onSetReuseLastLinkCacheHours = onSetReuseLastLinkCacheHours,
+        onDismissAutoplayBandwidthModeDialog = onDismissAutoplayBandwidthModeDialog,
         onDismissNextEpisodeThresholdModeDialog = onDismissNextEpisodeThresholdModeDialog,
         onDismissReuseLastLinkCacheDialog = onDismissReuseLastLinkCacheDialog
     )
