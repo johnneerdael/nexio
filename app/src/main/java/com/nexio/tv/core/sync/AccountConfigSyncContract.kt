@@ -34,13 +34,16 @@ import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import com.nexio.tv.domain.model.TrackingProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 6
+internal const val ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION = 7
 
 internal fun observeAccountConfigSyncChanges(
     heroCatalogSelections: Flow<Unit>,
@@ -95,6 +98,62 @@ internal fun observeAccountConfigSyncChanges(
         simklCatalogPreferences,
         simklAuthState,
         playerSettings
+    )
+}
+
+internal fun observeAccountConfigSyncChangedPaths(
+    heroCatalogSelections: Flow<Unit>,
+    homeCatalogOrderKeys: Flow<Unit>,
+    disabledHomeCatalogKeys: Flow<Unit>,
+    tmdbSettings: Flow<Unit>,
+    mdbListSettings: Flow<Unit>,
+    mdbListCatalogPreferences: Flow<Unit>,
+    omdbSettings: Flow<Unit>,
+    theIntroDbSettings: Flow<Unit>,
+    animeSkipEnabled: Flow<Unit>,
+    animeSkipClientId: Flow<Unit>,
+    subtitleTranslationSettings: Flow<Unit>,
+    imdbSettings: Flow<Unit>,
+    posterRatingsSettings: Flow<Unit>,
+    premiumizeSettings: Flow<Unit>,
+    premiumizeAccountState: Flow<Unit>,
+    torBoxSettings: Flow<Unit>,
+    torBoxAccountState: Flow<Unit>,
+    easyDebridSettings: Flow<Unit>,
+    easyDebridAccountState: Flow<Unit>,
+    realDebridState: Flow<Unit>,
+    traktAuthState: Flow<Unit>,
+    traktCatalogPreferences: Flow<Unit>,
+    simklCatalogPreferences: Flow<Unit>,
+    simklAuthState: Flow<Unit>,
+    playerSettings: Flow<Unit>
+): Flow<String> {
+    return merge(
+        heroCatalogSelections.map { "catalogs.home.heroCatalogKeys" },
+        homeCatalogOrderKeys.map { "catalogs.home.homeCatalogOrderKeys" },
+        disabledHomeCatalogKeys.map { "catalogs.home.disabledHomeCatalogKeys" },
+        tmdbSettings.map { "integrations.tmdb" },
+        mdbListSettings.map { "integrations.mdblist" },
+        mdbListCatalogPreferences.map { "catalogs.mdblist" },
+        omdbSettings.map { "integrations.omdb.enabled" },
+        theIntroDbSettings.map { "integrations.theIntroDb" },
+        animeSkipEnabled.map { "integrations.animeSkip.enabled" },
+        animeSkipClientId.map { "integrations.animeSkip.clientId" },
+        subtitleTranslationSettings.map { "integrations.subtitleTranslation" },
+        imdbSettings.map { "integrations.imdb" },
+        posterRatingsSettings.map { "integrations.posterRatings" },
+        premiumizeSettings.map { "integrations.debrid.premiumize" },
+        premiumizeAccountState.map { "integrations.debrid.premiumize" },
+        torBoxSettings.map { "integrations.debrid.torBox" },
+        torBoxAccountState.map { "integrations.debrid.torBox" },
+        easyDebridSettings.map { "integrations.debrid.easyDebrid" },
+        easyDebridAccountState.map { "integrations.debrid.easyDebrid" },
+        realDebridState.map { "integrations.debrid.realDebrid" },
+        traktAuthState.map { "integrations.traktAuth" },
+        traktCatalogPreferences.map { "catalogs.trakt" },
+        simklCatalogPreferences.map { "catalogs.simkl" },
+        simklAuthState.map { "integrations.simklAuth" },
+        playerSettings.map { "playback.streamSelection.trackingProvider" }
     )
 }
 
@@ -185,6 +244,28 @@ internal fun buildAccountConfigSyncPushParams(payload: AccountConfigSyncPayload)
         )
         put("p_source", "app")
         put("p_contract_version", ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION)
+    }
+}
+
+internal fun buildAccountConfigSyncPushParamsV7(
+    payload: AccountConfigSyncPayload,
+    baseRevision: Long,
+    changedPaths: List<String>
+): JsonObject {
+    return buildJsonObject {
+        put(
+            "p_settings_payload",
+            Json.encodeToJsonElement(AccountConfigSyncPayload.serializer(), payload)
+        )
+        put("p_base_revision", baseRevision)
+        put(
+            "p_changed_paths",
+            Json.encodeToJsonElement(
+                ListSerializer(String.serializer()),
+                changedPaths.distinct().filter(String::isNotBlank)
+            )
+        )
+        put("p_source", "app")
     }
 }
 
