@@ -21,16 +21,20 @@ import com.nexio.tv.domain.model.skipStep
 import com.nexio.tv.domain.model.supportsExtra
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.supervisorScope
 import com.nexio.tv.core.util.filterReleasedItems
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.util.concurrent.atomic.AtomicInteger
 
 private data class CatalogUpdateResult(
     val displayRows: List<CatalogRow>,
@@ -451,29 +455,198 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
         "trakt_items=${traktSnapshotItemKeys(beforeTraktSnapshot).size} simkl_items=${simklSnapshotItemKeys(beforeSimklSnapshot).size} mdb_items=${mdbSnapshotItemKeys(beforeMdbSnapshot).size}"
     )
 
-    if (shouldAttemptSerializedTraktDiscoveryRefresh(traktCatalogPreferences)) {
-        Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=trakt_discovery")
-        runCatching { traktDiscoveryService.ensureFresh(force = false) }
-            .onFailure { error ->
-                Log.w(HomeViewModel.TAG, "Failed synthetic Trakt refresh in serialized startup pipeline", error)
+    val refreshedCatalogCount = AtomicInteger(0)
+    val refreshTraktDiscovery = shouldAttemptSerializedTraktDiscoveryRefresh(traktCatalogPreferences)
+    val refreshSimklDiscovery = shouldRefreshSimklDiscoveryForState(simklCatalogPreferences, beforeSimklSnapshot)
+    val refreshMdbDiscovery = shouldRefreshMDBListDiscoveryForState(mdbListCatalogPreferences, beforeMdbSnapshot)
+    supervisorScope {
+        val refreshJobs = mutableListOf<Job>()
+        refreshJobs.add(
+            launch(Dispatchers.IO) {
+                try {
+                    Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=trakt_discovery")
+                    if (refreshTraktDiscovery) {
+                        try {
+                            traktDiscoveryService.ensureFresh(force = false)
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (t: Throwable) {
+                            Log.w(HomeViewModel.TAG, "Failed synthetic Trakt refresh in serialized startup pipeline", t)
+                        }
+                    }
+                    val afterTraktSnapshot = applyTomatoesOverridesToTraktSnapshot(
+                        traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first(),
+                        syntheticTomatoesOverridesByItemId
+                    )
+                    val traktBeforeKeys = traktSnapshotItemKeys(beforeTraktSnapshot)
+                    val traktAfterKeys = traktSnapshotItemKeys(afterTraktSnapshot)
+                    withContext(Dispatchers.Main.immediate) {
+                        traktDiscoverySnapshot = afterTraktSnapshot
+                        persistedTraktDiscoverySnapshot = afterTraktSnapshot
+                    }
+                    logStartupPerf(
+                        "synthetic_refresh_provider_ready",
+                        "source=trakt total=${traktAfterKeys.size} added=${(traktAfterKeys - traktBeforeKeys).size} retained=${(traktAfterKeys intersect traktBeforeKeys).size}"
+                    )
+                    Log.d(HomeViewModel.TAG, "Post-startup refresh step end source=trakt_discovery")
+                    logStartupPerf("synthetic_refresh_step_start", "source=trakt")
+                    renewTraktSyntheticSnapshotPipeline(afterTraktSnapshot)
+                    logStartupPerf("synthetic_refresh_step_end", "source=trakt rows=${persistedTraktSyntheticGroups.sumOf { it.rows.size }}")
+                    withContext(Dispatchers.Main.immediate) {
+                        scheduleUpdateCatalogRows()
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    Log.w(HomeViewModel.TAG, "Unexpected failure during Trakt refresh in serialized startup pipeline", t)
+                }
             }
-        Log.d(HomeViewModel.TAG, "Post-startup refresh step end source=trakt_discovery")
-    }
-    if (shouldRefreshMDBListDiscoveryForState(mdbListCatalogPreferences, beforeMdbSnapshot)) {
-        Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=mdblist_discovery")
-        runCatching { mdbListDiscoveryService.ensureFresh(force = false) }
-            .onFailure { error ->
-                Log.w(HomeViewModel.TAG, "Failed synthetic MDBList refresh in serialized startup pipeline", error)
+        )
+
+        refreshJobs.add(
+            launch(Dispatchers.IO) {
+                try {
+                    Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=simkl_discovery")
+                    if (refreshSimklDiscovery) {
+                        try {
+                            simklDiscoveryService.ensureFresh(force = false)
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (t: Throwable) {
+                            Log.w(HomeViewModel.TAG, "Failed synthetic SIMKL refresh in serialized startup pipeline", t)
+                        }
+                    }
+                    val afterSimklSnapshot = simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
+                    val simklBeforeKeys = simklSnapshotItemKeys(beforeSimklSnapshot)
+                    val simklAfterKeys = simklSnapshotItemKeys(afterSimklSnapshot)
+                    withContext(Dispatchers.Main.immediate) {
+                        simklDiscoverySnapshot = afterSimklSnapshot
+                        persistedSimklDiscoverySnapshot = afterSimklSnapshot
+                    }
+                    logStartupPerf(
+                        "synthetic_refresh_provider_ready",
+                        "source=simkl total=${simklAfterKeys.size} added=${(simklAfterKeys - simklBeforeKeys).size} retained=${(simklAfterKeys intersect simklBeforeKeys).size}"
+                    )
+                    Log.d(HomeViewModel.TAG, "Post-startup refresh step end source=simkl_discovery")
+                    logStartupPerf("synthetic_refresh_step_start", "source=simkl")
+                    renewSimklSyntheticSnapshotPipeline(afterSimklSnapshot)
+                    logStartupPerf("synthetic_refresh_step_end", "source=simkl rows=${persistedSimklSyntheticGroups.sumOf { it.rows.size }}")
+                    withContext(Dispatchers.Main.immediate) {
+                        scheduleUpdateCatalogRows()
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    Log.w(HomeViewModel.TAG, "Unexpected failure during SIMKL refresh in serialized startup pipeline", t)
+                }
             }
-        Log.d(HomeViewModel.TAG, "Post-startup refresh step end source=mdblist_discovery")
-    }
-    if (shouldRefreshSimklDiscoveryForState(simklCatalogPreferences, beforeSimklSnapshot)) {
-        Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=simkl_discovery")
-        runCatching { simklDiscoveryService.ensureFresh(force = false) }
-            .onFailure { error ->
-                Log.w(HomeViewModel.TAG, "Failed synthetic SIMKL refresh in serialized startup pipeline", error)
+        )
+
+        refreshJobs.add(
+            launch(Dispatchers.IO) {
+                try {
+                    Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=mdblist_discovery")
+                    if (refreshMdbDiscovery) {
+                        try {
+                            mdbListDiscoveryService.ensureFresh(force = false)
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (t: Throwable) {
+                            Log.w(HomeViewModel.TAG, "Failed synthetic MDBList refresh in serialized startup pipeline", t)
+                        }
+                    }
+                    val afterMdbSnapshot = applyTomatoesOverridesToMDBListSnapshot(
+                        mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first(),
+                        syntheticTomatoesOverridesByItemId
+                    )
+                    val mdbBeforeKeys = mdbSnapshotItemKeys(beforeMdbSnapshot)
+                    val mdbAfterKeys = mdbSnapshotItemKeys(afterMdbSnapshot)
+                    withContext(Dispatchers.Main.immediate) {
+                        mdbListDiscoverySnapshot = afterMdbSnapshot
+                        persistedMDBListDiscoverySnapshot = afterMdbSnapshot
+                    }
+                    logStartupPerf(
+                        "synthetic_refresh_provider_ready",
+                        "source=mdblist total=${mdbAfterKeys.size} added=${(mdbAfterKeys - mdbBeforeKeys).size} retained=${(mdbAfterKeys intersect mdbBeforeKeys).size}"
+                    )
+                    Log.d(HomeViewModel.TAG, "Post-startup refresh step end source=mdblist_discovery")
+                    logStartupPerf("synthetic_refresh_step_start", "source=mdblist")
+                    renewMDBListSyntheticSnapshotPipeline(afterMdbSnapshot)
+                    logStartupPerf("synthetic_refresh_step_end", "source=mdblist rows=${persistedMDBListSyntheticGroups.sumOf { it.rows.size }}")
+                    withContext(Dispatchers.Main.immediate) {
+                        scheduleUpdateCatalogRows()
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    Log.w(HomeViewModel.TAG, "Unexpected failure during MDBList refresh in serialized startup pipeline", t)
+                }
             }
-        Log.d(HomeViewModel.TAG, "Post-startup refresh step end source=simkl_discovery")
+        )
+
+        refreshJobs.add(
+            launch(Dispatchers.IO) {
+                try {
+                    val addons = addonsCache
+                    refreshedCatalogCount.set(
+                        homeCatalogRefreshCoordinator.refreshSerially(
+                            addons = addons,
+                            telemetryEnabled = startupPerfTelemetryEnabled,
+                            isCatalogDisabled = { addon, catalog ->
+                                isCatalogDisabled(
+                                    addonBaseUrl = addon.baseUrl,
+                                    addonId = addon.id,
+                                    type = catalog.apiType,
+                                    catalogId = catalog.id,
+                                    catalogName = catalog.name
+                                )
+                            },
+                            getCurrentRow = { key ->
+                                withContext(Dispatchers.Main.immediate) {
+                                    catalogsMap[key]
+                                }
+                            },
+                            isItemReferencedElsewhere = { itemKey, sourceCatalogKey ->
+                                withContext(Dispatchers.Main.immediate) {
+                                    catalogsMap.any { (catalogKey, row) ->
+                                        if (catalogKey == sourceCatalogKey) {
+                                            false
+                                        } else {
+                                            row.items.any { "${it.apiType}:${it.id}" == itemKey }
+                                        }
+                                    }
+                                }
+                            },
+                            onCatalogReady = { catalogKey, row, diff ->
+                                withContext(Dispatchers.Main.immediate) {
+                                    catalogsMap[catalogKey] = row
+                                    if (diff.addedOrChanged.isNotEmpty()) {
+                                        logStartupPerf(
+                                            "catalog_publish_ready",
+                                            "catalogKey=$catalogKey items_added=${diff.addedOrChanged.size}"
+                                        )
+                                    }
+                                    scheduleUpdateCatalogRows()
+                                }
+                            },
+                            onLog = { event, details -> logStartupPerf(event, details) }
+                        )
+                    )
+                    if (refreshedCatalogCount.get() == 0) {
+                        logStartupPerf("catalog_refresh_noop", "reason=no_refreshable_addon_catalogs")
+                    }
+                    Log.d(HomeViewModel.TAG, "Post-startup refresh addon catalogs refreshed=${refreshedCatalogCount.get()}")
+                    withContext(Dispatchers.Main.immediate) {
+                        scheduleUpdateCatalogRows()
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    Log.w(HomeViewModel.TAG, "Unexpected failure during addon refresh in serialized startup pipeline", t)
+                }
+            }
+        )
+        refreshJobs.joinAll()
     }
 
     val afterTraktSnapshot = traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
@@ -507,83 +680,14 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
             "mdb_total=${mdbAfterKeys.size} mdb_added=${(mdbAfterKeys - mdbBeforeKeys).size} mdb_retained=${(mdbAfterKeys intersect mdbBeforeKeys).size}"
     )
 
-    syntheticSnapshotBatchActive = true
-    try {
-        Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=trakt_snapshot")
-        logStartupPerf("synthetic_refresh_step_start", "source=trakt")
-        renewTraktSyntheticSnapshotPipeline(hydratedAfterTraktSnapshot)
-        logStartupPerf("synthetic_refresh_step_end", "source=trakt rows=${persistedTraktSyntheticGroups.sumOf { it.rows.size }}")
-        Log.d(
-            HomeViewModel.TAG,
-            "Post-startup refresh step end source=trakt_snapshot groups=${persistedTraktSyntheticGroups.size} rows=${persistedTraktSyntheticGroups.sumOf { it.rows.size }}"
-        )
-
-        Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=simkl_snapshot")
-        logStartupPerf("synthetic_refresh_step_start", "source=simkl")
-        renewSimklSyntheticSnapshotPipeline(afterSimklSnapshot)
-        logStartupPerf("synthetic_refresh_step_end", "source=simkl rows=${persistedSimklSyntheticGroups.sumOf { it.rows.size }}")
-        Log.d(
-            HomeViewModel.TAG,
-            "Post-startup refresh step end source=simkl_snapshot groups=${persistedSimklSyntheticGroups.size} rows=${persistedSimklSyntheticGroups.sumOf { it.rows.size }}"
-        )
-
-        Log.d(HomeViewModel.TAG, "Post-startup refresh step begin source=mdblist_snapshot")
-        logStartupPerf("synthetic_refresh_step_start", "source=mdblist")
-        renewMDBListSyntheticSnapshotPipeline(hydratedAfterMdbSnapshot)
-        logStartupPerf("synthetic_refresh_step_end", "source=mdblist rows=${persistedMDBListSyntheticGroups.sumOf { it.rows.size }}")
-        Log.d(
-            HomeViewModel.TAG,
-            "Post-startup refresh step end source=mdblist_snapshot groups=${persistedMDBListSyntheticGroups.size} rows=${persistedMDBListSyntheticGroups.sumOf { it.rows.size }}"
-        )
-    } finally {
-        syntheticSnapshotBatchActive = false
-    }
-    reloadPersistedSyntheticCatalogRowsPipeline()
     Log.d(
         HomeViewModel.TAG,
-        "Post-startup refresh reloaded synthetic snapshot traktGroups=${persistedTraktSyntheticGroups.size} traktRows=${persistedTraktSyntheticGroups.sumOf { it.rows.size }} " +
+        "Post-startup refresh settled synthetic snapshot traktGroups=${persistedTraktSyntheticGroups.size} traktRows=${persistedTraktSyntheticGroups.sumOf { it.rows.size }} " +
             "simklGroups=${persistedSimklSyntheticGroups.size} simklRows=${persistedSimklSyntheticGroups.sumOf { it.rows.size }} " +
             "mdbGroups=${persistedMDBListSyntheticGroups.size} mdbRows=${persistedMDBListSyntheticGroups.sumOf { it.rows.size }}"
     )
 
-    val addons = addonsCache
-    val refreshedCatalogCount = homeCatalogRefreshCoordinator.refreshSerially(
-        addons = addons,
-        telemetryEnabled = startupPerfTelemetryEnabled,
-        isCatalogDisabled = { addon, catalog ->
-            isCatalogDisabled(
-                addonBaseUrl = addon.baseUrl,
-                addonId = addon.id,
-                type = catalog.apiType,
-                catalogId = catalog.id,
-                catalogName = catalog.name
-            )
-        },
-        getCurrentRow = { key -> catalogsMap[key] },
-        isItemReferencedElsewhere = { itemKey, sourceCatalogKey ->
-            catalogsMap.any { (catalogKey, row) ->
-                if (catalogKey == sourceCatalogKey) return@any false
-                row.items.any { "${it.apiType}:${it.id}" == itemKey }
-            }
-        },
-        onCatalogReady = { catalogKey, row, diff ->
-            catalogsMap[catalogKey] = row
-            if (diff.addedOrChanged.isNotEmpty()) {
-                logStartupPerf(
-                    "catalog_publish_ready",
-                    "catalogKey=$catalogKey items_added=${diff.addedOrChanged.size}"
-                )
-            }
-            scheduleUpdateCatalogRows()
-        },
-        onLog = { event, details -> logStartupPerf(event, details) }
-    )
-    if (refreshedCatalogCount == 0) {
-        logStartupPerf("catalog_refresh_noop", "reason=no_refreshable_addon_catalogs")
-    }
-    Log.d(HomeViewModel.TAG, "Post-startup refresh addon catalogs refreshed=$refreshedCatalogCount")
-
-    // Recompute rows once at the end so Home only publishes from the renewed merged snapshot.
+    // Recompute rows once at the end so Home settles on the renewed merged snapshot.
     runCatching {
         lastCatalogComputationSignature = null
         updateCatalogRowsPipeline()
@@ -593,7 +697,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
         .flatMap { row -> row.items.asSequence() }
         .map { item -> "${item.apiType}:${item.id}" }
         .toSet()
-    if (refreshedCatalogCount == 0 && activeCatalogItemKeys.isNotEmpty()) {
+    if (refreshedCatalogCount.get() == 0 && activeCatalogItemKeys.isNotEmpty()) {
         val visibleItems = _fullCatalogRows.value
             .asSequence()
             .flatMap { row -> row.items.asSequence() }
@@ -1264,22 +1368,10 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val traktExpectedOrderKeys = buildExpectedConfiguredTraktOrderKeys(traktPrefs)
     val mdbExpectedOrderKeys = buildExpectedConfiguredMDBListOrderKeys(mdbListPrefs, effectiveMDBListSnapshot)
     val expectedConfiguredOrderKeys = (traktExpectedOrderKeys + simklExpectedOrderKeys + mdbExpectedOrderKeys + addonExpectedOrderKeys).distinct()
-    val sourceCachesReady = areConfiguredHomeSourceCachesReady(
-        addonExpectedOrderKeys = addonExpectedOrderKeys,
-        availableAddonOrderKeys = catalogSnapshot.keys,
-        traktExpectedOrderKeys = traktExpectedOrderKeys,
-        traktPrefs = traktPrefs,
-        traktSnapshot = effectiveTraktSnapshot,
-        simklExpectedOrderKeys = simklExpectedOrderKeys,
-        simklPrefs = simklPrefs,
-        simklSnapshot = effectiveSimklSnapshot,
-        mdbExpectedOrderKeys = mdbExpectedOrderKeys,
-        mdbPrefs = mdbListPrefs,
-        mdbSnapshot = effectiveMDBListSnapshot
-    )
     val publishableExpectedOrderKeys = buildPublishableConfiguredHomeOrderKeys(
         addons = addonsCache,
         disabledHomeCatalogKeys = disabledHomeCatalogKeys,
+        availableAddonOrderKeys = catalogSnapshot.keys,
         traktPrefs = traktPrefs,
         traktSnapshot = effectiveTraktSnapshot,
         hasTraktUpNextItems = currentState.traktUpNextItems.isNotEmpty(),
@@ -1287,16 +1379,6 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         simklSnapshot = effectiveSimklSnapshot,
         mdbPrefs = mdbListPrefs,
         mdbSnapshot = effectiveMDBListSnapshot
-    )
-    val publishSourcesReady = areConfiguredHomePublishSourcesReady(
-        addonExpectedOrderKeys = addonExpectedOrderKeys,
-        availableAddonOrderKeys = catalogSnapshot.keys,
-        traktExpectedOrderKeys = traktExpectedOrderKeys,
-        traktObserved = traktDiscoveryObserved,
-        simklExpectedOrderKeys = simklExpectedOrderKeys,
-        simklObserved = simklDiscoveryObserved,
-        mdbExpectedOrderKeys = mdbExpectedOrderKeys,
-        mdbObserved = mdbListDiscoveryObserved
     )
     val activeRefreshInProgress =
         catalogsLoadInProgress ||
@@ -1501,7 +1583,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val orderedGroupKeys = updateResult.orderedGroupKeys
     val nextTruncatedRowCache = updateResult.truncatedCache
     val candidateSnapshotComplete =
-        publishSourcesReady &&
+        publishableExpectedOrderKeys.isNotEmpty() &&
             isConfiguredHomeSnapshotComplete(
                 snapshotOrderedGroupKeys = orderedGroupKeys,
                 expectedConfiguredOrderKeys = publishableExpectedOrderKeys
@@ -1664,6 +1746,7 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
     val publishableExpectedOrderKeys = buildPublishableConfiguredHomeOrderKeys(
         addons = addonsCache,
         disabledHomeCatalogKeys = disabledHomeCatalogKeys,
+        availableAddonOrderKeys = catalogsMap.keys,
         traktPrefs = traktCatalogPreferences,
         traktSnapshot = traktDiscoverySnapshot,
         hasTraktUpNextItems = _uiState.value.traktUpNextItems.isNotEmpty(),

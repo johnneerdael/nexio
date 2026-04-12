@@ -182,9 +182,9 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         addons: List<Addon>,
         telemetryEnabled: Boolean,
         isCatalogDisabled: (Addon, CatalogDescriptor) -> Boolean,
-        getCurrentRow: (String) -> CatalogRow?,
-        isItemReferencedElsewhere: (String, String) -> Boolean,
-        onCatalogReady: (String, CatalogRow, CatalogItemDiff) -> Unit,
+        getCurrentRow: suspend (String) -> CatalogRow?,
+        isItemReferencedElsewhere: suspend (String, String) -> Boolean,
+        onCatalogReady: suspend (String, CatalogRow, CatalogItemDiff) -> Unit,
         onLog: (String, String?) -> Unit
     ): Int {
         var refreshedCatalogCount = 0
