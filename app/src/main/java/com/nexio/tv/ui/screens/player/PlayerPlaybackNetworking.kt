@@ -46,7 +46,7 @@ internal object PlayerPlaybackNetworking {
             return CacheDataSource.Factory()
                 .setCache(cache)
                 .setCacheKeyFactory(cacheKeyFactory)
-                .withUpstreamFallback(upstreamFactory)
+                .setUpstreamDataSourceFactory(upstreamFactory)
                 .setCacheWriteDataSinkFactory(null)
         }
         return CoverageAwareDataSource.Factory(
@@ -59,12 +59,4 @@ internal object PlayerPlaybackNetworking {
         )
     }
 
-    private fun CacheDataSource.Factory.withUpstreamFallback(
-        upstreamFactory: DataSource.Factory
-    ): CacheDataSource.Factory {
-        javaClass
-            .getMethod("setUpstream" + "DataSourceFactory", DataSource.Factory::class.java)
-            .invoke(this, upstreamFactory)
-        return this
-    }
 }
