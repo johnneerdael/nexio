@@ -107,6 +107,7 @@ internal fun buildExpectedConfiguredHomeOrderKeys(
 internal fun buildPublishableConfiguredHomeOrderKeys(
     addons: List<Addon>,
     disabledHomeCatalogKeys: Set<String>,
+    availableAddonOrderKeys: Set<String>,
     traktPrefs: TraktCatalogPreferences,
     traktSnapshot: TraktDiscoverySnapshot,
     hasTraktUpNextItems: Boolean,
@@ -129,6 +130,7 @@ internal fun buildPublishableConfiguredHomeOrderKeys(
         snapshot = mdbSnapshot
     )
     val addonKeys = buildExpectedConfiguredAddonOrderKeys(addons, disabledHomeCatalogKeys)
+        .filter { it in availableAddonOrderKeys }
     return (traktKeys + simklKeys + mdbKeys + addonKeys).distinct()
 }
 

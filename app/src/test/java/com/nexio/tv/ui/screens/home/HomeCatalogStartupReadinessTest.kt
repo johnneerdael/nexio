@@ -202,6 +202,7 @@ class HomeCatalogStartupReadinessTest {
         val publishable = buildPublishableConfiguredHomeOrderKeys(
             addons = addons,
             disabledHomeCatalogKeys = emptySet(),
+            availableAddonOrderKeys = emptySet(),
             traktPrefs = traktPrefs,
             traktSnapshot = traktSnapshot,
             hasTraktUpNextItems = false,
@@ -213,8 +214,7 @@ class HomeCatalogStartupReadinessTest {
 
         assertEquals(
             listOf(
-                "top:top-rated",
-                "cinemeta_movie_popular"
+                "top:top-rated"
             ),
             publishable
         )
@@ -408,6 +408,7 @@ class HomeCatalogStartupReadinessTest {
         val publishable = buildPublishableConfiguredHomeOrderKeys(
             addons = emptyList(),
             disabledHomeCatalogKeys = emptySet(),
+            availableAddonOrderKeys = emptySet(),
             traktPrefs = TraktCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
             traktSnapshot = TraktDiscoverySnapshot(),
             hasTraktUpNextItems = false,
@@ -418,6 +419,144 @@ class HomeCatalogStartupReadinessTest {
         )
 
         assertEquals(listOf(SimklCatalogIds.TV_TRENDING_TODAY), publishable)
+    }
+
+    @Test
+    fun `publishable configured home keys include simkl rails even while trakt discovery is still pending`() {
+        val traktPrefs = TraktCatalogPreferences(
+            enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES),
+            catalogOrder = TraktCatalogIds.BUILT_IN_ORDER
+        )
+        val traktSnapshot = TraktDiscoverySnapshot()
+        val simklPrefs = SimklCatalogPreferences(
+            enabledCatalogs = setOf(SimklCatalogIds.TV_TRENDING_TODAY),
+            catalogOrder = listOf(SimklCatalogIds.TV_TRENDING_TODAY)
+        )
+        val simklSnapshot = SimklDiscoverySnapshot(
+            itemsByCatalog = mapOf(
+                SimklCatalogIds.TV_TRENDING_TODAY to listOf(
+                    samplePreview("tt1000001", ContentType.SERIES, "Trending Show")
+                )
+            ),
+            updatedAtMs = 123L
+        )
+
+        assertTrue(shouldRefreshTraktDiscoveryForState(traktPrefs, traktSnapshot))
+
+        val publishable = buildPublishableConfiguredHomeOrderKeys(
+            addons = emptyList(),
+            disabledHomeCatalogKeys = emptySet(),
+            availableAddonOrderKeys = emptySet(),
+            traktPrefs = traktPrefs,
+            traktSnapshot = traktSnapshot,
+            hasTraktUpNextItems = false,
+            simklPrefs = simklPrefs,
+            simklSnapshot = simklSnapshot,
+            mdbPrefs = MDBListCatalogPreferences(),
+            mdbSnapshot = MDBListDiscoverySnapshot()
+        )
+
+        assertEquals(listOf(SimklCatalogIds.TV_TRENDING_TODAY), publishable)
+    }
+
+    @Test
+    fun `publishable configured home keys include addon rails even while trakt discovery is still pending`() {
+        val addons = listOf(
+            addonWithCatalog("cinemeta", "movie", "popular")
+        )
+        val traktPrefs = TraktCatalogPreferences(
+            enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES),
+            catalogOrder = TraktCatalogIds.BUILT_IN_ORDER
+        )
+        val traktSnapshot = TraktDiscoverySnapshot()
+        val simklPrefs = SimklCatalogPreferences(
+            enabledCatalogs = setOf(SimklCatalogIds.TV_TRENDING_TODAY),
+            catalogOrder = listOf(SimklCatalogIds.TV_TRENDING_TODAY)
+        )
+        val simklSnapshot = SimklDiscoverySnapshot(
+            itemsByCatalog = mapOf(
+                SimklCatalogIds.TV_TRENDING_TODAY to listOf(
+                    samplePreview("tt1000001", ContentType.SERIES, "Trending Show")
+                )
+            ),
+            updatedAtMs = 123L
+        )
+
+        assertTrue(shouldRefreshTraktDiscoveryForState(traktPrefs, traktSnapshot))
+
+        val publishable = buildPublishableConfiguredHomeOrderKeys(
+            addons = addons,
+            disabledHomeCatalogKeys = emptySet(),
+            availableAddonOrderKeys = setOf("cinemeta_movie_popular"),
+            traktPrefs = traktPrefs,
+            traktSnapshot = traktSnapshot,
+            hasTraktUpNextItems = false,
+            simklPrefs = simklPrefs,
+            simklSnapshot = simklSnapshot,
+            mdbPrefs = MDBListCatalogPreferences(),
+            mdbSnapshot = MDBListDiscoverySnapshot()
+        )
+
+        assertEquals(
+            listOf(
+                SimklCatalogIds.TV_TRENDING_TODAY,
+                "cinemeta_movie_popular"
+            ),
+            publishable
+        )
+        assertTrue(
+            isConfiguredHomeSnapshotComplete(
+                snapshotOrderedGroupKeys = publishable,
+            expectedConfiguredOrderKeys = publishable
+            )
+        )
+    }
+
+    @Test
+    fun `pending addon rows do not block ready simkl rows on cold startup`() {
+        val addons = listOf(
+            addonWithCatalog("cinemeta", "movie", "popular")
+        )
+        val traktPrefs = TraktCatalogPreferences(
+            enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES),
+            catalogOrder = TraktCatalogIds.BUILT_IN_ORDER
+        )
+        val traktSnapshot = TraktDiscoverySnapshot()
+        val simklPrefs = SimklCatalogPreferences(
+            enabledCatalogs = setOf(SimklCatalogIds.TV_TRENDING_TODAY),
+            catalogOrder = listOf(SimklCatalogIds.TV_TRENDING_TODAY)
+        )
+        val simklSnapshot = SimklDiscoverySnapshot(
+            itemsByCatalog = mapOf(
+                SimklCatalogIds.TV_TRENDING_TODAY to listOf(
+                    samplePreview("tt1000001", ContentType.SERIES, "Trending Show")
+                )
+            ),
+            updatedAtMs = 123L
+        )
+
+        assertTrue(shouldRefreshTraktDiscoveryForState(traktPrefs, traktSnapshot))
+
+        val publishable = buildPublishableConfiguredHomeOrderKeys(
+            addons = addons,
+            disabledHomeCatalogKeys = emptySet(),
+            availableAddonOrderKeys = emptySet(),
+            traktPrefs = traktPrefs,
+            traktSnapshot = traktSnapshot,
+            hasTraktUpNextItems = false,
+            simklPrefs = simklPrefs,
+            simklSnapshot = simklSnapshot,
+            mdbPrefs = MDBListCatalogPreferences(),
+            mdbSnapshot = MDBListDiscoverySnapshot()
+        )
+
+        assertEquals(listOf(SimklCatalogIds.TV_TRENDING_TODAY), publishable)
+        assertTrue(
+            isConfiguredHomeSnapshotComplete(
+                snapshotOrderedGroupKeys = publishable,
+                expectedConfiguredOrderKeys = publishable
+            )
+        )
     }
 
     @Test
@@ -446,6 +585,7 @@ class HomeCatalogStartupReadinessTest {
         val publishable = buildPublishableConfiguredHomeOrderKeys(
             addons = emptyList(),
             disabledHomeCatalogKeys = emptySet(),
+            availableAddonOrderKeys = emptySet(),
             traktPrefs = TraktCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
             traktSnapshot = TraktDiscoverySnapshot(),
             hasTraktUpNextItems = false,
@@ -493,6 +633,7 @@ class HomeCatalogStartupReadinessTest {
         val publishable = buildPublishableConfiguredHomeOrderKeys(
             addons = addons,
             disabledHomeCatalogKeys = emptySet(),
+            availableAddonOrderKeys = setOf("cinemeta_movie_popular"),
             traktPrefs = traktPrefs,
             traktSnapshot = traktSnapshot,
             hasTraktUpNextItems = false,
