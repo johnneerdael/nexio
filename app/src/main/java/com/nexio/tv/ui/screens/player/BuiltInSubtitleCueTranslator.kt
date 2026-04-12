@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
-private const val BUILT_IN_SUBTITLE_PREFETCH_DURATION_US = 20_000_000L
+private const val BUILT_IN_SUBTITLE_PREFETCH_DURATION_US = 20L * 60L * 1_000_000L
 private const val BUILT_IN_SUBTITLE_PROVIDER_FAILURE_COOLDOWN_MS = 60_000L
 
 internal class BuiltInSubtitleCueTranslator(
