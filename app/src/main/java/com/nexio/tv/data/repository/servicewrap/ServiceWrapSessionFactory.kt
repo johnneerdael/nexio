@@ -1,7 +1,9 @@
 package com.nexio.tv.data.repository.servicewrap
 
 import com.nexio.tv.domain.model.Stream
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
@@ -63,17 +65,47 @@ class ServiceWrapSessionFactory @Inject constructor(
                 launchedWrapCount += 1
                 inFlight.incrementAndGet()
                 scope.launch {
+                    var emittedTerminalBatch = false
                     try {
-                        val resolved = resolver.resolve(
+                        resolver.resolveProgressively(
                             candidate = candidate,
                             requestContext = requestContext
-                        )
-                        val wrappedStreams = wrappedStreamBuilder.build(candidate, resolved)
+                        ).collect { resolution ->
+                            val wrappedStreams = wrappedStreamBuilder.build(candidate, resolution.streams)
+                            if (wrappedStreams.isEmpty() && !resolution.isTerminal) {
+                                return@collect
+                            }
+                            if (resolution.isTerminal) {
+                                emittedTerminalBatch = true
+                            }
+                            onResolved(
+                                ServiceWrapResolvedBatch(
+                                    addonName = addonName,
+                                    addonLogo = addonLogo,
+                                    wrappedStreams = wrappedStreams,
+                                    isTerminal = resolution.isTerminal
+                                )
+                            )
+                        }
+                        if (!emittedTerminalBatch) {
+                            onResolved(
+                                ServiceWrapResolvedBatch(
+                                    addonName = addonName,
+                                    addonLogo = addonLogo,
+                                    wrappedStreams = emptyList(),
+                                    isTerminal = true
+                                )
+                            )
+                        }
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
                         onResolved(
                             ServiceWrapResolvedBatch(
                                 addonName = addonName,
                                 addonLogo = addonLogo,
-                                wrappedStreams = wrappedStreams
+                                wrappedStreams = emptyList(),
+                                isTerminal = true
                             )
                         )
                     } finally {

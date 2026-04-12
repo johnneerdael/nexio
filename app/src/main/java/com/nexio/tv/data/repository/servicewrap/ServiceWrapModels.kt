@@ -18,7 +18,13 @@ data class ServiceWrapRequestContext(
 data class ServiceWrapResolvedBatch(
     val addonName: String,
     val addonLogo: String?,
-    val wrappedStreams: List<Stream>
+    val wrappedStreams: List<Stream>,
+    val isTerminal: Boolean = true
+)
+
+data class ServiceWrapResolutionBatch(
+    val streams: List<ResolvedServiceWrapStream>,
+    val isTerminal: Boolean
 )
 
 interface ServiceWrapSession {

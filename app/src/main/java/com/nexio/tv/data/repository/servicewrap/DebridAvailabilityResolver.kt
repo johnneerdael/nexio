@@ -27,9 +27,12 @@ import com.nexio.tv.data.repository.EasyDebridService
 import com.nexio.tv.data.repository.PremiumizeService
 import com.nexio.tv.data.repository.RealDebridAuthService
 import com.nexio.tv.data.repository.TorBoxService
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.supervisorScope
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -63,17 +66,47 @@ class DebridAvailabilityResolver @Inject constructor(
     override suspend fun resolve(
         candidate: WrapCandidate,
         requestContext: ServiceWrapRequestContext
-    ): List<ResolvedServiceWrapStream> = supervisorScope {
+    ): List<ResolvedServiceWrapStream> {
+        val resolved = mutableListOf<ResolvedServiceWrapStream>()
+        resolveProgressively(candidate, requestContext).collect { batch ->
+            resolved += batch.streams
+        }
+        return resolved
+    }
+
+    override fun resolveProgressively(
+        candidate: WrapCandidate,
+        requestContext: ServiceWrapRequestContext
+    ): Flow<ServiceWrapResolutionBatch> = flow {
         val tasks = backends
             .filter { backend -> backend.isConfigured() }
-            .map { backend ->
+        if (tasks.isEmpty()) {
+            emit(ServiceWrapResolutionBatch(streams = emptyList(), isTerminal = true))
+            return@flow
+        }
+
+        supervisorScope {
+            val results = Channel<List<ResolvedServiceWrapStream>>(Channel.UNLIMITED)
+            val jobs = tasks.map { backend ->
                 async {
-                    runCatching {
-                        backend.resolve(candidate, requestContext)
-                    }.getOrDefault(emptyList())
+                    results.send(
+                        runCatching {
+                            backend.resolve(candidate, requestContext)
+                        }.getOrDefault(emptyList())
+                    )
                 }
             }
-        tasks.flatMap { it.await() }
+            repeat(tasks.size) { index ->
+                emit(
+                    ServiceWrapResolutionBatch(
+                        streams = results.receive(),
+                        isTerminal = index == tasks.lastIndex
+                    )
+                )
+            }
+            jobs.forEach { it.await() }
+            results.close()
+        }
     }
 
     private inner class PremiumizeBackend : ServiceWrapProviderBackend {

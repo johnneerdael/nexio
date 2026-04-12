@@ -73,7 +73,6 @@ import javax.inject.Inject
 private const val TAG = "StreamScreenViewModel"
 private const val EMBEDDED_STREAM_GROUP_NAME = "Embedded Streams"
 private const val EMBEDDED_STREAM_FALLBACK_NAME = "Embed Stream"
-private const val NO_STREAMS_EMPTY_STATE_DELAY_MS = 45_000L
 @HiltViewModel
 class StreamScreenViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -95,7 +94,6 @@ class StreamScreenViewModel @Inject constructor(
     private var streamLoadJob: Job? = null
     private var sourceChipErrorDismissJob: Job? = null
     private var activeStreamSearchRequestId: String? = null
-    private var pendingNoStreamsRequestId: String? = null
     private var streamFeatureFlags: StreamFeatureFlags = StreamFeatureFlags()
     private var streamDiagnosticsEnabled: Boolean = false
     private var streamParserCache = StreamPresentationEngine.ParserCache()
@@ -106,21 +104,6 @@ class StreamScreenViewModel @Inject constructor(
     private val shadowAutoPlayReplayCoordinator =
         ShadowAutoPlayReplayCoordinator(benchmarkAwareStreamScorer)
     private val dolbyVisionAutoPlayGate = DolbyVisionAutoPlayGate()
-    private val noStreamsGateController = NoStreamsGateController(
-        scope = viewModelScope,
-        delayMs = NO_STREAMS_EMPTY_STATE_DELAY_MS
-    ) {
-        updateUiStateIfChanged { state ->
-            if (pendingNoStreamsRequestId != null &&
-                state.error == null &&
-                state.presentedStreams.isEmpty()
-            ) {
-                state.copy(showNoStreamsState = true)
-            } else {
-                state
-            }
-        }
-    }
 
     private val videoId: String = savedStateHandle["videoId"] ?: ""
     private val contentType: String = savedStateHandle["contentType"] ?: ""
@@ -258,10 +241,8 @@ class StreamScreenViewModel @Inject constructor(
     fun cancelActiveStreamSearch() {
         activeStreamSearchRequestId?.let(streamRepository::cancelActiveStreamRequests)
         activeStreamSearchRequestId = null
-        pendingNoStreamsRequestId = null
         streamLoadJob?.cancel()
         streamLoadJob = null
-        noStreamsGateController.cancel()
         sourceChipErrorDismissJob?.cancel()
         sourceChipErrorDismissJob = null
         shadowAutoPlayReplayCoordinator.clear()
@@ -392,8 +373,6 @@ class StreamScreenViewModel @Inject constructor(
                     )
                 }
                 shadowAutoPlayReplayCoordinator.clear()
-                pendingNoStreamsRequestId = requestId
-                noStreamsGateController.restart()
 
                 val installedAddons = addonRepository.getInstalledAddons().first()
                 val installedAddonOrder = installedAddons.map { it.displayName }
@@ -518,10 +497,6 @@ class StreamScreenViewModel @Inject constructor(
                         resolvedAutoPlayTarget = true
                     }
                     val deterministicFailureMessage = organizedResult.deterministicFailureMessage
-                    if (organizedResult.organizedStreams.items.isNotEmpty()) {
-                        pendingNoStreamsRequestId = null
-                        noStreamsGateController.cancel()
-                    }
 
                     updateUiStateIfChanged {
                         it.copy(
@@ -638,8 +613,6 @@ class StreamScreenViewModel @Inject constructor(
                         }
                         is NetworkResult.Error -> {
                             streamSearchCompletedWithError = true
-                            pendingNoStreamsRequestId = null
-                            noStreamsGateController.cancel()
                             if (directAutoPlayFlowEnabledForSession) {
                                 directAutoPlayFlowEnabledForSession = false
                             }
@@ -741,8 +714,6 @@ class StreamScreenViewModel @Inject constructor(
                         )
                     )
                 }
-                pendingNoStreamsRequestId = null
-                noStreamsGateController.cancel()
                 if (!streamSearchCompletedWithError &&
                     !organizerHadFailure &&
                     _uiState.value.presentedStreams.isEmpty() &&

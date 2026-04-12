@@ -9,7 +9,15 @@ import com.nexio.tv.data.remote.api.AddonApi
 import com.nexio.tv.data.remote.api.StreamSearchRequestTag
 import com.nexio.tv.data.remote.dto.StreamDto
 import com.nexio.tv.data.remote.dto.StreamResponseDto
+import com.nexio.tv.data.repository.servicewrap.ResolvedServiceWrapStream
+import com.nexio.tv.data.repository.servicewrap.ServiceWrapProvider
+import com.nexio.tv.data.repository.servicewrap.ServiceWrapResolutionBatch
+import com.nexio.tv.data.repository.servicewrap.ServiceWrapRequestContext
+import com.nexio.tv.data.repository.servicewrap.ServiceWrapResolver
 import com.nexio.tv.data.repository.servicewrap.ServiceWrapSessionFactory
+import com.nexio.tv.data.repository.servicewrap.WrapCandidate
+import com.nexio.tv.data.repository.servicewrap.WrapCandidateExtractor
+import com.nexio.tv.data.repository.servicewrap.WrappedStreamBuilder
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
 import com.nexio.tv.domain.model.ContentType
@@ -20,6 +28,8 @@ import io.mockk.mockk
 import io.mockk.mockkStatic
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
@@ -172,6 +182,95 @@ class StreamRepositoryImplTest {
     }
 
     @Test
+    fun `getStreamsFromAllAddons emits wrapped service streams as each provider resolves`() = runTest {
+        mockAndroidLog()
+
+        val addonApi = mockk<AddonApi>()
+        val addonRepository = mockk<AddonRepository>()
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
+        val okHttpClient = mockk<OkHttpClient>(relaxed = true)
+        val dispatcher = mockk<Dispatcher>()
+        every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
+        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings(serviceWrapEnabled = true))
+        every { okHttpClient.dispatcher } returns dispatcher
+        every { dispatcher.runningCalls() } returns mutableListOf()
+        every { dispatcher.queuedCalls() } returns mutableListOf()
+
+        val addonA = streamAddon("https://addon-a.example", "Addon A")
+        every { addonRepository.getInstalledAddons() } returns flowOf(listOf(addonA))
+        val hash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
+        coEvery { addonApi.getStreams(match { it.contains("addon-a.example") }, any()) } returns Response.success(
+            StreamResponseDto(
+                streams = listOf(
+                    streamDto(
+                        name = "P2P Candidate",
+                        url = null,
+                        infoHash = hash,
+                        description = "Movie.2024.2160p.REMUX"
+                    )
+                )
+            )
+        )
+
+        val serviceWrapSessionFactory = ServiceWrapSessionFactory(
+            extractor = WrapCandidateExtractor(),
+            resolver = object : ServiceWrapResolver {
+                override suspend fun resolve(
+                    candidate: WrapCandidate,
+                    requestContext: ServiceWrapRequestContext
+                ): List<ResolvedServiceWrapStream> = error("progressive path should be used")
+
+                override fun resolveProgressively(
+                    candidate: WrapCandidate,
+                    requestContext: ServiceWrapRequestContext
+                ): Flow<ServiceWrapResolutionBatch> = flow {
+                    emit(
+                        ServiceWrapResolutionBatch(
+                            streams = listOf(resolvedStream(ServiceWrapProvider.REAL_DEBRID, candidate.normalizedInfoHash)),
+                            isTerminal = false
+                        )
+                    )
+                    delay(1_000L)
+                    emit(
+                        ServiceWrapResolutionBatch(
+                            streams = listOf(resolvedStream(ServiceWrapProvider.PREMIUMIZE, candidate.normalizedInfoHash)),
+                            isTerminal = true
+                        )
+                    )
+                }
+            },
+            wrappedStreamBuilder = WrappedStreamBuilder()
+        )
+
+        val repository = StreamRepositoryImpl(
+            api = addonApi,
+            addonRepository = addonRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            playerSettingsDataStore = playerSettingsDataStore,
+            serviceWrapSessionFactory = serviceWrapSessionFactory,
+            okHttpClient = okHttpClient
+        )
+
+        val emissions = withContext(Dispatchers.Default.limitedParallelism(1)) {
+            withTimeout(5_000L) {
+                repository.getStreamsFromAllAddons(
+                    type = "movie",
+                    videoId = "tt1234567",
+                    requestOrigin = "test_service_wrap_progressive",
+                    requestId = "request-service-wrap-progressive"
+                ).toList()
+            }
+        }
+
+        val successes = emissions.filterIsInstance<NetworkResult.Success<List<com.nexio.tv.domain.model.AddonStreams>>>()
+        assertEquals(3, successes.size)
+        assertTrue(successes[0].data.single().streams.isEmpty())
+        assertEquals(setOf("RD"), successes[1].data.single().streams.mapNotNull { it.wrappedProviderId }.toSet())
+        assertEquals(setOf("RD", "PM"), successes[2].data.single().streams.mapNotNull { it.wrappedProviderId }.toSet())
+    }
+
+    @Test
     fun `cancelActiveStreamRequests only cancels matching tagged addon stream calls`() {
         mockAndroidLog()
 
@@ -241,10 +340,36 @@ class StreamRepositoryImplTest {
         )
     }
 
-    private fun streamDto(name: String): StreamDto {
+    private fun streamDto(
+        name: String,
+        url: String? = "https://cdn.example/$name.m3u8",
+        infoHash: String? = null,
+        description: String? = null
+    ): StreamDto {
         return StreamDto(
             name = name,
-            url = "https://cdn.example/$name.m3u8"
+            description = description,
+            url = url,
+            infoHash = infoHash
+        )
+    }
+
+    private fun resolvedStream(
+        provider: ServiceWrapProvider,
+        hash: String
+    ): ResolvedServiceWrapStream {
+        return ResolvedServiceWrapStream(
+            provider = provider,
+            normalizedInfoHash = hash,
+            playbackUrl = "https://${provider.providerId.lowercase()}.example/$hash",
+            selectedFileIndex = 0,
+            filename = "Movie.2024.2160p.REMUX.mkv",
+            folderName = "Movie",
+            sizeBytes = 4_000_000_000L,
+            durationMs = 3_600_000L,
+            bitrate = 8_000_000L,
+            width = 3840,
+            height = 2160
         )
     }
 }

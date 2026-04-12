@@ -3,8 +3,13 @@ package com.nexio.tv.data.repository.servicewrap
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.Stream
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -273,6 +278,97 @@ class ServiceWrapSessionFactoryTest {
         assertEquals(0, result.launchedWrapCount)
         advanceUntilIdle()
         assertTrue(batches.isEmpty())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `session emits progressive resolver batches before terminal completion`() = runTest {
+        val hash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
+        val factory = ServiceWrapSessionFactory(
+            extractor = WrapCandidateExtractor(),
+            resolver = object : ServiceWrapResolver {
+                override suspend fun resolve(
+                    candidate: WrapCandidate,
+                    requestContext: ServiceWrapRequestContext
+                ): List<ResolvedServiceWrapStream> = error("progressive path should be used")
+
+                override fun resolveProgressively(
+                    candidate: WrapCandidate,
+                    requestContext: ServiceWrapRequestContext
+                ): Flow<ServiceWrapResolutionBatch> = flow {
+                    emit(
+                        ServiceWrapResolutionBatch(
+                            streams = listOf(resolvedStream(ServiceWrapProvider.REAL_DEBRID, candidate.normalizedInfoHash)),
+                            isTerminal = false
+                        )
+                    )
+                    delay(1_000L)
+                    emit(
+                        ServiceWrapResolutionBatch(
+                            streams = listOf(resolvedStream(ServiceWrapProvider.PREMIUMIZE, candidate.normalizedInfoHash)),
+                            isTerminal = true
+                        )
+                    )
+                }
+            },
+            wrappedStreamBuilder = WrappedStreamBuilder()
+        )
+        val batches = mutableListOf<ServiceWrapResolvedBatch>()
+        val session = factory.createSession(
+            requestContext = ServiceWrapRequestContext(
+                contentType = "movie",
+                season = null,
+                episode = null
+            ),
+            scope = this,
+            onResolved = { batch -> batches += batch }
+        )
+
+        val result = session.processAddonStreams(
+            addonName = "Addon A",
+            addonLogo = null,
+            streams = listOf(
+                stream(
+                    name = "Movie Candidate",
+                    infoHash = hash,
+                    url = null,
+                    description = "Movie.2024.2160p.REMUX"
+                )
+            )
+        )
+
+        assertTrue(result.visibleStreams.isEmpty())
+        assertEquals(1, result.launchedWrapCount)
+
+        runCurrent()
+        assertEquals(1, batches.size)
+        assertEquals(false, batches.single().isTerminal)
+        assertEquals(setOf("RD"), batches.single().wrappedStreams.mapNotNull { it.wrappedProviderId }.toSet())
+
+        advanceTimeBy(1_000L)
+        runCurrent()
+        assertEquals(2, batches.size)
+        assertEquals(true, batches.last().isTerminal)
+        assertEquals(setOf("PM"), batches.last().wrappedStreams.mapNotNull { it.wrappedProviderId }.toSet())
+    }
+
+    private fun resolvedStream(
+        provider: ServiceWrapProvider,
+        hash: String
+    ): ResolvedServiceWrapStream {
+        return ResolvedServiceWrapStream(
+            provider = provider,
+            normalizedInfoHash = hash,
+            playbackUrl = "https://${provider.providerId.lowercase()}.example/$hash",
+            selectedFileIndex = 0,
+            filename = "Movie.2024.2160p.REMUX.mkv",
+            folderName = "Movie",
+            sizeBytes = 4_000_000_000L,
+            durationMs = 3_600_000L,
+            bitrate = 8_000_000L,
+            width = 3840,
+            height = 2160
+        )
     }
 
     private fun stream(

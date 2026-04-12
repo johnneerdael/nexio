@@ -43,8 +43,10 @@ import io.mockk.mockkStatic
 import io.mockk.runs
 import io.mockk.unmockkStatic
 import io.mockk.verify
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -136,6 +138,27 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         } finally {
             clearViewModel(noWinnerViewModel)
             advanceUntilIdle()
+        }
+    }
+
+    @Test
+    fun `stream selection does not show no streams while stream search is still active`() {
+        val viewModel = buildViewModel(
+            streamFlow = flow {
+                emit(NetworkResult.Loading)
+                awaitCancellation()
+            }
+        )
+
+        try {
+            dispatcher.scheduler.runCurrent()
+            dispatcher.scheduler.advanceTimeBy(45_000L)
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(false, viewModel.uiState.value.showNoStreamsState)
+        } finally {
+            clearViewModel(viewModel)
+            dispatcher.scheduler.advanceUntilIdle()
         }
     }
 
