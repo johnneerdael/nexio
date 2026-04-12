@@ -391,6 +391,14 @@
     <string name="sub_startup_mode_all_desc">Prefetch and attach all addon subtitles before playback. Slowest startup.</string>
 
     <!-- PlaybackAutoPlaySettings -->
+    <string name="autoplay_bandwidth_mode_title">Autoplay Bandwidth Mode</string>
+    <string name="autoplay_bandwidth_mode_sub">Choose how autoplay decides which bitrates are safe.</string>
+    <string name="autoplay_bandwidth_mode_auto">Auto (Benchmark)</string>
+    <string name="autoplay_bandwidth_mode_auto_desc">Uses benchmark data to score streams by transport quality. Requires a completed benchmark.</string>
+    <string name="autoplay_bandwidth_mode_manual">Manual (Fixed Cap)</string>
+    <string name="autoplay_bandwidth_mode_manual_desc">Set a maximum bitrate limit. No benchmark required. Recommended for WiFi devices.</string>
+    <string name="autoplay_manual_bitrate_limit_title">Manual Bitrate Limit</string>
+    <string name="autoplay_manual_bitrate_limit_sub">Autoplay will only choose streams at or below this average bitrate.</string>
     <string name="autoplay_reuse_last_link">Reuse Last Link</string>
     <string name="autoplay_reuse_last_link_sub">Auto-play your last working stream for this same movie/episode when cache is still valid</string>
     <string name="autoplay_last_link_cache">Last Link Cache Duration</string>

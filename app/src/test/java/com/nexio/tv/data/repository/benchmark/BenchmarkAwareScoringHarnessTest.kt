@@ -66,6 +66,59 @@ class BenchmarkAwareScoringHarnessTest {
     }
 
     @Test
+    fun `manual cap scoring selects stream without benchmark sessions`() {
+        val scenario = sampleDataset().scenarios.single()
+
+        val event = BenchmarkAwareStreamScorer().scoreWithManualCap(
+            request = scenario.toShadowRequestContext(),
+            streams = scenario.toStreamCards(),
+            manualBitrateCap = 80.0
+        )
+
+        assertNotNull(event.selected)
+        assertTrue(event.benchmarksUsed.isEmpty())
+        assertEquals(0, event.selected?.transportFitScore)
+        assertEquals(80.0, event.selected?.safeBudgetMbps ?: -1.0, 0.0)
+        assertEquals(0, event.selected?.breakdown?.transport?.ratioScore)
+        assertEquals(0, event.selected?.breakdown?.transport?.startupScore)
+        assertEquals(0, event.selected?.breakdown?.transport?.seekScore)
+        assertEquals(0, event.selected?.breakdown?.transport?.stabilityScore)
+        assertEquals(null, event.selectedNonDolbyVisionFallback)
+    }
+
+    @Test
+    fun `manual cap scoring rejects streams over fixed bitrate cap without missing benchmark`() {
+        val scenario = sampleDataset().scenarios.single()
+
+        val event = BenchmarkAwareStreamScorer().scoreWithManualCap(
+            request = scenario.toShadowRequestContext(),
+            streams = scenario.toStreamCards(),
+            manualBitrateCap = 20.0
+        )
+
+        assertEquals(null, event.selected)
+        assertTrue(event.rejected.isNotEmpty())
+        assertTrue(event.rejected.all { rejected ->
+            rejected.reasons == listOf(ShadowRejectReason.EXCEEDS_AUTOPLAY_CAP)
+        })
+    }
+
+    @Test
+    fun `manual cap scoring rejects non debrid streams without benchmark requirement`() {
+        val scenario = sampleDataset().scenarios.single()
+        val stream = scenario.streams.first().copy(providerId = "HTTP")
+
+        val event = BenchmarkAwareStreamScorer().scoreWithManualCap(
+            request = scenario.toShadowRequestContext(),
+            streams = listOf(stream.toStreamCardModel()),
+            manualBitrateCap = 80.0
+        )
+
+        assertEquals(null, event.selected)
+        assertEquals(listOf(ShadowRejectReason.NOT_DEBRID_WRAPPED), event.rejected.single().reasons)
+    }
+
+    @Test
     fun `cli runner writes evaluation output`() {
         val datasetFile = Files.createTempFile("benchmark_scoring_dataset", ".json")
         val outputFile = Files.createTempFile("benchmark_scoring_output", ".json")
