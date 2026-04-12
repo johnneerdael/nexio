@@ -239,9 +239,17 @@ data class PlayerSettings(
     val filterMovieYearMismatchStreamsEnabled: Boolean = true,
     val subtitleOrganizationMode: SubtitleOrganizationMode = SubtitleOrganizationMode.BY_LANGUAGE,
     val addonSubtitleStartupMode: AddonSubtitleStartupMode = AddonSubtitleStartupMode.ALL_SUBTITLES,
+    val useParallelConnections: Boolean = DEFAULT_USE_PARALLEL_CONNECTIONS,
+    val parallelConnectionCount: Int = DEFAULT_PARALLEL_CONNECTION_COUNT,
+    val parallelChunkSizeMb: Int = DEFAULT_PARALLEL_CHUNK_SIZE_MB,
     val enableBufferLogs: Boolean = false
 ) {
     companion object {
+        const val DEFAULT_USE_PARALLEL_CONNECTIONS = true
+        const val DEFAULT_PARALLEL_CONNECTION_COUNT = 2
+        const val DEFAULT_PARALLEL_CHUNK_SIZE_MB = 16
+        const val MIN_PARALLEL_CONNECTION_COUNT = 2
+        const val MAX_PARALLEL_CONNECTION_COUNT = 4
     }
 }
 
@@ -463,6 +471,9 @@ class PlayerSettingsDataStore @Inject constructor(
     private val filterEpisodeMismatchStreamsEnabledKey = booleanPreferencesKey("filter_episode_mismatch_streams_enabled")
     private val filterMovieYearMismatchStreamsEnabledKey = booleanPreferencesKey("filter_movie_year_mismatch_streams_enabled")
     private val subtitleOrganizationModeKey = stringPreferencesKey("subtitle_organization_mode")
+    private val useParallelConnectionsKey = booleanPreferencesKey("use_parallel_connections")
+    private val parallelConnectionCountKey = intPreferencesKey("parallel_connection_count")
+    private val parallelChunkSizeMbKey = intPreferencesKey("parallel_chunk_size_mb")
     private val addonSubtitleStartupModeKey = stringPreferencesKey("addon_subtitle_startup_mode")
     private val enableBufferLogsKey = booleanPreferencesKey("enable_buffer_logs")
 
@@ -752,6 +763,15 @@ class PlayerSettingsDataStore @Inject constructor(
                 filterEpisodeMismatchStreamsEnabled = prefs[filterEpisodeMismatchStreamsEnabledKey] ?: true,
                 filterMovieYearMismatchStreamsEnabled = prefs[filterMovieYearMismatchStreamsEnabledKey] ?: true,
                 subtitleOrganizationMode = parseSubtitleOrganizationMode(prefs[subtitleOrganizationModeKey]),
+                useParallelConnections =
+                    prefs[useParallelConnectionsKey] ?: PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS,
+                parallelConnectionCount = (prefs[parallelConnectionCountKey]
+                    ?: PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT).coerceIn(
+                    PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT,
+                    PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT
+                ),
+                parallelChunkSizeMb =
+                    prefs[parallelChunkSizeMbKey] ?: PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB,
                 addonSubtitleStartupMode = parseAddonSubtitleStartupMode(prefs[addonSubtitleStartupModeKey]),
                 enableBufferLogs = prefs[enableBufferLogsKey] ?: false,
                 subtitleStyle = SubtitleStyleSettings(
@@ -1402,11 +1422,45 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun setUseParallelConnections(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[useParallelConnectionsKey] = enabled
+        }
+    }
+
+    suspend fun setParallelConnectionCount(count: Int) {
+        store().edit { prefs ->
+            prefs[parallelConnectionCountKey] = count.coerceIn(
+                PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT,
+                PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT
+            )
+        }
+    }
+
+    suspend fun setParallelChunkSizeMb(mb: Int) {
+        store().edit { prefs ->
+            prefs[parallelChunkSizeMbKey] = mb
+        }
+    }
+
     suspend fun updateMemorySettings(
         targetBufferSizeMb: Int? = null,
+        useParallelConnections: Boolean? = null,
+        parallelConnectionCount: Int? = null,
+        parallelChunkSizeMb: Int? = null
     ) {
         store().edit { prefs ->
             targetBufferSizeMb?.let { prefs[targetBufferSizeMbKey] = it.coerceAtLeast(0) }
+            useParallelConnections?.let { prefs[useParallelConnectionsKey] = it }
+            parallelConnectionCount?.let {
+                prefs[parallelConnectionCountKey] = it.coerceIn(
+                    PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT,
+                    PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT
+                )
+            }
+            parallelChunkSizeMb?.let {
+                prefs[parallelChunkSizeMbKey] = it
+            }
         }
     }
 }
