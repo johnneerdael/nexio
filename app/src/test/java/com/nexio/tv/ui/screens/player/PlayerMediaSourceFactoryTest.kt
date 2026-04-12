@@ -96,6 +96,32 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun warmAheadUpstreamKind_reportsSingleWhenDedicatedWarmAheadFactoryIsAbsent() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+
+        assertEquals("single", factory.currentWarmAheadUpstreamKindForTesting())
+    }
+
+    @Test
+    fun warmAheadUpstreamKind_reportsPrdsWhenDedicatedWarmAheadFactoryIsPresent() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+
+        factory.progressiveUpstreamFactoryForTesting(
+            url = "https://real-debrid.com/path/movie.mkv",
+            headers = emptyMap(),
+            warmAheadEnabledForProfile = true
+        )
+
+        assertEquals("prds", factory.currentWarmAheadUpstreamKindForTesting())
+    }
+
+    @Test
     fun warmAheadCacheKey_usesPlaybackUrlInsteadOfResolvedUrl() {
         assertEquals(
             "https://real-debrid.com/d/ABC/movie.mkv",
