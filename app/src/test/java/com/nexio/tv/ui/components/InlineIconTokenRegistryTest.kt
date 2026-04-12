@@ -2,10 +2,23 @@ package com.nexio.tv.ui.components
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class InlineIconTokenRegistryTest {
+
+    @Test
+    fun `tokenize parses optional icon scale override`() {
+        val segments = InlineIconTokenRegistry.tokenize("Before [[icon:dovi:1.75]] after [[icon:hdr10]]")
+        val iconSegments = segments.filterIsInstance<InlineIconSegment.IconSegment>()
+
+        assertEquals(2, iconSegments.size)
+        assertEquals("dovi", iconSegments[0].token.id)
+        assertEquals(1.75f, iconSegments[0].scaleOverride ?: -1f, 0.0001f)
+        assertEquals("hdr10", iconSegments[1].token.id)
+        assertNull(iconSegments[1].scaleOverride)
+    }
 
     @Test
     fun `token registry marks title badges as prominent`() {
