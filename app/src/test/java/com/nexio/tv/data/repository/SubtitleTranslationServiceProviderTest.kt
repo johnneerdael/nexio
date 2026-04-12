@@ -86,6 +86,22 @@ class SubtitleTranslationServiceProviderTest {
             SubtitleTranslationProviderError.RateLimited,
             classifyProviderError(SubtitleTranslationProvider.ANTHROPIC, 429, """{"error":{"message":"rate limited"}}""")
         )
+        assertEquals(
+            SubtitleTranslationProviderError.AccessDenied,
+            classifyProviderError(
+                SubtitleTranslationProvider.GEMINI,
+                403,
+                """
+                {
+                  "error": {
+                    "code": 403,
+                    "message": "Your project has been denied access. Please contact support.",
+                    "status": "PERMISSION_DENIED"
+                  }
+                }
+                """.trimIndent()
+            )
+        )
     }
 
     @Test
@@ -150,6 +166,96 @@ class SubtitleTranslationServiceProviderTest {
     @Test
     fun rateLimitProviderErrorDoesNotSplitAdaptiveChunks() = runTest {
         assertProviderErrorDoesNotSplitAdaptiveChunks(statusCode = 429)
+    }
+
+    @Test
+    fun geminiPermissionDeniedReportsProjectAccessFailure() = runTest {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(403)
+                .setBody(
+                    """
+                    {
+                      "error": {
+                        "code": 403,
+                        "message": "Your project has been denied access. Please contact support.",
+                        "status": "PERMISSION_DENIED"
+                      }
+                    }
+                    """.trimIndent()
+                )
+        )
+        server.start()
+        try {
+            val service = SubtitleTranslationService(
+                context = mockk<Context>(relaxed = true),
+                httpClient = OkHttpClient()
+            )
+
+            val result = service.translateCueTexts(
+                texts = listOf("Hello"),
+                targetLanguageCode = "nl",
+                settings = SubtitleTranslationSettings(
+                    provider = SubtitleTranslationProvider.GEMINI,
+                    apiKey = "test-key",
+                    model = "gemini-2.5-flash",
+                    baseUrl = server.url("/v1beta").toString()
+                )
+            )
+
+            assertTrue(result.isFailure)
+            assertEquals(
+                "Subtitle translation provider denied access for this API key or project.",
+                result.exceptionOrNull()?.message
+            )
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun terminalProviderErrorDoesNotDrainQueuedChunks() = runTest {
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return MockResponse()
+                    .setResponseCode(429)
+                    .setBody("""{"error":{"message":"quota exceeded"}}""")
+            }
+        }
+        server.start()
+        try {
+            val service = SubtitleTranslationService(
+                context = mockk<Context>(relaxed = true),
+                httpClient = OkHttpClient()
+            )
+
+            val result = service.translateCueTexts(
+                texts = (1..20).map { index -> "Line $index" },
+                targetLanguageCode = "nl",
+                settings = SubtitleTranslationSettings(
+                    provider = SubtitleTranslationProvider.GEMINI,
+                    apiKey = "test-key",
+                    model = "gemini-2.5-flash",
+                    baseUrl = server.url("/v1beta").toString()
+                ),
+                chunkConfig = SubtitleTranslationChunkConfig(
+                    maxEntries = 1,
+                    maxChars = 10_000,
+                    minSplitEntries = 1,
+                    maxParallelRequests = 3
+                )
+            )
+
+            assertTrue(result.isFailure)
+            assertTrue(
+                "Expected terminal failure to stop after the active batch, but saw ${server.requestCount} requests",
+                server.requestCount <= 3
+            )
+        } finally {
+            server.shutdown()
+        }
     }
 
     private suspend fun assertProviderErrorDoesNotSplitAdaptiveChunks(statusCode: Int) {
