@@ -124,6 +124,62 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun warmAheadRequestUrl_returnsNullWhenCurrentStreamChanged() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+        factory.setWarmAheadStateForTesting(
+            streamUrl = "https://example.com/stream-b.mkv",
+            resolvedUrl = "https://cdn.example.net/stream-b.mkv",
+            eligible = true,
+            active = true
+        )
+
+        assertEquals(
+            null,
+            factory.warmAheadRequestUrlForTesting("https://example.com/stream-a.mkv")
+        )
+    }
+
+    @Test
+    fun warmAheadRequestUrl_usesPlaybackUrlWhenResolvedUrlIsMissing() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+        factory.setWarmAheadStateForTesting(
+            streamUrl = "https://example.com/stream-a.mkv",
+            resolvedUrl = null,
+            eligible = true,
+            active = true
+        )
+
+        assertEquals(
+            "https://example.com/stream-a.mkv",
+            factory.warmAheadRequestUrlForTesting("https://example.com/stream-a.mkv")
+        )
+    }
+
+    @Test
+    fun warmAheadStartCheckRechecksDisabledSetting() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+        factory.setWarmAheadStateForTesting(
+            streamUrl = "https://example.com/stream-a.mkv",
+            resolvedUrl = null,
+            eligible = true,
+            active = true
+        )
+
+        factory.vodCacheWarmAheadEnabled = false
+
+        assertFalse(factory.shouldAttemptVodWarmAheadStartForTesting())
+    }
+
+    @Test
     fun benchmarkProgressiveFactory_usesParallelRangeDatasourceWhenEnabled() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
