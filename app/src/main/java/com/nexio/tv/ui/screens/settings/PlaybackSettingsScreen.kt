@@ -90,6 +90,7 @@ import androidx.tv.material3.Switch
 import androidx.tv.material3.SwitchDefaults
 import androidx.tv.material3.Text
 import com.nexio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
+import com.nexio.tv.data.local.AutoplayBandwidthMode
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.LibassRenderType
@@ -159,6 +160,7 @@ internal fun PlaybackSettingsContent(
     var showDecoderPriorityDialog by remember { mutableStateOf(false) }
     var showIecPackerChannelLayoutDialog by remember { mutableStateOf(false) }
     var showTrackingProviderDialog by remember { mutableStateOf(false) }
+    var showAutoplayBandwidthModeDialog by remember { mutableStateOf(false) }
     var showNextEpisodeThresholdModeDialog by remember { mutableStateOf(false) }
     var showReuseLastLinkCacheDialog by remember { mutableStateOf(false) }
     var showPlayerPreferenceDialog by remember { mutableStateOf(false) }
@@ -176,6 +178,7 @@ internal fun PlaybackSettingsContent(
         showDecoderPriorityDialog = false
         showIecPackerChannelLayoutDialog = false
         showTrackingProviderDialog = false
+        showAutoplayBandwidthModeDialog = false
         showNextEpisodeThresholdModeDialog = false
         showReuseLastLinkCacheDialog = false
         showPlayerPreferenceDialog = false
@@ -222,8 +225,12 @@ internal fun PlaybackSettingsContent(
                 },
                 trackingProviderEnabled = trackingProviderSelectorState.canChoose,
                 trackingProviderVisible = trackingProviderSelectorState.hasAnyConfiguredProvider,
+                onShowAutoplayBandwidthModeDialog = { openDialog { showAutoplayBandwidthModeDialog = true } },
                 onShowNextEpisodeThresholdModeDialog = { openDialog { showNextEpisodeThresholdModeDialog = true } },
                 onShowReuseLastLinkCacheDialog = { openDialog { showReuseLastLinkCacheDialog = true } },
+                onSetManualBitrateLimitMbps = { mbps ->
+                    coroutineScope.launch { viewModel.setManualBitrateLimitMbps(mbps) }
+                },
                 onSetStreamAutoPlayNextEpisodeEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setStreamAutoPlayNextEpisodeEnabled(enabled) }
                 },
@@ -367,6 +374,7 @@ internal fun PlaybackSettingsContent(
         showSecondaryAudioLanguageDialog = showSecondaryAudioLanguageDialog,
         showDecoderPriorityDialog = showDecoderPriorityDialog,
         showIecPackerChannelLayoutDialog = showIecPackerChannelLayoutDialog,
+        showAutoplayBandwidthModeDialog = showAutoplayBandwidthModeDialog,
         showNextEpisodeThresholdModeDialog = showNextEpisodeThresholdModeDialog,
         showReuseLastLinkCacheDialog = showReuseLastLinkCacheDialog,
         onSetPlayerPreference = { preference ->
@@ -403,6 +411,9 @@ internal fun PlaybackSettingsContent(
         onSetIecPackerMaxPcmChannelLayout = { layout: IecPackerChannelLayout ->
             coroutineScope.launch { viewModel.setIecPackerMaxPcmChannelLayout(layout) }
         },
+        onSetAutoplayBandwidthMode = { mode: AutoplayBandwidthMode ->
+            coroutineScope.launch { viewModel.setAutoplayBandwidthMode(mode) }
+        },
         onSetNextEpisodeThresholdMode = { mode ->
             coroutineScope.launch { viewModel.setNextEpisodeThresholdMode(mode) }
         },
@@ -419,6 +430,7 @@ internal fun PlaybackSettingsContent(
         onDismissSecondaryAudioLanguageDialog = ::dismissAllDialogs,
         onDismissDecoderPriorityDialog = ::dismissAllDialogs,
         onDismissIecPackerChannelLayoutDialog = ::dismissAllDialogs,
+        onDismissAutoplayBandwidthModeDialog = ::dismissAllDialogs,
         onDismissNextEpisodeThresholdModeDialog = ::dismissAllDialogs,
         onDismissReuseLastLinkCacheDialog = ::dismissAllDialogs
     )

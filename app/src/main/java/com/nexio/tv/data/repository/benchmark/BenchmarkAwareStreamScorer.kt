@@ -242,6 +242,63 @@ class BenchmarkAwareStreamScorer internal constructor(
         )
     }
 
+    fun scoreWithManualCap(
+        request: ShadowRequestContext,
+        streams: List<StreamCardModel>,
+        manualBitrateCap: Double,
+        elapsedMs: Long? = null
+    ): ShadowAutoPlayDecisionEvent {
+        val safeManualCap = manualBitrateCap.takeIf { it.isFinite() && it > 0.0 } ?: 20.0
+        val winners = mutableListOf<ShadowStreamDecision>()
+        val rejected = mutableListOf<ShadowRejectedStream>()
+
+        streams.forEach { item ->
+            val provider = item.toBenchmarkProvider()
+            val streamKey = item.shadowStreamKey()
+            val parsedFacts = item.shadowParsedFacts(request)
+            if (provider == null) {
+                rejected += ShadowRejectedStream(
+                    streamKey = streamKey,
+                    parsed = parsedFacts,
+                    reasons = listOf(ShadowRejectReason.NOT_DEBRID_WRAPPED)
+                )
+                return@forEach
+            }
+
+            evaluateStreamWithManualCap(
+                item = item,
+                provider = provider,
+                request = request,
+                manualBitrateCap = safeManualCap
+            ).fold(
+                onSuccess = { winners += it },
+                onFailure = { reasons ->
+                    rejected += ShadowRejectedStream(
+                        streamKey = streamKey,
+                        parsed = parsedFacts,
+                        provider = provider,
+                        reasons = reasons
+                    )
+                }
+            )
+        }
+
+        val ranked = winners.sortedWith(baseDecisionComparator())
+        val finalRanked = applyViableBitrateBucket(ranked)
+
+        return ShadowAutoPlayDecisionEvent(
+            eventVersion = 1,
+            eventType = "shadow_autoplay_decision",
+            request = request,
+            benchmarksUsed = emptyList(),
+            winners = finalRanked,
+            rejected = rejected.sortedBy { it.streamKey },
+            selected = finalRanked.firstOrNull(),
+            selectedNonDolbyVisionFallback = null,
+            timingsMs = elapsedMs
+        )
+    }
+
     private fun evaluateStream(
         item: StreamCardModel,
         provider: DebridBenchmarkProvider,
@@ -345,6 +402,84 @@ class BenchmarkAwareStreamScorer internal constructor(
                     realismRatio = contentBreakdown.realismRatio,
                     content = contentBreakdown,
                     transport = transportOption.toBreakdown(provider, requiredMbps)
+                )
+            )
+        )
+    }
+
+    private fun evaluateStreamWithManualCap(
+        item: StreamCardModel,
+        provider: DebridBenchmarkProvider,
+        request: ShadowRequestContext,
+        manualBitrateCap: Double
+    ): EitherSuccessOrReject<ShadowStreamDecision> {
+        val parsed = item.parsed
+        val sizeBytes = parsed.sizeBytes
+        if (sizeBytes == null || sizeBytes <= 0L) {
+            return EitherSuccessOrReject.reject(ShadowRejectReason.MISSING_SIZE)
+        }
+
+        val runtimeMs = item.shadowRuntimeMs(request)
+        val hasRuntime = runtimeMs != null && runtimeMs > 0L
+        val averageBitrateMbps = runtimeMs?.takeIf { it > 0L }?.let {
+            calculateAverageBitrateMbps(sizeBytes, it)
+        } ?: return EitherSuccessOrReject.reject(ShadowRejectReason.MISSING_RUNTIME)
+
+        if (averageBitrateMbps > manualBitrateCap) {
+            return EitherSuccessOrReject.reject(ShadowRejectReason.EXCEEDS_AUTOPLAY_CAP)
+        }
+
+        val resolutionTier = resolveResolutionTier(parsed.resolution)
+        val releaseType = classifyReleaseType(parsed, averageBitrateMbps)
+        var codecTier = resolveVideoCodecTier(parsed.encode, device = null)
+        if (codecTier == ShadowVideoCodecTier.OTHER &&
+            resolutionTier == ShadowResolutionTier.UHD_2160 &&
+            releaseType == ShadowReleaseType.REMUX
+        ) {
+            codecTier = ShadowVideoCodecTier.HEVC_HW
+        }
+        if (codecTier == ShadowVideoCodecTier.UNSUPPORTED) {
+            return EitherSuccessOrReject.reject(ShadowRejectReason.UNSUPPORTED_CODEC)
+        }
+
+        val contentBreakdown = buildContentScoreBreakdown(
+            parsed = parsed,
+            averageBitrateMbps = averageBitrateMbps,
+            resolutionTier = resolutionTier,
+            releaseType = releaseType,
+            codecTier = codecTier,
+            device = null,
+            runtimeKnown = hasRuntime
+        )
+        val contentScore = contentBreakdown.total()
+        val transportBreakdown = manualTransportBreakdown(
+            provider = provider,
+            safeBudgetMbps = manualBitrateCap,
+            requiredMbps = averageBitrateMbps
+        )
+
+        return EitherSuccessOrReject.success(
+            ShadowStreamDecision(
+                streamKey = item.shadowStreamKey(),
+                parsed = item.shadowParsedFacts(request),
+                provider = provider,
+                transport = DebridBenchmarkTransportMode.DIRECT,
+                finalScore = contentScore,
+                contentQualityScore = contentScore,
+                transportFitScore = 0,
+                suitabilityRatio = if (averageBitrateMbps <= 0.0) 0.0 else manualBitrateCap / averageBitrateMbps,
+                requiredMbps = averageBitrateMbps,
+                safeBudgetMbps = manualBitrateCap,
+                resolution = parsed.resolution,
+                hdrTags = parsed.visualTags.filter { it in HDR_VISUAL_TAGS },
+                audioTags = parsed.audioTags,
+                breakdown = ShadowDecisionBreakdown(
+                    averageBitrateMbps = averageBitrateMbps,
+                    releaseType = releaseType.wireKey,
+                    lowQuality4k = contentBreakdown.lowQuality4kPenalty < 0,
+                    realismRatio = contentBreakdown.realismRatio,
+                    content = contentBreakdown,
+                    transport = transportBreakdown
                 )
             )
         )
@@ -518,6 +653,27 @@ class BenchmarkAwareStreamScorer internal constructor(
             )
         }
     }
+}
+
+private fun manualTransportBreakdown(
+    provider: DebridBenchmarkProvider,
+    safeBudgetMbps: Double,
+    requiredMbps: Double
+): ShadowTransportScoreBreakdown {
+    return ShadowTransportScoreBreakdown(
+        provider = provider,
+        transport = DebridBenchmarkTransportMode.DIRECT,
+        safeBudgetMbps = safeBudgetMbps,
+        requiredMbps = requiredMbps,
+        suitabilityRatio = if (requiredMbps <= 0.0) 0.0 else safeBudgetMbps / requiredMbps,
+        ratioScore = 0,
+        startupScore = 0,
+        seekScore = 0,
+        stabilityScore = 0,
+        startupTtfbMs = null,
+        seekTtfbP95Ms = null,
+        seekFailRate = null
+    )
 }
 
 private fun selectNonDolbyVisionFallback(

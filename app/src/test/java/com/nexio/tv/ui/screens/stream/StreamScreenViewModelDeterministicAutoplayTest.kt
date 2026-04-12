@@ -12,9 +12,11 @@ import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
+import com.nexio.tv.data.repository.benchmark.BenchmarkAwareScoringScenarioStream
 import com.nexio.tv.data.repository.benchmark.BenchmarkAwareStreamScorer
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode
+import com.nexio.tv.data.repository.benchmark.ShadowRejectReason
 import com.nexio.tv.data.repository.benchmark.ShadowContentScoreBreakdown
 import com.nexio.tv.data.repository.benchmark.ShadowDecisionBreakdown
 import com.nexio.tv.data.repository.benchmark.ShadowParsedStreamFacts
@@ -51,6 +53,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -353,6 +356,52 @@ class StreamScreenViewModelDeterministicAutoplayTest {
                 request = movieRequest()
             )
         )
+    }
+
+    @Test
+    fun `shadow autoplay replay coordinator emits manual cap event without benchmarks`() {
+        val request = ShadowRequestContext(
+            requestId = "manual-cap",
+            videoId = "tt123",
+            contentType = "movie",
+            title = "Example",
+            season = null,
+            episode = null,
+            runtimeMinutes = 120
+        )
+        val coordinator = ShadowAutoPlayReplayCoordinator(BenchmarkAwareStreamScorer())
+
+        coordinator.updateCandidates(
+            request = request,
+            organizedStreams = listOf(
+                BenchmarkAwareScoringScenarioStream(
+                    streamKey = "manual-cap-1080p",
+                    providerId = "RD",
+                    resolution = "1080p",
+                    quality = "WEB-DL",
+                    encode = "H264",
+                    sizeBytes = 12L * 1024L * 1024L * 1024L,
+                    durationMs = 120L * 60_000L,
+                    visualTags = emptyList(),
+                    audioTags = listOf("DD+")
+                ).toStreamCardModel()
+            ),
+            activeTransportMode = null,
+            autoplayMaxBitrateMbps = 20.0,
+            isManualBandwidthMode = true,
+            isFinalPass = true,
+            allowEarlyFinishTerminal = false
+        )
+
+        val event = coordinator.buildEventIfReady(
+            benchmarkSessions = emptyMap(),
+            timingsMs = 7L
+        )
+
+        assertNotNull(event)
+        assertEquals("manual-cap-1080p", event?.selected?.streamKey)
+        assertEquals(emptyList<ShadowRejectReason>(), event?.rejected?.flatMap { it.reasons })
+        assertEquals(7L, event?.timingsMs)
     }
 
     private fun buildViewModel(

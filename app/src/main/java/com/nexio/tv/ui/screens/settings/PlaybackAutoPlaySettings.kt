@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FilterAlt
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -40,8 +41,9 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nexio.tv.data.local.PlayerSettings
+import com.nexio.tv.data.local.AutoplayBandwidthMode
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
+import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 import kotlin.math.roundToInt
@@ -49,8 +51,10 @@ import java.util.Locale
 
 internal fun LazyListScope.autoPlaySettingsItems(
     playerSettings: PlayerSettings,
+    onShowAutoplayBandwidthModeDialog: () -> Unit,
     onShowNextEpisodeThresholdModeDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
+    onSetManualBitrateLimitMbps: (Double) -> Unit,
     onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
     onSetStreamAutoPlayPreferBingeGroupForNextEpisode: (Boolean) -> Unit,
     onSetNextEpisodeThresholdPercent: (Float) -> Unit,
@@ -64,6 +68,38 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetFilterMovieYearMismatchStreamsEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {}
 ) {
+    item(key = "autoplay_bandwidth_mode") {
+        val modeSubtitle = when (playerSettings.autoplayBandwidthMode) {
+            AutoplayBandwidthMode.AUTO -> stringResource(R.string.autoplay_bandwidth_mode_auto)
+            AutoplayBandwidthMode.MANUAL -> stringResource(R.string.autoplay_bandwidth_mode_manual)
+        }
+        NavigationSettingsItem(
+            icon = Icons.Default.Wifi,
+            title = stringResource(R.string.autoplay_bandwidth_mode_title),
+            subtitle = modeSubtitle,
+            onClick = onShowAutoplayBandwidthModeDialog,
+            onFocused = onItemFocused
+        )
+    }
+
+    if (playerSettings.autoplayBandwidthMode == AutoplayBandwidthMode.MANUAL) {
+        item(key = "autoplay_manual_bitrate_limit") {
+            val sliderValue = (playerSettings.manualBitrateLimitMbps / 5.0).roundToInt()
+            SliderSettingsItem(
+                icon = Icons.Default.Tune,
+                title = stringResource(R.string.autoplay_manual_bitrate_limit_title),
+                subtitle = stringResource(R.string.autoplay_manual_bitrate_limit_sub),
+                value = sliderValue,
+                valueText = "${sliderValue * 5} Mbps",
+                minValue = 1,
+                maxValue = 40,
+                step = 1,
+                onValueChange = { onSetManualBitrateLimitMbps(it * 5.0) },
+                onFocused = onItemFocused
+            )
+        }
+    }
+
     item(key = "autoplay_reuse_last_link") {
         ToggleSettingsItem(
             icon = Icons.Default.History,
@@ -212,15 +248,29 @@ private fun formatHalfStepValue(value: Float): String {
 
 @Composable
 internal fun AutoPlaySettingsDialogs(
+    showAutoplayBandwidthModeDialog: Boolean,
     showNextEpisodeThresholdModeDialog: Boolean,
     showReuseLastLinkCacheDialog: Boolean,
     playerSettings: PlayerSettings,
     installedAddonNames: List<String>,
+    onSetAutoplayBandwidthMode: (AutoplayBandwidthMode) -> Unit,
     onSetNextEpisodeThresholdMode: (NextEpisodeThresholdMode) -> Unit,
     onSetReuseLastLinkCacheHours: (Int) -> Unit,
+    onDismissAutoplayBandwidthModeDialog: () -> Unit,
     onDismissNextEpisodeThresholdModeDialog: () -> Unit,
     onDismissReuseLastLinkCacheDialog: () -> Unit
 ) {
+    if (showAutoplayBandwidthModeDialog) {
+        AutoplayBandwidthModeDialog(
+            selectedMode = playerSettings.autoplayBandwidthMode,
+            onModeSelected = {
+                onSetAutoplayBandwidthMode(it)
+                onDismissAutoplayBandwidthModeDialog()
+            },
+            onDismiss = onDismissAutoplayBandwidthModeDialog
+        )
+    }
+
     if (showNextEpisodeThresholdModeDialog) {
         NextEpisodeThresholdModeDialog(
             selectedMode = playerSettings.nextEpisodeThresholdMode,
@@ -241,6 +291,100 @@ internal fun AutoPlaySettingsDialogs(
             },
             onDismiss = onDismissReuseLastLinkCacheDialog
         )
+    }
+}
+
+@Composable
+private fun AutoplayBandwidthModeDialog(
+    selectedMode: AutoplayBandwidthMode,
+    onModeSelected: (AutoplayBandwidthMode) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+    val options = listOf(
+        Triple(
+            AutoplayBandwidthMode.AUTO,
+            stringResource(R.string.autoplay_bandwidth_mode_auto),
+            stringResource(R.string.autoplay_bandwidth_mode_auto_desc)
+        ),
+        Triple(
+            AutoplayBandwidthMode.MANUAL,
+            stringResource(R.string.autoplay_bandwidth_mode_manual),
+            stringResource(R.string.autoplay_bandwidth_mode_manual_desc)
+        )
+    )
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.autoplay_bandwidth_mode_title),
+        width = 560.dp,
+        suppressFirstKeyUp = false
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 320.dp)
+        ) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp)
+            ) {
+                items(
+                    count = options.size,
+                    key = { index -> options[index].first.name }
+                ) { index ->
+                    val (mode, title, description) = options[index]
+                    val isSelected = mode == selectedMode
+
+                    Card(
+                        onClick = { onModeSelected(mode) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
+                        colors = CardDefaults.colors(
+                            containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                            focusedContainerColor = NexioColors.FocusBackground
+                        ),
+                        shape = CardDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                        scale = CardDefaults.scale(focusedScale = 1f)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = title,
+                                    color = if (isSelected) NexioColors.Primary else NexioColors.TextPrimary,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = description,
+                                    color = NexioColors.TextSecondary,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            if (isSelected) {
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = stringResource(R.string.cd_selected),
+                                    tint = NexioColors.Primary,
+                                    modifier = Modifier.height(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

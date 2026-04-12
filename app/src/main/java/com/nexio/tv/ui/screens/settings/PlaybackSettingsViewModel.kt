@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.settings
 
 import androidx.lifecycle.ViewModel
+import com.nexio.tv.data.local.AutoplayBandwidthMode
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.LibassRenderType
 import com.nexio.tv.data.local.PlayerSettings
@@ -330,6 +331,14 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setStreamAutoPlayPreferBingeGroupForNextEpisode(enabled: Boolean) {
         playerSettingsDataStore.setStreamAutoPlayPreferBingeGroupForNextEpisode(enabled)
+    }
+
+    suspend fun setAutoplayBandwidthMode(mode: AutoplayBandwidthMode) {
+        playerSettingsDataStore.setAutoplayBandwidthMode(mode)
+    }
+
+    suspend fun setManualBitrateLimitMbps(mbps: Double) {
+        playerSettingsDataStore.setManualBitrateLimitMbps(mbps)
     }
 
     suspend fun setNextEpisodeThresholdMode(mode: NextEpisodeThresholdMode) {
