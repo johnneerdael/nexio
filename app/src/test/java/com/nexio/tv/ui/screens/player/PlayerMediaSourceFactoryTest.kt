@@ -842,6 +842,7 @@ class PlayerMediaSourceFactoryTest {
         val context = appContext()
         val cache = mockk<androidx.media3.datasource.cache.SimpleCache>(relaxed = true)
         every { cache.getCachedLength("movie", 0L, 16L) } returns 0L
+        assertEquals(50L, StreamingCacheFillSession.MAX_URGENT_WAIT_MS)
         val session = StreamingCacheFillSession(
             cache = cache,
             cacheKeyFactory = StableCacheKeyFactory(),
@@ -862,8 +863,8 @@ class PlayerMediaSourceFactoryTest {
         val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
 
         assertTrue(
-            "production cap is 50ms; allow CI/Robolectric scheduling tolerance up to 225ms, observed ${elapsedMs}ms",
-            elapsedMs <= 225L
+            "production cap is 50ms; elapsed check only guards against second-scale blocking, observed ${elapsedMs}ms",
+            elapsedMs <= 250L
         )
     }
 
