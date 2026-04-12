@@ -39,13 +39,13 @@ import com.nexio.tv.data.remote.supabase.AccountAddonPayload
 import com.nexio.tv.data.remote.supabase.AccountAddonSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountConfigSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountConfigSyncPayload
+import com.nexio.tv.data.remote.supabase.AccountConfigV7PushResult
 import com.nexio.tv.data.remote.supabase.AccountRealDebridAccessSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountRealDebridRefreshSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountSettingsPayload
 import com.nexio.tv.data.remote.supabase.AccountSimklAccessSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountSecretApiKeyPayload
 import com.nexio.tv.data.remote.supabase.AccountSnapshotRpcResponse
-import com.nexio.tv.data.remote.supabase.AccountSyncMutationResult
 import com.nexio.tv.data.remote.supabase.AccountTraktAccessSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountTraktRefreshSecretPayload
 import com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings
@@ -190,6 +190,11 @@ class AccountSettingsSyncService @Inject constructor(
     @Volatile
     private var isApplyingRemote = false
     private val startupPushGate = AccountConfigStartupPushGate()
+    private val pendingChangedPaths = linkedSetOf<String>()
+    private var pendingChangedPathsGeneration: Long = 0L
+
+    @Volatile
+    private var lastAppliedRemoteRevision: Long = 0L
 
     init {
         observeLocalChanges()
@@ -197,7 +202,7 @@ class AccountSettingsSyncService @Inject constructor(
 
     private fun observeLocalChanges() {
         scope.launch {
-            observeAccountConfigSyncChanges(
+            observeAccountConfigSyncChangedPaths(
                 heroCatalogSelections = layoutPreferenceDataStore.heroCatalogSelections.drop(1).map { Unit },
                 homeCatalogOrderKeys = layoutPreferenceDataStore.homeCatalogOrderKeys.drop(1).map { Unit },
                 disabledHomeCatalogKeys = layoutPreferenceDataStore.disabledHomeCatalogKeys.drop(1).map { Unit },
@@ -235,7 +240,12 @@ class AccountSettingsSyncService @Inject constructor(
                 simklCatalogPreferences = simklSettingsDataStore.catalogPreferences.drop(1).map { Unit },
                 simklAuthState = simklAuthDataStore.state.drop(1).map { Unit },
                 playerSettings = playerSettingsDataStore.playerSettings.drop(1).map { Unit }
-            ).collect {
+            ).collect { changedPath ->
+                if (isApplyingRemote) return@collect
+                synchronized(pendingChangedPaths) {
+                    pendingChangedPaths.add(changedPath)
+                    pendingChangedPathsGeneration += 1L
+                }
                 schedulePush()
             }
         }
@@ -283,12 +293,47 @@ class AccountSettingsSyncService @Inject constructor(
             }
 
             val payload = buildLocalPayload()
+            val (changedPaths, changedPathsGeneration) = synchronized(pendingChangedPaths) {
+                pendingChangedPaths.toList() to pendingChangedPathsGeneration
+            }
+            var scheduleFollowUpPush = false
 
-            withJwtRefreshRetry {
-                postgrest.rpc(
-                    "sync_push_account_settings",
-                    buildAccountConfigSyncPushParams(payload)
-                ).decodeList<AccountSyncMutationResult>()
+            if (changedPaths.isNotEmpty()) {
+                val pushResult = withJwtRefreshRetry {
+                    postgrest.rpc(
+                        "sync_push_account_settings_v7",
+                        buildAccountConfigSyncPushParamsV7(
+                            payload = payload,
+                            baseRevision = lastAppliedRemoteRevision,
+                            changedPaths = changedPaths
+                        )
+                    ).decodeAs<AccountConfigV7PushResult>()
+                }
+
+                if (!pushResult.applied) {
+                    Log.w(TAG, "Account settings push conflicted paths=${pushResult.conflictPaths.joinToString(",")}")
+                    val hasNewerLocalChanges = synchronized(pendingChangedPaths) {
+                        pendingChangedPathsGeneration != changedPathsGeneration
+                    }
+                    if (hasNewerLocalChanges) {
+                        pushJob = scope.launch {
+                            delay(500)
+                            pushToRemote()
+                        }
+                    } else {
+                        pullFromRemoteAndApply()
+                    }
+                    return@withContext Result.success(Unit)
+                }
+
+                lastAppliedRemoteRevision = pushResult.syncRevision
+                synchronized(pendingChangedPaths) {
+                    if (pendingChangedPathsGeneration == changedPathsGeneration) {
+                        pendingChangedPaths.removeAll(changedPaths.toSet())
+                    } else {
+                        scheduleFollowUpPush = true
+                    }
+                }
             }
 
             val subtitleTranslationSettings = subtitleTranslationSettingsDataStore.settings.first()
@@ -316,6 +361,13 @@ class AccountSettingsSyncService @Inject constructor(
             syncTraktSecretsToRemote()
             syncSimklSecretsToRemote()
 
+            if (scheduleFollowUpPush) {
+                pushJob = scope.launch {
+                    delay(500)
+                    pushToRemote()
+                }
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to push account settings to remote", e)
@@ -323,8 +375,11 @@ class AccountSettingsSyncService @Inject constructor(
         }
     }
 
-    suspend fun pullFromRemoteAndApply(): Result<List<AddonPreferences.AddonInstallConfig>> = withContext(Dispatchers.IO) {
+    suspend fun pullFromRemoteAndApply(
+        clearPendingChanges: Boolean = true
+    ): Result<List<AddonPreferences.AddonInstallConfig>> = withContext(Dispatchers.IO) {
         try {
+            val pullStartedGeneration = synchronized(pendingChangedPaths) { pendingChangedPathsGeneration }
             val snapshot = withJwtRefreshRetry {
                 postgrest.rpc(
                     "sync_pull_account_snapshot",
@@ -350,6 +405,14 @@ class AccountSettingsSyncService @Inject constructor(
                     playerSettingsDataStore = playerSettingsDataStore
                 )
                 applyRemoteSecrets(snapshot.settings)
+                lastAppliedRemoteRevision = snapshot.settingsRevision
+                if (clearPendingChanges) {
+                    synchronized(pendingChangedPaths) {
+                        if (pendingChangedPathsGeneration == pullStartedGeneration) {
+                            pendingChangedPaths.clear()
+                        }
+                    }
+                }
             } finally {
                 isApplyingRemote = false
             }
