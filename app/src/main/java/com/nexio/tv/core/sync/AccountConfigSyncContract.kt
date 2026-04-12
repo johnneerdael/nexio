@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.transform
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
@@ -153,7 +154,10 @@ internal fun observeAccountConfigSyncChangedPaths(
         traktCatalogPreferences.map { "catalogs.trakt" },
         simklCatalogPreferences.map { "catalogs.simkl" },
         simklAuthState.map { "integrations.simklAuth" },
-        playerSettings.map { "playback.streamSelection.trackingProvider" }
+        playerSettings.transform {
+            emit("playback.streamSelection.trackingProvider")
+            emit("formatter")
+        }
     )
 }
 

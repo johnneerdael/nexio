@@ -19,6 +19,7 @@ data class AccountSnapshotRpcResponse(
 data class AccountConfigSnapshotRpcResponse(
     @SerialName("user_id") val userId: String? = null,
     val revision: Long = 0,
+    @SerialName("settings_revision") val settingsRevision: Long = 0,
     @SerialName("updated_at") val updatedAt: String? = null,
     val settings: AccountConfigSyncPayload = AccountConfigSyncPayload(),
     val addons: List<AccountAddonPayload> = emptyList()
