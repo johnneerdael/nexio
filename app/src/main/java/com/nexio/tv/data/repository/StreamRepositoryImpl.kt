@@ -188,8 +188,10 @@ class StreamRepositoryImpl @Inject constructor(
                         }
 
                         is StreamPipelineEvent.WrapResolved -> {
-                            pendingWrapEvents -= 1
                             val batch = event.batch
+                            if (batch.isTerminal) {
+                                pendingWrapEvents = (pendingWrapEvents - 1).coerceAtLeast(0)
+                            }
                             val existing = accumulatedResults[batch.addonName]
                             val mergedStreams = when {
                                 existing == null -> batch.wrappedStreams
