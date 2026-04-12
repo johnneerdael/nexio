@@ -1,8 +1,11 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.SimklAuthState
 import com.nexio.tv.data.local.SimklLibrarySnapshotStore
+import com.nexio.tv.data.remote.dto.simkl.SimklActivityBucketDto
 import com.nexio.tv.data.remote.dto.simkl.SimklIdsDto
+import com.nexio.tv.data.remote.dto.simkl.SimklLastActivitiesResponseDto
 import com.nexio.tv.data.remote.dto.simkl.SimklLibraryItemDto
 import com.nexio.tv.data.remote.dto.simkl.SimklMediaRefDto
 import com.nexio.tv.data.repository.simkl.SimklLibraryMutationAdapter
@@ -18,14 +21,13 @@ import io.mockk.verify
 import io.mockk.slot
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
-import com.nexio.tv.core.network.NetworkResult
-import kotlinx.coroutines.flow.flowOf
 
 class SimklLibraryServiceTest {
 
@@ -82,23 +84,19 @@ class SimklLibraryServiceTest {
     }
 
     @Test
-    fun `refreshNow populates SIMKL watchlist entries from remote status feeds`() = runTest {
+    fun `refreshNow populates SIMKL watchlist entries from remote all-items feed`() = runTest {
         val authDataStore = mockk<com.nexio.tv.data.local.SimklAuthDataStore>()
         everyAuth(authDataStore, true)
         val remote = mockk<SimklTrackingRemoteDataSource>()
         val snapshotStore = mockk<SimklLibrarySnapshotStore>(relaxed = true) {
             every { read() } returns null
         }
-        coEvery { remote.getAllItemsByStatus(any(), any(), any(), any(), any()) } returns Response.success(emptyList())
-        coEvery {
-            remote.getAllItemsByStatus(
-                type = "movies",
-                status = "plantowatch",
-                dateFrom = any(),
-                extended = any(),
-                episodeWatchedAt = any()
+        coEvery { remote.getLastActivities() } returns Response.success(
+            SimklLastActivitiesResponseDto(
+                movies = SimklActivityBucketDto(all = "2026-04-12T00:00:00Z")
             )
-        } returns Response.success(
+        )
+        coEvery { remote.getAllItems(dateFrom = null, extended = "full") } returns Response.success(
             listOf(
                 SimklLibraryItemDto(
                     status = "plantowatch",
