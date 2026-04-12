@@ -20,4 +20,18 @@ class BandwidthMonitorTest {
 
         assertEquals(0L, monitor.estimatedBytesPerSecond())
     }
+
+    @Test
+    fun estimatedBytesPerSecond_ignoresOutOfOrderSamplesWithoutSorting() {
+        var now = 1_000L
+        val monitor = BandwidthMonitor(windowMs = 5_000L, clockMs = { now })
+
+        monitor.onBytesTransferred(1_000)
+        now = 500L
+        monitor.onBytesTransferred(5_000)
+        now = 2_000L
+        monitor.onBytesTransferred(1_000)
+
+        assertEquals(2_000L, monitor.estimatedBytesPerSecond())
+    }
 }
