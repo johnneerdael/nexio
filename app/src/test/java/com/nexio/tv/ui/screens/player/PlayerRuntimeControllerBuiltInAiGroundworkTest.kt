@@ -136,14 +136,16 @@ class PlayerRuntimeControllerBuiltInAiGroundworkTest {
             val second = CompletableDeferred<Exception>()
 
             translator.translate(format, cueGroups, failureCallback(first))
-            withTimeout(2_000) { first.await() }
+            withTimeout(10_000) { first.await() }
+            val requestCountAfterFirstFailure = server.requestCount
 
             translator.translate(format, cueGroups, failureCallback(second))
-            withTimeout(2_000) { second.await() }
+            withTimeout(10_000) { second.await() }
 
-            assertTrue(
-                "Expected second failure to be suppressed without another provider request, but saw ${server.requestCount} requests",
-                server.requestCount <= 1
+            assertEquals(
+                "Expected second failure to be suppressed without another provider request",
+                requestCountAfterFirstFailure,
+                server.requestCount
             )
         } finally {
             server.shutdown()

@@ -20,6 +20,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.Locale
@@ -28,6 +30,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "SubtitleTranslation"
+private const val MAX_TRANSLATION_PROVIDER_ATTEMPTS = 4
+private const val DEFAULT_RETRY_DELAY_MS = 1_000L
+private const val MAX_RETRY_DELAY_MS = 8_000L
 
 internal fun subtitleTranslationCueCacheKey(
     text: String,
@@ -114,16 +119,16 @@ class SubtitleTranslationService @Inject constructor(
 ) {
     companion object {
         val DEFAULT_CUE_CHUNK_CONFIG = SubtitleTranslationChunkConfig(
-            maxEntries = 40,
-            maxChars = 3_500,
-            minSplitEntries = 20,
-            maxParallelRequests = 3
+            maxEntries = 2_000,
+            maxChars = 100_000,
+            minSplitEntries = 100,
+            maxParallelRequests = 1
         )
         val ADDON_OVERLAY_CUE_CHUNK_CONFIG = SubtitleTranslationChunkConfig(
-            maxEntries = 120,
-            maxChars = 12_000,
-            minSplitEntries = 20,
-            maxParallelRequests = 3
+            maxEntries = 2_000,
+            maxChars = 100_000,
+            minSplitEntries = 100,
+            maxParallelRequests = 1
         )
     }
 
@@ -325,7 +330,7 @@ class SubtitleTranslationService @Inject constructor(
         settings: SubtitleTranslationSettings,
         chunkConfig: SubtitleTranslationChunkConfig
     ): Map<Int, String> = coroutineScope {
-        val parallelism = chunkConfig.maxParallelRequests.coerceAtLeast(1)
+        val parallelism = chunkConfig.maxParallelRequests.coerceIn(1, 1)
         val translatedByIndex = mutableMapOf<Int, String>()
 
         for (batch in chunks.chunked(parallelism)) {
@@ -610,20 +615,34 @@ class SubtitleTranslationService @Inject constructor(
             )
         }
 
-        httpClient.newCall(request).execute().use { response ->
-            val raw = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                Log.w(TAG, "Subtitle translation request failed provider=${settings.provider} code=${response.code} body=${raw.take(300)}")
-                val providerError = classifyProviderError(settings.provider, response.code, raw)
-                if (includeSchema && isStructuredRequestFallbackEligible(response.code, providerError)) {
-                    return null
+        var attempt = 1
+        while (true) {
+            httpClient.newCall(request).execute().use { response ->
+                val raw = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "Subtitle translation request failed provider=${settings.provider} code=${response.code} attempt=$attempt body=${raw.take(300)}")
+                    val providerError = classifyProviderError(settings.provider, response.code, raw)
+                    if (includeSchema && isStructuredRequestFallbackEligible(response.code, providerError)) {
+                        return null
+                    }
+                    if (providerError.isRetryable() && attempt < MAX_TRANSLATION_PROVIDER_ATTEMPTS) {
+                        val delayMs = retryDelayMs(
+                            responseHeader = response.header("Retry-After"),
+                            body = raw,
+                            attempt = attempt
+                        )
+                        Log.w(TAG, "Retrying subtitle translation provider=${settings.provider} attempt=${attempt + 1} delayMs=$delayMs")
+                        sleepBeforeRetry(delayMs)
+                        attempt += 1
+                        continue
+                    }
+                    throw providerException(settings.provider, response.code, raw)
                 }
-                throw providerException(settings.provider, response.code, raw)
-            }
-            return when (settings.provider) {
-                SubtitleTranslationProvider.OPENAI -> parseOpenAiResponseText(raw)
-                SubtitleTranslationProvider.ANTHROPIC -> parseAnthropicResponseText(raw)
-                SubtitleTranslationProvider.GEMINI -> parseGeminiResponseText(raw)
+                return when (settings.provider) {
+                    SubtitleTranslationProvider.OPENAI -> parseOpenAiResponseText(raw)
+                    SubtitleTranslationProvider.ANTHROPIC -> parseAnthropicResponseText(raw)
+                    SubtitleTranslationProvider.GEMINI -> parseGeminiResponseText(raw)
+                }
             }
         }
     }
@@ -691,6 +710,49 @@ class SubtitleTranslationService @Inject constructor(
                     message = "Subtitle translation request failed with HTTP $statusCode."
                 )
         }
+    }
+
+    private fun SubtitleTranslationProviderError.isRetryable(): Boolean {
+        return this == SubtitleTranslationProviderError.RateLimited ||
+            this == SubtitleTranslationProviderError.Transient
+    }
+
+    private fun retryDelayMs(
+        responseHeader: String?,
+        body: String,
+        attempt: Int
+    ): Long {
+        return retryAfterHeaderDelayMs(responseHeader)
+            ?: retryInfoDelayMs(body)
+            ?: (DEFAULT_RETRY_DELAY_MS shl (attempt - 1)).coerceAtMost(MAX_RETRY_DELAY_MS)
+    }
+
+    private fun retryAfterHeaderDelayMs(value: String?): Long? {
+        val normalized = value?.trim()?.takeIf(String::isNotBlank) ?: return null
+        normalized.toLongOrNull()?.let { seconds ->
+            return (seconds * 1_000L).coerceAtLeast(0L)
+        }
+        return runCatching {
+            val retryAtMs = ZonedDateTime
+                .parse(normalized, DateTimeFormatter.RFC_1123_DATE_TIME)
+                .toInstant()
+                .toEpochMilli()
+            (retryAtMs - System.currentTimeMillis()).coerceAtLeast(0L)
+        }.getOrNull()
+    }
+
+    private fun retryInfoDelayMs(body: String): Long? {
+        val match = Regex(""""retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"""")
+            .find(body)
+            ?: return null
+        return ((match.groupValues[1].toDoubleOrNull() ?: return null) * 1_000L)
+            .toLong()
+            .coerceAtLeast(0L)
+    }
+
+    private fun sleepBeforeRetry(delayMs: Long) {
+        if (delayMs <= 0L) return
+        Thread.sleep(delayMs)
     }
 
     private fun parseTranslationResponse(responseText: String): Map<Int, String> {
