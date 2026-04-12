@@ -278,6 +278,86 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun parallelProviderProfiles_warmAheadDisabledKeepsRealDebridCurrentProfile() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+
+        assertEquals(
+            (2 to 24) to null,
+            factory.parallelProviderProfilesForTesting(
+                url = "https://real-debrid.com/path/movie.mkv",
+                warmAheadEnabledForStream = false
+            )
+        )
+    }
+
+    @Test
+    fun parallelProviderProfiles_warmAheadEnabledSplitsRealDebridOneAndOne() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+
+        assertEquals(
+            (1 to 24) to (1 to 24),
+            factory.parallelProviderProfilesForTesting(
+                url = "https://real-debrid.com/path/movie.mkv",
+                warmAheadEnabledForStream = true
+            )
+        )
+    }
+
+    @Test
+    fun parallelProviderProfiles_warmAheadDisabledKeepsPremiumizeCurrentProfile() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+
+        assertEquals(
+            (3 to 16) to null,
+            factory.parallelProviderProfilesForTesting(
+                url = "https://premiumize.me/path/movie.mkv",
+                warmAheadEnabledForStream = false
+            )
+        )
+    }
+
+    @Test
+    fun parallelProviderProfiles_warmAheadEnabledSplitsPremiumizeTwoAndOne() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+
+        assertEquals(
+            (2 to 16) to (1 to 16),
+            factory.parallelProviderProfilesForTesting(
+                url = "https://premiumize.me/path/movie.mkv",
+                warmAheadEnabledForStream = true
+            )
+        )
+    }
+
+    @Test
+    fun parallelProviderProfiles_warmAheadEnabledSplitsFallbackTwoAndOne() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+
+        assertEquals(
+            (2 to 24) to (1 to 16),
+            factory.parallelProviderProfilesForTesting(
+                url = "https://example.com/path/movie.mkv",
+                warmAheadEnabledForStream = true
+            )
+        )
+    }
+
+    @Test
     fun parallelProviderProfile_unknownProviderUsesSafeDefault() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),

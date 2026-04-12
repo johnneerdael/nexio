@@ -623,11 +623,12 @@ internal class PlayerMediaSourceFactory(
         return when {
             !usesHttpUpstream(url) -> baseDataSourceFactory
             parallelConnectionsEnabled && !isHls && !isDash -> {
-                val parallelProfile = resolveParallelProviderProfile(
+                val parallelProfile = resolveParallelProviderProfiles(
                     url = url,
+                    warmAheadEnabledForStream = false,
                     fallbackConnectionCount = fallbackParallelConnectionCount,
                     fallbackChunkSizeMb = fallbackParallelChunkSizeMb
-                )
+                ).playback
                 ParallelRangeDataSource.Factory(
                     okHttpFactory,
                     parallelProfile.connectionCount,
@@ -654,8 +655,23 @@ internal class PlayerMediaSourceFactory(
     }
 
     internal fun parallelProviderProfileForTesting(url: String): Pair<Int, Int> {
-        val profile = resolveParallelProviderProfile(url)
+        val profile = resolveParallelProviderProfiles(
+            url = url,
+            warmAheadEnabledForStream = false
+        ).playback
         return profile.connectionCount to profile.chunkSizeMb
+    }
+
+    internal fun parallelProviderProfilesForTesting(
+        url: String,
+        warmAheadEnabledForStream: Boolean
+    ): Pair<Pair<Int, Int>, Pair<Int, Int>?> {
+        val profiles = resolveParallelProviderProfiles(
+            url = url,
+            warmAheadEnabledForStream = warmAheadEnabledForStream
+        )
+        return (profiles.playback.connectionCount to profiles.playback.chunkSizeMb) to
+            profiles.warmAhead?.let { it.connectionCount to it.chunkSizeMb }
     }
 
     private data class ParallelProviderProfile(
@@ -663,41 +679,79 @@ internal class PlayerMediaSourceFactory(
         val chunkSizeMb: Int
     )
 
+    private data class ParallelProviderProfiles(
+        val playback: ParallelProviderProfile,
+        val warmAhead: ParallelProviderProfile?
+    )
+
     private data class ResolvedVodCacheUrl(
         val playbackUrl: String,
         val resolvedUrl: String?
     )
 
-    private fun resolveParallelProviderProfile(
+    private fun resolveParallelProviderProfiles(
         url: String,
+        warmAheadEnabledForStream: Boolean,
         fallbackConnectionCount: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
         fallbackChunkSizeMb: Int = SAFE_DEFAULT_PARALLEL_CHUNK_SIZE_MB
-    ): ParallelProviderProfile {
+    ): ParallelProviderProfiles {
         val host = runCatching { Uri.parse(url).host.orEmpty().lowercase(Locale.US) }
             .getOrDefault("")
-        return when {
-            host.contains("premiumize") ||
-                host.startsWith("pm.") ||
-                host.contains(".pm.") -> ParallelProviderProfile(
-                connectionCount = 3,
-                chunkSizeMb = 16
-            )
+        val isPremiumize =
+            host.contains("premiumize") || host.startsWith("pm.") || host.contains(".pm.")
+        val isRealDebrid =
             host.contains("real-debrid") ||
                 host.contains("realdebrid") ||
                 host.startsWith("rd.") ||
-                host.contains(".rd.") -> ParallelProviderProfile(
-                connectionCount = 2,
-                chunkSizeMb = 24
-            )
-            else -> ParallelProviderProfile(
-                connectionCount = fallbackConnectionCount.coerceIn(
-                    PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT,
-                    PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT
-                ),
-                chunkSizeMb = fallbackChunkSizeMb.coerceIn(
-                    PlayerSettings.MIN_PARALLEL_CHUNK_SIZE_MB,
-                    PlayerSettings.MAX_PARALLEL_CHUNK_SIZE_MB
+                host.contains(".rd.")
+
+        if (warmAheadEnabledForStream) {
+            return when {
+                isPremiumize -> ParallelProviderProfiles(
+                    playback = ParallelProviderProfile(connectionCount = 2, chunkSizeMb = 16),
+                    warmAhead = ParallelProviderProfile(connectionCount = 1, chunkSizeMb = 16)
                 )
+                isRealDebrid -> ParallelProviderProfiles(
+                    playback = ParallelProviderProfile(connectionCount = 1, chunkSizeMb = 24),
+                    warmAhead = ParallelProviderProfile(connectionCount = 1, chunkSizeMb = 24)
+                )
+                else -> ParallelProviderProfiles(
+                    playback = ParallelProviderProfile(
+                        connectionCount = fallbackConnectionCount.coerceIn(
+                            PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT,
+                            PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT
+                        ),
+                        chunkSizeMb = fallbackChunkSizeMb.coerceIn(
+                            PlayerSettings.MIN_PARALLEL_CHUNK_SIZE_MB,
+                            PlayerSettings.MAX_PARALLEL_CHUNK_SIZE_MB
+                        )
+                    ),
+                    warmAhead = ParallelProviderProfile(connectionCount = 1, chunkSizeMb = 16)
+                )
+            }
+        }
+
+        return when {
+            isPremiumize -> ParallelProviderProfiles(
+                playback = ParallelProviderProfile(connectionCount = 3, chunkSizeMb = 16),
+                warmAhead = null
+            )
+            isRealDebrid -> ParallelProviderProfiles(
+                playback = ParallelProviderProfile(connectionCount = 2, chunkSizeMb = 24),
+                warmAhead = null
+            )
+            else -> ParallelProviderProfiles(
+                playback = ParallelProviderProfile(
+                    connectionCount = fallbackConnectionCount.coerceIn(
+                        PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT,
+                        PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT
+                    ),
+                    chunkSizeMb = fallbackChunkSizeMb.coerceIn(
+                        PlayerSettings.MIN_PARALLEL_CHUNK_SIZE_MB,
+                        PlayerSettings.MAX_PARALLEL_CHUNK_SIZE_MB
+                    )
+                ),
+                warmAhead = null
             )
         }
     }
