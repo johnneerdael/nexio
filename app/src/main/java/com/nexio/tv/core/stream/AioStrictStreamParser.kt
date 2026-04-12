@@ -194,6 +194,8 @@ object AioStrictStreamParser {
     }
 
     private fun deriveServiceId(stream: Stream, description: String, filename: String?): String? {
+        stream.wrappedProviderId?.takeIf { it.isNotBlank() }?.let { return it }
+
         val descriptionSignals = description.lines()
             .map { it.trim() }
             .filter { it.isNotBlank() }
