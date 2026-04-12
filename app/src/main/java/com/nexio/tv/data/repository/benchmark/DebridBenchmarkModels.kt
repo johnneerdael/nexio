@@ -280,6 +280,8 @@ data class DebridBenchmarkTransportConfigSnapshot(
     val parallelConnectionsEnabled: Boolean? = null,
     val parallelConnectionCount: Int? = null,
     val vodCacheEnabled: Boolean? = null,
+    val vodCacheWarmAheadEnabled: Boolean? = null,
+    val vodCacheSizeMb: Int? = null,
     val parallelChunkSizeMb: Int? = null
 )
 

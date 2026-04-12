@@ -1228,8 +1228,31 @@ private fun formatBenchmarkMeasuredAt(measuredAtMs: Long): String {
 private fun formatBenchmarkConfigSnapshot(
     snapshot: com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportConfigSnapshot
 ): String {
-    return snapshot.chunkWaitTimeoutMs?.let { "${it} ms wait" }
-        ?: stringResource(R.string.debrid_benchmark_config_parallel_off)
+    val cacheLabel = when (snapshot.vodCacheEnabled) {
+        true -> snapshot.vodCacheSizeMb?.let { "Cache on (${it} MB)" } ?: "Cache on"
+        false -> "Cache off"
+        null -> "Cache unknown"
+    }
+    val warmAheadLabel = when (snapshot.vodCacheWarmAheadEnabled) {
+        true -> "warm-ahead on"
+        false -> "warm-ahead off"
+        null -> "warm-ahead unknown"
+    }
+    val parallelLabel = when (snapshot.parallelConnectionsEnabled) {
+        true -> {
+            val connectionCount = snapshot.parallelConnectionCount
+            val chunkSizeMb = snapshot.parallelChunkSizeMb
+            if (connectionCount != null && chunkSizeMb != null) {
+                "PRDS ${connectionCount}x${chunkSizeMb} MB"
+            } else {
+                "PRDS on"
+            }
+        }
+        false -> stringResource(R.string.debrid_benchmark_config_parallel_off)
+        null -> "PRDS unknown"
+    }
+    val waitLabel = snapshot.chunkWaitTimeoutMs?.let { "${it} ms wait" }
+    return listOfNotNull(cacheLabel, warmAheadLabel, parallelLabel, waitLabel).joinToString(" | ")
 }
 
 private fun formatBenchmarkElapsed(elapsedMs: Long): String {

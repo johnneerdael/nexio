@@ -134,6 +134,7 @@ class DebridBenchmarkStore internal constructor(
             profile.configSnapshot?.let { cs ->
                 cs.chunkWaitTimeoutMs?.let { if (it <= 0L) checks += "config.chunkWaitTimeoutMs=$it" }
                 cs.parallelConnectionCount?.let { if (it <= 0) checks += "config.parallelConnectionCount=$it" }
+                cs.vodCacheSizeMb?.let { if (it <= 0) checks += "config.vodCacheSizeMb=$it" }
                 cs.parallelChunkSizeMb?.let { if (it <= 0) checks += "config.parallelChunkSizeMb=$it" }
             }
             profile.rawSamples.throughputBuckets.forEachIndexed { i, b ->
@@ -409,6 +410,7 @@ class DebridBenchmarkStore internal constructor(
     private fun DebridBenchmarkTransportConfigSnapshot.isValid(): Boolean {
         return chunkWaitTimeoutMs?.let { it > 0L } != false &&
             parallelConnectionCount?.let { it > 0 } != false &&
+            vodCacheSizeMb?.let { it > 0 } != false &&
             parallelChunkSizeMb?.let { it > 0 } != false
     }
 
@@ -731,6 +733,9 @@ class DebridBenchmarkStore internal constructor(
                     parallelConnectionCount =
                         configJson.optionalStrictIntegralIntOrNull("parallelConnectionCount"),
                     vodCacheEnabled = configJson.optionalStrictBooleanOrNull("vodCacheEnabled"),
+                    vodCacheWarmAheadEnabled =
+                        configJson.optionalStrictBooleanOrNull("vodCacheWarmAheadEnabled"),
+                    vodCacheSizeMb = configJson.optionalStrictIntegralIntOrNull("vodCacheSizeMb"),
                     parallelChunkSizeMb = configJson.optionalStrictIntegralIntOrNull("parallelChunkSizeMb")
                 )
             },

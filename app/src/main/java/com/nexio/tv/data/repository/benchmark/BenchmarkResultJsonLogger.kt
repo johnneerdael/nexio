@@ -454,6 +454,8 @@ private fun DebridBenchmarkTransportProfile.toJsonObject(): JsonObject {
                 config.parallelConnectionsEnabled?.let { addProperty("parallelConnectionsEnabled", it) }
                 config.parallelConnectionCount?.let { addProperty("parallelConnectionCount", it) }
                 config.vodCacheEnabled?.let { addProperty("vodCacheEnabled", it) }
+                config.vodCacheWarmAheadEnabled?.let { addProperty("vodCacheWarmAheadEnabled", it) }
+                config.vodCacheSizeMb?.let { addProperty("vodCacheSizeMb", it) }
                 config.parallelChunkSizeMb?.let { addProperty("parallelChunkSizeMb", it) }
             })
         }
