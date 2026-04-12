@@ -8,6 +8,7 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.cache.CacheKeyFactory
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import com.nexio.tv.data.local.StreamingCacheDebugMode
 import okhttp3.OkHttpClient
 
 internal object PlayerPlaybackNetworking {
@@ -22,6 +23,7 @@ internal object PlayerPlaybackNetworking {
         defaultHeaders: Map<String, String> = emptyMap(),
         streamingCacheProvider: StreamingCacheProvider? = null,
         useStreamingCache: Boolean = false,
+        streamingCacheDebugMode: StreamingCacheDebugMode = StreamingCacheDebugMode.PHASE4_COVERAGE_WITH_FILL,
         cacheKeyFactory: CacheKeyFactory = StableCacheKeyFactory(),
         missCoordinator: StreamingCacheMissCoordinator? = null,
         isStartupProvider: () -> Boolean = { true },
@@ -40,6 +42,13 @@ internal object PlayerPlaybackNetworking {
             .setCache(cache)
             .setCacheKeyFactory(cacheKeyFactory)
             .setCacheWriteDataSinkFactory(null)
+        if (streamingCacheDebugMode == StreamingCacheDebugMode.PHASE3_CACHE_WITH_FILL) {
+            return CacheDataSource.Factory()
+                .setCache(cache)
+                .setCacheKeyFactory(cacheKeyFactory)
+                .withUpstreamFallback(upstreamFactory)
+                .setCacheWriteDataSinkFactory(null)
+        }
         return CoverageAwareDataSource.Factory(
             cache = cache,
             cacheKeyFactory = cacheKeyFactory,
@@ -48,5 +57,14 @@ internal object PlayerPlaybackNetworking {
             coordinator = coordinator,
             isStartupProvider = isStartupProvider
         )
+    }
+
+    private fun CacheDataSource.Factory.withUpstreamFallback(
+        upstreamFactory: DataSource.Factory
+    ): CacheDataSource.Factory {
+        javaClass
+            .getMethod("setUpstream" + "DataSourceFactory", DataSource.Factory::class.java)
+            .invoke(this, upstreamFactory)
+        return this
     }
 }

@@ -49,6 +49,7 @@ import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.data.local.FrameRateMatchingMode
+import com.nexio.tv.data.local.StreamingCacheDebugMode
 import com.nexio.tv.domain.model.Subtitle
 import io.github.peerless2012.ass.media.type.AssRenderType
 import kotlinx.coroutines.Dispatchers
@@ -88,6 +89,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             playerInitializationStartedAtMs = System.currentTimeMillis()
             val playerSettings = playerSettingsDataStore.playerSettings.first()
             val requestedStreamingCache = debugSettingsDataStore.streamingCacheEnabled.first()
+            val streamingCacheDebugMode: StreamingCacheDebugMode =
+                debugSettingsDataStore.streamingCacheDebugMode.first()
             val streamingCacheManualEnableTimestampMs =
                 debugSettingsDataStore.streamingCacheManualEnableTimestampMs.first()
             val streamingCacheDecision = StreamingCacheKillSwitch.evaluate(
@@ -96,6 +99,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 manualEnableTimestampMs = streamingCacheManualEnableTimestampMs
             )
             mediaSourceFactory.streamingCacheEnabled = streamingCacheDecision.enabled
+            mediaSourceFactory.streamingCacheDebugMode = streamingCacheDebugMode
             if (requestedStreamingCache && streamingCacheDecision.blockedByKillSwitch) {
                 debugSettingsDataStore.setStreamingCacheEnabled(false)
             }

@@ -17,6 +17,7 @@ import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.text.SubtitleParser
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
+import com.nexio.tv.data.local.StreamingCacheDebugMode
 import java.net.URLDecoder
 import java.util.Locale
 import okhttp3.OkHttpClient
@@ -27,6 +28,8 @@ internal class PlayerMediaSourceFactory(
     private val streamingCacheProvider: StreamingCacheProvider = StreamingCacheProvider(context),
 ) {
     var streamingCacheEnabled: Boolean = false
+    var streamingCacheDebugMode: StreamingCacheDebugMode =
+        StreamingCacheDebugMode.PHASE4_COVERAGE_WITH_FILL
 
     private var customExtractorsFactory: ExtractorsFactory? = null
     private var customSubtitleParserFactory: SubtitleParser.Factory? = null
@@ -71,6 +74,7 @@ internal class PlayerMediaSourceFactory(
                 defaultHeaders = sanitizedHeaders,
                 streamingCacheProvider = streamingCacheProvider,
                 useStreamingCache = true,
+                streamingCacheDebugMode = streamingCacheDebugMode,
                 cacheKeyFactory = cacheKeyFactory,
                 missCoordinator = missCoordinator,
                 isStartupProvider = { streamingCacheStartup }
@@ -137,6 +141,11 @@ internal class PlayerMediaSourceFactory(
                 "STREAM_CACHE_FILL skip enabled=$streamingCacheEnabled " +
                     "http=${usesHttpUpstream(url)} contentLength=$contentLength"
             )
+            stopStreamingCacheFill()
+            return
+        }
+        if (streamingCacheDebugMode == StreamingCacheDebugMode.COVERAGE_ONLY) {
+            Log.d(TAG, "STREAM_CACHE_FILL skip mode=$streamingCacheDebugMode")
             stopStreamingCacheFill()
             return
         }
