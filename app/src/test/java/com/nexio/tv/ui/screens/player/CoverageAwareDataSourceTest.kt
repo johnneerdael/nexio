@@ -135,7 +135,7 @@ class CoverageAwareDataSourceTest {
         val cacheKey = cacheKeyFactory.buildCacheKey(spec)
         writeCacheSpan(uri = uri, cacheKey = cacheKey, position = 0L, bytes = byteArrayOf(1, 2))
         val source = dataSource(
-            upstream = FakeDataSource(byteArrayOf(3, 4, 5, 6), AtomicInteger(0)),
+            upstream = FakeDataSource(byteArrayOf(0, 0, 3, 4, 5, 6), AtomicInteger(0)),
             startup = true
         )
 
@@ -155,11 +155,14 @@ class CoverageAwareDataSourceTest {
         val spec = DataSpec.Builder().setUri(uri).setPosition(0L).setLength(requestLength).build()
         val cacheKey = cacheKeyFactory.buildCacheKey(spec)
         val cachedPrefix = ByteArray(CoverageAwareDataSource.OPEN_ENDED_SEGMENT_BYTES.toInt()) { 1 }
+        val upstreamBytes = ByteArray((CoverageAwareDataSource.OPEN_ENDED_SEGMENT_BYTES + 1L).toInt()) { index ->
+            if (index == CoverageAwareDataSource.OPEN_ENDED_SEGMENT_BYTES.toInt()) 2 else 0
+        }
         val upstreamSuffix = byteArrayOf(2)
         writeCacheSpan(uri = uri, cacheKey = cacheKey, position = 0L, bytes = cachedPrefix)
         val upstreamOpens = AtomicInteger(0)
         val source = dataSource(
-            upstream = FakeDataSource(upstreamSuffix, upstreamOpens),
+            upstream = FakeDataSource(upstreamBytes, upstreamOpens),
             startup = true
         )
 
@@ -207,7 +210,7 @@ class CoverageAwareDataSourceTest {
         val source = dataSource(
             cacheKeyFactory = originalLengthKeyFactory,
             coordinator = coordinator,
-            upstream = FakeDataSource(byteArrayOf(3, 4, 5, 6), AtomicInteger(0)),
+            upstream = FakeDataSource(byteArrayOf(0, 0, 3, 4, 5, 6), AtomicInteger(0)),
             startup = false
         )
 
@@ -262,11 +265,13 @@ class CoverageAwareDataSourceTest {
     }
 
     @Test
-    fun open_unboundedLongRead_marksFallbackThroughFarFutureUntilClose() {
+    fun open_unboundedLongRead_ownsOnlyActiveFallbackSegmentAndContinuesWithNextSegment() {
         val uri = Uri.parse("https://example.com/movie.mkv")
         val spec = DataSpec.Builder().setUri(uri).setPosition(0L).setLength(C.LENGTH_UNSET.toLong()).build()
-        val probeStart = CoverageAwareDataSource.OPEN_ENDED_SEGMENT_BYTES + 1L
-        val probeEnd = probeStart + 1L
+        val ownedProbeStart = CoverageAwareDataSource.OPEN_ENDED_SEGMENT_BYTES - 1L
+        val ownedProbeEnd = CoverageAwareDataSource.OPEN_ENDED_SEGMENT_BYTES
+        val unownedProbeStart = CoverageAwareDataSource.OPEN_ENDED_SEGMENT_BYTES + 1L
+        val unownedProbeEnd = unownedProbeStart + 1L
         val upstreamBytes = ByteArray((CoverageAwareDataSource.OPEN_ENDED_SEGMENT_BYTES + 32L).toInt()) { index ->
             (index % 251).toByte()
         }
@@ -274,14 +279,13 @@ class CoverageAwareDataSourceTest {
         val coordinator = StreamingCacheMissCoordinator(StreamingRangeCoordinator())
         val source = dataSource(
             coordinator = coordinator,
-            upstream = FakeDataSource(upstreamBytes, upstreamOpens) {
-                assertTrue(coordinator.isOwnedByPlaybackFallback(probeStart, probeEnd))
-            },
+            upstream = FakeDataSource(upstreamBytes, upstreamOpens),
             startup = true
         )
 
         assertEquals(C.LENGTH_UNSET.toLong(), source.open(spec))
-        assertTrue(coordinator.isOwnedByPlaybackFallback(probeStart, probeEnd))
+        assertTrue(coordinator.isOwnedByPlaybackFallback(ownedProbeStart, ownedProbeEnd))
+        assertFalse(coordinator.isOwnedByPlaybackFallback(unownedProbeStart, unownedProbeEnd))
         val buffer = ByteArray(64 * 1024)
         var totalRead = 0
         while (true) {
@@ -292,8 +296,9 @@ class CoverageAwareDataSourceTest {
         source.close()
 
         assertEquals(upstreamBytes.size, totalRead)
-        assertEquals(1, upstreamOpens.get())
-        assertFalse(coordinator.isOwnedByPlaybackFallback(probeStart, probeEnd))
+        assertEquals(2, upstreamOpens.get())
+        assertFalse(coordinator.isOwnedByPlaybackFallback(ownedProbeStart, ownedProbeEnd))
+        assertFalse(coordinator.isOwnedByPlaybackFallback(unownedProbeStart, unownedProbeEnd))
     }
 
     @Test
@@ -373,7 +378,11 @@ class CoverageAwareDataSourceTest {
 
         override fun open(dataSpec: DataSpec): Long {
             opened = true
-            readPosition = 0
+            readPosition = dataSpec.position.coerceAtMost(bytes.size.toLong()).toInt()
+            readLimit = when (dataSpec.length) {
+                C.LENGTH_UNSET.toLong() -> bytes.size
+                else -> (readPosition + dataSpec.length).coerceAtMost(bytes.size.toLong()).toInt()
+            }
             openCount.incrementAndGet()
             onOpen()
             return dataSpec.length.takeIf { it != C.LENGTH_UNSET.toLong() } ?: bytes.size.toLong()
@@ -381,8 +390,8 @@ class CoverageAwareDataSourceTest {
 
         override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
             if (!opened) error("read before open")
-            if (readPosition >= bytes.size) return C.RESULT_END_OF_INPUT
-            val count = minOf(length, bytes.size - readPosition)
+            if (readPosition >= readLimit) return C.RESULT_END_OF_INPUT
+            val count = minOf(length, readLimit - readPosition)
             bytes.copyInto(buffer, offset, readPosition, readPosition + count)
             readPosition += count
             return count
@@ -397,5 +406,7 @@ class CoverageAwareDataSourceTest {
         override fun close() {
             opened = false
         }
+
+        private var readLimit = bytes.size
     }
 }

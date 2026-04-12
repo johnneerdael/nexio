@@ -23,6 +23,8 @@ internal class CoverageAwareDataSource(
     private var currentToken: String? = null
     private var currentUri: Uri? = null
     private var responseHeaders: Map<String, List<String>> = emptyMap()
+    private var activeSegmentLength: Long = C.LENGTH_UNSET.toLong()
+    private var activeSegmentBytesRead: Long = 0L
     private val transferListeners = mutableListOf<TransferListener>()
 
     override fun open(dataSpec: DataSpec): Long {
@@ -40,8 +42,18 @@ internal class CoverageAwareDataSource(
         while (true) {
             val source = activeSource ?: return C.RESULT_END_OF_INPUT
             val read = source.read(buffer, offset, length)
-            if (read != C.RESULT_END_OF_INPUT) return read
+            if (read != C.RESULT_END_OF_INPUT) {
+                if (read > 0) {
+                    activeSegmentBytesRead += read.toLong()
+                }
+                return read
+            }
+            val segmentEndedEarly = activeSegmentLength != C.LENGTH_UNSET.toLong() &&
+                activeSegmentBytesRead < activeSegmentLength
             closeActiveSegment()
+            if (segmentEndedEarly) {
+                pendingSpec = null
+            }
             if (pendingSpec == null) return C.RESULT_END_OF_INPUT
             openNextSegment(allowUrgentFill = true)
         }
@@ -112,21 +124,13 @@ internal class CoverageAwareDataSource(
             }
         }
 
-        val segmentSpec = if (spec.length == C.LENGTH_UNSET.toLong()) {
-            spec.withCacheKey(cacheKey)
-        } else {
-            spec.withSegmentLength(segmentLength, cacheKey)
-        }
-        val endExclusive = if (spec.length == C.LENGTH_UNSET.toLong()) {
-            Long.MAX_VALUE
-        } else {
-            spec.position + segmentLength
-        }
+        val segmentSpec = spec.withSegmentLength(segmentLength, cacheKey)
+        val endExclusive = spec.position + segmentLength
         val token = coordinator.markFallbackOwned(spec.position, endExclusive)
         try {
             openSegment(upstreamDataSourceFactory.createDataSource(), segmentSpec)
             currentToken = token
-            pendingSpec = if (spec.length == C.LENGTH_UNSET.toLong()) null else spec.afterSegment(segmentLength)
+            pendingSpec = spec.afterSegment(segmentLength)
         } catch (error: Throwable) {
             coordinator.clearFallbackOwnership(token)
             throw error
@@ -146,6 +150,8 @@ internal class CoverageAwareDataSource(
             throw error
         }
         activeSource = source
+        activeSegmentLength = spec.length
+        activeSegmentBytesRead = 0L
         currentUri = source.uri ?: spec.uri
         responseHeaders = source.responseHeaders
     }
@@ -157,6 +163,8 @@ internal class CoverageAwareDataSource(
             activeSource?.close()
         } finally {
             activeSource = null
+            activeSegmentLength = C.LENGTH_UNSET.toLong()
+            activeSegmentBytesRead = 0L
             if (token != null) {
                 coordinator.clearFallbackOwnership(token)
             }
