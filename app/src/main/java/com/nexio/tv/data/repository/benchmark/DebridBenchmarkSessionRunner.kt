@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository.benchmark
 
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
+import com.nexio.tv.data.local.VodCacheSizeMode
 import java.net.URI
 import java.security.MessageDigest
 import javax.inject.Inject
@@ -107,10 +108,6 @@ class DebridBenchmarkSessionRunner internal constructor(
             .distinct()
     }
 
-    private fun PlayerSettings.toBenchmarkTransportConfigSnapshot(): DebridBenchmarkTransportConfigSnapshot {
-        return DebridBenchmarkTransportConfigSnapshot()
-    }
-
     private fun benchmarkSessionMetadata(
         optimizedElapsedMs: Long
     ): DebridBenchmarkSessionMetadata {
@@ -142,6 +139,15 @@ class DebridBenchmarkSessionRunner internal constructor(
             )
         )
     }
+}
+
+internal fun PlayerSettings.toBenchmarkTransportConfigSnapshot(): DebridBenchmarkTransportConfigSnapshot {
+    return DebridBenchmarkTransportConfigSnapshot(
+        parallelConnectionsEnabled = useParallelConnections,
+        parallelConnectionCount = parallelConnectionCount,
+        vodCacheEnabled = vodCacheSizeMode == VodCacheSizeMode.ON,
+        parallelChunkSizeMb = parallelChunkSizeMb
+    )
 }
 
 private const val FRONTIER_EVENT_MINIMUM = 10

@@ -133,6 +133,8 @@ class DebridBenchmarkStore internal constructor(
             }
             profile.configSnapshot?.let { cs ->
                 cs.chunkWaitTimeoutMs?.let { if (it <= 0L) checks += "config.chunkWaitTimeoutMs=$it" }
+                cs.parallelConnectionCount?.let { if (it <= 0) checks += "config.parallelConnectionCount=$it" }
+                cs.parallelChunkSizeMb?.let { if (it <= 0) checks += "config.parallelChunkSizeMb=$it" }
             }
             profile.rawSamples.throughputBuckets.forEachIndexed { i, b ->
                 if (!b.throughputMbps.isFinite() || b.throughputMbps < 0.0) {
@@ -405,7 +407,9 @@ class DebridBenchmarkStore internal constructor(
     }
 
     private fun DebridBenchmarkTransportConfigSnapshot.isValid(): Boolean {
-        return chunkWaitTimeoutMs?.let { it > 0L } != false
+        return chunkWaitTimeoutMs?.let { it > 0L } != false &&
+            parallelConnectionCount?.let { it > 0 } != false &&
+            parallelChunkSizeMb?.let { it > 0 } != false
     }
 
     private fun DebridBenchmarkTransportDecisionMetrics.isValid(): Boolean {
@@ -721,7 +725,13 @@ class DebridBenchmarkStore internal constructor(
             },
             configSnapshot = profileJson.optionalObject("configSnapshot")?.let { configJson ->
                 DebridBenchmarkTransportConfigSnapshot(
-                    chunkWaitTimeoutMs = configJson.optionalStrictIntegralLongOrNull("chunkWaitTimeoutMs")
+                    chunkWaitTimeoutMs = configJson.optionalStrictIntegralLongOrNull("chunkWaitTimeoutMs"),
+                    parallelConnectionsEnabled =
+                        configJson.optionalStrictBooleanOrNull("parallelConnectionsEnabled"),
+                    parallelConnectionCount =
+                        configJson.optionalStrictIntegralIntOrNull("parallelConnectionCount"),
+                    vodCacheEnabled = configJson.optionalStrictBooleanOrNull("vodCacheEnabled"),
+                    parallelChunkSizeMb = configJson.optionalStrictIntegralIntOrNull("parallelChunkSizeMb")
                 )
             },
             rawSamples = DebridBenchmarkRawSamples(

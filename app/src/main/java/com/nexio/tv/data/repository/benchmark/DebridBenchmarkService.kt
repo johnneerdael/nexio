@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository.benchmark
 
 import com.nexio.tv.data.local.DebridBenchmarkStore
+import com.nexio.tv.data.local.PlayerSettingsDataStore
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
@@ -36,6 +37,7 @@ class DebridBenchmarkService internal constructor(
     private val sessionRunner: DebridBenchmarkSessionRunner,
     private val collectionUploader: DebridBenchmarkCollectionUploader,
     private val benchmarkResultJsonLogger: BenchmarkResultJsonLogger,
+    private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val scope: CoroutineScope,
     private val nowMs: () -> Long,
     private val executionGate: DebridBenchmarkExecutionGate
@@ -54,6 +56,7 @@ class DebridBenchmarkService internal constructor(
         sessionRunner: DebridBenchmarkSessionRunner,
         collectionUploader: DebridBenchmarkCollectionUploader,
         benchmarkResultJsonLogger: BenchmarkResultJsonLogger,
+        playerSettingsDataStore: PlayerSettingsDataStore,
         executionGate: DebridBenchmarkExecutionGate
     ) : this(
         resolver = resolver,
@@ -61,6 +64,7 @@ class DebridBenchmarkService internal constructor(
         sessionRunner = sessionRunner,
         collectionUploader = collectionUploader,
         benchmarkResultJsonLogger = benchmarkResultJsonLogger,
+        playerSettingsDataStore = playerSettingsDataStore,
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
         nowMs = System::currentTimeMillis,
         executionGate = executionGate
@@ -163,6 +167,7 @@ class DebridBenchmarkService internal constructor(
 
             transportResult.result?.let { rawResult ->
                 store.saveLatest(rawResult)
+                persistAutoplayMaxBitrate(rawResult)
                 collectionUploader.submitIfEnabled(rawResult)
                 benchmarkResultJsonLogger.logCompleted(rawResult)
             } ?: benchmarkResultJsonLogger.logOutcome(
@@ -198,6 +203,15 @@ class DebridBenchmarkService internal constructor(
         }
     }
 
+    private suspend fun persistAutoplayMaxBitrate(result: DebridBenchmarkResult) {
+        val safeBudget = result.optimized?.decision?.safeSustainedBudgetMbps
+            ?.takeIf { it.isFinite() && it > 0.0 }
+            ?: return
+        playerSettingsDataStore.setAutoplayMaxBitrate(
+            (safeBudget * AUTOPLAY_MAX_BITRATE_MARGIN).coerceAtMost(AUTOPLAY_MAX_BITRATE_CEILING_MBPS)
+        )
+    }
+
     private suspend fun emitOutcome(
         provider: DebridBenchmarkProvider,
         summary: DebridBenchmarkSummary,
@@ -221,5 +235,10 @@ class DebridBenchmarkService internal constructor(
             activeJob = null
             _activeState.value = DebridBenchmarkRuntimeState.Idle
         }
+    }
+
+    private companion object {
+        const val AUTOPLAY_MAX_BITRATE_MARGIN = 0.90
+        const val AUTOPLAY_MAX_BITRATE_CEILING_MBPS = 80.0
     }
 }

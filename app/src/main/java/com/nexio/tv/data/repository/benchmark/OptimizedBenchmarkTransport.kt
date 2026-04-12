@@ -1,9 +1,11 @@
 package com.nexio.tv.data.repository.benchmark
 
+import android.content.Context
 import androidx.media3.common.C
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.EOFException
 import java.io.InterruptedIOException
 import java.net.SocketException
@@ -55,9 +57,10 @@ class OptimizedBenchmarkTransport internal constructor(
 
     @Inject
     constructor(
+        @ApplicationContext context: Context,
         @Named("benchmark") okHttpClient: OkHttpClient
     ) : this(
-        factoryBuilder = DefaultOptimizedBenchmarkDataSourceFactoryBuilder(okHttpClient),
+        factoryBuilder = PlayerPipelineBenchmarkTransportFactory(context, okHttpClient),
         nanoTimeNs = System::nanoTime,
         sustainedThresholdBytes = 500L * 1024L * 1024L,
         sustainedThresholdElapsedMs = 120_000L,
