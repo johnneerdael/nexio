@@ -8,6 +8,7 @@ import androidx.media3.datasource.cache.ContentMetadata
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import com.nexio.tv.data.local.StreamingCacheDebugMode
 import io.mockk.every
 import io.mockk.mockk
 import java.io.IOException
@@ -279,6 +280,61 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun playbackNetworking_phase3ModeUsesReadOnlyCacheDataSource() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "stream-cache-phase3-${System.nanoTime()}"
+        )
+
+        try {
+            val factory = PlayerPlaybackNetworking.createDataSourceFactory(
+                context = context,
+                client = OkHttpClient(),
+                defaultHeaders = emptyMap(),
+                streamingCacheProvider = provider,
+                useStreamingCache = true,
+                streamingCacheDebugMode = StreamingCacheDebugMode.PHASE3_CACHE_WITH_FILL
+            )
+            val dataSource = factory.createDataSource()
+
+            assertTrue(dataSource is androidx.media3.datasource.cache.CacheDataSource)
+            assertFalse(dataSource is CoverageAwareDataSource)
+            assertTrue(provider.hasCacheInstance)
+        } finally {
+            provider.release()
+            provider.cacheDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun playbackNetworking_phase4ModeUsesCoverageAwareDataSource() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "stream-cache-phase4-${System.nanoTime()}"
+        )
+
+        try {
+            val factory = PlayerPlaybackNetworking.createDataSourceFactory(
+                context = context,
+                client = OkHttpClient(),
+                defaultHeaders = emptyMap(),
+                streamingCacheProvider = provider,
+                useStreamingCache = true,
+                streamingCacheDebugMode = StreamingCacheDebugMode.PHASE4_COVERAGE_WITH_FILL
+            )
+            val dataSource = factory.createDataSource()
+
+            assertTrue(dataSource is CoverageAwareDataSource)
+            assertTrue(provider.hasCacheInstance)
+        } finally {
+            provider.release()
+            provider.cacheDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun playbackNetworking_acceptsCustomCacheKeyFactory_withCacheEnabled() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val provider = StreamingCacheProvider(
@@ -462,6 +518,38 @@ class PlayerMediaSourceFactoryTest {
 
             factory.startStreamingCacheFill(
                 url = "asset:///movie.mkv",
+                headers = emptyMap(),
+                contentLength = 32L * 1024L * 1024L,
+                playbackByteProvider = { 0L }
+            )
+
+            assertFalse(provider.hasCacheInstance)
+            assertFalse(provider.cacheDirectory.exists())
+            assertFalse(factory.hasActiveFillSession)
+        } finally {
+            factory.shutdown()
+        }
+    }
+
+    @Test
+    fun startStreamingCacheFill_coverageOnlyDoesNotStartFillWorker() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "media-source-fill-coverage-only-${System.nanoTime()}"
+        )
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = OkHttpClient(),
+            streamingCacheProvider = provider
+        )
+
+        try {
+            factory.streamingCacheEnabled = true
+            factory.streamingCacheDebugMode = StreamingCacheDebugMode.COVERAGE_ONLY
+
+            factory.startStreamingCacheFill(
+                url = "https://example.com/movie.mkv",
                 headers = emptyMap(),
                 contentLength = 32L * 1024L * 1024L,
                 playbackByteProvider = { 0L }

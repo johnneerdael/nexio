@@ -20,6 +20,7 @@ import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.FrameRateMatchingMode
+import com.nexio.tv.data.local.StreamingCacheDebugMode
 import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.SkipInterval
 import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
@@ -391,21 +392,31 @@ class PlayerRuntimeController(
         observeGeminiSettings()
         observeTheIntroDbSettings()
         streamingCacheFlagJob = scope.launch {
-            debugSettingsDataStore.streamingCacheEnabled
-                .combine(debugSettingsDataStore.streamingCacheManualEnableTimestampMs) { enabled, manualEnableTimestampMs ->
-                    enabled to manualEnableTimestampMs
+            combine(
+                debugSettingsDataStore.streamingCacheEnabled,
+                debugSettingsDataStore.streamingCacheManualEnableTimestampMs,
+                debugSettingsDataStore.streamingCacheDebugMode
+            ) { enabled, manualEnableTimestampMs, mode ->
+                    StreamingCacheSettings(
+                        enabled = enabled,
+                        manualEnableTimestampMs = manualEnableTimestampMs,
+                        mode = mode
+                    )
                 }
-                .collect { (enabled, manualEnableTimestampMs) ->
+                .collect { settings ->
                     val decision = StreamingCacheKillSwitch.evaluate(
                         context = context,
-                        requested = enabled,
-                        manualEnableTimestampMs = manualEnableTimestampMs
+                        requested = settings.enabled,
+                        manualEnableTimestampMs = settings.manualEnableTimestampMs
                     )
                     mediaSourceFactory.streamingCacheEnabled = decision.enabled
+                    mediaSourceFactory.streamingCacheDebugMode = settings.mode
                     if (!decision.enabled) {
                         mediaSourceFactory.stopStreamingCacheFill()
+                    } else if (settings.mode == StreamingCacheDebugMode.COVERAGE_ONLY) {
+                        mediaSourceFactory.stopStreamingCacheFill()
                     }
-                    if (enabled && decision.blockedByKillSwitch) {
+                    if (settings.enabled && decision.blockedByKillSwitch) {
                         debugSettingsDataStore.setStreamingCacheEnabled(false)
                     }
                 }
@@ -414,6 +425,12 @@ class PlayerRuntimeController(
         observeBlurUnwatchedEpisodes()
         observeEpisodeWatchProgress()
     }
+
+    private data class StreamingCacheSettings(
+        val enabled: Boolean,
+        val manualEnableTimestampMs: Long,
+        val mode: StreamingCacheDebugMode
+    )
     
 
     fun onCleared() {
