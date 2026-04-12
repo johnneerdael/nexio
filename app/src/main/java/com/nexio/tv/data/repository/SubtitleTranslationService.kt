@@ -13,8 +13,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -57,6 +55,7 @@ internal fun subtitleTranslationDiskCacheKey(
 
 internal enum class SubtitleTranslationProviderError {
     InvalidApiKey,
+    AccessDenied,
     RateLimited,
     Transient,
     Unknown
@@ -72,11 +71,23 @@ internal fun classifyProviderError(
     body: String
 ): SubtitleTranslationProviderError {
     return when (statusCode) {
-        401, 403 -> SubtitleTranslationProviderError.InvalidApiKey
+        401 -> SubtitleTranslationProviderError.InvalidApiKey
+        403 -> if (provider == SubtitleTranslationProvider.GEMINI && body.indicatesGeminiProjectDenied()) {
+            SubtitleTranslationProviderError.AccessDenied
+        } else {
+            SubtitleTranslationProviderError.InvalidApiKey
+        }
         429 -> SubtitleTranslationProviderError.RateLimited
         in 500..599 -> SubtitleTranslationProviderError.Transient
         else -> SubtitleTranslationProviderError.Unknown
     }
+}
+
+private fun String.indicatesGeminiProjectDenied(): Boolean {
+    val normalized = lowercase(Locale.US)
+    return "permission_denied" in normalized ||
+        "project has been denied access" in normalized ||
+        "denied access" in normalized
 }
 
 private fun sha256(input: String): String {
@@ -297,11 +308,29 @@ class SubtitleTranslationService @Inject constructor(
     ): Map<Int, String> = coroutineScope {
         val chunks = chunkBlocks(blocks, chunkConfig)
         val targetLanguageName = displayLanguage(targetLanguageCode)
-        val gate = Semaphore(chunkConfig.maxParallelRequests.coerceAtLeast(1))
 
-        chunks.map { chunk ->
-            async(Dispatchers.IO) {
-                gate.withPermit {
+        translateChunksFailFast(
+            chunks = chunks,
+            targetLanguageCode = targetLanguageCode,
+            targetLanguageName = targetLanguageName,
+            settings = settings,
+            chunkConfig = chunkConfig
+        )
+    }
+
+    private suspend fun translateChunksFailFast(
+        chunks: List<List<TranslatableTimedTextBlock>>,
+        targetLanguageCode: String,
+        targetLanguageName: String,
+        settings: SubtitleTranslationSettings,
+        chunkConfig: SubtitleTranslationChunkConfig
+    ): Map<Int, String> = coroutineScope {
+        val parallelism = chunkConfig.maxParallelRequests.coerceAtLeast(1)
+        val translatedByIndex = mutableMapOf<Int, String>()
+
+        for (batch in chunks.chunked(parallelism)) {
+            val batchResults = batch.map { chunk ->
+                async(Dispatchers.IO) {
                     requestChunkTranslationAdaptive(
                         blocks = chunk,
                         targetLanguageCode = targetLanguageCode,
@@ -310,11 +339,11 @@ class SubtitleTranslationService @Inject constructor(
                         chunkConfig = chunkConfig
                     )
                 }
-            }
-        }.awaitAll()
-            .fold(mutableMapOf<Int, String>()) { acc, entries ->
-                acc.apply { putAll(entries) }
-            }
+            }.awaitAll()
+            batchResults.forEach(translatedByIndex::putAll)
+        }
+
+        translatedByIndex
     }
 
     private fun chunkBlocks(
@@ -427,22 +456,13 @@ class SubtitleTranslationService @Inject constructor(
             )
         }
         val chunks = chunkBlocks(blocks, chunkConfig)
-        val gate = Semaphore(chunkConfig.maxParallelRequests.coerceAtLeast(1))
-        val translatedByIndex = chunks.map { chunk ->
-            async(Dispatchers.IO) {
-                gate.withPermit {
-                    requestChunkTranslationAdaptive(
-                        blocks = chunk,
-                        targetLanguageCode = targetLanguageCode,
-                        targetLanguageName = targetLanguageName,
-                        settings = settings,
-                        chunkConfig = chunkConfig
-                    )
-                }
-            }
-        }.awaitAll().fold(mutableMapOf<Int, String>()) { acc, entries ->
-            acc.apply { putAll(entries) }
-        }
+        val translatedByIndex = translateChunksFailFast(
+            chunks = chunks,
+            targetLanguageCode = targetLanguageCode,
+            targetLanguageName = targetLanguageName,
+            settings = settings,
+            chunkConfig = chunkConfig
+        )
 
         buildMap {
             texts.forEachIndexed { index, source ->
@@ -653,6 +673,10 @@ class SubtitleTranslationService @Inject constructor(
             SubtitleTranslationProviderError.InvalidApiKey ->
                 SubtitleTranslationProviderException(
                     message = "Subtitle translation API key was rejected."
+                )
+            SubtitleTranslationProviderError.AccessDenied ->
+                SubtitleTranslationProviderException(
+                    message = "Subtitle translation provider denied access for this API key or project."
                 )
             SubtitleTranslationProviderError.RateLimited ->
                 SubtitleTranslationProviderException(
