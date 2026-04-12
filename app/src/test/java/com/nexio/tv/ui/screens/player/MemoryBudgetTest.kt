@@ -28,4 +28,17 @@ class MemoryBudgetTest {
         assertTrue(budget.effectiveFillHorizonBytes <= 128L * 1024L * 1024L)
         assertTrue(budget.effectiveFillHorizonBytes <= budget.effectiveSampleQueueBytes)
     }
+
+    @Test
+    fun lowMemoryReduction_keepsFillHorizonWithinSampleQueueBudgetFloor() {
+        val effectiveSampleQueueBytes = MemoryBudget.computeEffectiveSampleQueueBytes(
+            sampleQueueBudgetBytes = MemoryBudget.MIN_SAMPLE_QUEUE_BYTES,
+            hasRecentLowMemoryExit = true
+        )
+        val effectiveFillHorizonBytes = MemoryBudget.computeEffectiveFillHorizonBytes(
+            effectiveSampleQueueBytes = effectiveSampleQueueBytes
+        )
+
+        assertTrue(effectiveFillHorizonBytes <= effectiveSampleQueueBytes)
+    }
 }
