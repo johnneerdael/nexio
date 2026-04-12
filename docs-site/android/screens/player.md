@@ -6,7 +6,7 @@ This is the legacy player page. The player surface still exists, but the practic
 
 - [Playback](/playback/) for the current playback overview
 - [Playback Tuning](/playback/playback-tuning) for VOD cache and parallel downloading
-- [Subtitles and Auto-Translate](/playback/subtitles-and-auto-translate) for Gemini-backed subtitle translation
+- [Subtitles and Auto-Translate](/playback/subtitles-and-auto-translate) for provider-backed subtitle translation
 - [Audio Codecs and Device Advice](/playback/audio-codecs-and-device-advice) for AV1, AC4, 4K, and weaker hardware
 
 ## Still relevant

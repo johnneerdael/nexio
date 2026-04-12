@@ -1051,11 +1051,11 @@
     <string name="subtitle_auto_translate">Auto-Translate</string>
     <string name="subtitle_none">None</string>
     <string name="subtitle_ai_translate_title">AI subtitle translation</string>
-    <string name="subtitle_ai_translate_subtitle">Translate the selected subtitle to your primary subtitle language with Gemini.</string>
+    <string name="subtitle_ai_translate_subtitle">Translate the selected subtitle to your primary subtitle language with the configured provider.</string>
     <string name="subtitle_ai_translate_loading">Translating subtitle…</string>
     <string name="subtitle_ai_translate_requires_addon">AI translation currently works with addon subtitle files only.</string>
     <string name="subtitle_ai_translate_unsupported_builtin">This built-in subtitle track uses bitmap cues and cannot be AI-translated yet.</string>
-    <string name="subtitle_ai_translate_missing_key">Configure a Google Gemini API key in Integrations first.</string>
+    <string name="subtitle_ai_translate_missing_key">Configure a Subtitle Translation provider API key in Integrations first.</string>
     <string name="subtitle_ai_translate_missing_target">Choose a primary subtitle language before enabling AI translation.</string>
     <string name="subtitle_ai_translate_unsupported_format">This subtitle format is not supported for AI translation yet.</string>
     <string name="subtitle_ai_translate_failed">Failed to translate subtitle.</string>

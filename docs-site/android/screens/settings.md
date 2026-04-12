@@ -6,7 +6,7 @@ This is the legacy settings page. The old screen-by-screen breakdown is no longe
 
 - [Playback](/playback/) for the current playback entry point
 - [Playback Tuning](/playback/playback-tuning) for buffering and seek behavior
-- [Subtitles and Auto-Translate](/playback/subtitles-and-auto-translate) for Gemini-backed subtitle translation
+- [Subtitles and Auto-Translate](/playback/subtitles-and-auto-translate) for provider-backed subtitle translation
 - [Audio Codecs and Device Advice](/playback/audio-codecs-and-device-advice) for codec and device limits
 
 ## Still relevant

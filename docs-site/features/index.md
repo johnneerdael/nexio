@@ -147,7 +147,7 @@ Nexio includes a stronger subtitle workflow than most apps in this space, with s
 - subtitle organization modes
 - libass support
 - HDR-friendly subtitle rendering modes
-- **Google Gemini** subtitle translation
+- **Subtitle Translation** with OpenAI-compatible, Anthropic-compatible, or Google Gemini providers
 - cached translated subtitle assets
 
 ## Addons, catalogs, and home control
