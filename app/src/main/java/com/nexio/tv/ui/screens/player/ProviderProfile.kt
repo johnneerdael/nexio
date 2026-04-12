@@ -18,4 +18,13 @@ internal data class ProviderProfile(
         require(retainBehindBytes <= fillHorizonBytes)
         require(maxConnections == 1)
     }
+
+    companion object {
+        fun forMemoryBudget(memoryBudget: MemoryBudget): ProviderProfile {
+            return ProviderProfile(
+                fillHorizonBytes = memoryBudget.effectiveFillHorizonBytes,
+                lowWaterBytes = memoryBudget.effectiveFillHorizonBytes / 2L
+            )
+        }
+    }
 }

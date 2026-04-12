@@ -18,4 +18,14 @@ class MemoryBudgetTest {
         assertTrue(budget.effectiveHeapBytes > 0)
         assertTrue(budget.effectiveSampleQueueBytes >= MemoryBudget.MIN_SAMPLE_QUEUE_BYTES)
     }
+
+    @Test
+    fun effectiveFillHorizonBytes_isBoundedBelowSampleQueueBudget() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val budget = MemoryBudget(context)
+
+        assertTrue(budget.effectiveFillHorizonBytes >= 32L * 1024L * 1024L)
+        assertTrue(budget.effectiveFillHorizonBytes <= 128L * 1024L * 1024L)
+        assertTrue(budget.effectiveFillHorizonBytes <= budget.effectiveSampleQueueBytes)
+    }
 }

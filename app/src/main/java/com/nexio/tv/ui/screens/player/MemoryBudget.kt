@@ -11,6 +11,7 @@ internal class MemoryBudget(context: Context) {
     val largeMemoryClassBytes: Long
     val sampleQueueBudgetBytes: Long
     val effectiveSampleQueueBytes: Long
+    val effectiveFillHorizonBytes: Long
     val effectiveHeapBytes: Long = heapLimitBytes
 
     init {
@@ -30,6 +31,8 @@ internal class MemoryBudget(context: Context) {
         } else {
             sampleQueueBudgetBytes
         }
+        effectiveFillHorizonBytes = (effectiveSampleQueueBytes / 2L)
+            .coerceIn(MIN_FILL_HORIZON_BYTES, MAX_FILL_HORIZON_BYTES)
     }
 
     fun fillWorkerWithinBudget(activeConnections: Int): Boolean {
@@ -51,5 +54,7 @@ internal class MemoryBudget(context: Context) {
         const val FILL_WORKER_READ_BUFFER_BYTES = 512 * 1024
         const val MIN_SAMPLE_QUEUE_BYTES = 32L * 1024L * 1024L
         const val MAX_SAMPLE_QUEUE_BYTES = 350L * 1024L * 1024L
+        const val MIN_FILL_HORIZON_BYTES = 32L * 1024L * 1024L
+        const val MAX_FILL_HORIZON_BYTES = 128L * 1024L * 1024L
     }
 }

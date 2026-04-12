@@ -38,7 +38,7 @@ internal class PlayerMediaSourceFactory(
     private val rangeCoordinator = StreamingRangeCoordinator()
     private val missCoordinator = StreamingCacheMissCoordinator(rangeCoordinator)
     private val streamingBandwidthMonitor = BandwidthMonitor()
-    private val memoryBudget = MemoryBudget(context)
+    internal val memoryBudget = MemoryBudget(context)
     private val memoryPressureMonitor = StreamingCacheMemoryPressureMonitor(
         context = context,
         onMemoryPressure = ::onStreamingCacheMemoryWarning
@@ -176,7 +176,8 @@ internal class PlayerMediaSourceFactory(
             memoryBudget = memoryBudget,
             rangeCoordinator = missCoordinator,
             missCoordinator = missCoordinator,
-            bandwidthMonitor = streamingBandwidthMonitor
+            bandwidthMonitor = streamingBandwidthMonitor,
+            profile = ProviderProfile.forMemoryBudget(memoryBudget)
         ).also { fillSession = it }
 
         session.start(
