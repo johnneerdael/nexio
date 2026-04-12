@@ -104,14 +104,14 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
-    fun parallelProviderProfile_unknownProviderUsesOldDefault() {
+    fun parallelProviderProfile_unknownProviderUsesSafeDefault() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
             playbackOkHttpClient = OkHttpClient()
         )
 
         assertEquals(
-            2 to 16,
+            2 to 24,
             factory.parallelProviderProfileForTesting("https://example.com/path/movie.mkv")
         )
     }
