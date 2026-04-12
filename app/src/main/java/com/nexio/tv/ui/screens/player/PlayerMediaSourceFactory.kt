@@ -90,6 +90,9 @@ internal class PlayerMediaSourceFactory(
         headers: Map<String, String>,
         subtitleConfigurations: List<MediaItem.SubtitleConfiguration> = emptyList()
     ): MediaSource {
+        if (currentVodCacheUrl != null && currentVodCacheUrl != url) {
+            stopVodWarmAhead()
+        }
         val sanitizedHeaders = sanitizeHeaders(headers)
         val okHttpFactory = createOkHttpDataSourceFactory(sanitizedHeaders)
         val baseDataSourceFactory = DefaultDataSource.Factory(context, okHttpFactory)
@@ -353,9 +356,7 @@ internal class PlayerMediaSourceFactory(
     }
 
     private fun startVodWarmAheadIfEligible() {
-        if (!ENABLE_VOD_CACHE || isVodCacheDisabled) return
-        if (vodCacheSizeMode != VodCacheSizeMode.ON) return
-        if (!currentProgressiveIsEligibleForWarmAhead || !currentVodCacheActive) return
+        if (!shouldAttemptVodWarmAheadStart()) return
         val streamUrl = currentVodCacheUrl ?: return
         val upstreamFactory = currentProgressiveUpstreamFactory ?: return
         val upstreamKind = warmAheadUpstreamKindForTesting(upstreamFactory)
@@ -386,6 +387,40 @@ internal class PlayerMediaSourceFactory(
         activePrefetchWriter = null
     }
 
+    private fun shouldAttemptVodWarmAheadStart(): Boolean {
+        if (!ENABLE_VOD_CACHE || isVodCacheDisabled) return false
+        if (vodCacheSizeMode != VodCacheSizeMode.ON) return false
+        if (!vodCacheWarmAheadEnabled) return false
+        return currentProgressiveIsEligibleForWarmAhead && currentVodCacheActive
+    }
+
+    private fun resolveWarmAheadRequestUrl(streamUrl: String): String? {
+        if (currentVodCacheUrl != streamUrl) return null
+        val resolvedUrl = currentVodCacheResolvedUrl
+        if (currentVodCacheUrl != streamUrl) return null
+        return resolvedUrl ?: streamUrl
+    }
+
+    internal fun setWarmAheadStateForTesting(
+        streamUrl: String?,
+        resolvedUrl: String?,
+        eligible: Boolean,
+        active: Boolean
+    ) {
+        currentVodCacheUrl = streamUrl
+        currentVodCacheResolvedUrl = resolvedUrl
+        currentProgressiveIsEligibleForWarmAhead = eligible
+        currentVodCacheActive = active
+    }
+
+    internal fun warmAheadRequestUrlForTesting(streamUrl: String): String? {
+        return resolveWarmAheadRequestUrl(streamUrl)
+    }
+
+    internal fun shouldAttemptVodWarmAheadStartForTesting(): Boolean {
+        return shouldAttemptVodWarmAheadStart()
+    }
+
     private fun runWarmAheadLoop(
         streamUrl: String,
         upstreamFactory: DataSource.Factory,
@@ -397,7 +432,7 @@ internal class PlayerMediaSourceFactory(
         var cursor = 0L
         var idleCycles = 0
         while (!prefetchStop.get() && !Thread.currentThread().isInterrupted) {
-            val liveUrl = currentVodCacheResolvedUrl ?: currentVodCacheUrl ?: streamUrl
+            val liveUrl = resolveWarmAheadRequestUrl(streamUrl) ?: break
             val prefetchUri = runCatching { Uri.parse(liveUrl) }.getOrElse { Uri.parse(streamUrl) }
             val cacheKey = VodWarmAheadPolicy.warmAheadCacheKey(
                 playbackStreamUrl = streamUrl,
