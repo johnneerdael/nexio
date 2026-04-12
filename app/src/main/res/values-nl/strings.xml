@@ -176,6 +176,8 @@
   <string name="playback_buffer_enable_vod_cache_sub">Cache progressieve VOD op schijf om pieken in bandbreedte op te vangen.</string>
   <string name="playback_buffer_vod_cache_size">VOD-cachegrootte</string>
   <string name="playback_buffer_vod_cache_size_sub">Maximaal schijfgebruik voor progressieve VOD-cache (LRU-opruiming).</string>
+  <string name="playback_buffer_vod_warm_ahead">VOD-warm-ahead op achtergrond</string>
+  <string name="playback_buffer_vod_warm_ahead_sub">Download toekomstige cachereeksen op de achtergrond. Schakel uit als wifi-weergave hapert.</string>
   <string name="playback_buffer_network_title">Netwerk</string>
   <string name="playback_buffer_parallel_connections">Parallelle verbindingen</string>
   <string name="playback_buffer_parallel_connections_sub">Gebruik meerdere verbindingen parallel voor progressieve streams.</string>

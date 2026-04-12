@@ -24,6 +24,7 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
     playerSettings: PlayerSettings,
     onSetVodCacheSizeMode: (VodCacheSizeMode) -> Unit,
     onSetVodCacheSizeMb: (Int) -> Unit,
+    onSetVodCacheWarmAheadEnabled: (Boolean) -> Unit,
     onSetUseParallelConnections: (Boolean) -> Unit,
     onItemFocused: () -> Unit
 ) {
@@ -69,6 +70,17 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
                 maxValue = maxManualCacheMb,
                 step = 50,
                 onValueChange = onSetVodCacheSizeMb,
+                onFocused = onItemFocused
+            )
+        }
+
+        item(key = "network_cache_vod_warm_ahead") {
+            ToggleSettingsItem(
+                icon = Icons.Default.Wifi,
+                title = stringResource(R.string.playback_buffer_vod_warm_ahead),
+                subtitle = stringResource(R.string.playback_buffer_vod_warm_ahead_sub),
+                isChecked = playerSettings.vodCacheWarmAheadEnabled,
+                onCheckedChange = onSetVodCacheWarmAheadEnabled,
                 onFocused = onItemFocused
             )
         }

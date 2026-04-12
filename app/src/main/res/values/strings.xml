@@ -250,6 +250,8 @@
     <string name="playback_buffer_enable_vod_cache_sub">Cache progressive VOD on disk to absorb bandwidth spikes.</string>
     <string name="playback_buffer_vod_cache_size">VOD Cache Size</string>
     <string name="playback_buffer_vod_cache_size_sub">Maximum disk usage for progressive VOD cache (LRU-evicted).</string>
+    <string name="playback_buffer_vod_warm_ahead">VOD Background Warm-Ahead</string>
+    <string name="playback_buffer_vod_warm_ahead_sub">Download future cache ranges in the background. Turn off if WiFi playback stutters.</string>
     <string name="playback_buffer_network_title">Network</string>
     <string name="playback_buffer_parallel_connections">Parallel Connections</string>
     <string name="playback_buffer_parallel_connections_sub">Use multiple connections in parallel for progressive streams.</string>
