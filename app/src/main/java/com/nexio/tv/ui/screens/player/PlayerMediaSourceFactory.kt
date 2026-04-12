@@ -60,8 +60,6 @@ internal class PlayerMediaSourceFactory(
         Thread(runnable, "Nexio-vod-prefetch").apply { isDaemon = true }
     }
     var useParallelConnections: Boolean = PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS
-    var parallelConnectionCount: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT
-    var parallelChunkSizeMb: Int = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB
     var vodCacheSizeMode: VodCacheSizeMode = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE
         set(value) {
             field = value
@@ -484,21 +482,58 @@ internal class PlayerMediaSourceFactory(
         activeReadBytePosition.set(0L)
         return when {
             !usesHttpUpstream(url) -> baseDataSourceFactory
-            useParallelConnections && !isHls && !isDash -> ParallelRangeDataSource.Factory(
-                okHttpFactory,
-                parallelConnectionCount,
-                parallelChunkSizeMb.toLong() * 1024L * 1024L,
-                shouldAllowBackgroundPrefetch = { parallelStartupPrefetchUnlocked.get() },
-                onResolvedUri = { resolved ->
-                    currentVodCacheResolvedUrl = resolved?.toString()
-                },
-                onReadPositionAdvanced = { position ->
-                    activeReadBytePosition.accumulateAndGet(position) { current, next ->
-                        if (next > current) next else current
+            useParallelConnections && !isHls && !isDash -> {
+                val parallelProfile = resolveParallelProviderProfile(url)
+                ParallelRangeDataSource.Factory(
+                    okHttpFactory,
+                    parallelProfile.connectionCount,
+                    parallelProfile.chunkSizeMb.toLong() * 1024L * 1024L,
+                    shouldAllowBackgroundPrefetch = { parallelStartupPrefetchUnlocked.get() },
+                    onResolvedUri = { resolved ->
+                        currentVodCacheResolvedUrl = resolved?.toString()
+                    },
+                    onReadPositionAdvanced = { position ->
+                        activeReadBytePosition.accumulateAndGet(position) { current, next ->
+                            if (next > current) next else current
+                        }
                     }
-                }
-            )
+                )
+            }
             else -> okHttpFactory
+        }
+    }
+
+    internal fun parallelProviderProfileForTesting(url: String): Pair<Int, Int> {
+        val profile = resolveParallelProviderProfile(url)
+        return profile.connectionCount to profile.chunkSizeMb
+    }
+
+    private data class ParallelProviderProfile(
+        val connectionCount: Int,
+        val chunkSizeMb: Int
+    )
+
+    private fun resolveParallelProviderProfile(url: String): ParallelProviderProfile {
+        val host = runCatching { Uri.parse(url).host.orEmpty().lowercase(Locale.US) }
+            .getOrDefault("")
+        return when {
+            host.contains("premiumize") ||
+                host.startsWith("pm.") ||
+                host.contains(".pm.") -> ParallelProviderProfile(
+                connectionCount = 3,
+                chunkSizeMb = 16
+            )
+            host.contains("real-debrid") ||
+                host.contains("realdebrid") ||
+                host.startsWith("rd.") ||
+                host.contains(".rd.") -> ParallelProviderProfile(
+                connectionCount = 2,
+                chunkSizeMb = 24
+            )
+            else -> ParallelProviderProfile(
+                connectionCount = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
+                chunkSizeMb = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB
+            )
         }
     }
 
