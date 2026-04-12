@@ -39,6 +39,10 @@ internal class PlayerMediaSourceFactory(
     private val missCoordinator = StreamingCacheMissCoordinator(rangeCoordinator)
     private val streamingBandwidthMonitor = BandwidthMonitor()
     private val memoryBudget = MemoryBudget(context)
+    private val memoryPressureMonitor = StreamingCacheMemoryPressureMonitor(
+        context = context,
+        onMemoryPressure = ::onStreamingCacheMemoryWarning
+    )
     private var fillSession: StreamingCacheFillSession? = null
 
     @Volatile
@@ -51,6 +55,10 @@ internal class PlayerMediaSourceFactory(
     @VisibleForTesting
     internal val isStreamingCacheStartupForTesting: Boolean
         get() = streamingCacheStartup
+
+    init {
+        memoryPressureMonitor.start()
+    }
 
     fun configureSubtitleParsing(
         extractorsFactory: ExtractorsFactory?,
@@ -184,6 +192,10 @@ internal class PlayerMediaSourceFactory(
         streamingCacheStartup = false
     }
 
+    fun onStreamingCacheMemoryWarning() {
+        fillSession?.onMemoryWarning()
+    }
+
     fun stopStreamingCacheFill(): Boolean {
         val session = fillSession ?: return true
         val stopped = session.stop()
@@ -194,6 +206,7 @@ internal class PlayerMediaSourceFactory(
     }
 
     fun shutdown() {
+        memoryPressureMonitor.stop()
         if (stopStreamingCacheFill()) {
             streamingCacheProvider.release()
         }
