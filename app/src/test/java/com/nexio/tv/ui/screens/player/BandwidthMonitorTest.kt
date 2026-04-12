@@ -34,4 +34,20 @@ class BandwidthMonitorTest {
 
         assertEquals(2_000L, monitor.estimatedBytesPerSecond())
     }
+
+    @Test
+    fun estimatedBytesPerSecond_wrapsAroundCapacityWithoutChangingEstimate() {
+        var now = 0L
+        val monitor = BandwidthMonitor(windowMs = 10_000L, clockMs = { now }, capacity = 3)
+
+        monitor.onBytesTransferred(1_000)
+        now = 1_000L
+        monitor.onBytesTransferred(1_000)
+        now = 2_000L
+        monitor.onBytesTransferred(1_000)
+        now = 3_000L
+        monitor.onBytesTransferred(1_000)
+
+        assertEquals(1_500L, monitor.estimatedBytesPerSecond())
+    }
 }
