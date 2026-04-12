@@ -5,14 +5,14 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.ExoPlayer
-import com.nexio.tv.data.local.GeminiSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.DebridBenchmarkStore
+import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
-import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
 import com.nexio.tv.data.repository.SkipIntroRepository
+import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.MetaRepository
@@ -38,11 +38,11 @@ class PlayerViewModel @Inject constructor(
     private val skipIntroRepository: SkipIntroRepository,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
-    private val geminiSettingsDataStore: GeminiSettingsDataStore,
+    private val subtitleTranslationSettingsDataStore: SubtitleTranslationSettingsDataStore,
     private val theIntroDbSettingsDataStore: TheIntroDbSettingsDataStore,
     private val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     private val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
-    private val geminiSubtitleTranslationService: GeminiSubtitleTranslationService,
+    private val subtitleTranslationService: SubtitleTranslationService,
     private val playbackIdleGateState: PlaybackIdleGateState,
     private val debridBenchmarkStore: DebridBenchmarkStore,
     @Named("playback") private val playbackOkHttpClient: OkHttpClient,
@@ -59,11 +59,11 @@ class PlayerViewModel @Inject constructor(
         skipIntroRepository = skipIntroRepository,
         playerSettingsDataStore = playerSettingsDataStore,
         debugSettingsDataStore = debugSettingsDataStore,
-        geminiSettingsDataStore = geminiSettingsDataStore,
+        subtitleTranslationSettingsDataStore = subtitleTranslationSettingsDataStore,
         theIntroDbSettingsDataStore = theIntroDbSettingsDataStore,
         streamLinkCacheDataStore = streamLinkCacheDataStore,
         layoutPreferenceDataStore = layoutPreferenceDataStore,
-        geminiSubtitleTranslationService = geminiSubtitleTranslationService,
+        subtitleTranslationService = subtitleTranslationService,
         playbackIdleGateState = playbackIdleGateState,
         debridBenchmarkStore = debridBenchmarkStore,
         playbackOkHttpClient = playbackOkHttpClient,
