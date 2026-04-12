@@ -48,7 +48,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -56,7 +56,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -72,7 +71,7 @@ import javax.inject.Inject
 private const val TAG = "StreamScreenViewModel"
 private const val EMBEDDED_STREAM_GROUP_NAME = "Embedded Streams"
 private const val EMBEDDED_STREAM_FALLBACK_NAME = "Embed Stream"
-private const val NO_STREAMS_EMPTY_STATE_DELAY_MS = 10_000L
+private const val NO_STREAMS_EMPTY_STATE_DELAY_MS = 45_000L
 @HiltViewModel
 class StreamScreenViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -470,7 +469,10 @@ class StreamScreenViewModel @Inject constructor(
                             organizedStreams = organizedStreams,
                             selectedAutoPlayStream = selectedAutoPlayStream,
                             autoPlayPlaybackInfo = autoPlayPlaybackInfo,
-                            deterministicFailureMessage = if (deterministicAutoplay && isFinalPass && autoPlayPlaybackInfo == null) {
+                            deterministicFailureMessage = if (deterministicAutoplay &&
+                                isFinalPass &&
+                                autoPlayPlaybackInfo == null
+                            ) {
                                 "No eligible links found"
                             } else {
                                 null
@@ -569,32 +571,38 @@ class StreamScreenViewModel @Inject constructor(
                 }
 
                 updateSourceChipsForFetchStart(installedAddons)
-                val organizeRequests = MutableStateFlow<PendingOrganizeRequest?>(null)
+                val organizeChannel = Channel<PendingOrganizeRequest>(Channel.CONFLATED)
+                var latestAddonStreamGroups: List<AddonStreams> = emptyList()
                 val queuedPresentationVersion = AtomicLong(0L)
                 val appliedPresentationVersion = AtomicLong(0L)
+                var streamSearchCompletedWithError = false
+                var organizerHadFailure = false
                 val organizerJob = launch {
-                    organizeRequests
-                        .filterNotNull()
-                        .collect { request ->
-                            val organizedResult = try {
-                                buildOrganizedPayload(request.addonStreamGroups)
-                            } catch (error: CancellationException) {
-                                if (streamDiagnosticsEnabled) {
-                                    Log.d(
-                                        TAG,
-                                        "Incremental organize cancelled version=${request.version}: ${error.message}"
-                                    )
-                                }
-                                null
-                            } catch (error: Exception) {
-                                Log.w(TAG, "Failed to organize streams incrementally: ${error.message}")
-                                null
+                    for (request in organizeChannel) {
+                        val organizedResult = try {
+                            buildOrganizedPayload(
+                                addonStreamGroups = request.addonStreamGroups,
+                                isFinalPass = request.isFinalPass
+                            )
+                        } catch (error: CancellationException) {
+                            if (streamDiagnosticsEnabled) {
+                                Log.d(
+                                    TAG,
+                                    "Incremental organize cancelled version=${request.version}: ${error.message}"
+                                )
                             }
-                            if (organizedResult != null) {
-                                applyOrganizedPayload(organizedResult)
-                                appliedPresentationVersion.set(request.version)
-                            }
+                            throw error
+                        } catch (error: Exception) {
+                            organizerHadFailure = true
+                            Log.w(TAG, "Failed to organize streams incrementally: ${error.message}")
+                            null
                         }
+                        if (organizedResult != null) {
+                            applyOrganizedPayload(organizedResult)
+                            appliedPresentationVersion.set(request.version)
+                            organizerHadFailure = false
+                        }
+                    }
                 }
 
                 streamRepository.getStreamsFromAllAddons(
@@ -609,12 +617,14 @@ class StreamScreenViewModel @Inject constructor(
                     when (result) {
                         is NetworkResult.Success -> {
                             val version = queuedPresentationVersion.incrementAndGet()
-                            organizeRequests.value = PendingOrganizeRequest(
+                            latestAddonStreamGroups = result.data
+                            organizeChannel.trySend(PendingOrganizeRequest(
                                 version = version,
                                 addonStreamGroups = result.data
-                            )
+                            ))
                         }
                         is NetworkResult.Error -> {
+                            streamSearchCompletedWithError = true
                             pendingNoStreamsRequestId = null
                             noStreamsGateController.cancel()
                             if (directAutoPlayFlowEnabledForSession) {
@@ -655,27 +665,78 @@ class StreamScreenViewModel @Inject constructor(
                         }
                     }
                 }
-                val finalPendingRequest = organizeRequests.value
-                organizerJob.cancelAndJoin()
-                if (finalPendingRequest != null &&
-                    appliedPresentationVersion.get() < finalPendingRequest.version
+                var finalRequestedVersion = queuedPresentationVersion.get()
+                if (finalRequestedVersion > 0L &&
+                    appliedPresentationVersion.get() < finalRequestedVersion
+                ) {
+                    finalRequestedVersion = queuedPresentationVersion.incrementAndGet()
+                    if (streamDiagnosticsEnabled) {
+                        Log.d(
+                            TAG,
+                            "Queueing final organize version=$finalRequestedVersion " +
+                                "applied=${appliedPresentationVersion.get()}"
+                        )
+                    }
+                    organizeChannel.trySend(PendingOrganizeRequest(
+                        version = finalRequestedVersion,
+                        addonStreamGroups = latestAddonStreamGroups,
+                        isFinalPass = true
+                    ))
+                }
+                organizeChannel.close()
+                organizerJob.join()
+                if (finalRequestedVersion > 0L &&
+                    appliedPresentationVersion.get() < finalRequestedVersion
                 ) {
                     if (streamDiagnosticsEnabled) {
                         Log.d(
                             TAG,
-                            "Running final synchronous organize version=${finalPendingRequest.version} " +
+                            "Running final synchronous organize version=$finalRequestedVersion " +
                                 "applied=${appliedPresentationVersion.get()}"
                         )
                     }
-                    applyOrganizedPayload(buildOrganizedPayload(finalPendingRequest.addonStreamGroups, isFinalPass = true))
+                    try {
+                        applyOrganizedPayload(buildOrganizedPayload(latestAddonStreamGroups, isFinalPass = true))
+                        appliedPresentationVersion.set(finalRequestedVersion)
+                        organizerHadFailure = false
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        organizerHadFailure = true
+                        Log.w(TAG, "Failed to run final synchronous stream organize: ${error.message}")
+                        val organizeErrorMessage = context.getString(R.string.panel_failed_load_streams)
+                        updateUiStateIfChanged {
+                            it.copy(
+                                isLoading = false,
+                                showNoStreamsState = false,
+                                error = if (deterministicAutoplay) null else organizeErrorMessage,
+                                deterministicAutoplayFailureMessage = if (deterministicAutoplay) {
+                                    organizeErrorMessage
+                                } else {
+                                    it.deterministicAutoplayFailureMessage
+                                }
+                            )
+                        }
+                    }
                 }
-                if (deterministicAutoplay && !resolvedAutoPlayTarget) {
+
+                if (!organizerHadFailure && deterministicAutoplay && !resolvedAutoPlayTarget) {
                     applyOrganizedPayload(
                         buildOrganizedPayload(
                             _uiState.value.addonStreams,
                             isFinalPass = true
                         )
                     )
+                }
+                pendingNoStreamsRequestId = null
+                noStreamsGateController.cancel()
+                if (!streamSearchCompletedWithError &&
+                    !organizerHadFailure &&
+                    _uiState.value.presentedStreams.isEmpty() &&
+                    _uiState.value.error == null &&
+                    _uiState.value.deterministicAutoplayFailureMessage == null
+                ) {
+                    updateUiStateIfChanged { it.copy(showNoStreamsState = true) }
                 }
 
                 markRemainingSourceChipsAsError()
@@ -1355,7 +1416,8 @@ private data class OrganizedStreamPayload(
 
 private data class PendingOrganizeRequest(
     val version: Long,
-    val addonStreamGroups: List<AddonStreams>
+    val addonStreamGroups: List<AddonStreams>,
+    val isFinalPass: Boolean = false
 )
 
 internal class ShadowAutoPlayReplayCoordinator(
