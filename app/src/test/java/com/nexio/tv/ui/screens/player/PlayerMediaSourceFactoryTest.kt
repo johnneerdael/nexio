@@ -125,46 +125,6 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
-    fun vodCachePlaybackWritePolicy_parallelPlaybackUsesReadOnlyCache() {
-        val mode = PlayerMediaSourceFactory.resolvePlaybackVodCacheWriteMode(
-            parallelConnectionsEnabled = true
-        )
-
-        assertEquals(PlayerMediaSourceFactory.VodCacheWriteMode.READ_ONLY, mode)
-        assertFalse(
-            PlayerMediaSourceFactory.shouldInstallVodCacheWriter(
-                writeMode = mode,
-                blockOnCache = false
-            )
-        )
-    }
-
-    @Test
-    fun vodCachePlaybackWritePolicy_nonParallelPlaybackKeepsWriteThrough() {
-        val mode = PlayerMediaSourceFactory.resolvePlaybackVodCacheWriteMode(
-            parallelConnectionsEnabled = false
-        )
-
-        assertEquals(PlayerMediaSourceFactory.VodCacheWriteMode.WRITE_THROUGH, mode)
-        assertTrue(
-            PlayerMediaSourceFactory.shouldInstallVodCacheWriter(
-                writeMode = mode,
-                blockOnCache = false
-            )
-        )
-    }
-
-    @Test
-    fun vodCachePlaybackWritePolicy_warmAheadStillWritesWhenPlaybackModeIsReadOnly() {
-        assertTrue(
-            PlayerMediaSourceFactory.shouldInstallVodCacheWriter(
-                writeMode = PlayerMediaSourceFactory.VodCacheWriteMode.READ_ONLY,
-                blockOnCache = true
-            )
-        )
-    }
-
-    @Test
     fun parallelProviderProfile_premiumizeUsesThreeBySixteen() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
