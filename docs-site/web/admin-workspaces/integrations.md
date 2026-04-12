@@ -9,7 +9,7 @@ Most users should start with the app-first guides in [Integrations](/integration
 
 - Trakt: [Home and Continue Watching](/watch/home-and-continue-watching)
 - MDBList: [Details, Seasons, and Watching Flow](/watch/details-seasons-and-watching-flow)
-- Gemini: [Subtitles and Auto-Translate](/playback/subtitles-and-auto-translate)
+- Subtitle Translation: [Subtitles and Auto-Translate](/playback/subtitles-and-auto-translate)
 - Anime Skip and Poster Ratings: configured here in the portal and consumed by the TV app where those features appear.
 
 ## What the portal still does well
