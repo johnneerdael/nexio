@@ -40,14 +40,14 @@ class SubtitleTranslationSettingsViewModelTest {
         val missingApiKeyState = SubtitleTranslationSettingsUiState(
             provider = SubtitleTranslationProvider.OPENAI,
             apiKey = "",
-            model = "gpt-5-nano",
-            baseUrl = "https://api.openai.com/v1"
+            model = "openrouter/free",
+            baseUrl = "https://openrouter.ai/api/v1"
         )
         val missingModelState = SubtitleTranslationSettingsUiState(
             provider = SubtitleTranslationProvider.OPENAI,
             apiKey = "sk-test",
             model = "",
-            baseUrl = "https://api.openai.com/v1"
+            baseUrl = "https://openrouter.ai/api/v1"
         )
 
         assertEquals(SubtitleTranslationValidationError.MissingApiKey, missingApiKeyState.enablementError())

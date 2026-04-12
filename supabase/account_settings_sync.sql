@@ -611,8 +611,8 @@ as $$
       "subtitleTranslation": {
         "enabled": false,
         "provider": "OPENAI",
-        "model": "gpt-5-nano",
-        "baseUrl": "https://api.openai.com/v1"
+        "model": "openrouter/free",
+        "baseUrl": "https://openrouter.ai/api/v1"
       },
       "gemini": {
         "enabled": false

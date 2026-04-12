@@ -9,13 +9,13 @@ import org.junit.Test
 
 class SubtitleTranslationSettingsDataStoreTest {
     @Test
-    fun defaultsUseOpenAiNativeEndpointAndRequestedNanoModel() {
+    fun defaultsUseOpenRouterFreeModelAndEndpoint() {
         val settings = defaultSubtitleTranslationSettings()
 
         assertEquals(SubtitleTranslationProvider.OPENAI, settings.provider)
         assertEquals(SubtitleTranslationDefaults.OPENAI_MODEL, settings.model)
-        assertEquals("gpt-5-nano", settings.model)
-        assertEquals("https://api.openai.com/v1", settings.baseUrl)
+        assertEquals("openrouter/free", settings.model)
+        assertEquals("https://openrouter.ai/api/v1", settings.baseUrl)
     }
 
     @Test
@@ -67,8 +67,8 @@ class SubtitleTranslationSettingsDataStoreTest {
         )
 
         assertEquals(SubtitleTranslationProvider.OPENAI, settings.provider)
-        assertEquals("gpt-5-nano", settings.model)
-        assertEquals("https://api.openai.com/v1", settings.baseUrl)
+        assertEquals("openrouter/free", settings.model)
+        assertEquals("https://openrouter.ai/api/v1", settings.baseUrl)
     }
 
     @Test

@@ -59,6 +59,15 @@ import org.junit.Test
 class AccountConfigSyncContractTest {
 
     @Test
+    fun `subtitle translation sync defaults use OpenRouter free route`() {
+        val settings = SubtitleTranslationSyncSettings()
+
+        assertEquals("OPENAI", settings.provider)
+        assertEquals("openrouter/free", settings.model)
+        assertEquals("https://openrouter.ai/api/v1", settings.baseUrl)
+    }
+
+    @Test
     fun `buildAccountConfigSyncPayload serializes integrations catalogs formatter and imdb`() {
         val payload = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(

@@ -1068,7 +1068,7 @@
     <string name="subtitle_translation_provider_title">Provider</string>
     <string name="subtitle_translation_provider_subtitle">OpenAI-compatible, Anthropic-compatible, or Gemini</string>
     <string name="subtitle_translation_model_title">Model</string>
-    <string name="subtitle_translation_model_subtitle">Defaults are gpt-5-nano for OpenAI and claude-haiku-4-5 for Anthropic</string>
+    <string name="subtitle_translation_model_subtitle">Defaults are openrouter/free for OpenAI-compatible and claude-haiku-4-5 for Anthropic</string>
     <string name="subtitle_translation_endpoint_title">API Endpoint</string>
     <string name="subtitle_translation_endpoint_subtitle">Leave default for the native provider or use a compatible endpoint such as OpenRouter</string>
     <string name="subtitle_translation_api_key_title">API Key</string>
