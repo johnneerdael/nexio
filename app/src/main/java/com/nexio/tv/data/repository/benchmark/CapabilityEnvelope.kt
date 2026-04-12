@@ -33,7 +33,7 @@ data class CapabilityEnvelope(
          */
         val LOCKED_REAL_DEBRID = CapabilityEnvelope(
             maxSafeUrgentWorkers = 1,
-            maxSafePrefetchWorkers = 2,
+            maxSafePrefetchWorkers = 1,
             maxSafeUrgentChunkBytes = 33_554_432L,
             maxSafePrefetchChunkBytes = 67_108_864L,
             sustainedThroughputMbps = 0.0,
