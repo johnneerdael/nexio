@@ -73,6 +73,26 @@ class AioParseValueFactoryTest {
     }
 
     @Test
+    fun `parse value fallback trusts wrapped provider id over stream text`() {
+        val stream = stream(
+            filename = "Movie.Title.2023.2160p.BluRay.HEVC.TrueHD.Atmos.7.1-GROUP.mkv",
+            name = "TorBox",
+            description = """
+                📄 Movie.Title.2023.2160p.BluRay.HEVC.TrueHD.Atmos.7.1-GROUP.mkv
+                🔍 TorBox
+            """.trimIndent(),
+            wrappedProviderId = "PM"
+        )
+        val parsed = AioStrictStreamParser.parse(stream).copy(serviceId = null)
+
+        val parseValue = AioParseValueFactory.from(stream, parsed)
+
+        assertEquals("PM", parseValue.service.id)
+        assertEquals("Premiumize", parseValue.service.name)
+        assertEquals("debrid", parseValue.stream.type)
+    }
+
+    @Test
     fun `parse value exposes richer stream metadata fields`() {
         val stream = stream(
             filename = "Movie.Title.2023.2160p.BluRay.HEVC.TrueHD.Atmos.7.1-GROUP.mkv",
@@ -156,7 +176,8 @@ class AioParseValueFactoryTest {
         name: String? = null,
         description: String? = filename,
         bingeGroup: String? = null,
-        videoHash: String? = null
+        videoHash: String? = null,
+        wrappedProviderId: String? = null
     ): Stream {
         return Stream(
             name = name,
@@ -178,7 +199,8 @@ class AioParseValueFactoryTest {
             ),
             addonName = "Test Addon",
             addonLogo = null,
-            addonParserPreset = AddonParserPreset.GENERIC
+            addonParserPreset = AddonParserPreset.GENERIC,
+            wrappedProviderId = wrappedProviderId
         )
     }
 }
