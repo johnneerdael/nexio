@@ -17,6 +17,8 @@ internal fun DebridBenchmarkTransportConfigSnapshot.matchesAutoplayTransportSett
     settings: PlayerSettings
 ): Boolean {
     return vodCacheEnabled == (settings.vodCacheSizeMode == VodCacheSizeMode.ON) &&
+        vodCacheWarmAheadEnabled == settings.vodCacheWarmAheadEnabled &&
+        vodCacheSizeMb == settings.vodCacheSizeMb &&
         parallelConnectionsEnabled == settings.useParallelConnections &&
         parallelConnectionCount == settings.parallelConnectionCount &&
         parallelChunkSizeMb == settings.parallelChunkSizeMb

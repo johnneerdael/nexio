@@ -146,6 +146,8 @@ internal fun PlayerSettings.toBenchmarkTransportConfigSnapshot(): DebridBenchmar
         parallelConnectionsEnabled = useParallelConnections,
         parallelConnectionCount = parallelConnectionCount,
         vodCacheEnabled = vodCacheSizeMode == VodCacheSizeMode.ON,
+        vodCacheWarmAheadEnabled = vodCacheWarmAheadEnabled,
+        vodCacheSizeMb = vodCacheSizeMb,
         parallelChunkSizeMb = parallelChunkSizeMb
     )
 }

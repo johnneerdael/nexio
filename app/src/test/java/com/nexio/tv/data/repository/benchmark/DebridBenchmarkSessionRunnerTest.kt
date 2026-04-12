@@ -13,6 +13,8 @@ class DebridBenchmarkSessionRunnerTest {
     fun `transport config snapshot records current player transport settings`() {
         val snapshot = PlayerSettings(
             vodCacheSizeMode = VodCacheSizeMode.ON,
+            vodCacheWarmAheadEnabled = false,
+            vodCacheSizeMb = 2048,
             useParallelConnections = true,
             parallelConnectionCount = 4,
             parallelChunkSizeMb = 32
@@ -21,6 +23,8 @@ class DebridBenchmarkSessionRunnerTest {
         assertEquals(true, snapshot.parallelConnectionsEnabled)
         assertEquals(4, snapshot.parallelConnectionCount)
         assertEquals(true, snapshot.vodCacheEnabled)
+        assertEquals(false, snapshot.vodCacheWarmAheadEnabled)
+        assertEquals(2048, snapshot.vodCacheSizeMb)
         assertEquals(32, snapshot.parallelChunkSizeMb)
     }
 
@@ -62,6 +66,44 @@ class DebridBenchmarkSessionRunnerTest {
                     .toBenchmarkTransportConfigSnapshot()
             ).hasValidAutoplayBenchmarkFor(settings)
         )
+
+        assertFalse(
+            benchmarkResult(
+                safeBudgetMbps = 60.0,
+                configSnapshot = settings.copy(vodCacheWarmAheadEnabled = false)
+                    .toBenchmarkTransportConfigSnapshot()
+            ).hasValidAutoplayBenchmarkFor(settings)
+        )
+
+        assertFalse(
+            benchmarkResult(
+                safeBudgetMbps = 60.0,
+                configSnapshot = settings.copy(vodCacheSizeMb = 1024)
+                    .toBenchmarkTransportConfigSnapshot()
+            ).hasValidAutoplayBenchmarkFor(settings)
+        )
+    }
+
+    @Test
+    fun `benchmark result json records vod cache warm ahead and cache size`() {
+        val configSnapshot = PlayerSettings(
+            vodCacheSizeMode = VodCacheSizeMode.ON,
+            vodCacheWarmAheadEnabled = false,
+            vodCacheSizeMb = 2048,
+            useParallelConnections = true,
+            parallelConnectionCount = 4,
+            parallelChunkSizeMb = 32
+        ).toBenchmarkTransportConfigSnapshot()
+
+        val configJson = benchmarkResult(
+            safeBudgetMbps = 60.0,
+            configSnapshot = configSnapshot
+        ).toJsonObject()
+            .getAsJsonObject("optimized")
+            .getAsJsonObject("configSnapshot")
+
+        assertEquals(false, configJson.get("vodCacheWarmAheadEnabled").asBoolean)
+        assertEquals(2048, configJson.get("vodCacheSizeMb").asInt)
     }
 
     private fun benchmarkResult(
