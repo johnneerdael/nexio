@@ -331,6 +331,15 @@ internal fun PlaybackSettingsContent(
                 onSetSubtitleOutlineEnabled = { enabled -> coroutineScope.launch { viewModel.setSubtitleOutlineEnabled(enabled) } },
                 onSetUseLibass = { enabled -> coroutineScope.launch { viewModel.setUseLibass(enabled) } },
                 onSetLibassRenderType = { renderType -> coroutineScope.launch { viewModel.setLibassRenderType(renderType) } },
+                onSetUseParallelConnections = { enabled ->
+                    coroutineScope.launch { viewModel.setUseParallelConnections(enabled) }
+                },
+                onSetVodCacheSizeMode = { mode ->
+                    coroutineScope.launch { viewModel.setVodCacheSizeMode(mode) }
+                },
+                onSetVodCacheSizeMb = { mb ->
+                    coroutineScope.launch { viewModel.setVodCacheSizeMb(mb) }
+                },
                 shadowAutoplayDataCollectionEnabled = debridUiState.shadowAutoplayDataCollectionEnabled,
                 onSetShadowAutoplayDataCollectionEnabled = { debridViewModel.setShadowAutoplayDataCollectionEnabled(it) },
                 debridBenchmarkDataCollectionEnabled = debridUiState.debridBenchmarkDataCollectionEnabled,

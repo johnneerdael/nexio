@@ -62,6 +62,7 @@ import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.TrailerSettings
+import com.nexio.tv.data.local.VodCacheSizeMode
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
 
@@ -70,6 +71,7 @@ private enum class PlaybackSection {
     STREAM_SELECTION,
     AUDIO,
     SUBTITLES,
+    BUFFER_NETWORK,
     LOGGING
 }
 
@@ -156,6 +158,9 @@ internal fun PlaybackSettingsSections(
     onSetSubtitleOutlineEnabled: (Boolean) -> Unit,
     onSetUseLibass: (Boolean) -> Unit,
     onSetLibassRenderType: (com.nexio.tv.data.local.LibassRenderType) -> Unit,
+    onSetUseParallelConnections: (Boolean) -> Unit,
+    onSetVodCacheSizeMode: (VodCacheSizeMode) -> Unit,
+    onSetVodCacheSizeMb: (Int) -> Unit,
     // Troubleshooting — data collection
     shadowAutoplayDataCollectionEnabled: Boolean,
     onSetShadowAutoplayDataCollectionEnabled: (Boolean) -> Unit,
@@ -168,6 +173,7 @@ internal fun PlaybackSettingsSections(
     var streamExpanded by rememberSaveable { mutableStateOf(false) }
     var audioExpanded by rememberSaveable { mutableStateOf(false) }
     var subtitlesExpanded by rememberSaveable { mutableStateOf(false) }
+    var bufferAndNetworkExpanded by rememberSaveable { mutableStateOf(false) }
     var loggingExpanded by rememberSaveable { mutableStateOf(false) }
 
     val defaultGeneralHeaderFocus = remember { FocusRequester() }
@@ -175,6 +181,7 @@ internal fun PlaybackSettingsSections(
     val streamHeaderFocus = remember { FocusRequester() }
     val audioHeaderFocus = remember { FocusRequester() }
     val subtitlesHeaderFocus = remember { FocusRequester() }
+    val bufferAndNetworkHeaderFocus = remember { FocusRequester() }
     val loggingHeaderFocus = remember { FocusRequester() }
     val generalHeaderFocus = initialFocusRequester ?: defaultGeneralHeaderFocus
 
@@ -191,6 +198,8 @@ internal fun PlaybackSettingsSections(
     val strSectionAudioDesc = stringResource(R.string.playback_section_audio_desc)
     val strSectionSubtitles = stringResource(R.string.playback_section_subtitles)
     val strSectionSubtitlesDesc = stringResource(R.string.playback_section_subtitles_desc)
+    val strSectionNetworkCache = stringResource(R.string.playback_section_network_cache)
+    val strSectionNetworkCacheDesc = stringResource(R.string.playback_section_network_cache_desc)
     val strSectionLogging = stringResource(R.string.playback_section_logging)
     val strSectionLoggingDesc = stringResource(R.string.playback_section_logging_desc)
     val generalUi = PlaybackGeneralUi(
@@ -228,6 +237,11 @@ internal fun PlaybackSettingsSections(
     LaunchedEffect(subtitlesExpanded, focusedSection) {
         if (!subtitlesExpanded && focusedSection == PlaybackSection.SUBTITLES) {
             subtitlesHeaderFocus.requestFocus()
+        }
+    }
+    LaunchedEffect(bufferAndNetworkExpanded, focusedSection) {
+        if (!bufferAndNetworkExpanded && focusedSection == PlaybackSection.BUFFER_NETWORK) {
+            bufferAndNetworkHeaderFocus.requestFocus()
         }
     }
     LaunchedEffect(loggingExpanded, focusedSection) {
@@ -448,6 +462,24 @@ internal fun PlaybackSettingsSections(
                 onSetLibassRenderType = onSetLibassRenderType,
                 onItemFocused = { focusedSection = PlaybackSection.SUBTITLES },
                 enabled = !generalUi.isExternalPlayer
+            )
+        }
+
+        playbackCollapsibleSection(
+            keyPrefix = "buffer_network",
+            title = strSectionNetworkCache,
+            description = strSectionNetworkCacheDesc,
+            expanded = bufferAndNetworkExpanded,
+            onToggle = { bufferAndNetworkExpanded = !bufferAndNetworkExpanded },
+            focusRequester = bufferAndNetworkHeaderFocus,
+            onHeaderFocused = { focusedSection = PlaybackSection.BUFFER_NETWORK }
+        ) {
+            bufferAndNetworkSettingsItems(
+                playerSettings = playerSettings,
+                onSetVodCacheSizeMode = onSetVodCacheSizeMode,
+                onSetVodCacheSizeMb = onSetVodCacheSizeMb,
+                onSetUseParallelConnections = onSetUseParallelConnections,
+                onItemFocused = { focusedSection = PlaybackSection.BUFFER_NETWORK }
             )
         }
 
