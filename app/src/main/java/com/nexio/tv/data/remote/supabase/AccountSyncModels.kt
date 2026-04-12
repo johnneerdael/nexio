@@ -31,6 +31,16 @@ data class AccountSyncMutationResult(
 )
 
 @Serializable
+data class AccountConfigV7PushResult(
+    val applied: Boolean = true,
+    @SerialName("sync_revision") val syncRevision: Long = 0,
+    @SerialName("updated_at") val updatedAt: String? = null,
+    @SerialName("updated_from") val updatedFrom: String? = null,
+    val settings: AccountConfigSyncPayload = AccountConfigSyncPayload(),
+    @SerialName("conflict_paths") val conflictPaths: List<String> = emptyList()
+)
+
+@Serializable
 data class AccountAddonPayload(
     val id: String? = null,
     val url: String,
@@ -55,7 +65,7 @@ data class AccountAddonSecretPayload(
 @Serializable
 data class AccountConfigSyncPayload(
     @EncodeDefault
-    val schemaVersion: Int = 6,
+    val schemaVersion: Int = 7,
     val integrations: IntegrationSettings = IntegrationSettings(),
     val catalogs: CatalogSyncSettings = CatalogSyncSettings(),
     val playback: PlaybackConfigSyncSettings = PlaybackConfigSyncSettings(),

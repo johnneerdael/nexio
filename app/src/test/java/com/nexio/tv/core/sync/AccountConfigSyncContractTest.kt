@@ -128,7 +128,7 @@ class AccountConfigSyncContractTest {
         val json = Json.encodeToJsonElement(AccountConfigSyncPayload.serializer(), payload) as JsonObject
 
         assertEquals(setOf("schemaVersion", "integrations", "catalogs", "playback", "formatter"), json.keys)
-        assertEquals(6, json["schemaVersion"]?.toString()?.toInt())
+        assertEquals(7, json["schemaVersion"]?.toString()?.toInt())
         assertEquals("\"custom\"", json["formatter"]?.jsonObject?.get("selectedTemplateId")?.toString())
         assertEquals(
             "\"SIMKL\"",
@@ -183,7 +183,7 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
-    fun `build account config sync rpc params includes contract version 6`() {
+    fun `build account config sync rpc params includes contract version 7`() {
         val payload = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(),
             heroCatalogKeys = listOf("hero-a"),
@@ -208,7 +208,79 @@ class AccountConfigSyncContractTest {
         assertEquals("\"app\"", pushParams["p_source"].toString())
         assertTrue(pushParams.containsKey("p_settings_payload"))
         assertEquals(ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION, pullParams["p_contract_version"]?.toString()?.toInt())
-        assertEquals(6, buildAccountConfigSyncPullParams()["p_contract_version"]?.toString()?.toInt())
+        assertEquals(7, buildAccountConfigSyncPullParams()["p_contract_version"]?.toString()?.toInt())
+    }
+
+    @Test
+    fun `buildAccountConfigSyncPushParamsV7 includes base revision and changed paths`() {
+        val payload = buildAccountConfigSyncPayload(
+            integrations = IntegrationSettings(
+                imdb = ImdbSyncSettings(enabled = true, baseUrl = "https://ratings.example.com")
+            ),
+            heroCatalogKeys = emptyList(),
+            homeCatalogOrderKeys = emptyList(),
+            disabledHomeCatalogKeys = emptyList(),
+            traktCatalogEnabledSet = emptyList(),
+            traktCatalogOrder = emptyList(),
+            traktSelectedPopularListKeys = emptyList(),
+            simklCatalogEnabledSet = emptyList(),
+            simklCatalogOrder = emptyList(),
+            mdbListHiddenPersonalListKeys = emptyList(),
+            mdbListSelectedTopListKeys = emptyList(),
+            mdbListCatalogOrder = emptyList(),
+            trackingProvider = TrackingProvider.TRAKT,
+            formatter = FormatterSyncSettings()
+        )
+
+        val params = buildAccountConfigSyncPushParamsV7(
+            payload = payload,
+            baseRevision = 123,
+            changedPaths = listOf("integrations.imdb.baseUrl")
+        )
+
+        assertEquals("123", params["p_base_revision"].toString())
+        assertEquals("\"app\"", params["p_source"].toString())
+        assertTrue(params["p_changed_paths"].toString().contains("integrations.imdb.baseUrl"))
+    }
+
+    @Test
+    fun `observeAccountConfigSyncChangedPaths emits changed path labels`() = runTest {
+        val imdbSettings = MutableSharedFlow<Unit>(replay = 1)
+
+        val emission = backgroundScope.async(start = CoroutineStart.UNDISPATCHED) {
+            observeAccountConfigSyncChangedPaths(
+                heroCatalogSelections = MutableSharedFlow<Unit>(),
+                homeCatalogOrderKeys = MutableSharedFlow<Unit>(),
+                disabledHomeCatalogKeys = MutableSharedFlow<Unit>(),
+                tmdbSettings = MutableSharedFlow<Unit>(),
+                mdbListSettings = MutableSharedFlow<Unit>(),
+                mdbListCatalogPreferences = MutableSharedFlow<Unit>(),
+                omdbSettings = MutableSharedFlow<Unit>(),
+                theIntroDbSettings = MutableSharedFlow<Unit>(),
+                animeSkipEnabled = MutableSharedFlow<Unit>(),
+                animeSkipClientId = MutableSharedFlow<Unit>(),
+                subtitleTranslationSettings = MutableSharedFlow<Unit>(),
+                imdbSettings = imdbSettings,
+                posterRatingsSettings = MutableSharedFlow<Unit>(),
+                premiumizeSettings = MutableSharedFlow<Unit>(),
+                premiumizeAccountState = MutableSharedFlow<Unit>(),
+                torBoxSettings = MutableSharedFlow<Unit>(),
+                torBoxAccountState = MutableSharedFlow<Unit>(),
+                easyDebridSettings = MutableSharedFlow<Unit>(),
+                easyDebridAccountState = MutableSharedFlow<Unit>(),
+                realDebridState = MutableSharedFlow<Unit>(),
+                traktAuthState = MutableSharedFlow<Unit>(),
+                traktCatalogPreferences = MutableSharedFlow<Unit>(),
+                simklCatalogPreferences = MutableSharedFlow<Unit>(),
+                simklAuthState = MutableSharedFlow<Unit>(),
+                playerSettings = MutableSharedFlow<Unit>()
+            ).first()
+        }
+
+        imdbSettings.emit(Unit)
+        advanceUntilIdle()
+
+        assertEquals("integrations.imdb", emission.await())
     }
 
     @Test
