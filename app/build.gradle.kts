@@ -17,7 +17,8 @@ fun parseBooleanProperty(value: String?): Boolean {
 }
 
 fun resolveProperty(dev: Properties, local: Properties, key: String, fallback: String = ""): String {
-    return dev.getProperty(key)?.trim()?.takeIf { it.isNotBlank() }
+    return providers.gradleProperty(key).orNull?.trim()?.takeIf { it.isNotBlank() }
+        ?: dev.getProperty(key)?.trim()?.takeIf { it.isNotBlank() }
         ?: local.getProperty(key)?.trim()?.takeIf { it.isNotBlank() }
         ?: fallback
 }
@@ -350,9 +351,9 @@ dependencies {
     // Media3 core modules.
     if (useMedia3Source) {
         implementation(libs.media3.exoplayer)
-        implementation("androidx.media3:media3-exoplayer-kodi-cpp-audiosink")
+        implementation("androidx.media3:media3-exoplayer-kodi-cpp-audiosink:${libs.versions.media3.get()}")
         implementation(libs.media3.ui)
-        implementation("androidx.media3:media3-decoder-ffmpeg")
+        implementation("androidx.media3:media3-decoder-ffmpeg:${libs.versions.media3.get()}")
     }
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.exoplayer.dash)
