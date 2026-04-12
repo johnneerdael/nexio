@@ -140,6 +140,21 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun vodCachePlaybackWritePolicy_benchmarkParallelPlaybackUsesReadOnlyCachePolicy() {
+        val mode = PlayerMediaSourceFactory.resolvePlaybackVodCacheWriteMode(
+            parallelConnectionsEnabled = true
+        )
+
+        assertEquals(PlayerMediaSourceFactory.VodCacheWriteMode.READ_ONLY, mode)
+        assertFalse(
+            PlayerMediaSourceFactory.shouldInstallVodCacheWriter(
+                writeMode = mode,
+                blockOnCache = false
+            )
+        )
+    }
+
+    @Test
     fun vodCachePlaybackWritePolicy_nonParallelPlaybackKeepsWriteThrough() {
         val mode = PlayerMediaSourceFactory.resolvePlaybackVodCacheWriteMode(
             parallelConnectionsEnabled = false
