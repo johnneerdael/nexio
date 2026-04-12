@@ -246,6 +246,7 @@ data class PlayerSettings(
     val addonSubtitleStartupMode: AddonSubtitleStartupMode = AddonSubtitleStartupMode.ALL_SUBTITLES,
     val vodCacheSizeMode: VodCacheSizeMode = DEFAULT_VOD_CACHE_SIZE_MODE,
     val vodCacheSizeMb: Int = DEFAULT_VOD_CACHE_SIZE_MB,
+    val vodCacheWarmAheadEnabled: Boolean = DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED,
     val useParallelConnections: Boolean = DEFAULT_USE_PARALLEL_CONNECTIONS,
     val parallelConnectionCount: Int = DEFAULT_PARALLEL_CONNECTION_COUNT,
     val parallelChunkSizeMb: Int = DEFAULT_PARALLEL_CHUNK_SIZE_MB,
@@ -253,6 +254,7 @@ data class PlayerSettings(
 ) {
     companion object {
         const val DEFAULT_VOD_CACHE_SIZE_MB = 500
+        const val DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED = true
         const val MIN_VOD_CACHE_SIZE_MB = 100
         const val MAX_VOD_CACHE_SIZE_MB = 65_536
         val DEFAULT_VOD_CACHE_SIZE_MODE: VodCacheSizeMode = VodCacheSizeMode.ON
@@ -514,6 +516,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val subtitleOrganizationModeKey = stringPreferencesKey("subtitle_organization_mode")
     private val vodCacheSizeModeKey = stringPreferencesKey("vod_cache_size_mode")
     private val vodCacheSizeMbKey = intPreferencesKey("vod_cache_size_mb")
+    private val vodCacheWarmAheadEnabledKey = booleanPreferencesKey("vod_cache_warm_ahead_enabled")
     private val useParallelConnectionsKey = booleanPreferencesKey("use_parallel_connections")
     private val parallelConnectionCountKey = intPreferencesKey("parallel_connection_count")
     private val parallelChunkSizeMbKey = intPreferencesKey("parallel_chunk_size_mb")
@@ -817,6 +820,8 @@ class PlayerSettingsDataStore @Inject constructor(
                 vodCacheSizeMode = parseVodCacheSizeMode(prefs[vodCacheSizeModeKey]),
                 vodCacheSizeMb = (prefs[vodCacheSizeMbKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB)
                     .coerceIn(PlayerSettings.MIN_VOD_CACHE_SIZE_MB, PlayerSettings.MAX_VOD_CACHE_SIZE_MB),
+                vodCacheWarmAheadEnabled =
+                    prefs[vodCacheWarmAheadEnabledKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED,
                 useParallelConnections =
                     prefs[useParallelConnectionsKey] ?: PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS,
                 parallelConnectionCount = (prefs[parallelConnectionCountKey]
@@ -1528,6 +1533,8 @@ class PlayerSettingsDataStore @Inject constructor(
                     ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE) != PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE ||
                     (prefs[vodCacheSizeMbKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB) !=
                     PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB ||
+                    (prefs[vodCacheWarmAheadEnabledKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED) !=
+                    PlayerSettings.DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED ||
                     (prefs[useParallelConnectionsKey] ?: PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS) !=
                     PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS ||
                     (prefs[parallelConnectionCountKey] ?: PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT) !=
@@ -1536,6 +1543,7 @@ class PlayerSettingsDataStore @Inject constructor(
                     PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB
             prefs[vodCacheSizeModeKey] = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE.name
             prefs[vodCacheSizeMbKey] = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB
+            prefs[vodCacheWarmAheadEnabledKey] = PlayerSettings.DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED
             prefs[useParallelConnectionsKey] = PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS
             prefs[parallelConnectionCountKey] = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT
             prefs[parallelChunkSizeMbKey] = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB
@@ -1569,6 +1577,16 @@ class PlayerSettingsDataStore @Inject constructor(
                 prefs.remove(autoplayMaxBitrateMbpsKey)
             }
             prefs[vodCacheSizeMbKey] = normalized
+        }
+    }
+
+    suspend fun setVodCacheWarmAheadEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            val current = prefs[vodCacheWarmAheadEnabledKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED
+            if (current != enabled) {
+                prefs.remove(autoplayMaxBitrateMbpsKey)
+            }
+            prefs[vodCacheWarmAheadEnabledKey] = enabled
         }
     }
 
@@ -1622,6 +1640,7 @@ class PlayerSettingsDataStore @Inject constructor(
         targetBufferSizeMb: Int? = null,
         vodCacheSizeMode: VodCacheSizeMode? = null,
         vodCacheSizeMb: Int? = null,
+        vodCacheWarmAheadEnabled: Boolean? = null,
         useParallelConnections: Boolean? = null,
         parallelConnectionCount: Int? = null,
         parallelChunkSizeMb: Int? = null
@@ -1645,6 +1664,11 @@ class PlayerSettingsDataStore @Inject constructor(
                     .coerceIn(PlayerSettings.MIN_VOD_CACHE_SIZE_MB, PlayerSettings.MAX_VOD_CACHE_SIZE_MB)
                 transportChanged = transportChanged || current != normalized
                 prefs[vodCacheSizeMbKey] = normalized
+            }
+            vodCacheWarmAheadEnabled?.let {
+                val current = prefs[vodCacheWarmAheadEnabledKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED
+                transportChanged = transportChanged || current != it
+                prefs[vodCacheWarmAheadEnabledKey] = it
             }
             useParallelConnections?.let {
                 val current = prefs[useParallelConnectionsKey] ?: PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS
