@@ -26,7 +26,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,10 +72,16 @@ internal fun StreamSourcesSidePanel(
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = currentStreamIndex.coerceAtLeast(0))
     val reloadFocusRequester = remember { FocusRequester() }
     val closeFocusRequester = remember { FocusRequester() }
+    var hasUserNavigated by remember { mutableStateOf(false) }
+    var focusedStreamIndex by remember { mutableStateOf(-1) }
 
-    LaunchedEffect(uiState.isLoadingSourceStreams, uiState.sourcePresentedStreams.size, currentStreamIndex) {
-        if (uiState.isLoadingSourceStreams || uiState.sourcePresentedStreams.isEmpty()) return@LaunchedEffect
-        if (currentStreamIndex >= 0) listState.scrollToItem(currentStreamIndex)
+    LaunchedEffect(uiState.sourcePresentedStreams.size, currentStreamIndex) {
+        if (uiState.sourcePresentedStreams.isEmpty()) return@LaunchedEffect
+        if (hasUserNavigated) return@LaunchedEffect
+        val targetIndex = if (currentStreamIndex >= 0) currentStreamIndex else 0
+        if (targetIndex < uiState.sourcePresentedStreams.size) {
+            listState.scrollToItem(targetIndex)
+        }
         withFrameNanos { }
         withFrameNanos { }
         runCatching { streamsFocusRequester.requestFocus() }
@@ -190,7 +199,7 @@ internal fun StreamSourcesSidePanel(
             Spacer(modifier = Modifier.height(16.dp))
 
             when {
-                uiState.isLoadingSourceStreams -> {
+                uiState.sourcePresentedStreams.isEmpty() && uiState.isLoadingSourceStreams -> {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -201,7 +210,7 @@ internal fun StreamSourcesSidePanel(
                     }
                 }
 
-                uiState.sourceStreamsError != null -> {
+                uiState.sourceStreamsError != null && uiState.sourcePresentedStreams.isEmpty() -> {
                     Text(
                         text = uiState.sourceStreamsError,
                         style = MaterialTheme.typography.bodyLarge,
@@ -275,8 +284,27 @@ internal fun StreamSourcesSidePanel(
                                     } else {
                                         runCatching { reloadFocusRequester.requestFocus() }
                                     }
-                                }} else null
+                                }} else null,
+                                onFocused = {
+                                    if (focusedStreamIndex >= 0 && focusedStreamIndex != index) {
+                                        hasUserNavigated = true
+                                    }
+                                    focusedStreamIndex = index
+                                }
                             )
+                        }
+
+                        if (isAwaitingMoreSourceResults) {
+                            item(key = "loading_footer") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 24.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    LoadingIndicator()
+                                }
+                            }
                         }
                     }
                 }
