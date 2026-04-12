@@ -51,6 +51,7 @@ internal class PlayerMediaSourceFactory(
     @Volatile private var currentVodCacheResolvedUrl: ResolvedVodCacheUrl? = null
     @Volatile private var currentVodCacheActive: Boolean = false
     @Volatile private var currentProgressiveUpstreamFactory: DataSource.Factory? = null
+    @Volatile private var currentWarmAheadUpstreamFactory: DataSource.Factory? = null
     @Volatile private var currentProgressiveIsEligibleForWarmAhead: Boolean = false
     private val parallelStartupPrefetchUnlocked = AtomicBoolean(true)
     private val activeReadBytePosition = AtomicLong(0L)
@@ -104,27 +105,29 @@ internal class PlayerMediaSourceFactory(
         val isHls = resolvedMimeType == MimeTypes.APPLICATION_M3U8
         val isDash = resolvedMimeType == MimeTypes.APPLICATION_MPD
         currentVodCacheResolvedUrl = null
-        val progressiveUpstreamFactory = selectProgressiveUpstreamFactory(
-            url = url,
-            isHls = isHls,
-            isDash = isDash,
-            okHttpFactory = okHttpFactory,
-            baseDataSourceFactory = baseDataSourceFactory
-        )
         val useVodCache = ENABLE_VOD_CACHE &&
             vodCacheSizeMode == VodCacheSizeMode.ON &&
             !isHls &&
             !isDash &&
             shouldUseVodCache(url)
+        val warmAheadEnabledForStream = VodWarmAheadPolicy.shouldStartWarmAhead(
+            useVodCache = useVodCache,
+            warmAheadEnabled = vodCacheWarmAheadEnabled
+        )
+        val progressiveUpstreamFactory = selectProgressiveUpstreamFactory(
+            url = url,
+            isHls = isHls,
+            isDash = isDash,
+            okHttpFactory = okHttpFactory,
+            baseDataSourceFactory = baseDataSourceFactory,
+            warmAheadEnabledForProfile = warmAheadEnabledForStream
+        )
         val previousVodCacheActive = currentVodCacheActive
         currentVodCacheUrl = url
         currentVodCacheResolvedUrl = null
         currentVodCacheActive = false
         currentProgressiveUpstreamFactory = progressiveUpstreamFactory
-        currentProgressiveIsEligibleForWarmAhead = VodWarmAheadPolicy.shouldStartWarmAhead(
-            useVodCache = useVodCache,
-            warmAheadEnabled = vodCacheWarmAheadEnabled
-        )
+        currentProgressiveIsEligibleForWarmAhead = warmAheadEnabledForStream
         if (useVodCache) {
             Log.d(
                 TAG,
@@ -181,6 +184,7 @@ internal class PlayerMediaSourceFactory(
         } else {
             currentVodCacheActive = false
             currentProgressiveIsEligibleForWarmAhead = false
+            currentWarmAheadUpstreamFactory = null
             progressiveUpstreamFactory
         }
         val mediaItemBuilder = MediaItem.Builder().setUri(url)
@@ -263,6 +267,7 @@ internal class PlayerMediaSourceFactory(
             fallbackParallelConnectionCount = parallelConnectionCount,
             fallbackParallelChunkSizeMb = parallelChunkSizeMb,
             allowStartupBootstrapReuse = allowStartupBootstrapReuse,
+            warmAheadEnabledForProfile = false,
             transportSampleTimeMs = transportSampleTimeMs,
             onTransportBytesDownloaded = onTransportBytesDownloaded
         )
@@ -615,43 +620,83 @@ internal class PlayerMediaSourceFactory(
         fallbackParallelConnectionCount: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
         fallbackParallelChunkSizeMb: Int = SAFE_DEFAULT_PARALLEL_CHUNK_SIZE_MB,
         allowStartupBootstrapReuse: Boolean = true,
+        warmAheadEnabledForProfile: Boolean = false,
         transportSampleTimeMs: () -> Long = { SystemClock.elapsedRealtime() },
         onTransportBytesDownloaded: (Long, Long) -> Unit = { _, _ -> }
     ): DataSource.Factory {
         parallelStartupPrefetchUnlocked.set(!(parallelConnectionsEnabled && !isHls && !isDash))
         activeReadBytePosition.set(0L)
         return when {
-            !usesHttpUpstream(url) -> baseDataSourceFactory
+            !usesHttpUpstream(url) -> {
+                currentWarmAheadUpstreamFactory = null
+                baseDataSourceFactory
+            }
             parallelConnectionsEnabled && !isHls && !isDash -> {
-                val parallelProfile = resolveParallelProviderProfiles(
+                val profiles = resolveParallelProviderProfiles(
                     url = url,
-                    warmAheadEnabledForStream = false,
+                    warmAheadEnabledForStream = warmAheadEnabledForProfile,
                     fallbackConnectionCount = fallbackParallelConnectionCount,
                     fallbackChunkSizeMb = fallbackParallelChunkSizeMb
-                ).playback
-                ParallelRangeDataSource.Factory(
-                    okHttpFactory,
-                    parallelProfile.connectionCount,
-                    parallelProfile.chunkSizeMb.toLong() * 1024L * 1024L,
-                    shouldAllowBackgroundPrefetch = { parallelStartupPrefetchUnlocked.get() },
+                )
+                val resolvedUriCallback: (Uri?) -> Unit = { resolved ->
+                    currentVodCacheResolvedUrl = ResolvedVodCacheUrl(
+                        playbackUrl = url,
+                        resolvedUrl = resolved?.toString()
+                    )
+                }
+                val readPositionCallback: (Long) -> Unit = { position ->
+                    activeReadBytePosition.accumulateAndGet(position) { current, next ->
+                        if (next > current) next else current
+                    }
+                }
+                currentWarmAheadUpstreamFactory = profiles.warmAhead?.let { warmAheadProfile ->
+                    buildParallelRangeDataSourceFactory(
+                        okHttpFactory = okHttpFactory,
+                        profile = warmAheadProfile,
+                        allowStartupBootstrapReuse = false,
+                        transportSampleTimeMs = transportSampleTimeMs,
+                        onTransportBytesDownloaded = onTransportBytesDownloaded,
+                        onResolvedUri = resolvedUriCallback,
+                        onReadPositionAdvanced = { }
+                    )
+                }
+                buildParallelRangeDataSourceFactory(
+                    okHttpFactory = okHttpFactory,
+                    profile = profiles.playback,
+                    allowStartupBootstrapReuse = allowStartupBootstrapReuse,
                     transportSampleTimeMs = transportSampleTimeMs,
                     onTransportBytesDownloaded = onTransportBytesDownloaded,
-                    onResolvedUri = { resolved ->
-                        currentVodCacheResolvedUrl = ResolvedVodCacheUrl(
-                            playbackUrl = url,
-                            resolvedUrl = resolved?.toString()
-                        )
-                    },
-                    onReadPositionAdvanced = { position ->
-                        activeReadBytePosition.accumulateAndGet(position) { current, next ->
-                            if (next > current) next else current
-                        }
-                    },
-                    allowStartupBootstrapReuse = allowStartupBootstrapReuse
+                    onResolvedUri = resolvedUriCallback,
+                    onReadPositionAdvanced = readPositionCallback
                 )
             }
-            else -> okHttpFactory
+            else -> {
+                currentWarmAheadUpstreamFactory = null
+                okHttpFactory
+            }
         }
+    }
+
+    private fun buildParallelRangeDataSourceFactory(
+        okHttpFactory: OkHttpDataSource.Factory,
+        profile: ParallelProviderProfile,
+        allowStartupBootstrapReuse: Boolean,
+        transportSampleTimeMs: () -> Long,
+        onTransportBytesDownloaded: (Long, Long) -> Unit,
+        onResolvedUri: (Uri?) -> Unit,
+        onReadPositionAdvanced: (Long) -> Unit
+    ): ParallelRangeDataSource.Factory {
+        return ParallelRangeDataSource.Factory(
+            okHttpFactory,
+            profile.connectionCount,
+            profile.chunkSizeMb.toLong() * 1024L * 1024L,
+            shouldAllowBackgroundPrefetch = { parallelStartupPrefetchUnlocked.get() },
+            transportSampleTimeMs = transportSampleTimeMs,
+            onTransportBytesDownloaded = onTransportBytesDownloaded,
+            onResolvedUri = onResolvedUri,
+            onReadPositionAdvanced = onReadPositionAdvanced,
+            allowStartupBootstrapReuse = allowStartupBootstrapReuse
+        )
     }
 
     internal fun parallelProviderProfileForTesting(url: String): Pair<Int, Int> {
@@ -672,6 +717,17 @@ internal class PlayerMediaSourceFactory(
         )
         return (profiles.playback.connectionCount to profiles.playback.chunkSizeMb) to
             profiles.warmAhead?.let { it.connectionCount to it.chunkSizeMb }
+    }
+
+    internal fun warmAheadProviderProfileForTesting(
+        url: String,
+        warmAheadEnabledForStream: Boolean
+    ): Pair<Int, Int>? {
+        val profile = resolveParallelProviderProfiles(
+            url = url,
+            warmAheadEnabledForStream = warmAheadEnabledForStream
+        ).warmAhead
+        return profile?.let { it.connectionCount to it.chunkSizeMb }
     }
 
     private data class ParallelProviderProfile(
