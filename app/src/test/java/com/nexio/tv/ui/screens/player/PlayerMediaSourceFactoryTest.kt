@@ -81,6 +81,21 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun warmAheadUpstreamKind_reportsPrdsForParallelFactory() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+
+        val dataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video.mkv",
+            headers = emptyMap()
+        )
+
+        assertEquals("prds", PlayerMediaSourceFactory.warmAheadUpstreamKindForTesting(dataSourceFactory))
+    }
+
+    @Test
     fun benchmarkProgressiveFactory_usesParallelRangeDatasourceWhenEnabled() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),

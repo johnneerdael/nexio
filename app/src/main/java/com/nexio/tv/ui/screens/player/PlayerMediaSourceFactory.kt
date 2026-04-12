@@ -341,6 +341,11 @@ internal class PlayerMediaSourceFactory(
         if (!currentProgressiveIsEligibleForWarmAhead || !currentVodCacheActive) return
         val streamUrl = currentVodCacheUrl ?: return
         val upstreamFactory = currentProgressiveUpstreamFactory ?: return
+        val upstreamKind = warmAheadUpstreamKindForTesting(upstreamFactory)
+        Log.d(
+            TAG,
+            "VOD warm-ahead starting: upstream=$upstreamKind writeThroughEnabled=true"
+        )
         val capBytes = resolveVodCacheMaxBytes(context)
         val cache = getAnySimpleCache() ?: return
 
@@ -668,6 +673,10 @@ internal class PlayerMediaSourceFactory(
         private fun getAnySimpleCache(): SimpleCache? = sharedSimpleCache
 
         private fun bytesToMb(bytes: Long): Long = bytes / (1024L * 1024L)
+
+        internal fun warmAheadUpstreamKindForTesting(upstreamFactory: DataSource.Factory): String {
+            return if (upstreamFactory is ParallelRangeDataSource.Factory) "prds" else "single"
+        }
 
         private fun clearVodCacheInternal(context: Context) {
             synchronized(this) {
