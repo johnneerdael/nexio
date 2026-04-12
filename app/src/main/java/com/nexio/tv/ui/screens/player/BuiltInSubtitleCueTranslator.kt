@@ -9,8 +9,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 private const val BUILT_IN_SUBTITLE_PREFETCH_DURATION_US = 20_000_000L
+private const val BUILT_IN_SUBTITLE_PROVIDER_FAILURE_COOLDOWN_MS = 60_000L
 
 internal class BuiltInSubtitleCueTranslator(
     private val scope: CoroutineScope,
@@ -19,10 +21,13 @@ internal class BuiltInSubtitleCueTranslator(
     private val settingsProvider: () -> SubtitleTranslationSettings,
     private val targetLanguageProvider: () -> String?,
     private val onTranslatingChanged: (Boolean) -> Unit,
-    private val onTranslationError: (String?) -> Unit
+    private val onTranslationError: (String?) -> Unit,
+    private val providerFailureCooldownMs: Long = BUILT_IN_SUBTITLE_PROVIDER_FAILURE_COOLDOWN_MS,
+    private val nowMs: () -> Long = { System.currentTimeMillis() }
 ) : CueGroupSubtitleTranslator {
 
     private val activeRequestCount = AtomicInteger(0)
+    private val suppressedProviderFailure = AtomicReference<SuppressedProviderFailure?>(null)
 
     override fun getConfigurationToken(format: Format): String? {
         if (!isEnabledProvider()) {
@@ -33,7 +38,7 @@ internal class BuiltInSubtitleCueTranslator(
         if (!settings.enabled || settings.apiKey.isBlank() || targetLanguage.isBlank()) {
             return null
         }
-        return "${format.sampleMimeType}|$targetLanguage|${settings.provider}|${settings.model}|${settings.baseUrl}|${settings.apiKey.hashCode()}"
+        return builtInTranslationConfigurationToken(format, settings, targetLanguage)
     }
 
     override fun getPrefetchDurationUs(): Long = BUILT_IN_SUBTITLE_PREFETCH_DURATION_US
@@ -53,6 +58,18 @@ internal class BuiltInSubtitleCueTranslator(
         if (cueGroups.isEmpty()) {
             callback.onSuccess(emptyList())
             return
+        }
+
+        val configurationToken = builtInTranslationConfigurationToken(format, settings, targetLanguage)
+        suppressedProviderFailure.get()?.let { failure ->
+            if (failure.configurationToken == configurationToken && failure.retryAfterMs > nowMs()) {
+                onTranslationError(failure.message)
+                callback.onFailure(Exception(failure.message))
+                return
+            }
+            if (failure.configurationToken != configurationToken || failure.retryAfterMs <= nowMs()) {
+                suppressedProviderFailure.compareAndSet(failure, null)
+            }
         }
 
         updateActiveRequests(delta = 1)
@@ -93,10 +110,22 @@ internal class BuiltInSubtitleCueTranslator(
                         )
                     }
                     onTranslationError(null)
+                    suppressedProviderFailure.get()?.let { failure ->
+                        if (failure.configurationToken == configurationToken) {
+                            suppressedProviderFailure.compareAndSet(failure, null)
+                        }
+                    }
                     callback.onSuccess(translatedCueGroups)
                 }.onFailure { error ->
                     val message = error.message?.takeIf(String::isNotBlank)
                         ?: "Failed to translate subtitle."
+                    suppressedProviderFailure.set(
+                        SuppressedProviderFailure(
+                            configurationToken = configurationToken,
+                            message = message,
+                            retryAfterMs = nowMs() + providerFailureCooldownMs
+                        )
+                    )
                     onTranslationError(message)
                     callback.onFailure(Exception(message, error))
                 }
@@ -113,4 +142,18 @@ internal class BuiltInSubtitleCueTranslator(
         }
         onTranslatingChanged(active > 0)
     }
+
+    private fun builtInTranslationConfigurationToken(
+        format: Format,
+        settings: SubtitleTranslationSettings,
+        targetLanguage: String
+    ): String {
+        return "${format.sampleMimeType}|$targetLanguage|${settings.provider}|${settings.model}|${settings.baseUrl}|${settings.apiKey.hashCode()}"
+    }
+
+    private data class SuppressedProviderFailure(
+        val configurationToken: String,
+        val message: String,
+        val retryAfterMs: Long
+    )
 }
