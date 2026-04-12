@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.home
 
 import android.util.Log
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.data.repository.ContinueWatchingNextUpRef
 import com.nexio.tv.data.repository.ContinueWatchingResumeRef
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
@@ -120,6 +121,11 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithTmdb(
             tmdbId = tmdbId,
             contentType = ContentType.fromString(contentType)
         ) ?: return item
+        val localizedEpisodeDescription = localizedContinueWatchingEpisodeDescription(
+            tmdbMetadataService = tmdbMetadataService,
+            tmdbId = tmdbId,
+            item = item
+        )
 
         val existing = when (item) {
             is ContinueWatchingItem.InProgress -> item.displayMetadata
@@ -142,6 +148,9 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithTmdb(
         when (item) {
             is ContinueWatchingItem.InProgress -> item.copy(
                 displayMetadata = enrichedMetadata,
+                episodeDescription = localizedEpisodeDescription
+                    ?: enrichedMetadata.description
+                    ?: item.episodeDescription,
                 genres = enrichedMetadata.genres.ifEmpty { item.genres },
                 releaseInfo = enrichedMetadata.releaseInfo ?: item.releaseInfo
             )
@@ -152,6 +161,9 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithTmdb(
                     poster = enrichedMetadata.poster ?: item.info.poster,
                     backdrop = enrichedMetadata.backdrop ?: item.info.backdrop,
                     logo = enrichedMetadata.logo ?: item.info.logo,
+                    episodeDescription = localizedEpisodeDescription
+                        ?: enrichedMetadata.description
+                        ?: item.info.episodeDescription,
                     genres = enrichedMetadata.genres.ifEmpty { item.info.genres },
                     releaseInfo = enrichedMetadata.releaseInfo ?: item.info.releaseInfo
                 )
@@ -161,6 +173,21 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithTmdb(
         Log.w(HomeViewModel.TAG, "TMDB enrichment failed for continue watching item $contentId: ${e.message}")
         item
     }
+}
+
+internal suspend fun localizedContinueWatchingEpisodeDescription(
+    tmdbMetadataService: TmdbMetadataService,
+    tmdbId: String,
+    item: ContinueWatchingItem
+): String? {
+    val season = item.season() ?: return null
+    val episode = item.episode() ?: return null
+    if (!isSeriesType(item.contentType())) return null
+
+    return tmdbMetadataService.fetchEpisodeEnrichment(
+        tmdbId = tmdbId,
+        seasonNumbers = listOf(season)
+    )[season to episode]?.overview?.takeIf { it.isNotBlank() }
 }
 
 private fun parseEpisodeReleaseDate(raw: String?): LocalDate? {
