@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.player
 
 import android.net.Uri
+import androidx.annotation.VisibleForTesting
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSpec
@@ -146,7 +147,7 @@ internal class StreamingCacheFillSession(
 
     fun onMemoryWarning() {
         synchronized(sessionLock) {
-            fillController?.onMemoryWarning()
+            worker?.onMemoryWarning() ?: fillController?.onMemoryWarning()
         }
     }
 
@@ -225,6 +226,13 @@ internal class StreamingCacheFillSession(
 
     private fun hasCommittedSpan(cacheKey: String, position: Long, minLength: Long): Boolean {
         return cache.getCachedLength(cacheKey, position, minLength) >= minLength
+    }
+
+    @VisibleForTesting
+    internal fun workerPauseRequestedForTesting(): Boolean {
+        synchronized(sessionLock) {
+            return worker?.pauseRequestedForTesting() == true
+        }
     }
 
     private data class StartRequest(
