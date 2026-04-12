@@ -1,17 +1,30 @@
 package com.nexio.tv.ui.screens.player
 
+import android.content.Context
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.text.Cue
+import androidx.media3.common.text.CueGroup
+import androidx.media3.exoplayer.text.CueGroupSubtitleTranslator
 import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.domain.model.SubtitleTranslationDefaults
 import com.nexio.tv.domain.model.SubtitleTranslationProvider
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
+import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.Dispatcher
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.EmptyCoroutineContext
 
 class PlayerRuntimeControllerBuiltInAiGroundworkTest {
@@ -74,5 +87,80 @@ class PlayerRuntimeControllerBuiltInAiGroundworkTest {
         )
 
         assertNull(translator.getConfigurationToken(format))
+    }
+
+    @Test
+    fun `built in translator suppresses repeated provider requests after failure`() = runBlocking {
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return MockResponse()
+                    .setResponseCode(429)
+                    .setBody("""{"error":{"message":"quota exceeded"}}""")
+            }
+        }
+        server.start()
+        try {
+            val service = SubtitleTranslationService(
+                context = mockk<Context>(relaxed = true),
+                httpClient = OkHttpClient()
+            )
+            val translator = BuiltInSubtitleCueTranslator(
+                scope = CoroutineScope(EmptyCoroutineContext),
+                translationService = service,
+                isEnabledProvider = { true },
+                settingsProvider = {
+                    SubtitleTranslationSettings(
+                        enabled = true,
+                        provider = SubtitleTranslationProvider.OPENAI,
+                        apiKey = "configured-key",
+                        model = "test-model",
+                        baseUrl = server.url("/v1").toString()
+                    )
+                },
+                targetLanguageProvider = { "nl" },
+                onTranslatingChanged = {},
+                onTranslationError = {}
+            )
+            val format = Format.Builder()
+                .setSampleMimeType(MimeTypes.APPLICATION_SUBRIP)
+                .build()
+            val cueGroups = listOf(
+                CueGroup(
+                    listOf(Cue.Builder().setText("Hello").build()),
+                    0L
+                )
+            )
+
+            val first = CompletableDeferred<Exception>()
+            val second = CompletableDeferred<Exception>()
+
+            translator.translate(format, cueGroups, failureCallback(first))
+            withTimeout(2_000) { first.await() }
+
+            translator.translate(format, cueGroups, failureCallback(second))
+            withTimeout(2_000) { second.await() }
+
+            assertTrue(
+                "Expected second failure to be suppressed without another provider request, but saw ${server.requestCount} requests",
+                server.requestCount <= 1
+            )
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    private fun failureCallback(
+        failure: CompletableDeferred<Exception>
+    ): CueGroupSubtitleTranslator.TranslationCallback {
+        return object : CueGroupSubtitleTranslator.TranslationCallback {
+            override fun onSuccess(translatedCueGroups: List<CueGroup>) {
+                failure.complete(IllegalStateException("Expected translation failure"))
+            }
+
+            override fun onFailure(error: Exception) {
+                failure.complete(error)
+            }
+        }
     }
 }
