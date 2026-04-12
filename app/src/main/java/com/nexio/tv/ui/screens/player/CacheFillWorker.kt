@@ -107,6 +107,15 @@ internal class CacheFillWorker(
         }
     }
 
+    fun onMemoryWarning() {
+        synchronized(controlLock) {
+            fillController.onMemoryWarning()
+            pauseRequested.set(true)
+            commandSerial.incrementAndGet()
+            cancelActiveCall()
+        }
+    }
+
     fun resume() {
         synchronized(controlLock) {
             pauseRequested.set(false)
@@ -597,6 +606,18 @@ internal class CacheFillWorker(
     @VisibleForTesting
     internal fun commandSerialForTesting(): Long {
         return commandSerial.get()
+    }
+
+    @VisibleForTesting
+    internal fun pauseRequestedForTesting(): Boolean {
+        return pauseRequested.get()
+    }
+
+    @VisibleForTesting
+    internal fun hasActiveCallForTesting(): Boolean {
+        synchronized(callLock) {
+            return activeCall != null
+        }
     }
 
     @VisibleForTesting

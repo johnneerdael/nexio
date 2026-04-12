@@ -316,6 +316,68 @@ class CacheFillWorkerTest {
     }
 
     @Test
+    fun onMemoryWarning_pausesWorkerAndCancelsActiveCall() {
+        val chunkBytes = 64L
+        val requestEntered = CountDownLatch(1)
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                requestEntered.countDown()
+                try {
+                    while (true) {
+                        Thread.sleep(10L)
+                    }
+                } catch (_: InterruptedException) {
+                    throw IOException("interrupted")
+                }
+                throw IOException("unreachable")
+            }
+            .build()
+        val profile = ProviderProfile(
+            chunkBytes = chunkBytes,
+            normalFragmentBytes = chunkBytes,
+            fillHorizonBytes = chunkBytes * 16L,
+            lowWaterBytes = chunkBytes,
+            retainBehindBytes = 0L
+        )
+        val cache = provider.getOrCreateCache()
+        val cacheKey = "movie-memory-warning-active-call"
+        val fillController = FillController(
+            profile = profile,
+            cache = cache,
+            cacheKey = cacheKey,
+            playbackByteProvider = { 0L }
+        )
+        val worker = worker(
+            cacheKey = cacheKey,
+            profile = profile,
+            okHttpClient = client,
+            fillController = fillController,
+            safetyGapBytes = 0L
+        )
+
+        try {
+            worker.start(
+                url = server.url("/movie").toString(),
+                headers = emptyMap(),
+                contentLength = chunkBytes * 2L,
+                startPosition = 0L
+            )
+            assertTrue(requestEntered.await(1, TimeUnit.SECONDS))
+            assertTrue(waitUntil { worker.hasActiveCallForTesting() })
+            val commandSerialBeforeWarning = worker.commandSerialForTesting()
+
+            worker.onMemoryWarning()
+
+            assertEquals(FillController.State.MEMORY_PRESSURE, fillController.state)
+            assertTrue(worker.pauseRequestedForTesting())
+            assertTrue(worker.commandSerialForTesting() > commandSerialBeforeWarning)
+            assertFalse(worker.hasActiveCallForTesting())
+        } finally {
+            worker.stop()
+        }
+    }
+
+    @Test
     fun staleChunkProgressCannotOverwriteProcessedSeek() {
         val chunkBytes = 64L
         val seekTarget = chunkBytes * 4L

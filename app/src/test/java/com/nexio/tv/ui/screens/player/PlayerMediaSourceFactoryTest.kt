@@ -917,6 +917,63 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun streamingCacheFillSession_onMemoryWarningPausesActiveWorker() {
+        val context = appContext()
+        val provider = StreamingCacheProvider(
+            context = context,
+            cacheDirectoryName = "media-source-fill-memory-warning-${System.nanoTime()}"
+        )
+        val chunkBytes = 64L
+        val contentLength = 16L * 1024L * 1024L
+        val requestEntered = CountDownLatch(1)
+        val client = OkHttpClient.Builder()
+            .addInterceptor {
+                requestEntered.countDown()
+                try {
+                    while (true) {
+                        Thread.sleep(10L)
+                    }
+                } catch (_: InterruptedException) {
+                    throw IOException("interrupted")
+                }
+                throw IOException("unreachable")
+            }
+            .build()
+        val session = StreamingCacheFillSession(
+            cache = provider.getOrCreateCache(),
+            cacheKeyFactory = StableCacheKeyFactory(),
+            okHttpClient = client,
+            memoryBudget = MemoryBudget(context),
+            rangeCoordinator = StreamingRangeCoordinator(),
+            profile = ProviderProfile(
+                chunkBytes = chunkBytes,
+                normalFragmentBytes = chunkBytes,
+                fillHorizonBytes = contentLength,
+                lowWaterBytes = chunkBytes,
+                retainBehindBytes = 0L
+            )
+        )
+
+        try {
+            session.start(
+                url = "https://example.com/movie.mkv",
+                headers = emptyMap(),
+                contentLength = contentLength,
+                playbackByteProvider = { 0L }
+            )
+            assertTrue(requestEntered.await(1, TimeUnit.SECONDS))
+
+            session.onMemoryWarning()
+
+            assertTrue(session.workerPauseRequestedForTesting())
+        } finally {
+            session.stop()
+            provider.release()
+            provider.cacheDirectory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun streamingCacheFillSession_startAfterSlowStopStartsLatestPendingRequestWithoutOverlap() {
         val context = appContext()
         val provider = StreamingCacheProvider(
