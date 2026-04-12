@@ -838,6 +838,81 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun streamingCacheFillSession_awaitSpanCommitted_capsWaitToFiftyMilliseconds() {
+        val context = appContext()
+        val cache = mockk<androidx.media3.datasource.cache.SimpleCache>(relaxed = true)
+        every { cache.getCachedLength("movie", 0L, 16L) } returns 0L
+        val session = StreamingCacheFillSession(
+            cache = cache,
+            cacheKeyFactory = StableCacheKeyFactory(),
+            okHttpClient = OkHttpClient(),
+            memoryBudget = MemoryBudget(context),
+            rangeCoordinator = StreamingRangeCoordinator()
+        )
+
+        val startNs = System.nanoTime()
+        assertFalse(
+            session.awaitSpanCommitted(
+                cacheKey = "movie",
+                position = 0L,
+                minLength = 16L,
+                timeoutMs = 5_000L
+            )
+        )
+        val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
+
+        assertTrue("urgent wait must not block loader for seconds", elapsedMs < 250L)
+    }
+
+    @Test
+    fun streamingCacheFillSession_awaitSpanCommitted_returnsWhenListenerSeesFullSpan() {
+        val context = appContext()
+        val cache = mockk<androidx.media3.datasource.cache.SimpleCache>(relaxed = true)
+        val committed = java.util.concurrent.atomic.AtomicBoolean(false)
+        val listener = java.util.concurrent.atomic.AtomicReference<androidx.media3.datasource.cache.Cache.Listener?>()
+        every { cache.getCachedLength("movie", 0L, 16L) } answers {
+            if (committed.get()) 16L else 0L
+        }
+        every { cache.addListener("movie", any()) } answers {
+            listener.set(secondArg())
+            java.util.TreeSet<androidx.media3.datasource.cache.CacheSpan>()
+        }
+        every { cache.removeListener("movie", any()) } answers {
+            Unit
+        }
+        val session = StreamingCacheFillSession(
+            cache = cache,
+            cacheKeyFactory = StableCacheKeyFactory(),
+            okHttpClient = OkHttpClient(),
+            memoryBudget = MemoryBudget(context),
+            rangeCoordinator = StreamingRangeCoordinator()
+        )
+
+        val result = java.util.concurrent.atomic.AtomicBoolean(false)
+        val waiter = Thread {
+            result.set(
+                session.awaitSpanCommitted(
+                    cacheKey = "movie",
+                    position = 0L,
+                    minLength = 16L,
+                    timeoutMs = 5_000L
+                )
+            )
+        }
+        waiter.start()
+        assertTrue(waitUntil { listener.get() != null })
+        committed.set(true)
+        listener.get()!!.onSpanAdded(
+            cache,
+            mockk(relaxed = true)
+        )
+        waiter.join(1_000L)
+
+        assertFalse(waiter.isAlive)
+        assertTrue(result.get())
+    }
+
+    @Test
     fun streamingCacheFillSession_startAfterSlowStopStartsLatestPendingRequestWithoutOverlap() {
         val context = appContext()
         val provider = StreamingCacheProvider(
