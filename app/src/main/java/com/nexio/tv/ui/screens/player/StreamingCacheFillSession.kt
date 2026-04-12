@@ -235,7 +235,7 @@ internal class StreamingCacheFillSession(
         val cacheKey: String
     )
 
-    private companion object {
+    companion object {
         const val PENDING_START_THREAD_NAME = "StreamingCacheFillSession-pending-start"
         const val MAX_URGENT_WAIT_MS = 50L
     }
