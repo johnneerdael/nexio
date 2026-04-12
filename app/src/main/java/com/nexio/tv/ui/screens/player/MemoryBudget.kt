@@ -26,13 +26,13 @@ internal class MemoryBudget(context: Context) {
         sampleQueueBudgetBytes = (heapLimitBytes - reservedBytes)
             .coerceIn(MIN_SAMPLE_QUEUE_BYTES, MAX_SAMPLE_QUEUE_BYTES)
 
-        effectiveSampleQueueBytes = if (hasRecentLowMemoryExit(context)) {
-            sampleQueueBudgetBytes * 7L / 10L
-        } else {
-            sampleQueueBudgetBytes
-        }
-        effectiveFillHorizonBytes = (effectiveSampleQueueBytes / 2L)
-            .coerceIn(MIN_FILL_HORIZON_BYTES, MAX_FILL_HORIZON_BYTES)
+        effectiveSampleQueueBytes = computeEffectiveSampleQueueBytes(
+            sampleQueueBudgetBytes = sampleQueueBudgetBytes,
+            hasRecentLowMemoryExit = hasRecentLowMemoryExit(context)
+        )
+        effectiveFillHorizonBytes = computeEffectiveFillHorizonBytes(
+            effectiveSampleQueueBytes = effectiveSampleQueueBytes
+        )
     }
 
     fun fillWorkerWithinBudget(activeConnections: Int): Boolean {
@@ -56,5 +56,22 @@ internal class MemoryBudget(context: Context) {
         const val MAX_SAMPLE_QUEUE_BYTES = 350L * 1024L * 1024L
         const val MIN_FILL_HORIZON_BYTES = 32L * 1024L * 1024L
         const val MAX_FILL_HORIZON_BYTES = 128L * 1024L * 1024L
+
+        fun computeEffectiveSampleQueueBytes(
+            sampleQueueBudgetBytes: Long,
+            hasRecentLowMemoryExit: Boolean
+        ): Long {
+            val adjustedBytes = if (hasRecentLowMemoryExit) {
+                sampleQueueBudgetBytes * 7L / 10L
+            } else {
+                sampleQueueBudgetBytes
+            }
+            return adjustedBytes.coerceIn(MIN_SAMPLE_QUEUE_BYTES, MAX_SAMPLE_QUEUE_BYTES)
+        }
+
+        fun computeEffectiveFillHorizonBytes(effectiveSampleQueueBytes: Long): Long {
+            return (effectiveSampleQueueBytes / 2L)
+                .coerceIn(MIN_FILL_HORIZON_BYTES, MAX_FILL_HORIZON_BYTES)
+        }
     }
 }
