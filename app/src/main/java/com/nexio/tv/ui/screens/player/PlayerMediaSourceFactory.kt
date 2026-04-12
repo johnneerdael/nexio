@@ -593,6 +593,11 @@ internal class PlayerMediaSourceFactory(
         val chunkSizeMb: Int
     )
 
+    internal enum class VodCacheWriteMode {
+        READ_ONLY,
+        WRITE_THROUGH,
+    }
+
     private fun resolveParallelProviderProfile(
         url: String,
         fallbackConnectionCount: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
@@ -668,6 +673,23 @@ internal class PlayerMediaSourceFactory(
         private fun getAnySimpleCache(): SimpleCache? = sharedSimpleCache
 
         private fun bytesToMb(bytes: Long): Long = bytes / (1024L * 1024L)
+
+        internal fun resolvePlaybackVodCacheWriteMode(
+            parallelConnectionsEnabled: Boolean
+        ): VodCacheWriteMode {
+            return if (parallelConnectionsEnabled) {
+                VodCacheWriteMode.READ_ONLY
+            } else {
+                VodCacheWriteMode.WRITE_THROUGH
+            }
+        }
+
+        internal fun shouldInstallVodCacheWriter(
+            writeMode: VodCacheWriteMode,
+            blockOnCache: Boolean
+        ): Boolean {
+            return blockOnCache || writeMode == VodCacheWriteMode.WRITE_THROUGH
+        }
 
         private fun clearVodCacheInternal(context: Context) {
             synchronized(this) {
