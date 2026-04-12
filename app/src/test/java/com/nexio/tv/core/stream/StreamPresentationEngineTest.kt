@@ -363,12 +363,14 @@ class StreamPresentationEngineTest {
                 stream(
                     filename = "Show.S01E02.1080p.WEB-DL.x265.GroupA.mkv",
                     addonName = "Addon A",
-                    name = "⚡ RD"
+                    name = "⚡ RD",
+                    videoSizeBytes = 2_000_000_000L
                 ),
                 stream(
                     filename = "Show.S01E02.1080p.WEB-DL.x265.GroupB.mkv",
                     addonName = "Addon B",
-                    name = "⚡ RD"
+                    name = "⚡ RD",
+                    videoSizeBytes = 3_000_000_000L
                 )
             ),
             availableAddons = listOf("Addon A", "Addon B"),
@@ -417,6 +419,47 @@ class StreamPresentationEngineTest {
         )
 
         assertEquals(2, result.items.size)
+        assertEquals(listOf("PM", "RD"), result.items.mapNotNull { it.parsed.serviceId }.sorted())
+    }
+
+    @Test
+    fun `dedupe clusters exact byte size duplicates and keeps one cached result per service`() {
+        val sharedSizeBytes = 12_345_678_901L
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "First.Release.2026.1080p.WEB-DL.x265.GroupA.mkv",
+                    addonName = "Addon A",
+                    name = "⚡ RD",
+                    description = "⚡ RD",
+                    videoSizeBytes = sharedSizeBytes
+                ),
+                stream(
+                    filename = "Second.Release.2026.720p.HDTV.x264.GroupB.mkv",
+                    addonName = "Addon B",
+                    name = "⚡ Real-Debrid",
+                    description = "⚡ Real-Debrid",
+                    videoSizeBytes = sharedSizeBytes
+                ),
+                stream(
+                    filename = "Third.Release.2026.2160p.BluRay.HEVC.GroupC.mkv",
+                    addonName = "Addon C",
+                    name = "⚡ PM",
+                    description = "⚡ PM",
+                    videoSizeBytes = sharedSizeBytes
+                )
+            ),
+            availableAddons = listOf("Addon A", "Addon B", "Addon C"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                groupAcrossAddonsEnabled = true,
+                deduplicateGroupedStreamsEnabled = true
+            ),
+            requestContext = StreamRequestContext(contentType = "movie")
+        )
+
+        assertEquals(2, result.items.size)
+        assertEquals(1, result.diagnostics.droppedDeduplicateCount)
         assertEquals(listOf("PM", "RD"), result.items.mapNotNull { it.parsed.serviceId }.sorted())
     }
 

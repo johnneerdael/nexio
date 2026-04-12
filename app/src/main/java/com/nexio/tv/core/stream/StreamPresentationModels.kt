@@ -505,7 +505,8 @@ object StreamPresentationEngine {
         val stream = item.stream
         val hasStrongIdentity = parsed.normalizedFilenameKey != null ||
             !stream.behaviorHints?.videoHash.isNullOrBlank() ||
-            !stream.infoHash.isNullOrBlank()
+            !stream.infoHash.isNullOrBlank() ||
+            (parsed.sizeBytes != null && parsed.sizeBytes > 0L)
         return buildSet {
             parsed.normalizedFilenameKey?.let { add("filename:$it") }
             stream.behaviorHints?.videoHash
@@ -515,6 +516,7 @@ object StreamPresentationEngine {
             if (!stream.infoHash.isNullOrBlank()) {
                 add("hash:${stream.infoHash.lowercase(Locale.US)}:${stream.fileIdx ?: 0}")
             }
+            parsed.sizeBytes?.takeIf { it > 0L }?.let { add("exactbytes:$it") }
             if (!hasStrongIdentity) {
                 parsed.smartDetectKey?.let { add("smart:$it") }
             }
