@@ -105,6 +105,16 @@ class SubtitleTranslationServiceProviderTest {
     }
 
     @Test
+    fun defaultChunkConfigsFavorLargeSerialProviderRequests() {
+        assertEquals(2_000, SubtitleTranslationService.DEFAULT_CUE_CHUNK_CONFIG.maxEntries)
+        assertEquals(100_000, SubtitleTranslationService.DEFAULT_CUE_CHUNK_CONFIG.maxChars)
+        assertEquals(1, SubtitleTranslationService.DEFAULT_CUE_CHUNK_CONFIG.maxParallelRequests)
+        assertEquals(2_000, SubtitleTranslationService.ADDON_OVERLAY_CUE_CHUNK_CONFIG.maxEntries)
+        assertEquals(100_000, SubtitleTranslationService.ADDON_OVERLAY_CUE_CHUNK_CONFIG.maxChars)
+        assertEquals(1, SubtitleTranslationService.ADDON_OVERLAY_CUE_CHUNK_CONFIG.maxParallelRequests)
+    }
+
+    @Test
     fun structuredRequestProviderRejectionFallsBackToPlainRequest() = runTest {
         val server = MockWebServer()
         server.start()
@@ -159,13 +169,73 @@ class SubtitleTranslationServiceProviderTest {
     }
 
     @Test
+    fun rateLimitProviderErrorRetriesWithBackoffBeforeSucceeding() = runTest {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(429)
+                .setHeader("Retry-After", "0")
+                .setBody("""{"error":{"message":"quota exceeded"}}""")
+        )
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(429)
+                .setHeader("Retry-After", "0")
+                .setBody("""{"error":{"message":"quota exceeded"}}""")
+        )
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "choices": [
+                        {
+                          "message": {
+                            "content": "{\"items\":[{\"id\":0,\"text\":\"Hallo\"}]}"
+                          }
+                        }
+                      ]
+                    }
+                    """.trimIndent()
+                )
+        )
+        server.start()
+        try {
+            val service = SubtitleTranslationService(
+                context = mockk<Context>(relaxed = true),
+                httpClient = OkHttpClient()
+            )
+
+            val result = service.translateCueTexts(
+                texts = listOf("Hello"),
+                targetLanguageCode = "nl",
+                settings = SubtitleTranslationSettings(
+                    provider = SubtitleTranslationProvider.OPENAI,
+                    apiKey = "test-key",
+                    model = "gpt-5-nano",
+                    baseUrl = server.url("/v1").toString()
+                )
+            )
+
+            assertEquals(mapOf("Hello" to "Hallo"), result.getOrThrow())
+            assertEquals(3, server.requestCount)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun authProviderErrorDoesNotSplitAdaptiveChunks() = runTest {
         assertProviderErrorDoesNotSplitAdaptiveChunks(statusCode = 401)
     }
 
     @Test
     fun rateLimitProviderErrorDoesNotSplitAdaptiveChunks() = runTest {
-        assertProviderErrorDoesNotSplitAdaptiveChunks(statusCode = 429)
+        assertProviderErrorDoesNotSplitAdaptiveChunks(
+            statusCode = 429,
+            expectedRequestCount = 4
+        )
     }
 
     @Test
@@ -250,20 +320,24 @@ class SubtitleTranslationServiceProviderTest {
 
             assertTrue(result.isFailure)
             assertTrue(
-                "Expected terminal failure to stop after the active batch, but saw ${server.requestCount} requests",
-                server.requestCount <= 3
+                "Expected terminal failure to stop after retrying one active chunk, but saw ${server.requestCount} requests",
+                server.requestCount <= 4
             )
         } finally {
             server.shutdown()
         }
     }
 
-    private suspend fun assertProviderErrorDoesNotSplitAdaptiveChunks(statusCode: Int) {
+    private suspend fun assertProviderErrorDoesNotSplitAdaptiveChunks(
+        statusCode: Int,
+        expectedRequestCount: Int = 1
+    ) {
         val server = MockWebServer()
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 return MockResponse()
                     .setResponseCode(statusCode)
+                    .setHeader("Retry-After", "0")
                     .setBody("""{"error":{"message":"provider rejected request"}}""")
             }
         }
@@ -292,7 +366,7 @@ class SubtitleTranslationServiceProviderTest {
             )
 
             assertTrue(result.isFailure)
-            assertEquals(1, server.requestCount)
+            assertEquals(expectedRequestCount, server.requestCount)
         } finally {
             server.shutdown()
         }
