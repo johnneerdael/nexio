@@ -861,7 +861,10 @@ class PlayerMediaSourceFactoryTest {
         )
         val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
 
-        assertTrue("urgent wait must not block loader for seconds", elapsedMs < 250L)
+        assertTrue(
+            "production cap is 50ms; allow CI/Robolectric scheduling tolerance up to 225ms, observed ${elapsedMs}ms",
+            elapsedMs <= 225L
+        )
     }
 
     @Test
