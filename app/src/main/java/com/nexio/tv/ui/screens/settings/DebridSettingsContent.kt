@@ -129,6 +129,8 @@ internal data class DebridUiState(
     val collectorDashboardAvailable: Boolean = false,
     val deterministicAutoplayEnabled: Boolean = false,
     val deterministicAutoplayAvailable: Boolean = false,
+    val autoplayMaxBitrateEnabled: Boolean = true,
+    val autoplayMaxBitrateMbps: Double? = null,
     val benchmarkResultDialog: DebridBenchmarkResultDialogUi? = null,
     val torBoxConnected: Boolean = false,
     val torBoxEmail: String? = null,
@@ -189,7 +191,18 @@ private data class DebridSettingsToggleSnapshot(
     val deterministicAutoplayAvailable: Boolean,
     val serviceWrapEnabled: Boolean,
     val shadowAutoplayDataCollectionEnabled: Boolean,
-    val debridBenchmarkDataCollectionEnabled: Boolean
+    val debridBenchmarkDataCollectionEnabled: Boolean,
+    val autoplayMaxBitrateEnabled: Boolean,
+    val autoplayMaxBitrateMbps: Double?
+)
+
+private data class DebridPlayerSettingsSnapshot(
+    val deterministicAutoplayEnabled: Boolean,
+    val serviceWrapEnabled: Boolean,
+    val shadowAutoplayDataCollectionEnabled: Boolean,
+    val debridBenchmarkDataCollectionEnabled: Boolean,
+    val autoplayMaxBitrateEnabled: Boolean,
+    val autoplayMaxBitrateMbps: Double?
 )
 
 private data class DebridUiBaseSnapshot(
@@ -330,6 +343,25 @@ internal fun DebridSettingsContent(
                         onToggle = {
                             viewModel.setDeterministicAutoplayEnabled(
                                 !uiState.deterministicAutoplayEnabled
+                            )
+                        }
+                    )
+                }
+
+                item(key = "debrid_autoplay_max_bitrate") {
+                    val cap = uiState.autoplayMaxBitrateMbps
+                    SettingsToggleRow(
+                        title = "Autoplay max bitrate",
+                        subtitle = if (cap != null) {
+                            "Limit autoplay to ${formatBenchmarkThroughput(cap)} from the latest benchmark. Re-run after changing transport settings."
+                        } else {
+                            "Run a provider benchmark after changing transport settings."
+                        },
+                        checked = uiState.autoplayMaxBitrateEnabled,
+                        enabled = cap != null,
+                        onToggle = {
+                            viewModel.setAutoplayMaxBitrateEnabled(
+                                !uiState.autoplayMaxBitrateEnabled
                             )
                         }
                     )
@@ -1313,17 +1345,19 @@ internal class DebridSettingsViewModel @Inject internal constructor(
             )
         }
 
-        val deterministicAutoplayEnabled = playerSettingsDataStore.playerSettings
-            .map { it.deterministicAutoplayEnabled }
+        val playerSettingsSnapshot = playerSettingsDataStore.playerSettings
+            .map {
+                DebridPlayerSettingsSnapshot(
+                    deterministicAutoplayEnabled = it.deterministicAutoplayEnabled,
+                    serviceWrapEnabled = it.serviceWrapEnabled,
+                    shadowAutoplayDataCollectionEnabled = it.shadowAutoplayDataCollectionEnabled,
+                    debridBenchmarkDataCollectionEnabled = it.debridBenchmarkDataCollectionEnabled,
+                    autoplayMaxBitrateEnabled = it.autoplayMaxBitrateEnabled,
+                    autoplayMaxBitrateMbps = it.autoplayMaxBitrateMbps
+                )
+            }
 
-        val shadowAutoplayDataCollectionEnabled = playerSettingsDataStore.playerSettings
-            .map { it.shadowAutoplayDataCollectionEnabled }
-
-        val debridBenchmarkDataCollectionEnabled = playerSettingsDataStore.playerSettings
-            .map { it.debridBenchmarkDataCollectionEnabled }
-
-        val serviceWrapEnabled = playerSettingsDataStore.playerSettings
-            .map { it.serviceWrapEnabled }
+        val serviceWrapEnabled = playerSettingsSnapshot.map { it.serviceWrapEnabled }
 
         val deterministicAutoplayAvailable = combine(
             debridBenchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID),
@@ -1374,18 +1408,17 @@ internal class DebridSettingsViewModel @Inject internal constructor(
             }
 
             val settingsState = combine(
-                deterministicAutoplayEnabled,
-                deterministicAutoplayAvailable,
-                serviceWrapEnabled,
-                shadowAutoplayDataCollectionEnabled,
-                debridBenchmarkDataCollectionEnabled
-            ) { deterministicEnabled, deterministicAvailable, serviceWrapEnabled, shadowCollectionEnabled, benchmarkCollectionEnabled ->
+                playerSettingsSnapshot,
+                deterministicAutoplayAvailable
+            ) { playerSettings, deterministicAvailable ->
                 DebridSettingsToggleSnapshot(
-                    deterministicAutoplayEnabled = deterministicEnabled,
+                    deterministicAutoplayEnabled = playerSettings.deterministicAutoplayEnabled,
                     deterministicAutoplayAvailable = deterministicAvailable,
-                    serviceWrapEnabled = serviceWrapEnabled,
-                    shadowAutoplayDataCollectionEnabled = shadowCollectionEnabled,
-                    debridBenchmarkDataCollectionEnabled = benchmarkCollectionEnabled
+                    serviceWrapEnabled = playerSettings.serviceWrapEnabled,
+                    shadowAutoplayDataCollectionEnabled = playerSettings.shadowAutoplayDataCollectionEnabled,
+                    debridBenchmarkDataCollectionEnabled = playerSettings.debridBenchmarkDataCollectionEnabled,
+                    autoplayMaxBitrateEnabled = playerSettings.autoplayMaxBitrateEnabled,
+                    autoplayMaxBitrateMbps = playerSettings.autoplayMaxBitrateMbps
                 )
             }
 
@@ -1438,6 +1471,8 @@ internal class DebridSettingsViewModel @Inject internal constructor(
                     collectorDashboardAvailable = collectorDashboard.collectorDashboardAvailable,
                     deterministicAutoplayEnabled = settings.deterministicAutoplayEnabled,
                     deterministicAutoplayAvailable = settings.deterministicAutoplayAvailable,
+                    autoplayMaxBitrateEnabled = settings.autoplayMaxBitrateEnabled,
+                    autoplayMaxBitrateMbps = settings.autoplayMaxBitrateMbps,
                     benchmarkResultDialog = dialogs.benchmarkResultDialog,
                     torBoxConnected = base.connection.torBoxConnected,
                     torBoxEmail = base.connection.torBoxEmail,
@@ -1624,6 +1659,12 @@ internal class DebridSettingsViewModel @Inject internal constructor(
         viewModelScope.launch {
             if (enabled && !uiState.value.deterministicAutoplayAvailable) return@launch
             playerSettingsDataStore.setDeterministicAutoplayEnabled(enabled)
+        }
+    }
+
+    fun setAutoplayMaxBitrateEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            playerSettingsDataStore.setAutoplayMaxBitrateEnabled(enabled)
         }
     }
 

@@ -1,6 +1,7 @@
 package com.nexio.tv.data.repository.benchmark
 
 import com.nexio.tv.data.local.DebridBenchmarkStore
+import com.nexio.tv.data.local.PlayerSettingsDataStore
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -93,6 +94,53 @@ class DebridBenchmarkServiceTest {
         }
         verify(exactly = 1) {
             logger().logCompleted(completedResult)
+        }
+    }
+
+    @Test
+    fun `service persists autoplay max bitrate from completed benchmark safe budget`() = runTest {
+        val summary = DebridBenchmarkSummary(
+            startupTimeMs = 4_000L,
+            sustainedThroughputMbps = 123.5,
+            transferredBytes = 600.mb,
+            elapsedMs = 130.seconds
+        )
+        val completedResult = DebridBenchmarkResult(
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            measuredAtMs = 42_000L,
+            summary = summary,
+            terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
+            optimized = DebridBenchmarkTransportProfile(
+                startup = DebridBenchmarkStartupMetrics(),
+                sustained = DebridBenchmarkSustainedMetrics(actionable = true),
+                seek = DebridBenchmarkSeekMetrics(),
+                decision = DebridBenchmarkTransportDecisionMetrics(
+                    safeSustainedBudgetMbps = 60.0,
+                    actionable = true
+                )
+            )
+        )
+        val service = buildService(
+            runSession = { _, _, _ ->
+                DebridBenchmarkSessionResult(
+                    summary = summary,
+                    terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
+                    result = completedResult
+                )
+            },
+            scope = backgroundScope
+        )
+        val persisted = CompletableDeferred<Unit>()
+
+        coEvery { playerSettingsStore().setAutoplayMaxBitrate(any()) } answers {
+            persisted.complete(Unit)
+        }
+
+        assertTrue(service.start(DebridBenchmarkProvider.REAL_DEBRID))
+        persisted.await()
+
+        coVerify(exactly = 1) {
+            playerSettingsStore().setAutoplayMaxBitrate(54.0)
         }
     }
 
@@ -268,6 +316,7 @@ class DebridBenchmarkServiceTest {
     private lateinit var benchmarkSessionRunner: DebridBenchmarkSessionRunner
     private lateinit var benchmarkCollectionUploader: DebridBenchmarkCollectionUploader
     private lateinit var benchmarkResultJsonLogger: BenchmarkResultJsonLogger
+    private lateinit var playerSettingsDataStore: PlayerSettingsDataStore
 
     private fun buildService(
         runSession: suspend (DebridBenchmarkProvider, DebridBenchmarkCandidate, DebridBenchmarkObserver) -> DebridBenchmarkSessionResult,
@@ -280,6 +329,7 @@ class DebridBenchmarkServiceTest {
         benchmarkSessionRunner = mockk()
         benchmarkCollectionUploader = mockk(relaxed = true)
         benchmarkResultJsonLogger = mockk(relaxed = true)
+        playerSettingsDataStore = mockk(relaxed = true)
 
         coEvery { resolver.resolve(any()) } answers {
             resolveCandidate(firstArg())
@@ -295,6 +345,7 @@ class DebridBenchmarkServiceTest {
             sessionRunner = benchmarkSessionRunner,
             collectionUploader = benchmarkCollectionUploader,
             benchmarkResultJsonLogger = benchmarkResultJsonLogger,
+            playerSettingsDataStore = playerSettingsDataStore,
             scope = scope,
             nowMs = System::currentTimeMillis,
             executionGate = DebridBenchmarkExecutionGate()
@@ -304,6 +355,7 @@ class DebridBenchmarkServiceTest {
     private fun store(): DebridBenchmarkStore = benchmarkStore
     private fun uploader(): DebridBenchmarkCollectionUploader = benchmarkCollectionUploader
     private fun logger(): BenchmarkResultJsonLogger = benchmarkResultJsonLogger
+    private fun playerSettingsStore(): PlayerSettingsDataStore = playerSettingsDataStore
 
     private fun candidate(provider: DebridBenchmarkProvider): DebridBenchmarkCandidate {
         return DebridBenchmarkCandidate(

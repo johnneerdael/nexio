@@ -4,6 +4,7 @@ package com.nexio.tv.ui.screens.player
 
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -209,6 +210,72 @@ internal class PlayerMediaSourceFactory(
             okHttpFactory = okHttpFactory,
             baseDataSourceFactory = baseDataSourceFactory
         )
+    }
+
+    internal fun createBenchmarkProgressiveDataSourceFactory(
+        url: String,
+        headers: Map<String, String>,
+        parallelConnectionsEnabled: Boolean,
+        parallelConnectionCount: Int,
+        parallelChunkSizeMb: Int,
+        vodCacheEnabled: Boolean,
+        allowStartupBootstrapReuse: Boolean,
+        transportSampleTimeMs: () -> Long,
+        onTransportBytesDownloaded: (Long, Long) -> Unit
+    ): DataSource.Factory {
+        val sanitizedHeaders = sanitizeHeaders(headers)
+        val okHttpFactory = createOkHttpDataSourceFactory(sanitizedHeaders)
+        val baseDataSourceFactory = DefaultDataSource.Factory(context, okHttpFactory)
+        val resolvedMimeType = inferMimeType(
+            url = url,
+            filename = url.substringBefore('?').substringAfterLast('/', "").takeIf { it.isNotBlank() },
+            responseHeaders = null
+        )
+        val isHls = resolvedMimeType == MimeTypes.APPLICATION_M3U8
+        val isDash = resolvedMimeType == MimeTypes.APPLICATION_MPD
+        val progressiveUpstreamFactory = selectProgressiveUpstreamFactory(
+            url = url,
+            isHls = isHls,
+            isDash = isDash,
+            okHttpFactory = okHttpFactory,
+            baseDataSourceFactory = baseDataSourceFactory,
+            parallelConnectionsEnabled = parallelConnectionsEnabled,
+            fallbackParallelConnectionCount = parallelConnectionCount,
+            fallbackParallelChunkSizeMb = parallelChunkSizeMb,
+            allowStartupBootstrapReuse = allowStartupBootstrapReuse,
+            transportSampleTimeMs = transportSampleTimeMs,
+            onTransportBytesDownloaded = onTransportBytesDownloaded
+        )
+        val useVodCache = ENABLE_VOD_CACHE &&
+            vodCacheEnabled &&
+            !isHls &&
+            !isDash &&
+            shouldUseVodCache(url)
+        if (!useVodCache || isVodCacheDisabled) {
+            return progressiveUpstreamFactory
+        }
+
+        val vodCacheMaxBytes = resolveVodCacheMaxBytes(context)
+        maybeApplyLiveVodCacheCapIncrease(
+            context = context,
+            requestedMaxBytes = vodCacheMaxBytes,
+            allowLiveReconfigure = true
+        )
+        val cache = getReadySimpleCache(vodCacheMaxBytes)
+            ?: getAnySimpleCache()
+            ?: runCatching {
+                startVodCacheInitialization(context, vodCacheMaxBytes)
+                getOrCreateSimpleCache(context, vodCacheMaxBytes)
+            }.getOrElse { error ->
+                isVodCacheDisabled = true
+                Log.e(TAG, "Disabling VOD cache for benchmark after initialization failure", error)
+                null
+            }
+        return if (cache != null) {
+            buildVodCacheDataSourceFactory(progressiveUpstreamFactory, cache)
+        } else {
+            progressiveUpstreamFactory
+        }
     }
 
     fun shutdown() {
@@ -476,19 +543,31 @@ internal class PlayerMediaSourceFactory(
         isHls: Boolean,
         isDash: Boolean,
         okHttpFactory: OkHttpDataSource.Factory,
-        baseDataSourceFactory: DataSource.Factory
+        baseDataSourceFactory: DataSource.Factory,
+        parallelConnectionsEnabled: Boolean = useParallelConnections,
+        fallbackParallelConnectionCount: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
+        fallbackParallelChunkSizeMb: Int = SAFE_DEFAULT_PARALLEL_CHUNK_SIZE_MB,
+        allowStartupBootstrapReuse: Boolean = true,
+        transportSampleTimeMs: () -> Long = { SystemClock.elapsedRealtime() },
+        onTransportBytesDownloaded: (Long, Long) -> Unit = { _, _ -> }
     ): DataSource.Factory {
-        parallelStartupPrefetchUnlocked.set(!(useParallelConnections && !isHls && !isDash))
+        parallelStartupPrefetchUnlocked.set(!(parallelConnectionsEnabled && !isHls && !isDash))
         activeReadBytePosition.set(0L)
         return when {
             !usesHttpUpstream(url) -> baseDataSourceFactory
-            useParallelConnections && !isHls && !isDash -> {
-                val parallelProfile = resolveParallelProviderProfile(url)
+            parallelConnectionsEnabled && !isHls && !isDash -> {
+                val parallelProfile = resolveParallelProviderProfile(
+                    url = url,
+                    fallbackConnectionCount = fallbackParallelConnectionCount,
+                    fallbackChunkSizeMb = fallbackParallelChunkSizeMb
+                )
                 ParallelRangeDataSource.Factory(
                     okHttpFactory,
                     parallelProfile.connectionCount,
                     parallelProfile.chunkSizeMb.toLong() * 1024L * 1024L,
                     shouldAllowBackgroundPrefetch = { parallelStartupPrefetchUnlocked.get() },
+                    transportSampleTimeMs = transportSampleTimeMs,
+                    onTransportBytesDownloaded = onTransportBytesDownloaded,
                     onResolvedUri = { resolved ->
                         currentVodCacheResolvedUrl = resolved?.toString()
                     },
@@ -496,7 +575,8 @@ internal class PlayerMediaSourceFactory(
                         activeReadBytePosition.accumulateAndGet(position) { current, next ->
                             if (next > current) next else current
                         }
-                    }
+                    },
+                    allowStartupBootstrapReuse = allowStartupBootstrapReuse
                 )
             }
             else -> okHttpFactory
@@ -513,7 +593,11 @@ internal class PlayerMediaSourceFactory(
         val chunkSizeMb: Int
     )
 
-    private fun resolveParallelProviderProfile(url: String): ParallelProviderProfile {
+    private fun resolveParallelProviderProfile(
+        url: String,
+        fallbackConnectionCount: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
+        fallbackChunkSizeMb: Int = SAFE_DEFAULT_PARALLEL_CHUNK_SIZE_MB
+    ): ParallelProviderProfile {
         val host = runCatching { Uri.parse(url).host.orEmpty().lowercase(Locale.US) }
             .getOrDefault("")
         return when {
@@ -531,8 +615,14 @@ internal class PlayerMediaSourceFactory(
                 chunkSizeMb = 24
             )
             else -> ParallelProviderProfile(
-                connectionCount = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
-                chunkSizeMb = SAFE_DEFAULT_PARALLEL_CHUNK_SIZE_MB
+                connectionCount = fallbackConnectionCount.coerceIn(
+                    PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT,
+                    PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT
+                ),
+                chunkSizeMb = fallbackChunkSizeMb.coerceIn(
+                    PlayerSettings.MIN_PARALLEL_CHUNK_SIZE_MB,
+                    PlayerSettings.MAX_PARALLEL_CHUNK_SIZE_MB
+                )
             )
         }
     }
