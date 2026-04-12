@@ -330,24 +330,6 @@ internal fun DebridSettingsContent(
                     )
                 }
 
-                item(key = "debrid_deterministic_autoplay") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.debrid_deterministic_autoplay_title),
-                        subtitle = if (uiState.deterministicAutoplayAvailable) {
-                            "Skip stream selection and auto-play the best benchmark-aware match"
-                        } else {
-                            "Requires Service Wrap enabled and at least one completed debrid benchmark"
-                        },
-                        checked = uiState.deterministicAutoplayEnabled,
-                        enabled = uiState.deterministicAutoplayAvailable,
-                        onToggle = {
-                            viewModel.setDeterministicAutoplayEnabled(
-                                !uiState.deterministicAutoplayEnabled
-                            )
-                        }
-                    )
-                }
-
                 item(key = "debrid_autoplay_max_bitrate") {
                     val cap = uiState.autoplayMaxBitrateMbps
                     SettingsToggleRow(
