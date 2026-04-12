@@ -40,6 +40,11 @@ internal fun defaultSubtitleTranslationSettings(
             model = SubtitleTranslationDefaults.GEMINI_MODEL,
             baseUrl = SubtitleTranslationDefaults.GEMINI_BASE_URL
         )
+        SubtitleTranslationProvider.DASHSCOPE -> SubtitleTranslationSettings(
+            provider = provider,
+            model = SubtitleTranslationDefaults.DASHSCOPE_MODEL,
+            baseUrl = SubtitleTranslationDefaults.DASHSCOPE_BASE_URL
+        )
     }
 }
 

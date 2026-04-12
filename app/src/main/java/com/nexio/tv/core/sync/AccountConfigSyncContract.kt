@@ -207,7 +207,8 @@ internal fun buildAccountConfigSyncPayload(
         schemaVersion = ACCOUNT_CONFIG_SYNC_CONTRACT_VERSION,
         integrations = integrations.copy(
             gemini = integrations.gemini.copy(
-                enabled = integrations.subtitleTranslation.enabled
+                enabled = integrations.subtitleTranslation.enabled &&
+                    integrations.subtitleTranslation.provider.equals("GEMINI", ignoreCase = true)
             )
         ),
         catalogs = CatalogSyncSettings(

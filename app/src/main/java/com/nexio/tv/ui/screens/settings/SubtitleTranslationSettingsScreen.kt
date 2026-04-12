@@ -52,7 +52,8 @@ import com.nexio.tv.ui.theme.NexioColors
 private val providerOptions = listOf(
     SubtitleTranslationProvider.OPENAI to "OpenAI-compatible",
     SubtitleTranslationProvider.ANTHROPIC to "Anthropic-compatible",
-    SubtitleTranslationProvider.GEMINI to "Google Gemini"
+    SubtitleTranslationProvider.GEMINI to "Google Gemini",
+    SubtitleTranslationProvider.DASHSCOPE to "Alibaba DashScope (Qwen-MT)"
 )
 
 private enum class SubtitleTranslationSettingsDialog {

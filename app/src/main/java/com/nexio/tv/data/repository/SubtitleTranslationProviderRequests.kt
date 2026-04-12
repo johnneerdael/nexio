@@ -11,6 +11,7 @@ import org.json.JSONObject
 
 private const val ANTHROPIC_VERSION = "2023-06-01"
 private const val OPENAI_NATIVE_BASE_URL = "https://api.openai.com/v1"
+private const val DASHSCOPE_GENERATION_PATH = "/services/aigc/text-generation/generation"
 
 internal fun providerEndpoint(settings: SubtitleTranslationSettings): String {
     val rawRoot = settings.baseUrl.trim().trimEnd('/').ifBlank {
@@ -18,6 +19,7 @@ internal fun providerEndpoint(settings: SubtitleTranslationSettings): String {
             SubtitleTranslationProvider.OPENAI -> SubtitleTranslationDefaults.OPENAI_BASE_URL
             SubtitleTranslationProvider.ANTHROPIC -> SubtitleTranslationDefaults.ANTHROPIC_BASE_URL
             SubtitleTranslationProvider.GEMINI -> SubtitleTranslationDefaults.GEMINI_BASE_URL
+            SubtitleTranslationProvider.DASHSCOPE -> SubtitleTranslationDefaults.DASHSCOPE_BASE_URL
         }
     }
     return when (settings.provider) {
@@ -35,6 +37,8 @@ internal fun providerEndpoint(settings: SubtitleTranslationSettings): String {
             } else {
                 "$rawRoot/models/${settings.model}:generateContent"
             }
+        SubtitleTranslationProvider.DASHSCOPE ->
+            if (rawRoot.endsWith(DASHSCOPE_GENERATION_PATH)) rawRoot else "$rawRoot$DASHSCOPE_GENERATION_PATH"
     }
 }
 
@@ -98,6 +102,33 @@ internal fun buildAnthropicMessagesRequest(
     return body
 }
 
+internal fun buildDashScopeGenerationRequest(
+    settings: SubtitleTranslationSettings,
+    markerPayload: String,
+    sourceLanguage: String,
+    targetLanguage: String
+): JSONObject {
+    val message = JSONObject()
+    message.put("role", "user")
+    message.put("content", markerPayload)
+
+    val messages = JSONArray()
+    messages.put(message)
+
+    val translationOptions = JSONObject()
+    translationOptions.put("source_lang", sourceLanguage)
+    translationOptions.put("target_lang", targetLanguage)
+
+    val parameters = JSONObject()
+    parameters.put("result_format", "message")
+    parameters.put("translation_options", translationOptions)
+
+    return JSONObject()
+        .put("model", settings.model)
+        .put("input", JSONObject().put("messages", messages))
+        .put("parameters", parameters)
+}
+
 internal fun openAiRequest(endpoint: String, apiKey: String, body: JSONObject): Request {
     return Request.Builder()
         .url(endpoint)
@@ -112,6 +143,15 @@ internal fun anthropicRequest(endpoint: String, apiKey: String, body: JSONObject
         .url(endpoint)
         .header("x-api-key", apiKey.trim())
         .header("anthropic-version", ANTHROPIC_VERSION)
+        .header("Content-Type", "application/json")
+        .post(body.toString().toRequestBody("application/json".toMediaType()))
+        .build()
+}
+
+internal fun dashScopeRequest(endpoint: String, apiKey: String, body: JSONObject): Request {
+    return Request.Builder()
+        .url(endpoint)
+        .header("Authorization", "Bearer ${apiKey.trim()}")
         .header("Content-Type", "application/json")
         .post(body.toString().toRequestBody("application/json".toMediaType()))
         .build()
@@ -135,6 +175,17 @@ internal fun parseAnthropicResponseText(raw: String): String? {
         if (text != null) return text
     }
     return null
+}
+
+internal fun parseDashScopeResponseText(raw: String): String? {
+    val payload = JSONObject(raw)
+    return payload.optJSONObject("output")
+        ?.optJSONArray("choices")
+        ?.optJSONObject(0)
+        ?.optJSONObject("message")
+        ?.optString("content")
+        ?.let(::sanitizeJsonResponse)
+        ?.takeIf(String::isNotBlank)
 }
 
 internal fun sanitizeJsonResponse(text: String): String {
