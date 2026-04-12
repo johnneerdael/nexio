@@ -68,6 +68,13 @@ internal class PlayerMediaSourceFactory(
                 stopVodWarmAhead()
             }
         }
+    var vodCacheWarmAheadEnabled: Boolean = PlayerSettings.DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED
+        set(value) {
+            field = value
+            if (!value) {
+                stopVodWarmAhead()
+            }
+        }
     var vodCacheSizeMb: Int = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB
 
     fun configureSubtitleParsing(
@@ -111,7 +118,17 @@ internal class PlayerMediaSourceFactory(
         currentVodCacheResolvedUrl = null
         currentVodCacheActive = false
         currentProgressiveUpstreamFactory = progressiveUpstreamFactory
-        currentProgressiveIsEligibleForWarmAhead = useVodCache
+        currentProgressiveIsEligibleForWarmAhead = VodWarmAheadPolicy.shouldStartWarmAhead(
+            useVodCache = useVodCache,
+            warmAheadEnabled = vodCacheWarmAheadEnabled
+        )
+        if (useVodCache) {
+            Log.d(
+                TAG,
+                "VOD warm-ahead policy enabled=$currentProgressiveIsEligibleForWarmAhead " +
+                    "setting=$vodCacheWarmAheadEnabled writeThroughEnabled=true"
+            )
+        }
         val vodCacheMaxBytes = resolveVodCacheMaxBytes(context)
         if (useVodCache && !isVodCacheDisabled) {
             maybeApplyLiveVodCacheCapIncrease(
@@ -382,7 +399,10 @@ internal class PlayerMediaSourceFactory(
         while (!prefetchStop.get() && !Thread.currentThread().isInterrupted) {
             val liveUrl = currentVodCacheResolvedUrl ?: currentVodCacheUrl ?: streamUrl
             val prefetchUri = runCatching { Uri.parse(liveUrl) }.getOrElse { Uri.parse(streamUrl) }
-            val cacheKey = prefetchUri.toString()
+            val cacheKey = VodWarmAheadPolicy.warmAheadCacheKey(
+                playbackStreamUrl = streamUrl,
+                resolvedRequestUrl = liveUrl
+            )
             val cachedFrontier = contiguousCachedPrefix(cache, cacheKey, effectiveCapBytes)
             if (cachedFrontier > activeReadBytePosition.get()) {
                 activeReadBytePosition.set(cachedFrontier)
@@ -425,6 +445,7 @@ internal class PlayerMediaSourceFactory(
 
             val dataSpec = DataSpec.Builder()
                 .setUri(prefetchUri)
+                .setKey(cacheKey)
                 .setPosition(holeStart)
                 .setLength(writeLength)
                 .build()
