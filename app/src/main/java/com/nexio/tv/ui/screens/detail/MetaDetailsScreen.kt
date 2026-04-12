@@ -1547,16 +1547,15 @@ private fun MetaDetailsContent(
             )
         ) {
             try {
-                repeat(3) {
-                    if (initialHeroFocusRequested) return@repeat
-                    logFocusState("autoResetFocusToHero attempt=${it + 1}/3")
+                delay(300)
+                if (!initialHeroFocusRequested) {
+                    logFocusState("autoResetFocusToHero fallback")
                     resetFocusToHero(
                         focusManager = focusManager,
                         listState = listState,
                         heroPlayFocusRequester = heroPlayFocusRequester,
-                        reason = "initial_detail_entry"
+                        reason = "initial_detail_entry_fallback"
                     )
-                    delay(80)
                 }
             } finally {
                 logFocusState("autoResetFocusToHero finished")
@@ -1688,6 +1687,13 @@ private fun MetaDetailsContent(
                 isTrailerPlaying = isTrailerPlaying,
                 playButtonFocusRequester = heroPlayFocusRequester,
                 downFocusRequester = heroDownFocusRequester,
+                requestInitialFocus = shouldAutoResetFocusToHero(
+                    initialHeroFocusRequested = initialHeroFocusRequested,
+                    hasPendingRestoreTarget = pendingRestoreType != null,
+                    hasPendingRestoreEpisodeId = pendingRestoreEpisodeId != null,
+                    isTrailerPlaying = isTrailerPlaying,
+                    isTrailerLoading = isTrailerLoading
+                ),
                 onMoveDownRequested = heroMoveDownRequest,
                 onHeroActionFocused = { action ->
                     logFocusState("heroActionFocused action=$action")

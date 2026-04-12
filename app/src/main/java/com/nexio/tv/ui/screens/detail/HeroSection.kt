@@ -88,6 +88,7 @@ internal fun HeroContentSection(
     isTrailerPlaying: Boolean = false,
     playButtonFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
+    requestInitialFocus: Boolean = false,
     restorePlayFocusToken: Int = 0,
     onMoveDownRequested: (() -> Unit)? = null,
     onHeroActionFocused: (HeroAction) -> Unit = {},
@@ -208,6 +209,7 @@ internal fun HeroContentSection(
                         directions = resolveHeroActionDirections(HeroAction.PLAY, heroActionOrder),
                         actionRequesters = heroActionRequesters,
                         downFocusRequester = downFocusRequester,
+                        requestInitialFocus = requestInitialFocus,
                         restoreFocusToken = restorePlayFocusToken,
                         onMoveDownRequested = onMoveDownRequested,
                         onFocused = onHeroActionFocused,
@@ -322,6 +324,7 @@ private fun PlayButton(
     directions: HeroActionDirections,
     actionRequesters: Map<HeroAction, FocusRequester>,
     downFocusRequester: FocusRequester? = null,
+    requestInitialFocus: Boolean = false,
     restoreFocusToken: Int = 0,
     onMoveDownRequested: (() -> Unit)? = null,
     onFocused: (HeroAction) -> Unit = {},
@@ -335,6 +338,13 @@ private fun PlayButton(
             focusRequester.requestFocusAfterFrames(reason = "play_button_restore_token=$restoreFocusToken")
         }
     }
+
+    LaunchedEffect(requestInitialFocus, focusRequester) {
+        if (requestInitialFocus) {
+            focusRequester.requestFocusAfterFrames(reason = "initial_detail_focus")
+        }
+    }
+
     val context = LocalContext.current
     val playPainter = rememberRawSvgPainter(
         context = context,
