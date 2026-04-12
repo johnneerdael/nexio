@@ -317,6 +317,24 @@ class CoverageAwareDataSourceTest {
         assertEquals(0L, StreamingMetrics.coordinatorWaitTimeouts.get())
     }
 
+    @Test
+    fun metrics_countFallbackSegmentOpensAndBytes() {
+        StreamingMetrics.reset()
+        val uri = Uri.parse("https://example.com/movie.mkv")
+        val spec = DataSpec.Builder().setUri(uri).setPosition(0L).setLength(4L).build()
+        val source = dataSource(
+            upstream = FakeDataSource(byteArrayOf(1, 2, 3, 4), AtomicInteger(0)),
+            startup = true
+        )
+
+        source.open(spec)
+        source.close()
+
+        val snapshot = StreamingMetrics.snapshot()
+        assertEquals(1L, snapshot.getValue("coverage_fallback_segment_opens"))
+        assertEquals(4L, snapshot.getValue("coverage_fallback_bytes_requested"))
+    }
+
     private fun dataSource(
         cacheKeyFactory: CacheKeyFactory = this.cacheKeyFactory,
         coordinator: StreamingCacheMissCoordinator = StreamingCacheMissCoordinator(StreamingRangeCoordinator()),

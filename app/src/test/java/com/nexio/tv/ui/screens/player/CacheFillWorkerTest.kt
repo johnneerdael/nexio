@@ -510,6 +510,28 @@ class CacheFillWorkerTest {
     }
 
     @Test
+    fun metrics_countFillChunkStarts() {
+        StreamingMetrics.reset()
+        val data = ByteArray(64) { it.toByte() }
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(206)
+                .setHeader("Content-Range", "bytes 0-63/64")
+                .setBody(BufferFactory.body(data))
+        )
+        val worker = worker(cacheKey = "movie-fill-metrics")
+
+        worker.downloadChunkToCache(
+            url = server.url("/movie").toString(),
+            headers = emptyMap(),
+            start = 0L,
+            end = data.size.toLong()
+        )
+
+        assertEquals(1L, StreamingMetrics.snapshot().getValue("fill_worker_chunk_starts"))
+    }
+
+    @Test
     fun pendingReplacementStart_survivesPauseResumeAndSeek() {
         val chunkBytes = 64L
         val firstRequestEntered = CountDownLatch(1)
