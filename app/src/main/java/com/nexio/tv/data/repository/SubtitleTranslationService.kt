@@ -37,9 +37,10 @@ private const val MAX_RETRY_DELAY_MS = 8_000L
 internal fun subtitleTranslationCueCacheKey(
     text: String,
     targetLanguageCode: String,
-    settings: SubtitleTranslationSettings
+    settings: SubtitleTranslationSettings,
+    sourceLanguageCode: String? = null
 ): String {
-    return sha256("cue|${settings.provider}|${settings.model}|${settings.baseUrl}|$targetLanguageCode|$text")
+    return sha256("cue|${settings.provider}|${settings.model}|${settings.baseUrl}|${sourceLanguageCode.orEmpty()}|$targetLanguageCode|$text")
 }
 
 internal fun translatedSubtitleId(
@@ -137,6 +138,7 @@ class SubtitleTranslationService @Inject constructor(
     suspend fun translateSubtitle(
         sourceSubtitle: Subtitle,
         targetLanguageCode: String,
+        sourceLanguageCode: String? = sourceSubtitle.lang,
         settings: SubtitleTranslationSettings
     ): Result<TranslatedSubtitleAsset> = withContext(Dispatchers.IO) {
         runCatching {
@@ -165,6 +167,7 @@ class SubtitleTranslationService @Inject constructor(
                 val translatedBlocks = translateBlocks(
                     blocks = document.translatableBlocks,
                     targetLanguageCode = normalizedTarget,
+                    sourceLanguageCode = sourceLanguageCode,
                     settings = normalizedSettings
                 )
                 translatedFile.parentFile?.mkdirs()
@@ -209,6 +212,7 @@ class SubtitleTranslationService @Inject constructor(
         return translateSubtitle(
             sourceSubtitle = sourceSubtitle,
             targetLanguageCode = targetLanguageCode,
+            sourceLanguageCode = sourceSubtitle.lang,
             settings = geminiCompatibilitySettings(apiKey)
         )
     }
@@ -216,6 +220,7 @@ class SubtitleTranslationService @Inject constructor(
     suspend fun translateCueTexts(
         texts: List<String>,
         targetLanguageCode: String,
+        sourceLanguageCode: String? = null,
         settings: SubtitleTranslationSettings,
         chunkConfig: SubtitleTranslationChunkConfig = DEFAULT_CUE_CHUNK_CONFIG
     ): Result<Map<String, String>> = withContext(Dispatchers.IO) {
@@ -226,6 +231,7 @@ class SubtitleTranslationService @Inject constructor(
             val normalizedSettings = settings.copy(
                 apiKey = settings.apiKey.trim()
             )
+            val normalizedSource = normalizeSourceLanguageCode(sourceLanguageCode)
             if (normalizedSettings.apiKey.isBlank()) {
                 throw IllegalArgumentException("Subtitle translation API key is missing.")
             }
@@ -240,7 +246,7 @@ class SubtitleTranslationService @Inject constructor(
             val resolved = mutableMapOf<String, String>()
             val missing = mutableListOf<String>()
             for (text in normalizedTexts) {
-                val cached = cueTranslationCache[subtitleTranslationCueCacheKey(text, normalizedTarget, normalizedSettings)]
+                val cached = cueTranslationCache[subtitleTranslationCueCacheKey(text, normalizedTarget, normalizedSettings, normalizedSource)]
                 if (cached != null) {
                     resolved[text] = cached
                 } else {
@@ -252,11 +258,12 @@ class SubtitleTranslationService @Inject constructor(
                 val translated = translateMissingCueTexts(
                     texts = missing,
                     targetLanguageCode = normalizedTarget,
+                    sourceLanguageCode = normalizedSource,
                     settings = normalizedSettings,
                     chunkConfig = chunkConfig
                 )
                 translated.forEach { (source, value) ->
-                    cueTranslationCache[subtitleTranslationCueCacheKey(source, normalizedTarget, normalizedSettings)] = value
+                    cueTranslationCache[subtitleTranslationCueCacheKey(source, normalizedTarget, normalizedSettings, normalizedSource)] = value
                     resolved[source] = value
                 }
             }
@@ -274,6 +281,7 @@ class SubtitleTranslationService @Inject constructor(
         return translateCueTexts(
             texts = texts,
             targetLanguageCode = targetLanguageCode,
+            sourceLanguageCode = null,
             settings = geminiCompatibilitySettings(apiKey),
             chunkConfig = chunkConfig
         )
@@ -308,16 +316,19 @@ class SubtitleTranslationService @Inject constructor(
     private suspend fun translateBlocks(
         blocks: List<TranslatableTimedTextBlock>,
         targetLanguageCode: String,
+        sourceLanguageCode: String?,
         settings: SubtitleTranslationSettings,
         chunkConfig: SubtitleTranslationChunkConfig = DEFAULT_CUE_CHUNK_CONFIG
     ): Map<Int, String> = coroutineScope {
         val chunks = chunkBlocks(blocks, chunkConfig)
         val targetLanguageName = displayLanguage(targetLanguageCode)
+        val sourceLanguageName = displaySourceLanguage(sourceLanguageCode)
 
         translateChunksFailFast(
             chunks = chunks,
             targetLanguageCode = targetLanguageCode,
             targetLanguageName = targetLanguageName,
+            sourceLanguageName = sourceLanguageName,
             settings = settings,
             chunkConfig = chunkConfig
         )
@@ -327,6 +338,7 @@ class SubtitleTranslationService @Inject constructor(
         chunks: List<List<TranslatableTimedTextBlock>>,
         targetLanguageCode: String,
         targetLanguageName: String,
+        sourceLanguageName: String,
         settings: SubtitleTranslationSettings,
         chunkConfig: SubtitleTranslationChunkConfig
     ): Map<Int, String> = coroutineScope {
@@ -340,6 +352,7 @@ class SubtitleTranslationService @Inject constructor(
                         blocks = chunk,
                         targetLanguageCode = targetLanguageCode,
                         targetLanguageName = targetLanguageName,
+                        sourceLanguageName = sourceLanguageName,
                         settings = settings,
                         chunkConfig = chunkConfig
                     )
@@ -381,6 +394,7 @@ class SubtitleTranslationService @Inject constructor(
         blocks: List<TranslatableTimedTextBlock>,
         targetLanguageCode: String,
         targetLanguageName: String,
+        sourceLanguageName: String,
         settings: SubtitleTranslationSettings,
         chunkConfig: SubtitleTranslationChunkConfig
     ): Map<Int, String> {
@@ -389,6 +403,7 @@ class SubtitleTranslationService @Inject constructor(
                 blocks = blocks,
                 targetLanguageCode = targetLanguageCode,
                 targetLanguageName = targetLanguageName,
+                sourceLanguageName = sourceLanguageName,
                 settings = settings
             )
         }.getOrElse { error ->
@@ -403,12 +418,14 @@ class SubtitleTranslationService @Inject constructor(
                 blocks = blocks.take(midpoint),
                 targetLanguageCode = targetLanguageCode,
                 targetLanguageName = targetLanguageName,
+                sourceLanguageName = sourceLanguageName,
                 settings = settings,
                 chunkConfig = chunkConfig
             ) + requestChunkTranslationAdaptive(
                 blocks = blocks.drop(midpoint),
                 targetLanguageCode = targetLanguageCode,
                 targetLanguageName = targetLanguageName,
+                sourceLanguageName = sourceLanguageName,
                 settings = settings,
                 chunkConfig = chunkConfig
             )
@@ -419,8 +436,27 @@ class SubtitleTranslationService @Inject constructor(
         blocks: List<TranslatableTimedTextBlock>,
         targetLanguageCode: String,
         targetLanguageName: String,
+        sourceLanguageName: String,
         settings: SubtitleTranslationSettings
     ): Map<Int, String> {
+        if (settings.provider == SubtitleTranslationProvider.DASHSCOPE) {
+            val responseText = executeTranslationRequest(
+                promptPayload = buildPromptPayload(
+                    blocks = blocks,
+                    targetLanguageCode = targetLanguageCode,
+                    targetLanguageName = targetLanguageName
+                ),
+                targetLanguageCode = targetLanguageCode,
+                targetLanguageName = targetLanguageName,
+                sourceLanguageName = sourceLanguageName,
+                markerPayload = buildDashScopeMarkerPayload(blocks),
+                settings = settings,
+                includeSchema = false
+            ) ?: throw IllegalStateException("Subtitle translation provider did not return a translation payload.")
+
+            return parseDashScopeMarkerResponse(responseText, blocks)
+        }
+
         val promptPayload = buildPromptPayload(
             blocks = blocks,
             targetLanguageCode = targetLanguageCode,
@@ -431,6 +467,8 @@ class SubtitleTranslationService @Inject constructor(
             promptPayload = promptPayload,
             targetLanguageCode = targetLanguageCode,
             targetLanguageName = targetLanguageName,
+            sourceLanguageName = sourceLanguageName,
+            markerPayload = null,
             settings = settings,
             includeSchema = true
         )
@@ -438,6 +476,8 @@ class SubtitleTranslationService @Inject constructor(
                 promptPayload = promptPayload,
                 targetLanguageCode = targetLanguageCode,
                 targetLanguageName = targetLanguageName,
+                sourceLanguageName = sourceLanguageName,
+                markerPayload = null,
                 settings = settings,
                 includeSchema = false
             )
@@ -449,10 +489,12 @@ class SubtitleTranslationService @Inject constructor(
     private suspend fun translateMissingCueTexts(
         texts: List<String>,
         targetLanguageCode: String,
+        sourceLanguageCode: String?,
         settings: SubtitleTranslationSettings,
         chunkConfig: SubtitleTranslationChunkConfig
     ): Map<String, String> = coroutineScope {
         val targetLanguageName = displayLanguage(targetLanguageCode)
+        val sourceLanguageName = displaySourceLanguage(sourceLanguageCode)
         val blocks = texts.mapIndexed { index, text ->
             TranslatableTimedTextBlock(
                 blockId = index,
@@ -465,6 +507,7 @@ class SubtitleTranslationService @Inject constructor(
             chunks = chunks,
             targetLanguageCode = targetLanguageCode,
             targetLanguageName = targetLanguageName,
+            sourceLanguageName = sourceLanguageName,
             settings = settings,
             chunkConfig = chunkConfig
         )
@@ -512,6 +555,14 @@ class SubtitleTranslationService @Inject constructor(
             append("). ")
             append("Return JSON only. Keep the same ids. ")
             append("Preserve subtitle brevity, punctuation, markup, speaker labels, and internal line breaks when possible.")
+        }
+    }
+
+    private fun buildDashScopeMarkerPayload(
+        blocks: List<TranslatableTimedTextBlock>
+    ): String {
+        return blocks.joinToString("\n") { block ->
+            "[[${block.blockId}]] ${block.text}"
         }
     }
 
@@ -579,6 +630,8 @@ class SubtitleTranslationService @Inject constructor(
         promptPayload: JSONObject,
         targetLanguageCode: String,
         targetLanguageName: String,
+        sourceLanguageName: String,
+        markerPayload: String?,
         settings: SubtitleTranslationSettings,
         includeSchema: Boolean
     ): String? {
@@ -613,6 +666,16 @@ class SubtitleTranslationService @Inject constructor(
                     includeSchema = includeSchema
                 )
             )
+            SubtitleTranslationProvider.DASHSCOPE -> dashScopeRequest(
+                endpoint = endpoint,
+                apiKey = settings.apiKey,
+                body = buildDashScopeGenerationRequest(
+                    settings = settings,
+                    markerPayload = markerPayload ?: promptPayload.toString(),
+                    sourceLanguage = sourceLanguageName,
+                    targetLanguage = targetLanguageName
+                )
+            )
         }
 
         var attempt = 1
@@ -642,6 +705,7 @@ class SubtitleTranslationService @Inject constructor(
                     SubtitleTranslationProvider.OPENAI -> parseOpenAiResponseText(raw)
                     SubtitleTranslationProvider.ANTHROPIC -> parseAnthropicResponseText(raw)
                     SubtitleTranslationProvider.GEMINI -> parseGeminiResponseText(raw)
+                    SubtitleTranslationProvider.DASHSCOPE -> parseDashScopeResponseText(raw)
                 }
             }
         }
@@ -778,6 +842,33 @@ class SubtitleTranslationService @Inject constructor(
         }
     }
 
+    private fun parseDashScopeMarkerResponse(
+        responseText: String,
+        blocks: List<TranslatableTimedTextBlock>
+    ): Map<Int, String> {
+        val trimmed = sanitizeJsonResponse(responseText).trim()
+        if (trimmed.isBlank()) {
+            throw IllegalStateException("Subtitle translation provider returned an empty translation payload.")
+        }
+        if (blocks.size == 1 && !trimmed.contains("[[")) {
+            return mapOf(blocks.first().blockId to trimmed)
+        }
+
+        val parsed = Regex("""(?s)\[\[(\d+)]]\s*(.*?)(?=\n\[\[\d+]]|\z)""")
+            .findAll(trimmed)
+            .mapNotNull { match ->
+                val id = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
+                val text = match.groupValues[2].trim()
+                if (text.isBlank()) null else id to text
+            }
+            .toMap()
+        val expectedIds = blocks.map { it.blockId }.toSet()
+        if (!parsed.keys.containsAll(expectedIds)) {
+            throw IllegalStateException("Subtitle translation provider returned an incomplete translation payload.")
+        }
+        return parsed.filterKeys { it in expectedIds }
+    }
+
     private fun geminiCompatibilitySettings(apiKey: String): SubtitleTranslationSettings {
         return SubtitleTranslationSettings(
             provider = SubtitleTranslationProvider.GEMINI,
@@ -791,6 +882,22 @@ class SubtitleTranslationService @Inject constructor(
         val locale = Locale.forLanguageTag(code)
         val name = locale.getDisplayLanguage(Locale.ENGLISH)
         return if (name.isNullOrBlank()) code else name
+    }
+
+    private fun displaySourceLanguage(code: String?): String {
+        val normalized = normalizeSourceLanguageCode(code)
+        if (normalized.isBlank() || normalized == "auto" || normalized == "und" || normalized == "unknown") {
+            return "auto"
+        }
+        return displayLanguage(normalized)
+    }
+
+    private fun normalizeSourceLanguageCode(code: String?): String {
+        return code
+            ?.trim()
+            ?.lowercase(Locale.US)
+            ?.replace('_', '-')
+            .orEmpty()
     }
 
 }

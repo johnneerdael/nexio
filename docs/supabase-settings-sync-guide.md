@@ -13,3 +13,5 @@ Contract v7 prevents stale full-payload overwrites by using optimistic concurren
 - Older contract versions keep using `sync_push_account_settings` and are not affected by v7.
 
 This makes Supabase the source of truth for the newest accepted server revision. It rejects stale overlapping writes instead of letting a delayed client overwrite newer settings.
+
+Subtitle translation providers share one secret slot: `translation_api_key` at `integration:subtitle-translation`. DashScope/Qwen-MT uses that generic secret just like OpenAI-compatible, Anthropic-compatible, and Gemini translation providers; provider selection lives in `integrations.subtitleTranslation.provider`.
