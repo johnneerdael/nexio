@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -29,6 +30,8 @@ class DebugSettingsDataStore @Inject constructor(
     private val syncCodeFeaturesEnabledKey = booleanPreferencesKey("sync_code_features_enabled")
     private val streamDiagnosticsEnabledKey = booleanPreferencesKey("stream_diagnostics_enabled")
     private val streamingCacheEnabledKey = booleanPreferencesKey("streaming_cache_enabled")
+    private val streamingCacheManualEnableTimestampMsKey =
+        longPreferencesKey("streaming_cache_manual_enable_timestamp_ms")
     private val startupPerfTelemetryEnabledKey = booleanPreferencesKey("startup_perf_telemetry_enabled")
     private val diskFirstHomeStartupEnabledKey = booleanPreferencesKey("disk_first_home_startup_enabled")
     private val diskFirstHomeStartupDefaultAppliedKey =
@@ -62,6 +65,10 @@ class DebugSettingsDataStore @Inject constructor(
         prefs[streamingCacheEnabledKey] ?: false
     }
 
+    val streamingCacheManualEnableTimestampMs: Flow<Long> = dataStore.data.map { prefs ->
+        prefs[streamingCacheManualEnableTimestampMsKey] ?: 0L
+    }
+
     val startupPerfTelemetryEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[startupPerfTelemetryEnabledKey] ?: false
     }
@@ -91,6 +98,9 @@ class DebugSettingsDataStore @Inject constructor(
     suspend fun setStreamingCacheEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[streamingCacheEnabledKey] = enabled
+            if (enabled) {
+                prefs[streamingCacheManualEnableTimestampMsKey] = System.currentTimeMillis()
+            }
         }
     }
 
