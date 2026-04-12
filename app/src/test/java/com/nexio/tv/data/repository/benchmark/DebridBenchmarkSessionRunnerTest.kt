@@ -8,7 +8,7 @@ import org.junit.Test
 class DebridBenchmarkSessionRunnerTest {
 
     @Test
-    fun `transport config snapshot records current player transport settings`() {
+    fun `transport config snapshot records current player transport settings without vod cache`() {
         val snapshot = PlayerSettings(
             vodCacheSizeMode = VodCacheSizeMode.ON,
             useParallelConnections = true,
@@ -18,7 +18,7 @@ class DebridBenchmarkSessionRunnerTest {
 
         assertEquals(true, snapshot.parallelConnectionsEnabled)
         assertEquals(4, snapshot.parallelConnectionCount)
-        assertEquals(true, snapshot.vodCacheEnabled)
+        assertEquals(false, snapshot.vodCacheEnabled)
         assertEquals(32, snapshot.parallelChunkSizeMb)
     }
 }
