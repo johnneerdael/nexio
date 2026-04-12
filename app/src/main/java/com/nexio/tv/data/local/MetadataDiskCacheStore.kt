@@ -257,6 +257,7 @@ class MetadataDiskCacheStore @Inject constructor(
     }
 
     fun removeMetaEntriesForItem(itemKey: String): List<String> {
+        flushPendingWrites()
         val removedImageUrls = mutableListOf<String>()
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -282,6 +283,7 @@ class MetadataDiskCacheStore @Inject constructor(
 
     fun removeMetaEntriesNotIn(activeItemKeys: Set<String>, maxEntries: Int = 400): List<String> {
         if (activeItemKeys.isEmpty()) return emptyList()
+        flushPendingWrites()
         val removedImageUrls = mutableListOf<String>()
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -360,6 +362,7 @@ class MetadataDiskCacheStore @Inject constructor(
     }
 
     fun removeHomeUnreferencedMetaEntries(maxEntries: Int = 400): List<String> {
+        flushPendingWrites()
         val activeItemKeys = readHomeReferencedItemKeys()
         val removedImageUrls = mutableListOf<String>()
         runCatching {
@@ -391,6 +394,7 @@ class MetadataDiskCacheStore @Inject constructor(
     }
 
     fun removeEntriesFromStaleEpochs(maxEntries: Int = 800): List<String> {
+        flushPendingWrites()
         val currentEpoch = currentLanguageEpoch()
         val removedImageUrls = mutableListOf<String>()
         runCatching {
