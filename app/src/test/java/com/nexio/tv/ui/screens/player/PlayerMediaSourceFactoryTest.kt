@@ -96,6 +96,34 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun warmAheadCacheKey_usesPlaybackUrlInsteadOfResolvedUrl() {
+        assertEquals(
+            "https://real-debrid.com/d/ABC/movie.mkv",
+            VodWarmAheadPolicy.warmAheadCacheKey(
+                playbackStreamUrl = "https://real-debrid.com/d/ABC/movie.mkv",
+                resolvedRequestUrl = "https://cdn.example.net/edge/movie.mkv"
+            )
+        )
+    }
+
+    @Test
+    fun progressivePlaybackStillUsesParallelRangeDatasourceWhenWarmAheadIsDisabled() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        ).apply {
+            vodCacheWarmAheadEnabled = false
+        }
+
+        val dataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video.mkv",
+            headers = emptyMap()
+        )
+
+        assertTrue(dataSourceFactory is ParallelRangeDataSource.Factory)
+    }
+
+    @Test
     fun benchmarkProgressiveFactory_usesParallelRangeDatasourceWhenEnabled() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
