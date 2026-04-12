@@ -15,6 +15,7 @@ import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.SubtitleOrganizationMode
 import com.nexio.tv.data.local.TrailerSettings
 import com.nexio.tv.data.local.TrailerSettingsDataStore
+import com.nexio.tv.data.local.VodCacheSizeMode
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.data.repository.TrackingProviderState
@@ -285,6 +286,22 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun resetBufferSettingsToDefaults() {
         playerSettingsDataStore.resetBufferSettingsToDefaults()
+    }
+
+    suspend fun setVodCacheSizeMode(mode: VodCacheSizeMode) {
+        playerSettingsDataStore.setVodCacheSizeMode(mode)
+    }
+
+    suspend fun setVodCacheSizeMb(mb: Int) {
+        playerSettingsDataStore.setVodCacheSizeMb(mb)
+    }
+
+    suspend fun setUseParallelConnections(enabled: Boolean) {
+        playerSettingsDataStore.setUseParallelConnections(enabled)
+    }
+
+    suspend fun resetNetworkSettingsToDefaults() {
+        playerSettingsDataStore.resetNetworkSettingsToDefaults()
     }
 
     suspend fun setStreamAutoPlayMode(mode: StreamAutoPlayMode) {

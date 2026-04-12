@@ -40,10 +40,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -140,20 +137,12 @@ class PlayerRuntimeController(
     fun getCurrentStreamUrl(): String = currentStreamUrl
     fun getCurrentHeaders(): Map<String, String> = currentHeaders
 
-    internal fun maybeStartStreamingCacheFillForCurrentStream() {
-        mediaSourceFactory.startStreamingCacheFill(
-            url = currentStreamUrl,
-            headers = currentHeaders,
-            contentLength = currentVideoSize,
-            playbackByteProvider = { streamingCachePlaybackBytePosition.get() }
-        )
-    }
-
     fun stopAndRelease() {
         beginPlayerExit()
         endDisplayModeSessionForExit()
         Dv5HardwareToneMapRpuTap.setEnabledForPlayback(enabled = false, streamUrl = currentStreamUrl)
         releasePlayer()
+        mediaSourceFactory.clearVodCache()
     }
 
     internal var currentVideoId: String? = videoId
@@ -237,7 +226,6 @@ class PlayerRuntimeController(
     internal var nextEpisodeAutoPlayJob: Job? = null
     internal var sourceStreamsJob: Job? = null
     internal var sourceChipErrorDismissJob: Job? = null
-    internal var streamingCacheFlagJob: Job? = null
     internal var aiSubtitleTranslationJob: Job? = null
     internal var builtInAiSubtitleTranslationJob: Job? = null
     internal var addonSubtitleOverlayJob: Job? = null
@@ -249,7 +237,6 @@ class PlayerRuntimeController(
     internal var lastSavedPosition: Long = 0L
     internal val saveThresholdMs = 5000L 
     internal var lastKnownDuration: Long = 0L
-    internal val streamingCachePlaybackBytePosition = AtomicLong(0L)
 
     
     internal var hasRenderedFirstFrame = false
@@ -383,6 +370,7 @@ class PlayerRuntimeController(
     init {
         playbackIdleGateState.onPlayerSessionStarted()
         refreshScrobbleItem()
+        mediaSourceFactory.warmupVodCacheAsync()
         if (!navigationArgs.startFromBeginning) {
             loadSavedProgressFor(currentSeason, currentEpisode)
         }
@@ -390,26 +378,6 @@ class PlayerRuntimeController(
         observeSubtitleSettings()
         observeGeminiSettings()
         observeTheIntroDbSettings()
-        streamingCacheFlagJob = scope.launch {
-            debugSettingsDataStore.streamingCacheEnabled
-                .combine(debugSettingsDataStore.streamingCacheManualEnableTimestampMs) { enabled, manualEnableTimestampMs ->
-                    enabled to manualEnableTimestampMs
-                }
-                .collect { (enabled, manualEnableTimestampMs) ->
-                    val decision = StreamingCacheKillSwitch.evaluate(
-                        context = context,
-                        requested = enabled,
-                        manualEnableTimestampMs = manualEnableTimestampMs
-                    )
-                    mediaSourceFactory.streamingCacheEnabled = decision.enabled
-                    if (!decision.enabled) {
-                        mediaSourceFactory.stopStreamingCacheFill()
-                    }
-                    if (enabled && decision.blockedByKillSwitch) {
-                        debugSettingsDataStore.setStreamingCacheEnabled(false)
-                    }
-                }
-        }
         fetchMetaDetails(contentId, contentType)
         observeBlurUnwatchedEpisodes()
         observeEpisodeWatchProgress()
@@ -422,8 +390,6 @@ class PlayerRuntimeController(
         releasePlayer()
         vodTelemetryJob?.cancel()
         mediaSourceFactory.shutdown()
-        streamingCacheFlagJob?.cancel()
-        streamingCacheFlagJob = null
         sourceChipErrorDismissJob?.cancel()
     }
 
@@ -449,29 +415,4 @@ class PlayerRuntimeController(
             com.nexio.tv.core.player.FrameRateUtils.clearOriginalDisplayMode()
         }
     }
-}
-
-internal fun PlayerRuntimeController.estimateBufferedBytePosition(): Long {
-    val player = _exoPlayer ?: return 0L
-    val size = currentVideoSize ?: return 0L
-    val duration = player.duration
-    if (duration <= 0L || duration == C.TIME_UNSET) return 0L
-    val bufferedMs = player.bufferedPosition.coerceAtLeast(player.currentPosition)
-    return (size * bufferedMs / duration).coerceIn(0L, size)
-}
-
-internal fun PlayerRuntimeController.updateStreamingCachePlaybackBytePosition(
-    positionMs: Long,
-    durationMs: Long
-) {
-    val size = currentVideoSize ?: run {
-        streamingCachePlaybackBytePosition.set(0L)
-        return
-    }
-    if (durationMs <= 0L || durationMs == C.TIME_UNSET) {
-        streamingCachePlaybackBytePosition.set(0L)
-        return
-    }
-    val bytePosition = (size * positionMs.coerceAtLeast(0L) / durationMs).coerceIn(0L, size)
-    streamingCachePlaybackBytePosition.set(bytePosition)
 }

@@ -8,6 +8,7 @@ import coil.memory.MemoryCache
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import com.nexio.tv.core.sync.StartupSyncService
+import com.nexio.tv.ui.screens.player.ObsoletePlaybackCacheCleanup
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +28,7 @@ class NexioApplication : Application(), ImageLoaderFactory {
             Python.start(AndroidPlatform(this))
         }
         appScope.launch {
+            ObsoletePlaybackCacheCleanup.cleanup(cacheDir)
             runPosterCacheCleanup()
         }
     }
