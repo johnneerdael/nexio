@@ -202,6 +202,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             mediaSourceFactory.useParallelConnections = playerSettings.useParallelConnections
             mediaSourceFactory.parallelConnectionCount = playerSettings.parallelConnectionCount
             mediaSourceFactory.parallelChunkSizeMb = playerSettings.parallelChunkSizeMb
+            mediaSourceFactory.vodCacheSizeMode = playerSettings.vodCacheSizeMode
+            mediaSourceFactory.vodCacheSizeMb = playerSettings.vodCacheSizeMb
             if (kodiCustomAudioSinkEnabled) {
                 safeAudioForcedStreamUrls.remove(url)
                 audioDisabledForcedStreamUrls.remove(url)
@@ -702,6 +704,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                                     "host=${currentStreamUrl.safeHost()}"
                             )
                         }
+                        mediaSourceFactory.notifyPlaybackFirstFrameRendered()
                         hasRenderedFirstFrame = true
                         _uiState.update { it.copy(showLoadingOverlay = false) }
                     }

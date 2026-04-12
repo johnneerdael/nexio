@@ -255,6 +255,8 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
             nextEpisodeThresholdModeSetting = settings.nextEpisodeThresholdMode
             nextEpisodeThresholdPercentSetting = settings.nextEpisodeThresholdPercent
             nextEpisodeThresholdMinutesBeforeEndSetting = settings.nextEpisodeThresholdMinutesBeforeEnd
+            mediaSourceFactory.vodCacheSizeMode = settings.vodCacheSizeMode
+            mediaSourceFactory.vodCacheSizeMb = settings.vodCacheSizeMb
             applySubtitlePreferences(
                 settings.subtitleStyle.preferredLanguage,
                 settings.subtitleStyle.secondaryPreferredLanguage

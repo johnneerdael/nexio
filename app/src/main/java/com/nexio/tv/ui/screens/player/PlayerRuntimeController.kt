@@ -142,6 +142,7 @@ class PlayerRuntimeController(
         endDisplayModeSessionForExit()
         Dv5HardwareToneMapRpuTap.setEnabledForPlayback(enabled = false, streamUrl = currentStreamUrl)
         releasePlayer()
+        mediaSourceFactory.clearVodCache()
     }
 
     internal var currentVideoId: String? = videoId
@@ -369,6 +370,7 @@ class PlayerRuntimeController(
     init {
         playbackIdleGateState.onPlayerSessionStarted()
         refreshScrobbleItem()
+        mediaSourceFactory.warmupVodCacheAsync()
         if (!navigationArgs.startFromBeginning) {
             loadSavedProgressFor(currentSeason, currentEpisode)
         }
