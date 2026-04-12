@@ -212,6 +212,31 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `startup push gate blocks pushes until current user has pulled remote settings`() {
+        val gate = AccountConfigStartupPushGate()
+
+        gate.onSessionUserChanged("user-a")
+
+        assertFalse(gate.canPush("user-a"))
+
+        gate.markRemotePullSucceeded("user-a")
+
+        assertTrue(gate.canPush("user-a"))
+    }
+
+    @Test
+    fun `startup push gate resets when sync user changes`() {
+        val gate = AccountConfigStartupPushGate()
+
+        gate.onSessionUserChanged("user-a")
+        gate.markRemotePullSucceeded("user-a")
+        gate.onSessionUserChanged("user-b")
+
+        assertFalse(gate.canPush("user-a"))
+        assertFalse(gate.canPush("user-b"))
+    }
+
+    @Test
     fun `buildImdbSyncSettings reads from the imdb store`() = runTest {
         val imdbSettingsDataStore = mockk<ImdbSettingsDataStore>()
         every { imdbSettingsDataStore.settings } returns flowOf(

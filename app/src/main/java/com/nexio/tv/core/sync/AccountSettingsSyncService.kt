@@ -189,6 +189,7 @@ class AccountSettingsSyncService @Inject constructor(
 
     @Volatile
     private var isApplyingRemote = false
+    private val startupPushGate = AccountConfigStartupPushGate()
 
     init {
         observeLocalChanges()
@@ -242,13 +243,28 @@ class AccountSettingsSyncService @Inject constructor(
 
     private fun schedulePush() {
         if (isApplyingRemote) return
-        if (!authManager.hasSyncSession) return
+        val userId = authManager.currentSessionUserId ?: return
+        if (!startupPushGate.canPush(userId)) {
+            Log.d(TAG, "Skipping account settings push before startup remote pull completes")
+            return
+        }
 
         pushJob?.cancel()
         pushJob = scope.launch {
             delay(500)
             pushToRemote()
         }
+    }
+
+    fun onStartupSyncUserChanged(userId: String?) {
+        if (startupPushGate.onSessionUserChanged(userId)) {
+            pushJob?.cancel()
+            pushJob = null
+        }
+    }
+
+    fun markStartupRemotePullSucceeded(userId: String) {
+        startupPushGate.markRemotePullSucceeded(userId)
     }
 
     private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {

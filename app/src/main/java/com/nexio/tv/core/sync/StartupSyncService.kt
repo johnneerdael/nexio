@@ -35,6 +35,7 @@ class StartupSyncService @Inject constructor(
     init {
         scope.launch {
             authManager.sessionUserId.collect { userId ->
+                accountSettingsSyncService.onStartupSyncUserChanged(userId)
                 if (userId != null) {
                     val force = forceSyncRequested
                     val firstAuthForUser = lastAuthenticatedUserId != userId
@@ -88,6 +89,7 @@ class StartupSyncService @Inject constructor(
                 val result = pullRemoteSnapshot()
                 if (result.isSuccess) {
                     lastPulledKey = key
+                    accountSettingsSyncService.markStartupRemotePullSucceeded(userId)
                     syncCompleted = true
                     return@launch
                 }

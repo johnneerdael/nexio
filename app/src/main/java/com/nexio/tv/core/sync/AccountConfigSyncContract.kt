@@ -98,6 +98,32 @@ internal fun observeAccountConfigSyncChanges(
     )
 }
 
+internal class AccountConfigStartupPushGate {
+    private val lock = Any()
+    private var sessionUserId: String? = null
+    private var remotePulledUserId: String? = null
+
+    fun onSessionUserChanged(userId: String?): Boolean = synchronized(lock) {
+        val changed = sessionUserId != userId
+        if (changed) {
+            sessionUserId = userId
+            remotePulledUserId = null
+        }
+        changed
+    }
+
+    fun markRemotePullSucceeded(userId: String) {
+        synchronized(lock) {
+            sessionUserId = userId
+            remotePulledUserId = userId
+        }
+    }
+
+    fun canPush(userId: String?): Boolean = synchronized(lock) {
+        userId != null && userId == sessionUserId && userId == remotePulledUserId
+    }
+}
+
 internal fun buildAccountConfigSyncPayload(
     integrations: IntegrationSettings,
     heroCatalogKeys: List<String>,
