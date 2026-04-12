@@ -865,6 +865,8 @@
     <string name="debug_sync_code_subtitle">Show Generate/Enter Sync Code buttons in Account settings</string>
     <string name="debug_streaming_cache_title">Streaming Cache</string>
     <string name="debug_streaming_cache_subtitle">Developer-only: enable read-only Media3 cache path for playback validation</string>
+    <string name="debug_streaming_cache_mode_title">Streaming Cache Mode</string>
+    <string name="debug_streaming_cache_mode_subtitle">Current diagnostic mode: %1$s</string>
     <string name="debug_section_account">Account</string>
     <string name="debug_section_transport_validation">Passthrough Transport Validation</string>
     <string name="debug_transport_validation_enabled_title">Validation Enabled</string>

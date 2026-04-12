@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
+import com.nexio.tv.data.local.StreamingCacheDebugMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,6 +42,11 @@ class DebugSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            dataStore.streamingCacheDebugMode.collectLatest { mode ->
+                _uiState.update { it.copy(streamingCacheDebugMode = mode) }
+            }
+        }
+        viewModelScope.launch {
             playerSettingsDataStore.playerSettings.collectLatest { settings ->
                 _uiState.update {
                     it.copy(
@@ -65,6 +71,13 @@ class DebugSettingsViewModel @Inject constructor(
             }
             is DebugSettingsEvent.ToggleStreamingCache -> {
                 viewModelScope.launch { dataStore.setStreamingCacheEnabled(event.enabled) }
+            }
+            is DebugSettingsEvent.CycleStreamingCacheDebugMode -> {
+                viewModelScope.launch {
+                    dataStore.setStreamingCacheDebugMode(
+                        _uiState.value.streamingCacheDebugMode.next()
+                    )
+                }
             }
             is DebugSettingsEvent.SignIn -> {
                 viewModelScope.launch {
@@ -111,6 +124,8 @@ data class DebugSettingsUiState(
     val accountTabEnabled: Boolean = false,
     val syncCodeFeaturesEnabled: Boolean = false,
     val streamingCacheEnabled: Boolean = false,
+    val streamingCacheDebugMode: StreamingCacheDebugMode =
+        StreamingCacheDebugMode.PHASE4_COVERAGE_WITH_FILL,
     val dv5ToneMapToSdrEnabled: Boolean = false,
     val dv5HardwareToneMapToSdrEnabled: Boolean = false,
     val dv5HardwareToneMapCpuFallbackEnabled: Boolean = false,
@@ -122,6 +137,7 @@ sealed class DebugSettingsEvent {
     data class ToggleAccountTab(val enabled: Boolean) : DebugSettingsEvent()
     data class ToggleSyncCodeFeatures(val enabled: Boolean) : DebugSettingsEvent()
     data class ToggleStreamingCache(val enabled: Boolean) : DebugSettingsEvent()
+    data object CycleStreamingCacheDebugMode : DebugSettingsEvent()
     data class ToggleDv5ToneMapToSdr(val enabled: Boolean) : DebugSettingsEvent()
     data class ToggleDv5HardwareToneMapToSdr(val enabled: Boolean) : DebugSettingsEvent()
     data class ToggleDv5HardwareToneMapCpuFallback(val enabled: Boolean) : DebugSettingsEvent()
