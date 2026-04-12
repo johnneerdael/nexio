@@ -21,8 +21,15 @@ import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.data.repository.TrackingProviderState
 import com.nexio.tv.data.repository.TrackingProviderStateRepository
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
+import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
+import com.nexio.tv.data.repository.benchmark.hasValidAutoplayBenchmarkFor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
@@ -34,6 +41,7 @@ class PlaybackSettingsViewModel @Inject constructor(
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val addonRepository: AddonRepository,
+    private val debridBenchmarkService: DebridBenchmarkService,
     trackingProviderStateRepository: TrackingProviderStateRepository
 ) : ViewModel() {
 
@@ -42,6 +50,20 @@ class PlaybackSettingsViewModel @Inject constructor(
     val streamDiagnosticsEnabled: Flow<Boolean> = debugSettingsDataStore.streamDiagnosticsEnabled
     val startupPerfTelemetryEnabled: Flow<Boolean> = debugSettingsDataStore.startupPerfTelemetryEnabled
     val trackingProviderSelectorState: Flow<TrackingProviderSelectorState> = trackingProviderStateRepository.state
+    private val latestBenchmarkResults: Flow<List<DebridBenchmarkResult>> = combine(
+        debridBenchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID),
+        debridBenchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE),
+        debridBenchmarkService.latestResult(DebridBenchmarkProvider.TORBOX),
+        debridBenchmarkService.latestResult(DebridBenchmarkProvider.EASY_DEBRID)
+    ) { realDebrid, premiumize, torBox, easyDebrid ->
+        listOfNotNull(realDebrid, premiumize, torBox, easyDebrid)
+    }
+    val autoplayBenchmarkAvailable: Flow<Boolean> = combine(
+        playerSettings,
+        latestBenchmarkResults
+    ) { settings, benchmarkResults ->
+        benchmarkResults.any { it.hasValidAutoplayBenchmarkFor(settings) }
+    }.distinctUntilChanged()
     val installedAddonNames: Flow<List<String>> = addonRepository.getInstalledAddons().map { addons ->
         addons
             .filter { addon ->
@@ -334,11 +356,34 @@ class PlaybackSettingsViewModel @Inject constructor(
     }
 
     suspend fun setAutoplayBandwidthMode(mode: AutoplayBandwidthMode) {
-        playerSettingsDataStore.setAutoplayBandwidthMode(mode)
+        val targetMode = if (mode == AutoplayBandwidthMode.AUTO && !currentAutoplayBenchmarkAvailable()) {
+            AutoplayBandwidthMode.MANUAL
+        } else {
+            mode
+        }
+        playerSettingsDataStore.setAutoplayBandwidthMode(targetMode)
     }
 
     suspend fun setManualBitrateLimitMbps(mbps: Double) {
         playerSettingsDataStore.setManualBitrateLimitMbps(mbps)
+    }
+
+    suspend fun setDeterministicAutoplayEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setDeterministicAutoplayEnabled(enabled)
+    }
+
+    private suspend fun currentAutoplayBenchmarkAvailable(): Boolean {
+        val settings = playerSettings.first()
+        return listOf(
+            DebridBenchmarkProvider.REAL_DEBRID,
+            DebridBenchmarkProvider.PREMIUMIZE,
+            DebridBenchmarkProvider.TORBOX,
+            DebridBenchmarkProvider.EASY_DEBRID
+        ).any { provider ->
+            debridBenchmarkService.latestResult(provider)
+                .first()
+                ?.hasValidAutoplayBenchmarkFor(settings) == true
+        }
     }
 
     suspend fun setNextEpisodeThresholdMode(mode: NextEpisodeThresholdMode) {

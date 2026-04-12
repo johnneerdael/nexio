@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository.benchmark
 
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
+import com.nexio.tv.data.local.VodCacheSizeMode
 import java.net.URI
 import java.security.MessageDigest
 import javax.inject.Inject
@@ -144,7 +145,7 @@ internal fun PlayerSettings.toBenchmarkTransportConfigSnapshot(): DebridBenchmar
     return DebridBenchmarkTransportConfigSnapshot(
         parallelConnectionsEnabled = useParallelConnections,
         parallelConnectionCount = parallelConnectionCount,
-        vodCacheEnabled = false,
+        vodCacheEnabled = vodCacheSizeMode == VodCacheSizeMode.ON,
         parallelChunkSizeMb = parallelChunkSizeMb
     )
 }

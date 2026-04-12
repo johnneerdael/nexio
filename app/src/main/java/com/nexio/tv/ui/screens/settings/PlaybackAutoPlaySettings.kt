@@ -51,9 +51,11 @@ import java.util.Locale
 
 internal fun LazyListScope.autoPlaySettingsItems(
     playerSettings: PlayerSettings,
+    autoplayBenchmarkAvailable: Boolean,
     onShowAutoplayBandwidthModeDialog: () -> Unit,
     onShowNextEpisodeThresholdModeDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
+    onSetDeterministicAutoplayEnabled: (Boolean) -> Unit,
     onSetManualBitrateLimitMbps: (Double) -> Unit,
     onSetStreamAutoPlayNextEpisodeEnabled: (Boolean) -> Unit,
     onSetStreamAutoPlayPreferBingeGroupForNextEpisode: (Boolean) -> Unit,
@@ -68,8 +70,29 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetFilterMovieYearMismatchStreamsEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {}
 ) {
+    val effectiveBandwidthMode = playerSettings.effectiveAutoplayBandwidthMode(autoplayBenchmarkAvailable)
+    val deterministicAutoplayAvailable =
+        playerSettings.serviceWrapEnabled &&
+            (effectiveBandwidthMode == AutoplayBandwidthMode.MANUAL || autoplayBenchmarkAvailable)
+
+    item(key = "autoplay_deterministic") {
+        ToggleSettingsItem(
+            icon = Icons.Default.Tune,
+            title = stringResource(R.string.autoplay_deterministic_title),
+            subtitle = if (deterministicAutoplayAvailable) {
+                stringResource(R.string.autoplay_deterministic_sub)
+            } else {
+                stringResource(R.string.autoplay_deterministic_unavailable_sub)
+            },
+            isChecked = playerSettings.deterministicAutoplayEnabled,
+            onCheckedChange = onSetDeterministicAutoplayEnabled,
+            enabled = deterministicAutoplayAvailable,
+            onFocused = onItemFocused
+        )
+    }
+
     item(key = "autoplay_bandwidth_mode") {
-        val modeSubtitle = when (playerSettings.autoplayBandwidthMode) {
+        val modeSubtitle = when (effectiveBandwidthMode) {
             AutoplayBandwidthMode.AUTO -> stringResource(R.string.autoplay_bandwidth_mode_auto)
             AutoplayBandwidthMode.MANUAL -> stringResource(R.string.autoplay_bandwidth_mode_manual)
         }
@@ -82,7 +105,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
         )
     }
 
-    if (playerSettings.autoplayBandwidthMode == AutoplayBandwidthMode.MANUAL) {
+    if (effectiveBandwidthMode == AutoplayBandwidthMode.MANUAL) {
         item(key = "autoplay_manual_bitrate_limit") {
             val sliderValue = (playerSettings.manualBitrateLimitMbps / 5.0).roundToInt()
             SliderSettingsItem(
@@ -252,6 +275,7 @@ internal fun AutoPlaySettingsDialogs(
     showNextEpisodeThresholdModeDialog: Boolean,
     showReuseLastLinkCacheDialog: Boolean,
     playerSettings: PlayerSettings,
+    autoplayBenchmarkAvailable: Boolean,
     installedAddonNames: List<String>,
     onSetAutoplayBandwidthMode: (AutoplayBandwidthMode) -> Unit,
     onSetNextEpisodeThresholdMode: (NextEpisodeThresholdMode) -> Unit,
@@ -262,7 +286,8 @@ internal fun AutoPlaySettingsDialogs(
 ) {
     if (showAutoplayBandwidthModeDialog) {
         AutoplayBandwidthModeDialog(
-            selectedMode = playerSettings.autoplayBandwidthMode,
+            selectedMode = playerSettings.effectiveAutoplayBandwidthMode(autoplayBenchmarkAvailable),
+            autoplayBenchmarkAvailable = autoplayBenchmarkAvailable,
             onModeSelected = {
                 onSetAutoplayBandwidthMode(it)
                 onDismissAutoplayBandwidthModeDialog()
@@ -297,6 +322,7 @@ internal fun AutoPlaySettingsDialogs(
 @Composable
 private fun AutoplayBandwidthModeDialog(
     selectedMode: AutoplayBandwidthMode,
+    autoplayBenchmarkAvailable: Boolean,
     onModeSelected: (AutoplayBandwidthMode) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -339,9 +365,15 @@ private fun AutoplayBandwidthModeDialog(
                 ) { index ->
                     val (mode, title, description) = options[index]
                     val isSelected = mode == selectedMode
+                    val isEnabled = mode != AutoplayBandwidthMode.AUTO || autoplayBenchmarkAvailable
+                    val optionDescription = if (mode == AutoplayBandwidthMode.AUTO && !autoplayBenchmarkAvailable) {
+                        stringResource(R.string.autoplay_bandwidth_mode_auto_unavailable_desc)
+                    } else {
+                        description
+                    }
 
                     Card(
-                        onClick = { onModeSelected(mode) },
+                        onClick = { if (isEnabled) onModeSelected(mode) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
@@ -361,12 +393,16 @@ private fun AutoplayBandwidthModeDialog(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = title,
-                                    color = if (isSelected) NexioColors.Primary else NexioColors.TextPrimary,
+                                    color = when {
+                                        !isEnabled -> NexioColors.TextSecondary
+                                        isSelected -> NexioColors.Primary
+                                        else -> NexioColors.TextPrimary
+                                    },
                                     style = MaterialTheme.typography.bodyLarge
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = description,
+                                    text = optionDescription,
                                     color = NexioColors.TextSecondary,
                                     style = MaterialTheme.typography.bodySmall
                                 )
@@ -479,6 +515,16 @@ private fun NextEpisodeThresholdModeDialog(
                 }
             }
         }
+    }
+}
+
+private fun PlayerSettings.effectiveAutoplayBandwidthMode(
+    autoplayBenchmarkAvailable: Boolean
+): AutoplayBandwidthMode {
+    return if (autoplayBandwidthMode == AutoplayBandwidthMode.AUTO && !autoplayBenchmarkAvailable) {
+        AutoplayBandwidthMode.MANUAL
+    } else {
+        autoplayBandwidthMode
     }
 }
 

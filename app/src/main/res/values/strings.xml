@@ -395,10 +395,14 @@
     <string name="autoplay_bandwidth_mode_sub">Choose how autoplay decides which bitrates are safe.</string>
     <string name="autoplay_bandwidth_mode_auto">Auto (Benchmark)</string>
     <string name="autoplay_bandwidth_mode_auto_desc">Uses benchmark data to score streams by transport quality. Requires a completed benchmark.</string>
+    <string name="autoplay_bandwidth_mode_auto_unavailable_desc">Run a benchmark with the current VOD cache and parallel connection settings before using Auto.</string>
     <string name="autoplay_bandwidth_mode_manual">Manual (Fixed Cap)</string>
     <string name="autoplay_bandwidth_mode_manual_desc">Set a maximum bitrate limit. No benchmark required. Recommended for WiFi devices.</string>
     <string name="autoplay_manual_bitrate_limit_title">Manual Bitrate Limit</string>
     <string name="autoplay_manual_bitrate_limit_sub">Autoplay will only choose streams at or below this average bitrate.</string>
+    <string name="autoplay_deterministic_title">Deterministic Autoplay</string>
+    <string name="autoplay_deterministic_sub">Skip stream selection and auto-play the best eligible match.</string>
+    <string name="autoplay_deterministic_unavailable_sub">Requires Service Wrap. Auto bandwidth mode also needs a current valid benchmark.</string>
     <string name="autoplay_reuse_last_link">Reuse Last Link</string>
     <string name="autoplay_reuse_last_link_sub">Auto-play your last working stream for this same movie/episode when cache is still valid</string>
     <string name="autoplay_last_link_cache">Last Link Cache Duration</string>
