@@ -34,6 +34,7 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode
 import com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionLogger
 import com.nexio.tv.data.repository.benchmark.ShadowRequestContext
+import com.nexio.tv.data.repository.benchmark.hasValidAutoplayBenchmarkFor
 import com.nexio.tv.data.repository.benchmark.normalizedBenchmarkServiceKey
 import com.nexio.tv.domain.model.AddonStreams
 import com.nexio.tv.domain.model.Meta
@@ -432,6 +433,10 @@ class StreamScreenViewModel @Inject constructor(
                             requestContext = buildStreamRequestContext(),
                             parserCache = streamParserCache
                         )
+                        val validBenchmarkSessions = latestValidBenchmarkSessions(playerSettings)
+                        val hasValidBenchmark = validBenchmarkSessions.isNotEmpty()
+                        val isManualBandwidthMode = playerSettings.isManualBandwidthMode(hasValidBenchmark)
+                        val autoplayMaxBitrateMbps = playerSettings.autoplayMaxBitrateForScoring(hasValidBenchmark)
                         val autoPlayPlaybackInfo = if (autoPlayHandledForSession) {
                             null
                         } else if (deterministicAutoplay) {
@@ -439,8 +444,9 @@ class StreamScreenViewModel @Inject constructor(
                                 request = buildShadowRequestContext(requestId),
                                 organizedStreams = organizedStreams.items,
                                 activeTransportMode = playerSettings.toShadowActiveTransportMode(),
-                                autoplayMaxBitrateMbps = playerSettings.autoplayMaxBitrateForScoring(),
-                                isManualBandwidthMode = playerSettings.isManualBandwidthMode(),
+                                benchmarkSessions = validBenchmarkSessions,
+                                autoplayMaxBitrateMbps = autoplayMaxBitrateMbps,
+                                isManualBandwidthMode = isManualBandwidthMode,
                                 isFinalPass = isFinalPass
                             )
                         } else {
@@ -449,8 +455,9 @@ class StreamScreenViewModel @Inject constructor(
                                 organizedStreams = organizedStreams.items,
                                 autoPlayCandidates = autoPlayCandidates,
                                 activeTransportMode = playerSettings.toShadowActiveTransportMode(),
-                                autoplayMaxBitrateMbps = playerSettings.autoplayMaxBitrateForScoring(),
-                                isManualBandwidthMode = playerSettings.isManualBandwidthMode()
+                                benchmarkSessions = validBenchmarkSessions,
+                                autoplayMaxBitrateMbps = autoplayMaxBitrateMbps,
+                                isManualBandwidthMode = isManualBandwidthMode
                             )
                         }
                         val selectedAutoPlayStream = if (!deterministicAutoplay && autoPlayPlaybackInfo == null && !autoPlayHandledForSession) {
@@ -491,12 +498,14 @@ class StreamScreenViewModel @Inject constructor(
                         origin = "stream_screen",
                         organizedResult = organizedResult.organizedStreams
                     )
+                    val validBenchmarkSessions = latestValidBenchmarkSessions(playerSettings)
+                    val hasValidBenchmark = validBenchmarkSessions.isNotEmpty()
                     updateShadowAutoPlayDecision(
                         request = buildShadowRequestContext(requestId),
                         organizedStreams = organizedResult.organizedStreams.items,
                         activeTransportMode = playerSettings.toShadowActiveTransportMode(),
-                        autoplayMaxBitrateMbps = playerSettings.autoplayMaxBitrateForScoring(),
-                        isManualBandwidthMode = playerSettings.isManualBandwidthMode(),
+                        autoplayMaxBitrateMbps = playerSettings.autoplayMaxBitrateForScoring(hasValidBenchmark),
+                        isManualBandwidthMode = playerSettings.isManualBandwidthMode(hasValidBenchmark),
                         isFinalPass = organizedResult.shadowDecisionFinalPass,
                         allowEarlyFinishTerminal = organizedResult.shadowDecisionAllowEarlyFinish
                     )
@@ -1090,6 +1099,7 @@ class StreamScreenViewModel @Inject constructor(
         organizedStreams: List<StreamCardModel>,
         autoPlayCandidates: List<Stream>,
         activeTransportMode: DebridBenchmarkTransportMode?,
+        benchmarkSessions: Map<DebridBenchmarkProvider, DebridBenchmarkResult>,
         autoplayMaxBitrateMbps: Double?,
         isManualBandwidthMode: Boolean
     ): StreamPlaybackInfo? {
@@ -1104,7 +1114,6 @@ class StreamScreenViewModel @Inject constructor(
                 manualBitrateCap = autoplayMaxBitrateMbps ?: return null
             )
         } else {
-            val benchmarkSessions = latestBenchmarkSessions()
             if (benchmarkSessions.isEmpty()) return null
             benchmarkAwareStreamScorer.score(
                 request = request,
@@ -1138,6 +1147,7 @@ class StreamScreenViewModel @Inject constructor(
         request: ShadowRequestContext,
         organizedStreams: List<StreamCardModel>,
         activeTransportMode: DebridBenchmarkTransportMode?,
+        benchmarkSessions: Map<DebridBenchmarkProvider, DebridBenchmarkResult>,
         autoplayMaxBitrateMbps: Double?,
         isManualBandwidthMode: Boolean,
         isFinalPass: Boolean
@@ -1156,7 +1166,6 @@ class StreamScreenViewModel @Inject constructor(
                 manualBitrateCap = autoplayMaxBitrateMbps ?: return null
             )
         } else {
-            val benchmarkSessions = latestBenchmarkSessions()
             if (benchmarkSessions.isEmpty()) return null
             benchmarkAwareStreamScorer.score(
                 request = request,
@@ -1370,6 +1379,14 @@ class StreamScreenViewModel @Inject constructor(
         return sessions
     }
 
+    private fun latestValidBenchmarkSessions(
+        playerSettings: PlayerSettings
+    ): Map<DebridBenchmarkProvider, DebridBenchmarkResult> {
+        return latestBenchmarkSessions().filterValues { result ->
+            result.hasValidAutoplayBenchmarkFor(playerSettings)
+        }
+    }
+
     private fun shouldInvalidateCachedDeterministicAutoPlayLink(
         cached: com.nexio.tv.data.local.CachedStreamLink
     ): Boolean {
@@ -1570,15 +1587,17 @@ private fun PlayerSettings.toShadowActiveTransportMode(): DebridBenchmarkTranspo
     return null
 }
 
-private fun PlayerSettings.autoplayMaxBitrateForScoring(): Double? {
-    return when (autoplayBandwidthMode) {
-        AutoplayBandwidthMode.AUTO -> if (autoplayMaxBitrateEnabled) autoplayMaxBitrateMbps else null
-        AutoplayBandwidthMode.MANUAL -> manualBitrateLimitMbps
+private fun PlayerSettings.autoplayMaxBitrateForScoring(hasValidBenchmark: Boolean): Double? {
+    return when {
+        autoplayBandwidthMode == AutoplayBandwidthMode.AUTO && hasValidBenchmark ->
+            if (autoplayMaxBitrateEnabled) autoplayMaxBitrateMbps else null
+        else -> manualBitrateLimitMbps
     }
 }
 
-private fun PlayerSettings.isManualBandwidthMode(): Boolean {
-    return autoplayBandwidthMode == AutoplayBandwidthMode.MANUAL
+private fun PlayerSettings.isManualBandwidthMode(hasValidBenchmark: Boolean): Boolean {
+    return autoplayBandwidthMode == AutoplayBandwidthMode.MANUAL ||
+        (autoplayBandwidthMode == AutoplayBandwidthMode.AUTO && !hasValidBenchmark)
 }
 
 internal fun deterministicAutoplayEarlyFinishSatisfied(
