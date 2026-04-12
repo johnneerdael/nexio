@@ -72,7 +72,8 @@ internal fun StreamItem(
     requestInitialFocus: Boolean,
     isCurrentStream: Boolean = false,
     onClick: () -> Unit,
-    onUpKey: (() -> Unit)? = null
+    onUpKey: (() -> Unit)? = null,
+    onFocused: (() -> Unit)? = null
 ) {
     val fallbackItem = remember(stream) {
         val parsed = AioStrictStreamParser.parse(stream)
@@ -90,7 +91,8 @@ internal fun StreamItem(
         requestInitialFocus = requestInitialFocus,
         isCurrentStream = isCurrentStream,
         onClick = onClick,
-        onUpKey = onUpKey
+        onUpKey = onUpKey,
+        onFocused = onFocused
     )
 }
 
@@ -101,7 +103,8 @@ internal fun StreamItem(
     requestInitialFocus: Boolean,
     isCurrentStream: Boolean = false,
     onClick: () -> Unit,
-    onUpKey: (() -> Unit)? = null
+    onUpKey: (() -> Unit)? = null,
+    onFocused: (() -> Unit)? = null
 ) {
     val stream = item.stream
     Card(
@@ -109,6 +112,7 @@ internal fun StreamItem(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (requestInitialFocus) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged { if (it.isFocused) onFocused?.invoke() }
             .then(if (onUpKey != null) Modifier.onKeyEvent { event ->
                 if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN &&
                     event.key == Key.DirectionUp) {
