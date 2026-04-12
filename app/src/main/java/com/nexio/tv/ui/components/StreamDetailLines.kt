@@ -32,14 +32,13 @@ internal fun streamDetailLineStyle(
     baseStyle: TextStyle
 ): TextStyle {
     if (!shouldCompactFinalFilenameLine(detailLines, index)) return baseStyle
-    return baseStyle.copy(fontSize = 10.sp, lineHeight = 14.sp)
+    return baseStyle.copy(fontSize = 7.sp, lineHeight = 10.sp)
 }
 
 internal fun shouldCompactFinalFilenameLine(
     detailLines: List<String>,
     index: Int
 ): Boolean {
-    if (index != detailLines.lastIndex) return false
     val detail = detailLines.getOrNull(index)?.trim().orEmpty()
     return detail.startsWith(FilenameLinePrefix)
 }

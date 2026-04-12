@@ -15,16 +15,18 @@ class StreamDetailLinesTest {
     )
 
     @Test
-    fun `compacts only final filename line`() {
+    fun `compacts filename line at any position`() {
         val detailLines = listOf(
-            "[[icon:hdr10]] [[icon:ddp]]",
             "💾 41.38 GB",
-            "📄 Avatar.Fire.And.Ash.2025.2160p.AMZN.WEB-DL.DDP5.1.mkv"
+            "[[icon:prime]] Amazon • [[icon:premiumize]] Premiumize",
+            "📄 Avatar.Fire.And.Ash.2025.2160p.AMZN.WEB-DL.DDP5.1.mkv",
+            "[[icon:hdr10:1.75]] [[icon:ddp:1.75]]"
         )
 
         assertFalse(shouldCompactFinalFilenameLine(detailLines, 0))
         assertFalse(shouldCompactFinalFilenameLine(detailLines, 1))
         assertTrue(shouldCompactFinalFilenameLine(detailLines, 2))
+        assertFalse(shouldCompactFinalFilenameLine(detailLines, 3))
 
         val compactStyle = streamDetailLineStyle(
             detailLines = detailLines,
@@ -32,8 +34,8 @@ class StreamDetailLinesTest {
             baseStyle = baseStyle
         )
 
-        assertEquals(10.sp, compactStyle.fontSize)
-        assertEquals(14.sp, compactStyle.lineHeight)
+        assertEquals(7.sp, compactStyle.fontSize)
+        assertEquals(10.sp, compactStyle.lineHeight)
     }
 
     @Test
