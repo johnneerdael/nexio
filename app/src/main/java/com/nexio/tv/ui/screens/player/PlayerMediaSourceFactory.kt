@@ -217,7 +217,8 @@ internal class PlayerMediaSourceFactory(
 
     internal fun progressiveUpstreamFactoryForTesting(
         url: String,
-        headers: Map<String, String> = emptyMap()
+        headers: Map<String, String> = emptyMap(),
+        warmAheadEnabledForProfile: Boolean = false
     ): DataSource.Factory {
         val sanitizedHeaders = sanitizeHeaders(headers)
         val okHttpFactory = createOkHttpDataSourceFactory(sanitizedHeaders)
@@ -232,7 +233,8 @@ internal class PlayerMediaSourceFactory(
             isHls = resolvedMimeType == MimeTypes.APPLICATION_M3U8,
             isDash = resolvedMimeType == MimeTypes.APPLICATION_MPD,
             okHttpFactory = okHttpFactory,
-            baseDataSourceFactory = baseDataSourceFactory
+            baseDataSourceFactory = baseDataSourceFactory,
+            warmAheadEnabledForProfile = warmAheadEnabledForProfile
         )
     }
 
@@ -363,7 +365,7 @@ internal class PlayerMediaSourceFactory(
     private fun startVodWarmAheadIfEligible() {
         if (!shouldAttemptVodWarmAheadStart()) return
         val streamUrl = currentVodCacheUrl ?: return
-        val upstreamFactory = currentProgressiveUpstreamFactory ?: return
+        val upstreamFactory = currentWarmAheadUpstreamFactory ?: currentProgressiveUpstreamFactory ?: return
         val upstreamKind = warmAheadUpstreamKindForTesting(upstreamFactory)
         Log.d(
             TAG,
@@ -728,6 +730,11 @@ internal class PlayerMediaSourceFactory(
             warmAheadEnabledForStream = warmAheadEnabledForStream
         ).warmAhead
         return profile?.let { it.connectionCount to it.chunkSizeMb }
+    }
+
+    internal fun currentWarmAheadUpstreamKindForTesting(): String {
+        val factory = currentWarmAheadUpstreamFactory ?: return "single"
+        return warmAheadUpstreamKindForTesting(factory)
     }
 
     private data class ParallelProviderProfile(
