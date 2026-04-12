@@ -17,6 +17,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.text.CueGroup
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ForwardingRenderer
@@ -87,18 +88,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             resetLoadingOverlayForNewStream()
             playerInitializationStartedAtMs = System.currentTimeMillis()
             val playerSettings = playerSettingsDataStore.playerSettings.first()
-            val requestedStreamingCache = debugSettingsDataStore.streamingCacheEnabled.first()
-            val streamingCacheManualEnableTimestampMs =
-                debugSettingsDataStore.streamingCacheManualEnableTimestampMs.first()
-            val streamingCacheDecision = StreamingCacheKillSwitch.evaluate(
-                context = context,
-                requested = requestedStreamingCache,
-                manualEnableTimestampMs = streamingCacheManualEnableTimestampMs
-            )
-            mediaSourceFactory.streamingCacheEnabled = streamingCacheDecision.enabled
-            if (requestedStreamingCache && streamingCacheDecision.blockedByKillSwitch) {
-                debugSettingsDataStore.setStreamingCacheEnabled(false)
-            }
             lastPreferredAudioLanguage = playerSettings.preferredAudioLanguage
             lastSecondaryPreferredAudioLanguage = playerSettings.secondaryPreferredAudioLanguage
             val experimentalFireOsIecPassthroughEnabled =
@@ -208,11 +197,11 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     "bridge=${dv7ToDv81Probe.bridgeVersion ?: "n/a"} " +
                     "host=${url.safeHost()}"
             )
-            val loadControl = PlayerLoadControlFactory.buildForStreamingCacheDecision(
-                streamingCacheEnabled = streamingCacheDecision.enabled,
-                effectiveSampleQueueBytes = MemoryBudget(context).effectiveSampleQueueBytes
-            )
+            val loadControl = DefaultLoadControl.Builder().build()
 
+            mediaSourceFactory.useParallelConnections = playerSettings.useParallelConnections
+            mediaSourceFactory.vodCacheSizeMode = playerSettings.vodCacheSizeMode
+            mediaSourceFactory.vodCacheSizeMb = playerSettings.vodCacheSizeMb
             if (kodiCustomAudioSinkEnabled) {
                 safeAudioForcedStreamUrls.remove(url)
                 audioDisabledForcedStreamUrls.remove(url)
@@ -713,7 +702,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                                     "host=${currentStreamUrl.safeHost()}"
                             )
                         }
-                        mediaSourceFactory.onStreamingCacheFirstFrameRendered()
+                        mediaSourceFactory.notifyPlaybackFirstFrameRendered()
                         hasRenderedFirstFrame = true
                         _uiState.update { it.copy(showLoadingOverlay = false) }
                     }
@@ -919,7 +908,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 setMediaSource(initialMediaSource)
                 playWhenReady = true
                 prepare()
-                maybeStartStreamingCacheFillForCurrentStream()
                 launchStartupPreparationTasks(
                     url = url,
                     headers = headers,

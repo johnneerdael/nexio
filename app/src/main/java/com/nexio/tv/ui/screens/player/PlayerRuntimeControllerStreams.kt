@@ -374,7 +374,6 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     
     resetLoadingOverlayForNewStream()
     deactivateAddonSubtitleOverlay()
-    mediaSourceFactory.stopStreamingCacheFill()
     backendStop()
 
     currentStreamUrl = url
@@ -447,7 +446,6 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
                 player.setMediaSource(mediaSource)
                 player.playWhenReady = true
                 player.prepare()
-                maybeStartStreamingCacheFillForCurrentStream()
                 launchStartupAfrPreflight(
                     url = url,
                     headers = newHeaders,
@@ -702,7 +700,6 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     // persist stale positions into the newly selected episode.
     resetLoadingOverlayForNewStream()
     deactivateAddonSubtitleOverlay()
-    mediaSourceFactory.stopStreamingCacheFill()
     backendStop()
 
     currentStreamUrl = url
@@ -783,7 +780,6 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
                 player.setMediaSource(mediaSource)
                 player.playWhenReady = true
                 player.prepare()
-                maybeStartStreamingCacheFillForCurrentStream()
                 launchStartupAfrPreflight(
                     url = url,
                     headers = newHeaders,
