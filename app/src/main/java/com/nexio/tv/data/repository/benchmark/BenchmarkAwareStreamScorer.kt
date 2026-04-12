@@ -119,6 +119,7 @@ enum class ShadowRejectReason {
     MISSING_SIZE,
     MISSING_RUNTIME,
     UNSUPPORTED_CODEC,
+    EXCEEDS_AUTOPLAY_CAP,
     INSUFFICIENT_TRANSPORT_BUDGET,
     NO_ELIGIBLE_TRANSPORT
 }
@@ -148,7 +149,8 @@ class BenchmarkAwareStreamScorer internal constructor(
         streams: List<StreamCardModel>,
         benchmarkSessions: Map<DebridBenchmarkProvider, DebridBenchmarkResult>,
         activeTransportMode: DebridBenchmarkTransportMode? = null,
-        elapsedMs: Long? = null
+        elapsedMs: Long? = null,
+        autoplayMaxBitrateMbps: Double? = null
     ): ShadowAutoPlayDecisionEvent {
         val movieMode = request.isMovieLike()
         val showMode = request.isSeriesLike()
@@ -194,6 +196,7 @@ class BenchmarkAwareStreamScorer internal constructor(
                 benchmarkSession = benchmarkSession,
                 request = request,
                 activeTransportMode = activeTransportMode,
+                autoplayMaxBitrateMbps = autoplayMaxBitrateMbps,
                 movieMode = movieMode,
                 showMode = showMode
             ).fold(
@@ -245,6 +248,7 @@ class BenchmarkAwareStreamScorer internal constructor(
         benchmarkSession: DebridBenchmarkResult,
         request: ShadowRequestContext,
         activeTransportMode: DebridBenchmarkTransportMode?,
+        autoplayMaxBitrateMbps: Double?,
         movieMode: Boolean,
         showMode: Boolean
     ): EitherSuccessOrReject<ShadowStreamDecision> {
@@ -258,6 +262,12 @@ class BenchmarkAwareStreamScorer internal constructor(
         val averageBitrateMbps = runtimeMs?.takeIf { it > 0L }?.let {
             calculateAverageBitrateMbps(sizeBytes, it)
         } ?: 0.0
+        if (autoplayMaxBitrateMbps != null &&
+            autoplayMaxBitrateMbps > 0.0 &&
+            averageBitrateMbps > autoplayMaxBitrateMbps
+        ) {
+            return EitherSuccessOrReject.reject(ShadowRejectReason.EXCEEDS_AUTOPLAY_CAP)
+        }
         val resolutionTier = resolveResolutionTier(parsed.resolution)
         val releaseType = classifyReleaseType(parsed, averageBitrateMbps)
         val requiredMbps = if (hasRuntime) {

@@ -276,7 +276,11 @@ data class DebridBenchmarkThroughputBucketSample(
 )
 
 data class DebridBenchmarkTransportConfigSnapshot(
-    val chunkWaitTimeoutMs: Long? = null
+    val chunkWaitTimeoutMs: Long? = null,
+    val parallelConnectionsEnabled: Boolean? = null,
+    val parallelConnectionCount: Int? = null,
+    val vodCacheEnabled: Boolean? = null,
+    val parallelChunkSizeMb: Int? = null
 )
 
 data class DebridBenchmarkTransportDecisionMetrics(
