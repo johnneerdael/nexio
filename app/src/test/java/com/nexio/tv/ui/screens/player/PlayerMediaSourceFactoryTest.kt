@@ -78,6 +78,45 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun parallelProviderProfile_premiumizeUsesThreeBySixteen() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+
+        assertEquals(
+            3 to 16,
+            factory.parallelProviderProfileForTesting("https://premiumize.me/path/movie.mkv")
+        )
+    }
+
+    @Test
+    fun parallelProviderProfile_realDebridUsesTwoByTwentyFour() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+
+        assertEquals(
+            2 to 24,
+            factory.parallelProviderProfileForTesting("https://real-debrid.com/path/movie.mkv")
+        )
+    }
+
+    @Test
+    fun parallelProviderProfile_unknownProviderUsesOldDefault() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+
+        assertEquals(
+            2 to 16,
+            factory.parallelProviderProfileForTesting("https://example.com/path/movie.mkv")
+        )
+    }
+
+    @Test
     fun progressivePlayback_returnsProgressiveMediaSource() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),

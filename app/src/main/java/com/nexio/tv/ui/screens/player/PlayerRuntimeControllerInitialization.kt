@@ -200,8 +200,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             val loadControl = DefaultLoadControl.Builder().build()
 
             mediaSourceFactory.useParallelConnections = playerSettings.useParallelConnections
-            mediaSourceFactory.parallelConnectionCount = playerSettings.parallelConnectionCount
-            mediaSourceFactory.parallelChunkSizeMb = playerSettings.parallelChunkSizeMb
             mediaSourceFactory.vodCacheSizeMode = playerSettings.vodCacheSizeMode
             mediaSourceFactory.vodCacheSizeMb = playerSettings.vodCacheSizeMb
             if (kodiCustomAudioSinkEnabled) {
