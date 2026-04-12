@@ -27,6 +27,14 @@ class SubtitleTranslationSettingsDataStoreTest {
     }
 
     @Test
+    fun defaultsForDashScopeUseQwenMtAndIntlEndpoint() {
+        val settings = defaultSubtitleTranslationSettings(SubtitleTranslationProvider.DASHSCOPE)
+
+        assertEquals("qwen-mt-flash", settings.model)
+        assertEquals("https://dashscope-intl.aliyuncs.com/api/v1", settings.baseUrl)
+    }
+
+    @Test
     fun legacyGeminiKeyWithoutStoredProviderMigratesToGeminiProvider() {
         val settings = normalizeSubtitleTranslationSettings(
             enabled = true,
@@ -82,10 +90,10 @@ class SubtitleTranslationSettingsDataStoreTest {
             baseUrlKey to "https://openrouter.ai/api/v1"
         )
 
-        applySubtitleTranslationProviderDefaults(prefs, SubtitleTranslationProvider.ANTHROPIC)
+        applySubtitleTranslationProviderDefaults(prefs, SubtitleTranslationProvider.DASHSCOPE)
 
-        assertEquals("ANTHROPIC", prefs[providerKey])
-        assertEquals(SubtitleTranslationDefaults.ANTHROPIC_MODEL, prefs[modelKey])
-        assertEquals(SubtitleTranslationDefaults.ANTHROPIC_BASE_URL, prefs[baseUrlKey])
+        assertEquals("DASHSCOPE", prefs[providerKey])
+        assertEquals(SubtitleTranslationDefaults.DASHSCOPE_MODEL, prefs[modelKey])
+        assertEquals(SubtitleTranslationDefaults.DASHSCOPE_BASE_URL, prefs[baseUrlKey])
     }
 }

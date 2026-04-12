@@ -74,6 +74,22 @@ class SubtitleTranslationProviderRequestsTest {
     }
 
     @Test
+    fun dashScopeEndpointAppendsTextGenerationPathToBaseUrl() {
+        val endpoint = providerEndpoint(
+            SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.DASHSCOPE,
+                model = "qwen-mt-flash",
+                baseUrl = "https://dashscope-intl.aliyuncs.com/api/v1/"
+            )
+        )
+
+        assertEquals(
+            "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/text-generation/generation",
+            endpoint
+        )
+    }
+
+    @Test
     fun openAiRequestUsesChatCompletionMessagesAndJsonObjectFormat() {
         val userPayloadJson = JSONObject()
         userPayloadJson.put("items", emptyList<String>())
@@ -106,6 +122,50 @@ class SubtitleTranslationProviderRequestsTest {
         assertEquals("system", body.getString("system"))
         assertTrue(body.getInt("max_tokens") > 0)
         assertEquals("user", body.getJSONArray("messages").getJSONObject(0).getString("role"))
+    }
+
+    @Test
+    fun dashScopeRequestUsesQwenMtTranslationOptions() {
+        val body = buildDashScopeGenerationRequest(
+            settings = SubtitleTranslationSettings(
+                provider = SubtitleTranslationProvider.DASHSCOPE,
+                model = "qwen-mt-flash"
+            ),
+            markerPayload = "[[0]] Czesc",
+            sourceLanguage = "Polish",
+            targetLanguage = "Dutch"
+        )
+
+        assertEquals("qwen-mt-flash", body.getString("model"))
+        val message = body.getJSONObject("input")
+            .getJSONArray("messages")
+            .getJSONObject(0)
+        assertEquals("user", message.getString("role"))
+        assertEquals("[[0]] Czesc", message.getString("content"))
+        val options = body.getJSONObject("parameters").getJSONObject("translation_options")
+        assertEquals("Polish", options.getString("source_lang"))
+        assertEquals("Dutch", options.getString("target_lang"))
+    }
+
+    @Test
+    fun parseDashScopeResponseTextReadsChoiceMessageContent() {
+        val parsed = parseDashScopeResponseText(
+            """
+            {
+              "output": {
+                "choices": [
+                  {
+                    "message": {
+                      "content": "[[0]] Hallo"
+                    }
+                  }
+                ]
+              }
+            }
+            """.trimIndent()
+        )
+
+        assertEquals("[[0]] Hallo", parsed)
     }
 
     @Test

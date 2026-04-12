@@ -89,6 +89,7 @@ internal class BuiltInSubtitleCueTranslator(
                 translationService.translateCueTexts(
                     texts = sourceTexts,
                     targetLanguageCode = targetLanguage,
+                    sourceLanguageCode = format.language,
                     settings = settings
                 ).onSuccess { translatedTexts ->
                     val translatedCueGroups = cueGroups.map { cueGroup ->
@@ -148,7 +149,7 @@ internal class BuiltInSubtitleCueTranslator(
         settings: SubtitleTranslationSettings,
         targetLanguage: String
     ): String {
-        return "${format.sampleMimeType}|$targetLanguage|${settings.provider}|${settings.model}|${settings.baseUrl}|${settings.apiKey.hashCode()}"
+        return "${format.sampleMimeType}|${format.language.orEmpty()}|$targetLanguage|${settings.provider}|${settings.model}|${settings.baseUrl}|${settings.apiKey.hashCode()}"
     }
 
     private data class SuppressedProviderFailure(

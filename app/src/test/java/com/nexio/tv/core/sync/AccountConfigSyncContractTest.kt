@@ -158,10 +158,15 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
-    fun `buildAccountConfigSyncPayload mirrors subtitle translation enabled into legacy gemini`() {
+    fun `buildAccountConfigSyncPayload mirrors only gemini subtitle translation into legacy gemini`() {
         val payload = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(
-                subtitleTranslation = SubtitleTranslationSyncSettings(enabled = false),
+                subtitleTranslation = SubtitleTranslationSyncSettings(
+                    enabled = true,
+                    provider = "DASHSCOPE",
+                    model = "qwen-mt-flash",
+                    baseUrl = "https://dashscope-intl.aliyuncs.com/api/v1"
+                ),
                 gemini = GeminiSyncSettings(enabled = true)
             ),
             heroCatalogKeys = emptyList(),
@@ -180,6 +185,33 @@ class AccountConfigSyncContractTest {
         )
 
         assertFalse(payload.integrations.gemini.enabled)
+
+        val geminiPayload = buildAccountConfigSyncPayload(
+            integrations = IntegrationSettings(
+                subtitleTranslation = SubtitleTranslationSyncSettings(
+                    enabled = true,
+                    provider = "GEMINI",
+                    model = "gemini-2.5-flash",
+                    baseUrl = "https://generativelanguage.googleapis.com/v1beta"
+                ),
+                gemini = GeminiSyncSettings(enabled = false)
+            ),
+            heroCatalogKeys = emptyList(),
+            homeCatalogOrderKeys = emptyList(),
+            disabledHomeCatalogKeys = emptyList(),
+            traktCatalogEnabledSet = emptyList(),
+            traktCatalogOrder = emptyList(),
+            traktSelectedPopularListKeys = emptyList(),
+            simklCatalogEnabledSet = emptyList(),
+            simklCatalogOrder = emptyList(),
+            mdbListHiddenPersonalListKeys = emptyList(),
+            mdbListSelectedTopListKeys = emptyList(),
+            mdbListCatalogOrder = emptyList(),
+            trackingProvider = TrackingProvider.TRAKT,
+            formatter = FormatterSyncSettings()
+        )
+
+        assertTrue(geminiPayload.integrations.gemini.enabled)
     }
 
     @Test

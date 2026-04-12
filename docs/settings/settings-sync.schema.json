@@ -163,9 +163,9 @@
           "required": ["enabled", "provider", "model", "baseUrl"],
           "properties": {
             "enabled": { "type": "boolean", "default": false },
-            "provider": { "type": "string", "enum": ["OPENAI", "ANTHROPIC", "GEMINI"], "default": "OPENAI" },
-            "model": { "type": "string", "minLength": 1, "default": "gpt-5-nano" },
-            "baseUrl": { "type": "string", "default": "https://api.openai.com/v1" }
+            "provider": { "type": "string", "enum": ["OPENAI", "ANTHROPIC", "GEMINI", "DASHSCOPE"], "default": "OPENAI" },
+            "model": { "type": "string", "minLength": 1, "default": "openrouter/free" },
+            "baseUrl": { "type": "string", "default": "https://openrouter.ai/api/v1" }
           }
         },
         "gemini": {
