@@ -162,6 +162,26 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun warmAheadRequestUrl_ignoresResolvedUrlFromDifferentStream() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+        factory.setWarmAheadStateForTesting(
+            streamUrl = "https://example.com/stream-b.mkv",
+            resolvedPlaybackUrl = "https://example.com/stream-a.mkv",
+            resolvedUrl = "https://cdn.example.net/stream-a.mkv",
+            eligible = true,
+            active = true
+        )
+
+        assertEquals(
+            "https://example.com/stream-b.mkv",
+            factory.warmAheadRequestUrlForTesting("https://example.com/stream-b.mkv")
+        )
+    }
+
+    @Test
     fun warmAheadStartCheckRechecksDisabledSetting() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
