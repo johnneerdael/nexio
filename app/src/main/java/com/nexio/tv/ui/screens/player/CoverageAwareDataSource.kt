@@ -116,9 +116,11 @@ internal class CoverageAwareDataSource(
         val holeLength = if (cachedLength < 0L) -cachedLength else queryLength
         val segmentLength = holeLength.coerceAtMost(queryLength).coerceAtLeast(1L)
         if (allowUrgentFill && !isStartupProvider()) {
+            StreamingMetrics.coverageUrgentFillAttempts.incrementAndGet()
             val urgentLength = segmentLength.coerceAtMost(CacheFillWorker.URGENT_FRAGMENT_SIZE)
             val timeoutMs = computeWaitTimeoutMs()
             if (coordinator.requestUrgentFill(cacheKey, spec.position, urgentLength, timeoutMs)) {
+                StreamingMetrics.coverageUrgentFillSuccesses.incrementAndGet()
                 openNextSegment(allowUrgentFill = false)
                 return
             }
@@ -126,6 +128,8 @@ internal class CoverageAwareDataSource(
 
         val segmentSpec = spec.withSegmentLength(segmentLength, cacheKey)
         val endExclusive = spec.position + segmentLength
+        StreamingMetrics.coverageFallbackSegmentOpens.incrementAndGet()
+        StreamingMetrics.coverageFallbackBytesRequested.addAndGet(segmentLength)
         val token = coordinator.markFallbackOwned(spec.position, endExclusive)
         try {
             openSegment(upstreamDataSourceFactory.createDataSource(), segmentSpec)

@@ -232,6 +232,7 @@ internal class CacheFillWorker(
 
                 val resultCommandSerial = commandSerial.get()
                 if (rangeCoordinator.isOwnedByPlaybackFallback(start, end)) {
+                    StreamingMetrics.fillWorkerFallbackOwnedSkips.incrementAndGet()
                     if (urgentChunk) {
                         pendingUrgentTarget.compareAndSet(NO_PENDING_SEEK, urgentTarget)
                     }
@@ -260,6 +261,7 @@ internal class CacheFillWorker(
                     continue
                 } else if (result.bytesWritten <= 0L) {
                     if (rangeCoordinator.isOwnedByPlaybackFallback(start, end)) {
+                        StreamingMetrics.fillWorkerFallbackOwnedSkips.incrementAndGet()
                         if (urgentChunk) {
                             pendingUrgentTarget.compareAndSet(NO_PENDING_SEEK, urgentTarget)
                         }
@@ -307,6 +309,7 @@ internal class CacheFillWorker(
             return ChunkResult(workerGeneration, resultCommandSerial, start, end, 0L)
         }
 
+        StreamingMetrics.fillWorkerChunkStarts.incrementAndGet()
         val requestedLength = end - start
         if (cache.isCached(cacheKey, start, requestedLength)) {
             return ChunkResult(workerGeneration, resultCommandSerial, start, end, requestedLength)
