@@ -21,9 +21,9 @@ Nexio keeps the subtitle experience simple first, then adds provider-backed tran
 ## Where to add the API key
 
 - Open `Settings > Integration > Subtitle Translation`.
-- Choose `OpenAI-compatible`, `Anthropic-compatible`, or `Google Gemini`.
+- Choose `OpenAI-compatible`, `Anthropic-compatible`, `Google Gemini`, or `Alibaba DashScope (Qwen-MT)`.
 - Leave the endpoint alone for the native provider, or set a compatible base URL such as `https://openrouter.ai/api/v1`.
-- Set the model. The OpenAI-compatible default is `openrouter/free`; the Anthropic default is `claude-haiku-4-5`; the Gemini default is `gemini-2.5-flash`.
+- Set the model. The OpenAI-compatible default is `openrouter/free`; the Anthropic default is `claude-haiku-4-5`; the Gemini default is `gemini-2.5-flash`; the DashScope default is `qwen-mt-flash`.
 - Paste the provider API key.
 - Nexio stores that key through account sync, so you do not have to re-enter it on every device.
 

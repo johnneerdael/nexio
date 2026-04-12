@@ -115,6 +115,61 @@ class SubtitleTranslationServiceProviderTest {
     }
 
     @Test
+    fun dashScopeCueTranslationSendsSourceLanguageAndMapsMarkerOutput() = runTest {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "output": {
+                        "choices": [
+                          {
+                            "message": {
+                              "content": "[[0]] Hallo\\n[[1]] Tot ziens"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                    """.trimIndent()
+                )
+        )
+        server.start()
+        try {
+            val service = SubtitleTranslationService(
+                context = mockk<Context>(relaxed = true),
+                httpClient = OkHttpClient()
+            )
+
+            val result = service.translateCueTexts(
+                texts = listOf("Czesc", "Do widzenia"),
+                targetLanguageCode = "nl",
+                sourceLanguageCode = "pl",
+                settings = SubtitleTranslationSettings(
+                    provider = SubtitleTranslationProvider.DASHSCOPE,
+                    apiKey = "dashscope-key",
+                    model = "qwen-mt-flash",
+                    baseUrl = server.url("/api/v1").toString()
+                )
+            )
+
+            assertEquals(mapOf("Czesc" to "Hallo", "Do widzenia" to "Tot ziens"), result.getOrThrow())
+
+            val request = server.takeRequest()
+            assertEquals("Bearer dashscope-key", request.getHeader("Authorization"))
+            val body = request.body.readUtf8()
+            assertTrue(body.contains(""""source_lang":"Polish""""))
+            assertTrue(body.contains(""""target_lang":"Dutch""""))
+            assertTrue(body.contains("[[0]] Czesc"))
+            assertTrue(body.contains("[[1]] Do widzenia"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun structuredRequestProviderRejectionFallsBackToPlainRequest() = runTest {
         val server = MockWebServer()
         server.start()

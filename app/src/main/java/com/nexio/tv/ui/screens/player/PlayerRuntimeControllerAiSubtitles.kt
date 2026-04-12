@@ -183,6 +183,7 @@ internal fun PlayerRuntimeController.translateAndSelectAddonSubtitle(sourceSubti
         val result = subtitleTranslationService.translateSubtitle(
             sourceSubtitle = sourceSubtitle,
             targetLanguageCode = targetLanguage,
+            sourceLanguageCode = PlayerSubtitleUtils.normalizeLanguageCode(sourceSubtitle.lang),
             settings = subtitleTranslationSettings
         )
 
@@ -234,6 +235,7 @@ private suspend fun PlayerRuntimeController.translateAndActivateAddonOverlayCues
     val translatedTexts = subtitleTranslationService.translateCueTexts(
         texts = sourceTexts,
         targetLanguageCode = targetLanguage,
+        sourceLanguageCode = PlayerSubtitleUtils.normalizeLanguageCode(sourceSubtitle.lang),
         settings = subtitleTranslationSettings,
         chunkConfig = SubtitleTranslationService.ADDON_OVERLAY_CUE_CHUNK_CONFIG
     ).getOrThrow()
