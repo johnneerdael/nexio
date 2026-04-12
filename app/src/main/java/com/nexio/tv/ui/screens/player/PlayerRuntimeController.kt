@@ -17,17 +17,18 @@ import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.local.AudioLanguageOption
-import com.nexio.tv.data.local.GeminiSettingsDataStore
+import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.StreamingCacheDebugMode
 import com.nexio.tv.data.repository.SkipIntroRepository
 import com.nexio.tv.data.repository.SkipInterval
-import com.nexio.tv.data.repository.GeminiSubtitleTranslationService
+import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.TrackingScrobbleService
 import com.nexio.tv.data.local.DebridBenchmarkStore
 import okhttp3.OkHttpClient
+import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.AddonRepository
@@ -60,11 +61,11 @@ class PlayerRuntimeController(
     internal val skipIntroRepository: SkipIntroRepository,
     internal val playerSettingsDataStore: PlayerSettingsDataStore,
     internal val debugSettingsDataStore: DebugSettingsDataStore,
-    internal val geminiSettingsDataStore: GeminiSettingsDataStore,
+    internal val subtitleTranslationSettingsDataStore: SubtitleTranslationSettingsDataStore,
     internal val theIntroDbSettingsDataStore: TheIntroDbSettingsDataStore,
     internal val streamLinkCacheDataStore: StreamLinkCacheDataStore,
     internal val layoutPreferenceDataStore: com.nexio.tv.data.local.LayoutPreferenceDataStore,
-    internal val geminiSubtitleTranslationService: GeminiSubtitleTranslationService,
+    internal val subtitleTranslationService: SubtitleTranslationService,
     internal val playbackIdleGateState: PlaybackIdleGateState,
     internal val debridBenchmarkStore: DebridBenchmarkStore,
     internal val playbackOkHttpClient: OkHttpClient,
@@ -182,14 +183,14 @@ class PlayerRuntimeController(
     internal val _progressUiState = MutableStateFlow(PlayerPlaybackProgressUiState())
     val progressUiState: StateFlow<PlayerPlaybackProgressUiState> = _progressUiState.asStateFlow()
 
-    internal val builtInSubtitleCueTranslator = GeminiBuiltInSubtitleCueTranslator(
+    internal val builtInSubtitleCueTranslator = BuiltInSubtitleCueTranslator(
         scope = scope,
-        translationService = geminiSubtitleTranslationService,
+        translationService = subtitleTranslationService,
         // Built-in AI subtitles are rendered through the app overlay. Keeping
         // Media3's native translator disabled prevents source/translated cue
         // races and avoids double-translating cue text emitted by onCues.
         isEnabledProvider = { false },
-        apiKeyProvider = { geminiApiKey },
+        settingsProvider = { subtitleTranslationSettings },
         targetLanguageProvider = { _uiState.value.subtitleStyle.preferredLanguage },
         onTranslatingChanged = { isTranslating ->
             _uiState.update { state ->
@@ -286,8 +287,8 @@ class PlayerRuntimeController(
     internal var sourceStreamFeatureFlags: StreamFeatureFlags = StreamFeatureFlags()
     internal var currentStreamBingeGroup: String? = navigationArgs.bingeGroup
     internal var hasAppliedRememberedAudioSelection: Boolean = false
-    internal var geminiEnabled: Boolean = false
-    internal var geminiApiKey: String = ""
+    @Volatile
+    internal var subtitleTranslationSettings = SubtitleTranslationSettings()
     internal var aiTranslationSelectionGeneration: Long = 0L
     internal var currentCueGroup: CueGroup = CueGroup.EMPTY_TIME_ZERO
     internal var builtInAiCueGeneration: Long = 0L
@@ -389,7 +390,7 @@ class PlayerRuntimeController(
         }
         observeDebugSettings()
         observeSubtitleSettings()
-        observeGeminiSettings()
+        observeSubtitleTranslationSettings()
         observeTheIntroDbSettings()
         streamingCacheFlagJob = scope.launch {
             combine(

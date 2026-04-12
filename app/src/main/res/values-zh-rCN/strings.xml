@@ -251,7 +251,6 @@
   <string name="settings_integrations_section_subtitle">配置外部元数据和海报集成</string>
   <string name="settings_tmdb_subtitle">元数据增强设置</string>
   <string name="settings_mdblist_subtitle">外部评分提供商</string>
-  <string name="settings_gemini_subtitle">Google Gemini AI 字幕翻译</string>
   <string name="playback_title">播放设置</string>
   <string name="playback_subtitle">配置视频播放和字幕选项</string>
   <string name="cd_decrease">减少</string>
@@ -680,16 +679,6 @@
   <string name="subtitle_ai_translate_missing_target">在启用 AI 翻译之前，请先设置首选的字幕语言。</string>
   <string name="subtitle_ai_translate_unsupported_format">AI 翻译尚不支持此字幕格式。</string>
   <string name="subtitle_ai_translate_failed">翻译字幕失败。</string>
-  <string name="gemini_title">Google Gemini</string>
-  <string name="gemini_subtitle">AI Studio 密钥和 AI 字幕翻译设置</string>
-  <string name="gemini_enable_title">启用 Gemini</string>
-  <string name="gemini_enable_subtitle">允许在播放期间使用 AI 实时翻译字幕</string>
-  <string name="gemini_api_key_title">AI Studio API 密钥</string>
-  <string name="gemini_api_key_subtitle">您的密钥将通过 Nexio 帐户同步存储，并用于字幕翻译</string>
-  <string name="gemini_dialog_title">Google AI Studio API 密钥</string>
-  <string name="gemini_dialog_subtitle">请粘贴您从 Google AI Studio 获取的 Gemini API 密钥</string>
-  <string name="gemini_dialog_placeholder">输入 Google AI Studio API 密钥</string>
-  <string name="gemini_missing_api_key">在启用 Gemini 之前，请先输入您的 API 密钥。</string>
   <string name="subtitle_all">全部</string>
   <string name="subtitle_section_core">核心选项</string>
   <string name="subtitle_section_advanced">高级设置</string>

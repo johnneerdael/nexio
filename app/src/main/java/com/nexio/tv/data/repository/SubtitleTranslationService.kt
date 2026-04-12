@@ -4,6 +4,9 @@ import android.content.Context
 import android.util.Log
 import com.nexio.tv.core.logging.sanitizeUrlForLogs
 import com.nexio.tv.domain.model.Subtitle
+import com.nexio.tv.domain.model.SubtitleTranslationDefaults
+import com.nexio.tv.domain.model.SubtitleTranslationProvider
+import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -26,15 +29,67 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val TAG = "GeminiSubtitleTx"
-private const val GEMINI_MODEL = "gemini-2.5-flash"
+private const val TAG = "SubtitleTranslation"
 
-data class GeminiTranslatedSubtitleAsset(
+internal fun subtitleTranslationCueCacheKey(
+    text: String,
+    targetLanguageCode: String,
+    settings: SubtitleTranslationSettings
+): String {
+    return sha256("cue|${settings.provider}|${settings.model}|${settings.baseUrl}|$targetLanguageCode|$text")
+}
+
+internal fun translatedSubtitleId(
+    sourceSubtitleId: String,
+    targetLanguage: String,
+    settings: SubtitleTranslationSettings
+): String {
+    return "ai:${settings.provider.name.lowercase()}:$sourceSubtitleId:$targetLanguage"
+}
+
+internal fun subtitleTranslationDiskCacheKey(
+    sourceUrl: String,
+    targetLanguage: String,
+    settings: SubtitleTranslationSettings
+): String {
+    return sha256("file|$sourceUrl|$targetLanguage|${settings.provider}|${settings.model}|${settings.baseUrl}|v2")
+}
+
+internal enum class SubtitleTranslationProviderError {
+    InvalidApiKey,
+    RateLimited,
+    Transient,
+    Unknown
+}
+
+private class SubtitleTranslationProviderException(
+    message: String
+) : IllegalStateException(message)
+
+internal fun classifyProviderError(
+    provider: SubtitleTranslationProvider,
+    statusCode: Int,
+    body: String
+): SubtitleTranslationProviderError {
+    return when (statusCode) {
+        401, 403 -> SubtitleTranslationProviderError.InvalidApiKey
+        429 -> SubtitleTranslationProviderError.RateLimited
+        in 500..599 -> SubtitleTranslationProviderError.Transient
+        else -> SubtitleTranslationProviderError.Unknown
+    }
+}
+
+private fun sha256(input: String): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(StandardCharsets.UTF_8))
+    return digest.joinToString("") { "%02x".format(it) }
+}
+
+data class TranslatedSubtitleAsset(
     val sourceSubtitle: Subtitle,
     val translatedSubtitle: Subtitle
 )
 
-data class GeminiTranslationChunkConfig(
+data class SubtitleTranslationChunkConfig(
     val maxEntries: Int,
     val maxChars: Int,
     val minSplitEntries: Int = 20,
@@ -42,18 +97,18 @@ data class GeminiTranslationChunkConfig(
 )
 
 @Singleton
-class GeminiSubtitleTranslationService @Inject constructor(
+class SubtitleTranslationService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val httpClient: OkHttpClient
 ) {
     companion object {
-        val DEFAULT_CUE_CHUNK_CONFIG = GeminiTranslationChunkConfig(
+        val DEFAULT_CUE_CHUNK_CONFIG = SubtitleTranslationChunkConfig(
             maxEntries = 40,
             maxChars = 3_500,
             minSplitEntries = 20,
             maxParallelRequests = 3
         )
-        val ADDON_OVERLAY_CUE_CHUNK_CONFIG = GeminiTranslationChunkConfig(
+        val ADDON_OVERLAY_CUE_CHUNK_CONFIG = SubtitleTranslationChunkConfig(
             maxEntries = 120,
             maxChars = 12_000,
             minSplitEntries = 20,
@@ -66,14 +121,17 @@ class GeminiSubtitleTranslationService @Inject constructor(
     suspend fun translateSubtitle(
         sourceSubtitle: Subtitle,
         targetLanguageCode: String,
-        apiKey: String
-    ): Result<GeminiTranslatedSubtitleAsset> = withContext(Dispatchers.IO) {
+        settings: SubtitleTranslationSettings
+    ): Result<TranslatedSubtitleAsset> = withContext(Dispatchers.IO) {
         runCatching {
             val normalizedTarget = targetLanguageCode.trim().ifBlank {
                 throw IllegalArgumentException("Target language is required.")
             }
-            val trimmedKey = apiKey.trim().ifBlank {
-                throw IllegalArgumentException("Gemini API key is missing.")
+            val normalizedSettings = settings.copy(
+                apiKey = settings.apiKey.trim()
+            )
+            if (normalizedSettings.apiKey.isBlank()) {
+                throw IllegalArgumentException("Subtitle translation API key is missing.")
             }
 
             val sourceText = downloadSubtitleText(sourceSubtitle.url)
@@ -83,14 +141,15 @@ class GeminiSubtitleTranslationService @Inject constructor(
             val translatedFile = resolveCacheFile(
                 sourceUrl = sourceSubtitle.url,
                 targetLanguage = normalizedTarget,
-                extension = document.extension
+                extension = document.extension,
+                settings = normalizedSettings
             )
 
             if (!translatedFile.exists() || translatedFile.length() == 0L) {
                 val translatedBlocks = translateBlocks(
                     blocks = document.translatableBlocks,
                     targetLanguageCode = normalizedTarget,
-                    apiKey = trimmedKey
+                    settings = normalizedSettings
                 )
                 translatedFile.parentFile?.mkdirs()
                 // Write + fsync so the file URI we hand back to the player is
@@ -112,32 +171,47 @@ class GeminiSubtitleTranslationService @Inject constructor(
             }
 
             val translatedSubtitle = sourceSubtitle.copy(
-                id = "gemini:${sourceSubtitle.id}:${normalizedTarget}",
+                id = translatedSubtitleId(sourceSubtitle.id, normalizedTarget, normalizedSettings),
                 url = translatedFile.toURI().toString(),
                 lang = normalizedTarget,
                 addonName = "${sourceSubtitle.addonName} AI",
                 addonLogo = sourceSubtitle.addonLogo
             )
 
-            GeminiTranslatedSubtitleAsset(
+            TranslatedSubtitleAsset(
                 sourceSubtitle = sourceSubtitle,
                 translatedSubtitle = translatedSubtitle
             )
         }
     }
 
+    suspend fun translateSubtitle(
+        sourceSubtitle: Subtitle,
+        targetLanguageCode: String,
+        apiKey: String
+    ): Result<TranslatedSubtitleAsset> {
+        return translateSubtitle(
+            sourceSubtitle = sourceSubtitle,
+            targetLanguageCode = targetLanguageCode,
+            settings = geminiCompatibilitySettings(apiKey)
+        )
+    }
+
     suspend fun translateCueTexts(
         texts: List<String>,
         targetLanguageCode: String,
-        apiKey: String,
-        chunkConfig: GeminiTranslationChunkConfig = DEFAULT_CUE_CHUNK_CONFIG
+        settings: SubtitleTranslationSettings,
+        chunkConfig: SubtitleTranslationChunkConfig = DEFAULT_CUE_CHUNK_CONFIG
     ): Result<Map<String, String>> = withContext(Dispatchers.IO) {
         runCatching {
             val normalizedTarget = targetLanguageCode.trim().ifBlank {
                 throw IllegalArgumentException("Target language is required.")
             }
-            val trimmedKey = apiKey.trim().ifBlank {
-                throw IllegalArgumentException("Gemini API key is missing.")
+            val normalizedSettings = settings.copy(
+                apiKey = settings.apiKey.trim()
+            )
+            if (normalizedSettings.apiKey.isBlank()) {
+                throw IllegalArgumentException("Subtitle translation API key is missing.")
             }
             val normalizedTexts = texts
                 .map { it.trim() }
@@ -150,7 +224,7 @@ class GeminiSubtitleTranslationService @Inject constructor(
             val resolved = mutableMapOf<String, String>()
             val missing = mutableListOf<String>()
             for (text in normalizedTexts) {
-                val cached = cueTranslationCache[cueCacheKey(text, normalizedTarget)]
+                val cached = cueTranslationCache[subtitleTranslationCueCacheKey(text, normalizedTarget, normalizedSettings)]
                 if (cached != null) {
                     resolved[text] = cached
                 } else {
@@ -162,17 +236,31 @@ class GeminiSubtitleTranslationService @Inject constructor(
                 val translated = translateMissingCueTexts(
                     texts = missing,
                     targetLanguageCode = normalizedTarget,
-                    apiKey = trimmedKey,
+                    settings = normalizedSettings,
                     chunkConfig = chunkConfig
                 )
                 translated.forEach { (source, value) ->
-                    cueTranslationCache[cueCacheKey(source, normalizedTarget)] = value
+                    cueTranslationCache[subtitleTranslationCueCacheKey(source, normalizedTarget, normalizedSettings)] = value
                     resolved[source] = value
                 }
             }
 
             resolved
         }
+    }
+
+    suspend fun translateCueTexts(
+        texts: List<String>,
+        targetLanguageCode: String,
+        apiKey: String,
+        chunkConfig: SubtitleTranslationChunkConfig = DEFAULT_CUE_CHUNK_CONFIG
+    ): Result<Map<String, String>> {
+        return translateCueTexts(
+            texts = texts,
+            targetLanguageCode = targetLanguageCode,
+            settings = geminiCompatibilitySettings(apiKey),
+            chunkConfig = chunkConfig
+        )
     }
 
     private suspend fun downloadSubtitleText(url: String): String = withContext(Dispatchers.IO) {
@@ -193,18 +281,19 @@ class GeminiSubtitleTranslationService @Inject constructor(
     private fun resolveCacheFile(
         sourceUrl: String,
         targetLanguage: String,
-        extension: String
+        extension: String,
+        settings: SubtitleTranslationSettings
     ): File {
-        val cacheRoot = File(context.cacheDir, "gemini-subtitles")
-        val key = sha256("$sourceUrl|$targetLanguage|v1")
+        val cacheRoot = File(context.cacheDir, "ai-subtitles")
+        val key = subtitleTranslationDiskCacheKey(sourceUrl, targetLanguage, settings)
         return File(cacheRoot, "$key.$extension")
     }
 
     private suspend fun translateBlocks(
         blocks: List<TranslatableTimedTextBlock>,
         targetLanguageCode: String,
-        apiKey: String,
-        chunkConfig: GeminiTranslationChunkConfig = DEFAULT_CUE_CHUNK_CONFIG
+        settings: SubtitleTranslationSettings,
+        chunkConfig: SubtitleTranslationChunkConfig = DEFAULT_CUE_CHUNK_CONFIG
     ): Map<Int, String> = coroutineScope {
         val chunks = chunkBlocks(blocks, chunkConfig)
         val targetLanguageName = displayLanguage(targetLanguageCode)
@@ -217,7 +306,7 @@ class GeminiSubtitleTranslationService @Inject constructor(
                         blocks = chunk,
                         targetLanguageCode = targetLanguageCode,
                         targetLanguageName = targetLanguageName,
-                        apiKey = apiKey,
+                        settings = settings,
                         chunkConfig = chunkConfig
                     )
                 }
@@ -230,7 +319,7 @@ class GeminiSubtitleTranslationService @Inject constructor(
 
     private fun chunkBlocks(
         blocks: List<TranslatableTimedTextBlock>,
-        chunkConfig: GeminiTranslationChunkConfig
+        chunkConfig: SubtitleTranslationChunkConfig
     ): List<List<TranslatableTimedTextBlock>> {
         val result = mutableListOf<List<TranslatableTimedTextBlock>>()
         var current = mutableListOf<TranslatableTimedTextBlock>()
@@ -258,17 +347,20 @@ class GeminiSubtitleTranslationService @Inject constructor(
         blocks: List<TranslatableTimedTextBlock>,
         targetLanguageCode: String,
         targetLanguageName: String,
-        apiKey: String,
-        chunkConfig: GeminiTranslationChunkConfig
+        settings: SubtitleTranslationSettings,
+        chunkConfig: SubtitleTranslationChunkConfig
     ): Map<Int, String> {
         return runCatching {
             requestChunkTranslation(
                 blocks = blocks,
                 targetLanguageCode = targetLanguageCode,
                 targetLanguageName = targetLanguageName,
-                apiKey = apiKey
+                settings = settings
             )
         }.getOrElse { error ->
+            if (error is SubtitleTranslationProviderException) {
+                throw error
+            }
             if (blocks.size <= chunkConfig.minSplitEntries || blocks.size <= 1) {
                 throw error
             }
@@ -277,13 +369,13 @@ class GeminiSubtitleTranslationService @Inject constructor(
                 blocks = blocks.take(midpoint),
                 targetLanguageCode = targetLanguageCode,
                 targetLanguageName = targetLanguageName,
-                apiKey = apiKey,
+                settings = settings,
                 chunkConfig = chunkConfig
             ) + requestChunkTranslationAdaptive(
                 blocks = blocks.drop(midpoint),
                 targetLanguageCode = targetLanguageCode,
                 targetLanguageName = targetLanguageName,
-                apiKey = apiKey,
+                settings = settings,
                 chunkConfig = chunkConfig
             )
         }
@@ -293,26 +385,29 @@ class GeminiSubtitleTranslationService @Inject constructor(
         blocks: List<TranslatableTimedTextBlock>,
         targetLanguageCode: String,
         targetLanguageName: String,
-        apiKey: String
+        settings: SubtitleTranslationSettings
     ): Map<Int, String> {
-        val requestBody = buildGenerationRequest(
+        val promptPayload = buildPromptPayload(
             blocks = blocks,
             targetLanguageCode = targetLanguageCode,
-            targetLanguageName = targetLanguageName,
-            includeSchema = true
+            targetLanguageName = targetLanguageName
         )
 
-        val responseText = executeGenerationRequest(requestBody, apiKey)
-            ?: executeGenerationRequest(
-                buildGenerationRequest(
-                    blocks = blocks,
-                    targetLanguageCode = targetLanguageCode,
-                    targetLanguageName = targetLanguageName,
-                    includeSchema = false
-                ),
-                apiKey = apiKey
+        val responseText = executeTranslationRequest(
+            promptPayload = promptPayload,
+            targetLanguageCode = targetLanguageCode,
+            targetLanguageName = targetLanguageName,
+            settings = settings,
+            includeSchema = true
+        )
+            ?: executeTranslationRequest(
+                promptPayload = promptPayload,
+                targetLanguageCode = targetLanguageCode,
+                targetLanguageName = targetLanguageName,
+                settings = settings,
+                includeSchema = false
             )
-            ?: throw IllegalStateException("Gemini did not return a translation payload.")
+            ?: throw IllegalStateException("Subtitle translation provider did not return a translation payload.")
 
         return parseTranslationResponse(responseText)
     }
@@ -320,8 +415,8 @@ class GeminiSubtitleTranslationService @Inject constructor(
     private suspend fun translateMissingCueTexts(
         texts: List<String>,
         targetLanguageCode: String,
-        apiKey: String,
-        chunkConfig: GeminiTranslationChunkConfig
+        settings: SubtitleTranslationSettings,
+        chunkConfig: SubtitleTranslationChunkConfig
     ): Map<String, String> = coroutineScope {
         val targetLanguageName = displayLanguage(targetLanguageCode)
         val blocks = texts.mapIndexed { index, text ->
@@ -340,7 +435,7 @@ class GeminiSubtitleTranslationService @Inject constructor(
                         blocks = chunk,
                         targetLanguageCode = targetLanguageCode,
                         targetLanguageName = targetLanguageName,
-                        apiKey = apiKey,
+                        settings = settings,
                         chunkConfig = chunkConfig
                     )
                 }
@@ -358,11 +453,10 @@ class GeminiSubtitleTranslationService @Inject constructor(
         }
     }
 
-    private fun buildGenerationRequest(
+    private fun buildPromptPayload(
         blocks: List<TranslatableTimedTextBlock>,
         targetLanguageCode: String,
-        targetLanguageName: String,
-        includeSchema: Boolean
+        targetLanguageName: String
     ): JSONObject {
         val items = JSONArray().apply {
             blocks.forEach { block ->
@@ -374,11 +468,33 @@ class GeminiSubtitleTranslationService @Inject constructor(
             }
         }
 
-        val promptPayload = JSONObject()
+        return JSONObject()
             .put("targetLanguageCode", targetLanguageCode)
             .put("targetLanguageName", targetLanguageName)
             .put("items", items)
+    }
 
+    private fun buildTranslationSystemPrompt(
+        targetLanguageCode: String,
+        targetLanguageName: String
+    ): String {
+        return buildString {
+            append("You are an expert subtitle localization specialist. ")
+            append("Translate only the text fields in the provided JSON items into ")
+            append(targetLanguageName)
+            append(" (")
+            append(targetLanguageCode)
+            append("). ")
+            append("Return JSON only. Keep the same ids. ")
+            append("Preserve subtitle brevity, punctuation, markup, speaker labels, and internal line breaks when possible.")
+        }
+    }
+
+    private fun buildGeminiGenerationRequest(
+        promptPayload: JSONObject,
+        systemPrompt: String,
+        includeSchema: Boolean
+    ): JSONObject {
         val generationConfig = JSONObject()
             .put("temperature", 0.2)
             .put(
@@ -415,16 +531,7 @@ class GeminiSubtitleTranslationService @Inject constructor(
                     JSONArray().put(
                         JSONObject().put(
                             "text",
-                            buildString {
-                                append("You are an expert subtitle localization specialist. ")
-                                append("Translate only the text fields in the provided JSON items into ")
-                                append(targetLanguageName)
-                                append(" (")
-                                append(targetLanguageCode)
-                                append("). ")
-                                append("Return JSON only. Keep the same ids. ")
-                                append("Preserve subtitle brevity, punctuation, markup, speaker labels, and internal line breaks when possible.")
-                            }
+                            systemPrompt
                         )
                     )
                 )
@@ -443,47 +550,134 @@ class GeminiSubtitleTranslationService @Inject constructor(
             .put("generationConfig", generationConfig)
     }
 
-    private fun executeGenerationRequest(
-        requestBody: JSONObject,
-        apiKey: String
+    private fun executeTranslationRequest(
+        promptPayload: JSONObject,
+        targetLanguageCode: String,
+        targetLanguageName: String,
+        settings: SubtitleTranslationSettings,
+        includeSchema: Boolean
     ): String? {
-        val request = Request.Builder()
-            .url("https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL:generateContent")
-            .header("x-goog-api-key", apiKey)
-            .header("Content-Type", "application/json")
-            .post(requestBody.toString().toRequestBody("application/json".toMediaType()))
-            .build()
+        val systemPrompt = buildTranslationSystemPrompt(targetLanguageCode, targetLanguageName)
+        val endpoint = providerEndpoint(settings)
+        val request = when (settings.provider) {
+            SubtitleTranslationProvider.OPENAI -> openAiRequest(
+                endpoint = endpoint,
+                apiKey = settings.apiKey,
+                body = buildOpenAiChatCompletionRequest(
+                    settings = settings,
+                    systemPrompt = systemPrompt,
+                    userPayload = promptPayload.toString(),
+                    includeJsonMode = includeSchema
+                )
+            )
+            SubtitleTranslationProvider.ANTHROPIC -> anthropicRequest(
+                endpoint = endpoint,
+                apiKey = settings.apiKey,
+                body = buildAnthropicMessagesRequest(
+                    settings = settings,
+                    systemPrompt = systemPrompt,
+                    userPayload = promptPayload.toString()
+                )
+            )
+            SubtitleTranslationProvider.GEMINI -> geminiRequest(
+                endpoint = endpoint,
+                apiKey = settings.apiKey,
+                body = buildGeminiGenerationRequest(
+                    promptPayload = promptPayload,
+                    systemPrompt = systemPrompt,
+                    includeSchema = includeSchema
+                )
+            )
+        }
 
         httpClient.newCall(request).execute().use { response ->
             val raw = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
-                Log.w(TAG, "Gemini request failed code=${response.code} body=${raw.take(300)}")
-                return null
-            }
-            val payload = JSONObject(raw)
-            val candidates = payload.optJSONArray("candidates") ?: return null
-            if (candidates.length() == 0) return null
-            val content = candidates.optJSONObject(0)?.optJSONObject("content") ?: return null
-            val parts = content.optJSONArray("parts") ?: return null
-            for (index in 0 until parts.length()) {
-                val text = parts.optJSONObject(index)?.optString("text").orEmpty()
-                if (text.isNotBlank()) {
-                    return text
+                Log.w(TAG, "Subtitle translation request failed provider=${settings.provider} code=${response.code} body=${raw.take(300)}")
+                val providerError = classifyProviderError(settings.provider, response.code, raw)
+                if (includeSchema && isStructuredRequestFallbackEligible(response.code, providerError)) {
+                    return null
                 }
+                throw providerException(settings.provider, response.code, raw)
             }
-            return null
+            return when (settings.provider) {
+                SubtitleTranslationProvider.OPENAI -> parseOpenAiResponseText(raw)
+                SubtitleTranslationProvider.ANTHROPIC -> parseAnthropicResponseText(raw)
+                SubtitleTranslationProvider.GEMINI -> parseGeminiResponseText(raw)
+            }
+        }
+    }
+
+    private fun geminiRequest(
+        endpoint: String,
+        apiKey: String,
+        body: JSONObject
+    ): Request {
+        return Request.Builder()
+            .url(endpoint)
+            .header("x-goog-api-key", apiKey)
+            .header("Content-Type", "application/json")
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+    }
+
+    private fun parseGeminiResponseText(raw: String): String? {
+        val payload = JSONObject(raw)
+        val candidates = payload.optJSONArray("candidates") ?: return null
+        if (candidates.length() == 0) return null
+        val content = candidates.optJSONObject(0)?.optJSONObject("content") ?: return null
+        val parts = content.optJSONArray("parts") ?: return null
+        for (index in 0 until parts.length()) {
+            val text = parts.optJSONObject(index)?.optString("text").orEmpty()
+            if (text.isNotBlank()) {
+                return text
+            }
+        }
+        return null
+    }
+
+    private fun isStructuredRequestFallbackEligible(
+        statusCode: Int,
+        providerError: SubtitleTranslationProviderError
+    ): Boolean {
+        return providerError == SubtitleTranslationProviderError.Unknown && statusCode in 400..499
+    }
+
+    private fun providerException(
+        provider: SubtitleTranslationProvider,
+        statusCode: Int,
+        body: String
+    ): SubtitleTranslationProviderException {
+        val providerError = classifyProviderError(provider, statusCode, body)
+        return when (providerError) {
+            SubtitleTranslationProviderError.InvalidApiKey ->
+                SubtitleTranslationProviderException(
+                    message = "Subtitle translation API key was rejected."
+                )
+            SubtitleTranslationProviderError.RateLimited ->
+                SubtitleTranslationProviderException(
+                    message = "Subtitle translation provider rate limit reached. Try again later."
+                )
+            SubtitleTranslationProviderError.Transient ->
+                SubtitleTranslationProviderException(
+                    message = "Subtitle translation provider is temporarily unavailable."
+                )
+            SubtitleTranslationProviderError.Unknown ->
+                SubtitleTranslationProviderException(
+                    message = "Subtitle translation request failed with HTTP $statusCode."
+                )
         }
     }
 
     private fun parseTranslationResponse(responseText: String): Map<Int, String> {
-        val normalized = responseText.trim()
+        val normalized = sanitizeJsonResponse(responseText)
         val array = when {
             normalized.startsWith("[") -> JSONArray(normalized)
             normalized.startsWith("{") -> JSONObject(normalized).optJSONArray("items") ?: JSONArray()
             else -> JSONArray()
         }
         if (array.length() == 0) {
-            throw IllegalStateException("Gemini returned an empty translation payload.")
+            throw IllegalStateException("Subtitle translation provider returned an empty translation payload.")
         }
 
         return buildMap {
@@ -498,21 +692,26 @@ class GeminiSubtitleTranslationService @Inject constructor(
         }
     }
 
+    private fun geminiCompatibilitySettings(apiKey: String): SubtitleTranslationSettings {
+        return SubtitleTranslationSettings(
+            provider = SubtitleTranslationProvider.GEMINI,
+            apiKey = apiKey,
+            model = SubtitleTranslationDefaults.GEMINI_MODEL,
+            baseUrl = SubtitleTranslationDefaults.GEMINI_BASE_URL
+        )
+    }
+
     private fun displayLanguage(code: String): String {
         val locale = Locale.forLanguageTag(code)
         val name = locale.getDisplayLanguage(Locale.ENGLISH)
         return if (name.isNullOrBlank()) code else name
     }
 
-    private fun cueCacheKey(text: String, targetLanguageCode: String): String {
-        return sha256("cue|$targetLanguageCode|$text")
-    }
-
-    private fun sha256(input: String): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(StandardCharsets.UTF_8))
-        return digest.joinToString("") { "%02x".format(it) }
-    }
 }
+
+typealias GeminiSubtitleTranslationService = SubtitleTranslationService
+typealias GeminiTranslatedSubtitleAsset = TranslatedSubtitleAsset
+typealias GeminiTranslationChunkConfig = SubtitleTranslationChunkConfig
 
 private enum class TimedTextFormat(val extension: String) {
     SRT("srt"),
