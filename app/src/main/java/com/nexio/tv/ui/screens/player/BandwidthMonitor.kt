@@ -1,64 +1,75 @@
 package com.nexio.tv.ui.screens.player
 
 import android.os.SystemClock
-import java.util.concurrent.ConcurrentLinkedDeque
 
 internal class BandwidthMonitor(
     private val windowMs: Long = 5_000L,
-    private val clockMs: () -> Long = SystemClock::elapsedRealtime
+    private val clockMs: () -> Long = SystemClock::elapsedRealtime,
+    capacity: Int = DEFAULT_CAPACITY
 ) {
     private data class Sample(
-        val timestampMs: Long,
-        val bytes: Long
+        var timestampMs: Long = 0L,
+        var bytes: Long = 0L
     )
 
-    private val samples = ConcurrentLinkedDeque<Sample>()
+    private val samples = Array(capacity.coerceAtLeast(2)) { Sample() }
     private val lock = Any()
+    private var startIndex = 0
+    private var size = 0
+    private var lastTimestampMs = Long.MIN_VALUE
 
     fun onBytesTransferred(bytes: Long) {
         if (bytes <= 0L) return
         synchronized(lock) {
             val now = clockMs()
-            pruneAndNormalizeLocked(now)
-            insertSampleLocked(Sample(timestampMs = now, bytes = bytes))
+            if (now < lastTimestampMs) return
+            lastTimestampMs = now
+            pruneLocked(now)
+            appendLocked(now, bytes)
         }
     }
 
     fun estimatedBytesPerSecond(): Long {
         synchronized(lock) {
-            pruneAndNormalizeLocked(clockMs())
+            pruneLocked(clockMs())
+            if (size <= 1) return 0L
 
-            val windowSamples = samples.toList()
-            if (windowSamples.isEmpty()) return 0L
-
-            val elapsedMs = windowSamples.last().timestampMs - windowSamples.first().timestampMs
+            val first = samples[startIndex]
+            val last = samples[index(size - 1)]
+            val elapsedMs = last.timestampMs - first.timestampMs
             if (elapsedMs <= 0L) return 0L
 
-            val totalBytes = windowSamples.fold(0L) { acc, sample -> acc + sample.bytes }
+            var totalBytes = 0L
+            for (i in 0 until size) {
+                totalBytes += samples[index(i)].bytes
+            }
             return totalBytes * 1_000L / elapsedMs
         }
     }
 
-    private fun pruneAndNormalizeLocked(nowMs: Long) {
-        val cutoffMs = nowMs - windowMs
-        val retainedSamples = samples
-            .asSequence()
-            .filter { it.timestampMs >= cutoffMs }
-            .sortedBy { it.timestampMs }
-            .toList()
+    private fun appendLocked(timestampMs: Long, bytes: Long) {
+        if (size == samples.size) {
+            startIndex = (startIndex + 1) % samples.size
+            size--
+        }
 
-        samples.clear()
-        retainedSamples.forEach(samples::addLast)
+        val insertIndex = index(size)
+        samples[insertIndex].timestampMs = timestampMs
+        samples[insertIndex].bytes = bytes
+        size++
     }
 
-    private fun insertSampleLocked(sample: Sample) {
-        val orderedSamples = samples
-            .asSequence()
-            .plus(sample)
-            .sortedBy { it.timestampMs }
-            .toList()
+    private fun pruneLocked(nowMs: Long) {
+        val cutoffMs = nowMs - windowMs
+        while (size > 0 && samples[startIndex].timestampMs < cutoffMs) {
+            startIndex = (startIndex + 1) % samples.size
+            size--
+        }
+    }
 
-        samples.clear()
-        orderedSamples.forEach(samples::addLast)
+    private fun index(offset: Int): Int = (startIndex + offset) % samples.size
+
+    companion object {
+        private const val DEFAULT_CAPACITY = 256
     }
 }
