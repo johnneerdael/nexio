@@ -3,6 +3,9 @@ package com.nexio.tv.ui.screens.player
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.datasource.cache.CacheDataSource
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import io.mockk.mockk
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
@@ -75,6 +78,50 @@ class PlayerMediaSourceFactoryTest {
         )
 
         assertFalse(dataSourceFactory is ParallelRangeDataSource.Factory)
+    }
+
+    @Test
+    fun benchmarkProgressiveFactory_usesParallelRangeDatasourceWhenEnabled() {
+        val factory = PlayerMediaSourceFactory(
+            context = mockk(relaxed = true),
+            playbackOkHttpClient = OkHttpClient()
+        )
+
+        val dataSourceFactory = factory.createBenchmarkProgressiveDataSourceFactory(
+            url = "https://example.com/video.mkv",
+            headers = emptyMap(),
+            parallelConnectionsEnabled = true,
+            parallelConnectionCount = 4,
+            parallelChunkSizeMb = 32,
+            vodCacheEnabled = false,
+            allowStartupBootstrapReuse = true,
+            transportSampleTimeMs = { 0L },
+            onTransportBytesDownloaded = { _, _ -> }
+        )
+
+        assertTrue(dataSourceFactory is ParallelRangeDataSource.Factory)
+    }
+
+    @Test
+    fun benchmarkProgressiveFactory_wrapsVodCacheWhenEnabled() {
+        val factory = PlayerMediaSourceFactory(
+            context = ApplicationProvider.getApplicationContext<Context>(),
+            playbackOkHttpClient = OkHttpClient()
+        )
+
+        val dataSourceFactory = factory.createBenchmarkProgressiveDataSourceFactory(
+            url = "https://example.com/video.mkv",
+            headers = emptyMap(),
+            parallelConnectionsEnabled = false,
+            parallelConnectionCount = 2,
+            parallelChunkSizeMb = 16,
+            vodCacheEnabled = true,
+            allowStartupBootstrapReuse = true,
+            transportSampleTimeMs = { 0L },
+            onTransportBytesDownloaded = { _, _ -> }
+        )
+
+        assertTrue(dataSourceFactory.createDataSource() is CacheDataSource)
     }
 
     @Test

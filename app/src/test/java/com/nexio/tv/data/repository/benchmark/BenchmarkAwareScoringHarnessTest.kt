@@ -48,6 +48,24 @@ class BenchmarkAwareScoringHarnessTest {
     }
 
     @Test
+    fun `scorer rejects streams above autoplay max bitrate cap`() {
+        val scenario = sampleDataset().scenarios.single()
+
+        val event = BenchmarkAwareStreamScorer().score(
+            request = scenario.toShadowRequestContext(),
+            streams = scenario.toStreamCards(),
+            benchmarkSessions = scenario.toBenchmarkSessionMap(),
+            autoplayMaxBitrateMbps = 20.0
+        )
+
+        assertEquals(null, event.selected)
+        assertTrue(event.rejected.isNotEmpty())
+        assertTrue(event.rejected.all { rejected ->
+            rejected.reasons == listOf(ShadowRejectReason.EXCEEDS_AUTOPLAY_CAP)
+        })
+    }
+
+    @Test
     fun `cli runner writes evaluation output`() {
         val datasetFile = Files.createTempFile("benchmark_scoring_dataset", ".json")
         val outputFile = Files.createTempFile("benchmark_scoring_output", ".json")
