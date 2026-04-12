@@ -532,7 +532,7 @@ internal class PlayerMediaSourceFactory(
             )
             else -> ParallelProviderProfile(
                 connectionCount = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
-                chunkSizeMb = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB
+                chunkSizeMb = SAFE_DEFAULT_PARALLEL_CHUNK_SIZE_MB
             )
         }
     }
@@ -555,6 +555,7 @@ internal class PlayerMediaSourceFactory(
         private const val PREFETCH_IDLE_SLEEP_MS = 250L
         private const val PREFETCH_MAX_IDLE_CYCLES = 20
         private const val LIVE_CACHE_RECONFIGURE_MIN_DELTA_BYTES = 64L * 1024L * 1024L
+        private const val SAFE_DEFAULT_PARALLEL_CHUNK_SIZE_MB = 24
         private const val DEFAULT_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
