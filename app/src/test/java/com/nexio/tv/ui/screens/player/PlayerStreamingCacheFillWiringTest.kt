@@ -44,9 +44,17 @@ class PlayerStreamingCacheFillWiringTest {
             "com/nexio/tv/ui/screens/player/PlayerPlaybackNetworking.kt"
         ).toFile().readText()
 
+        val phase3Block = source.substringAfter(
+            "if (streamingCacheDebugMode == StreamingCacheDebugMode.PHASE3_CACHE_WITH_FILL)"
+        ).substringBefore("return CoverageAwareDataSource.Factory(")
+        val coverageBlock = source.substringAfter("return CoverageAwareDataSource.Factory(")
+        assertTrue(
+            "Phase 3 diagnostic mode should use CacheDataSource upstream fallback",
+            phase3Block.contains(".setUpstreamDataSourceFactory(upstreamFactory)")
+        )
         assertFalse(
-            "Streaming cache playback must not use CacheDataSource.setUpstreamDataSourceFactory(...)",
-            source.contains("setUpstreamDataSourceFactory")
+            "Coverage-aware streaming cache playback must not use CacheDataSource upstream fallback",
+            coverageBlock.contains("setUpstreamDataSourceFactory")
         )
         assertTrue(
             "Streaming cache playback must still construct CoverageAwareDataSource.Factory",
