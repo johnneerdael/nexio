@@ -16,7 +16,8 @@ internal class DiskSpoolDataSource(
     private val randomAccessFallbackFactory: DataSource.Factory? = null,
     private val randomAccessBypassDistanceBytes: Long = RANDOM_ACCESS_BYPASS_DISTANCE_BYTES,
     private val startupPrebufferBytes: Long = 0L,
-    private val startupPrebufferWaitTimeoutMs: Long = STARTUP_PREBUFFER_WAIT_TIMEOUT_MS
+    private val startupPrebufferWaitTimeoutMs: Long = STARTUP_PREBUFFER_WAIT_TIMEOUT_MS,
+    private val ramReadAheadBytes: Long = 0L
 ) : DataSource {
 
     private val transferListeners = mutableListOf<TransferListener>()
@@ -25,6 +26,7 @@ internal class DiskSpoolDataSource(
     private var position = 0L
     private var remaining = C.LENGTH_UNSET.toLong()
     private var resolvedContentLength = C.LENGTH_UNSET.toLong()
+    private var readAheadBuffer: DiskSpoolReadAheadBuffer? = null
 
     override fun addTransferListener(transferListener: TransferListener) {
         transferListeners.add(transferListener)
@@ -44,6 +46,11 @@ internal class DiskSpoolDataSource(
 
         openedDataSpec = dataSpec
         position = dataSpec.position
+        readAheadBuffer?.release()
+        readAheadBuffer = ramReadAheadBytes
+            .takeIf { it > 0L }
+            ?.let { DiskSpoolReadAheadBuffer(session, it) }
+        readAheadBuffer?.start(position)
         resolvedContentLength = when {
             contentLength != C.LENGTH_UNSET.toLong() -> contentLength
             session.contentLengthBytes() != C.LENGTH_UNSET.toLong() -> session.contentLengthBytes()
@@ -78,6 +85,18 @@ internal class DiskSpoolDataSource(
                 minOf(length.toLong(), remaining).toInt()
             }
 
+            val bufferedRead = readAheadBuffer?.read(position, buffer, offset, readLength) ?: 0
+            if (bufferedRead > 0) {
+                position += bufferedRead.toLong()
+                if (remaining != C.LENGTH_UNSET.toLong()) {
+                    remaining -= bufferedRead.toLong()
+                }
+
+                val dataSpec = openedDataSpec ?: return bufferedRead
+                transferListeners.forEach { it.onBytesTransferred(this, dataSpec, false, bufferedRead) }
+                return bufferedRead
+            }
+
             val read = session.read(position, buffer, offset, readLength)
             if (read > 0) {
                 position += read.toLong()
@@ -102,6 +121,8 @@ internal class DiskSpoolDataSource(
     }
 
     override fun close() {
+        readAheadBuffer?.release()
+        readAheadBuffer = null
         fallbackDataSource?.close()
         fallbackDataSource = null
         val dataSpec = openedDataSpec
@@ -147,6 +168,7 @@ internal class DiskSpoolDataSource(
 
     private fun openFallbackForCurrentPosition(): DataSource? {
         if (randomAccessFallbackFactory == null) return null
+        readAheadBuffer?.reset(position)
         val dataSpec = openedDataSpec ?: return null
         val fallbackSpec = dataSpec.buildUpon()
             .setPosition(position)
@@ -157,6 +179,7 @@ internal class DiskSpoolDataSource(
     }
 
     private fun openFallback(dataSpec: DataSpec): Long {
+        readAheadBuffer?.reset(dataSpec.position)
         openFallbackDataSource(dataSpec)
         openedDataSpec = null
         return remaining
@@ -203,7 +226,8 @@ internal class DiskSpoolDataSource(
         private val uri: Uri,
         private val contentLength: Long = C.LENGTH_UNSET.toLong(),
         private val randomAccessFallbackFactory: DataSource.Factory? = null,
-        private val startupPrebufferBytes: Long = 0L
+        private val startupPrebufferBytes: Long = 0L,
+        private val ramReadAheadBytes: Long = 0L
     ) : DataSource.Factory {
         override fun createDataSource(): DataSource {
             return DiskSpoolDataSource(
@@ -211,9 +235,14 @@ internal class DiskSpoolDataSource(
                 uri = uri,
                 contentLength = contentLength,
                 randomAccessFallbackFactory = randomAccessFallbackFactory,
-                startupPrebufferBytes = startupPrebufferBytes
+                startupPrebufferBytes = startupPrebufferBytes,
+                ramReadAheadBytes = ramReadAheadBytes
             )
         }
+    }
+
+    internal fun awaitReadAheadBufferedBytesForTesting(minBytes: Long, timeoutMs: Long): Boolean {
+        return readAheadBuffer?.awaitBufferedBytesForTesting(minBytes, timeoutMs) ?: false
     }
 
     private companion object {

@@ -273,6 +273,68 @@ class DiskSpoolDataSourceTest {
     }
 
     @Test
+    fun `sequential reads use async ram read ahead buffer fed from disk spool`() {
+        val session = DiskSpoolSession(
+            File(temp.root, "movie.spool"),
+            capacityBytes = 1_024L,
+            waitTimeoutMs = 1_000L
+        )
+        val uri = Uri.parse("https://example.com/movie.bin")
+        session.writeRange(0L, byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8), 8)
+        val dataSource = DiskSpoolDataSource(
+            session = session,
+            uri = uri,
+            contentLength = 8L,
+            ramReadAheadBytes = 8L
+        )
+
+        try {
+            assertEquals(8L, dataSource.open(DataSpec(uri)))
+            assertTrue(dataSource.awaitReadAheadBufferedBytesForTesting(minBytes = 8L, timeoutMs = 1_000L))
+
+            val first = ByteArray(4)
+            assertEquals(4, dataSource.read(first, 0, first.size))
+            val second = ByteArray(4)
+            assertEquals(4, dataSource.read(second, 0, second.size))
+
+            assertArrayEquals(byteArrayOf(1, 2, 3, 4), first)
+            assertArrayEquals(byteArrayOf(5, 6, 7, 8), second)
+        } finally {
+            dataSource.close()
+            session.close()
+        }
+    }
+
+    @Test
+    fun `read falls back to disk spool when ram buffer has no bytes ready`() {
+        val session = DiskSpoolSession(
+            File(temp.root, "movie.spool"),
+            capacityBytes = 1_024L,
+            waitTimeoutMs = 1_000L
+        )
+        val uri = Uri.parse("https://example.com/movie.bin")
+        val dataSource = DiskSpoolDataSource(
+            session = session,
+            uri = uri,
+            contentLength = 4L,
+            ramReadAheadBytes = 8L
+        )
+
+        try {
+            assertEquals(4L, dataSource.open(DataSpec(uri)))
+            session.writeRange(0L, byteArrayOf(9, 10, 11, 12), 4)
+
+            val out = ByteArray(4)
+            assertEquals(4, dataSource.read(out, 0, out.size))
+
+            assertArrayEquals(byteArrayOf(9, 10, 11, 12), out)
+        } finally {
+            dataSource.close()
+            session.close()
+        }
+    }
+
+    @Test
     fun `open fails clearly when factory creates data source after session closed`() {
         val session = DiskSpoolSession(
             File(temp.root, "movie.spool"),
