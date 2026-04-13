@@ -511,6 +511,15 @@ internal fun PlayerRuntimeController.maybeApplyStartupPreferredAudioSelection(
 ): Int? {
     if (autoAudioSelected) return null
     if (audioTracks.isEmpty()) return null
+    if (isSafeAudioModeActiveForCurrentPlayback) {
+        autoAudioSelected = true
+        Log.i(
+            PlayerRuntimeController.TAG,
+            "AUDIO_STARTUP: Safe audio mode active; preserving device-constrained " +
+                "selection index=$currentSelectedIndex"
+        )
+        return null
+    }
     if (hasAppliedRememberedAudioSelection) {
         autoAudioSelected = true
         return null
@@ -803,6 +812,15 @@ internal fun PlayerRuntimeController.maybeApplyRememberedAudioSelection(audioTra
     if (hasAppliedRememberedAudioSelection) return
     if (!streamReuseLastLinkEnabled) return
     if (audioTracks.isEmpty()) return
+    if (isSafeAudioModeActiveForCurrentPlayback) {
+        hasAppliedRememberedAudioSelection = true
+        Log.i(
+            PlayerRuntimeController.TAG,
+            "AUDIO_STARTUP: Safe audio mode active; skipping remembered audio override " +
+                "to preserve device-constrained track selection"
+        )
+        return
+    }
     if (rememberedAudioLanguage.isNullOrBlank() && rememberedAudioName.isNullOrBlank()) return
 
     // If the user's preference is "Original language", do not let a stale
@@ -872,6 +890,10 @@ internal fun PlayerRuntimeController.maybeRestorePendingAudioSelectionAfterSubti
         return null
     }
     if (audioTracks.isEmpty()) return null
+    if (isSafeAudioModeActiveForCurrentPlayback) {
+        pendingAudioSelectionAfterSubtitleRefresh = null
+        return null
+    }
 
     val targetLang = normalizeTrackMatchValue(pending.language)
     val targetName = normalizeTrackMatchValue(pending.name)

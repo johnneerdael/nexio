@@ -104,6 +104,12 @@ internal class PlayerMediaSourceFactory(
     internal var diskSpoolDirectoryResolverForTesting: ((Context, DiskSpoolStorageLocation) -> File?)? = null
     internal var diskSpoolWriterProfileObserverForTesting: ((Int, Int) -> Unit)? = null
 
+    fun isDiskSpoolSessionActive(): Boolean {
+        return synchronized(diskSpoolLock) {
+            activeDiskSpoolSession?.let { !it.isClosed() } ?: false
+        }
+    }
+
     init {
         cleanupDiskSpoolDirectory()
     }
