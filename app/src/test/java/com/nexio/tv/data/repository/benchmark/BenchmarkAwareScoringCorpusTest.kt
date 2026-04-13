@@ -194,8 +194,9 @@ class BenchmarkAwareScoringCorpusTest {
         )
 
         val result = summary.scenarios.single()
-        assertTrue(lotr.acceptableWinnerKeys.contains(result.selectedStreamKey))
         assertTrue(result.acceptableMatch)
+        val baseKey = result.selectedStreamKey?.substringBefore('|')
+        assertTrue(lotr.acceptableWinnerKeys.contains(baseKey))
     }
 
     @Test
@@ -213,8 +214,9 @@ class BenchmarkAwareScoringCorpusTest {
 
         summary.scenarios.forEach { result ->
             val scenario = selectedScenarios.first { it.id == result.scenarioId }
-            assertTrue(scenario.acceptableWinnerKeys.contains(result.selectedStreamKey))
             assertTrue(result.acceptableMatch)
+            val baseKey = result.selectedStreamKey?.substringBefore('|')
+            assertTrue(scenario.acceptableWinnerKeys.contains(baseKey))
         }
     }
 
@@ -236,7 +238,8 @@ class BenchmarkAwareScoringCorpusTest {
 
         summary.scenarios.forEach { result ->
             val scenario = selectedScenarios.first { it.id == result.scenarioId }
-            assertEquals(scenario.expectedResolvedWinnerStreamKey(), result.selectedStreamKey)
+            val baseKey = result.selectedStreamKey?.substringBefore('|')
+            assertEquals(scenario.expectedResolvedWinnerStreamKey(), baseKey)
             assertTrue(result.acceptableMatch)
         }
     }

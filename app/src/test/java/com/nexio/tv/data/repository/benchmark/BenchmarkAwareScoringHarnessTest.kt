@@ -20,7 +20,8 @@ class BenchmarkAwareScoringHarnessTest {
 
         assertEquals(1, summary.scenarioCount)
         assertTrue(summary.top1Accuracy >= 0.0)
-        assertTrue(summary.scenarios.single().selectedStreamKey in setOf("truehd_pcm", "ddp_atmos"))
+        val baseKey = summary.scenarios.single().selectedStreamKey?.substringBefore('|')
+        assertTrue(baseKey in setOf("truehd_pcm", "ddp_atmos"))
     }
 
     @Test

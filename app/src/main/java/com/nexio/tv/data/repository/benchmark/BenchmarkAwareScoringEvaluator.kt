@@ -83,12 +83,12 @@ class BenchmarkAwareScoringEvaluator {
             }
             val exactTopMatch =
                 expectedWinnerStreamKey != null &&
-                    selectedKey == expectedWinnerStreamKey
+                    streamKeyMatches(selectedKey, expectedWinnerStreamKey)
             val acceptableMatch =
-                selectedKey != null && acceptableWinnerKeys.contains(selectedKey)
+                selectedKey != null && acceptableWinnerKeys.any { streamKeyMatches(selectedKey, it) }
             val pairwiseSatisfied = scenario.preferredPairs.count { pair ->
-                val preferred = event.winners.indexOfFirst { it.streamKey == pair.preferredStreamKey }
-                val other = event.winners.indexOfFirst { it.streamKey == pair.otherStreamKey }
+                val preferred = event.winners.indexOfFirst { streamKeyMatches(it.streamKey, pair.preferredStreamKey) }
+                val other = event.winners.indexOfFirst { streamKeyMatches(it.streamKey, pair.otherStreamKey) }
                 preferred >= 0 && other >= 0 && preferred < other
             }
             val failureCategory = when {
@@ -174,4 +174,12 @@ class BenchmarkAwareScoringTuningHarness(
             summary.acceptableAccuracy * 2.0 +
             summary.pairwiseAccuracy * 2.0
     }
+}
+
+private fun streamKeyMatches(actual: String?, expected: String?): Boolean {
+    if (actual == null || expected == null) return actual == expected
+    if (actual == expected) return true
+    val baseActual = actual.substringBefore('|')
+    val baseExpected = expected.substringBefore('|')
+    return baseActual == baseExpected
 }

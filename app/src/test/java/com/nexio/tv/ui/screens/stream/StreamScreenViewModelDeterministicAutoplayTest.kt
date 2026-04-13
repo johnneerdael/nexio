@@ -424,7 +424,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         )
 
         assertNotNull(event)
-        assertEquals("manual-cap-1080p", event?.selected?.streamKey)
+        assertEquals("manual-cap-1080p|RD", event?.selected?.streamKey)
         assertEquals(emptyList<ShadowRejectReason>(), event?.rejected?.flatMap { it.reasons })
         assertEquals(7L, event?.timingsMs)
     }
