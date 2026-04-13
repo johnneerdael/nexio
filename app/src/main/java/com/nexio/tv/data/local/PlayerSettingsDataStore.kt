@@ -15,6 +15,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.nexio.tv.domain.model.TrackingProvider
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -249,6 +250,7 @@ data class PlayerSettings(
     val vodCacheSizeMb: Int = DEFAULT_VOD_CACHE_SIZE_MB,
     val vodCacheWarmAheadEnabled: Boolean = DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED,
     val progressivePlaybackDiskMode: ProgressivePlaybackDiskMode = ProgressivePlaybackDiskMode.OFF,
+    val diskSpoolStorageLocation: DiskSpoolStorageLocation = DiskSpoolStorageLocation.BUILTIN,
     val spoolStorageProbeResultJson: String? = null,
     val useParallelConnections: Boolean = DEFAULT_USE_PARALLEL_CONNECTIONS,
     val parallelConnectionCount: Int = DEFAULT_PARALLEL_CONNECTION_COUNT,
@@ -532,6 +534,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val vodCacheSizeMbKey = intPreferencesKey("vod_cache_size_mb")
     private val vodCacheWarmAheadEnabledKey = booleanPreferencesKey("vod_cache_warm_ahead_enabled")
     private val progressivePlaybackDiskModeKey = stringPreferencesKey("progressive_playback_disk_mode")
+    private val diskSpoolStorageLocationKey = stringPreferencesKey("disk_spool_storage_location")
     private val spoolStorageProbeResultJsonKey = stringPreferencesKey("spool_storage_probe_result_json")
     private val useParallelConnectionsKey = booleanPreferencesKey("use_parallel_connections")
     private val parallelConnectionCountKey = intPreferencesKey("parallel_connection_count")
@@ -840,6 +843,9 @@ class PlayerSettingsDataStore @Inject constructor(
                     prefs[vodCacheWarmAheadEnabledKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED,
                 progressivePlaybackDiskMode = parseProgressivePlaybackDiskMode(
                     prefs[progressivePlaybackDiskModeKey]
+                ),
+                diskSpoolStorageLocation = parseDiskSpoolStorageLocation(
+                    prefs[diskSpoolStorageLocationKey]
                 ),
                 spoolStorageProbeResultJson = prefs[spoolStorageProbeResultJsonKey]
                     ?.takeIf { SpoolStorageProbeResult.fromJsonOrNull(it) != null },
@@ -1258,6 +1264,14 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
+    private fun parseDiskSpoolStorageLocation(value: String?): DiskSpoolStorageLocation {
+        return when (value?.trim()?.uppercase()) {
+            "EXTERNAL" -> DiskSpoolStorageLocation.EXTERNAL
+            "BUILTIN" -> DiskSpoolStorageLocation.BUILTIN
+            else -> DiskSpoolStorageLocation.BUILTIN
+        }
+    }
+
     private fun normalizeSelectableLanguageCode(language: String): String {
         val code = language.trim().lowercase()
         return when (code) {
@@ -1595,6 +1609,9 @@ class PlayerSettingsDataStore @Inject constructor(
                 prefs.remove(autoplayMaxBitrateMbpsKey)
             }
             prefs[vodCacheSizeModeKey] = mode.name
+            if (mode == VodCacheSizeMode.ON) {
+                prefs[progressivePlaybackDiskModeKey] = ProgressivePlaybackDiskMode.OFF.name
+            }
         }
     }
 
@@ -1626,6 +1643,19 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setProgressivePlaybackDiskMode(mode: ProgressivePlaybackDiskMode) {
         store().edit { prefs ->
             prefs[progressivePlaybackDiskModeKey] = mode.name
+            if (mode == ProgressivePlaybackDiskMode.SPOOL) {
+                prefs[vodCacheSizeModeKey] = VodCacheSizeMode.OFF.name
+            }
+        }
+    }
+
+    suspend fun setDiskSpoolStorageLocation(location: DiskSpoolStorageLocation) {
+        store().edit { prefs ->
+            val current = parseDiskSpoolStorageLocation(prefs[diskSpoolStorageLocationKey])
+            if (current != location) {
+                prefs.remove(spoolStorageProbeResultJsonKey)
+            }
+            prefs[diskSpoolStorageLocationKey] = location.name
         }
     }
 

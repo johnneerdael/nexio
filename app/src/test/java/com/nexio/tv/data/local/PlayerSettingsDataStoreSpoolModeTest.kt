@@ -2,6 +2,7 @@ package com.nexio.tv.data.local
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -20,6 +21,11 @@ class PlayerSettingsDataStoreSpoolModeTest {
     }
 
     @Test
+    fun `default disk spool storage location is builtin`() {
+        assertEquals(DiskSpoolStorageLocation.BUILTIN, PlayerSettings().diskSpoolStorageLocation)
+    }
+
+    @Test
     fun `setting spool mode persists`() = runTest {
         val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
 
@@ -29,6 +35,53 @@ class PlayerSettingsDataStoreSpoolModeTest {
             ProgressivePlaybackDiskMode.SPOOL,
             dataStore.playerSettings.first().progressivePlaybackDiskMode
         )
+    }
+
+    @Test
+    fun `setting disk spool storage location persists`() = runTest {
+        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+
+        dataStore.setDiskSpoolStorageLocation(DiskSpoolStorageLocation.EXTERNAL)
+
+        assertEquals(
+            DiskSpoolStorageLocation.EXTERNAL,
+            dataStore.playerSettings.first().diskSpoolStorageLocation
+        )
+    }
+
+    @Test
+    fun `changing disk spool storage location clears diagnostic result`() = runTest {
+        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+
+        dataStore.setDiskSpoolStorageLocation(DiskSpoolStorageLocation.BUILTIN)
+        dataStore.setSpoolStorageProbeResult(probeResult())
+        dataStore.setDiskSpoolStorageLocation(DiskSpoolStorageLocation.EXTERNAL)
+
+        assertNull(dataStore.playerSettings.first().spoolStorageProbeResultJson)
+    }
+
+    @Test
+    fun `enabling disk spool turns vod cache off`() = runTest {
+        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+
+        dataStore.setVodCacheSizeMode(VodCacheSizeMode.ON)
+        dataStore.setProgressivePlaybackDiskMode(ProgressivePlaybackDiskMode.SPOOL)
+
+        val settings = dataStore.playerSettings.first()
+        assertEquals(ProgressivePlaybackDiskMode.SPOOL, settings.progressivePlaybackDiskMode)
+        assertEquals(VodCacheSizeMode.OFF, settings.vodCacheSizeMode)
+    }
+
+    @Test
+    fun `enabling vod cache turns disk spool off`() = runTest {
+        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+
+        dataStore.setProgressivePlaybackDiskMode(ProgressivePlaybackDiskMode.SPOOL)
+        dataStore.setVodCacheSizeMode(VodCacheSizeMode.ON)
+
+        val settings = dataStore.playerSettings.first()
+        assertEquals(VodCacheSizeMode.ON, settings.vodCacheSizeMode)
+        assertEquals(ProgressivePlaybackDiskMode.OFF, settings.progressivePlaybackDiskMode)
     }
 
     @Test
