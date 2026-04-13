@@ -253,6 +253,7 @@ data class PlayerSettings(
     val progressivePlaybackDiskMode: ProgressivePlaybackDiskMode = ProgressivePlaybackDiskMode.OFF,
     val diskSpoolSizeMb: Int = DEFAULT_DISK_SPOOL_SIZE_MB,
     val diskSpoolStartupBufferMb: Int = DEFAULT_DISK_SPOOL_STARTUP_BUFFER_MB,
+    val diskSpoolRamReadBufferMb: Int = DEFAULT_DISK_SPOOL_RAM_READ_BUFFER_MB,
     val diskSpoolStorageLocation: DiskSpoolStorageLocation = DiskSpoolStorageLocation.BUILTIN,
     val spoolStorageProbeResultJson: String? = null,
     val useParallelConnections: Boolean = DEFAULT_USE_PARALLEL_CONNECTIONS,
@@ -267,9 +268,12 @@ data class PlayerSettings(
         const val MAX_VOD_CACHE_SIZE_MB = 65_536
         const val DEFAULT_DISK_SPOOL_SIZE_MB = 512
         const val DEFAULT_DISK_SPOOL_STARTUP_BUFFER_MB = 100
+        const val DEFAULT_DISK_SPOOL_RAM_READ_BUFFER_MB = 64
         const val MIN_DISK_SPOOL_SIZE_MB = 256
         const val MAX_DISK_SPOOL_SIZE_MB = 65_536
         const val MIN_DISK_SPOOL_STARTUP_BUFFER_MB = 0
+        const val MIN_DISK_SPOOL_RAM_READ_BUFFER_MB = 0
+        const val MAX_DISK_SPOOL_RAM_READ_BUFFER_MB = 256
         val DEFAULT_VOD_CACHE_SIZE_MODE: VodCacheSizeMode = VodCacheSizeMode.ON
         const val DEFAULT_USE_PARALLEL_CONNECTIONS = true
         const val DEFAULT_PARALLEL_CONNECTION_COUNT = 2
@@ -545,6 +549,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val progressivePlaybackDiskModeKey = stringPreferencesKey("progressive_playback_disk_mode")
     private val diskSpoolSizeMbKey = intPreferencesKey("disk_spool_size_mb")
     private val diskSpoolStartupBufferMbKey = intPreferencesKey("disk_spool_startup_buffer_mb")
+    private val diskSpoolRamReadBufferMbKey = intPreferencesKey("disk_spool_ram_read_buffer_mb")
     private val diskSpoolStorageLocationKey = stringPreferencesKey("disk_spool_storage_location")
     private val spoolStorageProbeResultJsonKey = stringPreferencesKey("spool_storage_probe_result_json")
     private val useParallelConnectionsKey = booleanPreferencesKey("use_parallel_connections")
@@ -867,6 +872,12 @@ class PlayerSettingsDataStore @Inject constructor(
                                 PlayerSettings.MIN_DISK_SPOOL_SIZE_MB,
                                 PlayerSettings.MAX_DISK_SPOOL_SIZE_MB
                             )
+                    ),
+                diskSpoolRamReadBufferMb = (prefs[diskSpoolRamReadBufferMbKey]
+                    ?: PlayerSettings.DEFAULT_DISK_SPOOL_RAM_READ_BUFFER_MB)
+                    .coerceIn(
+                        PlayerSettings.MIN_DISK_SPOOL_RAM_READ_BUFFER_MB,
+                        PlayerSettings.MAX_DISK_SPOOL_RAM_READ_BUFFER_MB
                     ),
                 diskSpoolStorageLocation = parseDiskSpoolStorageLocation(
                     prefs[diskSpoolStorageLocationKey]
@@ -1703,6 +1714,15 @@ class PlayerSettingsDataStore @Inject constructor(
             prefs[diskSpoolStartupBufferMbKey] = mb.coerceIn(
                 PlayerSettings.MIN_DISK_SPOOL_STARTUP_BUFFER_MB,
                 currentSpoolSize
+            )
+        }
+    }
+
+    suspend fun setDiskSpoolRamReadBufferMb(mb: Int) {
+        store().edit { prefs ->
+            prefs[diskSpoolRamReadBufferMbKey] = mb.coerceIn(
+                PlayerSettings.MIN_DISK_SPOOL_RAM_READ_BUFFER_MB,
+                PlayerSettings.MAX_DISK_SPOOL_RAM_READ_BUFFER_MB
             )
         }
     }
