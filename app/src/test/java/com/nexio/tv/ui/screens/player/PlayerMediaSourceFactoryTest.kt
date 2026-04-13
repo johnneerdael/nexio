@@ -502,6 +502,31 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun cleanupDiskSpoolDirectory_removesStaleDiagnosticFiles() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val spoolDirectory = context.cacheDir.resolve("player_disk_spool")
+        val staleDiagnostic = spoolDirectory.resolve("spool-diagnostic-stale.bin")
+        val staleRandom = spoolDirectory.resolve("spool-diagnostic-stale.bin.random")
+        val staleConcurrent = spoolDirectory.resolve("spool-diagnostic-stale.bin.concurrent")
+        val activeSpool = spoolDirectory.resolve("spool-active.bin")
+        val unrelatedFile = spoolDirectory.resolve("keep.txt")
+        spoolDirectory.mkdirs()
+        staleDiagnostic.writeText("diagnostic")
+        staleRandom.writeText("random")
+        staleConcurrent.writeText("concurrent")
+        activeSpool.writeText("spool")
+        unrelatedFile.writeText("keep")
+
+        PlayerMediaSourceFactory(context, OkHttpClient()).cleanupDiskSpoolDirectoryForTesting()
+
+        assertEquals(false, staleDiagnostic.exists())
+        assertEquals(false, staleRandom.exists())
+        assertEquals(false, staleConcurrent.exists())
+        assertEquals(false, activeSpool.exists())
+        assertEquals(true, unrelatedFile.exists())
+    }
+
+    @Test
     fun warmAheadUpstreamKind_reportsPrdsForParallelFactory() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
