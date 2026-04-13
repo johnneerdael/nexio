@@ -827,7 +827,11 @@ internal class PlayerMediaSourceFactory(
         }
         // Playback can stop after this factory is returned; DiskSpoolDataSource.open
         // rechecks the session so a closed spool cannot masquerade as playable media.
-        return DiskSpoolDataSource.Factory(session, Uri.parse(url))
+        return DiskSpoolDataSource.Factory(
+            session = session,
+            uri = Uri.parse(url),
+            randomAccessFallbackFactory = createOkHttpDataSourceFactory(requestHeaders)
+        )
     }
 
     private fun resolveRequestedDiskSpoolBytes(): Long {
