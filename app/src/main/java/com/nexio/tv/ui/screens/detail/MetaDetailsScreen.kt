@@ -1365,6 +1365,7 @@ private fun MetaDetailsContent(
     var activePeopleTab by rememberSaveable(meta.id) { mutableStateOf(initialPeopleTab) }
     var seasonOptionsDialogSeason by remember { mutableStateOf<Int?>(null) }
     val lastFocusedEpisodeIdBySeason = remember(meta.id) { mutableStateMapOf<Int, String>() }
+    val nextToWatchScrolledSeasons = remember(meta.id) { mutableStateMapOf<Int, Boolean>() }
     val episodeFocusRequestersBySeason = remember(meta.id) { mutableMapOf<Int, MutableMap<String, FocusRequester>>() }
     val seasonEpisodeFocusRequesters = remember(selectedSeason, episodesForSeason) {
         val byEpisodeId = episodeFocusRequestersBySeason.getOrPut(selectedSeason) { mutableMapOf() }
@@ -1390,14 +1391,16 @@ private fun MetaDetailsContent(
         selectedSeason,
         manualSeasonOverrideActive,
         nextToWatch,
-        lastFocusedEpisodeIdBySeason[selectedSeason]
+        lastFocusedEpisodeIdBySeason[selectedSeason],
+        nextToWatchScrolledSeasons[selectedSeason]
     ) {
         resolveSeasonEntryEpisodeId(
             meta = meta,
             selectedSeason = selectedSeason,
             nextToWatch = seasonNextToWatchCandidate,
             lastFocusedEpisodeIdBySeason = lastFocusedEpisodeIdBySeason,
-            manualSeasonOverride = manualSeasonOverrideActive
+            manualSeasonOverride = manualSeasonOverrideActive,
+            preferStoredEpisodeFocus = nextToWatchScrolledSeasons[selectedSeason] == true
         )
     }
     val seasonDownFocusRequester = remember(selectedSeason, episodesForSeason, seasonEpisodeFocusRequesters, seasonEntryEpisodeId) {
@@ -1818,9 +1821,12 @@ private fun MetaDetailsContent(
                                 hasVisitedEpisodes = true
                                 lastFocusedEpisodeIdBySeason[selectedSeason] = episodeId
                             },
-                            scrollToEpisodeId = if (lastFocusedEpisodeIdBySeason[selectedSeason] == null) {
+                            scrollToEpisodeId = if (nextToWatchScrolledSeasons[selectedSeason] != true) {
                                 seasonEntryEpisodeId
-                            } else null
+                            } else null,
+                            onScrollToEpisodeHandled = {
+                                nextToWatchScrolledSeasons[selectedSeason] = true
+                            }
                         )
                     }
                 }
