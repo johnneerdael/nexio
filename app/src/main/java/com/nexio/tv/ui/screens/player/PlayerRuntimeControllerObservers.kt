@@ -9,7 +9,9 @@ import androidx.media3.common.util.Util
 import androidx.media3.common.util.UnstableApi
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.SubtitleOrganizationMode
+import com.nexio.tv.data.local.diskSpoolTargetBitrateMbps
 import com.nexio.tv.domain.model.Subtitle
+import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -258,6 +260,10 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
             mediaSourceFactory.vodCacheSizeMode = settings.vodCacheSizeMode
             mediaSourceFactory.vodCacheSizeMb = settings.vodCacheSizeMb
             mediaSourceFactory.vodCacheWarmAheadEnabled = settings.vodCacheWarmAheadEnabled
+            mediaSourceFactory.progressivePlaybackDiskMode = settings.progressivePlaybackDiskMode
+            mediaSourceFactory.spoolStorageProbeResult =
+                SpoolStorageProbeResult.fromJsonOrNull(settings.spoolStorageProbeResultJson)
+            mediaSourceFactory.diskSpoolTargetBitrateMbps = settings.diskSpoolTargetBitrateMbps()
             applySubtitlePreferences(
                 settings.subtitleStyle.preferredLanguage,
                 settings.subtitleStyle.secondaryPreferredLanguage

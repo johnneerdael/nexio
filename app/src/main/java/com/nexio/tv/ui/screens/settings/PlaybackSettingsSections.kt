@@ -62,6 +62,7 @@ import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
+import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
 import com.nexio.tv.data.local.TrailerSettings
 import com.nexio.tv.data.local.VodCacheSizeMode
 import com.nexio.tv.ui.components.NexioDialog
@@ -167,6 +168,8 @@ internal fun PlaybackSettingsSections(
     onSetVodCacheSizeMode: (VodCacheSizeMode) -> Unit,
     onSetVodCacheSizeMb: (Int) -> Unit,
     onSetVodCacheWarmAheadEnabled: (Boolean) -> Unit,
+    onSetProgressivePlaybackDiskMode: (ProgressivePlaybackDiskMode) -> Unit,
+    onRunDiskSpoolStorageProbe: () -> Unit,
     // Troubleshooting — data collection
     shadowAutoplayDataCollectionEnabled: Boolean,
     onSetShadowAutoplayDataCollectionEnabled: (Boolean) -> Unit,
@@ -490,6 +493,8 @@ internal fun PlaybackSettingsSections(
                 onSetVodCacheSizeMb = onSetVodCacheSizeMb,
                 onSetVodCacheWarmAheadEnabled = onSetVodCacheWarmAheadEnabled,
                 onSetUseParallelConnections = onSetUseParallelConnections,
+                onSetProgressivePlaybackDiskMode = onSetProgressivePlaybackDiskMode,
+                onRunDiskSpoolStorageProbe = onRunDiskSpoolStorageProbe,
                 onItemFocused = { focusedSection = PlaybackSection.BUFFER_NETWORK }
             )
         }

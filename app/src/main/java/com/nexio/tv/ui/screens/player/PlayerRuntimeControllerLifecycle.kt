@@ -43,6 +43,7 @@ internal fun PlayerRuntimeController.releasePlayer() {
     builtInAiSubtitleTranslationJob = null
     _exoPlayer?.release()
     _exoPlayer = null
+    mediaSourceFactory.closeActiveDiskSpoolSessionForPlaybackStop()
 }
 
 internal fun PlayerRuntimeController.notifyAudioSessionUpdate(active: Boolean) {
