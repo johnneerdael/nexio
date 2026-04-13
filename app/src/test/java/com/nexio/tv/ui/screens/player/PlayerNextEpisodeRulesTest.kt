@@ -77,8 +77,8 @@ class PlayerNextEpisodeRulesTest {
     }
 
     @Test
-    fun `tidb managed content with no credits or preview window does not fall back to threshold in parallel`() {
-        assertFalse(
+    fun `tidb managed content with no credits or preview window falls back to threshold`() {
+        assertTrue(
             PlayerNextEpisodeRules.shouldShowNextEpisodeCard(
                 positionMs = 1_188_000,
                 durationMs = 1_200_000,
