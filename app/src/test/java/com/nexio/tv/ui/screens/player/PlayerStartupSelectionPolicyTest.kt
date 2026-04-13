@@ -458,6 +458,57 @@ class PlayerStartupSelectionPolicyTest {
     }
 
     @Test
+    fun `french VO track is classified as original not voiceover and selected as english original`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "VFF : French (E-AC-3 7.1)", language = "fr", codec = "E-AC-3", channelCount = 8),
+            TrackInfo(index = 1, name = "VFF : French Audio Description (AAC Stereo)", language = "fr", codec = "AAC", channelCount = 2),
+            TrackInfo(index = 2, name = "VFQ : French (AC-3 5.1)", language = "fr", codec = "AC-3", channelCount = 6),
+            TrackInfo(index = 3, name = "VO : English (E-AC-3 5.1)", language = "en", codec = "E-AC-3", channelCount = 6)
+        )
+
+        val index = findBestStartupAudioTrackIndex(
+            audioTracks = tracks,
+            targets = listOf("en"),
+            originalLanguage = "en"
+        )
+
+        assertEquals(3, index)
+    }
+
+    @Test
+    fun `french VO track selected by original language fallback when metadata is missing`() {
+        val tracks = listOf(
+            TrackInfo(index = 0, name = "VFF : French (E-AC-3 7.1)", language = "fr", codec = "E-AC-3", channelCount = 8),
+            TrackInfo(index = 1, name = "VFF : French Audio Description (AAC Stereo)", language = "fr", codec = "AAC", channelCount = 2),
+            TrackInfo(index = 2, name = "VFQ : French (AC-3 5.1)", language = "fr", codec = "AC-3", channelCount = 6),
+            TrackInfo(index = 3, name = "VO : English (E-AC-3 5.1)", language = "en", codec = "E-AC-3", channelCount = 6)
+        )
+
+        // When originalLanguage is null, the VO track naming convention should
+        // be recognized as ORIGINAL (not VOICEOVER) so the fallback picker
+        // can identify it as the original language track.
+        val trackTypes = PlayerAudioTrackNamingConventions.trackTypes(tracks[3])
+        assertTrue(
+            "VO track should be classified as ORIGINAL, got: $trackTypes",
+            AudioTrackType.ORIGINAL in trackTypes
+        )
+        assertTrue(
+            "VO track should NOT be classified as VOICEOVER, got: $trackTypes",
+            AudioTrackType.VOICEOVER !in trackTypes
+        )
+    }
+
+    @Test
+    fun `french VFF track is inferred as french language`() {
+        val track = TrackInfo(index = 0, name = "VFF : French (E-AC-3 7.1)", language = null)
+        val inferred = PlayerAudioTrackNamingConventions.inferredLanguageCodes(track)
+        assertTrue(
+            "VFF track should infer french language, got: $inferred",
+            inferred.any { it == "fr" }
+        )
+    }
+
+    @Test
     fun `addon subtitle release scoring returns null when every candidate is ruled out`() {
         val best = pickBestAddonSubtitleByRelease(
             candidates = listOf(
