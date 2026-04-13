@@ -20,4 +20,30 @@ interface ServiceWrapResolver {
             )
         )
     }
+
+    fun resolveChunkProgressively(
+        candidates: List<WrapCandidate>,
+        requestContext: ServiceWrapRequestContext
+    ): Flow<ServiceWrapResolutionChunkBatch> = flow {
+        candidates.forEach { candidate ->
+            var emittedTerminalBatch = false
+            resolveProgressively(candidate, requestContext).collect { resolution ->
+                if (resolution.isTerminal) emittedTerminalBatch = true
+                emit(
+                    ServiceWrapResolutionChunkBatch(
+                        streamsByHash = mapOf(candidate.normalizedInfoHash to resolution.streams),
+                        isTerminal = resolution.isTerminal
+                    )
+                )
+            }
+            if (!emittedTerminalBatch) {
+                emit(
+                    ServiceWrapResolutionChunkBatch(
+                        streamsByHash = mapOf(candidate.normalizedInfoHash to emptyList()),
+                        isTerminal = true
+                    )
+                )
+            }
+        }
+    }
 }

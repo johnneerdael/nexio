@@ -312,7 +312,9 @@ class ServiceWrapSessionFactoryTest {
                     )
                 }
             },
-            wrappedStreamBuilder = WrappedStreamBuilder()
+            wrappedStreamBuilder = WrappedStreamBuilder(),
+            chunkSize = 1,
+            chunkFlushDelayMs = 0L
         )
         val batches = mutableListOf<ServiceWrapResolvedBatch>()
         val session = factory.createSession(
@@ -355,6 +357,132 @@ class ServiceWrapSessionFactoryTest {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
+    fun `session flushes a chunk when twenty candidates are queued`() = runTest {
+        val chunkSizes = mutableListOf<Int>()
+        val factory = ServiceWrapSessionFactory(
+            extractor = WrapCandidateExtractor(),
+            resolver = object : ServiceWrapResolver {
+                override suspend fun resolve(
+                    candidate: WrapCandidate,
+                    requestContext: ServiceWrapRequestContext
+                ): List<ResolvedServiceWrapStream> = error("chunk path should be used")
+
+                override fun resolveChunkProgressively(
+                    candidates: List<WrapCandidate>,
+                    requestContext: ServiceWrapRequestContext
+                ): Flow<ServiceWrapResolutionChunkBatch> = flow {
+                    chunkSizes += candidates.size
+                    emit(
+                        ServiceWrapResolutionChunkBatch(
+                            streamsByHash = candidates.associate { candidate ->
+                                candidate.normalizedInfoHash to listOf(
+                                    resolvedStream(ServiceWrapProvider.REAL_DEBRID, candidate.normalizedInfoHash)
+                                )
+                            },
+                            isTerminal = true
+                        )
+                    )
+                }
+            },
+            wrappedStreamBuilder = WrappedStreamBuilder(),
+            maxConcurrentResolutions = 6,
+            chunkSize = 20,
+            chunkFlushDelayMs = 250L
+        )
+        val batches = mutableListOf<ServiceWrapResolvedBatch>()
+        val session = factory.createSession(
+            requestContext = ServiceWrapRequestContext(contentType = "movie", season = null, episode = null),
+            scope = this,
+            onResolved = { batches += it }
+        )
+
+        val streams = (1..20).map { index ->
+            stream(
+                name = "Movie Candidate $index",
+                infoHash = "%040x".format(index),
+                url = null,
+                description = "Movie.2024.2160p.REMUX"
+            )
+        }
+
+        val result = session.processAddonStreams(
+            addonName = "Addon A",
+            addonLogo = null,
+            streams = streams
+        )
+
+        assertEquals(20, result.launchedWrapCount)
+        runCurrent()
+        assertEquals(listOf(20), chunkSizes)
+        assertEquals(20, batches.count { it.isTerminal })
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `session flushes a partial chunk after delay`() = runTest {
+        val chunkSizes = mutableListOf<Int>()
+        val factory = ServiceWrapSessionFactory(
+            extractor = WrapCandidateExtractor(),
+            resolver = object : ServiceWrapResolver {
+                override suspend fun resolve(
+                    candidate: WrapCandidate,
+                    requestContext: ServiceWrapRequestContext
+                ): List<ResolvedServiceWrapStream> = error("chunk path should be used")
+
+                override fun resolveChunkProgressively(
+                    candidates: List<WrapCandidate>,
+                    requestContext: ServiceWrapRequestContext
+                ): Flow<ServiceWrapResolutionChunkBatch> = flow {
+                    chunkSizes += candidates.size
+                    emit(
+                        ServiceWrapResolutionChunkBatch(
+                            streamsByHash = candidates.associate { candidate ->
+                                candidate.normalizedInfoHash to listOf(
+                                    resolvedStream(ServiceWrapProvider.REAL_DEBRID, candidate.normalizedInfoHash)
+                                )
+                            },
+                            isTerminal = true
+                        )
+                    )
+                }
+            },
+            wrappedStreamBuilder = WrappedStreamBuilder(),
+            maxConcurrentResolutions = 6,
+            chunkSize = 20,
+            chunkFlushDelayMs = 250L
+        )
+        val batches = mutableListOf<ServiceWrapResolvedBatch>()
+        val session = factory.createSession(
+            requestContext = ServiceWrapRequestContext(contentType = "movie", season = null, episode = null),
+            scope = this,
+            onResolved = { batches += it }
+        )
+
+        val result = session.processAddonStreams(
+            addonName = "Addon A",
+            addonLogo = null,
+            streams = (1..3).map { index ->
+                stream(
+                    name = "Movie Candidate $index",
+                    infoHash = "%040x".format(index),
+                    url = null,
+                    description = "Movie.2024.2160p.REMUX"
+                )
+            }
+        )
+
+        assertEquals(3, result.launchedWrapCount)
+        runCurrent()
+        assertTrue(chunkSizes.isEmpty())
+
+        advanceTimeBy(250L)
+        runCurrent()
+        assertEquals(listOf(3), chunkSizes)
+        assertEquals(3, batches.count { it.isTerminal })
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
     fun `session limits concurrent hash resolutions`() = runTest {
         val active = AtomicInteger(0)
         val maxObserved = AtomicInteger(0)
@@ -373,7 +501,9 @@ class ServiceWrapSessionFactoryTest {
                 }
             },
             wrappedStreamBuilder = WrappedStreamBuilder(),
-            maxConcurrentResolutions = 2
+            maxConcurrentResolutions = 2,
+            chunkSize = 1,
+            chunkFlushDelayMs = 0L
         )
         val batches = mutableListOf<ServiceWrapResolvedBatch>()
         val session = factory.createSession(
