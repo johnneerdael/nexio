@@ -131,7 +131,8 @@ data class SyncedFormatterTemplateSettings(
     val selectedTemplateId: String = "universal",
     val customTemplateLabel: String? = null,
     val customNameTemplate: String? = null,
-    val customDescriptionTemplate: String? = null
+    val customDescriptionTemplate: String? = null,
+    val customBadgeRowTemplate: String? = null
 )
 
 /**
@@ -521,6 +522,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val syncedFormatterCustomTemplateLabelKey = stringPreferencesKey("synced_formatter_custom_template_label")
     private val syncedFormatterCustomNameTemplateKey = stringPreferencesKey("synced_formatter_custom_name_template")
     private val syncedFormatterCustomDescriptionTemplateKey = stringPreferencesKey("synced_formatter_custom_description_template")
+    private val syncedFormatterCustomBadgeRowTemplateKey = stringPreferencesKey("synced_formatter_custom_badge_row_template")
     private val groupStreamsAcrossAddonsEnabledKey = booleanPreferencesKey("group_streams_across_addons_enabled")
     private val deduplicateGroupedStreamsEnabledKey = booleanPreferencesKey("deduplicate_grouped_streams_enabled")
     private val serviceWrapEnabledKey = booleanPreferencesKey("service_wrap_enabled")
@@ -825,7 +827,8 @@ class PlayerSettingsDataStore @Inject constructor(
                     selectedTemplateId = prefs[syncedFormatterSelectedTemplateIdKey] ?: "universal",
                     customTemplateLabel = prefs[syncedFormatterCustomTemplateLabelKey],
                     customNameTemplate = prefs[syncedFormatterCustomNameTemplateKey],
-                    customDescriptionTemplate = prefs[syncedFormatterCustomDescriptionTemplateKey]
+                    customDescriptionTemplate = prefs[syncedFormatterCustomDescriptionTemplateKey],
+                    customBadgeRowTemplate = prefs[syncedFormatterCustomBadgeRowTemplateKey]
                 ),
                 groupStreamsAcrossAddonsEnabled = true,
                 deduplicateGroupedStreamsEnabled = prefs[deduplicateGroupedStreamsEnabledKey] ?: true,
@@ -1157,20 +1160,28 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setSyncedFormatterCustomTemplate(
         label: String?,
         nameTemplate: String?,
-        descriptionTemplate: String?
+        descriptionTemplate: String?,
+        badgeRowTemplate: String? = null
     ) {
         store().edit { prefs ->
             val normalizedLabel = label?.trim()?.takeIf { it.isNotEmpty() }
             val normalizedName = nameTemplate?.takeIf { it.isNotBlank() }
             val normalizedDescription = descriptionTemplate?.takeIf { it.isNotBlank() }
+            val normalizedBadgeRow = badgeRowTemplate?.takeIf { it.isNotBlank() }
             if (normalizedLabel != null && normalizedName != null && normalizedDescription != null) {
                 prefs[syncedFormatterCustomTemplateLabelKey] = normalizedLabel
                 prefs[syncedFormatterCustomNameTemplateKey] = normalizedName
                 prefs[syncedFormatterCustomDescriptionTemplateKey] = normalizedDescription
+                if (normalizedBadgeRow != null) {
+                    prefs[syncedFormatterCustomBadgeRowTemplateKey] = normalizedBadgeRow
+                } else {
+                    prefs.remove(syncedFormatterCustomBadgeRowTemplateKey)
+                }
             } else {
                 prefs.remove(syncedFormatterCustomTemplateLabelKey)
                 prefs.remove(syncedFormatterCustomNameTemplateKey)
                 prefs.remove(syncedFormatterCustomDescriptionTemplateKey)
+                prefs.remove(syncedFormatterCustomBadgeRowTemplateKey)
             }
         }
     }

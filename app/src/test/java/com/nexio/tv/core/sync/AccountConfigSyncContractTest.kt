@@ -120,7 +120,8 @@ class AccountConfigSyncContractTest {
                     id = "custom",
                     label = "My Formatter",
                     nameTemplate = "{stream.title}",
-                    descriptionTemplate = "{stream.quality}"
+                    descriptionTemplate = "{stream.quality}",
+                    badgeRowTemplate = "[[chip:cached]]"
                 )
             )
         )
@@ -130,6 +131,13 @@ class AccountConfigSyncContractTest {
         assertEquals(setOf("schemaVersion", "integrations", "catalogs", "playback", "formatter"), json.keys)
         assertEquals(7, json["schemaVersion"]?.toString()?.toInt())
         assertEquals("\"custom\"", json["formatter"]?.jsonObject?.get("selectedTemplateId")?.toString())
+        assertEquals(
+            "\"[[chip:cached]]\"",
+            json["formatter"]?.jsonObject
+                ?.get("customTemplate")?.jsonObject
+                ?.get("badgeRowTemplate")
+                ?.toString()
+        )
         assertEquals(
             "\"SIMKL\"",
             json["playback"]?.jsonObject?.get("streamSelection")?.jsonObject?.get("trackingProvider")?.toString()
@@ -689,7 +697,8 @@ class AccountConfigSyncContractTest {
                     id = "custom",
                     label = "Custom",
                     nameTemplate = "{stream.title}",
-                    descriptionTemplate = "{stream.quality}"
+                    descriptionTemplate = "{stream.quality}",
+                    badgeRowTemplate = "[[chip:cached]]"
                 )
             )
         )
@@ -753,7 +762,8 @@ class AccountConfigSyncContractTest {
             playerSettingsDataStore.setSyncedFormatterCustomTemplate(
                 label = "Custom",
                 nameTemplate = "{stream.title}",
-                descriptionTemplate = "{stream.quality}"
+                descriptionTemplate = "{stream.quality}",
+                badgeRowTemplate = "[[chip:cached]]"
             )
         }
     }

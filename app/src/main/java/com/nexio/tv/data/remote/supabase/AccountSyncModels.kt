@@ -95,7 +95,8 @@ data class CustomFormatterSyncTemplate(
     val id: String = "custom",
     val label: String = "Custom",
     val nameTemplate: String = "",
-    val descriptionTemplate: String = ""
+    val descriptionTemplate: String = "",
+    val badgeRowTemplate: String = ""
 )
 
 @Serializable
