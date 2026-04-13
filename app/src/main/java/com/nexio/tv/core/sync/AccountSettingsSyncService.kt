@@ -560,7 +560,8 @@ class AccountSettingsSyncService @Inject constructor(
                             id = "custom",
                             label = playerSettings.syncedFormatterTemplate.customTemplateLabel ?: "Custom",
                             nameTemplate = it,
-                            descriptionTemplate = playerSettings.syncedFormatterTemplate.customDescriptionTemplate.orEmpty()
+                            descriptionTemplate = playerSettings.syncedFormatterTemplate.customDescriptionTemplate.orEmpty(),
+                            badgeRowTemplate = playerSettings.syncedFormatterTemplate.customBadgeRowTemplate.orEmpty()
                         )
                     }
                     ?.takeIf { it.descriptionTemplate.isNotBlank() }

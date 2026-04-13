@@ -11,6 +11,13 @@ A formatter is:
 - plus modifiers like `::title`
 - plus conditions like `::exists["yes"||"no"]`
 - plus inline image tokens like `[[icon:4k]]`
+- plus stream chip tokens like `[[chip:cached]]`
+
+Custom formatters have three template fields:
+
+- `nameTemplate` controls the stream card title.
+- `descriptionTemplate` controls the multiline detail text.
+- `badgeRowTemplate` controls an optional full-width row below the main card content. Leave it blank to skip the row.
 
 ## Core syntax
 
@@ -141,6 +148,42 @@ You can place icon tokens anywhere plain text is allowed:
 - Keep them near the start of a title or the start of a short metadata line so they read like badges rather than decoration.
 - Prefer one or two strong icons over a long chain of small badges.
 - If you need broad compatibility outside icon-aware surfaces, include a text fallback nearby such as `{stream.audioTags::join(' • ')}`.
+
+## Stream chip tokens
+Stream chip tokens render the same chip styling used by Nexio's automatic stream badges. Place them inline inside `nameTemplate` or `descriptionTemplate`, or put them in `badgeRowTemplate` for a separate full-width badge row.
+
+Use this syntax:
+
+```text
+[[chip:cached]]
+[[chip:torrent]]
+[[chip:youtube]]
+[[chip:external]]
+```
+
+Available chip tokens:
+
+| Token | Meaning |
+| :--- | :--- |
+| `[[chip:cached]]` | Cached / instant stream |
+| `[[chip:torrent]]` | Torrent / P2P stream |
+| `[[chip:youtube]]` | YouTube stream |
+| `[[chip:external]]` | External player stream |
+
+Inline example:
+
+```text
+{service.cached::istrue["[[chip:cached]] "||""]}{stream.resolution} {stream.title}
+```
+
+Separate badge row example:
+
+```text
+badgeRowTemplate:
+{service.cached::istrue["[[chip:cached]]"||""]}{stream.type::=p2p[" [[chip:torrent]]"||""]}
+```
+
+If a custom formatter uses any `[[chip:*]]` token in the title, detail text, or badge row, Nexio lets the formatter control chip placement and does not add the automatic bottom chip row for that stream card. If no chip token is present, the automatic chip row still appears.
 
 ### Universal formatter examples
 The built-in `Universal` formatter currently uses icon tokens in three main places:

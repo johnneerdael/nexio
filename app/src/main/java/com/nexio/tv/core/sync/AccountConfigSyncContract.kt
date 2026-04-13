@@ -418,7 +418,8 @@ internal suspend fun applyAccountConfigSyncSettings(
     playerSettingsDataStore.setSyncedFormatterCustomTemplate(
         label = settings.formatter.customTemplate?.label,
         nameTemplate = settings.formatter.customTemplate?.nameTemplate,
-        descriptionTemplate = settings.formatter.customTemplate?.descriptionTemplate
+        descriptionTemplate = settings.formatter.customTemplate?.descriptionTemplate,
+        badgeRowTemplate = settings.formatter.customTemplate?.badgeRowTemplate
     )
     applyImdbSyncSettings(settings.integrations.imdb, imdbSettingsDataStore)
 }

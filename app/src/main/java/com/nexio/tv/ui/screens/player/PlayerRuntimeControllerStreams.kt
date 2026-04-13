@@ -316,7 +316,8 @@ private fun SyncedFormatterTemplateSettings.toAioFormatterSelection(): AioFormat
             AioCustomTemplateSelection(
                 label = customTemplateLabel,
                 nameTemplate = customNameTemplate,
-                descriptionTemplate = customDescriptionTemplate
+                descriptionTemplate = customDescriptionTemplate,
+                badgeRowTemplate = customBadgeRowTemplate
             )
         } else {
             null
