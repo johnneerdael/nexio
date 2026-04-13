@@ -79,6 +79,7 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTerminationReason
 import com.nexio.tv.data.repository.benchmark.CollectorPublicDashboardLinkProvider
 import com.nexio.tv.data.repository.benchmark.CollectorPublicDashboardLinkResult
 import com.nexio.tv.core.qr.QrCodeGenerator
+import com.nexio.tv.data.repository.benchmark.hasValidAutoplayBenchmarkFor
 import com.nexio.tv.data.repository.benchmark.safeSustainedBudgetMbps
 import com.nexio.tv.data.repository.benchmark.playbackStability
 import com.nexio.tv.ui.components.NexioDialog
@@ -1362,21 +1363,23 @@ internal class DebridSettingsViewModel @Inject internal constructor(
                 )
             }
 
-        val serviceWrapEnabled = playerSettingsSnapshot.map { it.serviceWrapEnabled }
-
         val deterministicAutoplayAvailable = combine(
             debridBenchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID),
             debridBenchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE),
             debridBenchmarkService.latestResult(DebridBenchmarkProvider.TORBOX),
             debridBenchmarkService.latestResult(DebridBenchmarkProvider.EASY_DEBRID),
-            serviceWrapEnabled
-        ) { latestRealDebridResult, latestPremiumizeResult, latestTorBoxResult, latestEasyDebridResult, serviceWrapEnabled ->
-            (
-                latestRealDebridResult != null ||
-                    latestPremiumizeResult != null ||
-                    latestTorBoxResult != null ||
-                    latestEasyDebridResult != null
-                ) && serviceWrapEnabled
+            playerSettingsDataStore.playerSettings
+        ) { latestRealDebridResult, latestPremiumizeResult, latestTorBoxResult, latestEasyDebridResult, settings ->
+            val autoplayBenchmarkAvailable = listOfNotNull(
+                latestRealDebridResult,
+                latestPremiumizeResult,
+                latestTorBoxResult,
+                latestEasyDebridResult
+            ).any { result ->
+                result.hasValidAutoplayBenchmarkFor(settings)
+            }
+
+            settings.autoplayBandwidthMode.isDeterministicAutoplayAvailable(autoplayBenchmarkAvailable)
         }
 
         val dialogState = benchmarkResultDialog.map { benchmarkDialog ->
@@ -1689,9 +1692,6 @@ internal class DebridSettingsViewModel @Inject internal constructor(
         viewModelScope.launch {
             if (enabled && !uiState.value.serviceWrapAvailable) return@launch
             playerSettingsDataStore.setServiceWrapEnabled(enabled)
-            if (!enabled && uiState.value.deterministicAutoplayEnabled) {
-                playerSettingsDataStore.setDeterministicAutoplayEnabled(false)
-            }
         }
     }
 
