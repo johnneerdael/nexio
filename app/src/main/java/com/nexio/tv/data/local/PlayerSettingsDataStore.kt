@@ -119,7 +119,7 @@ data class BufferSettings(
         const val DEFAULT_MAX_BUFFER_MS = 50_000
         const val DEFAULT_BUFFER_FOR_PLAYBACK_MS = 3_000
         const val DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 5_000
-        const val DEFAULT_TARGET_BUFFER_SIZE_MB: Int = 100
+        const val DEFAULT_TARGET_BUFFER_SIZE_MB: Int = 350
         const val DEFAULT_BACK_BUFFER_DURATION_MS = 0
     }
 }

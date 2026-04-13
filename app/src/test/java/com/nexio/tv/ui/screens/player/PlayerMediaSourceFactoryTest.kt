@@ -320,14 +320,14 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
-    fun parallelProviderProfiles_warmAheadEnabledSplitsRealDebridOneAndOne() {
+    fun parallelProviderProfiles_warmAheadEnabledSplitsRealDebridTwoAndOne() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
             playbackOkHttpClient = OkHttpClient()
         )
 
         assertEquals(
-            (1 to 24) to (1 to 24),
+            (2 to 24) to (1 to 24),
             factory.parallelProviderProfilesForTesting(
                 url = "https://real-debrid.com/path/movie.mkv",
                 warmAheadEnabledForStream = true
