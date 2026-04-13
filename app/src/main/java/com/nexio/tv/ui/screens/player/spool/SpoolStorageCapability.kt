@@ -12,12 +12,21 @@ internal data class SpoolStorageProbeResult(
     val durationMs: Long,
     val bytesWritten: Long,
     val bytesRead: Long,
-    val spoolDirectoryPath: String
+    val spoolDirectoryPath: String,
+    val concurrentSequentialWriteMbps: Double? = null,
+    val concurrentSequentialReadMbps: Double? = null,
+    val concurrentRandomWriteMbps: Double? = null
 ) {
+    val sequentialWriteMbps: Double
+        get() = writeMbps
+
+    val sequentialReadMbps: Double
+        get() = readMbps
+
     fun toJsonOrNull(): String? = runCatching { toJson() }.getOrNull()
 
     fun toJson(): String {
-        return JSONObject()
+        val json = JSONObject()
             .put("writeMbps", writeMbps)
             .put("readMbps", readMbps)
             .put("combinedMbps", combinedMbps)
@@ -28,7 +37,10 @@ internal data class SpoolStorageProbeResult(
             .put("bytesWritten", bytesWritten)
             .put("bytesRead", bytesRead)
             .put("spoolDirectoryPath", spoolDirectoryPath)
-            .toString()
+        concurrentSequentialWriteMbps?.let { json.put("concurrentSequentialWriteMbps", it) }
+        concurrentSequentialReadMbps?.let { json.put("concurrentSequentialReadMbps", it) }
+        concurrentRandomWriteMbps?.let { json.put("concurrentRandomWriteMbps", it) }
+        return json.toString()
     }
 
     companion object {
@@ -46,6 +58,9 @@ internal data class SpoolStorageProbeResult(
             val bytesWritten = json.longOrNull("bytesWritten") ?: return null
             val bytesRead = json.longOrNull("bytesRead") ?: return null
             val spoolDirectoryPath = json.stringOrNull("spoolDirectoryPath") ?: return null
+            val concurrentSequentialWriteMbps = json.finiteDoubleOrNull("concurrentSequentialWriteMbps")
+            val concurrentSequentialReadMbps = json.finiteDoubleOrNull("concurrentSequentialReadMbps")
+            val concurrentRandomWriteMbps = json.finiteDoubleOrNull("concurrentRandomWriteMbps")
 
             return SpoolStorageProbeResult(
                 writeMbps = writeMbps,
@@ -57,7 +72,10 @@ internal data class SpoolStorageProbeResult(
                 durationMs = durationMs,
                 bytesWritten = bytesWritten,
                 bytesRead = bytesRead,
-                spoolDirectoryPath = spoolDirectoryPath
+                spoolDirectoryPath = spoolDirectoryPath,
+                concurrentSequentialWriteMbps = concurrentSequentialWriteMbps,
+                concurrentSequentialReadMbps = concurrentSequentialReadMbps,
+                concurrentRandomWriteMbps = concurrentRandomWriteMbps
             )
         }
 
