@@ -143,9 +143,9 @@ data class BenchmarkAwareStreamScoringConfig(
                 ),
                 contentRewards = ShadowContentRewardConfig(
                     codec = mapOf(
-                        ShadowVideoCodecTier.AV1_HW to 14,
-                        ShadowVideoCodecTier.HEVC_HW to 10,
-                        ShadowVideoCodecTier.H264_HW to 4,
+                        ShadowVideoCodecTier.AV1_HW to 0,
+                        ShadowVideoCodecTier.HEVC_HW to 0,
+                        ShadowVideoCodecTier.H264_HW to 0,
                         ShadowVideoCodecTier.AV1_SW to -18,
                         ShadowVideoCodecTier.HEVC_SW to -10,
                         ShadowVideoCodecTier.VC1 to -16,
