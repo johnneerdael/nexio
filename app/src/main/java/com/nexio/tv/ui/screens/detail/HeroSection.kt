@@ -60,8 +60,6 @@ import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.painter.Painter
 import coil.decode.SvgDecoder
@@ -77,9 +75,6 @@ internal fun HeroContentSection(
     isInLibrary: Boolean,
     onToggleLibrary: () -> Unit,
     onLibraryLongPress: () -> Unit,
-    isMovieWatched: Boolean,
-    isMovieWatchedPending: Boolean,
-    onToggleMovieWatched: () -> Unit,
     trailerAvailable: Boolean = false,
     onTrailerClick: () -> Unit = {},
     hideLogoDuringTrailer: Boolean = false,
@@ -120,24 +115,18 @@ internal fun HeroContentSection(
     )
     val resolvedPlayFocusRequester = playButtonFocusRequester ?: remember { FocusRequester() }
     val libraryFocusRequester = remember { FocusRequester() }
-    val watchedFocusRequester = remember { FocusRequester() }
     val trailerFocusRequester = remember { FocusRequester() }
-    val heroActionOrder = remember(meta.apiType, trailerAvailable) {
-        buildHeroActionOrder(
-            isMovie = meta.apiType == "movie",
-            trailerAvailable = trailerAvailable
-        )
+    val heroActionOrder = remember(trailerAvailable) {
+        buildHeroActionOrder(trailerAvailable = trailerAvailable)
     }
     val heroActionRequesters = remember(
         resolvedPlayFocusRequester,
         libraryFocusRequester,
-        watchedFocusRequester,
         trailerFocusRequester
     ) {
         mapOf(
             HeroAction.PLAY to resolvedPlayFocusRequester,
             HeroAction.LIBRARY to libraryFocusRequester,
-            HeroAction.WATCHED to watchedFocusRequester,
             HeroAction.TRAILER to trailerFocusRequester
         )
     }
@@ -234,33 +223,6 @@ internal fun HeroContentSection(
                         onMoveDownRequested = onMoveDownRequested,
                         onFocused = onHeroActionFocused
                     )
-
-                    if (meta.apiType == "movie") {
-                        ActionIconButton(
-                            action = HeroAction.WATCHED,
-                            icon = if (isMovieWatched) {
-                                Icons.Default.Visibility
-                            } else {
-                                Icons.Default.VisibilityOff
-                            },
-                            contentDescription = if (isMovieWatched) {
-                                stringResource(R.string.hero_mark_unwatched)
-                            } else {
-                                stringResource(R.string.hero_mark_watched)
-                            },
-                            onClick = onToggleMovieWatched,
-                            enabled = !isMovieWatchedPending,
-                            selected = isMovieWatched,
-                            selectedContainerColor = Color.White,
-                            selectedContentColor = Color.Black,
-                            focusRequester = watchedFocusRequester,
-                            directions = resolveHeroActionDirections(HeroAction.WATCHED, heroActionOrder),
-                            actionRequesters = heroActionRequesters,
-                            downFocusRequester = downFocusRequester,
-                            onMoveDownRequested = onMoveDownRequested,
-                            onFocused = onHeroActionFocused
-                        )
-                    }
 
                     if (trailerAvailable) {
                         ActionIconButtonPainter(
@@ -390,10 +352,10 @@ private fun PlayButton(
                 }
             },
         colors = ButtonDefaults.colors(
-            containerColor = androidx.compose.ui.graphics.Color.White,
-            focusedContainerColor = androidx.compose.ui.graphics.Color.White,
-            contentColor = androidx.compose.ui.graphics.Color.Black,
-            focusedContentColor = androidx.compose.ui.graphics.Color.Black
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.Secondary,
+            contentColor = NexioColors.TextPrimary,
+            focusedContentColor = NexioColors.OnSecondary
         ),
         shape = ButtonDefaults.shape(
             shape = RoundedCornerShape(32.dp)

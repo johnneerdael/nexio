@@ -2,7 +2,6 @@
 
 package com.nexio.tv.ui.screens.detail
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +19,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -105,8 +106,8 @@ private fun CompanyLogoCard(
             .width(140.dp)
             .height(56.dp),
         colors = CardDefaults.colors(
-            containerColor = Color.White,
-            focusedContainerColor = Color.White
+            containerColor = NexioColors.BackgroundCard,
+            focusedContainerColor = NexioColors.Secondary
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
@@ -114,15 +115,14 @@ private fun CompanyLogoCard(
                 shape = RoundedCornerShape(12.dp)
             )
         ),
-        scale = CardDefaults.scale(focusedScale = 1.03f)
+        scale = CardDefaults.scale(focusedScale = 1f)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.White),
-        contentAlignment = Alignment.Center
+                .clip(RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center
         ) {
             if (logoModel != null && !logoLoadFailed) {
                 AsyncImage(
@@ -132,13 +132,17 @@ private fun CompanyLogoCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 10.dp),
-                    contentScale = ContentScale.Fit
+                    contentScale = ContentScale.Fit,
+                    colorFilter = ColorFilter.tint(
+                        color = Color.White,
+                        blendMode = BlendMode.SrcIn
+                    )
                 )
             } else {
                 Text(
                     text = company.name,
                     style = MaterialTheme.typography.labelLarge,
-                    color = NexioTheme.extendedColors.textSecondary,
+                    color = NexioColors.TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(horizontal = 16.dp)
