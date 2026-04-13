@@ -46,6 +46,7 @@ import com.nexio.tv.core.util.isUnreleased
 import java.time.LocalDate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -57,6 +58,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -129,6 +131,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(MetaDetailsUiState())
     val uiState: StateFlow<MetaDetailsUiState> = _uiState.asStateFlow()
+    private val effectiveContentId = MutableStateFlow(itemId)
 
     private var moreLikeThisJob: Job? = null
     private var reviewsJob: Job? = null
@@ -377,10 +380,13 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeWatchProgress() {
         if (itemType.lowercase() == "movie") return
         viewModelScope.launch {
-            watchProgressRepository.getAllEpisodeProgress(itemId)
+            effectiveContentId.flatMapLatest { contentId ->
+                watchProgressRepository.getAllEpisodeProgress(contentId)
+            }
                 .distinctUntilChanged()
                 .collectLatest { progressMap ->
                 _uiState.update { state ->
@@ -401,10 +407,13 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeWatchedEpisodes() {
         if (itemType.lowercase() == "movie") return
         viewModelScope.launch {
-            watchProgressRepository.getAllEpisodeProgress(itemId)
+            effectiveContentId.flatMapLatest { contentId ->
+                watchProgressRepository.getAllEpisodeProgress(contentId)
+            }
                 .map { progressMap ->
                     progressMap
                         .filterValues { it.isCompleted() }
@@ -438,10 +447,13 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeMovieWatched() {
         if (itemType.lowercase() != "movie") return
         viewModelScope.launch {
-            watchProgressRepository.isWatched(itemId)
+            effectiveContentId.flatMapLatest { contentId ->
+                watchProgressRepository.isWatched(contentId)
+            }
                 .distinctUntilChanged()
                 .collectLatest { watched ->
                 _uiState.update { state ->
@@ -678,6 +690,9 @@ class MetaDetailsViewModel @Inject constructor(
     }
 
     private fun applyMeta(meta: Meta) {
+        meta.id.takeIf { it.isNotBlank() }?.let { loadedContentId ->
+            effectiveContentId.value = loadedContentId
+        }
         _uiState.update { state -> state.withRefreshedMeta(meta) }
         trailerHasPlayed = false
         preloadTitleTrailerAvailability(meta)
@@ -1659,6 +1674,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun toggleLibrary() {
         val meta = _uiState.value.meta ?: return
+        val progressContentId = effectiveProgressContentId(meta)
         viewModelScope.launch {
             val input = meta.toLibraryEntryInput()
             val wasInWatchlist = _uiState.value.isInWatchlist
@@ -1775,15 +1791,16 @@ class MetaDetailsViewModel @Inject constructor(
         val meta = _uiState.value.meta ?: return
         if (meta.apiType != "movie") return
         if (_uiState.value.isMovieWatchedPending) return
+        val progressContentId = effectiveProgressContentId(meta)
 
         viewModelScope.launch {
             _uiState.update { it.copy(isMovieWatchedPending = true) }
             runCatching {
                 if (_uiState.value.isMovieWatched) {
-                    watchProgressRepository.removeFromHistory(itemId)
+                    watchProgressRepository.removeFromHistory(progressContentId)
                     showMessage(context.getString(R.string.detail_movie_marked_unwatched))
                 } else {
-                    watchProgressRepository.markAsCompleted(buildCompletedMovieProgress(meta))
+                    watchProgressRepository.markAsCompleted(buildCompletedMovieProgress(meta, progressContentId))
                     showMessage(context.getString(R.string.detail_movie_marked_watched))
                 }
             }.onFailure { error ->
@@ -1810,13 +1827,14 @@ class MetaDetailsViewModel @Inject constructor(
 
             val episodeKey = season to episode
             val isWatched = _uiState.value.isEpisodeWatched(season, episode)
+            val progressContentId = effectiveProgressContentId(meta)
             applyEpisodeWatchOverride(setOf(episodeKey), watched = !isWatched)
             runCatching {
                 if (isWatched) {
-                    watchProgressRepository.removeFromHistory(itemId, season, episode)
+                    watchProgressRepository.removeFromHistory(progressContentId, season, episode)
                     showMessage(context.getString(R.string.detail_episode_marked_unwatched))
                 } else {
-                    watchProgressRepository.markAsCompleted(buildCompletedEpisodeProgress(meta, video))
+                    watchProgressRepository.markAsCompleted(buildCompletedEpisodeProgress(meta, video, progressContentId))
                     showMessage(context.getString(R.string.detail_episode_marked_watched))
                 }
             }.onFailure { error ->
@@ -1924,6 +1942,7 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun markSeasonUnwatched(season: Int) {
         val meta = _uiState.value.meta ?: return
+        val progressContentId = effectiveProgressContentId(meta)
         viewModelScope.launch {
             val episodes = meta.videos.filter { it.season == season && it.episode != null }
             val watched = episodes.filter { video ->
@@ -1946,9 +1965,11 @@ class MetaDetailsViewModel @Inject constructor(
             var unmarked = 0
             for (video in watched) {
                 val key = episodePendingKey(video)
-                val episodeKey = video.season!! to video.episode!!
+                val seasonNumber = video.season ?: continue
+                val episodeNumber = video.episode ?: continue
+                val episodeKey = seasonNumber to episodeNumber
                 runCatching {
-                    watchProgressRepository.removeFromHistory(itemId, video.season!!, video.episode!!)
+                    watchProgressRepository.removeFromHistory(progressContentId, seasonNumber, episodeNumber)
                     unmarked++
                 }.onFailure { error ->
                     Log.w(TAG, "Failed to unmark S${video.season}E${video.episode}: ${error.message}")
@@ -1967,6 +1988,7 @@ class MetaDetailsViewModel @Inject constructor(
         val meta = _uiState.value.meta ?: return
         val targetSeason = video.season ?: return
         val targetEpisode = video.episode ?: return
+        val progressContentId = effectiveProgressContentId(meta)
 
         viewModelScope.launch {
             val previous = meta.videos.filter { v ->
@@ -1994,7 +2016,7 @@ class MetaDetailsViewModel @Inject constructor(
                 val key = episodePendingKey(ep)
                 val episodeKey = ep.season!! to ep.episode!!
                 runCatching {
-                    watchProgressRepository.markAsCompleted(buildCompletedEpisodeProgress(meta, ep))
+                    watchProgressRepository.markAsCompleted(buildCompletedEpisodeProgress(meta, ep, progressContentId))
                     marked++
                 }.onFailure { error ->
                     Log.w(TAG, "Failed to mark S${ep.season}E${ep.episode} as watched: ${error.message}")
@@ -2009,9 +2031,16 @@ class MetaDetailsViewModel @Inject constructor(
         }
     }
 
-    private fun buildCompletedMovieProgress(meta: Meta): WatchProgress {
+    private fun effectiveProgressContentId(meta: Meta? = _uiState.value.meta): String {
+        return meta?.id?.takeIf { it.isNotBlank() } ?: effectiveContentId.value.takeIf { it.isNotBlank() } ?: itemId
+    }
+
+    private fun buildCompletedMovieProgress(
+        meta: Meta,
+        contentId: String = effectiveProgressContentId(meta)
+    ): WatchProgress {
         return WatchProgress(
-            contentId = itemId,
+            contentId = contentId,
             contentType = meta.apiType,
             name = meta.name,
             poster = meta.poster,
@@ -2028,10 +2057,14 @@ class MetaDetailsViewModel @Inject constructor(
         )
     }
 
-    private fun buildCompletedEpisodeProgress(meta: Meta, video: Video): WatchProgress {
+    private fun buildCompletedEpisodeProgress(
+        meta: Meta,
+        video: Video,
+        contentId: String = effectiveProgressContentId(meta)
+    ): WatchProgress {
         val runtimeMs = video.runtime?.toLong()?.times(60_000L) ?: 1L
         return WatchProgress(
-            contentId = itemId,
+            contentId = contentId,
             contentType = meta.apiType,
             name = meta.name,
             poster = meta.poster,
@@ -2480,13 +2513,14 @@ class MetaDetailsViewModel @Inject constructor(
         if (_uiState.value.episodeWatchedPendingKeys.contains(pendingKey)) return
 
         viewModelScope.launch {
+            val progressContentId = effectiveProgressContentId()
             _uiState.update {
                 it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys + pendingKey)
             }
             // Capture the actual resume entry (keyed by contentId+season+episode, not video.id)
             // so rollback restores the same instance that was removed.
             val captured = continueWatchingSnapshotService.currentRawResumeItems()
-                .firstOrNull { it.contentId == itemId && it.season == season && it.episode == episode }
+                .firstOrNull { it.contentId == progressContentId && it.season == season && it.episode == episode }
             // Only optimistically remove if there's actually an entry to remove.
             if (captured != null) {
                 continueWatchingSnapshotService.removeResumeEntry(captured.videoId)
@@ -2494,7 +2528,7 @@ class MetaDetailsViewModel @Inject constructor(
             val episodeKey = season to episode
             applyEpisodeWatchOverride(setOf(episodeKey), watched = false)
             runCatching {
-                watchProgressRepository.removeFromHistory(itemId, season, episode)
+                watchProgressRepository.removeFromHistory(progressContentId, season, episode)
                 showMessage(context.getString(R.string.cw_action_clear_progress))
                 continueWatchingSnapshotService.ensureFresh(force = true)
             }.onFailure { error ->
@@ -2638,7 +2672,8 @@ class MetaDetailsViewModel @Inject constructor(
         val season = video.season ?: return
         val episode = video.episode ?: return
         val meta = _uiState.value.meta ?: return
-        if (itemId.isBlank()) {
+        val progressContentId = effectiveProgressContentId(meta)
+        if (progressContentId.isBlank()) {
             showMessage(message = context.getString(R.string.error_missing_tracking_ids), isError = true)
             return
         }
@@ -2647,7 +2682,7 @@ class MetaDetailsViewModel @Inject constructor(
             runCatching {
                 trackingScrobbleService.checkin(
                     TrackingScrobbleItem.Episode(
-                        contentId = itemId,
+                        contentId = progressContentId,
                         showTitle = meta.name,
                         showYear = null,
                         season = season,
