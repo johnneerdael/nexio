@@ -13,16 +13,16 @@ Czech,Čeština,cs,"cze, ces","Czech, Čeština, cs, cze, ces"
 Hungarian,Magyar,hu,hun,"Hungarian, Magyar, hu, hun"
 ,,,,
 Track Type,Common Aliases Found in Stream Tags,Description,,
-Original Audio,"Original, Orig, Undetermined, und",The native language the movie was shot in. Sometimes left blank or tagged as und (undetermined) by ripping software.,,
+Original Audio,"Original, Orig, Undetermined, und, VO, Version Originale",The native language the movie was shot in. Sometimes left blank or tagged as und (undetermined) by ripping software. VO (Version Originale) is the standard French naming convention for the original language track.,,
 Commentary,"Commentary, Comm, Director's Commentary, Cast Commentary",Alternative audio tracks featuring filmmakers or actors talking over the movie.,,
 Dubbed,"Dub, Dubbed, Dual Audio","Audio translated into a secondary language (e.g., ""English Dub"", ""Hindi Dub"").",,
 Descriptive Audio,"AD, Audio Description, DVS, Visual Description","Tracks specifically narrated for the visually impaired, describing on-screen actions.",,
 Isolated Score,"Score, Music Only, Isolated Score",A track featuring only the movie's musical soundtrack with no dialogue or sound effects.,,
-Voiceover,"VO, Lektor, Gavrilov","Common in Eastern Europe (especially Poland and Russia), where a single narrator translates the dialogue over the original audio.",,
+Voiceover,"Lektor, Gavrilov, Voiceover, Voice-Over, Voice Over","Common in Eastern Europe (especially Poland and Russia), where a single narrator translates the dialogue over the original audio.",,
 ,,,,
 Language,Native Name(s),2-Letter (ISO 639-1),3-Letter (ISO 639-2),Common Tags / Aliases
 English,English,en,eng,"English, en, eng, en-US, en-GB"
-French,Français,fr,"fre, fra","French, Français, fr, fre, fra, fr-CA"
+French,Français,fr,"fre, fra","French, Français, fr, fre, fra, fr-CA, VF, VFF, VFQ, VFI, VOSTFR"
 German,Deutsch,de,"ger, deu","German, Deutsch, de, ger, deu"
 Spanish,"Español, Castellano",es,spa,"Spanish, Español, es, spa, es-ES, es-419, Castilian"
 Italian,Italiano,it,ita,"Italian, Italiano, it, ita"

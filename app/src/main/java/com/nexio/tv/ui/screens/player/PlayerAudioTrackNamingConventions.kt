@@ -197,13 +197,13 @@ internal object PlayerAudioTrackNamingConventions {
         }
 
         val fallbackTrackTypeAliases = mapOf(
-            AudioTrackType.ORIGINAL to setOf("original", "orig", "undetermined", "und", "main", "default"),
+            AudioTrackType.ORIGINAL to setOf("original", "orig", "undetermined", "und", "main", "default", "vo", "version originale"),
             AudioTrackType.COMMENTARY to setOf("commentary", "comm", "director's commentary", "cast commentary"),
             AudioTrackType.DUBBED to setOf("dub", "dubbed", "dual audio"),
             AudioTrackType.DESCRIPTIVE_AUDIO to
                 setOf("ad", "audio description", "dvs", "visual description"),
             AudioTrackType.ISOLATED_SCORE to setOf("score", "music only", "isolated score"),
-            AudioTrackType.VOICEOVER to setOf("vo", "lektor", "gavrilov")
+            AudioTrackType.VOICEOVER to setOf("lektor", "gavrilov", "voiceover", "voice-over", "voice over")
         )
 
         return AudioTrackNamingMap(
@@ -284,7 +284,7 @@ private val FALLBACK_THREE_LETTER_ALIASES = mapOf(
     "en" to setOf("eng"),
     "es" to setOf("spa"),
     "fi" to setOf("fin"),
-    "fr" to setOf("fra", "fre"),
+    "fr" to setOf("fra", "fre", "vf", "vff", "vfq", "vfi"),
     "he" to setOf("heb"),
     "hi" to setOf("hin"),
     "hu" to setOf("hun"),
