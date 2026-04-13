@@ -55,7 +55,8 @@ class AioTemplateFormatterTest {
     fun `built in universal template renders richer aio style multiline output`() {
         val formatter = AioTemplateFormatter(
             nameTemplate = AioBuiltInFormatters.UNIVERSAL.nameTemplate,
-            descriptionTemplate = AioBuiltInFormatters.UNIVERSAL.descriptionTemplate
+            descriptionTemplate = AioBuiltInFormatters.UNIVERSAL.descriptionTemplate,
+            badgeRowTemplate = AioBuiltInFormatters.UNIVERSAL.badgeRowTemplate
         )
         val parseValue = AioParseValue(
             stream = AioStreamTemplateModel(
@@ -94,11 +95,13 @@ class AioTemplateFormatterTest {
             listOf(
                 "💾 10.74 GB",
                 "[[icon:netflix]] Netflix • [[icon:realdebrid]] Real-Debrid",
-                "[[text:7:10]]Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.NF.mkv",
-                "[[icon:dovi:1.25]] [[icon:atmos:1.25]] [[icon:truehd:1.25]]"
+                "[[text:7:10]]Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.NF.mkv"
             ),
             detailLine.lines()
         )
+        assertTrue(result.badgeRow.contains("[[icon:dovi:1.75]]"))
+        assertTrue(result.badgeRow.contains("[[icon:atmos:1.75]]"))
+        assertTrue(result.badgeRow.contains("[[icon:truehd:1.40]]"))
     }
 
     @Test

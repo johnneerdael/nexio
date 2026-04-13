@@ -117,6 +117,7 @@ enum class ShadowRejectReason {
     NOT_DEBRID_WRAPPED,
     MISSING_BENCHMARK,
     MISSING_SIZE,
+    LOW_QUALITY_RELEASE,
     MISSING_RUNTIME,
     UNSUPPORTED_CODEC,
     EXCEEDS_AUTOPLAY_CAP,
@@ -327,6 +328,9 @@ class BenchmarkAwareStreamScorer internal constructor(
         }
         val resolutionTier = resolveResolutionTier(parsed.resolution)
         val releaseType = classifyReleaseType(parsed, averageBitrateMbps)
+        if (releaseType in HARD_REJECT_RELEASE_TYPES) {
+            return EitherSuccessOrReject.reject(ShadowRejectReason.LOW_QUALITY_RELEASE)
+        }
         val requiredMbps = if (hasRuntime) {
             averageBitrateMbps * config.burstMargins.getValue(releaseType)
         } else {
@@ -431,6 +435,9 @@ class BenchmarkAwareStreamScorer internal constructor(
 
         val resolutionTier = resolveResolutionTier(parsed.resolution)
         val releaseType = classifyReleaseType(parsed, averageBitrateMbps)
+        if (releaseType in HARD_REJECT_RELEASE_TYPES) {
+            return EitherSuccessOrReject.reject(ShadowRejectReason.LOW_QUALITY_RELEASE)
+        }
         var codecTier = resolveVideoCodecTier(parsed.encode, device = null)
         if (codecTier == ShadowVideoCodecTier.OTHER &&
             resolutionTier == ShadowResolutionTier.UHD_2160 &&
@@ -576,16 +583,39 @@ class BenchmarkAwareStreamScorer internal constructor(
         val audioBasePoints = config.contentRewards.audio.getValue(audioDecision.effectiveTier)
         val audioPoints = if (audioDecision.supported) audioBasePoints else -audioBasePoints
 
+        val releaseTypePoints = config.contentRewards.releaseType.getOrDefault(releaseType, 0)
+
+        val resolutionPoints = if (device != null) {
+            config.contentRewards.resolution.getOrDefault(resolutionTier, 0)
+        } else {
+            config.contentRewards.resolution.getOrDefault(resolutionTier, 0)
+        }
+
+        val isUhd = resolutionTier == ShadowResolutionTier.UHD_2160
+        val hasHdr = hdrTier != ShadowHdrTier.SDR && hdrSupportTier != ShadowSupportLevel.UNSUPPORTED
+        val hasPremiumAudio = audioDecision.supported && audioDecision.effectiveTier in PREMIUM_AUDIO_TIERS
+        val hasEfficientCodec = codecTier == ShadowVideoCodecTier.HEVC_HW || codecTier == ShadowVideoCodecTier.AV1_HW
+
+        var synergyPoints = 0
+        if (isUhd && hasHdr && hasPremiumAudio) synergyPoints += 6
+        else if (isUhd && hasHdr) synergyPoints += 3
+        if (hasEfficientCodec && hasHdr) synergyPoints += 2
+
+        var penaltyPoints = 0
+        if (isUhd && hdrTier == ShadowHdrTier.SDR && !hasEfficientCodec) penaltyPoints -= 4
+
+        val lowQuality4kPenalty = if (isUhd && releaseType in LOW_QUALITY_RELEASE_TYPES) -20 else 0
+
         return ShadowContentScoreBreakdown(
-            resolutionPoints = 0,
+            resolutionPoints = resolutionPoints,
             audioPoints = audioPoints,
             hdrPoints = hdrPoints,
             codecPoints = codecPoints,
-            releaseTypePoints = 0,
+            releaseTypePoints = releaseTypePoints,
             bitrateQualityPoints = 0,
-            synergyPoints = 0,
-            penaltyPoints = 0,
-            lowQuality4kPenalty = 0,
+            synergyPoints = synergyPoints,
+            penaltyPoints = penaltyPoints,
+            lowQuality4kPenalty = lowQuality4kPenalty,
             resolutionTier = resolutionTier.name.lowercase(Locale.US),
             releaseTypeTier = releaseType.wireKey,
             codecTier = codecTier.name.lowercase(Locale.US),
@@ -908,7 +938,8 @@ private fun ShadowContentScoreBreakdown.total(): Int {
         releaseTypePoints +
         bitrateQualityPoints +
         synergyPoints +
-        penaltyPoints
+        penaltyPoints +
+        lowQuality4kPenalty
 }
 
 private fun resolveAudioScoringDecision(
@@ -1090,6 +1121,12 @@ private fun classifyReleaseType(
         quality.contains("blu") -> ShadowReleaseType.BLURAY_ENCODE
         quality.contains("web-dl") || quality.contains("webdl") -> ShadowReleaseType.WEBDL
         quality.contains("webrip") || quality.contains("web-rip") -> ShadowReleaseType.WEBRIP
+        quality.contains("hdtv") || quality.contains("tv-rip") || quality.contains("dsr") || quality.contains("sat-rip") -> ShadowReleaseType.HDTV
+        quality.contains("hdrip") || quality.contains("hd-rip") -> ShadowReleaseType.HDRIP
+        quality.contains("scr") -> ShadowReleaseType.SCREENER
+        quality == "cam" || quality.contains("camrip") || quality.contains("hdcam") -> ShadowReleaseType.CAM
+        quality == "ts" || quality.contains("telesync") || quality.contains("hdts") || quality.contains("pdvd") -> ShadowReleaseType.TELESYNC
+        quality == "tc" || quality.contains("telecine") || quality.contains("hdtc") -> ShadowReleaseType.TELECINE
         averageBitrateMbps >= 30.0 -> ShadowReleaseType.HIGH_BITRATE_ENCODE
         averageBitrateMbps >= 10.0 -> ShadowReleaseType.NORMAL_ENCODE
         averageBitrateMbps > 0.0 -> ShadowReleaseType.SMALL_ENCODE
@@ -1197,6 +1234,27 @@ private fun shadowTransportOptionComparator(
 private val HDR_VISUAL_TAGS = setOf("DV", "HDR", "HDR10", "HDR10+", "HLG")
 private const val VIABLE_BUCKET_FRACTION = 0.70
 private const val RESOLUTION_BUCKET_MIN_COUNT = 3
+
+private val PREMIUM_AUDIO_TIERS = setOf(
+    ShadowAudioTier.TRUEHD_ATMOS,
+    ShadowAudioTier.DTSX,
+    ShadowAudioTier.DDP_ATMOS,
+    ShadowAudioTier.TRUEHD,
+    ShadowAudioTier.DTSHD
+)
+
+private val LOW_QUALITY_RELEASE_TYPES = setOf(
+    ShadowReleaseType.CAM,
+    ShadowReleaseType.TELESYNC,
+    ShadowReleaseType.TELECINE,
+    ShadowReleaseType.SCREENER
+)
+
+private val HARD_REJECT_RELEASE_TYPES = setOf(
+    ShadowReleaseType.CAM,
+    ShadowReleaseType.TELESYNC,
+    ShadowReleaseType.TELECINE
+)
 
 private fun ShadowRequestContext.isMovieLike(): Boolean {
     return contentType.equals("movie", ignoreCase = true)

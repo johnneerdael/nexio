@@ -72,10 +72,12 @@ data class BenchmarkAwareScoringScenario(
         val expectation = autoplayExpectation ?: return selected?.streamKey
         val cards = toStreamCards()
         val selectedItem = selected?.streamKey?.let { streamKey ->
-            cards.firstOrNull { it.stream.wrappedOriginalStreamKey == streamKey || it.parsed.exactDuplicateKey == streamKey }
+            val baseKey = streamKey.substringBefore('|')
+            cards.firstOrNull { it.stream.wrappedOriginalStreamKey == streamKey || it.stream.wrappedOriginalStreamKey == baseKey || it.parsed.exactDuplicateKey == streamKey || it.parsed.exactDuplicateKey == baseKey }
         } ?: return null
         val fallbackItem = selectedNonDolbyVisionFallback?.streamKey?.let { streamKey ->
-            cards.firstOrNull { it.stream.wrappedOriginalStreamKey == streamKey || it.parsed.exactDuplicateKey == streamKey }
+            val baseKey = streamKey.substringBefore('|')
+            cards.firstOrNull { it.stream.wrappedOriginalStreamKey == streamKey || it.stream.wrappedOriginalStreamKey == baseKey || it.parsed.exactDuplicateKey == streamKey || it.parsed.exactDuplicateKey == baseKey }
         }
         val gate = DolbyVisionAutoPlayGate(
             probe = object : DolbyVisionProfileProbe {
