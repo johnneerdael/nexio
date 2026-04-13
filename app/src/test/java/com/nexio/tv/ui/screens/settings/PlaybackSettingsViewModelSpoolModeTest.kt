@@ -58,7 +58,7 @@ class PlaybackSettingsViewModelSpoolModeTest {
     }
 
     @Test
-    fun `failed disk spool storage probe clears persisted result`() {
+    fun `failed disk spool storage probe reports failed state without clearing persisted result`() {
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>(relaxed = true)
         val context = mockk<Context>(relaxed = true)
         val cacheFile = temp.newFile("cache-file")
@@ -69,9 +69,89 @@ class PlaybackSettingsViewModelSpoolModeTest {
 
         viewModel.runDiskSpoolStorageProbe(context)
 
-        coVerify(timeout = 5_000) {
+        val state = awaitProbeState<DiskSpoolStorageProbeUiState.Failed>(viewModel)
+        assertTrue(state is DiskSpoolStorageProbeUiState.Failed)
+        coVerify(exactly = 0) {
             playerSettingsDataStore.setSpoolStorageProbeResult(null)
         }
+    }
+
+    @Test
+    fun `disk spool storage probe exposes running state without clearing persisted result`() {
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>(relaxed = true)
+        val context = mockk<Context>(relaxed = true)
+        val cacheDirectory = temp.newFolder("cache-dir")
+        val probeStarted = CountDownLatch(1)
+        val releaseProbe = CountDownLatch(1)
+        every { context.applicationContext } returns context
+        every { context.cacheDir } returns cacheDirectory
+
+        val viewModel = createViewModel(playerSettingsDataStore).apply {
+            diskSpoolStorageProbeRunnerForTesting = { directory, _ ->
+                probeStarted.countDown()
+                assertTrue(releaseProbe.await(5, TimeUnit.SECONDS))
+                passingProbeResult(directory)
+            }
+        }
+
+        viewModel.runDiskSpoolStorageProbe(context)
+        assertTrue(probeStarted.await(5, TimeUnit.SECONDS))
+
+        assertEquals(DiskSpoolStorageProbeUiState.Running, viewModel.diskSpoolStorageProbeUiState.value)
+        coVerify(exactly = 0) {
+            playerSettingsDataStore.setSpoolStorageProbeResult(null)
+        }
+
+        releaseProbe.countDown()
+        coVerify(timeout = 5_000) {
+            playerSettingsDataStore.setSpoolStorageProbeResult(match<SpoolStorageProbeResult> { true })
+        }
+    }
+
+    @Test
+    fun `disk spool storage probe failure exposes failed state without clearing stats`() {
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>(relaxed = true)
+        val context = mockk<Context>(relaxed = true)
+        val cacheDirectory = temp.newFolder("cache-dir")
+        every { context.applicationContext } returns context
+        every { context.cacheDir } returns cacheDirectory
+
+        val viewModel = createViewModel(playerSettingsDataStore).apply {
+            diskSpoolStorageProbeRunnerForTesting = { _, _ ->
+                throw IOException("not enough free space")
+            }
+        }
+
+        viewModel.runDiskSpoolStorageProbe(context)
+
+        val state = awaitProbeState<DiskSpoolStorageProbeUiState.Failed>(viewModel)
+        assertTrue(state is DiskSpoolStorageProbeUiState.Failed)
+        assertEquals("not enough free space", (state as DiskSpoolStorageProbeUiState.Failed).message)
+        coVerify(exactly = 0) {
+            playerSettingsDataStore.setSpoolStorageProbeResult(null)
+        }
+    }
+
+    @Test
+    fun `disk spool storage probe no directory exposes failed state`() {
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>(relaxed = true)
+        val context = mockk<Context>(relaxed = true)
+        val cacheDirectory = temp.newFolder("cache-dir")
+        every { context.applicationContext } returns context
+        every { context.cacheDir } returns cacheDirectory
+
+        val viewModel = createViewModel(playerSettingsDataStore).apply {
+            diskSpoolDirectoryResolverForTesting = { _, _ -> null }
+        }
+
+        viewModel.runDiskSpoolStorageProbe(context)
+
+        val state = awaitProbeState<DiskSpoolStorageProbeUiState.Failed>(viewModel)
+        assertTrue(state is DiskSpoolStorageProbeUiState.Failed)
+        assertEquals(
+            "Disk spool storage location is unavailable",
+            (state as DiskSpoolStorageProbeUiState.Failed).message
+        )
     }
 
     @Test
@@ -115,7 +195,7 @@ class PlaybackSettingsViewModelSpoolModeTest {
         Thread.sleep(100)
         releaseSecondProbe.countDown()
 
-        coVerify(timeout = 5_000, exactly = 2) {
+        coVerify(exactly = 0) {
             playerSettingsDataStore.setSpoolStorageProbeResult(null)
         }
         coVerify(timeout = 5_000, exactly = 1) {
@@ -128,27 +208,26 @@ class PlaybackSettingsViewModelSpoolModeTest {
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>(relaxed = true)
         val context = mockk<Context>(relaxed = true)
         val cacheDirectory = temp.newFolder("cache-dir")
-        val staleClearEntered = CountDownLatch(1)
-        val releaseStaleClear = CountDownLatch(1)
+        val staleProbeStarted = CountDownLatch(1)
+        val releaseStaleProbe = CountDownLatch(1)
         val committedResults = CopyOnWriteArrayList<SpoolStorageProbeResult?>()
-        val nullWrites = AtomicInteger(0)
         val invocation = AtomicInteger(0)
         val successResult = passingProbeResult(cacheDirectory)
         every { context.applicationContext } returns context
         every { context.cacheDir } returns cacheDirectory
         coEvery { playerSettingsDataStore.setSpoolStorageProbeResult(any()) } coAnswers {
             val result = firstArg<SpoolStorageProbeResult?>()
-            if (result == null && nullWrites.incrementAndGet() == 2) {
-                staleClearEntered.countDown()
-                assertTrue(releaseStaleClear.await(5, TimeUnit.SECONDS))
-            }
             committedResults += result
         }
 
         val viewModel = createViewModel(playerSettingsDataStore).apply {
             diskSpoolStorageProbeRunnerForTesting = { _, _ ->
                 when (invocation.incrementAndGet()) {
-                    1 -> throw IOException("stale probe failure")
+                    1 -> {
+                        staleProbeStarted.countDown()
+                        assertTrue(releaseStaleProbe.await(5, TimeUnit.SECONDS))
+                        throw IOException("stale probe failure")
+                    }
                     2 -> successResult
                     else -> error("Unexpected probe invocation")
                 }
@@ -156,16 +235,19 @@ class PlaybackSettingsViewModelSpoolModeTest {
         }
 
         viewModel.runDiskSpoolStorageProbe(context)
-        assertTrue(staleClearEntered.await(5, TimeUnit.SECONDS))
+        assertTrue(staleProbeStarted.await(5, TimeUnit.SECONDS))
 
         viewModel.runDiskSpoolStorageProbe(context)
         Thread.sleep(200L)
-        releaseStaleClear.countDown()
+        releaseStaleProbe.countDown()
 
         coVerify(timeout = 5_000) {
             playerSettingsDataStore.setSpoolStorageProbeResult(successResult)
         }
         assertEquals(successResult, committedResults.last())
+        coVerify(exactly = 0) {
+            playerSettingsDataStore.setSpoolStorageProbeResult(null)
+        }
     }
 
     @Test
@@ -241,5 +323,19 @@ class PlaybackSettingsViewModelSpoolModeTest {
             bytesRead = 1_350_000_000L,
             spoolDirectoryPath = directory.absolutePath
         )
+    }
+
+    private inline fun <reified T : DiskSpoolStorageProbeUiState> awaitProbeState(
+        viewModel: PlaybackSettingsViewModel
+    ): T {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (System.nanoTime() < deadline) {
+            val state = viewModel.diskSpoolStorageProbeUiState.value
+            if (state is T) return state
+            Thread.sleep(10L)
+        }
+        val state = viewModel.diskSpoolStorageProbeUiState.value
+        assertTrue("Expected ${T::class.java.simpleName}, got $state", state is T)
+        return state as T
     }
 }
