@@ -263,6 +263,7 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
             mediaSourceFactory.progressivePlaybackDiskMode = settings.progressivePlaybackDiskMode
             mediaSourceFactory.diskSpoolSizeMb = settings.diskSpoolSizeMb
             mediaSourceFactory.diskSpoolStartupBufferMb = settings.diskSpoolStartupBufferMb
+            mediaSourceFactory.diskSpoolRamReadBufferMb = settings.diskSpoolRamReadBufferMb
             mediaSourceFactory.diskSpoolStorageLocation = settings.diskSpoolStorageLocation
             mediaSourceFactory.spoolStorageProbeResult =
                 SpoolStorageProbeResult.fromJsonOrNull(settings.spoolStorageProbeResultJson)

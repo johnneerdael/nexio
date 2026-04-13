@@ -98,6 +98,7 @@ internal class PlayerMediaSourceFactory(
     var progressivePlaybackDiskMode: ProgressivePlaybackDiskMode = ProgressivePlaybackDiskMode.OFF
     var diskSpoolSizeMb: Int = PlayerSettings.DEFAULT_DISK_SPOOL_SIZE_MB
     var diskSpoolStartupBufferMb: Int = PlayerSettings.DEFAULT_DISK_SPOOL_STARTUP_BUFFER_MB
+    var diskSpoolRamReadBufferMb: Int = PlayerSettings.DEFAULT_DISK_SPOOL_RAM_READ_BUFFER_MB
     var diskSpoolStorageLocation: DiskSpoolStorageLocation = DiskSpoolStorageLocation.BUILTIN
     internal var spoolStorageProbeResult: SpoolStorageProbeResult? = null
     var diskSpoolTargetBitrateMbps: Double? = null
@@ -107,6 +108,8 @@ internal class PlayerMediaSourceFactory(
     internal var diskSpoolDirectoryResolverForTesting: ((Context, DiskSpoolStorageLocation) -> File?)? = null
     internal var diskSpoolSessionObserverForTesting: ((File, Long) -> Unit)? = null
     internal var diskSpoolWriterProfileObserverForTesting: ((Int, Int, Long) -> Unit)? = null
+    internal var diskSpoolHeapLimitBytesForTesting: Long? = null
+    internal var diskSpoolReadAheadObserverForTesting: ((Long) -> Unit)? = null
 
     fun isDiskSpoolSessionActive(): Boolean {
         return synchronized(diskSpoolLock) {
@@ -843,7 +846,8 @@ internal class PlayerMediaSourceFactory(
             session = session,
             uri = Uri.parse(url),
             randomAccessFallbackFactory = createOkHttpDataSourceFactory(requestHeaders),
-            startupPrebufferBytes = resolveDiskSpoolStartupBufferBytes(requestedSpoolBytes)
+            startupPrebufferBytes = resolveDiskSpoolStartupBufferBytes(requestedSpoolBytes),
+            ramReadAheadBytes = resolveDiskSpoolRamReadAheadBytes()
         )
     }
 
@@ -860,6 +864,17 @@ internal class PlayerMediaSourceFactory(
             (requestedSpoolBytes / 1024L / 1024L).toInt().coerceAtLeast(PlayerSettings.MIN_DISK_SPOOL_STARTUP_BUFFER_MB)
         )
         return requestedMb.toLong() * 1024L * 1024L
+    }
+
+    private fun resolveDiskSpoolRamReadAheadBytes(): Long {
+        val heapLimitBytes = diskSpoolHeapLimitBytesForTesting
+            ?: MemoryBudget(context).heapLimitBytes
+        val bytes = MemoryBudget.effectiveDiskSpoolReadAheadBytes(
+            requestedMb = diskSpoolRamReadBufferMb,
+            heapLimitBytes = heapLimitBytes
+        )
+        diskSpoolReadAheadObserverForTesting?.invoke(bytes)
+        return bytes
     }
 
     private fun hasDiskSpoolCapacity(spoolDir: File, requestedSpoolBytes: Long): Boolean {
