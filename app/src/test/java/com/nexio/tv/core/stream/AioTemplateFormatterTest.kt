@@ -94,7 +94,7 @@ class AioTemplateFormatterTest {
             listOf(
                 "💾 10.74 GB",
                 "[[icon:netflix]] Netflix • [[icon:realdebrid]] Real-Debrid",
-                "Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.NF.mkv",
+                "[[text:7:10]]Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.NF.mkv",
                 "[[icon:dovi:1.25]] [[icon:atmos:1.25]] [[icon:truehd:1.25]]"
             ),
             detailLine.lines()

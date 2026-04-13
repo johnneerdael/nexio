@@ -4,7 +4,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.sp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StreamDetailLinesTest {
@@ -15,18 +14,22 @@ class StreamDetailLinesTest {
     )
 
     @Test
-    fun `compacts filename line at any position`() {
+    fun `applies text style token at any position and strips marker from display text`() {
         val detailLines = listOf(
             "💾 41.38 GB",
             "[[icon:prime]] Amazon • [[icon:premiumize]] Premiumize",
-            "📄 Avatar.Fire.And.Ash.2025.2160p.AMZN.WEB-DL.DDP5.1.mkv",
+            "[[text:7:10]]Avatar.Fire.And.Ash.2025.2160p.AMZN.WEB-DL.DDP5.1.mkv",
             "[[icon:hdr10:1.75]] [[icon:ddp:1.75]]"
         )
 
         assertFalse(shouldCompactFinalFilenameLine(detailLines, 0))
         assertFalse(shouldCompactFinalFilenameLine(detailLines, 1))
-        assertTrue(shouldCompactFinalFilenameLine(detailLines, 2))
+        assertFalse(shouldCompactFinalFilenameLine(detailLines, 2))
         assertFalse(shouldCompactFinalFilenameLine(detailLines, 3))
+        assertEquals(
+            "Avatar.Fire.And.Ash.2025.2160p.AMZN.WEB-DL.DDP5.1.mkv",
+            streamDetailLineDisplayText(detailLines[2])
+        )
 
         val compactStyle = streamDetailLineStyle(
             detailLines = detailLines,
