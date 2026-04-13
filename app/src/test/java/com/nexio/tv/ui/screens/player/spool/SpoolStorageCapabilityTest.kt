@@ -111,6 +111,27 @@ class SpoolStorageCapabilityTest {
     }
 
     @Test
+    fun underLoadReadMbps_capsImplausibleCacheSkewedReadResults() {
+        val result = SpoolStorageProbeResult(
+            writeMbps = 72.0,
+            readMbps = 10_856.0,
+            combinedMbps = 10_928.0,
+            p99ReadLatencyMs = 40L,
+            maxReadStallMs = 70L,
+            measuredAtMs = 1_776_047_817_725L,
+            durationMs = 60_000L,
+            bytesWritten = 128L * 1024L * 1024L,
+            bytesRead = 128L * 1024L * 1024L,
+            spoolDirectoryPath = "/data/user_de/0/com.nexio.tv/cache/player_disk_spool",
+            concurrentSequentialWriteMbps = 72.0,
+            concurrentSequentialReadMbps = 10_856.0
+        )
+
+        assertEquals(72.0, SpoolStoragePolicy.underLoadReadMbps(result), 0.01)
+        assertEquals(55, SpoolStoragePolicy.recommendedAutoplayCapMbps(result))
+    }
+
+    @Test
     fun isFresh_requiresRecentMeasurementAndMatchingDirectory() {
         val result = SpoolStorageProbeResult(
             writeMbps = 180.0,
