@@ -100,6 +100,16 @@ internal class ParallelRangeDataSource(
         val createdAtUptimeMs: Long
     )
 
+    internal data class DiagnosticSnapshot(
+        val closed: Boolean,
+        val parallelConnections: Int,
+        val chunkSizeBytes: Long,
+        val scheduledChunks: Int,
+        val pooledBuffers: Int,
+        val executorShutdown: Boolean,
+        val currentChunkIndex: Long
+    )
+
     private var resolvedUri: Uri? = null
     private var originalDataSpec: DataSpec? = null
     private var totalFileLength: Long = C.LENGTH_UNSET.toLong()
@@ -196,6 +206,7 @@ internal class ParallelRangeDataSource(
 
         Log.d(TAG, "Parallel mode: ${parallelConnections} connections, ${chunkSize / 1024 / 1024}MB chunks, " +
                 "file=${totalFileLength / 1024 / 1024}MB, resolved=${resolvedUri?.host}")
+        logDiagnostic("open", windowMs = 0L)
 
         // Reuse a small probe window immediately for both startup and large seek reopens.
         val firstChunkIndex = position / chunkSize
@@ -368,6 +379,7 @@ internal class ParallelRangeDataSource(
             if (totalFileLength != C.LENGTH_UNSET.toLong() && ci * chunkSize >= totalFileLength) break
             ensureChunkScheduled(ci)
         }
+        logDiagnostic("schedule")
     }
 
     private fun ensureChunkScheduled(chunkIndex: Long) {
@@ -581,6 +593,7 @@ internal class ParallelRangeDataSource(
         executor.shutdownNow()
 
         bufferPool.clear()
+        logDiagnostic("close", windowMs = 0L)
     }
 
     override fun addTransferListener(transferListener: TransferListener) {
@@ -591,6 +604,37 @@ internal class ParallelRangeDataSource(
 
     override fun getResponseHeaders(): Map<String, List<String>> =
         fallbackSource?.responseHeaders ?: emptyMap()
+
+    internal fun diagnosticSnapshotForTesting(): DiagnosticSnapshot {
+        return DiagnosticSnapshot(
+            closed = closed.get(),
+            parallelConnections = parallelConnections,
+            chunkSizeBytes = chunkSize,
+            scheduledChunks = chunks.size,
+            pooledBuffers = bufferPool.size,
+            executorShutdown = executor.isShutdown,
+            currentChunkIndex = currentChunkIndex
+        )
+    }
+
+    private fun logDiagnostic(site: String, windowMs: Long = 5_000L) {
+        val snapshot = diagnosticSnapshotForTesting()
+        PlayerTransportTelemetry.logThrottled(
+            site = "prds.$site",
+            windowMs = windowMs,
+            pairs = mapOf(
+                "closed" to snapshot.closed,
+                "connections" to snapshot.parallelConnections,
+                "chunkMb" to (snapshot.chunkSizeBytes / 1024L / 1024L),
+                "scheduled" to snapshot.scheduledChunks,
+                "pooled" to snapshot.pooledBuffers,
+                "executorShutdown" to snapshot.executorShutdown,
+                "currentChunk" to snapshot.currentChunkIndex,
+                "posMb" to (position / 1024L / 1024L),
+                "remainingMb" to if (bytesRemaining == C.LENGTH_UNSET.toLong()) "unset" else bytesRemaining / 1024L / 1024L
+            )
+        )
+    }
 
     /**
      * Factory for creating ParallelRangeDataSource instances.

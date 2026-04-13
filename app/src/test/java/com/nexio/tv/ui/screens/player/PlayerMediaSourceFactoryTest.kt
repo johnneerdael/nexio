@@ -291,14 +291,14 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
-    fun parallelProviderProfile_realDebridUsesTwoByTwentyFour() {
+    fun parallelProviderProfile_realDebridUsesTwoByEighteen() {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
             playbackOkHttpClient = OkHttpClient()
         )
 
         assertEquals(
-            2 to 24,
+            2 to 18,
             factory.parallelProviderProfileForTesting("https://real-debrid.com/path/movie.mkv")
         )
     }
@@ -311,7 +311,7 @@ class PlayerMediaSourceFactoryTest {
         )
 
         assertEquals(
-            (2 to 24) to null,
+            (2 to 18) to null,
             factory.parallelProviderProfilesForTesting(
                 url = "https://real-debrid.com/path/movie.mkv",
                 warmAheadEnabledForStream = false
@@ -327,7 +327,7 @@ class PlayerMediaSourceFactoryTest {
         )
 
         assertEquals(
-            (2 to 24) to (1 to 24),
+            (2 to 18) to (1 to 18),
             factory.parallelProviderProfilesForTesting(
                 url = "https://real-debrid.com/path/movie.mkv",
                 warmAheadEnabledForStream = true
@@ -391,7 +391,7 @@ class PlayerMediaSourceFactoryTest {
         )
 
         assertEquals(
-            1 to 24,
+            1 to 18,
             factory.warmAheadProviderProfileForTesting(
                 url = "https://real-debrid.com/path/movie.mkv",
                 warmAheadEnabledForStream = true
