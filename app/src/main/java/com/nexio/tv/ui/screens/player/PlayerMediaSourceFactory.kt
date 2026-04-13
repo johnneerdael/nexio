@@ -100,6 +100,7 @@ internal class PlayerMediaSourceFactory(
     var diskSpoolStartupBufferMb: Int = PlayerSettings.DEFAULT_DISK_SPOOL_STARTUP_BUFFER_MB
     var diskSpoolRamReadBufferMb: Int = PlayerSettings.DEFAULT_DISK_SPOOL_RAM_READ_BUFFER_MB
     var diskSpoolStorageLocation: DiskSpoolStorageLocation = DiskSpoolStorageLocation.BUILTIN
+    var diskSpoolDiagnosticsEnabled: Boolean = false
     internal var spoolStorageProbeResult: SpoolStorageProbeResult? = null
     var diskSpoolTargetBitrateMbps: Double? = null
     internal var diskSpoolAvailableBytesForTesting: Long? = null
@@ -110,6 +111,7 @@ internal class PlayerMediaSourceFactory(
     internal var diskSpoolWriterProfileObserverForTesting: ((Int, Int, Long) -> Unit)? = null
     internal var diskSpoolHeapLimitBytesForTesting: Long? = null
     internal var diskSpoolReadAheadObserverForTesting: ((Long) -> Unit)? = null
+    internal var diskSpoolDiagnosticsLoggerForTesting: ((String) -> Unit)? = null
 
     fun isDiskSpoolSessionActive(): Boolean {
         return synchronized(diskSpoolLock) {
@@ -152,6 +154,13 @@ internal class PlayerMediaSourceFactory(
             !isHls &&
             !isDash &&
             shouldUseVodCache(url)
+        logDiskSpoolDiagnostics {
+            "createMediaSource host=${safeHost(url)} mode=$progressivePlaybackDiskMode " +
+                "mime=${resolvedMimeType ?: "unknown"} hls=$isHls dash=$isDash http=${usesHttpUpstream(url)} " +
+                "eligibleBySetting=$diskSpoolEligibleBySetting spoolMb=$diskSpoolSizeMb " +
+                "startupMb=$diskSpoolStartupBufferMb ramMb=$diskSpoolRamReadBufferMb " +
+                "storage=$diskSpoolStorageLocation"
+        }
         val useVodCache = ENABLE_VOD_CACHE &&
             !diskSpoolEligibleBySetting &&
             vodCacheSizeMode == VodCacheSizeMode.ON &&
@@ -789,11 +798,23 @@ internal class PlayerMediaSourceFactory(
         fallbackParallelConnectionCount: Int,
         fallbackParallelChunkSizeMb: Int
     ): DataSource.Factory? {
-        if (progressivePlaybackDiskMode != ProgressivePlaybackDiskMode.SPOOL) return null
-        if (isHls || isDash) return null
-        if (!usesHttpUpstream(url)) return null
+        if (progressivePlaybackDiskMode != ProgressivePlaybackDiskMode.SPOOL) {
+            logDiskSpoolDiagnostics { "not eligible: mode=$progressivePlaybackDiskMode host=${safeHost(url)}" }
+            return null
+        }
+        if (isHls || isDash) {
+            logDiskSpoolDiagnostics { "not eligible: adaptive stream hls=$isHls dash=$isDash host=${safeHost(url)}" }
+            return null
+        }
+        if (!usesHttpUpstream(url)) {
+            logDiskSpoolDiagnostics { "not eligible: non-http upstream host=${safeHost(url)}" }
+            return null
+        }
 
-        val spoolDir = diskSpoolDirectoryOrNull() ?: return null
+        val spoolDir = diskSpoolDirectoryOrNull() ?: run {
+            logDiskSpoolDiagnostics { "not eligible: no spool directory storage=$diskSpoolStorageLocation host=${safeHost(url)}" }
+            return null
+        }
 
         val requestedSpoolBytes = resolveRequestedDiskSpoolBytes()
         if (!hasDiskSpoolCapacity(spoolDir, requestedSpoolBytes)) return null
@@ -820,6 +841,12 @@ internal class PlayerMediaSourceFactory(
         }
         diskSpoolSessionObserverForTesting?.invoke(spoolFile, requestedSpoolBytes)
         val startupPrebufferBytes = resolveDiskSpoolStartupBufferBytes(requestedSpoolBytes)
+        logDiskSpoolDiagnostics {
+            "session created host=${safeHost(url)} dir=${spoolDir.absolutePath} " +
+                "requestedMb=${requestedSpoolBytes / 1024L / 1024L} " +
+                "startupMb=${startupPrebufferBytes / 1024L / 1024L} " +
+                "connections=${diskSpoolProfile.connectionCount} chunkMb=${diskSpoolProfile.chunkSizeMb}"
+        }
 
         val registrationGeneration = synchronized(diskSpoolLock) {
             diskSpoolLifecycleGeneration
@@ -835,6 +862,7 @@ internal class PlayerMediaSourceFactory(
             )
         }.getOrElse { error ->
             Log.w(TAG, "Disk spool writer scheduling failed; falling back to normal progressive upstream", error)
+            logDiskSpoolDiagnostics { "fallback: writer scheduling failed host=${safeHost(url)} message=${error.message}" }
             closeDiskSpoolSession(session, reason = "writer scheduling failure")
             return null
         }
@@ -846,12 +874,18 @@ internal class PlayerMediaSourceFactory(
         if (!isDiskSpoolSessionStillRegistered(session, registrationGeneration)) {
             writerFuture?.cancel(true)
             closeDiskSpoolSession(session, reason = "disk spool session invalidated before factory return")
+            logDiskSpoolDiagnostics { "fallback: session invalidated before factory return host=${safeHost(url)}" }
             return null
         }
         if (!prewarmDiskSpoolStartup(session, writerFuture, startupPrebufferBytes)) {
             writerFuture?.cancel(true)
             closeDiskSpoolSession(session, reason = "startup prewarm failure")
+            logDiskSpoolDiagnostics { "fallback: startup prewarm failed host=${safeHost(url)}" }
             return null
+        }
+        logDiskSpoolDiagnostics {
+            "returning disk spool factory host=${safeHost(url)} frontier=${session.contiguousFrontierBytes()} " +
+                "startupTarget=$startupPrebufferBytes"
         }
         // Playback can stop after this factory is returned; DiskSpoolDataSource.open
         // rechecks the session so a closed spool cannot masquerade as playable media.
@@ -896,10 +930,17 @@ internal class PlayerMediaSourceFactory(
             StatFs(spoolDir.absolutePath).availableBytes
         }.getOrElse { error ->
             Log.w(TAG, "Unable to check disk spool free space", error)
+            logDiskSpoolDiagnostics { "capacity check failed dir=${spoolDir.absolutePath} message=${error.message}" }
             return false
         }
-        return availableBytes >= requestedSpoolBytes &&
+        val hasCapacity = availableBytes >= requestedSpoolBytes &&
             availableBytes - requestedSpoolBytes >= DISK_SPOOL_FREE_SPACE_RESERVE_BYTES
+        logDiskSpoolDiagnostics {
+            "capacity dir=${spoolDir.absolutePath} availableMb=${availableBytes / 1024L / 1024L} " +
+                "requestedMb=${requestedSpoolBytes / 1024L / 1024L} " +
+                "reserveMb=${DISK_SPOOL_FREE_SPACE_RESERVE_BYTES / 1024L / 1024L} ok=$hasCapacity"
+        }
+        return hasCapacity
     }
 
     private fun scheduleDiskSpoolWriter(
@@ -914,6 +955,11 @@ internal class PlayerMediaSourceFactory(
         diskSpoolWriterProfileObserverForTesting?.invoke(profile.connectionCount, chunkBytes, startupPrebufferBytes)
         val task = Runnable {
             runCatching {
+                logDiskSpoolDiagnostics {
+                    "writer started host=${safeHost(url)} targetMb=${requestedSpoolBytes / 1024L / 1024L} " +
+                        "startupMb=${startupPrebufferBytes / 1024L / 1024L} " +
+                        "connections=${profile.connectionCount} chunkMb=${chunkBytes / 1024 / 1024}"
+                }
                 DiskSpoolWriter(
                     playbackOkHttpClient,
                     requestHeaders = requestHeaders,
@@ -924,6 +970,7 @@ internal class PlayerMediaSourceFactory(
                     .downloadUntil(url, session, requestedSpoolBytes)
             }.onFailure { error ->
                 Log.w(TAG, "Disk spool writer failed; closing spool session", error)
+                logDiskSpoolDiagnostics { "writer failed host=${safeHost(url)} message=${error.message}" }
                 if (!closeActiveDiskSpoolSessionIfActive(session, cancelWriter = false, reason = "writer failure")) {
                     closeDiskSpoolSession(session, reason = "writer failure before registration")
                 }
@@ -945,6 +992,10 @@ internal class PlayerMediaSourceFactory(
     ): Boolean {
         if (startupPrebufferBytes <= 0L) return true
         if (writerFuture == null) return true
+        logDiskSpoolDiagnostics {
+            "prewarm start targetMb=${startupPrebufferBytes / 1024L / 1024L} " +
+                "frontierMb=${session.contiguousFrontierBytes() / 1024L / 1024L}"
+        }
         val didPrewarm = session.awaitFrontierAtLeast(
             targetFrontierBytes = startupPrebufferBytes,
             timeoutMs = DISK_SPOOL_STARTUP_PREWARM_TIMEOUT_MS
@@ -955,8 +1006,23 @@ internal class PlayerMediaSourceFactory(
                 "Disk spool startup prewarm failed frontier=${session.contiguousFrontierBytes()} " +
                     "target=$startupPrebufferBytes done=${writerFuture.isDone}"
             )
+        } else {
+            logDiskSpoolDiagnostics {
+                "prewarm success targetMb=${startupPrebufferBytes / 1024L / 1024L} " +
+                    "frontierMb=${session.contiguousFrontierBytes() / 1024L / 1024L} done=${writerFuture.isDone}"
+            }
         }
         return didPrewarm
+    }
+
+    private inline fun logDiskSpoolDiagnostics(message: () -> String) {
+        if (!diskSpoolDiagnosticsEnabled) return
+        val text = "DISK_SPOOL_DIAG: ${message()}"
+        diskSpoolDiagnosticsLoggerForTesting?.invoke(text) ?: Log.i(TAG, text)
+    }
+
+    private fun safeHost(url: String): String {
+        return runCatching { Uri.parse(url).host ?: "unknown" }.getOrDefault("unknown")
     }
 
     private fun registerActiveDiskSpoolSession(

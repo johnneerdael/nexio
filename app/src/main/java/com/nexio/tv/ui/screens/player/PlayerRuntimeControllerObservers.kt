@@ -190,6 +190,11 @@ internal fun PlayerRuntimeController.observeDebugSettings() {
             streamDiagnosticsEnabled = enabled
         }
     }
+    scope.launch {
+        debugSettingsDataStore.diskSpoolDiagnosticsEnabled.collectLatest { enabled ->
+            mediaSourceFactory.diskSpoolDiagnosticsEnabled = enabled
+        }
+    }
 }
 
 internal fun PlayerRuntimeController.observeEpisodeWatchProgress() {

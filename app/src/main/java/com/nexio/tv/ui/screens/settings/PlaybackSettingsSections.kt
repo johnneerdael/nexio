@@ -154,10 +154,12 @@ internal fun PlaybackSettingsSections(
     onSetFireOsIecSuperviseAudioDelayEnabled: (Boolean) -> Unit,
     streamDiagnosticsEnabled: Boolean,
     startupPerfTelemetryEnabled: Boolean,
+    diskSpoolDiagnosticsEnabled: Boolean,
     onSetFireOsIecVerboseLoggingEnabled: (Boolean) -> Unit,
     onSetEnableBufferLogs: (Boolean) -> Unit,
     onSetStreamDiagnosticsEnabled: (Boolean) -> Unit,
     onSetStartupPerfTelemetryEnabled: (Boolean) -> Unit,
+    onSetDiskSpoolDiagnosticsEnabled: (Boolean) -> Unit,
     onSetIecPackerMaxPcmChannelLayout: (IecPackerChannelLayout) -> Unit,
     onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
     onSetSubtitleSize: (Int) -> Unit,
@@ -559,6 +561,17 @@ internal fun PlaybackSettingsSections(
                     subtitle = stringResource(R.string.playback_logging_startup_perf_subtitle),
                     isChecked = startupPerfTelemetryEnabled,
                     onCheckedChange = onSetStartupPerfTelemetryEnabled,
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
+
+            item(key = "logging_disk_spool_diagnostics") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Storage,
+                    title = stringResource(R.string.playback_logging_disk_spool_diagnostics_title),
+                    subtitle = stringResource(R.string.playback_logging_disk_spool_diagnostics_subtitle),
+                    isChecked = diskSpoolDiagnosticsEnabled,
+                    onCheckedChange = onSetDiskSpoolDiagnosticsEnabled,
                     onFocused = { focusedSection = PlaybackSection.LOGGING }
                 )
             }
