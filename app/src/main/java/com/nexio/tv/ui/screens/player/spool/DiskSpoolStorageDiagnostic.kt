@@ -2,9 +2,11 @@ package com.nexio.tv.ui.screens.player.spool
 
 import android.os.SystemClock
 import java.io.File
+import java.io.IOException
 import java.io.RandomAccessFile
 import java.util.Random
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.CancellationException
 import java.util.concurrent.atomic.AtomicReference
 
 internal class DiskSpoolStorageDiagnostic(
@@ -15,27 +17,47 @@ internal class DiskSpoolStorageDiagnostic(
     private val randomWriteEnabled: Boolean,
     private val randomSeed: Long = System.nanoTime(),
     private val nowMs: () -> Long = { System.currentTimeMillis() },
-    private val shouldContinue: () -> Boolean = { !Thread.currentThread().isInterrupted }
+    private val shouldContinue: () -> Boolean = { !Thread.currentThread().isInterrupted },
+    private val availableBytesProvider: (File) -> Long = { it.usableSpace }
 ) {
+    companion object {
+        private const val DIAGNOSTIC_PREFIX = "spool-diagnostic-"
+
+        fun cleanupStaleDiagnosticFiles(directory: File) {
+            directory.listFiles()?.forEach { file ->
+                if (file.isFile && file.name.startsWith(DIAGNOSTIC_PREFIX)) {
+                    file.delete()
+                }
+            }
+        }
+    }
+
     fun run(): SpoolStorageProbeResult {
         require(totalBytes > 0L) { "totalBytes must be positive" }
         require(sequentialBlockBytes > 0) { "sequentialBlockBytes must be positive" }
         require(randomBlockBytes > 0) { "randomBlockBytes must be positive" }
 
         directory.mkdirs()
+        runCatching { cleanupStaleDiagnosticFiles(directory) }
+        ensureCapacity()
+        ensureRunning()
         val measuredAtMs = nowMs()
         val file = File(directory, "spool-diagnostic-${SystemClock.elapsedRealtimeNanos()}.bin")
         val randomFile = File(directory, "${file.name}.random")
         val concurrentFile = File(directory, "${file.name}.concurrent")
         return try {
             val sequentialWriteMbps = sequentialWrite(file)
+            ensureRunning()
             val sequentialReadMbps = sequentialRead(file)
+            ensureRunning()
             val concurrentSequential = concurrentSequentialReadWrite(
                 readFile = file,
                 writeFile = concurrentFile
             )
+            ensureRunning()
             val concurrentRandom = if (randomWriteEnabled) {
                 sequentialWrite(randomFile)
+                ensureRunning()
                 concurrentSequentialReadRandomWrite(readFile = file, writeFile = randomFile)
             } else {
                 null
@@ -76,6 +98,7 @@ internal class DiskSpoolStorageDiagnostic(
                     writer.write(buffer, 0, length)
                     position += length.toLong()
                 }
+                ensureRunning()
                 writer.fd.sync()
             }
         }
@@ -93,6 +116,7 @@ internal class DiskSpoolStorageDiagnostic(
                     reader.readFully(buffer, 0, length)
                     position += length.toLong()
                 }
+                ensureRunning()
             }
         }
         return mbps(totalBytes, elapsedNs)
@@ -115,6 +139,7 @@ internal class DiskSpoolStorageDiagnostic(
                     writer.write(writeBuffer, 0, length)
                     position += length.toLong()
                 }
+                ensureRunning()
                 writer.fd.sync()
             },
             readWork = { reader ->
@@ -125,6 +150,7 @@ internal class DiskSpoolStorageDiagnostic(
                     reader.readFully(readBuffer, 0, length)
                     position += length.toLong()
                 }
+                ensureRunning()
             },
             readFile = readFile,
             writeFile = writeFile
@@ -151,6 +177,7 @@ internal class DiskSpoolStorageDiagnostic(
                     writer.write(writeBuffer, 0, length)
                     writtenBytes += length.toLong()
                 }
+                ensureRunning()
                 writer.fd.sync()
             },
             readWork = { reader ->
@@ -161,6 +188,7 @@ internal class DiskSpoolStorageDiagnostic(
                     reader.readFully(readBuffer, 0, length)
                     position += length.toLong()
                 }
+                ensureRunning()
             },
             readFile = readFile,
             writeFile = writeFile
@@ -218,6 +246,29 @@ internal class DiskSpoolStorageDiagnostic(
         val startedAt = System.nanoTime()
         block()
         return (System.nanoTime() - startedAt).coerceAtLeast(1L)
+    }
+
+    private fun ensureRunning() {
+        if (!shouldContinue()) {
+            throw CancellationException("Disk spool storage diagnostic canceled")
+        }
+    }
+
+    private fun requiredBytes(): Long {
+        var fileCount = 2L
+        if (randomWriteEnabled) fileCount += 1L
+        return totalBytes * fileCount
+    }
+
+    private fun ensureCapacity() {
+        val availableBytes = availableBytesProvider(directory)
+        val requiredBytes = requiredBytes()
+        if (availableBytes < requiredBytes) {
+            throw IOException(
+                "Need ${requiredBytes / 1024L / 1024L} MiB free for disk spool diagnostic, " +
+                    "found ${availableBytes / 1024L / 1024L} MiB"
+            )
+        }
     }
 
     private fun mbps(bytes: Long, elapsedNs: Long): Double {
