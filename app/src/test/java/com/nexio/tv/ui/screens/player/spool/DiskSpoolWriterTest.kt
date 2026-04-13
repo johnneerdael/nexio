@@ -520,6 +520,50 @@ class DiskSpoolWriterTest {
         }
     }
 
+    @Test
+    fun `parallel writer schedules multiple adjacent range requests into one session`() {
+        val content = ByteArray(96 * 1024) { (it % 251).toByte() }
+        val requestedRanges = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val range = request.getHeader("Range")
+                if (range != null) requestedRanges += range
+                return when (range) {
+                    "bytes=0-0" -> MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Accept-Ranges", "bytes")
+                        .setHeader("Content-Range", "bytes 0-0/${content.size}")
+                        .setHeader("Content-Length", 1)
+                        .setBody(Buffer().writeByte(0x2A))
+                    else -> rangedResponse(content, range ?: error("Missing range"))
+                }
+            }
+        }
+        server.start()
+        val session = DiskSpoolSession(File(temp.root, "parallel.spool"), capacityBytes = 128 * 1024L)
+
+        try {
+            DiskSpoolWriter(
+                okHttpClient = OkHttpClient(),
+                chunkBytes = 32 * 1024,
+                ioBufferBytes = 4 * 1024,
+                parallelConnections = 3,
+                startupPriorityBytes = 64 * 1024L
+            ).downloadUntil(server.url("/movie.bin").toString(), session, content.size.toLong())
+
+            val buffer = ByteArray(content.size)
+            assertEquals(content.size, session.read(0L, buffer, 0, buffer.size))
+            assertArrayEquals(content, buffer)
+            assertTrue(requestedRanges.contains("bytes=0-32767"))
+            assertTrue(requestedRanges.contains("bytes=32768-65535"))
+            assertTrue(requestedRanges.contains("bytes=65536-98303"))
+        } finally {
+            session.close()
+            server.shutdown()
+        }
+    }
+
     private fun rangedResponse(content: ByteArray, rangeHeader: String): MockResponse {
         val match = Regex("""bytes=(\d+)-(\d+)""").matchEntire(rangeHeader)
             ?: error("Unexpected Range header: $rangeHeader")
