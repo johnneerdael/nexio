@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.runCurrent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.atomic.AtomicInteger
 
 class ServiceWrapSessionFactoryTest {
 
@@ -350,6 +351,81 @@ class ServiceWrapSessionFactoryTest {
         assertEquals(2, batches.size)
         assertEquals(true, batches.last().isTerminal)
         assertEquals(setOf("PM"), batches.last().wrappedStreams.mapNotNull { it.wrappedProviderId }.toSet())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `session limits concurrent hash resolutions`() = runTest {
+        val active = AtomicInteger(0)
+        val maxObserved = AtomicInteger(0)
+        val factory = ServiceWrapSessionFactory(
+            extractor = WrapCandidateExtractor(),
+            resolver = object : ServiceWrapResolver {
+                override suspend fun resolve(
+                    candidate: WrapCandidate,
+                    requestContext: ServiceWrapRequestContext
+                ): List<ResolvedServiceWrapStream> {
+                    val current = active.incrementAndGet()
+                    maxObserved.updateAndGet { previous -> maxOf(previous, current) }
+                    delay(1_000L)
+                    active.decrementAndGet()
+                    return listOf(resolvedStream(ServiceWrapProvider.REAL_DEBRID, candidate.normalizedInfoHash))
+                }
+            },
+            wrappedStreamBuilder = WrappedStreamBuilder(),
+            maxConcurrentResolutions = 2
+        )
+        val batches = mutableListOf<ServiceWrapResolvedBatch>()
+        val session = factory.createSession(
+            requestContext = ServiceWrapRequestContext(
+                contentType = "movie",
+                season = null,
+                episode = null
+            ),
+            scope = this,
+            onResolved = { batch -> batches += batch }
+        )
+
+        val result = session.processAddonStreams(
+            addonName = "Addon A",
+            addonLogo = null,
+            streams = listOf(
+                stream(
+                    name = "Movie Candidate 1",
+                    infoHash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01",
+                    url = null,
+                    description = "Movie.2024.2160p.REMUX"
+                ),
+                stream(
+                    name = "Movie Candidate 2",
+                    infoHash = "ABCDEF0123456789ABCDEF0123456789ABCDEF02",
+                    url = null,
+                    description = "Movie.2024.1080p"
+                ),
+                stream(
+                    name = "Movie Candidate 3",
+                    infoHash = "ABCDEF0123456789ABCDEF0123456789ABCDEF03",
+                    url = null,
+                    description = "Movie.2024.720p"
+                )
+            )
+        )
+
+        assertEquals(3, result.launchedWrapCount)
+
+        runCurrent()
+        assertEquals(2, active.get())
+        assertEquals(2, maxObserved.get())
+
+        advanceTimeBy(1_000L)
+        runCurrent()
+        assertEquals(1, active.get())
+        assertEquals(2, maxObserved.get())
+
+        advanceUntilIdle()
+        assertEquals(0, active.get())
+        assertEquals(2, maxObserved.get())
+        assertEquals(3, batches.size)
     }
 
     private fun resolvedStream(
