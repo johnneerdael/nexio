@@ -261,6 +261,7 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
             mediaSourceFactory.vodCacheSizeMb = settings.vodCacheSizeMb
             mediaSourceFactory.vodCacheWarmAheadEnabled = settings.vodCacheWarmAheadEnabled
             mediaSourceFactory.progressivePlaybackDiskMode = settings.progressivePlaybackDiskMode
+            mediaSourceFactory.diskSpoolStorageLocation = settings.diskSpoolStorageLocation
             mediaSourceFactory.spoolStorageProbeResult =
                 SpoolStorageProbeResult.fromJsonOrNull(settings.spoolStorageProbeResultJson)
             mediaSourceFactory.diskSpoolTargetBitrateMbps = settings.diskSpoolTargetBitrateMbps()

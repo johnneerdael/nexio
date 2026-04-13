@@ -205,6 +205,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             mediaSourceFactory.vodCacheSizeMb = playerSettings.vodCacheSizeMb
             mediaSourceFactory.vodCacheWarmAheadEnabled = playerSettings.vodCacheWarmAheadEnabled
             mediaSourceFactory.progressivePlaybackDiskMode = playerSettings.progressivePlaybackDiskMode
+            mediaSourceFactory.diskSpoolStorageLocation = playerSettings.diskSpoolStorageLocation
             mediaSourceFactory.spoolStorageProbeResult =
                 SpoolStorageProbeResult.fromJsonOrNull(playerSettings.spoolStorageProbeResultJson)
             mediaSourceFactory.diskSpoolTargetBitrateMbps = playerSettings.diskSpoolTargetBitrateMbps()
