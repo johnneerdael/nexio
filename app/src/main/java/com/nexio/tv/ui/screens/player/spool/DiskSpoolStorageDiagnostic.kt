@@ -15,6 +15,7 @@ internal class DiskSpoolStorageDiagnostic(
     private val sequentialBlockBytes: Int = 1024 * 1024,
     private val randomBlockBytes: Int = 4 * 1024,
     private val randomWriteEnabled: Boolean,
+    private val readCachePurgeBytes: Long = totalBytes,
     private val randomSeed: Long = System.nanoTime(),
     private val nowMs: () -> Long = { System.currentTimeMillis() },
     private val shouldContinue: () -> Boolean = { !Thread.currentThread().isInterrupted },
@@ -36,6 +37,7 @@ internal class DiskSpoolStorageDiagnostic(
         require(totalBytes > 0L) { "totalBytes must be positive" }
         require(sequentialBlockBytes > 0) { "sequentialBlockBytes must be positive" }
         require(randomBlockBytes > 0) { "randomBlockBytes must be positive" }
+        require(readCachePurgeBytes >= 0L) { "readCachePurgeBytes must not be negative" }
 
         directory.mkdirs()
         runCatching { cleanupStaleDiagnosticFiles(directory) }
@@ -45,11 +47,14 @@ internal class DiskSpoolStorageDiagnostic(
         val file = File(directory, "spool-diagnostic-${SystemClock.elapsedRealtimeNanos()}.bin")
         val randomFile = File(directory, "${file.name}.random")
         val concurrentFile = File(directory, "${file.name}.concurrent")
+        val cachePurgeFile = File(directory, "${file.name}.purge")
         return try {
             val sequentialWriteMbps = sequentialWrite(file)
             ensureRunning()
+            purgeReadCache(cachePurgeFile)
             val sequentialReadMbps = sequentialRead(file)
             ensureRunning()
+            purgeReadCache(cachePurgeFile)
             val concurrentSequential = concurrentSequentialReadWrite(
                 readFile = file,
                 writeFile = concurrentFile
@@ -58,6 +63,7 @@ internal class DiskSpoolStorageDiagnostic(
             val concurrentRandom = if (randomWriteEnabled) {
                 sequentialWrite(randomFile)
                 ensureRunning()
+                purgeReadCache(cachePurgeFile)
                 concurrentSequentialReadRandomWrite(readFile = file, writeFile = randomFile)
             } else {
                 null
@@ -84,6 +90,7 @@ internal class DiskSpoolStorageDiagnostic(
             file.delete()
             randomFile.delete()
             concurrentFile.delete()
+            cachePurgeFile.delete()
         }
     }
 
@@ -121,6 +128,31 @@ internal class DiskSpoolStorageDiagnostic(
             }
         }
         return mbps(totalBytes, elapsedNs)
+    }
+
+    private fun purgeReadCache(file: File) {
+        if (readCachePurgeBytes == 0L) return
+        val buffer = ByteArray(sequentialBlockBytes)
+        try {
+            RandomAccessFile(file, "rw").use { writer ->
+                writer.setLength(readCachePurgeBytes)
+                var position = 0L
+                var seed = 0
+                while (position < readCachePurgeBytes && shouldContinue()) {
+                    val length = minOf(buffer.size.toLong(), readCachePurgeBytes - position).toInt()
+                    for (index in 0 until length step 256) {
+                        buffer[index] = (seed++ and 0xFF).toByte()
+                    }
+                    writer.seek(position)
+                    writer.write(buffer, 0, length)
+                    position += length.toLong()
+                }
+                ensureRunning()
+                writer.fd.sync()
+            }
+        } finally {
+            file.delete()
+        }
     }
 
     private fun concurrentSequentialReadWrite(

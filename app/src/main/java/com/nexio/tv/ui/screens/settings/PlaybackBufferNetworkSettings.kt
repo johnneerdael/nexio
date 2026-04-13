@@ -240,6 +240,7 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
                         R.string.playback_buffer_disk_spool_diagnostic_measured_random,
                         recommendation,
                         status.underLoadWriteMBps,
+                        status.underLoadReadMBps,
                         randomWriteMBps,
                         status.autoplayCapMbps,
                         status.p99ReadLatencyMs,
@@ -250,6 +251,7 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
                         R.string.playback_buffer_disk_spool_diagnostic_measured,
                         recommendation,
                         status.underLoadWriteMBps,
+                        status.underLoadReadMBps,
                         status.autoplayCapMbps,
                         status.p99ReadLatencyMs,
                         status.maxReadStallMs
@@ -304,6 +306,7 @@ internal sealed class DiskSpoolDiagnosticStatus {
         val recommendation: DiskSpoolDiagnosticRecommendation,
         val autoplayCapMbps: Int,
         val underLoadWriteMBps: Int,
+        val underLoadReadMBps: Int,
         val randomWriteMBps: Int?,
         val p99ReadLatencyMs: Long,
         val maxReadStallMs: Long
@@ -339,6 +342,7 @@ internal fun resolveDiskSpoolDiagnosticStatus(
         },
         autoplayCapMbps = SpoolStoragePolicy.recommendedAutoplayCapMbps(result),
         underLoadWriteMBps = mbpsToMBpsInt(SpoolStoragePolicy.underLoadWriteMbps(result)),
+        underLoadReadMBps = mbpsToMBpsInt(SpoolStoragePolicy.underLoadReadMbps(result)),
         randomWriteMBps = SpoolStoragePolicy.underLoadRandomWriteMbps(result)?.let(::mbpsToMBpsInt),
         p99ReadLatencyMs = result.p99ReadLatencyMs,
         maxReadStallMs = result.maxReadStallMs

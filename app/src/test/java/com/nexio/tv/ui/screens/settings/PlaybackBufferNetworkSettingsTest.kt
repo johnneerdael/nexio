@@ -86,7 +86,7 @@ class PlaybackBufferNetworkSettingsTest {
     }
 
     @Test
-    fun diskSpoolDiagnosticStatus_reportsWriteMBpsRecommendationAndAutoplayCap() {
+    fun diskSpoolDiagnosticStatus_reportsUnderLoadMBpsRecommendationAndAutoplayCap() {
         val path = "/data/user/0/com.nexio.tv/cache/player_disk_spool"
         val nowMs = 1_776_047_818_725L
         val result = SpoolStorageProbeResult(
@@ -108,8 +108,9 @@ class PlaybackBufferNetworkSettingsTest {
         assertEquals(
             DiskSpoolDiagnosticStatus.Measured(
                 recommendation = DiskSpoolDiagnosticRecommendation.Recommended,
-                autoplayCapMbps = 160,
+                autoplayCapMbps = 200,
                 underLoadWriteMBps = 50,
+                underLoadReadMBps = 100,
                 randomWriteMBps = 40,
                 p99ReadLatencyMs = 40L,
                 maxReadStallMs = 70L
@@ -146,8 +147,9 @@ class PlaybackBufferNetworkSettingsTest {
         assertEquals(
             DiskSpoolDiagnosticStatus.Measured(
                 recommendation = DiskSpoolDiagnosticRecommendation.NotRecommended,
-                autoplayCapMbps = 160,
+                autoplayCapMbps = 200,
                 underLoadWriteMBps = 50,
+                underLoadReadMBps = 100,
                 randomWriteMBps = 40,
                 p99ReadLatencyMs = 40L,
                 maxReadStallMs = 900L
@@ -166,9 +168,9 @@ class PlaybackBufferNetworkSettingsTest {
         val path = "/data/user/0/com.nexio.tv/cache/player_disk_spool"
         val nowMs = 1_776_047_818_725L
         val passing = SpoolStorageProbeResult(
-            writeMbps = 240.0,
+            writeMbps = 180.0,
             readMbps = 180.0,
-            combinedMbps = 420.0,
+            combinedMbps = 360.0,
             p99ReadLatencyMs = 40L,
             maxReadStallMs = 70L,
             measuredAtMs = nowMs - 1_000L,
@@ -189,7 +191,7 @@ class PlaybackBufferNetworkSettingsTest {
             )
         )
         assertEquals(
-            DiskSpoolProbeStatus.Passed(combinedMbps = 420, p99ReadLatencyMs = 40L),
+            DiskSpoolProbeStatus.Passed(combinedMbps = 360, p99ReadLatencyMs = 40L),
             resolveDiskSpoolProbeStatus(
                 result = passing,
                 progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL,
