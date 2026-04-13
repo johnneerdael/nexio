@@ -100,6 +100,58 @@ class DiskSpoolPipelineTest {
         }
     }
 
+    @Test
+    fun `parallel writer feeds datasource while playback reads from spool`() {
+        val content = ByteArray(192 * 1024) { (it % 251).toByte() }
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val range = request.getHeader("Range")
+                return when (range) {
+                    "bytes=0-0" -> MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Accept-Ranges", "bytes")
+                        .setHeader("Content-Range", "bytes 0-0/${content.size}")
+                        .setHeader("Content-Length", 1)
+                        .setBody(Buffer().writeByte(0x2A))
+                    else -> rangedResponse(content, range ?: error("Missing range"))
+                }
+            }
+        }
+        server.start()
+        val session = DiskSpoolSession(File(temp.root, "parallel-pipeline.spool"), capacityBytes = 256 * 1024L)
+        val uri = Uri.parse(server.url("/movie.bin").toString())
+        val writerThread = Thread {
+            DiskSpoolWriter(
+                okHttpClient = OkHttpClient(),
+                chunkBytes = 64 * 1024,
+                ioBufferBytes = 8 * 1024,
+                parallelConnections = 2,
+                startupPriorityBytes = 64 * 1024L
+            ).downloadUntil(uri.toString(), session, content.size.toLong())
+        }
+        val dataSource = DiskSpoolDataSource(session, uri)
+
+        try {
+            writerThread.start()
+            dataSource.open(DataSpec(uri))
+            val actual = ByteArray(content.size)
+            var offset = 0
+            while (offset < actual.size) {
+                val read = dataSource.read(actual, offset, actual.size - offset)
+                if (read == C.RESULT_END_OF_INPUT) break
+                offset += read
+            }
+            assertEquals(content.size, offset)
+            assertArrayEquals(content, actual)
+        } finally {
+            dataSource.close()
+            session.close()
+            writerThread.join(5_000L)
+            server.shutdown()
+        }
+    }
+
     private fun rangedResponse(content: ByteArray, rangeHeader: String): MockResponse {
         val match = Regex("""bytes=(\d+)-(\d+)""").matchEntire(rangeHeader)
             ?: error("Unexpected Range header: $rangeHeader")
