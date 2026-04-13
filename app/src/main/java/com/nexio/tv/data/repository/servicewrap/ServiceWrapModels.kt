@@ -27,6 +27,26 @@ data class ServiceWrapResolutionBatch(
     val isTerminal: Boolean
 )
 
+data class ServiceWrapResolutionChunkBatch(
+    val streamsByHash: Map<String, List<ResolvedServiceWrapStream>>,
+    val isTerminal: Boolean
+) {
+    companion object {
+        fun terminalEmpty(hashes: Collection<String>): ServiceWrapResolutionChunkBatch {
+            return ServiceWrapResolutionChunkBatch(
+                streamsByHash = hashes.associateWith { emptyList() },
+                isTerminal = true
+            )
+        }
+    }
+}
+
+data class ServiceWrapResolvedChunk(
+    val candidate: WrapCandidate,
+    val wrappedStreams: List<Stream>,
+    val isTerminal: Boolean
+)
+
 interface ServiceWrapSession {
     fun processAddonStreams(
         addonName: String,
