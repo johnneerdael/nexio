@@ -41,10 +41,56 @@ internal class DiskSpoolSession(
             spoolFile.createNewFile()
         }
 
-        writer = RandomAccessFile(spoolFile, "rw").apply {
-            setLength(capacityBytes)
+        var openedWriter: RandomAccessFile? = null
+        var openedReader: RandomAccessFile? = null
+        var setupFailure: Throwable? = null
+        try {
+            openedWriter = RandomAccessFile(spoolFile, "rw")
+            openedWriter.setLength(capacityBytes)
+            openedReader = RandomAccessFile(spoolFile, "r")
+
+            writer = openedWriter
+            reader = openedReader
+            openedWriter = null
+            openedReader = null
+        } catch (throwable: Throwable) {
+            setupFailure = throwable
+            throw throwable
+        } finally {
+            var cleanupFailure: Throwable? = null
+            fun recordCleanupFailure(throwable: Throwable) {
+                if (cleanupFailure == null) {
+                    cleanupFailure = throwable
+                } else {
+                    cleanupFailure.addSuppressed(throwable)
+                }
+            }
+
+            listOfNotNull(openedWriter, openedReader).forEach { handle ->
+                try {
+                    handle.close()
+                } catch (throwable: IOException) {
+                    recordCleanupFailure(throwable)
+                }
+            }
+            if (setupFailure != null) {
+                try {
+                    if (spoolFile.exists() && !spoolFile.delete() && spoolFile.exists()) {
+                        recordCleanupFailure(IOException("Unable to delete spool file: ${spoolFile.absolutePath}"))
+                    }
+                } catch (throwable: Throwable) {
+                    recordCleanupFailure(throwable)
+                }
+            }
+            cleanupFailure?.let { failure ->
+                val setupThrowable = setupFailure
+                if (setupThrowable == null) {
+                    throw failure
+                } else {
+                    setupThrowable.addSuppressed(failure)
+                }
+            }
         }
-        reader = RandomAccessFile(spoolFile, "r")
     }
 
     fun isClosed(): Boolean = closed.get()

@@ -6,6 +6,7 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -81,6 +82,35 @@ class DiskSpoolDataSourceTest {
     }
 
     @Test
+    fun `read caps large remaining length by caller buffer length`() {
+        val session = DiskSpoolSession(
+            File(temp.root, "movie.spool"),
+            capacityBytes = 1_024L,
+            waitTimeoutMs = 1_000L
+        )
+        val uri = Uri.parse("https://example.com/movie.bin")
+        session.writeRange(0L, byteArrayOf(1, 2, 3, 4), 4)
+
+        try {
+            val dataSource = DiskSpoolDataSource(
+                session = session,
+                uri = uri,
+                contentLength = Int.MAX_VALUE.toLong() + 100L
+            )
+
+            assertEquals(Int.MAX_VALUE.toLong() + 100L, dataSource.open(DataSpec(uri)))
+
+            val buffer = ByteArray(4)
+            assertEquals(4, dataSource.read(buffer, 0, buffer.size))
+            assertArrayEquals(byteArrayOf(1, 2, 3, 4), buffer)
+
+            dataSource.close()
+        } finally {
+            session.close()
+        }
+    }
+
+    @Test
     fun `read waits for delayed writer instead of ending early`() {
         val session = DiskSpoolSession(
             File(temp.root, "movie.spool"),
@@ -120,6 +150,29 @@ class DiskSpoolDataSourceTest {
             dataSource.close()
             session.close()
         }
+    }
+
+    @Test
+    fun `open fails clearly when factory creates data source after session closed`() {
+        val session = DiskSpoolSession(
+            File(temp.root, "movie.spool"),
+            capacityBytes = 1_024L,
+            waitTimeoutMs = 1_000L
+        )
+        val uri = Uri.parse("https://example.com/movie.bin")
+        val dataSourceFactory = DiskSpoolDataSource.Factory(
+            session = session,
+            uri = uri,
+            contentLength = 4L
+        )
+
+        session.close()
+
+        val failure = runCatching {
+            dataSourceFactory.createDataSource().open(DataSpec(uri))
+        }.exceptionOrNull()
+
+        assertTrue(failure is IOException)
     }
 
     @Test

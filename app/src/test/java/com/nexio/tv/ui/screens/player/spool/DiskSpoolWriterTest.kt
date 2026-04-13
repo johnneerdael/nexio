@@ -9,6 +9,7 @@ import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
+import okhttp3.mockwebserver.SocketPolicy
 import okio.Buffer
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -46,6 +47,75 @@ class DiskSpoolWriterTest {
             assertEquals(1_048_576L, metadata.contentLength)
             assertTrue(metadata.supportsRanges)
         } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `probe and range requests include playback headers`() {
+        val content = ByteArray(1024) { (it % 251).toByte() }
+        val requests = mutableListOf<RecordedRequest>()
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                synchronized(requests) {
+                    requests += request
+                }
+                return when (request.getHeader("Range")) {
+                    "bytes=0-0" -> MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Accept-Ranges", "bytes")
+                        .setHeader("Content-Range", "bytes 0-0/${content.size}")
+                        .setHeader("Content-Length", 1)
+                        .setBody(Buffer().writeByte(0x2A))
+
+                    "bytes=0-1023" -> MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Accept-Ranges", "bytes")
+                        .setHeader("Content-Range", "bytes 0-1023/${content.size}")
+                        .setHeader("Content-Length", content.size)
+                        .setBody(Buffer().write(content))
+
+                    else -> MockResponse().setResponseCode(400)
+                }
+            }
+        }
+        server.start()
+
+        val session = DiskSpoolSession(
+            File(temp.root, "headers.spool"),
+            capacityBytes = 2 * 1024L,
+            waitTimeoutMs = 1_000L
+        )
+
+        try {
+            val writer = DiskSpoolWriter(
+                OkHttpClient(),
+                requestHeaders = mapOf(
+                    "Authorization" to "Bearer token",
+                    "X-Playback-Token" to "custom-token",
+                    "Range" to "bytes=999-1000"
+                ),
+                chunkBytes = content.size,
+                ioBufferBytes = 256
+            )
+
+            writer.downloadUntil(
+                url = server.url("/movie.bin").toString(),
+                session = session,
+                targetFrontierBytes = content.size.toLong()
+            )
+
+            val recorded = synchronized(requests) { requests.toList() }
+            assertEquals(2, recorded.size)
+            assertEquals("Bearer token", recorded[0].getHeader("Authorization"))
+            assertEquals("custom-token", recorded[0].getHeader("X-Playback-Token"))
+            assertEquals("bytes=0-0", recorded[0].getHeader("Range"))
+            assertEquals("Bearer token", recorded[1].getHeader("Authorization"))
+            assertEquals("custom-token", recorded[1].getHeader("X-Playback-Token"))
+            assertEquals("bytes=0-1023", recorded[1].getHeader("Range"))
+        } finally {
+            session.close()
             server.shutdown()
         }
     }
@@ -294,6 +364,158 @@ class DiskSpoolWriterTest {
         } finally {
             session.close()
             writerThread.join(1_000L)
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `writer cancels pending metadata probe when session closes`() {
+        val probeStarted = CountDownLatch(1)
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (request.getHeader("Range") == "bytes=0-0") {
+                    probeStarted.countDown()
+                    return MockResponse()
+                        .setSocketPolicy(SocketPolicy.NO_RESPONSE)
+                }
+
+                return MockResponse().setResponseCode(500)
+            }
+        }
+        server.start()
+
+        val session = DiskSpoolSession(
+            File(temp.root, "movie.spool"),
+            capacityBytes = 128 * 1024L,
+            waitTimeoutMs = 10L
+        )
+        val failure = AtomicReference<Throwable?>(null)
+        val writer = DiskSpoolWriter(OkHttpClient())
+        val writerThread = Thread {
+            try {
+                writer.downloadUntil(
+                    url = server.url("/movie.bin").toString(),
+                    session = session,
+                    targetFrontierBytes = 64 * 1024L
+                )
+            } catch (throwable: Throwable) {
+                failure.set(throwable)
+            }
+        }
+
+        try {
+            writerThread.start()
+            assertTrue(probeStarted.await(5, TimeUnit.SECONDS))
+
+            session.close()
+            writerThread.join(2_000L)
+
+            assertTrue(!writerThread.isAlive)
+            assertEquals(null, failure.get())
+        } finally {
+            session.close()
+            writerThread.join(1_000L)
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `writer cancels pending range request when session closes`() {
+        val contentLength = 64 * 1024
+        val rangeStarted = CountDownLatch(1)
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return when (request.getHeader("Range")) {
+                    "bytes=0-0" -> MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Accept-Ranges", "bytes")
+                        .setHeader("Content-Range", "bytes 0-0/$contentLength")
+                        .setHeader("Content-Length", 1)
+                        .setBody(Buffer().writeByte(0x2A))
+
+                    null -> MockResponse().setResponseCode(200)
+
+                    else -> {
+                        rangeStarted.countDown()
+                        MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE)
+                    }
+                }
+            }
+        }
+        server.start()
+
+        val session = DiskSpoolSession(
+            File(temp.root, "movie.spool"),
+            capacityBytes = 128 * 1024L,
+            waitTimeoutMs = 10L
+        )
+        val failure = AtomicReference<Throwable?>(null)
+        val writer = DiskSpoolWriter(
+            OkHttpClient(),
+            chunkBytes = contentLength,
+            ioBufferBytes = 8 * 1024
+        )
+        val writerThread = Thread {
+            try {
+                writer.downloadUntil(
+                    url = server.url("/movie.bin").toString(),
+                    session = session,
+                    targetFrontierBytes = contentLength.toLong()
+                )
+            } catch (throwable: Throwable) {
+                failure.set(throwable)
+            }
+        }
+
+        try {
+            writerThread.start()
+            assertTrue(rangeStarted.await(5, TimeUnit.SECONDS))
+
+            session.close()
+            writerThread.join(2_000L)
+
+            assertTrue(!writerThread.isAlive)
+            assertEquals(null, failure.get())
+        } finally {
+            session.close()
+            writerThread.join(1_000L)
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `writer skips metadata probe when session is already closed`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(206)
+                .setHeader("Accept-Ranges", "bytes")
+                .setHeader("Content-Range", "bytes 0-0/1048576")
+                .setHeader("Content-Length", 1)
+                .setBody(Buffer().writeByte(0x2A))
+        )
+        server.start()
+
+        val session = DiskSpoolSession(
+            File(temp.root, "closed.spool"),
+            capacityBytes = 128 * 1024L,
+            waitTimeoutMs = 10L
+        )
+
+        try {
+            session.close()
+
+            DiskSpoolWriter(OkHttpClient()).downloadUntil(
+                url = server.url("/movie.bin").toString(),
+                session = session,
+                targetFrontierBytes = 64 * 1024L
+            )
+
+            assertEquals(0, server.requestCount)
+        } finally {
+            session.close()
             server.shutdown()
         }
     }

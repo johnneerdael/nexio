@@ -2,10 +2,12 @@ package com.nexio.tv.ui.screens.player.spool
 
 import androidx.media3.common.C
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -36,6 +38,20 @@ class DiskSpoolSessionTest {
         assertEquals(4L, session.contiguousFrontierBytes())
 
         session.close()
+    }
+
+    @Test
+    fun `constructor deletes spool file when reader open fails after preallocation`() {
+        val realSpoolFile = File(temp.root, "movie.spool")
+        val readerFailurePath = temp.newFolder("reader-failure")
+        val spoolFile = ReaderOpenFailingFile(realSpoolFile, readerFailurePath)
+
+        val failure = runCatching {
+            DiskSpoolSession(spoolFile, capacityBytes = 1024L, waitTimeoutMs = 1_000L)
+        }.exceptionOrNull()
+
+        assertTrue(failure is IOException)
+        assertFalse(realSpoolFile.exists())
     }
 
     @Test
@@ -174,5 +190,28 @@ class DiskSpoolSessionTest {
             writerThread.join(1_000L)
             session.close()
         }
+    }
+
+    private class ReaderOpenFailingFile(
+        private val delegate: File,
+        private val readerFailurePath: File
+    ) : File(delegate.path) {
+        private val pathRequestCount = AtomicInteger(0)
+
+        override fun getPath(): String {
+            return if (pathRequestCount.incrementAndGet() == 1) {
+                delegate.path
+            } else {
+                readerFailurePath.path
+            }
+        }
+
+        override fun exists(): Boolean = delegate.exists()
+
+        override fun createNewFile(): Boolean = delegate.createNewFile()
+
+        override fun delete(): Boolean = delegate.delete()
+
+        override fun getAbsolutePath(): String = delegate.absolutePath
     }
 }

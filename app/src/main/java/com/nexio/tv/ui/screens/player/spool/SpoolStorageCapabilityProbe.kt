@@ -7,8 +7,11 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.util.concurrent.Callable
+import java.util.concurrent.CancellationException
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import kotlin.math.ceil
 
@@ -16,7 +19,8 @@ internal class SpoolStorageCapabilityProbe(
     private val directory: File,
     private val nowMs: () -> Long = { System.currentTimeMillis() },
     private val elapsedRealtimeMs: () -> Long = { SystemClock.elapsedRealtime() },
-    private val elapsedRealtimeNs: () -> Long = { SystemClock.elapsedRealtimeNanos() }
+    private val elapsedRealtimeNs: () -> Long = { SystemClock.elapsedRealtimeNanos() },
+    private val shouldContinue: () -> Boolean = { !Thread.currentThread().isInterrupted }
 ) {
     internal data class ConcurrentProbeEvents(
         val overlapped: Boolean
@@ -25,8 +29,10 @@ internal class SpoolStorageCapabilityProbe(
     fun run(durationMs: Long = 60_000L, blockBytes: Int = 256 * 1024): SpoolStorageProbeResult {
         require(durationMs > 0L) { "durationMs must be positive" }
         require(blockBytes > 0) { "blockBytes must be positive" }
+        ensureShouldContinue()
 
         directory.mkdirs()
+        ensureShouldContinue()
 
         val probeFile = File(directory, "spool-probe-${nowMs()}.bin")
         if (probeFile.exists() && !probeFile.delete() && probeFile.exists()) {
@@ -59,8 +65,11 @@ internal class SpoolStorageCapabilityProbe(
             }
             start.countDown()
 
-            val writerResult = writerFuture.get()
-            val readerResult = readerFuture.get()
+            ensureShouldContinue()
+            val writerResult = writerFuture.getProbeResult()
+            ensureShouldContinue()
+            val readerResult = readerFuture.getProbeResult()
+            ensureShouldContinue()
 
             return summarizeForTesting(
                 durationMs = durationMs,
@@ -98,7 +107,41 @@ internal class SpoolStorageCapabilityProbe(
     }
 
     internal fun awaitWorkersReady(ready: CountDownLatch, timeoutMs: Long): Boolean {
-        return ready.await(timeoutMs, TimeUnit.MILLISECONDS)
+        val deadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+        while (ready.count > 0L) {
+            ensureShouldContinue()
+            val remainingNs = deadlineNs - System.nanoTime()
+            if (remainingNs <= 0L) return false
+            val pollMs = TimeUnit.NANOSECONDS.toMillis(remainingNs).coerceIn(1L, 50L)
+            ready.await(pollMs, TimeUnit.MILLISECONDS)
+        }
+        return true
+    }
+
+    private fun ensureShouldContinue() {
+        if (!shouldContinue()) {
+            throw CancellationException("Spool storage probe cancelled")
+        }
+    }
+
+    private fun <T> Future<T>.getProbeResult(): T {
+        return try {
+            get()
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw CancellationException("Spool storage probe interrupted").also {
+                it.initCause(interrupted)
+            }
+        } catch (execution: ExecutionException) {
+            val cause = execution.cause
+            when (cause) {
+                is CancellationException -> throw cause
+                is RuntimeException -> throw cause
+                is Error -> throw cause
+                null -> throw execution
+                else -> throw cause
+            }
+        }
     }
 
     private data class WriterResult(
@@ -117,6 +160,7 @@ internal class SpoolStorageCapabilityProbe(
         start: CountDownLatch,
         deadlineMs: Long
     ): WriterResult {
+        var readySignaled = false
         try {
             RandomAccessFile(probeFile, "rw").use { randomAccessFile ->
                 val channel = randomAccessFile.channel
@@ -126,13 +170,16 @@ internal class SpoolStorageCapabilityProbe(
                 }
                 block.flip()
 
-                start.await()
+                ready.countDown()
+                readySignaled = true
+                awaitStart(start, deadlineMs)
+                ensureShouldContinue()
 
                 var bytesWritten = 0L
                 var position = 0L
-                while (elapsedRealtimeMs() < deadlineMs && !Thread.currentThread().isInterrupted) {
+                while (elapsedRealtimeMs() < deadlineMs && shouldContinue()) {
                     block.rewind()
-                    channel.writeFully(block, position, deadlineMs, elapsedRealtimeMs)
+                    channel.writeFully(block, position, deadlineMs, elapsedRealtimeMs, shouldContinue)
                     position += blockBytes
                     bytesWritten += blockBytes
                 }
@@ -140,7 +187,9 @@ internal class SpoolStorageCapabilityProbe(
                 return WriterResult(bytesWritten = bytesWritten)
             }
         } finally {
-            ready.countDown()
+            if (!readySignaled) {
+                ready.countDown()
+            }
         }
     }
 
@@ -151,22 +200,27 @@ internal class SpoolStorageCapabilityProbe(
         start: CountDownLatch,
         deadlineMs: Long
     ): ReaderResult {
+        var readySignaled = false
         try {
             RandomAccessFile(probeFile, "r").use { randomAccessFile ->
                 val channel = randomAccessFile.channel
                 val block = ByteBuffer.allocateDirect(blockBytes)
                 val readLatenciesMs = ArrayList<Long>()
 
-                start.await()
+                ready.countDown()
+                readySignaled = true
+                awaitStart(start, deadlineMs)
+                ensureShouldContinue()
 
                 var bytesRead = 0L
                 var position = 0L
-                while (!Thread.currentThread().isInterrupted) {
+                while (shouldContinue()) {
                     val fileSize = channel.size()
                     if (position >= fileSize) {
                         if (elapsedRealtimeMs() >= deadlineMs) {
                             break
                         }
+                        ensureShouldContinue()
                         Thread.yield()
                         continue
                     }
@@ -183,6 +237,7 @@ internal class SpoolStorageCapabilityProbe(
                         if (elapsedRealtimeMs() >= deadlineMs) {
                             break
                         }
+                        ensureShouldContinue()
                         Thread.yield()
                         continue
                     }
@@ -195,7 +250,23 @@ internal class SpoolStorageCapabilityProbe(
                 return ReaderResult(bytesRead = bytesRead, readLatenciesMs = readLatenciesMs)
             }
         } finally {
-            ready.countDown()
+            if (!readySignaled) {
+                ready.countDown()
+            }
+        }
+    }
+
+    private fun awaitStart(start: CountDownLatch, deadlineMs: Long) {
+        val remainingProbeMs = (deadlineMs - elapsedRealtimeMs()).coerceAtLeast(1L)
+        val deadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(remainingProbeMs)
+        while (start.count > 0L) {
+            ensureShouldContinue()
+            val remainingNs = deadlineNs - System.nanoTime()
+            if (remainingNs <= 0L) {
+                throw CancellationException("Spool storage probe did not start before deadline")
+            }
+            val pollMs = TimeUnit.NANOSECONDS.toMillis(remainingNs).coerceIn(1L, 50L)
+            start.await(pollMs, TimeUnit.MILLISECONDS)
         }
     }
 
@@ -251,12 +322,13 @@ private fun FileChannel.writeFully(
     buffer: ByteBuffer,
     position: Long,
     deadlineMs: Long,
-    elapsedRealtimeMs: () -> Long
+    elapsedRealtimeMs: () -> Long,
+    shouldContinue: () -> Boolean
 ) {
     var writePosition = position
     var lastProgressAtMs = elapsedRealtimeMs()
     while (buffer.hasRemaining()) {
-        if (Thread.currentThread().isInterrupted) {
+        if (!shouldContinue()) {
             throw IOException("Interrupted while writing spool probe data")
         }
         if (elapsedRealtimeMs() >= deadlineMs) {

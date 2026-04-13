@@ -255,6 +255,14 @@
     <string name="playback_buffer_network_title">Network</string>
     <string name="playback_buffer_parallel_connections">Parallel Connections</string>
     <string name="playback_buffer_parallel_connections_sub">Use multiple connections in parallel for progressive streams.</string>
+    <string name="playback_buffer_disk_spool_mode">Disk spool playback</string>
+    <string name="playback_buffer_disk_spool_mode_sub">Experimental: plays progressive VOD from a warmed disk spool after storage passes a speed check.</string>
+    <string name="playback_buffer_disk_spool_probe">Run disk speed check</string>
+    <string name="playback_buffer_disk_spool_probe_status_disabled">Speed check: disk spool playback is off.</string>
+    <string name="playback_buffer_disk_spool_probe_status_not_checked">Speed check: not checked.</string>
+    <string name="playback_buffer_disk_spool_probe_status_passed">Speed check: passed (%1$d Mbps combined, p99 %2$d ms).</string>
+    <string name="playback_buffer_disk_spool_probe_status_failed">Speed check: failed (%1$d Mbps combined, p99 %2$d ms).</string>
+    <string name="playback_buffer_disk_spool_probe_status_stale">Speed check: stale. Run again.</string>
     <string name="playback_buffer_connection_count">Connection Count</string>
     <string name="playback_buffer_connection_count_sub">Number of parallel TCP connections.</string>
     <string name="playback_buffer_chunk_size">Chunk Size</string>

@@ -4,15 +4,33 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.CancellationException
 
 class SpoolStorageCapabilityTest {
     @Test
-    fun targetBitrate_prefersUserCapThenStreamThenFallback() {
+    fun storageProbe_stopsBeforeRunningWhenCancelled() {
+        val probe = SpoolStorageCapabilityProbe(
+            directory = java.io.File(System.getProperty("java.io.tmpdir"), "spool-probe-cancelled"),
+            shouldContinue = { false }
+        )
+
+        try {
+            probe.run(durationMs = 60_000L, blockBytes = 4 * 1024)
+        } catch (_: CancellationException) {
+            return
+        }
+
+        throw AssertionError("Expected cancelled storage probe to throw CancellationException")
+    }
+
+    @Test
+    fun targetBitrate_prefersStreamThenUserCapWithUnknownStreamFallbackFloor() {
         assertEquals(63.0, SpoolStoragePolicy.targetBitrateMbps(63.0, 40.0), 0.01)
-        assertEquals(40.0, SpoolStoragePolicy.targetBitrateMbps(0.0, 40.0), 0.01)
-        assertEquals(40.0, SpoolStoragePolicy.targetBitrateMbps(Double.NaN, 40.0), 0.01)
+        assertEquals(80.0, SpoolStoragePolicy.targetBitrateMbps(0.0, 40.0), 0.01)
+        assertEquals(80.0, SpoolStoragePolicy.targetBitrateMbps(Double.NaN, 40.0), 0.01)
         assertEquals(80.0, SpoolStoragePolicy.targetBitrateMbps(null, -1.0), 0.01)
-        assertEquals(40.0, SpoolStoragePolicy.targetBitrateMbps(null, 40.0), 0.01)
+        assertEquals(80.0, SpoolStoragePolicy.targetBitrateMbps(null, 40.0), 0.01)
+        assertEquals(120.0, SpoolStoragePolicy.targetBitrateMbps(null, 120.0), 0.01)
         assertEquals(80.0, SpoolStoragePolicy.targetBitrateMbps(null, null), 0.01)
     }
 
