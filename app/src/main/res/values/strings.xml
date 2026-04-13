@@ -404,7 +404,7 @@
     <string name="autoplay_manual_bitrate_limit_sub">Autoplay will only choose streams at or below this average bitrate.</string>
     <string name="autoplay_deterministic_title">Deterministic Autoplay</string>
     <string name="autoplay_deterministic_sub">Skip stream selection and auto-play the best eligible match.</string>
-    <string name="autoplay_deterministic_unavailable_sub">Requires Service Wrap. Auto bandwidth mode also needs a current valid benchmark.</string>
+    <string name="autoplay_deterministic_unavailable_sub">Manual mode works without Service Wrap. Auto mode uses Manual until a current valid benchmark exists.</string>
     <string name="autoplay_reuse_last_link">Reuse Last Link</string>
     <string name="autoplay_reuse_last_link_sub">Auto-play your last working stream for this same movie/episode when cache is still valid</string>
     <string name="autoplay_last_link_cache">Last Link Cache Duration</string>
