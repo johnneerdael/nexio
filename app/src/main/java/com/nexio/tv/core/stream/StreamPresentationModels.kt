@@ -181,7 +181,9 @@ data class StreamCardModel(
     val parsed: ParsedStreamInfo,
     val title: String,
     val subtitle: String?,
-    val detailLines: List<String>
+    val detailLines: List<String>,
+    val badgeRow: String? = null,
+    val hasFormatterChipTokens: Boolean = false
 )
 
 @Immutable
@@ -252,6 +254,8 @@ object StreamPresentationEngine {
                 append(selection.customTemplate?.nameTemplate.orEmpty())
                 append('|')
                 append(selection.customTemplate?.descriptionTemplate.orEmpty())
+                append('|')
+                append(selection.customTemplate?.badgeRowTemplate.orEmpty())
                 append('|')
                 append(requestContext.contentType.orEmpty())
                 append('|')
@@ -325,7 +329,9 @@ object StreamPresentationEngine {
                 subtitle = if (uniformPresentation != null) null
                 else buildSubtitle(stream, parsedInfo, flags.uniformFormattingEnabled),
                 detailLines = uniformPresentation?.detailLines
-                    ?: buildDetailLines(stream, parsedInfo, flags.uniformFormattingEnabled)
+                    ?: buildDetailLines(stream, parsedInfo, flags.uniformFormattingEnabled),
+                badgeRow = uniformPresentation?.badgeRow,
+                hasFormatterChipTokens = uniformPresentation?.hasFormatterChipTokens == true
             )
         }
 

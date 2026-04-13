@@ -145,6 +145,70 @@ class StreamPresentationEngineTest {
     }
 
     @Test
+    fun `custom uniform formatting renders optional badge row template and detects chip token`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Movie.Title.2023.2160p.BluRay.HEVC-GROUP.mkv",
+                    name = "⚡ RD"
+                )
+            ),
+            availableAddons = listOf("Test Addon"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                uniformFormattingEnabled = true,
+                groupAcrossAddonsEnabled = false,
+                uniformFormattingTemplate = AioFormatterSelection(
+                    selectedTemplateId = "custom",
+                    customTemplate = AioCustomTemplateSelection(
+                        label = "Badge row",
+                        nameTemplate = "{stream.title}",
+                        descriptionTemplate = "{stream.year}",
+                        badgeRowTemplate = "{service.cached::istrue[\"[[chip:cached]]\"||\"\"]}"
+                    )
+                )
+            ),
+            requestContext = StreamRequestContext(contentType = "movie")
+        )
+
+        val item = result.items.single()
+        assertEquals("[[chip:cached]]", item.badgeRow)
+        assertEquals(true, item.hasFormatterChipTokens)
+    }
+
+    @Test
+    fun `custom uniform formatting detects inline chip token and leaves empty badge row blank`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Movie.Title.2023.2160p.BluRay.HEVC-GROUP.mkv",
+                    name = "⚡ RD"
+                )
+            ),
+            availableAddons = listOf("Test Addon"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                uniformFormattingEnabled = true,
+                groupAcrossAddonsEnabled = false,
+                uniformFormattingTemplate = AioFormatterSelection(
+                    selectedTemplateId = "custom",
+                    customTemplate = AioCustomTemplateSelection(
+                        label = "Inline badge",
+                        nameTemplate = "{service.cached::istrue[\"[[chip:cached]] \"||\"\"]}{stream.title}",
+                        descriptionTemplate = "{stream.year}"
+                    )
+                )
+            ),
+            requestContext = StreamRequestContext(contentType = "movie")
+        )
+
+        val item = result.items.single()
+        assertEquals("[[chip:cached]] Movie Title", item.title)
+        assertEquals(null, item.badgeRow)
+        assertEquals(true, item.hasFormatterChipTokens)
+    }
+
+    @Test
     fun `uniform formatting falls back to metadata runtime when parser duration is missing`() {
         val result = StreamPresentationEngine.organize(
             streams = listOf(
