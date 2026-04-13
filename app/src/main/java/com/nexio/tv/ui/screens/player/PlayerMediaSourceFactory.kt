@@ -779,7 +779,7 @@ internal class PlayerMediaSourceFactory(
                     warmAhead = ParallelProviderProfile(connectionCount = 1, chunkSizeMb = 16)
                 )
                 isRealDebrid -> ParallelProviderProfiles(
-                    playback = ParallelProviderProfile(connectionCount = 1, chunkSizeMb = 24),
+                    playback = ParallelProviderProfile(connectionCount = 2, chunkSizeMb = 24),
                     warmAhead = ParallelProviderProfile(connectionCount = 1, chunkSizeMb = 24)
                 )
                 else -> ParallelProviderProfiles(
