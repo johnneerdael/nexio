@@ -96,6 +96,7 @@ import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.LibassRenderType
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
+import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.data.local.TrailerSettings
@@ -354,6 +355,12 @@ internal fun PlaybackSettingsContent(
                 },
                 onSetVodCacheWarmAheadEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setVodCacheWarmAheadEnabled(enabled) }
+                },
+                onSetProgressivePlaybackDiskMode = { mode: ProgressivePlaybackDiskMode ->
+                    coroutineScope.launch { viewModel.setProgressivePlaybackDiskMode(mode) }
+                },
+                onRunDiskSpoolStorageProbe = {
+                    viewModel.runDiskSpoolStorageProbe(context)
                 },
                 shadowAutoplayDataCollectionEnabled = debridUiState.shadowAutoplayDataCollectionEnabled,
                 onSetShadowAutoplayDataCollectionEnabled = { debridViewModel.setShadowAutoplayDataCollectionEnabled(it) },

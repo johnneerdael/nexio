@@ -6,8 +6,20 @@ import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.datasource.cache.CacheDataSource
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolDataSource
+import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import io.mockk.mockk
+import java.io.IOException
+import java.io.File
+import java.util.concurrent.Executor
+import java.util.concurrent.atomic.AtomicBoolean
 import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.Dispatcher
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
+import okio.Buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -78,6 +90,413 @@ class PlayerMediaSourceFactoryTest {
         )
 
         assertFalse(dataSourceFactory is ParallelRangeDataSource.Factory)
+    }
+
+    @Test
+    fun progressivePlayback_usesDiskSpoolFactoryWhenEnabledAndProbePasses() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val writerScheduled = AtomicBoolean(false)
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = noNetworkOkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            spoolStorageProbeResult = passingProbeResult(context)
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+            diskSpoolWriterExecutorForTesting = Executor { writerScheduled.set(true) }
+        }
+
+        val dataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video.mkv",
+            headers = emptyMap(),
+        )
+
+        assertTrue(dataSourceFactory is DiskSpoolDataSource.Factory)
+        assertTrue(writerScheduled.get())
+    }
+
+    @Test
+    fun progressivePlayback_passesSanitizedHeadersIntoDiskSpoolWriter() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val content = ByteArray(1024) { (it % 251).toByte() }
+        val requests = mutableListOf<RecordedRequest>()
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                synchronized(requests) {
+                    requests += request
+                }
+                return when (request.getHeader("Range")) {
+                    "bytes=0-0" -> MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Accept-Ranges", "bytes")
+                        .setHeader("Content-Range", "bytes 0-0/${content.size}")
+                        .setHeader("Content-Length", 1)
+                        .setBody(Buffer().writeByte(0x2A))
+
+                    "bytes=0-1023" -> MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Accept-Ranges", "bytes")
+                        .setHeader("Content-Range", "bytes 0-1023/${content.size}")
+                        .setHeader("Content-Length", content.size)
+                        .setBody(Buffer().write(content))
+
+                    else -> MockResponse().setResponseCode(400)
+                }
+            }
+        }
+        server.start()
+
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = OkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            spoolStorageProbeResult = passingProbeResult(context)
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+            diskSpoolWriterExecutorForTesting = Executor { runnable -> runnable.run() }
+        }
+
+        try {
+            factory.createMediaSource(
+                url = server.url("/video.mkv").toString(),
+                headers = mapOf(
+                    "Authorization" to "Bearer token",
+                    "X-Playback-Token" to "custom-token",
+                    "Range" to "bytes=999-1000"
+                )
+            )
+
+            val recorded = synchronized(requests) { requests.toList() }
+            assertEquals(2, recorded.size)
+            assertEquals("Bearer token", recorded[0].getHeader("Authorization"))
+            assertEquals("custom-token", recorded[0].getHeader("X-Playback-Token"))
+            assertEquals("bytes=0-0", recorded[0].getHeader("Range"))
+            assertEquals("Bearer token", recorded[1].getHeader("Authorization"))
+            assertEquals("custom-token", recorded[1].getHeader("X-Playback-Token"))
+            assertEquals("bytes=0-1023", recorded[1].getHeader("Range"))
+        } finally {
+            server.shutdown()
+            factory.shutdown()
+        }
+    }
+
+    @Test
+    fun progressivePlayback_usesNormalFactoryWhenDiskSpoolModeOff() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = noNetworkOkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.OFF
+            spoolStorageProbeResult = passingProbeResult(context)
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+        }
+
+        val dataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video.mkv",
+            headers = emptyMap(),
+        )
+
+        assertFalse(dataSourceFactory is DiskSpoolDataSource.Factory)
+    }
+
+    @Test
+    fun progressivePlayback_usesNormalFactoryWhenDiskSpoolProbeIsFailedOrStale() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = noNetworkOkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            spoolStorageProbeResult = passingProbeResult(context).copy(
+                measuredAtMs = System.currentTimeMillis() - 8L * 24L * 60L * 60L * 1000L
+            )
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+        }
+
+        val dataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video.mkv",
+            headers = emptyMap(),
+        )
+
+        assertFalse(dataSourceFactory is DiskSpoolDataSource.Factory)
+    }
+
+    @Test
+    fun progressivePlayback_doesNotUseDiskSpoolForHlsOrDash() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = noNetworkOkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            spoolStorageProbeResult = passingProbeResult(context)
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+        }
+
+        val hlsFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/master.m3u8",
+            headers = emptyMap(),
+        )
+        val dashFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/manifest.mpd",
+            headers = emptyMap(),
+        )
+
+        assertFalse(hlsFactory is DiskSpoolDataSource.Factory)
+        assertFalse(dashFactory is DiskSpoolDataSource.Factory)
+    }
+
+    @Test
+    fun progressivePlayback_doesNotSynchronouslyProbeWhenDiskSpoolGatePasses() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = noNetworkOkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            spoolStorageProbeResult = passingProbeResult(context)
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+            diskSpoolWriterExecutorForTesting = Executor { }
+        }
+
+        val dataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video.mkv",
+            headers = emptyMap(),
+        )
+
+        assertTrue(dataSourceFactory is DiskSpoolDataSource.Factory)
+    }
+
+    @Test
+    fun progressivePlayback_usesNormalFactoryWhenPlaybackStopsDuringDiskSpoolRegistration() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        lateinit var factory: PlayerMediaSourceFactory
+        factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = noNetworkOkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            spoolStorageProbeResult = passingProbeResult(context)
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+            diskSpoolWriterExecutorForTesting = Executor {
+                factory.closeActiveDiskSpoolSessionForPlaybackStop()
+            }
+        }
+
+        val dataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video.mkv",
+            headers = emptyMap(),
+        )
+
+        assertFalse(dataSourceFactory is DiskSpoolDataSource.Factory)
+        assertEquals(0, diskSpoolFiles(context).size)
+        factory.shutdown()
+    }
+
+    @Test
+    fun progressivePlayback_usesNormalFactoryWhenPlaybackStopsAfterDiskSpoolRegistration() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        lateinit var factory: PlayerMediaSourceFactory
+        factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = noNetworkOkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            spoolStorageProbeResult = passingProbeResult(context)
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+            diskSpoolWriterExecutorForTesting = Executor { }
+            diskSpoolAfterRegistrationForTesting = {
+                factory.closeActiveDiskSpoolSessionForPlaybackStop()
+            }
+        }
+
+        val dataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video.mkv",
+            headers = emptyMap(),
+        )
+
+        assertFalse(dataSourceFactory is DiskSpoolDataSource.Factory)
+        assertEquals(0, diskSpoolFiles(context).size)
+        factory.shutdown()
+    }
+
+    @Test
+    fun progressivePlayback_usesFallbackTargetWhenStreamBitrateIsUnknown() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = noNetworkOkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            spoolStorageProbeResult = passingProbeResult(context).copy(
+                writeMbps = 45.0,
+                readMbps = 45.0,
+                combinedMbps = 100.0
+            )
+            diskSpoolTargetBitrateMbps = 40.0
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+            diskSpoolWriterExecutorForTesting = Executor { }
+        }
+
+        val dataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video.mkv",
+            headers = emptyMap(),
+        )
+
+        assertFalse(dataSourceFactory is DiskSpoolDataSource.Factory)
+    }
+
+    @Test
+    fun progressivePlayback_usesRaisedDiskSpoolTargetBitrateWhenConfigured() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = noNetworkOkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            spoolStorageProbeResult = passingProbeResult(context).copy(
+                writeMbps = 119.0,
+                readMbps = 119.0,
+                combinedMbps = 360.0
+            )
+            diskSpoolTargetBitrateMbps = 120.0
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+            diskSpoolWriterExecutorForTesting = Executor { }
+        }
+
+        val failingDataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video-a.mkv",
+            headers = emptyMap(),
+        )
+
+        assertFalse(failingDataSourceFactory is DiskSpoolDataSource.Factory)
+
+        factory.spoolStorageProbeResult = passingProbeResult(context).copy(
+            writeMbps = 120.0,
+            readMbps = 120.0,
+            combinedMbps = 300.0
+        )
+
+        val passingDataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video-b.mkv",
+            headers = emptyMap(),
+        )
+
+        assertTrue(passingDataSourceFactory is DiskSpoolDataSource.Factory)
+        factory.shutdown()
+    }
+
+    @Test
+    fun closeActiveDiskSpoolSessionForPlaybackStop_closesActiveDiskSpoolSession() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = noNetworkOkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            spoolStorageProbeResult = passingProbeResult(context)
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+            diskSpoolWriterExecutorForTesting = Executor { }
+        }
+
+        factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video.mkv",
+            headers = emptyMap(),
+        )
+
+        assertEquals(1, diskSpoolFiles(context).size)
+
+        factory.closeActiveDiskSpoolSessionForPlaybackStop()
+
+        assertEquals(0, diskSpoolFiles(context).size)
+        factory.shutdown()
+    }
+
+    @Test
+    fun progressivePlayback_closesPreviousDiskSpoolSessionWhenCreatingNextOne() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = noNetworkOkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            spoolStorageProbeResult = passingProbeResult(context)
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+            diskSpoolWriterExecutorForTesting = Executor { }
+        }
+
+        factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video-a.mkv",
+            headers = emptyMap(),
+        )
+
+        assertEquals(1, diskSpoolFiles(context).size)
+
+        factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video-b.mkv",
+            headers = emptyMap(),
+        )
+
+        assertEquals(1, diskSpoolFiles(context).size)
+        factory.shutdown()
+    }
+
+    @Test
+    fun shutdown_closesActiveDiskSpoolSession() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = noNetworkOkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            spoolStorageProbeResult = passingProbeResult(context)
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+            diskSpoolWriterExecutorForTesting = Executor { }
+        }
+
+        factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video.mkv",
+            headers = emptyMap(),
+        )
+
+        assertEquals(1, diskSpoolFiles(context).size)
+
+        factory.shutdown()
+
+        assertEquals(0, diskSpoolFiles(context).size)
+    }
+
+    @Test
+    fun progressivePlayback_closesActiveDiskSpoolSessionWhenUsingNormalFactory() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = noNetworkOkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            spoolStorageProbeResult = passingProbeResult(context)
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+            diskSpoolWriterExecutorForTesting = Executor { }
+        }
+
+        factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video-a.mkv",
+            headers = emptyMap(),
+        )
+
+        assertEquals(1, diskSpoolFiles(context).size)
+
+        factory.progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.OFF
+        val dataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
+            url = "https://example.com/video-b.mkv",
+            headers = emptyMap(),
+        )
+
+        assertFalse(dataSourceFactory is DiskSpoolDataSource.Factory)
+        assertEquals(0, diskSpoolFiles(context).size)
+        factory.shutdown()
     }
 
     @Test
@@ -477,5 +896,36 @@ class PlayerMediaSourceFactoryTest {
         )
 
         assertTrue(mediaSource is DashMediaSource)
+    }
+
+    private fun noNetworkOkHttpClient(): OkHttpClient {
+        return OkHttpClient.Builder()
+            .addInterceptor {
+                throw IOException("network probe should not run on factory hot path")
+            }
+            .build()
+    }
+
+    private fun passingProbeResult(context: Context): SpoolStorageProbeResult {
+        return SpoolStorageProbeResult(
+            writeMbps = 180.0,
+            readMbps = 180.0,
+            combinedMbps = 360.0,
+            p99ReadLatencyMs = 40L,
+            maxReadStallMs = 70L,
+            measuredAtMs = System.currentTimeMillis(),
+            durationMs = 60_000L,
+            bytesWritten = 1_350_000_000L,
+            bytesRead = 1_350_000_000L,
+            spoolDirectoryPath = context.cacheDir.resolve("player_disk_spool").absolutePath
+        )
+    }
+
+    private fun diskSpoolFiles(context: Context): List<java.io.File> {
+        return context.cacheDir
+            .resolve("player_disk_spool")
+            .listFiles()
+            ?.filter { it.isFile && it.name.startsWith("spool-") && it.name.endsWith(".bin") }
+            .orEmpty()
     }
 }

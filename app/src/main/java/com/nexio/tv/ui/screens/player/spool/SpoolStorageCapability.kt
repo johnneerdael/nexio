@@ -78,10 +78,10 @@ internal object SpoolStoragePolicy {
         if (streamBitrateMbps != null && streamBitrateMbps.isFinite() && streamBitrateMbps > 0.0) {
             return streamBitrateMbps
         }
-        if (userCapMbps != null && userCapMbps.isFinite() && userCapMbps > 0.0) {
-            return userCapMbps
-        }
-        return FALLBACK_TARGET_MBPS
+        return maxOf(
+            FALLBACK_TARGET_MBPS,
+            userCapMbps?.takeIf { it.isFinite() && it > 0.0 } ?: FALLBACK_TARGET_MBPS
+        )
     }
 
     fun canSustain(result: SpoolStorageProbeResult, targetVideoMbps: Double): Boolean {

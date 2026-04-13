@@ -6,6 +6,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
+import java.io.IOException
 
 @UnstableApi
 internal class DiskSpoolDataSource(
@@ -27,6 +28,9 @@ internal class DiskSpoolDataSource(
     override fun open(dataSpec: DataSpec): Long {
         if (openedDataSpec != null) {
             close()
+        }
+        if (session.isClosed()) {
+            throw IOException("Disk spool session closed")
         }
 
         openedDataSpec = dataSpec
@@ -58,7 +62,7 @@ internal class DiskSpoolDataSource(
             val readLength = if (remaining == C.LENGTH_UNSET.toLong()) {
                 length
             } else {
-                minOf(length, remaining.toInt())
+                minOf(length.toLong(), remaining).toInt()
             }
 
             val read = session.read(position, buffer, offset, readLength)

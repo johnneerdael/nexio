@@ -4,6 +4,7 @@ package com.nexio.tv.ui.screens.player
 
 import android.content.Context
 import android.net.Uri
+import android.os.StatFs
 import android.os.SystemClock
 import android.util.Log
 import androidx.media3.common.MediaItem
@@ -30,10 +31,17 @@ import androidx.media3.extractor.text.SubtitleParser
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.extractor.ts.TsExtractor
 import com.nexio.tv.data.local.PlayerSettings
+import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
 import com.nexio.tv.data.local.VodCacheSizeMode
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolDataSource
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolSession
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolWriter
+import com.nexio.tv.ui.screens.player.spool.SpoolStoragePolicy
+import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import java.io.File
 import java.net.URLDecoder
 import java.util.Locale
+import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicBoolean
@@ -61,6 +69,14 @@ internal class PlayerMediaSourceFactory(
     private val prefetchExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "Nexio-vod-prefetch").apply { isDaemon = true }
     }
+    private val diskSpoolExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "Nexio-disk-spool").apply { isDaemon = true }
+    }
+    private val diskSpoolLock = Any()
+    private var activeDiskSpoolSession: DiskSpoolSession? = null
+    private var activeDiskSpoolFuture: Future<*>? = null
+    private var diskSpoolLifecycleGeneration: Long = 0L
+    private val diskSpoolFileCounter = AtomicLong(0L)
     var useParallelConnections: Boolean = PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS
     var vodCacheSizeMode: VodCacheSizeMode = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE
         set(value) {
@@ -77,6 +93,16 @@ internal class PlayerMediaSourceFactory(
             }
         }
     var vodCacheSizeMb: Int = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB
+    var progressivePlaybackDiskMode: ProgressivePlaybackDiskMode = ProgressivePlaybackDiskMode.OFF
+    internal var spoolStorageProbeResult: SpoolStorageProbeResult? = null
+    var diskSpoolTargetBitrateMbps: Double? = null
+    internal var diskSpoolAvailableBytesForTesting: Long? = null
+    internal var diskSpoolWriterExecutorForTesting: Executor? = null
+    internal var diskSpoolAfterRegistrationForTesting: (() -> Unit)? = null
+
+    init {
+        cleanupDiskSpoolDirectory()
+    }
 
     fun configureSubtitleParsing(
         extractorsFactory: ExtractorsFactory?,
@@ -120,6 +146,7 @@ internal class PlayerMediaSourceFactory(
             isDash = isDash,
             okHttpFactory = okHttpFactory,
             baseDataSourceFactory = baseDataSourceFactory,
+            requestHeaders = sanitizedHeaders,
             warmAheadEnabledForProfile = warmAheadEnabledForStream
         )
         val previousVodCacheActive = currentVodCacheActive
@@ -234,6 +261,7 @@ internal class PlayerMediaSourceFactory(
             isDash = resolvedMimeType == MimeTypes.APPLICATION_MPD,
             okHttpFactory = okHttpFactory,
             baseDataSourceFactory = baseDataSourceFactory,
+            requestHeaders = sanitizedHeaders,
             warmAheadEnabledForProfile = warmAheadEnabledForProfile
         )
     }
@@ -265,6 +293,7 @@ internal class PlayerMediaSourceFactory(
             isDash = isDash,
             okHttpFactory = okHttpFactory,
             baseDataSourceFactory = baseDataSourceFactory,
+            requestHeaders = sanitizedHeaders,
             parallelConnectionsEnabled = parallelConnectionsEnabled,
             fallbackParallelConnectionCount = parallelConnectionCount,
             fallbackParallelChunkSizeMb = parallelChunkSizeMb,
@@ -311,11 +340,17 @@ internal class PlayerMediaSourceFactory(
     fun shutdown() {
         stopVodWarmAhead()
         prefetchExecutor.shutdownNow()
+        closeActiveDiskSpoolSession(cancelWriter = true, reason = "factory shutdown")
+        diskSpoolExecutor.shutdownNow()
     }
 
     fun clearVodCache() {
         stopVodWarmAhead()
         clearVodCacheInternal(context)
+    }
+
+    internal fun closeActiveDiskSpoolSessionForPlaybackStop() {
+        closeActiveDiskSpoolSession(cancelWriter = true, reason = "playback stop")
     }
 
     fun warmupVodCacheAsync() {
@@ -326,6 +361,31 @@ internal class PlayerMediaSourceFactory(
     fun notifyPlaybackFirstFrameRendered() {
         parallelStartupPrefetchUnlocked.set(true)
         startVodWarmAheadIfEligible()
+    }
+
+    internal fun cleanupDiskSpoolDirectoryForTesting() {
+        cleanupDiskSpoolDirectory()
+    }
+
+    private fun cleanupDiskSpoolDirectory() {
+        runCatching {
+            val directory = diskSpoolDirectoryOrNull() ?: return
+            if (directory.exists()) {
+                directory.listFiles()?.forEach { file ->
+                    if (file.isFile && file.name.startsWith("spool-") && file.name.endsWith(".bin")) {
+                        file.delete()
+                    }
+                }
+            }
+            directory.mkdirs()
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to clean disk spool directory", error)
+        }
+    }
+
+    private fun diskSpoolDirectoryOrNull(): File? {
+        val cacheDirectory = runCatching { context.cacheDir }.getOrNull() ?: return null
+        return File(cacheDirectory, DISK_SPOOL_DIR)
     }
 
     fun getVodCacheLogState(currentStreamUrl: String? = null): String {
@@ -622,6 +682,7 @@ internal class PlayerMediaSourceFactory(
         isDash: Boolean,
         okHttpFactory: OkHttpDataSource.Factory,
         baseDataSourceFactory: DataSource.Factory,
+        requestHeaders: Map<String, String> = emptyMap(),
         parallelConnectionsEnabled: Boolean = useParallelConnections,
         fallbackParallelConnectionCount: Int = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT,
         fallbackParallelChunkSizeMb: Int = SAFE_DEFAULT_PARALLEL_CHUNK_SIZE_MB,
@@ -632,6 +693,11 @@ internal class PlayerMediaSourceFactory(
     ): DataSource.Factory {
         parallelStartupPrefetchUnlocked.set(!(parallelConnectionsEnabled && !isHls && !isDash))
         activeReadBytePosition.set(0L)
+        createDiskSpoolFactoryIfEligible(url, isHls, isDash, requestHeaders)?.let { diskSpoolFactory ->
+            currentWarmAheadUpstreamFactory = null
+            return diskSpoolFactory
+        }
+        closeActiveDiskSpoolSession(cancelWriter = true, reason = "non disk-spool upstream selected")
         return when {
             !usesHttpUpstream(url) -> {
                 currentWarmAheadUpstreamFactory = null
@@ -681,6 +747,213 @@ internal class PlayerMediaSourceFactory(
                 okHttpFactory
             }
         }
+    }
+
+    private fun createDiskSpoolFactoryIfEligible(
+        url: String,
+        isHls: Boolean,
+        isDash: Boolean,
+        requestHeaders: Map<String, String>
+    ): DataSource.Factory? {
+        if (progressivePlaybackDiskMode != ProgressivePlaybackDiskMode.SPOOL) return null
+        if (isHls || isDash) return null
+        if (!usesHttpUpstream(url)) return null
+
+        val result = spoolStorageProbeResult ?: return null
+        val spoolDir = diskSpoolDirectoryOrNull() ?: return null
+        val spoolDirectoryPath = spoolDir.absolutePath
+        if (!SpoolStoragePolicy.isFresh(result, System.currentTimeMillis(), spoolDirectoryPath)) {
+            return null
+        }
+
+        val fallbackTargetBitrateMbps = SpoolStoragePolicy.targetBitrateMbps(
+            streamBitrateMbps = null,
+            userCapMbps = null
+        )
+        val targetBitrateMbps = maxOf(
+            fallbackTargetBitrateMbps,
+            diskSpoolTargetBitrateMbps
+                ?.takeIf { it.isFinite() && it > 0.0 }
+                ?: fallbackTargetBitrateMbps
+        )
+        if (!SpoolStoragePolicy.canSustain(result, targetBitrateMbps)) return null
+
+        val requestedSpoolBytes = resolveRequestedDiskSpoolBytes()
+        if (!hasDiskSpoolCapacity(spoolDir, requestedSpoolBytes)) return null
+
+        val spoolFile = File(
+            spoolDir,
+            "spool-${SystemClock.elapsedRealtimeNanos()}-${diskSpoolFileCounter.incrementAndGet()}.bin"
+        )
+        val session = runCatching {
+            DiskSpoolSession(spoolFile, capacityBytes = requestedSpoolBytes)
+        }.getOrElse { error ->
+            Log.w(TAG, "Disk spool session creation failed; falling back to normal progressive upstream", error)
+            return null
+        }
+
+        val registrationGeneration = synchronized(diskSpoolLock) {
+            diskSpoolLifecycleGeneration
+        }
+        val writerFuture = runCatching {
+            scheduleDiskSpoolWriter(url, session, requestedSpoolBytes, requestHeaders)
+        }.getOrElse { error ->
+            Log.w(TAG, "Disk spool writer scheduling failed; falling back to normal progressive upstream", error)
+            closeDiskSpoolSession(session, reason = "writer scheduling failure")
+            return null
+        }
+        val previous = registerActiveDiskSpoolSession(session, writerFuture, registrationGeneration)
+            ?: return null
+        diskSpoolAfterRegistrationForTesting?.invoke()
+        previous.first?.cancel(true)
+        closeDiskSpoolSession(previous.second, reason = "replaced by new disk spool session")
+        if (!isDiskSpoolSessionStillRegistered(session, registrationGeneration)) {
+            writerFuture?.cancel(true)
+            closeDiskSpoolSession(session, reason = "disk spool session invalidated before factory return")
+            return null
+        }
+        // Playback can stop after this factory is returned; DiskSpoolDataSource.open
+        // rechecks the session so a closed spool cannot masquerade as playable media.
+        return DiskSpoolDataSource.Factory(session, Uri.parse(url))
+    }
+
+    private fun resolveRequestedDiskSpoolBytes(): Long {
+        return DEFAULT_DISK_SPOOL_BYTES
+    }
+
+    private fun hasDiskSpoolCapacity(spoolDir: File, requestedSpoolBytes: Long): Boolean {
+        val availableBytes = diskSpoolAvailableBytesForTesting ?: runCatching {
+            spoolDir.mkdirs()
+            StatFs(spoolDir.absolutePath).availableBytes
+        }.getOrElse { error ->
+            Log.w(TAG, "Unable to check disk spool free space", error)
+            return false
+        }
+        return availableBytes >= requestedSpoolBytes &&
+            availableBytes - requestedSpoolBytes >= DISK_SPOOL_FREE_SPACE_RESERVE_BYTES
+    }
+
+    private fun scheduleDiskSpoolWriter(
+        url: String,
+        session: DiskSpoolSession,
+        requestedSpoolBytes: Long,
+        requestHeaders: Map<String, String>
+    ): Future<*>? {
+        val chunkBytes = selectedDiskSpoolChunkBytes()
+        val task = Runnable {
+            runCatching {
+                DiskSpoolWriter(
+                    playbackOkHttpClient,
+                    requestHeaders = requestHeaders,
+                    chunkBytes = chunkBytes
+                )
+                    .downloadUntil(url, session, requestedSpoolBytes)
+            }.onFailure { error ->
+                Log.w(TAG, "Disk spool writer failed; closing spool session", error)
+                if (!closeActiveDiskSpoolSessionIfActive(session, cancelWriter = false, reason = "writer failure")) {
+                    closeDiskSpoolSession(session, reason = "writer failure before registration")
+                }
+            }
+        }
+        val testingExecutor = diskSpoolWriterExecutorForTesting
+        return if (testingExecutor != null) {
+            testingExecutor.execute(task)
+            null
+        } else {
+            diskSpoolExecutor.submit(task)
+        }
+    }
+
+    private fun registerActiveDiskSpoolSession(
+        session: DiskSpoolSession,
+        future: Future<*>?,
+        registrationGeneration: Long
+    ): Pair<Future<*>?, DiskSpoolSession?>? {
+        var shouldRejectNewSession = false
+        val previous = synchronized(diskSpoolLock) {
+            if (diskSpoolLifecycleGeneration != registrationGeneration || session.isClosed()) {
+                shouldRejectNewSession = true
+                null
+            } else {
+                val previousFuture = activeDiskSpoolFuture
+                val previousSession = activeDiskSpoolSession
+                activeDiskSpoolFuture = future
+                activeDiskSpoolSession = session
+                previousFuture to previousSession
+            }
+        }
+        if (shouldRejectNewSession) {
+            future?.cancel(true)
+            closeDiskSpoolSession(session, reason = "disk spool registration invalidated")
+            return null
+        }
+        return previous
+    }
+
+    private fun isDiskSpoolSessionStillRegistered(
+        session: DiskSpoolSession,
+        registrationGeneration: Long
+    ): Boolean {
+        return synchronized(diskSpoolLock) {
+            diskSpoolLifecycleGeneration == registrationGeneration &&
+                activeDiskSpoolSession === session &&
+                !session.isClosed()
+        }
+    }
+
+    private fun nextDiskSpoolLifecycleGenerationLocked() {
+        diskSpoolLifecycleGeneration += 1L
+    }
+
+    private fun closeActiveDiskSpoolSession(
+        cancelWriter: Boolean,
+        reason: String
+    ) {
+        val active = synchronized(diskSpoolLock) {
+            nextDiskSpoolLifecycleGenerationLocked()
+            val future = activeDiskSpoolFuture
+            val session = activeDiskSpoolSession
+            activeDiskSpoolFuture = null
+            activeDiskSpoolSession = null
+            future to session
+        }
+        if (cancelWriter) active.first?.cancel(true)
+        closeDiskSpoolSession(active.second, reason)
+    }
+
+    private fun closeActiveDiskSpoolSessionIfActive(
+        session: DiskSpoolSession,
+        cancelWriter: Boolean,
+        reason: String
+    ): Boolean {
+        var didCloseActiveSession = false
+        val active = synchronized(diskSpoolLock) {
+            if (activeDiskSpoolSession !== session) {
+                null
+            } else {
+                didCloseActiveSession = true
+                nextDiskSpoolLifecycleGenerationLocked()
+                val future = activeDiskSpoolFuture
+                activeDiskSpoolFuture = null
+                activeDiskSpoolSession = null
+                future to session
+            }
+        }
+        if (active != null) {
+            if (cancelWriter) active.first?.cancel(true)
+            closeDiskSpoolSession(active.second, reason)
+        }
+        return didCloseActiveSession
+    }
+
+    private fun closeDiskSpoolSession(session: DiskSpoolSession?, reason: String) {
+        if (session == null) return
+        runCatching { session.close() }
+            .onFailure { error -> Log.w(TAG, "Failed to close disk spool session during $reason", error) }
+    }
+
+    private fun selectedDiskSpoolChunkBytes(): Int {
+        return SAFE_DEFAULT_PARALLEL_CHUNK_SIZE_MB * 1024 * 1024
     }
 
     private fun buildParallelRangeDataSourceFactory(
@@ -833,6 +1106,9 @@ internal class PlayerMediaSourceFactory(
         private const val TAG = "PlayerMediaSource"
         private const val ENABLE_VOD_CACHE = true
         private const val VOD_CACHE_DIR = "player_vod_cache"
+        private const val DISK_SPOOL_DIR = "player_disk_spool"
+        private const val DEFAULT_DISK_SPOOL_BYTES = 512L * 1024L * 1024L
+        private const val DISK_SPOOL_FREE_SPACE_RESERVE_BYTES = 512L * 1024L * 1024L
         private const val VOD_CACHE_FREE_SPACE_RESERVE_BYTES = 1024L * 1024L * 1024L
         private const val MIN_RUNTIME_VOD_CACHE_BYTES = 1L * 1024L * 1024L
         private const val PREFETCH_BLOCK_BYTES = 16L * 1024L * 1024L

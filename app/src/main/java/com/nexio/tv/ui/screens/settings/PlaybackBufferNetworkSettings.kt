@@ -16,9 +16,14 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.R
 import com.nexio.tv.data.local.PlayerSettings
+import com.nexio.tv.data.local.diskSpoolTargetBitrateMbps
+import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
 import com.nexio.tv.data.local.VodCacheSizeMode
+import com.nexio.tv.ui.screens.player.spool.SpoolStoragePolicy
+import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import com.nexio.tv.ui.theme.NexioColors
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 internal fun LazyListScope.bufferAndNetworkSettingsItems(
     playerSettings: PlayerSettings,
@@ -26,6 +31,8 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
     onSetVodCacheSizeMb: (Int) -> Unit,
     onSetVodCacheWarmAheadEnabled: (Boolean) -> Unit,
     onSetUseParallelConnections: (Boolean) -> Unit,
+    onSetProgressivePlaybackDiskMode: (ProgressivePlaybackDiskMode) -> Unit,
+    onRunDiskSpoolStorageProbe: () -> Unit,
     onItemFocused: () -> Unit
 ) {
     item(key = "network_cache_disk_header") {
@@ -128,6 +135,108 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
             isChecked = playerSettings.useParallelConnections,
             onCheckedChange = onSetUseParallelConnections,
             onFocused = onItemFocused
+        )
+    }
+
+    item(key = "network_cache_disk_spool_mode") {
+        ToggleSettingsItem(
+            icon = Icons.Default.Storage,
+            title = stringResource(R.string.playback_buffer_disk_spool_mode),
+            subtitle = stringResource(R.string.playback_buffer_disk_spool_mode_sub),
+            isChecked = playerSettings.progressivePlaybackDiskMode == ProgressivePlaybackDiskMode.SPOOL,
+            onCheckedChange = { enabled ->
+                onSetProgressivePlaybackDiskMode(
+                    if (enabled) ProgressivePlaybackDiskMode.SPOOL else ProgressivePlaybackDiskMode.OFF
+                )
+            },
+            onFocused = onItemFocused
+        )
+    }
+
+    item(key = "network_cache_disk_spool_probe") {
+        SettingsActionRow(
+            title = stringResource(R.string.playback_buffer_disk_spool_probe),
+            subtitle = null,
+            onClick = onRunDiskSpoolStorageProbe,
+            onFocused = onItemFocused
+        )
+    }
+
+    item(key = "network_cache_disk_spool_probe_status") {
+        val context = LocalContext.current
+        val spoolDirectoryPath = context.cacheDir.resolve("player_disk_spool").absolutePath
+        val status = resolveDiskSpoolProbeStatus(
+            result = SpoolStorageProbeResult.fromJsonOrNull(playerSettings.spoolStorageProbeResultJson),
+            progressivePlaybackDiskMode = playerSettings.progressivePlaybackDiskMode,
+            nowMs = System.currentTimeMillis(),
+            spoolDirectoryPath = spoolDirectoryPath,
+            targetVideoMbps = SpoolStoragePolicy.targetBitrateMbps(
+                streamBitrateMbps = null,
+                userCapMbps = playerSettings.diskSpoolTargetBitrateMbps()
+            )
+        )
+        val statusText = when (status) {
+            DiskSpoolProbeStatus.Disabled ->
+                stringResource(R.string.playback_buffer_disk_spool_probe_status_disabled)
+            DiskSpoolProbeStatus.NotChecked ->
+                stringResource(R.string.playback_buffer_disk_spool_probe_status_not_checked)
+            is DiskSpoolProbeStatus.Passed ->
+                stringResource(
+                    R.string.playback_buffer_disk_spool_probe_status_passed,
+                    status.combinedMbps,
+                    status.p99ReadLatencyMs
+                )
+            is DiskSpoolProbeStatus.Failed ->
+                stringResource(
+                    R.string.playback_buffer_disk_spool_probe_status_failed,
+                    status.combinedMbps,
+                    status.p99ReadLatencyMs
+                )
+            DiskSpoolProbeStatus.Stale ->
+                stringResource(R.string.playback_buffer_disk_spool_probe_status_stale)
+        }
+        Text(
+            text = statusText,
+            style = MaterialTheme.typography.bodySmall,
+            color = NexioColors.TextSecondary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+    }
+}
+
+internal sealed class DiskSpoolProbeStatus {
+    object Disabled : DiskSpoolProbeStatus()
+    object NotChecked : DiskSpoolProbeStatus()
+    data class Passed(val combinedMbps: Int, val p99ReadLatencyMs: Long) : DiskSpoolProbeStatus()
+    data class Failed(val combinedMbps: Int, val p99ReadLatencyMs: Long) : DiskSpoolProbeStatus()
+    object Stale : DiskSpoolProbeStatus()
+}
+
+internal fun resolveDiskSpoolProbeStatus(
+    result: SpoolStorageProbeResult?,
+    progressivePlaybackDiskMode: ProgressivePlaybackDiskMode,
+    nowMs: Long,
+    spoolDirectoryPath: String,
+    targetVideoMbps: Double
+): DiskSpoolProbeStatus {
+    if (progressivePlaybackDiskMode != ProgressivePlaybackDiskMode.SPOOL) {
+        return DiskSpoolProbeStatus.Disabled
+    }
+    if (result == null) return DiskSpoolProbeStatus.NotChecked
+    if (!SpoolStoragePolicy.isFresh(result, nowMs, spoolDirectoryPath)) {
+        return DiskSpoolProbeStatus.Stale
+    }
+
+    val combinedMbps = result.combinedMbps.roundToInt()
+    return if (SpoolStoragePolicy.canSustain(result, targetVideoMbps)) {
+        DiskSpoolProbeStatus.Passed(
+            combinedMbps = combinedMbps,
+            p99ReadLatencyMs = result.p99ReadLatencyMs
+        )
+    } else {
+        DiskSpoolProbeStatus.Failed(
+            combinedMbps = combinedMbps,
+            p99ReadLatencyMs = result.p99ReadLatencyMs
         )
     }
 }

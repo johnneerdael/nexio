@@ -15,6 +15,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.nexio.tv.domain.model.TrackingProvider
+import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -247,6 +248,8 @@ data class PlayerSettings(
     val vodCacheSizeMode: VodCacheSizeMode = DEFAULT_VOD_CACHE_SIZE_MODE,
     val vodCacheSizeMb: Int = DEFAULT_VOD_CACHE_SIZE_MB,
     val vodCacheWarmAheadEnabled: Boolean = DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED,
+    val progressivePlaybackDiskMode: ProgressivePlaybackDiskMode = ProgressivePlaybackDiskMode.OFF,
+    val spoolStorageProbeResultJson: String? = null,
     val useParallelConnections: Boolean = DEFAULT_USE_PARALLEL_CONNECTIONS,
     val parallelConnectionCount: Int = DEFAULT_PARALLEL_CONNECTION_COUNT,
     val parallelChunkSizeMb: Int = DEFAULT_PARALLEL_CHUNK_SIZE_MB,
@@ -265,6 +268,12 @@ data class PlayerSettings(
         const val MAX_PARALLEL_CONNECTION_COUNT = 4
         const val MIN_PARALLEL_CHUNK_SIZE_MB = 8
         const val MAX_PARALLEL_CHUNK_SIZE_MB = 128
+    }
+}
+
+fun PlayerSettings.diskSpoolTargetBitrateMbps(): Double? {
+    return autoplayMaxBitrateMbps ?: manualBitrateLimitMbps.takeIf {
+        autoplayBandwidthMode == AutoplayBandwidthMode.MANUAL
     }
 }
 
@@ -365,6 +374,11 @@ enum class StreamAutoPlaySource {
 enum class VodCacheSizeMode {
     OFF,
     ON
+}
+
+enum class ProgressivePlaybackDiskMode {
+    OFF,
+    SPOOL
 }
 
 enum class FrameRateMatchingMode {
@@ -517,6 +531,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val vodCacheSizeModeKey = stringPreferencesKey("vod_cache_size_mode")
     private val vodCacheSizeMbKey = intPreferencesKey("vod_cache_size_mb")
     private val vodCacheWarmAheadEnabledKey = booleanPreferencesKey("vod_cache_warm_ahead_enabled")
+    private val progressivePlaybackDiskModeKey = stringPreferencesKey("progressive_playback_disk_mode")
+    private val spoolStorageProbeResultJsonKey = stringPreferencesKey("spool_storage_probe_result_json")
     private val useParallelConnectionsKey = booleanPreferencesKey("use_parallel_connections")
     private val parallelConnectionCountKey = intPreferencesKey("parallel_connection_count")
     private val parallelChunkSizeMbKey = intPreferencesKey("parallel_chunk_size_mb")
@@ -822,6 +838,11 @@ class PlayerSettingsDataStore @Inject constructor(
                     .coerceIn(PlayerSettings.MIN_VOD_CACHE_SIZE_MB, PlayerSettings.MAX_VOD_CACHE_SIZE_MB),
                 vodCacheWarmAheadEnabled =
                     prefs[vodCacheWarmAheadEnabledKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED,
+                progressivePlaybackDiskMode = parseProgressivePlaybackDiskMode(
+                    prefs[progressivePlaybackDiskModeKey]
+                ),
+                spoolStorageProbeResultJson = prefs[spoolStorageProbeResultJsonKey]
+                    ?.takeIf { SpoolStorageProbeResult.fromJsonOrNull(it) != null },
                 useParallelConnections =
                     prefs[useParallelConnectionsKey] ?: PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS,
                 parallelConnectionCount = (prefs[parallelConnectionCountKey]
@@ -881,6 +902,10 @@ class PlayerSettingsDataStore @Inject constructor(
         prefs[libassRenderTypeKey]?.let {
             try { LibassRenderType.valueOf(it) } catch (e: Exception) { LibassRenderType.OVERLAY_OPEN_GL }
         } ?: LibassRenderType.OVERLAY_OPEN_GL
+    }
+
+    internal val spoolStorageProbeResult: Flow<SpoolStorageProbeResult?> = dataStore.data.map { prefs ->
+        SpoolStorageProbeResult.fromJsonOrNull(prefs[spoolStorageProbeResultJsonKey])
     }
 
     // Player preference setter
@@ -1222,6 +1247,14 @@ class PlayerSettingsDataStore @Inject constructor(
             "ON", "AUTO", "MANUAL" -> VodCacheSizeMode.ON
             "OFF" -> VodCacheSizeMode.OFF
             else -> PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE
+        }
+    }
+
+    private fun parseProgressivePlaybackDiskMode(value: String?): ProgressivePlaybackDiskMode {
+        return when (value?.trim()?.uppercase()) {
+            "SPOOL" -> ProgressivePlaybackDiskMode.SPOOL
+            "OFF" -> ProgressivePlaybackDiskMode.OFF
+            else -> ProgressivePlaybackDiskMode.OFF
         }
     }
 
@@ -1587,6 +1620,29 @@ class PlayerSettingsDataStore @Inject constructor(
                 prefs.remove(autoplayMaxBitrateMbpsKey)
             }
             prefs[vodCacheWarmAheadEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setProgressivePlaybackDiskMode(mode: ProgressivePlaybackDiskMode) {
+        store().edit { prefs ->
+            prefs[progressivePlaybackDiskModeKey] = mode.name
+        }
+    }
+
+    internal suspend fun setSpoolStorageProbeResult(result: SpoolStorageProbeResult?) {
+        store().edit { prefs ->
+            val json = result?.toJsonOrNull()
+            if (json != null) {
+                prefs[spoolStorageProbeResultJsonKey] = json
+            } else {
+                prefs.remove(spoolStorageProbeResultJsonKey)
+            }
+        }
+    }
+
+    internal suspend fun setSpoolStorageProbeResultJsonForTesting(rawJson: String) {
+        store().edit { prefs ->
+            prefs[spoolStorageProbeResultJsonKey] = rawJson
         }
     }
 
