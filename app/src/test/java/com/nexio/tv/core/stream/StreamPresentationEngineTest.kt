@@ -25,11 +25,12 @@ class StreamPresentationEngineTest {
             listOf(
                 "💾 10.74 GB",
                 "[[icon:appletv]] Apple TV+ • [[icon:premiumize]] Premiumize",
-                "[[text:7:10]]Shrinking.S03E06.Dereks.Dont.Die.1080p.ATVP.WEB-DL.DDP5.1.Atmos.ENG.ITA.H264-TheShrink.mkv",
-                "[[icon:atmos:1.25]] [[icon:ddp:1.25]]"
+                "[[text:7:10]]Shrinking.S03E06.Dereks.Dont.Die.1080p.ATVP.WEB-DL.DDP5.1.Atmos.ENG.ITA.H264-TheShrink.mkv"
             ),
             item.detailLines
         )
+        assertEquals("[[icon:atmos:1.50]] [[icon:ddp:1.25]]", item.badgeRow)
+        assertEquals(true, item.suppressAutomaticBadgeRow)
     }
 
     @Test
@@ -48,11 +49,12 @@ class StreamPresentationEngineTest {
             listOf(
                 "💾 10.74 GB",
                 "[[icon:realdebrid]] Real-Debrid",
-                "[[text:7:10]]Shelter.2026.MULTi.VFQ.2160p.HDR.WEB-DL.H265-Slay3R.mkv",
-                "[[icon:hdr10:1.25]]"
+                "[[text:7:10]]Shelter.2026.MULTi.VFQ.2160p.HDR.WEB-DL.H265-Slay3R.mkv"
             ),
             item.detailLines
         )
+        assertEquals("[[icon:hdr10:1.25]]", item.badgeRow)
+        assertEquals(true, item.suppressAutomaticBadgeRow)
     }
 
     @Test
@@ -66,13 +68,15 @@ class StreamPresentationEngineTest {
 
         val item = organize(stream)
         val detailOutput = item.detailLines.joinToString("\n")
+        val badgeRow = item.badgeRow.orEmpty()
 
         assertEquals("[[icon:4k]] Movie Title (2023)", item.title)
         assertTrue(detailOutput.contains("[[icon:netflix]] Netflix"))
-        assertTrue(detailOutput.contains("[[icon:atmos:1.25]]"))
-        assertTrue(detailOutput.contains("[[icon:truehd:1.25]]"))
-        assertTrue(detailOutput.contains("[[icon:dovi:1.25]]"))
         assertTrue(detailOutput.contains("[[icon:realdebrid]] Real-Debrid"))
+        assertTrue(badgeRow.contains("[[icon:atmos:1.50]]"))
+        assertTrue(badgeRow.contains("[[icon:truehd:1.25]]"))
+        assertTrue(badgeRow.contains("[[icon:dovi:1.50]]"))
+        assertEquals(true, item.suppressAutomaticBadgeRow)
     }
 
     @Test
@@ -174,6 +178,40 @@ class StreamPresentationEngineTest {
         val item = result.items.single()
         assertEquals("[[chip:cached]]", item.badgeRow)
         assertEquals(true, item.hasFormatterChipTokens)
+        assertEquals(true, item.suppressAutomaticBadgeRow)
+    }
+
+    @Test
+    fun `custom uniform formatting suppresses automatic badge row when badge row has only icons`() {
+        val result = StreamPresentationEngine.organize(
+            streams = listOf(
+                stream(
+                    filename = "Movie.Title.2023.2160p.HDR.BluRay.HEVC-GROUP.mkv",
+                    name = "⚡ RD"
+                )
+            ),
+            availableAddons = listOf("Test Addon"),
+            selectedAddonFilter = null,
+            flags = StreamFeatureFlags(
+                uniformFormattingEnabled = true,
+                groupAcrossAddonsEnabled = false,
+                uniformFormattingTemplate = AioFormatterSelection(
+                    selectedTemplateId = "custom",
+                    customTemplate = AioCustomTemplateSelection(
+                        label = "Icon badge row",
+                        nameTemplate = "{stream.title}",
+                        descriptionTemplate = "{stream.year}",
+                        badgeRowTemplate = "{stream.visualTags::exists[\"{stream.visualTags::join(' ')::replace('HDR','[[icon:hdr10:1.25]]')}\"||\"\"]}"
+                    )
+                )
+            ),
+            requestContext = StreamRequestContext(contentType = "movie")
+        )
+
+        val item = result.items.single()
+        assertEquals("[[icon:hdr10:1.25]]", item.badgeRow)
+        assertEquals(false, item.hasFormatterChipTokens)
+        assertEquals(true, item.suppressAutomaticBadgeRow)
     }
 
     @Test
@@ -206,6 +244,7 @@ class StreamPresentationEngineTest {
         assertEquals("[[chip:cached]] Movie Title", item.title)
         assertEquals(null, item.badgeRow)
         assertEquals(true, item.hasFormatterChipTokens)
+        assertEquals(true, item.suppressAutomaticBadgeRow)
     }
 
     @Test

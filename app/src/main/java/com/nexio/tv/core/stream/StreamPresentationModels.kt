@@ -183,7 +183,8 @@ data class StreamCardModel(
     val subtitle: String?,
     val detailLines: List<String>,
     val badgeRow: String? = null,
-    val hasFormatterChipTokens: Boolean = false
+    val hasFormatterChipTokens: Boolean = false,
+    val suppressAutomaticBadgeRow: Boolean = false
 )
 
 @Immutable
@@ -331,7 +332,8 @@ object StreamPresentationEngine {
                 detailLines = uniformPresentation?.detailLines
                     ?: buildDetailLines(stream, parsedInfo, flags.uniformFormattingEnabled),
                 badgeRow = uniformPresentation?.badgeRow,
-                hasFormatterChipTokens = uniformPresentation?.hasFormatterChipTokens == true
+                hasFormatterChipTokens = uniformPresentation?.hasFormatterChipTokens == true,
+                suppressAutomaticBadgeRow = uniformPresentation?.suppressAutomaticBadgeRow == true
             )
         }
 

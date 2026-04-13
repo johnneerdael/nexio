@@ -36,7 +36,8 @@ data class AioUniformPresentation(
     val title: String,
     val detailLines: List<String>,
     val badgeRow: String? = null,
-    val hasFormatterChipTokens: Boolean = false
+    val hasFormatterChipTokens: Boolean = false,
+    val suppressAutomaticBadgeRow: Boolean = false
 )
 
 data class AioParseValue(
@@ -1015,8 +1016,8 @@ object AioBuiltInFormatters {
 💾 {stream.size::>0["{stream.size::bytes}"||"Unknown"]}{stream.size::>0::and::stream.duration::>0[" • "||""]}{stream.duration::>0["⏱️ {stream.duration::time}"||""]}
 {stream.filename::~NF["[[icon:netflix]] Netflix"||""]}{stream.filename::~DSNP["[[icon:disneyplus]] Disney+"||""]}{stream.filename::~HMAX["[[icon:hbo]] HBO Max"||""]}{stream.filename::~.MAX.["[[icon:max]] Max"||""]}{stream.filename::~AMZN["[[icon:prime]] Amazon"||""]}{stream.filename::~APTV["[[icon:appletv]] Apple TV+"||""]}{stream.filename::~ATVP["[[icon:appletv]] Apple TV+"||""]}{stream.filename::~PMTP["[[icon:paramount]] Paramount+"||""]}{stream.filename::~PCOK["[[icon:peacock]] Peacock"||""]}{stream.filename::~CRTC["[[icon:crunchyroll]] Crunchyroll"||""]}{stream.filename::~CR.["[[icon:crunchyroll]] Crunchyroll"||""]}{stream.filename::~NF::or::stream.filename::~DSNP::or::stream.filename::~HMAX::or::stream.filename::~.MAX.::or::stream.filename::~AMZN::or::stream.filename::~APTV::or::stream.filename::~ATVP::or::stream.filename::~PMTP::or::stream.filename::~PCOK::or::stream.filename::~CRTC::or::stream.filename::~CR.::and::service.name::exists[" • "||""]}{service.name::~Real-Debrid["[[icon:realdebrid]] Real-Debrid"||""]}{service.name::~Premiumize["[[icon:premiumize]] Premiumize"||""]}{service.name::~AllDebrid["[[icon:alldebrid]] AllDebrid"||""]}{service.name::~Debrid-Link["[[icon:debridlink]] Debrid-Link"||""]}{service.name::~TorBox["[[icon:torbox]] TorBox"||""]}{service.name::~Offcloud["[[icon:offcloud]] Offcloud"||""]}{service.name::~put.io["[[icon:putio]] put.io"||""]}{service.name::~EasyDebrid["[[icon:easydebrid]] EasyDebrid"||""]}{service.name::~Debrider["[[icon:debrider]] Debrider"||""]}{service.name::~PikPak["[[icon:pikpak]] PikPak"||""]}{service.name::~Seedr["[[icon:seedr]] Seedr"||""]}{service.name::~Easynews["[[icon:easynews]] Easynews"||""]}{service.name::~NzbDAV["[[icon:nzbdav]] NzbDAV"||""]}{service.name::~AltMount["[[icon:altmount]] AltMount"||""]}{service.name::~Stremio NNTP["[[icon:stremionntp]] Stremio NNTP"||""]}{service.name::~StremThru Newz["[[icon:stremthrunewz]] StremThru Newz"||""]}{service.name::~Real-Debrid::isfalse::and::service.name::~Premiumize::isfalse::and::service.name::~AllDebrid::isfalse::and::service.name::~Debrid-Link::isfalse::and::service.name::~TorBox::isfalse::and::service.name::~Offcloud::isfalse::and::service.name::~put.io::isfalse::and::service.name::~EasyDebrid::isfalse::and::service.name::~Debrider::isfalse::and::service.name::~PikPak::isfalse::and::service.name::~Seedr::isfalse::and::service.name::~Easynews::isfalse::and::service.name::~NzbDAV::isfalse::and::service.name::~AltMount::isfalse::and::service.name::~Stremio NNTP::isfalse::and::service.name::~StremThru Newz::isfalse::and::service.name::exists["{service.name}"||""]}
 {stream.filename::exists["[[text:7:10]]{stream.filename}"||"—"]}
-{stream.visualTags::exists["{stream.visualTags::join(' ')::replace('Dolby Vision','[[icon:dovi:1.25]]')::replace('DoVi','[[icon:dovi:1.25]]')::replace('DV','[[icon:dovi:1.25]]')::replace('HDR10+','[[icon:hdr10:1.25]]')::replace('HDR10','[[icon:hdr10:1.25]]')::replace('HDR','[[icon:hdr10:1.25]]')}"||""]} {stream.audioTags::exists["{stream.audioTags::join(' ')::replace('Atmos','[[icon:atmos:1.25]]')::replace('TrueHD','[[icon:truehd:1.25]]')::replace('DTS-HD MA','[[icon:dtshd:1.25]]')::replace('DTS:X','[[icon:dtsx:1.25]]')::replace('DD+','[[icon:ddp:1.25]]')::replace('DD','[[icon:dd:1.25]]')::replace('EAC3','[[icon:ddp:1.25]]')::replace('AC3','[[icon:dd:1.25]]')::replace('DTS','[[icon:dts:1.25]]')}"||""]}
-""".trimIndent()
+""".trimIndent(),
+        badgeRowTemplate = """{stream.visualTags::exists["{stream.visualTags::join(' ')::replace('Dolby Vision','[[icon:dovi:1.50]]')::replace('DoVi','[[icon:dovi:1.50]]')::replace('DV','[[icon:dovi:1.50]]')::replace('HDR10+','[[icon:hdr10:1.25]]')::replace('HDR10','[[icon:hdr10:1.25]]')::replace('HDR','[[icon:hdr10:1.25]]')}"||""]} {stream.audioTags::exists["{stream.audioTags::join(' ')::replace('Atmos','[[icon:atmos:1.50]]')::replace('TrueHD','[[icon:truehd:1.25]]')::replace('DTS-HD MA','[[icon:dtshd:1.25]]')::replace('DTS:X','[[icon:dtsx:1.25]]')::replace('DD+','[[icon:ddp:1.25]]')::replace('DD','[[icon:dd:1.25]]')::replace('EAC3','[[icon:ddp:1.25]]')::replace('AC3','[[icon:dd:1.25]]')::replace('DTS','[[icon:dts:1.25]]')}"||""]}"""
     )
 
     val PRISM = AioTemplateDefinition(
@@ -1069,13 +1070,15 @@ object AioUniformFormatter {
             AioParseValueFactory.from(stream, parsed, requestContext)
         )
         val badgeRow = formatted.badgeRow.trim().takeIf { it.isNotEmpty() }
+        val hasFormatterChipTokens = containsChipToken(formatted.name) ||
+            containsChipToken(formatted.description) ||
+            containsChipToken(badgeRow.orEmpty())
         return AioUniformPresentation(
             title = formatted.name.trim(),
             detailLines = formatted.description.lines().map { it.trim() }.filter { it.isNotEmpty() },
             badgeRow = badgeRow,
-            hasFormatterChipTokens = containsChipToken(formatted.name) ||
-                containsChipToken(formatted.description) ||
-                containsChipToken(badgeRow.orEmpty())
+            hasFormatterChipTokens = hasFormatterChipTokens,
+            suppressAutomaticBadgeRow = definition.badgeRowTemplate.isNotBlank() || hasFormatterChipTokens
         )
     }
 
