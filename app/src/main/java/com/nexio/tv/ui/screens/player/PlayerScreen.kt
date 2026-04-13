@@ -561,6 +561,7 @@ fun PlayerScreen(
                 renderState = PlayerSurfaceRenderState(
                     resizeMode = uiState.resizeMode,
                     subtitleStyle = uiState.subtitleStyle,
+                    keepScreenOn = uiState.isPlaying || uiState.isBuffering,
                     overlayCues = resolveOverlayCues(
                         useAiOverlay = uiState.useBuiltInAiSubtitleOverlay,
                         translatedBuiltInCues = uiState.translatedBuiltInCues,
