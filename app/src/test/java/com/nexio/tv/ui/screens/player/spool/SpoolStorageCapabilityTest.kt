@@ -66,9 +66,48 @@ class SpoolStorageCapabilityTest {
         assertFalse(SpoolStoragePolicy.canSustain(excessiveLatency, 80.0))
 
         assertFalse(SpoolStoragePolicy.canSustain(pass, 0.0))
+    }
 
-        val tooShort = pass.copy(durationMs = 29_999L)
-        assertFalse(SpoolStoragePolicy.canSustain(tooShort, 80.0))
+    @Test
+    fun recommendedAutoplayCap_usesUnderLoadStorageThroughputAndAutoplayBounds() {
+        val result = SpoolStorageProbeResult(
+            writeMbps = 1_600.0,
+            readMbps = 3_200.0,
+            combinedMbps = 1_200.0,
+            p99ReadLatencyMs = 40L,
+            maxReadStallMs = 70L,
+            measuredAtMs = 1_776_047_817_725L,
+            durationMs = 60_000L,
+            bytesWritten = 1_350_000_000L,
+            bytesRead = 1_350_000_000L,
+            spoolDirectoryPath = "/data/user/0/com.nexio.tv/cache/player_disk_spool",
+            concurrentSequentialWriteMbps = 400.0,
+            concurrentSequentialReadMbps = 800.0,
+            concurrentRandomWriteMbps = 320.0
+        )
+
+        assertEquals(200, SpoolStoragePolicy.recommendedAutoplayCapMbps(result))
+    }
+
+    @Test
+    fun recommendedAutoplayCap_roundsDownToManualAutoplayStep() {
+        val result = SpoolStorageProbeResult(
+            writeMbps = 1_600.0,
+            readMbps = 3_200.0,
+            combinedMbps = 390.0,
+            p99ReadLatencyMs = 40L,
+            maxReadStallMs = 70L,
+            measuredAtMs = 1_776_047_817_725L,
+            durationMs = 60_000L,
+            bytesWritten = 1_350_000_000L,
+            bytesRead = 1_350_000_000L,
+            spoolDirectoryPath = "/data/user/0/com.nexio.tv/cache/player_disk_spool",
+            concurrentSequentialWriteMbps = 350.0,
+            concurrentSequentialReadMbps = 300.0,
+            concurrentRandomWriteMbps = 156.0
+        )
+
+        assertEquals(155, SpoolStoragePolicy.recommendedAutoplayCapMbps(result))
     }
 
     @Test

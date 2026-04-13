@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.player.spool
 
+import kotlin.math.floor
 import org.json.JSONObject
 
 internal data class SpoolStorageProbeResult(
@@ -88,6 +89,9 @@ internal data class SpoolStorageProbeResult(
 internal object SpoolStoragePolicy {
     private const val FALLBACK_TARGET_MBPS = 80.0
     private const val MIN_HEADROOM_MULTIPLIER = 2.5
+    private const val MIN_AUTOPLAY_CAP_MBPS = 5
+    private const val MAX_AUTOPLAY_CAP_MBPS = 200
+    private const val AUTOPLAY_CAP_STEP_MBPS = 5
     private const val MAX_P99_READ_LATENCY_MS = 100L
     private const val MAX_READ_STALL_MS = 500L
     private const val MAX_RESULT_AGE_MS = 7L * 24L * 60L * 60L * 1000L
@@ -104,14 +108,59 @@ internal object SpoolStoragePolicy {
 
     fun canSustain(result: SpoolStorageProbeResult, targetVideoMbps: Double): Boolean {
         if (!targetVideoMbps.isFinite() || targetVideoMbps <= 0.0) return false
-        if (result.durationMs < 30_000L) return false
 
         val requiredThroughputMbps = targetVideoMbps * MIN_HEADROOM_MULTIPLIER
-        return result.writeMbps >= targetVideoMbps &&
-            result.readMbps >= targetVideoMbps &&
-            result.combinedMbps >= requiredThroughputMbps &&
+        return underLoadWriteMbps(result) >= targetVideoMbps &&
+            underLoadReadMbps(result) >= targetVideoMbps &&
+            underLoadCombinedMbps(result) >= requiredThroughputMbps &&
             result.p99ReadLatencyMs <= MAX_P99_READ_LATENCY_MS &&
             result.maxReadStallMs <= MAX_READ_STALL_MS
+    }
+
+    fun isRecommended(result: SpoolStorageProbeResult): Boolean {
+        return result.p99ReadLatencyMs <= MAX_P99_READ_LATENCY_MS &&
+            result.maxReadStallMs <= MAX_READ_STALL_MS &&
+            recommendedAutoplayCapMbps(result) >= FALLBACK_TARGET_MBPS
+    }
+
+    fun recommendedAutoplayCapMbps(result: SpoolStorageProbeResult): Int {
+        val safeCapMbps = safeAutoplayCapMbps(result)
+            .coerceIn(MIN_AUTOPLAY_CAP_MBPS.toDouble(), MAX_AUTOPLAY_CAP_MBPS.toDouble())
+        val rounded = floor(safeCapMbps / AUTOPLAY_CAP_STEP_MBPS).toInt() * AUTOPLAY_CAP_STEP_MBPS
+        return rounded.coerceIn(MIN_AUTOPLAY_CAP_MBPS, MAX_AUTOPLAY_CAP_MBPS)
+    }
+
+    fun underLoadWriteMbps(result: SpoolStorageProbeResult): Double {
+        return result.concurrentSequentialWriteMbps ?: result.writeMbps
+    }
+
+    fun underLoadReadMbps(result: SpoolStorageProbeResult): Double {
+        return result.concurrentSequentialReadMbps ?: result.readMbps
+    }
+
+    fun underLoadRandomWriteMbps(result: SpoolStorageProbeResult): Double? {
+        return result.concurrentRandomWriteMbps
+    }
+
+    private fun safeAutoplayCapMbps(result: SpoolStorageProbeResult): Double {
+        return listOfNotNull(
+            underLoadWriteMbps(result),
+            underLoadReadMbps(result),
+            underLoadCombinedMbps(result) / MIN_HEADROOM_MULTIPLIER,
+            underLoadRandomWriteMbps(result)
+        ).filter { it.isFinite() && it > 0.0 }
+            .minOrNull()
+            ?: 0.0
+    }
+
+    private fun underLoadCombinedMbps(result: SpoolStorageProbeResult): Double {
+        val writeMbps = result.concurrentSequentialWriteMbps
+        val readMbps = result.concurrentSequentialReadMbps
+        return if (writeMbps != null && readMbps != null) {
+            writeMbps + readMbps
+        } else {
+            result.combinedMbps
+        }
     }
 
     fun isFresh(result: SpoolStorageProbeResult, nowMs: Long, spoolDirectoryPath: String): Boolean {
