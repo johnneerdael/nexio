@@ -21,6 +21,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.ForwardingRenderer
 import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioSink
@@ -54,6 +55,7 @@ import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import com.nexio.tv.domain.model.Subtitle
 import io.github.peerless2012.ass.media.type.AssRenderType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -711,6 +713,10 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         }
                         mediaSourceFactory.notifyPlaybackFirstFrameRendered()
                         hasRenderedFirstFrame = true
+                        maybeSchedulePostFirstFrameBufferingWatchdog(
+                            playbackSessionId = playbackSessionId,
+                            kodiCustomAudioSinkEnabled = kodiCustomAudioSinkEnabled
+                        )
                         resumeAutoplayAfterLifecyclePause = false
                         _uiState.update { it.copy(showLoadingOverlay = false) }
                     }
@@ -761,39 +767,14 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             return
                         }
 
-                        if (error.isAudioTrackInitializationFailure()) {
-                            if (kodiCustomAudioSinkEnabled) {
-                                Log.w(
-                                    PlayerRuntimeController.TAG,
-                                    "AudioTrack init failed with custom Kodi IEC AudioSink enabled; " +
-                                        "not retrying with safe audio fallback " +
-                                        "host=${currentStreamUrl.safeHost()} " +
-                                        "positionMs=$currentPosition"
-                                )
-                            } else {
-                                if (!isSafeAudioModeActiveForCurrentPlayback) {
-                                    Log.w(
-                                        PlayerRuntimeController.TAG,
-                                        "AudioTrack init failed, retrying with safe audio mode " +
-                                            "host=${currentStreamUrl.safeHost()} " +
-                                            "positionMs=$currentPosition"
-                                    )
-                                    safeAudioForcedStreamUrls.add(currentStreamUrl)
-                                    retryCurrentStreamWithSafeAudioFallback(currentPosition)
-                                    return
-                                }
-                                if (!isAudioDisabledForCurrentPlayback) {
-                                    Log.w(
-                                        PlayerRuntimeController.TAG,
-                                        "AudioTrack init still failing in safe audio mode, retrying " +
-                                            "with audio disabled host=${currentStreamUrl.safeHost()} " +
-                                            "positionMs=$currentPosition"
-                                    )
-                                    audioDisabledForcedStreamUrls.add(currentStreamUrl)
-                                    retryCurrentStreamWithAudioDisabled(currentPosition)
-                                    return
-                                }
-                            }
+                        if (error.isAudioTrackInitializationFailure() &&
+                            handleAudioTrackInitializationFailure(
+                                kodiCustomAudioSinkEnabled = kodiCustomAudioSinkEnabled,
+                                fromPositionMs = currentPosition,
+                                source = "player error"
+                            )
+                        ) {
+                            return
                         }
 
                         if (error.isStuckPlayingNoProgress()) {
@@ -900,7 +881,34 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         }
                     }
                 }
+                val analyticsListener = object : AnalyticsListener {
+                    override fun onAudioSinkError(
+                        eventTime: AnalyticsListener.EventTime,
+                        audioSinkError: Exception
+                    ) {
+                        if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
+                        if (!audioSinkError.isAudioSinkInitializationFailure()) {
+                            Log.w(
+                                PlayerRuntimeController.TAG,
+                                "Audio sink error callback did not match init failure " +
+                                    "host=${currentStreamUrl.safeHost()} " +
+                                    "error=${audioSinkError.describeCauseChain()}"
+                            )
+                            return
+                        }
+                        scope.launch {
+                            if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return@launch
+                            val livePlayer = _exoPlayer ?: return@launch
+                            handleAudioTrackInitializationFailure(
+                                kodiCustomAudioSinkEnabled = kodiCustomAudioSinkEnabled,
+                                fromPositionMs = livePlayer.currentPosition,
+                                source = "audio sink callback"
+                            )
+                        }
+                    }
+                }
                 addListener(playerListener)
+                addAnalyticsListener(analyticsListener)
                 if (dv5HardwareToneMapActive) {
                     setVideoFrameMetadataListener { presentationTimeUs, _, _, _ ->
                         Dv5HardwareToneMapRpuTap.onFrameAboutToRender(presentationTimeUs)
@@ -1140,6 +1148,7 @@ internal suspend fun PlayerRuntimeController.prepareStartupSubtitles(
 
 internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     cancelFirstFrameWatchdog()
+    cancelPostFirstFrameBufferingWatchdog()
     hasRenderedFirstFrame = false
     shouldEnforceAutoplayOnFirstReady = true
     resumeAutoplayAfterLifecyclePause = false
@@ -1390,6 +1399,106 @@ private fun PlaybackException.isAudioTrackInitializationFailure(): Boolean {
         append(cause?.cause?.message ?: "")
     }
     return details.contains("audiotrack init failed", ignoreCase = true)
+}
+
+private fun Exception.isAudioSinkInitializationFailure(): Boolean {
+    if (causeChain().any { it is AudioSink.InitializationException }) return true
+    val details = describeCauseChain()
+    return details.contains("audiotrack init failed", ignoreCase = true) ||
+        details.contains("cannot create audiotrack", ignoreCase = true)
+}
+
+private fun Throwable.causeChain(): Sequence<Throwable> = sequence {
+    var current: Throwable? = this@causeChain
+    var depth = 0
+    while (current != null && depth < 12) {
+        yield(current)
+        current = current.cause
+        depth++
+    }
+}
+
+private fun Throwable.describeCauseChain(): String {
+    return causeChain().joinToString(" <- ") { throwable ->
+        "${throwable::class.java.simpleName}: ${throwable.message.orEmpty()}"
+    }
+}
+
+private fun PlayerRuntimeController.handleAudioTrackInitializationFailure(
+    kodiCustomAudioSinkEnabled: Boolean,
+    fromPositionMs: Long,
+    source: String
+): Boolean {
+    if (kodiCustomAudioSinkEnabled) {
+        Log.w(
+            PlayerRuntimeController.TAG,
+            "AudioTrack init failed via $source with custom Kodi IEC AudioSink enabled; " +
+                "not retrying with safe audio fallback " +
+                "host=${currentStreamUrl.safeHost()} " +
+                "positionMs=$fromPositionMs"
+        )
+        return false
+    }
+    if (!isSafeAudioModeActiveForCurrentPlayback) {
+        Log.w(
+            PlayerRuntimeController.TAG,
+            "AudioTrack init failed via $source, retrying with safe audio mode " +
+                "host=${currentStreamUrl.safeHost()} " +
+                "positionMs=$fromPositionMs"
+        )
+        safeAudioForcedStreamUrls.add(currentStreamUrl)
+        retryCurrentStreamWithSafeAudioFallback(fromPositionMs)
+        return true
+    }
+    if (!isAudioDisabledForCurrentPlayback) {
+        Log.w(
+            PlayerRuntimeController.TAG,
+            "AudioTrack init still failing via $source in safe audio mode, retrying " +
+                "with audio disabled host=${currentStreamUrl.safeHost()} " +
+                "positionMs=$fromPositionMs"
+        )
+        audioDisabledForcedStreamUrls.add(currentStreamUrl)
+        retryCurrentStreamWithAudioDisabled(fromPositionMs)
+        return true
+    }
+    return false
+}
+
+internal fun PlayerRuntimeController.cancelPostFirstFrameBufferingWatchdog() {
+    postFirstFrameBufferingWatchdogJob?.cancel()
+    postFirstFrameBufferingWatchdogJob = null
+}
+
+private fun PlayerRuntimeController.maybeSchedulePostFirstFrameBufferingWatchdog(
+    playbackSessionId: Long,
+    kodiCustomAudioSinkEnabled: Boolean
+) {
+    if (postFirstFrameBufferingWatchdogJob?.isActive == true) return
+    postFirstFrameBufferingWatchdogJob = scope.launch {
+        delay(PlayerRuntimeController.POST_FIRST_FRAME_BUFFERING_TIMEOUT_MS)
+
+        if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return@launch
+        if (!hasRenderedFirstFrame || userPausedManually) return@launch
+        val livePlayer = _exoPlayer ?: return@launch
+        if (!livePlayer.playWhenReady || livePlayer.playbackState != Player.STATE_BUFFERING) return@launch
+        val currentPosition = livePlayer.currentPosition.coerceAtLeast(0L)
+        if (currentPosition > PlayerRuntimeController.POST_FIRST_FRAME_STUCK_POSITION_MS) return@launch
+
+        Log.w(
+            PlayerRuntimeController.TAG,
+            "POST_FIRST_FRAME_BUFFERING: stuck buffering after first frame " +
+                "delayMs=${PlayerRuntimeController.POST_FIRST_FRAME_BUFFERING_TIMEOUT_MS} " +
+                "positionMs=$currentPosition " +
+                "safeAudio=$isSafeAudioModeActiveForCurrentPlayback " +
+                "audioDisabled=$isAudioDisabledForCurrentPlayback " +
+                "host=${currentStreamUrl.safeHost()}"
+        )
+        handleAudioTrackInitializationFailure(
+            kodiCustomAudioSinkEnabled = kodiCustomAudioSinkEnabled,
+            fromPositionMs = currentPosition,
+            source = "post-first-frame buffering watchdog"
+        )
+    }
 }
 
 private fun PlaybackException.isStuckPlayingNoProgress(): Boolean {
