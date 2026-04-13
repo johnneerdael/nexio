@@ -283,7 +283,7 @@ fun PlayerScreen(
                     viewModel.pausePlaybackForLifecycle()
                 }
                 Lifecycle.Event.ON_RESUME -> {
-                    // Don't auto-resume, let user control
+                    viewModel.resumePlaybackForLifecycle()
                 }
                 else -> {}
             }

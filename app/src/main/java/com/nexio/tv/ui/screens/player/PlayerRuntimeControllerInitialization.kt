@@ -704,6 +704,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         }
                         mediaSourceFactory.notifyPlaybackFirstFrameRendered()
                         hasRenderedFirstFrame = true
+                        resumeAutoplayAfterLifecyclePause = false
                         _uiState.update { it.copy(showLoadingOverlay = false) }
                     }
 
@@ -1134,6 +1135,7 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     cancelFirstFrameWatchdog()
     hasRenderedFirstFrame = false
     shouldEnforceAutoplayOnFirstReady = true
+    resumeAutoplayAfterLifecyclePause = false
     userPausedManually = false
     timeoutRecoveryAttempts = 0
     hasRetriedCurrentStreamAfterUnexpectedNpe = false
