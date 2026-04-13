@@ -25,15 +25,25 @@ interface ServiceWrapResolver {
         candidates: List<WrapCandidate>,
         requestContext: ServiceWrapRequestContext
     ): Flow<ServiceWrapResolutionChunkBatch> = flow {
-        val resultsByHash = LinkedHashMap<String, List<ResolvedServiceWrapStream>>()
         candidates.forEach { candidate ->
-            resultsByHash[candidate.normalizedInfoHash] = resolve(candidate, requestContext)
+            var emittedTerminalBatch = false
+            resolveProgressively(candidate, requestContext).collect { resolution ->
+                if (resolution.isTerminal) emittedTerminalBatch = true
+                emit(
+                    ServiceWrapResolutionChunkBatch(
+                        streamsByHash = mapOf(candidate.normalizedInfoHash to resolution.streams),
+                        isTerminal = resolution.isTerminal
+                    )
+                )
+            }
+            if (!emittedTerminalBatch) {
+                emit(
+                    ServiceWrapResolutionChunkBatch(
+                        streamsByHash = mapOf(candidate.normalizedInfoHash to emptyList()),
+                        isTerminal = true
+                    )
+                )
+            }
         }
-        emit(
-            ServiceWrapResolutionChunkBatch(
-                streamsByHash = resultsByHash,
-                isTerminal = true
-            )
-        )
     }
 }
