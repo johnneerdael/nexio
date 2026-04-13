@@ -12,25 +12,32 @@ import java.io.IOException
 internal class DiskSpoolDataSource(
     private val session: DiskSpoolSession,
     private val uri: Uri,
-    private val contentLength: Long = C.LENGTH_UNSET.toLong()
+    private val contentLength: Long = C.LENGTH_UNSET.toLong(),
+    private val randomAccessFallbackFactory: DataSource.Factory? = null,
+    private val randomAccessBypassDistanceBytes: Long = RANDOM_ACCESS_BYPASS_DISTANCE_BYTES
 ) : DataSource {
 
     private val transferListeners = mutableListOf<TransferListener>()
     private var openedDataSpec: DataSpec? = null
+    private var fallbackDataSource: DataSource? = null
     private var position = 0L
     private var remaining = C.LENGTH_UNSET.toLong()
     private var resolvedContentLength = C.LENGTH_UNSET.toLong()
 
     override fun addTransferListener(transferListener: TransferListener) {
         transferListeners.add(transferListener)
+        fallbackDataSource?.addTransferListener(transferListener)
     }
 
     override fun open(dataSpec: DataSpec): Long {
-        if (openedDataSpec != null) {
+        if (openedDataSpec != null || fallbackDataSource != null) {
             close()
         }
         if (session.isClosed()) {
             throw IOException("Disk spool session closed")
+        }
+        if (shouldBypassSpool(dataSpec.position)) {
+            return openFallback(dataSpec)
         }
 
         openedDataSpec = dataSpec
@@ -53,6 +60,7 @@ internal class DiskSpoolDataSource(
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
         if (length == 0) return 0
+        fallbackDataSource?.let { return it.read(buffer, offset, length) }
 
         while (true) {
             if (shouldEndOfInput()) {
@@ -80,10 +88,17 @@ internal class DiskSpoolDataSource(
             if (read == 0) {
                 continue
             }
+
+            val fallback = openFallbackForCurrentPosition()
+            if (fallback != null) {
+                return fallback.read(buffer, offset, length)
+            }
         }
     }
 
     override fun close() {
+        fallbackDataSource?.close()
+        fallbackDataSource = null
         val dataSpec = openedDataSpec
         if (dataSpec != null) {
             transferListeners.forEach { it.onTransferEnd(this, dataSpec, false) }
@@ -94,16 +109,63 @@ internal class DiskSpoolDataSource(
         resolvedContentLength = C.LENGTH_UNSET.toLong()
     }
 
-    override fun getUri(): Uri? = uri
+    override fun getUri(): Uri? = fallbackDataSource?.uri ?: uri
 
-    override fun getResponseHeaders(): Map<String, List<String>> = emptyMap()
+    override fun getResponseHeaders(): Map<String, List<String>> {
+        return fallbackDataSource?.responseHeaders ?: emptyMap()
+    }
+
+    private fun shouldBypassSpool(requestedPosition: Long): Boolean {
+        if (randomAccessFallbackFactory == null) return false
+        if (requestedPosition < session.windowStartBytes()) return true
+
+        val frontier = session.contiguousFrontierBytes()
+        val bypassDistance = randomAccessBypassDistanceBytes.coerceAtLeast(0L)
+        return requestedPosition > frontier + bypassDistance
+    }
+
+    private fun openFallbackForCurrentPosition(): DataSource? {
+        if (randomAccessFallbackFactory == null) return null
+        val dataSpec = openedDataSpec ?: return null
+        val fallbackSpec = dataSpec.buildUpon()
+            .setPosition(position)
+            .setLength(remaining)
+            .build()
+        endSpoolTransfer()
+        return openFallbackDataSource(fallbackSpec)
+    }
+
+    private fun openFallback(dataSpec: DataSpec): Long {
+        openFallbackDataSource(dataSpec)
+        openedDataSpec = null
+        return remaining
+    }
+
+    private fun openFallbackDataSource(dataSpec: DataSpec): DataSource {
+        val fallback = randomAccessFallbackFactory?.createDataSource() ?: error("Missing fallback factory")
+        transferListeners.forEach(fallback::addTransferListener)
+        fallbackDataSource = fallback
+        val fallbackLength = fallback.open(dataSpec)
+        position = dataSpec.position
+        remaining = when {
+            dataSpec.length != C.LENGTH_UNSET.toLong() -> dataSpec.length
+            fallbackLength != C.LENGTH_UNSET.toLong() -> fallbackLength
+            else -> C.LENGTH_UNSET.toLong()
+        }
+        return fallback
+    }
+
+    private fun endSpoolTransfer() {
+        val dataSpec = openedDataSpec ?: return
+        transferListeners.forEach { it.onTransferEnd(this, dataSpec, false) }
+        openedDataSpec = null
+    }
 
     private fun shouldEndOfInput(): Boolean {
         if (remaining == 0L) return true
         if (session.isClosed()) return true
         val knownContentLength = currentKnownContentLength()
         if (knownContentLength != C.LENGTH_UNSET.toLong() && position >= knownContentLength) return true
-        if (position < session.windowStartBytes()) return true
         return false
     }
 
@@ -118,10 +180,20 @@ internal class DiskSpoolDataSource(
     internal class Factory(
         private val session: DiskSpoolSession,
         private val uri: Uri,
-        private val contentLength: Long = C.LENGTH_UNSET.toLong()
+        private val contentLength: Long = C.LENGTH_UNSET.toLong(),
+        private val randomAccessFallbackFactory: DataSource.Factory? = null
     ) : DataSource.Factory {
         override fun createDataSource(): DataSource {
-            return DiskSpoolDataSource(session, uri, contentLength)
+            return DiskSpoolDataSource(
+                session = session,
+                uri = uri,
+                contentLength = contentLength,
+                randomAccessFallbackFactory = randomAccessFallbackFactory
+            )
         }
+    }
+
+    private companion object {
+        const val RANDOM_ACCESS_BYPASS_DISTANCE_BYTES = 64L * 1024L * 1024L
     }
 }

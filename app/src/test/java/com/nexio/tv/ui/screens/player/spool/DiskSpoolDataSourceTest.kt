@@ -82,6 +82,47 @@ class DiskSpoolDataSourceTest {
     }
 
     @Test
+    fun `far random access read bypasses spool without rebasing primary window`() {
+        val session = DiskSpoolSession(
+            File(temp.root, "movie.spool"),
+            capacityBytes = 1_024L,
+            waitTimeoutMs = 1_000L
+        )
+        val uri = Uri.parse("https://example.com/movie.bin")
+        val fallbackContent = ByteArray(4_096) { (it % 251).toByte() }
+        val fallbackFactory = ByteArrayFallbackFactory(fallbackContent)
+        session.writeRange(0L, byteArrayOf(1, 2, 3, 4), 4)
+
+        try {
+            val dataSource = DiskSpoolDataSource(
+                session = session,
+                uri = uri,
+                contentLength = fallbackContent.size.toLong(),
+                randomAccessFallbackFactory = fallbackFactory,
+                randomAccessBypassDistanceBytes = 16L
+            )
+            val dataSpec = DataSpec.Builder()
+                .setUri(uri)
+                .setPosition(1_024L)
+                .setLength(4L)
+                .build()
+
+            assertEquals(4L, dataSource.open(dataSpec))
+
+            val buffer = ByteArray(4)
+            assertEquals(4, dataSource.read(buffer, 0, buffer.size))
+            assertArrayEquals(fallbackContent.copyOfRange(1_024, 1_028), buffer)
+            assertEquals(0L, session.windowStartBytes())
+            assertEquals(4L, session.contiguousFrontierBytes())
+            assertEquals(listOf(1_024L), fallbackFactory.openedPositions)
+
+            dataSource.close()
+        } finally {
+            session.close()
+        }
+    }
+
+    @Test
     fun `read caps large remaining length by caller buffer length`() {
         val session = DiskSpoolSession(
             File(temp.root, "movie.spool"),
@@ -246,6 +287,47 @@ class DiskSpoolDataSourceTest {
             )
         } finally {
             session.close()
+        }
+    }
+
+    private class ByteArrayFallbackFactory(
+        private val content: ByteArray
+    ) : DataSource.Factory {
+        val openedPositions = mutableListOf<Long>()
+
+        override fun createDataSource(): DataSource {
+            return object : DataSource {
+                private var position = 0
+                private var remaining = 0
+
+                override fun addTransferListener(transferListener: TransferListener) = Unit
+
+                override fun open(dataSpec: DataSpec): Long {
+                    openedPositions += dataSpec.position
+                    position = dataSpec.position.toInt()
+                    remaining = when {
+                        dataSpec.length != C.LENGTH_UNSET.toLong() -> dataSpec.length.toInt()
+                        else -> content.size - position
+                    }
+                    return remaining.toLong()
+                }
+
+                override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                    if (remaining == 0) return C.RESULT_END_OF_INPUT
+                    val bytesToRead = minOf(length, remaining, content.size - position)
+                    if (bytesToRead <= 0) return C.RESULT_END_OF_INPUT
+                    System.arraycopy(content, position, buffer, offset, bytesToRead)
+                    position += bytesToRead
+                    remaining -= bytesToRead
+                    return bytesToRead
+                }
+
+                override fun getUri(): Uri? = null
+
+                override fun getResponseHeaders(): Map<String, List<String>> = emptyMap()
+
+                override fun close() = Unit
+            }
         }
     }
 }
