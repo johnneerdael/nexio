@@ -10,13 +10,15 @@ import kotlin.random.Random
 data class AioTemplateDefinition(
     val id: String,
     val nameTemplate: String,
-    val descriptionTemplate: String
+    val descriptionTemplate: String,
+    val badgeRowTemplate: String = ""
 )
 
 data class AioCustomTemplateSelection(
     val label: String? = null,
     val nameTemplate: String? = null,
-    val descriptionTemplate: String? = null
+    val descriptionTemplate: String? = null,
+    val badgeRowTemplate: String? = null
 )
 
 data class AioFormatterSelection(
@@ -26,12 +28,15 @@ data class AioFormatterSelection(
 
 data class AioFormattedText(
     val name: String,
-    val description: String
+    val description: String,
+    val badgeRow: String = ""
 )
 
 data class AioUniformPresentation(
     val title: String,
-    val detailLines: List<String>
+    val detailLines: List<String>,
+    val badgeRow: String? = null,
+    val hasFormatterChipTokens: Boolean = false
 )
 
 data class AioParseValue(
@@ -289,12 +294,14 @@ data class AioDebugTemplateModel(
 
 class AioTemplateFormatter(
     private val nameTemplate: String,
-    private val descriptionTemplate: String
+    private val descriptionTemplate: String,
+    private val badgeRowTemplate: String = ""
 ) {
     fun format(parseValue: AioParseValue): AioFormattedText {
         return AioFormattedText(
             name = renderTemplate(nameTemplate, parseValue),
-            description = renderTemplate(descriptionTemplate, parseValue)
+            description = renderTemplate(descriptionTemplate, parseValue),
+            badgeRow = renderTemplate(badgeRowTemplate, parseValue)
         )
     }
 
@@ -1055,14 +1062,20 @@ object AioUniformFormatter {
         val definition = resolveTemplate(selection)
         val formatter = AioTemplateFormatter(
             nameTemplate = definition.nameTemplate,
-            descriptionTemplate = definition.descriptionTemplate
+            descriptionTemplate = definition.descriptionTemplate,
+            badgeRowTemplate = definition.badgeRowTemplate
         )
         val formatted = formatter.format(
             AioParseValueFactory.from(stream, parsed, requestContext)
         )
+        val badgeRow = formatted.badgeRow.trim().takeIf { it.isNotEmpty() }
         return AioUniformPresentation(
             title = formatted.name.trim(),
-            detailLines = formatted.description.lines().map { it.trim() }.filter { it.isNotEmpty() }
+            detailLines = formatted.description.lines().map { it.trim() }.filter { it.isNotEmpty() },
+            badgeRow = badgeRow,
+            hasFormatterChipTokens = containsChipToken(formatted.name) ||
+                containsChipToken(formatted.description) ||
+                containsChipToken(badgeRow.orEmpty())
         )
     }
 
@@ -1077,12 +1090,19 @@ object AioUniformFormatter {
                 return AioTemplateDefinition(
                     id = "custom",
                     nameTemplate = customTemplate.nameTemplate.orEmpty(),
-                    descriptionTemplate = customTemplate.descriptionTemplate.orEmpty()
+                    descriptionTemplate = customTemplate.descriptionTemplate.orEmpty(),
+                    badgeRowTemplate = customTemplate.badgeRowTemplate.orEmpty()
                 )
             }
         }
         return AioBuiltInFormatters.byId(selectedId)
     }
+
+    private fun containsChipToken(value: String): Boolean {
+        return ChipTokenPattern.containsMatchIn(value)
+    }
+
+    private val ChipTokenPattern = Regex("""\[\[chip:[a-z0-9_]+]]""", RegexOption.IGNORE_CASE)
 }
 
 object AioParseValueFactory {
