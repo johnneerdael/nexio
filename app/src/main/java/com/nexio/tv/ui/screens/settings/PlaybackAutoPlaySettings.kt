@@ -70,10 +70,11 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetFilterMovieYearMismatchStreamsEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {}
 ) {
-    val effectiveBandwidthMode = playerSettings.effectiveAutoplayBandwidthMode(autoplayBenchmarkAvailable)
+    val effectiveBandwidthMode = playerSettings.autoplayBandwidthMode.effectiveAutoplayBandwidthMode(
+        autoplayBenchmarkAvailable
+    )
     val deterministicAutoplayAvailable =
-        playerSettings.serviceWrapEnabled &&
-            (effectiveBandwidthMode == AutoplayBandwidthMode.MANUAL || autoplayBenchmarkAvailable)
+        playerSettings.autoplayBandwidthMode.isDeterministicAutoplayAvailable(autoplayBenchmarkAvailable)
 
     item(key = "autoplay_deterministic") {
         ToggleSettingsItem(
@@ -286,7 +287,9 @@ internal fun AutoPlaySettingsDialogs(
 ) {
     if (showAutoplayBandwidthModeDialog) {
         AutoplayBandwidthModeDialog(
-            selectedMode = playerSettings.effectiveAutoplayBandwidthMode(autoplayBenchmarkAvailable),
+            selectedMode = playerSettings.autoplayBandwidthMode.effectiveAutoplayBandwidthMode(
+                autoplayBenchmarkAvailable
+            ),
             autoplayBenchmarkAvailable = autoplayBenchmarkAvailable,
             onModeSelected = {
                 onSetAutoplayBandwidthMode(it)
@@ -515,16 +518,6 @@ private fun NextEpisodeThresholdModeDialog(
                 }
             }
         }
-    }
-}
-
-private fun PlayerSettings.effectiveAutoplayBandwidthMode(
-    autoplayBenchmarkAvailable: Boolean
-): AutoplayBandwidthMode {
-    return if (autoplayBandwidthMode == AutoplayBandwidthMode.AUTO && !autoplayBenchmarkAvailable) {
-        AutoplayBandwidthMode.MANUAL
-    } else {
-        autoplayBandwidthMode
     }
 }
 
