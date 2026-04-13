@@ -1011,7 +1011,7 @@ private fun StreamCard(
                         )
                     )
 
-                    if (!item.hasFormatterChipTokens) {
+                    if (!item.suppressAutomaticBadgeRow) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             streamBadgeKinds(stream, item.parsed).forEach { badge ->
                                 StreamTypeChip(badge)

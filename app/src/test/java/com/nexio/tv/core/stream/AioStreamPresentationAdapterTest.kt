@@ -49,10 +49,11 @@ class AioStreamPresentationAdapterTest {
             listOf(
                 "💾 62.5 GB",
                 "[[icon:realdebrid]] Real-Debrid",
-                "[[text:7:10]]Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.mkv",
-                "[[icon:dovi:1.25]] [[icon:atmos:1.25]] [[icon:truehd:1.25]]"
+                "[[text:7:10]]Movie.Title.2023.2160p.BluRay.HEVC.DV.TrueHD.Atmos.7.1.iTA.ENG-GROUP.mkv"
             ),
             item.detailLines
         )
+        assertEquals("[[icon:dovi:1.50]] [[icon:atmos:1.50]] [[icon:truehd:1.25]]", item.badgeRow)
+        assertEquals(true, item.suppressAutomaticBadgeRow)
     }
 }

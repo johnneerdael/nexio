@@ -183,7 +183,7 @@ badgeRowTemplate:
 {service.cached::istrue["[[chip:cached]]"||""]}{stream.type::=p2p[" [[chip:torrent]]"||""]}
 ```
 
-If a custom formatter uses any `[[chip:*]]` token in the title, detail text, or badge row, Nexio lets the formatter control chip placement and does not add the automatic bottom chip row for that stream card. If no chip token is present, the automatic chip row still appears.
+If `badgeRowTemplate` is configured, Nexio treats that row as the replacement for the automatic bottom chip row. The automatic row does not appear unless the formatter recreates it with `[[chip:*]]` tokens. Inline `[[chip:*]]` tokens in `nameTemplate` or `descriptionTemplate` also suppress the automatic row.
 
 ### Universal formatter examples
 The built-in `Universal` formatter currently uses icon tokens in three main places:
