@@ -25,7 +25,7 @@ class StreamPresentationEngineTest {
             listOf(
                 "💾 10.74 GB",
                 "[[icon:appletv]] Apple TV+ • [[icon:premiumize]] Premiumize",
-                "Shrinking.S03E06.Dereks.Dont.Die.1080p.ATVP.WEB-DL.DDP5.1.Atmos.ENG.ITA.H264-TheShrink.mkv",
+                "[[text:7:10]]Shrinking.S03E06.Dereks.Dont.Die.1080p.ATVP.WEB-DL.DDP5.1.Atmos.ENG.ITA.H264-TheShrink.mkv",
                 "[[icon:atmos:1.25]] [[icon:ddp:1.25]]"
             ),
             item.detailLines
@@ -48,7 +48,7 @@ class StreamPresentationEngineTest {
             listOf(
                 "💾 10.74 GB",
                 "[[icon:realdebrid]] Real-Debrid",
-                "Shelter.2026.MULTi.VFQ.2160p.HDR.WEB-DL.H265-Slay3R.mkv",
+                "[[text:7:10]]Shelter.2026.MULTi.VFQ.2160p.HDR.WEB-DL.H265-Slay3R.mkv",
                 "[[icon:hdr10:1.25]]"
             ),
             item.detailLines
