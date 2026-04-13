@@ -194,6 +194,85 @@ class DiskSpoolDataSourceTest {
     }
 
     @Test
+    fun `open waits for configured startup prebuffer before playback reads`() {
+        val session = DiskSpoolSession(
+            File(temp.root, "movie.spool"),
+            capacityBytes = 1_024L,
+            waitTimeoutMs = 1_000L
+        )
+        val uri = Uri.parse("https://example.com/movie.bin")
+        val dataSource = DiskSpoolDataSource(
+            session = session,
+            uri = uri,
+            contentLength = 8L,
+            startupPrebufferBytes = 4L,
+            startupPrebufferWaitTimeoutMs = 1_000L
+        )
+        val writerFailure = AtomicReference<Throwable?>(null)
+
+        try {
+            val writerThread = Thread {
+                try {
+                    Thread.sleep(125L)
+                    session.writeRange(0L, byteArrayOf(7, 8, 9, 10), 4)
+                } catch (throwable: Throwable) {
+                    writerFailure.set(throwable)
+                }
+            }
+            writerThread.start()
+
+            assertEquals(8L, dataSource.open(DataSpec(uri)))
+            writerThread.join(1_000L)
+
+            assertEquals(null, writerFailure.get())
+            assertEquals(4L, session.contiguousFrontierBytes())
+        } finally {
+            dataSource.close()
+            session.close()
+        }
+    }
+
+    @Test
+    fun `open clamps startup prebuffer to discovered content length`() {
+        val session = DiskSpoolSession(
+            File(temp.root, "movie.spool"),
+            capacityBytes = 1_024L,
+            waitTimeoutMs = 1_000L
+        )
+        val uri = Uri.parse("https://example.com/movie.bin")
+        val dataSource = DiskSpoolDataSource(
+            session = session,
+            uri = uri,
+            contentLength = C.LENGTH_UNSET.toLong(),
+            startupPrebufferBytes = 10L,
+            startupPrebufferWaitTimeoutMs = 1_000L
+        )
+        val writerFailure = AtomicReference<Throwable?>(null)
+
+        try {
+            val writerThread = Thread {
+                try {
+                    Thread.sleep(125L)
+                    session.setSourceMetadata(contentLength = 4L, supportsRanges = true)
+                    session.writeRange(0L, byteArrayOf(7, 8, 9, 10), 4)
+                } catch (throwable: Throwable) {
+                    writerFailure.set(throwable)
+                }
+            }
+            writerThread.start()
+
+            assertEquals(C.LENGTH_UNSET.toLong(), dataSource.open(DataSpec(uri)))
+            writerThread.join(1_000L)
+
+            assertEquals(null, writerFailure.get())
+            assertEquals(4L, session.contiguousFrontierBytes())
+        } finally {
+            dataSource.close()
+            session.close()
+        }
+    }
+
+    @Test
     fun `open fails clearly when factory creates data source after session closed`() {
         val session = DiskSpoolSession(
             File(temp.root, "movie.spool"),

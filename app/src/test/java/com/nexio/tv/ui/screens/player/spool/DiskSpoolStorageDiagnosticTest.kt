@@ -13,6 +13,21 @@ class DiskSpoolStorageDiagnosticTest {
     val temp = TemporaryFolder()
 
     @Test
+    fun `default diagnostic workload is bounded for shield class devices`() {
+        assertEquals(
+            128L * 1024L * 1024L,
+            DiskSpoolStorageDiagnostic.resolveDefaultTotalBytesForTesting(
+                availableBytes = 2L * 1024L * 1024L * 1024L,
+                randomWriteEnabled = true
+            )
+        )
+        assertEquals(
+            32L * 1024L * 1024L,
+            DiskSpoolStorageDiagnostic.resolveDefaultReadCachePurgeBytesForTesting()
+        )
+    }
+
+    @Test
     fun `diagnostic returns sequential read write and random write results`() {
         val directory = temp.newFolder("spool-diagnostic")
 

@@ -50,6 +50,30 @@ class PlayerSettingsDataStoreSpoolModeTest {
     }
 
     @Test
+    fun `setting disk spool size and startup buffer persists with bounds`() = runTest {
+        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+
+        dataStore.setDiskSpoolSizeMb(2_048)
+        dataStore.setDiskSpoolStartupBufferMb(384)
+
+        val settings = dataStore.playerSettings.first()
+        assertEquals(2_048, settings.diskSpoolSizeMb)
+        assertEquals(384, settings.diskSpoolStartupBufferMb)
+    }
+
+    @Test
+    fun `disk spool startup buffer is clamped to spool size`() = runTest {
+        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+
+        dataStore.setDiskSpoolSizeMb(512)
+        dataStore.setDiskSpoolStartupBufferMb(2_048)
+
+        val settings = dataStore.playerSettings.first()
+        assertEquals(512, settings.diskSpoolSizeMb)
+        assertEquals(512, settings.diskSpoolStartupBufferMb)
+    }
+
+    @Test
     fun `changing disk spool storage location clears diagnostic result`() = runTest {
         val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
 

@@ -251,6 +251,8 @@ data class PlayerSettings(
     val vodCacheSizeMb: Int = DEFAULT_VOD_CACHE_SIZE_MB,
     val vodCacheWarmAheadEnabled: Boolean = DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED,
     val progressivePlaybackDiskMode: ProgressivePlaybackDiskMode = ProgressivePlaybackDiskMode.OFF,
+    val diskSpoolSizeMb: Int = DEFAULT_DISK_SPOOL_SIZE_MB,
+    val diskSpoolStartupBufferMb: Int = DEFAULT_DISK_SPOOL_STARTUP_BUFFER_MB,
     val diskSpoolStorageLocation: DiskSpoolStorageLocation = DiskSpoolStorageLocation.BUILTIN,
     val spoolStorageProbeResultJson: String? = null,
     val useParallelConnections: Boolean = DEFAULT_USE_PARALLEL_CONNECTIONS,
@@ -263,6 +265,11 @@ data class PlayerSettings(
         const val DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED = true
         const val MIN_VOD_CACHE_SIZE_MB = 100
         const val MAX_VOD_CACHE_SIZE_MB = 65_536
+        const val DEFAULT_DISK_SPOOL_SIZE_MB = 512
+        const val DEFAULT_DISK_SPOOL_STARTUP_BUFFER_MB = 100
+        const val MIN_DISK_SPOOL_SIZE_MB = 256
+        const val MAX_DISK_SPOOL_SIZE_MB = 65_536
+        const val MIN_DISK_SPOOL_STARTUP_BUFFER_MB = 0
         val DEFAULT_VOD_CACHE_SIZE_MODE: VodCacheSizeMode = VodCacheSizeMode.ON
         const val DEFAULT_USE_PARALLEL_CONNECTIONS = true
         const val DEFAULT_PARALLEL_CONNECTION_COUNT = 2
@@ -536,6 +543,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val vodCacheSizeMbKey = intPreferencesKey("vod_cache_size_mb")
     private val vodCacheWarmAheadEnabledKey = booleanPreferencesKey("vod_cache_warm_ahead_enabled")
     private val progressivePlaybackDiskModeKey = stringPreferencesKey("progressive_playback_disk_mode")
+    private val diskSpoolSizeMbKey = intPreferencesKey("disk_spool_size_mb")
+    private val diskSpoolStartupBufferMbKey = intPreferencesKey("disk_spool_startup_buffer_mb")
     private val diskSpoolStorageLocationKey = stringPreferencesKey("disk_spool_storage_location")
     private val spoolStorageProbeResultJsonKey = stringPreferencesKey("spool_storage_probe_result_json")
     private val useParallelConnectionsKey = booleanPreferencesKey("use_parallel_connections")
@@ -847,6 +856,18 @@ class PlayerSettingsDataStore @Inject constructor(
                 progressivePlaybackDiskMode = parseProgressivePlaybackDiskMode(
                     prefs[progressivePlaybackDiskModeKey]
                 ),
+                diskSpoolSizeMb = (prefs[diskSpoolSizeMbKey] ?: PlayerSettings.DEFAULT_DISK_SPOOL_SIZE_MB)
+                    .coerceIn(PlayerSettings.MIN_DISK_SPOOL_SIZE_MB, PlayerSettings.MAX_DISK_SPOOL_SIZE_MB),
+                diskSpoolStartupBufferMb = (prefs[diskSpoolStartupBufferMbKey]
+                    ?: PlayerSettings.DEFAULT_DISK_SPOOL_STARTUP_BUFFER_MB)
+                    .coerceIn(
+                        PlayerSettings.MIN_DISK_SPOOL_STARTUP_BUFFER_MB,
+                        (prefs[diskSpoolSizeMbKey] ?: PlayerSettings.DEFAULT_DISK_SPOOL_SIZE_MB)
+                            .coerceIn(
+                                PlayerSettings.MIN_DISK_SPOOL_SIZE_MB,
+                                PlayerSettings.MAX_DISK_SPOOL_SIZE_MB
+                            )
+                    ),
                 diskSpoolStorageLocation = parseDiskSpoolStorageLocation(
                     prefs[diskSpoolStorageLocationKey]
                 ),
@@ -1657,6 +1678,32 @@ class PlayerSettingsDataStore @Inject constructor(
             if (mode == ProgressivePlaybackDiskMode.SPOOL) {
                 prefs[vodCacheSizeModeKey] = VodCacheSizeMode.OFF.name
             }
+        }
+    }
+
+    suspend fun setDiskSpoolSizeMb(mb: Int) {
+        store().edit { prefs ->
+            val normalized = mb.coerceIn(
+                PlayerSettings.MIN_DISK_SPOOL_SIZE_MB,
+                PlayerSettings.MAX_DISK_SPOOL_SIZE_MB
+            )
+            prefs[diskSpoolSizeMbKey] = normalized
+            val currentStartup = (prefs[diskSpoolStartupBufferMbKey]
+                ?: PlayerSettings.DEFAULT_DISK_SPOOL_STARTUP_BUFFER_MB)
+            if (currentStartup > normalized) {
+                prefs[diskSpoolStartupBufferMbKey] = normalized
+            }
+        }
+    }
+
+    suspend fun setDiskSpoolStartupBufferMb(mb: Int) {
+        store().edit { prefs ->
+            val currentSpoolSize = (prefs[diskSpoolSizeMbKey] ?: PlayerSettings.DEFAULT_DISK_SPOOL_SIZE_MB)
+                .coerceIn(PlayerSettings.MIN_DISK_SPOOL_SIZE_MB, PlayerSettings.MAX_DISK_SPOOL_SIZE_MB)
+            prefs[diskSpoolStartupBufferMbKey] = mb.coerceIn(
+                PlayerSettings.MIN_DISK_SPOOL_STARTUP_BUFFER_MB,
+                currentSpoolSize
+            )
         }
     }
 

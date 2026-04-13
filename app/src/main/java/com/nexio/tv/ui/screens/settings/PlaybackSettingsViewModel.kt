@@ -362,6 +362,14 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setProgressivePlaybackDiskMode(mode)
     }
 
+    suspend fun setDiskSpoolSizeMb(mb: Int) {
+        playerSettingsDataStore.setDiskSpoolSizeMb(mb)
+    }
+
+    suspend fun setDiskSpoolStartupBufferMb(mb: Int) {
+        playerSettingsDataStore.setDiskSpoolStartupBufferMb(mb)
+    }
+
     suspend fun setDiskSpoolStorageLocation(location: DiskSpoolStorageLocation) {
         playerSettingsDataStore.setDiskSpoolStorageLocation(location)
     }
@@ -414,10 +422,17 @@ class PlaybackSettingsViewModel @Inject constructor(
                 val shouldContinue = {
                     coroutineContext.isActive && !Thread.currentThread().isInterrupted
                 }
+                val randomWriteEnabled = settings.useParallelConnections
+                val diagnosticTotalBytes = DiskSpoolStorageDiagnostic.resolveDefaultTotalBytes(
+                    availableBytes = spoolDirectory.usableSpace,
+                    randomWriteEnabled = randomWriteEnabled
+                )
                 val result = diskSpoolStorageProbeRunnerForTesting?.invoke(spoolDirectory, shouldContinue)
                     ?: DiskSpoolStorageDiagnostic(
                         directory = spoolDirectory,
-                        randomWriteEnabled = settings.useParallelConnections,
+                        totalBytes = diagnosticTotalBytes,
+                        readCachePurgeBytes = DiskSpoolStorageDiagnostic.resolveDefaultReadCachePurgeBytes(),
+                        randomWriteEnabled = randomWriteEnabled,
                         shouldContinue = shouldContinue
                     ).run()
                 coroutineContext.ensureActive()

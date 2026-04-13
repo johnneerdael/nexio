@@ -11,18 +11,23 @@ import java.util.concurrent.atomic.AtomicReference
 
 internal class DiskSpoolStorageDiagnostic(
     private val directory: File,
-    private val totalBytes: Long = 512L * 1024L * 1024L,
+    private val totalBytes: Long = DEFAULT_TOTAL_BYTES,
     private val sequentialBlockBytes: Int = 1024 * 1024,
     private val randomBlockBytes: Int = 4 * 1024,
     private val randomWriteEnabled: Boolean,
-    private val readCachePurgeBytes: Long = totalBytes,
+    private val readCachePurgeBytes: Long = minOf(totalBytes, DEFAULT_READ_CACHE_PURGE_BYTES),
     private val randomSeed: Long = System.nanoTime(),
     private val nowMs: () -> Long = { System.currentTimeMillis() },
     private val shouldContinue: () -> Boolean = { !Thread.currentThread().isInterrupted },
-    private val availableBytesProvider: (File) -> Long = { it.usableSpace }
+    private val availableBytesProvider: (File) -> Long = { it.usableSpace },
+    private val concurrentJoinTimeoutMs: Long = DEFAULT_CONCURRENT_JOIN_TIMEOUT_MS
 ) {
     companion object {
         private const val DIAGNOSTIC_PREFIX = "spool-diagnostic-"
+        private const val DEFAULT_TOTAL_BYTES = 128L * 1024L * 1024L
+        private const val MIN_TOTAL_BYTES = 32L * 1024L * 1024L
+        private const val DEFAULT_READ_CACHE_PURGE_BYTES = 32L * 1024L * 1024L
+        private const val DEFAULT_CONCURRENT_JOIN_TIMEOUT_MS = 30_000L
 
         fun cleanupStaleDiagnosticFiles(directory: File) {
             directory.listFiles()?.forEach { file ->
@@ -30,6 +35,27 @@ internal class DiskSpoolStorageDiagnostic(
                     file.delete()
                 }
             }
+        }
+
+        fun resolveDefaultTotalBytes(availableBytes: Long, randomWriteEnabled: Boolean): Long {
+            val availablePerFile = availableBytes
+                .coerceAtLeast(0L)
+                .div(requiredFileCount(randomWriteEnabled))
+            return minOf(DEFAULT_TOTAL_BYTES, availablePerFile).coerceAtLeast(MIN_TOTAL_BYTES)
+        }
+
+        fun resolveDefaultReadCachePurgeBytes(): Long = DEFAULT_READ_CACHE_PURGE_BYTES
+
+        internal fun resolveDefaultTotalBytesForTesting(
+            availableBytes: Long,
+            randomWriteEnabled: Boolean
+        ): Long = resolveDefaultTotalBytes(availableBytes, randomWriteEnabled)
+
+        internal fun resolveDefaultReadCachePurgeBytesForTesting(): Long =
+            resolveDefaultReadCachePurgeBytes()
+
+        private fun requiredFileCount(randomWriteEnabled: Boolean): Long {
+            return if (randomWriteEnabled) 3L else 2L
         }
     }
 
@@ -264,11 +290,12 @@ internal class DiskSpoolStorageDiagnostic(
         }
         writer.name = "DiskSpoolDiagnosticWriter"
         reader.name = "DiskSpoolDiagnosticReader"
+        writer.isDaemon = true
+        reader.isDaemon = true
         writer.start()
         reader.start()
         start.countDown()
-        writer.join()
-        reader.join()
+        joinConcurrentWorkers(writer, reader)
         failure.get()?.let { throw it }
         return ConcurrentResult(
             writeMbps = mbps(writeBytes, writeElapsedNs),
@@ -276,6 +303,23 @@ internal class DiskSpoolStorageDiagnostic(
             p99ReadLatencyMs = readTiming.p99Ms(),
             maxReadStallMs = readTiming.maxMs()
         )
+    }
+
+    private fun joinConcurrentWorkers(writer: Thread, reader: Thread) {
+        val safeTimeoutMs = concurrentJoinTimeoutMs.coerceAtLeast(1L)
+        val deadlineMs = SystemClock.elapsedRealtime() + safeTimeoutMs
+        while (writer.isAlive || reader.isAlive) {
+            ensureRunning()
+            val remainingMs = deadlineMs - SystemClock.elapsedRealtime()
+            if (remainingMs <= 0L) {
+                writer.interrupt()
+                reader.interrupt()
+                throw IOException("Timed out waiting for disk spool storage diagnostic workers")
+            }
+            val waitMs = minOf(remainingMs, 50L)
+            if (writer.isAlive) writer.join(waitMs)
+            if (reader.isAlive) reader.join(1L)
+        }
     }
 
     private fun timedNs(block: () -> Unit): Long {
@@ -291,9 +335,7 @@ internal class DiskSpoolStorageDiagnostic(
     }
 
     private fun requiredBytes(): Long {
-        var fileCount = 2L
-        if (randomWriteEnabled) fileCount += 1L
-        return totalBytes * fileCount
+        return totalBytes * requiredFileCount(randomWriteEnabled)
     }
 
     private fun ensureCapacity() {

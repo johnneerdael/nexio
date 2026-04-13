@@ -23,6 +23,20 @@ class DiskSpoolStorageResolverTest {
     }
 
     @Test
+    fun `builtin directory prefers device protected cache over install location cache`() {
+        val installCacheDir = temp.newFolder("install-cache")
+        val deviceCacheDir = temp.newFolder("device-cache")
+
+        assertEquals(
+            File(deviceCacheDir, "player_disk_spool"),
+            DiskSpoolStorageResolver.builtinSpoolDirectory(
+                cacheDir = installCacheDir,
+                deviceProtectedCacheDir = deviceCacheDir
+            )
+        )
+    }
+
+    @Test
     fun `external directory uses first mounted removable app cache directory`() {
         val primary = temp.newFolder("primary")
         val usb = temp.newFolder("usb")

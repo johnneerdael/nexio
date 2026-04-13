@@ -9,6 +9,22 @@ import org.junit.Test
 
 class PlaybackBufferNetworkSettingsTest {
     @Test
+    fun diskSpoolSizeMax_reservesHeadroomFromAvailableStorage() {
+        assertEquals(
+            1_536,
+            resolveDiskSpoolSizeMaxMb(2_048L * 1024L * 1024L)
+        )
+    }
+
+    @Test
+    fun diskSpoolSizeMax_keepsSliderRangeValidWhenStorageIsBelowMinimum() {
+        assertEquals(
+            256,
+            resolveDiskSpoolSizeMaxMb(128L * 1024L * 1024L)
+        )
+    }
+
+    @Test
     fun parallelConnectionsSubtitle_warnsWhenDiskSpoolAndParallelAreEnabled() {
         assertEquals(
             ParallelConnectionsSubtitle.WarningForDiskSpool,
