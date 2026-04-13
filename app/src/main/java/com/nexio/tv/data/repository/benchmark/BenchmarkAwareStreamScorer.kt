@@ -311,7 +311,7 @@ class BenchmarkAwareStreamScorer internal constructor(
         showMode: Boolean
     ): EitherSuccessOrReject<ShadowStreamDecision> {
         val parsed = item.parsed
-        val sizeBytes = parsed.sizeBytes
+        val sizeBytes = item.effectiveSizeBytes()
         if (sizeBytes == null || sizeBytes <= 0L) {
             return EitherSuccessOrReject.reject(ShadowRejectReason.MISSING_SIZE)
         }
@@ -418,7 +418,7 @@ class BenchmarkAwareStreamScorer internal constructor(
         manualBitrateCap: Double
     ): EitherSuccessOrReject<ShadowStreamDecision> {
         val parsed = item.parsed
-        val sizeBytes = parsed.sizeBytes
+        val sizeBytes = item.effectiveSizeBytes()
         if (sizeBytes == null || sizeBytes <= 0L) {
             return EitherSuccessOrReject.reject(ShadowRejectReason.MISSING_SIZE)
         }
@@ -583,13 +583,9 @@ class BenchmarkAwareStreamScorer internal constructor(
         val audioBasePoints = config.contentRewards.audio.getValue(audioDecision.effectiveTier)
         val audioPoints = if (audioDecision.supported) audioBasePoints else -audioBasePoints
 
-        val releaseTypePoints = config.contentRewards.releaseType.getOrDefault(releaseType, 0)
+        val releaseTypePoints = config.contentRewards.releaseType?.getOrDefault(releaseType, 0) ?: 0
 
-        val resolutionPoints = if (device != null) {
-            config.contentRewards.resolution.getOrDefault(resolutionTier, 0)
-        } else {
-            config.contentRewards.resolution.getOrDefault(resolutionTier, 0)
-        }
+        val resolutionPoints = config.contentRewards.resolution?.getOrDefault(resolutionTier, 0) ?: 0
 
         val isUhd = resolutionTier == ShadowResolutionTier.UHD_2160
         val hasHdr = hdrTier != ShadowHdrTier.SDR && hdrSupportTier != ShadowSupportLevel.UNSUPPORTED
@@ -1084,7 +1080,7 @@ private fun StreamCardModel.shadowParsedFacts(request: ShadowRequestContext): Sh
         serviceId = shadowServiceId(),
         filename = shadowFilename(),
         folderName = parsed.folderName?.trim()?.takeIf { it.isNotBlank() },
-        sizeBytes = parsed.sizeBytes,
+        sizeBytes = effectiveSizeBytes(),
         durationMs = shadowRuntimeMs(request),
         runtimeSource = shadowRuntimeSource(request),
         resolution = parsed.resolution,
@@ -1097,6 +1093,12 @@ private fun StreamCardModel.shadowParsedFacts(request: ShadowRequestContext): Sh
         releaseGroup = parsed.releaseGroup,
         cached = parsed.isCached
     )
+}
+
+private fun StreamCardModel.effectiveSizeBytes(): Long? {
+    return parsed.sizeBytes?.takeIf { it > 0L }
+        ?: parsed.preservedMetadata.videoSize?.takeIf { it > 0L }
+        ?: stream.behaviorHints?.videoSize?.takeIf { it > 0L }
 }
 
 private fun StreamCardModel.shadowStreamKey(): String {

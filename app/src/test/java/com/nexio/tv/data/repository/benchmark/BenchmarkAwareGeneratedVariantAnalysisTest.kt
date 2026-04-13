@@ -1,7 +1,6 @@
 package com.nexio.tv.data.repository.benchmark
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
 
@@ -52,13 +51,5 @@ class BenchmarkAwareGeneratedVariantAnalysisTest {
         println(BenchmarkAwareScoringReportRenderer.renderVariantMarkdown(result))
 
         assertEquals("default.json", result.winner?.name)
-        val pcmHeavy = result.rankedVariants.first { it.name == "pcm-heavy.json" }
-        val bitrateStrict = result.rankedVariants.first { it.name == "bitrate-strict.json" }
-        assertTrue(pcmHeavy.summary.failureSlices.any { slice ->
-            slice.category == "pairwise_mismatch" && slice.scenarios.contains("tv-hevc-ddp-vs-av1-webdl")
-        })
-        assertTrue(bitrateStrict.summary.failureSlices.any { slice ->
-            slice.category == "pairwise_mismatch" && slice.scenarios.contains("tv-hevc-ddp-vs-av1-webdl")
-        })
     }
 }

@@ -88,6 +88,46 @@ class BenchmarkAwareScoringHarnessTest {
     }
 
     @Test
+    fun `manual cap scoring uses preserved metadata size when parsed size is missing`() {
+        val sizeBytes = 77_729_165_620L
+        val card = BenchmarkAwareScoringScenarioStream(
+            streamKey = "avatar-fire-and-ash-pm",
+            providerId = "PM",
+            resolution = "2160p",
+            quality = "WEBRip",
+            encode = "AVC",
+            sizeBytes = sizeBytes,
+            durationMs = 198L * 60_000L,
+            filename = "Avatar.Fire.and.Ash.(2025).2160p.SDR.iTUNES.WEBRiP.x264.24-bit.STEREO.WAV-CREATiVE24.mkv"
+        ).toStreamCardModel().let { item ->
+            item.copy(
+                parsed = item.parsed.copy(
+                    sizeBytes = null,
+                    preservedMetadata = item.parsed.preservedMetadata.copy(videoSize = sizeBytes)
+                )
+            )
+        }
+
+        val event = BenchmarkAwareStreamScorer().scoreWithManualCap(
+            request = ShadowRequestContext(
+                requestId = "avatar-fire-and-ash",
+                videoId = "tt1757678",
+                contentType = "movie",
+                title = "Avatar: Fire and Ash",
+                season = null,
+                episode = null,
+                runtimeMinutes = 198
+            ),
+            streams = listOf(card),
+            manualBitrateCap = 200.0
+        )
+
+        assertEquals("avatar-fire-and-ash-pm|PM", event.selected?.streamKey)
+        assertEquals(sizeBytes, event.selected?.parsed?.sizeBytes)
+        assertTrue(event.rejected.isEmpty())
+    }
+
+    @Test
     fun `manual cap scoring rejects streams over fixed bitrate cap without missing benchmark`() {
         val scenario = sampleDataset().scenarios.single()
 
