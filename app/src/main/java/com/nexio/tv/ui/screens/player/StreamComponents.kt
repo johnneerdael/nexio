@@ -53,9 +53,12 @@ import com.nexio.tv.core.stream.StreamCardModel
 import com.nexio.tv.core.stream.StreamFeatureFlags
 import com.nexio.tv.core.stream.StreamPresentationEngine
 import com.nexio.tv.domain.model.Stream
+import com.nexio.tv.ui.components.FormatterBadgeRow
+import com.nexio.tv.ui.components.InlineChipText
+import com.nexio.tv.ui.components.InlineChipTokenRegistry
 import com.nexio.tv.ui.components.InlineIconText
-import com.nexio.tv.ui.components.StreamBadgeKind
 import com.nexio.tv.ui.components.StreamDetailLines
+import com.nexio.tv.ui.components.StreamTypeChip
 import com.nexio.tv.ui.components.SourceChipItem
 import com.nexio.tv.ui.components.SourceChipStatus
 import com.nexio.tv.ui.components.SourceStatusFilterChip
@@ -139,136 +142,111 @@ internal fun StreamItem(
         ),
         scale = CardDefaults.scale(focusedScale = 1.04f)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                modifier = Modifier.weight(0.8f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                Column(
+                    modifier = Modifier.weight(0.8f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    InlineIconText(
-                        text = item.title,
-                        style = MaterialTheme.typography.bodyMedium.copy(
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val titleStyle = MaterialTheme.typography.bodyMedium.copy(
                             fontWeight = FontWeight.Bold,
                             color = NexioColors.TextPrimary
-                        ),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    if (isCurrentStream) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(NexioColors.Primary.copy(alpha = 0.2f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.sources_playing),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = NexioColors.Primary
+                        )
+                        if (InlineChipTokenRegistry.containsToken(item.title)) {
+                            InlineChipText(
+                                text = item.title,
+                                style = titleStyle,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } else {
+                            InlineIconText(
+                                text = item.title,
+                                style = titleStyle,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
-                    }
-                }
 
-                item.subtitle?.let { description ->
-                    if (description != item.title) {
-                        Text(
-                            text = description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = NexioTheme.extendedColors.textSecondary
-                        )
-                    }
-                }
-
-                StreamDetailLines(
-                    detailLines = item.detailLines,
-                    colorStyle = MaterialTheme.typography.bodySmall.copy(
-                        color = NexioTheme.extendedColors.textSecondary
-                    )
-                )
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    streamBadgeKinds(stream, item.parsed).forEach { badge ->
-                        when (badge) {
-                            StreamBadgeKind.CACHED -> {
-                                StreamTypeChip(
-                                    text = stringResource(R.string.stream_type_cached),
-                                    color = NexioColors.Success
-                                )
-                            }
-                            StreamBadgeKind.TORRENT -> {
-                                StreamTypeChip(
-                                    text = stringResource(R.string.stream_type_torrent),
-                                    color = NexioColors.Secondary
-                                )
-                            }
-                            StreamBadgeKind.YOUTUBE -> {
-                                StreamTypeChip(
-                                    text = stringResource(R.string.stream_type_youtube),
-                                    color = Color(0xFFFF0000)
-                                )
-                            }
-                            StreamBadgeKind.EXTERNAL -> {
-                                StreamTypeChip(
-                                    text = stringResource(R.string.stream_type_external),
+                        if (isCurrentStream) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(NexioColors.Primary.copy(alpha = 0.2f))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.sources_playing),
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = NexioColors.Primary
                                 )
                             }
                         }
                     }
+
+                    item.subtitle?.let { description ->
+                        if (description != item.title) {
+                            Text(
+                                text = description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = NexioTheme.extendedColors.textSecondary
+                            )
+                        }
+                    }
+
+                    StreamDetailLines(
+                        detailLines = item.detailLines,
+                        colorStyle = MaterialTheme.typography.bodySmall.copy(
+                            color = NexioTheme.extendedColors.textSecondary
+                        )
+                    )
+
+                    if (!item.hasFormatterChipTokens) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            streamBadgeKinds(stream, item.parsed).forEach { badge ->
+                                StreamTypeChip(badge)
+                            }
+                        }
+                    }
+                }
+
+                Column(
+                    modifier = Modifier.weight(0.2f),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    if (stream.addonLogo != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(stream.addonLogo)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = stream.addonName,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
                 }
             }
 
-            Column(
-                modifier = Modifier.weight(0.2f),
-                horizontalAlignment = Alignment.End
-            ) {
-                if (stream.addonLogo != null) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(stream.addonLogo)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = stream.addonName,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                        contentScale = ContentScale.Fit
-                    )
-                }
+            item.badgeRow?.let { badgeRow ->
+                FormatterBadgeRow(text = badgeRow)
             }
         }
-    }
-}
-
-@Composable
-private fun StreamTypeChip(
-    text: String,
-    color: Color
-) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(color.copy(alpha = 0.2f))
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            color = color
-        )
     }
 }
 
