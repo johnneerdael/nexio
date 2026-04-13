@@ -215,6 +215,22 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 safeAudioForcedStreamUrls.remove(url)
                 audioDisabledForcedStreamUrls.remove(url)
             }
+            // When disk spool is active, prior safe-audio / audio-disabled entries
+            // for this URL are false positives caused by spool data-delivery latency,
+            // not actual AudioTrack init failures.  Clear them so passthrough and
+            // normal track selection work correctly.
+            if (mediaSourceFactory.isDiskSpoolSessionActive()) {
+                val hadSafeAudio = safeAudioForcedStreamUrls.remove(url)
+                val hadAudioDisabled = audioDisabledForcedStreamUrls.remove(url)
+                if (hadSafeAudio || hadAudioDisabled) {
+                    Log.i(
+                        PlayerRuntimeController.TAG,
+                        "AUDIO_INIT: disk spool active; cleared stale safe-audio " +
+                            "flags for host=${Uri.parse(url).host ?: "unknown"} " +
+                            "(safeAudio=$hadSafeAudio audioDisabled=$hadAudioDisabled)"
+                    )
+                }
+            }
             val safeAudioModeEnabled =
                 !kodiCustomAudioSinkEnabled && safeAudioForcedStreamUrls.contains(url)
             val audioDisabledForStream =
@@ -778,7 +794,17 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         }
 
                         if (error.isStuckPlayingNoProgress()) {
-                            if (kodiCustomAudioSinkEnabled) {
+                            val stuckDiskSpoolActive = mediaSourceFactory.isDiskSpoolSessionActive()
+                            if (stuckDiskSpoolActive) {
+                                Log.i(
+                                    PlayerRuntimeController.TAG,
+                                    "Stuck player detected with disk spool active; stall is " +
+                                        "data-delivery latency, not audio failure — " +
+                                        "skipping safe audio recovery " +
+                                        "host=${currentStreamUrl.safeHost()} " +
+                                        "positionMs=$currentPosition"
+                                )
+                            } else if (kodiCustomAudioSinkEnabled) {
                                 Log.w(
                                     PlayerRuntimeController.TAG,
                                     "Stuck player detected with custom Kodi IEC AudioSink enabled; " +
@@ -1484,6 +1510,7 @@ private fun PlayerRuntimeController.maybeSchedulePostFirstFrameBufferingWatchdog
         val currentPosition = livePlayer.currentPosition.coerceAtLeast(0L)
         if (currentPosition > PlayerRuntimeController.POST_FIRST_FRAME_STUCK_POSITION_MS) return@launch
 
+        val diskSpoolActive = mediaSourceFactory.isDiskSpoolSessionActive()
         Log.w(
             PlayerRuntimeController.TAG,
             "POST_FIRST_FRAME_BUFFERING: stuck buffering after first frame " +
@@ -1491,8 +1518,17 @@ private fun PlayerRuntimeController.maybeSchedulePostFirstFrameBufferingWatchdog
                 "positionMs=$currentPosition " +
                 "safeAudio=$isSafeAudioModeActiveForCurrentPlayback " +
                 "audioDisabled=$isAudioDisabledForCurrentPlayback " +
+                "diskSpool=$diskSpoolActive " +
                 "host=${currentStreamUrl.safeHost()}"
         )
+        if (diskSpoolActive) {
+            Log.i(
+                PlayerRuntimeController.TAG,
+                "POST_FIRST_FRAME_BUFFERING: disk spool active; buffering stall is " +
+                    "data-delivery latency, not an audio init failure — skipping safe audio recovery"
+            )
+            return@launch
+        }
         handleAudioTrackInitializationFailure(
             kodiCustomAudioSinkEnabled = kodiCustomAudioSinkEnabled,
             fromPositionMs = currentPosition,
