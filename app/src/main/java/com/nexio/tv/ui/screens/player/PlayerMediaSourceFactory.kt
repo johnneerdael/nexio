@@ -35,8 +35,9 @@ import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
 import com.nexio.tv.data.local.VodCacheSizeMode
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolDataSource
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolSession
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageResolver
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolWriter
-import com.nexio.tv.ui.screens.player.spool.SpoolStoragePolicy
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import java.io.File
 import java.net.URLDecoder
@@ -94,11 +95,14 @@ internal class PlayerMediaSourceFactory(
         }
     var vodCacheSizeMb: Int = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB
     var progressivePlaybackDiskMode: ProgressivePlaybackDiskMode = ProgressivePlaybackDiskMode.OFF
+    var diskSpoolStorageLocation: DiskSpoolStorageLocation = DiskSpoolStorageLocation.BUILTIN
     internal var spoolStorageProbeResult: SpoolStorageProbeResult? = null
     var diskSpoolTargetBitrateMbps: Double? = null
     internal var diskSpoolAvailableBytesForTesting: Long? = null
     internal var diskSpoolWriterExecutorForTesting: Executor? = null
     internal var diskSpoolAfterRegistrationForTesting: (() -> Unit)? = null
+    internal var diskSpoolDirectoryResolverForTesting: ((Context, DiskSpoolStorageLocation) -> File?)? = null
+    internal var diskSpoolWriterProfileObserverForTesting: ((Int, Int) -> Unit)? = null
 
     init {
         cleanupDiskSpoolDirectory()
@@ -131,7 +135,12 @@ internal class PlayerMediaSourceFactory(
         val isHls = resolvedMimeType == MimeTypes.APPLICATION_M3U8
         val isDash = resolvedMimeType == MimeTypes.APPLICATION_MPD
         currentVodCacheResolvedUrl = null
+        val diskSpoolEligibleBySetting = progressivePlaybackDiskMode == ProgressivePlaybackDiskMode.SPOOL &&
+            !isHls &&
+            !isDash &&
+            shouldUseVodCache(url)
         val useVodCache = ENABLE_VOD_CACHE &&
+            !diskSpoolEligibleBySetting &&
             vodCacheSizeMode == VodCacheSizeMode.ON &&
             !isHls &&
             !isDash &&
@@ -384,8 +393,8 @@ internal class PlayerMediaSourceFactory(
     }
 
     private fun diskSpoolDirectoryOrNull(): File? {
-        val cacheDirectory = runCatching { context.cacheDir }.getOrNull() ?: return null
-        return File(cacheDirectory, DISK_SPOOL_DIR)
+        return diskSpoolDirectoryResolverForTesting?.invoke(context, diskSpoolStorageLocation)
+            ?: DiskSpoolStorageResolver.resolveSpoolDirectory(context, diskSpoolStorageLocation)
     }
 
     fun getVodCacheLogState(currentStreamUrl: String? = null): String {
@@ -693,7 +702,15 @@ internal class PlayerMediaSourceFactory(
     ): DataSource.Factory {
         parallelStartupPrefetchUnlocked.set(!(parallelConnectionsEnabled && !isHls && !isDash))
         activeReadBytePosition.set(0L)
-        createDiskSpoolFactoryIfEligible(url, isHls, isDash, requestHeaders)?.let { diskSpoolFactory ->
+        createDiskSpoolFactoryIfEligible(
+            url = url,
+            isHls = isHls,
+            isDash = isDash,
+            requestHeaders = requestHeaders,
+            parallelConnectionsEnabled = parallelConnectionsEnabled,
+            fallbackParallelConnectionCount = fallbackParallelConnectionCount,
+            fallbackParallelChunkSizeMb = fallbackParallelChunkSizeMb
+        )?.let { diskSpoolFactory ->
             currentWarmAheadUpstreamFactory = null
             return diskSpoolFactory
         }
@@ -753,33 +770,29 @@ internal class PlayerMediaSourceFactory(
         url: String,
         isHls: Boolean,
         isDash: Boolean,
-        requestHeaders: Map<String, String>
+        requestHeaders: Map<String, String>,
+        parallelConnectionsEnabled: Boolean,
+        fallbackParallelConnectionCount: Int,
+        fallbackParallelChunkSizeMb: Int
     ): DataSource.Factory? {
         if (progressivePlaybackDiskMode != ProgressivePlaybackDiskMode.SPOOL) return null
         if (isHls || isDash) return null
         if (!usesHttpUpstream(url)) return null
 
-        val result = spoolStorageProbeResult ?: return null
         val spoolDir = diskSpoolDirectoryOrNull() ?: return null
-        val spoolDirectoryPath = spoolDir.absolutePath
-        if (!SpoolStoragePolicy.isFresh(result, System.currentTimeMillis(), spoolDirectoryPath)) {
-            return null
-        }
-
-        val fallbackTargetBitrateMbps = SpoolStoragePolicy.targetBitrateMbps(
-            streamBitrateMbps = null,
-            userCapMbps = null
-        )
-        val targetBitrateMbps = maxOf(
-            fallbackTargetBitrateMbps,
-            diskSpoolTargetBitrateMbps
-                ?.takeIf { it.isFinite() && it > 0.0 }
-                ?: fallbackTargetBitrateMbps
-        )
-        if (!SpoolStoragePolicy.canSustain(result, targetBitrateMbps)) return null
 
         val requestedSpoolBytes = resolveRequestedDiskSpoolBytes()
         if (!hasDiskSpoolCapacity(spoolDir, requestedSpoolBytes)) return null
+        val diskSpoolProfile = if (parallelConnectionsEnabled) {
+            resolveParallelProviderProfiles(
+                url = url,
+                warmAheadEnabledForStream = false,
+                fallbackConnectionCount = fallbackParallelConnectionCount,
+                fallbackChunkSizeMb = fallbackParallelChunkSizeMb
+            ).playback
+        } else {
+            ParallelProviderProfile(connectionCount = 1, chunkSizeMb = SAFE_DEFAULT_PARALLEL_CHUNK_SIZE_MB)
+        }
 
         val spoolFile = File(
             spoolDir,
@@ -796,7 +809,7 @@ internal class PlayerMediaSourceFactory(
             diskSpoolLifecycleGeneration
         }
         val writerFuture = runCatching {
-            scheduleDiskSpoolWriter(url, session, requestedSpoolBytes, requestHeaders)
+            scheduleDiskSpoolWriter(url, session, requestedSpoolBytes, requestHeaders, diskSpoolProfile)
         }.getOrElse { error ->
             Log.w(TAG, "Disk spool writer scheduling failed; falling back to normal progressive upstream", error)
             closeDiskSpoolSession(session, reason = "writer scheduling failure")
@@ -837,15 +850,19 @@ internal class PlayerMediaSourceFactory(
         url: String,
         session: DiskSpoolSession,
         requestedSpoolBytes: Long,
-        requestHeaders: Map<String, String>
+        requestHeaders: Map<String, String>,
+        profile: ParallelProviderProfile
     ): Future<*>? {
-        val chunkBytes = selectedDiskSpoolChunkBytes()
+        val chunkBytes = profile.chunkSizeMb * 1024 * 1024
+        diskSpoolWriterProfileObserverForTesting?.invoke(profile.connectionCount, chunkBytes)
         val task = Runnable {
             runCatching {
                 DiskSpoolWriter(
                     playbackOkHttpClient,
                     requestHeaders = requestHeaders,
-                    chunkBytes = chunkBytes
+                    chunkBytes = chunkBytes,
+                    parallelConnections = profile.connectionCount,
+                    startupPriorityBytes = DISK_SPOOL_STARTUP_PRIORITY_BYTES
                 )
                     .downloadUntil(url, session, requestedSpoolBytes)
             }.onFailure { error ->
@@ -1108,6 +1125,7 @@ internal class PlayerMediaSourceFactory(
         private const val VOD_CACHE_DIR = "player_vod_cache"
         private const val DISK_SPOOL_DIR = "player_disk_spool"
         private const val DEFAULT_DISK_SPOOL_BYTES = 512L * 1024L * 1024L
+        private const val DISK_SPOOL_STARTUP_PRIORITY_BYTES = 100L * 1024L * 1024L
         private const val DISK_SPOOL_FREE_SPACE_RESERVE_BYTES = 512L * 1024L * 1024L
         private const val VOD_CACHE_FREE_SPACE_RESERVE_BYTES = 1024L * 1024L * 1024L
         private const val MIN_RUNTIME_VOD_CACHE_BYTES = 1L * 1024L * 1024L
