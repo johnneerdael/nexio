@@ -1,0 +1,118 @@
+package com.nexio.tv.ui.screens.player.spool
+
+import android.net.Uri
+import androidx.media3.common.C
+import androidx.media3.datasource.DataSpec
+import java.io.File
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
+import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.Dispatcher
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
+import okio.Buffer
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+@RunWith(RobolectricTestRunner::class)
+class DiskSpoolPipelineTest {
+    @get:Rule
+    val temp = TemporaryFolder()
+
+    @Test
+    fun `reads while writer fills spool and propagates metadata`() {
+        val content = ByteArray(128 * 1024) { (it % 251).toByte() }
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val rangeHeader = request.getHeader("Range")
+                return if (rangeHeader == null) {
+                    MockResponse().setResponseCode(200)
+                } else {
+                    rangedResponse(content, rangeHeader)
+                }
+            }
+        }
+        server.start()
+
+        val session = DiskSpoolSession(
+            File(temp.root, "movie.spool"),
+            capacityBytes = 256 * 1024L,
+            waitTimeoutMs = 2_000L
+        )
+        val writer = DiskSpoolWriter(
+            OkHttpClient.Builder()
+                .readTimeout(1, TimeUnit.SECONDS)
+                .build(),
+            chunkBytes = 32 * 1024,
+            ioBufferBytes = 8 * 1024
+        )
+        val uri = Uri.parse(server.url("/movie.bin").toString())
+        val dataSource = DiskSpoolDataSource(
+            session = session,
+            uri = uri,
+            contentLength = C.LENGTH_UNSET.toLong()
+        )
+        val failure = AtomicReference<Throwable?>(null)
+        val writerThread = Thread {
+            try {
+                writer.downloadUntil(
+                    uri.toString(),
+                    session,
+                    targetFrontierBytes = content.size.toLong()
+                )
+            } catch (throwable: Throwable) {
+                failure.set(throwable)
+            }
+        }
+
+        try {
+            assertEquals(C.LENGTH_UNSET.toLong(), dataSource.open(DataSpec(uri)))
+
+            writerThread.start()
+
+            val actual = ByteArray(content.size)
+            var totalRead = 0
+            while (totalRead < actual.size) {
+                val read = dataSource.read(actual, totalRead, actual.size - totalRead)
+                if (read == C.RESULT_END_OF_INPUT) {
+                    break
+                }
+                totalRead += read
+            }
+
+            writerThread.join(5_000L)
+
+            assertEquals(null, failure.get())
+            assertEquals(content.size, totalRead)
+            assertArrayEquals(content, actual)
+            assertEquals(content.size.toLong(), session.contentLengthBytes())
+        } finally {
+            dataSource.close()
+            session.close()
+            server.shutdown()
+        }
+    }
+
+    private fun rangedResponse(content: ByteArray, rangeHeader: String): MockResponse {
+        val match = Regex("""bytes=(\d+)-(\d+)""").matchEntire(rangeHeader)
+            ?: error("Unexpected Range header: $rangeHeader")
+        val start = match.groupValues[1].toInt()
+        val requestedEnd = match.groupValues[2].toInt()
+        val endExclusive = minOf(requestedEnd + 1, content.size)
+        val length = endExclusive - start
+
+        return MockResponse()
+            .setResponseCode(206)
+            .setHeader("Accept-Ranges", "bytes")
+            .setHeader("Content-Range", "bytes $start-${endExclusive - 1}/${content.size}")
+            .setHeader("Content-Length", length)
+            .setBody(Buffer().write(content, start, length))
+    }
+}
