@@ -1,0 +1,278 @@
+package com.nexio.tv.ui.screens.player.spool
+
+import android.os.SystemClock
+import androidx.media3.common.C
+import java.io.Closeable
+import java.io.File
+import java.io.IOException
+import java.io.RandomAccessFile
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.min
+
+internal class DiskSpoolSession(
+    spoolFile: File,
+    private val capacityBytes: Long,
+    private val waitTimeoutMs: Long = 10_000L
+) : Closeable {
+    private data class Range(
+        val start: Long,
+        val endExclusive: Long
+    )
+
+    private val lock = java.lang.Object()
+    private val closed = AtomicBoolean(false)
+    private val windowStart = AtomicLong(0L)
+    private val frontier = AtomicLong(0L)
+    private val priorityPosition = AtomicLong(C.TIME_UNSET.toLong())
+    private val contentLength = AtomicLong(C.LENGTH_UNSET.toLong())
+    private val supportsRangesFlag = AtomicBoolean(false)
+    private val ranges = mutableListOf<Range>()
+
+    private var writer: RandomAccessFile? = null
+    private var reader: RandomAccessFile? = null
+    private val spoolFile: File = spoolFile
+
+    init {
+        require(capacityBytes > 0L) { "capacityBytes must be positive" }
+
+        spoolFile.parentFile?.mkdirs()
+        if (!spoolFile.exists()) {
+            spoolFile.createNewFile()
+        }
+
+        writer = RandomAccessFile(spoolFile, "rw").apply {
+            setLength(capacityBytes)
+        }
+        reader = RandomAccessFile(spoolFile, "r")
+    }
+
+    fun isClosed(): Boolean = closed.get()
+
+    fun contiguousFrontierBytes(): Long = frontier.get()
+
+    fun windowStartBytes(): Long = windowStart.get()
+
+    fun consumePriorityPosition(): Long = priorityPosition.getAndSet(C.TIME_UNSET.toLong())
+
+    fun contentLengthBytes(): Long = contentLength.get()
+
+    fun supportsRanges(): Boolean = supportsRangesFlag.get()
+
+    fun setSourceMetadata(contentLength: Long, supportsRanges: Boolean) {
+        this.contentLength.set(contentLength)
+        supportsRangesFlag.set(supportsRanges)
+    }
+
+    fun rebaseTo(position: Long) {
+        synchronized(lock) {
+            ensureOpenLocked()
+            ranges.clear()
+            windowStart.set(position)
+            frontier.set(position)
+            lock.notifyAll()
+        }
+    }
+
+    fun writeRange(start: Long, bytes: ByteArray, length: Int) {
+        require(start >= 0L) { "start must be non-negative" }
+        require(length >= 0) { "length must be non-negative" }
+        require(length <= bytes.size) { "length must be <= bytes.size" }
+        if (length == 0) return
+
+        synchronized(lock) {
+            ensureOpenLocked()
+            val currentWindowStart = windowStart.get()
+            if (start < currentWindowStart) {
+                return
+            }
+
+            val file = writer ?: throw IllegalStateException("Session closed")
+            var remaining = length
+            var logicalOffset = 0L
+            while (remaining > 0) {
+                val physicalOffset = (start + logicalOffset).mod(capacityBytes)
+                val chunkLength = min(remaining.toLong(), capacityBytes - physicalOffset).toInt()
+                file.seek(physicalOffset)
+                file.write(bytes, logicalOffset.toInt(), chunkLength)
+                remaining -= chunkLength
+                logicalOffset += chunkLength.toLong()
+            }
+
+            recordRangeLocked(start, start + length.toLong())
+            updateFrontierAndWindowLocked()
+            lock.notifyAll()
+        }
+    }
+
+    fun read(position: Long, buffer: ByteArray, offset: Int, length: Int): Int {
+        require(position >= 0L) { "position must be non-negative" }
+        require(offset >= 0) { "offset must be non-negative" }
+        require(length >= 0) { "length must be non-negative" }
+        require(offset <= buffer.size) { "offset must be <= buffer.size" }
+        require(length <= buffer.size - offset) { "offset + length must fit in buffer" }
+        if (length == 0) return 0
+
+        synchronized(lock) {
+            val startedAtMs = SystemClock.elapsedRealtime()
+            var remainingMs = waitTimeoutMs
+            while (true) {
+                if (closed.get()) {
+                    priorityPosition.set(position)
+                    return -1
+                }
+
+                val currentWindowStart = windowStart.get()
+                val currentFrontier = frontier.get()
+                if (position < currentWindowStart) {
+                    priorityPosition.set(position)
+                    return -1
+                }
+
+                if (position < currentFrontier) {
+                    val available = (currentFrontier - position).coerceAtMost(length.toLong()).toInt()
+                    readFullyLocked(position, buffer, offset, available)
+                    return available
+                }
+
+                val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
+                if (elapsedMs >= waitTimeoutMs || remainingMs <= 0L) {
+                    priorityPosition.set(position)
+                    return -1
+                }
+                val waitSliceMs = minOf(remainingMs, 50L)
+                val beforeWaitMs = SystemClock.elapsedRealtime()
+                try {
+                    lock.wait(waitSliceMs)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    priorityPosition.set(position)
+                    return -1
+                }
+                val afterWaitMs = SystemClock.elapsedRealtime()
+                remainingMs = if (afterWaitMs <= beforeWaitMs) {
+                    (remainingMs - waitSliceMs).coerceAtLeast(0L)
+                } else {
+                    (waitTimeoutMs - (afterWaitMs - startedAtMs)).coerceAtLeast(0L)
+                }
+            }
+        }
+    }
+
+    override fun close() {
+        val closeFailure = arrayListOf<IOException>()
+        synchronized(lock) {
+            if (closed.get()) {
+                return
+            }
+            closed.set(true)
+            lock.notifyAll()
+
+            try {
+                writer?.close()
+            } catch (throwable: IOException) {
+                closeFailure += throwable
+            } finally {
+                writer = null
+            }
+            try {
+                reader?.close()
+            } catch (throwable: IOException) {
+                closeFailure += throwable
+            } finally {
+                reader = null
+            }
+        }
+
+        if (spoolFile.exists() && !spoolFile.delete() && spoolFile.exists()) {
+            closeFailure += IOException("Unable to delete spool file: ${spoolFile.absolutePath}")
+        }
+
+        if (closeFailure.isNotEmpty()) {
+            val failure = closeFailure.first()
+            closeFailure.drop(1).forEach(failure::addSuppressed)
+            throw failure
+        }
+    }
+
+    private fun updateFrontierAndWindowLocked() {
+        val currentFrontier = computeFrontierLocked()
+        frontier.set(currentFrontier)
+        val nextWindowStart = maxOf(windowStart.get(), currentFrontier - capacityBytes)
+        windowStart.set(nextWindowStart)
+        pruneRangesLocked()
+    }
+
+    private fun computeFrontierLocked(): Long {
+        var current = windowStart.get()
+        for (range in ranges) {
+            if (range.endExclusive <= current) {
+                continue
+            }
+            if (range.start > current) {
+                break
+            }
+            current = maxOf(current, range.endExclusive)
+        }
+        return current
+    }
+
+    private fun recordRangeLocked(start: Long, endExclusive: Long) {
+        ranges.add(Range(start, endExclusive))
+        ranges.sortBy { it.start }
+
+        val merged = ArrayList<Range>(ranges.size)
+        for (range in ranges) {
+            val last = merged.lastOrNull()
+            if (last == null || range.start > last.endExclusive) {
+                merged.add(range)
+            } else {
+                merged[merged.lastIndex] = last.copy(endExclusive = maxOf(last.endExclusive, range.endExclusive))
+            }
+        }
+
+        ranges.clear()
+        ranges.addAll(merged)
+    }
+
+    private fun pruneRangesLocked() {
+        val currentWindowStart = windowStart.get()
+        if (ranges.isEmpty()) return
+
+        val retained = ranges.filter { it.endExclusive > currentWindowStart }
+        ranges.clear()
+        ranges.addAll(retained)
+    }
+
+    private fun readFullyLocked(position: Long, buffer: ByteArray, offset: Int, length: Int) {
+        val file = reader ?: throw IllegalStateException("Session closed")
+        var remaining = length
+        var logicalOffset = 0L
+        while (remaining > 0) {
+            val physicalOffset = (position + logicalOffset).mod(capacityBytes)
+            val chunkLength = min(remaining.toLong(), capacityBytes - physicalOffset).toInt()
+            file.seek(physicalOffset)
+            var bytesRead = 0
+            while (bytesRead < chunkLength) {
+                val read = file.read(buffer, offset + logicalOffset.toInt() + bytesRead, chunkLength - bytesRead)
+                if (read < 0) {
+                    throw IOException("Unexpected EOF while reading spool")
+                }
+                bytesRead += read
+            }
+            remaining -= chunkLength
+            logicalOffset += chunkLength.toLong()
+        }
+    }
+
+    private fun ensureOpenLocked() {
+        if (closed.get()) {
+            throw IllegalStateException("Session closed")
+        }
+    }
+}
+
+private fun Long.mod(divisor: Long): Long {
+    val result = this % divisor
+    return if (result >= 0L) result else result + divisor
+}
