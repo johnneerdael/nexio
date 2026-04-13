@@ -6,8 +6,8 @@ import java.util.Locale
 import kotlin.math.roundToLong
 
 object AioStrictStreamParser {
-    private val sizeRegex = Regex("""(?i)(\d+(?:\.\d+)?)\s?(KB|MB|GB|TB)""")
-    private val packageSizeRegex = Regex("""(?i)📦\s*(\d+(?:\.\d+)?)\s?(KB|MB|GB|TB)""")
+    private val sizeRegex = Regex("""(?i)(\d+(?:\.\d+)?)\s?(KiB|MiB|GiB|TiB|KB|MB|GB|TB)""")
+    private val packageSizeRegex = Regex("""(?i)📦\s*(\d+(?:\.\d+)?)\s?(KiB|MiB|GiB|TiB|KB|MB|GB|TB)""")
     private val yearRegex = Regex("""\b(19|20)\d{2}\b""")
     private val seedersRegex = Regex("""[👥👤]\s*(\d+)""")
     private val ageRegex = Regex("""(?i)(?:📅\s*)?(\d+[dhmy])\b""")
@@ -332,10 +332,10 @@ object AioStrictStreamParser {
         val value = groupValues[1].toDoubleOrNull() ?: return null
         val unit = groupValues[2].uppercase(Locale.US)
         val multiplier = when (unit) {
-            "KB" -> 1024.0
-            "MB" -> 1024.0 * 1024.0
-            "GB" -> 1024.0 * 1024.0 * 1024.0
-            "TB" -> 1024.0 * 1024.0 * 1024.0 * 1024.0
+            "KB", "KIB" -> 1024.0
+            "MB", "MIB" -> 1024.0 * 1024.0
+            "GB", "GIB" -> 1024.0 * 1024.0 * 1024.0
+            "TB", "TIB" -> 1024.0 * 1024.0 * 1024.0 * 1024.0
             else -> return null
         }
         return (value * multiplier).roundToLong()
