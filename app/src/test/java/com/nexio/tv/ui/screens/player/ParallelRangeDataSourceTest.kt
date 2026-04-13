@@ -110,6 +110,34 @@ class ParallelRangeDataSourceTest {
         }
     }
 
+    @Test(timeout = 5_000L)
+    fun `parallel range datasource diagnostic snapshot tracks chunks and close state`() {
+        val fixture = RangeServerFixture(
+            content = ByteArray(512 * 1024) { (it % 251).toByte() },
+            chunkSize = 64 * 1024L,
+            transientFailuresByChunkIndex = mutableMapOf()
+        )
+
+        fixture.use { server ->
+            val dataSource = server.createDataSource()
+            dataSource.open(server.dataSpec())
+            val buffer = ByteArray(32 * 1024)
+            val read = dataSource.read(buffer, 0, buffer.size)
+
+            assertTrue(read > 0)
+            val openSnapshot = dataSource.diagnosticSnapshotForTesting()
+            assertEquals(false, openSnapshot.closed)
+            assertEquals(4, openSnapshot.parallelConnections)
+            assertEquals(64 * 1024L, openSnapshot.chunkSizeBytes)
+            assertTrue(openSnapshot.scheduledChunks >= 0)
+
+            dataSource.close()
+            val closedSnapshot = dataSource.diagnosticSnapshotForTesting()
+            assertEquals(true, closedSnapshot.closed)
+            assertEquals(0, closedSnapshot.scheduledChunks)
+        }
+    }
+
     private fun readAll(
         dataSource: ParallelRangeDataSource,
         dataSpec: DataSpec
