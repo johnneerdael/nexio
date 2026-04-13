@@ -14,7 +14,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -29,7 +28,7 @@ class NexioApplication : Application(), ImageLoaderFactory {
         }
         appScope.launch {
             ObsoletePlaybackCacheCleanup.cleanup(cacheDir)
-            runPosterCacheCleanup()
+            retainPosterCacheOnStartup()
         }
     }
 
@@ -54,25 +53,8 @@ class NexioApplication : Application(), ImageLoaderFactory {
             .build()
     }
 
-    private fun runPosterCacheCleanup() {
-        val imageCacheDir = cacheDir.resolve("image_cache")
-        if (!imageCacheDir.exists()) return
-
-        val prefs = getSharedPreferences("poster_cache_gc", MODE_PRIVATE)
-        val now = System.currentTimeMillis()
-        val lastRun = prefs.getLong("last_run_ms", 0L)
-        val minIntervalMs = TimeUnit.HOURS.toMillis(6)
-        if (now - lastRun < minIntervalMs) return
-
-        val maxAgeMs = TimeUnit.HOURS.toMillis(72)
-        val cutoff = now - maxAgeMs
-        imageCacheDir.walkTopDown()
-            .filter { it.isFile }
-            .forEach { file ->
-                if (file.lastModified() < cutoff) {
-                    runCatching { file.delete() }
-                }
-            }
-        prefs.edit().putLong("last_run_ms", now).apply()
+    private fun retainPosterCacheOnStartup() {
+        // Home snapshots can reference older poster URLs after a cold start.
+        // Let Coil's size-bounded disk cache and metadata-driven evictions decide what to drop.
     }
 }
