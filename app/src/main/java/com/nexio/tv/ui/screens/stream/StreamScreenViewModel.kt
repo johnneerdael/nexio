@@ -32,6 +32,7 @@ import com.nexio.tv.data.repository.benchmark.BenchmarkAwareStreamScorer
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode
+import com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionEvent
 import com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionLogger
 import com.nexio.tv.data.repository.benchmark.ShadowRequestContext
 import com.nexio.tv.data.repository.benchmark.hasValidAutoplayBenchmarkFor
@@ -66,6 +67,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.LinkedHashMap
 import java.util.Locale
 import javax.inject.Inject
@@ -73,6 +76,8 @@ import javax.inject.Inject
 private const val TAG = "StreamScreenViewModel"
 private const val EMBEDDED_STREAM_GROUP_NAME = "Embedded Streams"
 private const val EMBEDDED_STREAM_FALLBACK_NAME = "Embed Stream"
+private const val DETERMINISTIC_AUTOPLAY_PREFLIGHT_CANDIDATE_LIMIT = 3
+private const val AUTOPLAY_PREFLIGHT_TIMEOUT_MS = 1_500
 @HiltViewModel
 class StreamScreenViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -1146,20 +1151,6 @@ class StreamScreenViewModel @Inject constructor(
                 autoplayMaxBitrateMbps = autoplayMaxBitrateMbps
             )
         }
-        val selectedKey = event.selected?.streamKey ?: return null
-        val selectedItem = eligibleStreams.firstOrNull { item ->
-            item.stream.wrappedOriginalStreamKey == selectedKey ||
-                item.parsed.exactDuplicateKey == selectedKey
-        } ?: return null
-        val fallbackItem = event.selectedNonDolbyVisionFallback
-            ?.streamKey
-            ?.let { fallbackKey ->
-                eligibleStreams.firstOrNull { item ->
-                    item.stream.wrappedOriginalStreamKey == fallbackKey ||
-                        item.parsed.exactDuplicateKey == fallbackKey
-                }
-            }
-
         val earlyFinishDecision = deterministicAutoplayEarlyFinishDecision(event.winners, request)
         if (!isFinalPass) {
             Log.i(
@@ -1174,9 +1165,27 @@ class StreamScreenViewModel @Inject constructor(
             return null
         }
 
+        val selectedCandidate = selectDeterministicAutoplayCandidate(
+            event = event,
+            eligibleStreams = eligibleStreams,
+            maxCandidates = DETERMINISTIC_AUTOPLAY_PREFLIGHT_CANDIDATE_LIMIT,
+            isPlayable = { item ->
+                val playable = AutoplayPlaybackUrlPreflight.isPlayable(item.stream.getStreamUrl())
+                if (!playable) {
+                    Log.i(
+                        TAG,
+                        "DETERMINISTIC_AUTOPLAY_PREFLIGHT_REJECTED " +
+                            "stream=${item.stream.wrappedOriginalStreamKey ?: item.parsed.exactDuplicateKey} " +
+                            "reason=stremthru_download_failed"
+                    )
+                }
+                playable
+            }
+        ) ?: return null
+
         return buildStreamPlaybackInfo(
-            item = selectedItem,
-            nonDolbyVisionFallback = fallbackItem
+            item = selectedCandidate.selectedItem,
+            nonDolbyVisionFallback = selectedCandidate.nonDolbyVisionFallbackItem
         )
     }
 
@@ -1540,6 +1549,87 @@ internal fun buildShadowAutoPlayDecisionEvent(
         autoplayMaxBitrateMbps = autoplayMaxBitrateMbps,
         elapsedMs = timingsMs
     )
+}
+
+internal data class DeterministicAutoplayCandidateSelection(
+    val selectedItem: StreamCardModel,
+    val nonDolbyVisionFallbackItem: StreamCardModel?
+)
+
+internal suspend fun selectDeterministicAutoplayCandidate(
+    event: ShadowAutoPlayDecisionEvent,
+    eligibleStreams: List<StreamCardModel>,
+    maxCandidates: Int = DETERMINISTIC_AUTOPLAY_PREFLIGHT_CANDIDATE_LIMIT,
+    isPlayable: suspend (StreamCardModel) -> Boolean
+): DeterministicAutoplayCandidateSelection? {
+    val candidates = event.winners
+        .take(maxCandidates.coerceAtLeast(1))
+        .mapNotNull { decision ->
+            eligibleStreams.firstOrNull { item ->
+                item.matchesShadowStreamKey(decision.streamKey)
+            }
+        }
+
+    for (candidate in candidates) {
+        if (!isPlayable(candidate)) continue
+        val fallback = event.selectedNonDolbyVisionFallback
+            ?.takeIf { candidate.matchesShadowStreamKey(event.selected?.streamKey) }
+            ?.streamKey
+            ?.let { fallbackKey ->
+                eligibleStreams.firstOrNull { item -> item.matchesShadowStreamKey(fallbackKey) }
+            }
+        return DeterministicAutoplayCandidateSelection(
+            selectedItem = candidate,
+            nonDolbyVisionFallbackItem = fallback
+        )
+    }
+
+    return null
+}
+
+private fun StreamCardModel.matchesShadowStreamKey(streamKey: String?): Boolean {
+    if (streamKey.isNullOrBlank()) return false
+    return stream.wrappedOriginalStreamKey == streamKey ||
+        parsed.exactDuplicateKey == streamKey
+}
+
+private object AutoplayPlaybackUrlPreflight {
+    suspend fun isPlayable(url: String?): Boolean {
+        val trimmed = url?.trim()?.takeIf { it.isNotBlank() } ?: return false
+        if (!isStremThruUrl(trimmed)) return true
+        return withContext(Dispatchers.IO) {
+            runCatching { !redirectsToDownloadFailedAsset(trimmed) }
+                .getOrElse { true }
+        }
+    }
+
+    private fun isStremThruUrl(url: String): Boolean {
+        return runCatching {
+            URL(url).host.orEmpty().lowercase(Locale.US).contains("stremthru")
+        }.getOrDefault(false)
+    }
+
+    private fun redirectsToDownloadFailedAsset(url: String): Boolean {
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = false
+            requestMethod = "HEAD"
+            connectTimeout = AUTOPLAY_PREFLIGHT_TIMEOUT_MS
+            readTimeout = AUTOPLAY_PREFLIGHT_TIMEOUT_MS
+        }
+        return try {
+            val code = connection.responseCode
+            if (code !in 300..399) return false
+            isStremThruDownloadFailedRedirectLocation(connection.getHeaderField("Location"))
+        } finally {
+            connection.disconnect()
+        }
+    }
+}
+
+internal fun isStremThruDownloadFailedRedirectLocation(location: String?): Boolean {
+    return location
+        ?.lowercase(Locale.US)
+        ?.contains("/static/download_failed.mp4") == true
 }
 
 private fun PlayerSettings.toStreamFeatureFlags(): StreamFeatureFlags {

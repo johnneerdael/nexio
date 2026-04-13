@@ -24,6 +24,7 @@ import com.nexio.tv.data.repository.benchmark.ShadowRequestContext
 import com.nexio.tv.data.repository.benchmark.ShadowStreamDecision
 import com.nexio.tv.data.repository.benchmark.ShadowTransportScoreBreakdown
 import com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionLogger
+import com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionEvent
 import com.nexio.tv.data.repository.benchmark.ShadowAutoplayCollectionUploader
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
@@ -43,6 +44,7 @@ import io.mockk.mockkStatic
 import io.mockk.runs
 import io.mockk.unmockkStatic
 import io.mockk.verify
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -427,6 +429,92 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         assertEquals(7L, event?.timingsMs)
     }
 
+    @Test
+    fun `deterministic autoplay candidate selection skips failed primary and tries next ranked winner`() = runBlocking {
+        val cards = listOf(
+            scenarioCard("primary", providerId = "RD"),
+            scenarioCard("secondary", providerId = "PM"),
+            scenarioCard("tertiary", providerId = "RD")
+        )
+        val event = autoplayDecisionEvent(
+            winners = listOf(
+                remuxWinner("primary", DebridBenchmarkProvider.REAL_DEBRID, 60.0, "Primary.2160p.REMUX.mkv"),
+                remuxWinner("secondary", DebridBenchmarkProvider.PREMIUMIZE, 55.0, "Secondary.2160p.REMUX.mkv"),
+                remuxWinner("tertiary", DebridBenchmarkProvider.REAL_DEBRID, 50.0, "Tertiary.2160p.REMUX.mkv")
+            ),
+            selected = remuxWinner("primary", DebridBenchmarkProvider.REAL_DEBRID, 60.0, "Primary.2160p.REMUX.mkv")
+        )
+
+        val selected = selectDeterministicAutoplayCandidate(
+            event = event,
+            eligibleStreams = cards,
+            maxCandidates = 3,
+            isPlayable = { item -> item.stream.wrappedOriginalStreamKey != "primary" }
+        )
+
+        assertEquals("secondary", selected?.selectedItem?.stream?.wrappedOriginalStreamKey)
+    }
+
+    @Test
+    fun `deterministic autoplay candidate selection preserves selected dv non dv fallback`() = runBlocking {
+        val primary = scenarioCard(
+            streamKey = "primary-dv",
+            providerId = "RD",
+            visualTags = listOf("DV"),
+            quality = "WEB-DL"
+        )
+        val fallback = scenarioCard(
+            streamKey = "fallback-hdr10",
+            providerId = "PM",
+            visualTags = listOf("HDR10"),
+            quality = "WEB-DL"
+        )
+        val primaryDecision = remuxWinner(
+            streamKey = "primary-dv",
+            provider = DebridBenchmarkProvider.REAL_DEBRID,
+            averageBitrateMbps = 35.0,
+            filename = "Primary.DV.WEB-DL.mkv"
+        )
+        val fallbackDecision = remuxWinner(
+            streamKey = "fallback-hdr10",
+            provider = DebridBenchmarkProvider.PREMIUMIZE,
+            averageBitrateMbps = 30.0,
+            filename = "Fallback.HDR10.WEB-DL.mkv"
+        )
+        val event = autoplayDecisionEvent(
+            winners = listOf(primaryDecision, fallbackDecision),
+            selected = primaryDecision,
+            selectedNonDolbyVisionFallback = fallbackDecision
+        )
+
+        val selected = selectDeterministicAutoplayCandidate(
+            event = event,
+            eligibleStreams = listOf(primary, fallback),
+            maxCandidates = 3,
+            isPlayable = { true }
+        )
+
+        assertEquals("primary-dv", selected?.selectedItem?.stream?.wrappedOriginalStreamKey)
+        assertEquals(
+            "fallback-hdr10",
+            selected?.nonDolbyVisionFallbackItem?.stream?.wrappedOriginalStreamKey
+        )
+    }
+
+    @Test
+    fun `stremthru preflight detects static download failed redirect location`() {
+        assertEquals(
+            true,
+            isStremThruDownloadFailedRedirectLocation(
+                "https://stremthrufortheweebs.midnightignite.me/v0/store/_/static/download_failed.mp4"
+            )
+        )
+        assertEquals(
+            false,
+            isStremThruDownloadFailedRedirectLocation("https://45-4.download.real-debrid.com/d/example.mkv")
+        )
+    }
+
     private fun buildViewModel(
         streamFlow: kotlinx.coroutines.flow.Flow<NetworkResult<List<AddonStreams>>>,
         cachedLink: CachedStreamLink? = null,
@@ -545,6 +633,40 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             addonLogo = null,
             wrappedProviderId = wrappedProviderId,
             wrappedOriginalStreamKey = name
+        )
+    }
+
+    private fun scenarioCard(
+        streamKey: String,
+        providerId: String,
+        visualTags: List<String> = listOf("HDR10"),
+        quality: String = "BluRay"
+    ) = BenchmarkAwareScoringScenarioStream(
+        streamKey = streamKey,
+        providerId = providerId,
+        resolution = "2160p",
+        quality = quality,
+        encode = "HEVC",
+        sizeBytes = 50L * 1024L * 1024L * 1024L,
+        durationMs = 120L * 60_000L,
+        visualTags = visualTags,
+        filename = "$streamKey.mkv"
+    ).toStreamCardModel()
+
+    private fun autoplayDecisionEvent(
+        winners: List<ShadowStreamDecision>,
+        selected: ShadowStreamDecision?,
+        selectedNonDolbyVisionFallback: ShadowStreamDecision? = null
+    ): ShadowAutoPlayDecisionEvent {
+        return ShadowAutoPlayDecisionEvent(
+            eventVersion = 1,
+            eventType = "shadow_autoplay_decision",
+            request = movieRequest(),
+            benchmarksUsed = emptyList(),
+            winners = winners,
+            rejected = emptyList(),
+            selected = selected,
+            selectedNonDolbyVisionFallback = selectedNonDolbyVisionFallback
         )
     }
 
