@@ -29,6 +29,7 @@ import kotlin.math.roundToInt
 
 internal fun LazyListScope.bufferAndNetworkSettingsItems(
     playerSettings: PlayerSettings,
+    diskSpoolStorageProbeUiState: DiskSpoolStorageProbeUiState,
     onSetVodCacheSizeMode: (VodCacheSizeMode) -> Unit,
     onSetVodCacheSizeMb: (Int) -> Unit,
     onSetVodCacheWarmAheadEnabled: (Boolean) -> Unit,
@@ -215,12 +216,17 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
         ) ?: DiskSpoolStorageResolver.builtinSpoolDirectory(context)
         val status = resolveDiskSpoolDiagnosticStatus(
             result = SpoolStorageProbeResult.fromJsonOrNull(playerSettings.spoolStorageProbeResultJson),
+            probeUiState = diskSpoolStorageProbeUiState,
             nowMs = System.currentTimeMillis(),
             spoolDirectoryPath = spoolDirectory.absolutePath
         )
         val statusText = when (status) {
             DiskSpoolDiagnosticStatus.NotChecked ->
                 stringResource(R.string.playback_buffer_disk_spool_diagnostic_not_checked)
+            DiskSpoolDiagnosticStatus.Running ->
+                stringResource(R.string.playback_buffer_disk_spool_diagnostic_running)
+            is DiskSpoolDiagnosticStatus.Failed ->
+                stringResource(R.string.playback_buffer_disk_spool_diagnostic_failed, status.message)
             is DiskSpoolDiagnosticStatus.Measured -> {
                 val randomWriteMbps = status.randomWriteMbps
                 if (randomWriteMbps != null) {
@@ -279,7 +285,9 @@ internal fun nextDiskSpoolStorageLocation(
 
 internal sealed class DiskSpoolDiagnosticStatus {
     object NotChecked : DiskSpoolDiagnosticStatus()
+    object Running : DiskSpoolDiagnosticStatus()
     object Stale : DiskSpoolDiagnosticStatus()
+    data class Failed(val message: String) : DiskSpoolDiagnosticStatus()
     data class Measured(
         val sequentialWriteMbps: Int,
         val sequentialReadMbps: Int,
@@ -289,9 +297,16 @@ internal sealed class DiskSpoolDiagnosticStatus {
 
 internal fun resolveDiskSpoolDiagnosticStatus(
     result: SpoolStorageProbeResult?,
+    probeUiState: DiskSpoolStorageProbeUiState,
     nowMs: Long,
     spoolDirectoryPath: String
 ): DiskSpoolDiagnosticStatus {
+    when (probeUiState) {
+        DiskSpoolStorageProbeUiState.Running -> return DiskSpoolDiagnosticStatus.Running
+        is DiskSpoolStorageProbeUiState.Failed ->
+            return DiskSpoolDiagnosticStatus.Failed(probeUiState.message)
+        DiskSpoolStorageProbeUiState.NotChecked -> Unit
+    }
     if (result == null) return DiskSpoolDiagnosticStatus.NotChecked
     if (!SpoolStoragePolicy.isFresh(result, nowMs, spoolDirectoryPath)) {
         return DiskSpoolDiagnosticStatus.Stale

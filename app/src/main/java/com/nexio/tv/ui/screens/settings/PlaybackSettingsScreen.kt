@@ -139,6 +139,7 @@ internal fun PlaybackSettingsContent(
     val streamDiagnosticsEnabled by viewModel.streamDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val startupPerfTelemetryEnabled by viewModel.startupPerfTelemetryEnabled.collectAsStateWithLifecycle(initialValue = false)
     val autoplayBenchmarkAvailable by viewModel.autoplayBenchmarkAvailable.collectAsStateWithLifecycle(initialValue = false)
+    val diskSpoolStorageProbeUiState by viewModel.diskSpoolStorageProbeUiState.collectAsStateWithLifecycle()
     val debridUiState by debridViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LaunchedEffect(debridViewModel) {
@@ -210,6 +211,7 @@ internal fun PlaybackSettingsContent(
                 initialFocusRequester = initialFocusRequester,
                 playerSettings = playerSettings,
                 trailerSettings = trailerSettings,
+                diskSpoolStorageProbeUiState = diskSpoolStorageProbeUiState,
                 onShowPlayerPreferenceDialog = { openDialog { showPlayerPreferenceDialog = true } },
                 onShowAudioLanguageDialog = { openDialog { showAudioLanguageDialog = true } },
                 onShowSecondaryAudioLanguageDialog = { openDialog { showSecondaryAudioLanguageDialog = true } },

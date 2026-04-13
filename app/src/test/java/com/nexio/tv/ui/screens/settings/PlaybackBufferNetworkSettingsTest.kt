@@ -41,8 +41,46 @@ class PlaybackBufferNetworkSettingsTest {
             DiskSpoolDiagnosticStatus.NotChecked,
             resolveDiskSpoolDiagnosticStatus(
                 result = null,
+                probeUiState = DiskSpoolStorageProbeUiState.NotChecked,
                 nowMs = 1_776_047_818_725L,
                 spoolDirectoryPath = "/cache/player_disk_spool"
+            )
+        )
+    }
+
+    @Test
+    fun diskSpoolDiagnosticStatus_prefersRunningAndFailedTransientState() {
+        val path = "/data/user/0/com.nexio.tv/cache/player_disk_spool"
+        val nowMs = 1_776_047_818_725L
+        val passing = SpoolStorageProbeResult(
+            writeMbps = 180.0,
+            readMbps = 180.0,
+            combinedMbps = 360.0,
+            p99ReadLatencyMs = 40L,
+            maxReadStallMs = 70L,
+            measuredAtMs = nowMs - 1_000L,
+            durationMs = 60_000L,
+            bytesWritten = 1_350_000_000L,
+            bytesRead = 1_350_000_000L,
+            spoolDirectoryPath = path
+        )
+
+        assertEquals(
+            DiskSpoolDiagnosticStatus.Running,
+            resolveDiskSpoolDiagnosticStatus(
+                result = passing,
+                probeUiState = DiskSpoolStorageProbeUiState.Running,
+                nowMs = nowMs,
+                spoolDirectoryPath = path
+            )
+        )
+        assertEquals(
+            DiskSpoolDiagnosticStatus.Failed("not enough free space"),
+            resolveDiskSpoolDiagnosticStatus(
+                result = passing,
+                probeUiState = DiskSpoolStorageProbeUiState.Failed("not enough free space"),
+                nowMs = nowMs,
+                spoolDirectoryPath = path
             )
         )
     }
