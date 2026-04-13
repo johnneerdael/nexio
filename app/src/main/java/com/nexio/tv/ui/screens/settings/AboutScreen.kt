@@ -81,8 +81,8 @@ fun AboutSettingsContent(
                     painter = painterResource(id = R.drawable.app_logo_wordmark),
                     contentDescription = "NEXIO",
                     modifier = Modifier
-                        .width(180.dp)
-                        .height(50.dp),
+                        .width(252.dp)
+                        .height(70.dp),
                     contentScale = ContentScale.Fit
                 )
 

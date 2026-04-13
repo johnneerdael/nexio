@@ -1639,7 +1639,7 @@ private fun LegacySidebarScaffold(
                             contentDescription = "NEXIO",
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(42.dp)
+                                .height(59.dp)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                     }

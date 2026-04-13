@@ -128,7 +128,7 @@ internal fun ModernSidebarBlurPanel(
             .padding(horizontal = 12.dp, vertical = 14.dp)
     ) {
         val headerLogoRes = if (isSidebarExpanded) R.drawable.app_logo_wordmark else R.drawable.app_logo_mark
-        val headerLogoHeight = if (isSidebarExpanded) 42.dp else 34.dp
+        val headerLogoHeight = if (isSidebarExpanded) 59.dp else 48.dp
         val headerLogoContentDescription = "NEXIO"
 
         Image(

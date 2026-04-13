@@ -139,7 +139,7 @@ fun AuthQrSignInScreen(
                     contentDescription = "NEXIO",
                     modifier = Modifier
                         .fillMaxWidth(0.85f)
-                        .height(60.dp),
+                        .height(84.dp),
                     contentScale = ContentScale.Fit
                 )
                 Spacer(modifier = Modifier.height(22.dp))
