@@ -1109,7 +1109,7 @@ object AioParseValueFactory {
         val smallLanguageCodes = languageCodes?.map { makeSmallCaps(it) }
         val extension = effectiveFilename?.substringAfterLast('.', "")?.takeIf { it.isNotBlank() }
         val serviceId = parsed.serviceId
-            ?: deriveServiceId(stream)
+            ?: stream.wrappedProviderId?.takeIf { it.isNotBlank() }
         val type = when {
             serviceId != null -> "debrid"
             !stream.infoHash.isNullOrBlank() -> "p2p"
@@ -1385,25 +1385,4 @@ object AioParseValueFactory {
         return input.map { map[it.uppercaseChar()] ?: it }.joinToString("")
     }
 
-    private fun deriveServiceId(stream: Stream): String? {
-        stream.wrappedProviderId?.takeIf { it.isNotBlank() }?.let { return it }
-
-        val lowered = listOfNotNull(stream.name, stream.description, stream.addonName)
-            .joinToString(" ")
-            .lowercase(Locale.US)
-        return when {
-            lowered.contains("rd+") -> "RD"
-            lowered.contains("pm+") -> "PM"
-            Regex("""(?i)(?:^|[\s\[\(\|])rd(?:$|[\s\]\)\|])""").containsMatchIn(lowered) ||
-                lowered.contains("realdebrid") || lowered.contains("real-debrid") -> "RD"
-            Regex("""(?i)(?:^|[\s\[\(\|])pm(?:$|[\s\]\)\|])""").containsMatchIn(lowered) ||
-                lowered.contains("premiumize") -> "PM"
-            lowered.contains("alldebrid") || lowered.contains("all-debrid") -> "AD"
-            lowered.contains("debridlink") || lowered.contains("debrid-link") || lowered.contains("dlink") -> "DL"
-            lowered.contains("torbox") -> "TB"
-            lowered.contains("easydebrid") || lowered.contains("easy-debrid") -> "ED"
-            lowered.contains("pikpak") -> "PK"
-            else -> null
-        }
-    }
 }

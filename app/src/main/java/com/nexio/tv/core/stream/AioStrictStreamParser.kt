@@ -24,7 +24,7 @@ object AioStrictStreamParser {
     private val genericIndexerEmojis = listOf("🌐", "⚙️", "🔗", "🔎", "🔍", "☁️")
 
     private fun aliasRegex(alias: String): Regex {
-        return Regex("""(?i)(?:^|[\s(\[|/_-])${Regex.escape(alias)}(?=$|[\s)\]|/_-])""")
+        return Regex("""(?i)(?:^|[\s(\[|/_-])${Regex.escape(alias)}(?=$|[\s)\]|/_+-])""")
     }
 
     private val servicePatterns = linkedMapOf(

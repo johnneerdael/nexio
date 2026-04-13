@@ -93,6 +93,26 @@ class AioParseValueFactoryTest {
     }
 
     @Test
+    fun `parse value does not infer service from filename text after strict parse`() {
+        listOf(
+            "Movie.Title.2023.TorBox.1080p.WEB-DL.H264-GROUP.mkv",
+            "Movie.Title.2023.EasyDebrid.1080p.WEB-DL.H264-GROUP.mkv"
+        ).forEach { filename ->
+            val stream = stream(
+                filename = filename,
+                name = null,
+                description = filename
+            )
+            val parsed = AioStrictStreamParser.parse(stream)
+
+            val parseValue = AioParseValueFactory.from(stream, parsed)
+
+            assertEquals(filename, null, parseValue.service.id)
+            assertEquals(filename, "http", parseValue.stream.type)
+        }
+    }
+
+    @Test
     fun `parse value exposes richer stream metadata fields`() {
         val stream = stream(
             filename = "Movie.Title.2023.2160p.BluRay.HEVC.TrueHD.Atmos.7.1-GROUP.mkv",
