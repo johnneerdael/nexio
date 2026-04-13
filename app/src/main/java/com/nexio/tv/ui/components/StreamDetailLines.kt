@@ -14,16 +14,28 @@ fun StreamDetailLines(
     colorStyle: TextStyle
 ) {
     detailLines.forEachIndexed { index, detail ->
-        InlineIconText(
-            text = streamDetailLineDisplayText(detail),
-            style = streamDetailLineStyle(
-                detailLines = detailLines,
-                index = index,
-                baseStyle = colorStyle
-            ),
-            maxLines = if (index == detailLines.lastIndex) 1 else 2,
-            overflow = TextOverflow.Ellipsis
+        val displayText = streamDetailLineDisplayText(detail)
+        val style = streamDetailLineStyle(
+            detailLines = detailLines,
+            index = index,
+            baseStyle = colorStyle
         )
+        val maxLines = if (index == detailLines.lastIndex) 1 else 2
+        if (InlineChipTokenRegistry.containsToken(displayText)) {
+            InlineChipText(
+                text = displayText,
+                style = style,
+                maxLines = maxLines,
+                overflow = TextOverflow.Ellipsis
+            )
+        } else {
+            InlineIconText(
+                text = displayText,
+                style = style,
+                maxLines = maxLines,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
