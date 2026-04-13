@@ -184,6 +184,49 @@ class DebridAvailabilityResolver @Inject constructor(
                 return emptyList()
             }
 
+            return resolveCachedCandidate(candidate, requestContext, apiKey)
+        }
+
+        override suspend fun resolveChunk(
+            candidates: List<WrapCandidate>,
+            requestContext: ServiceWrapRequestContext
+        ): Map<String, List<ResolvedServiceWrapStream>> {
+            val apiKey = premiumizeSettingsDataStore.settings.first().apiKey.trim()
+            if (apiKey.isBlank() || candidates.isEmpty()) return emptyMap()
+
+            val cacheResponse = runCatching {
+                premiumizeApi.checkCache(
+                    apiKey = apiKey,
+                    items = candidates.map { it.magnetUri }
+                )
+            }.getOrNull() ?: return candidates.associate { it.normalizedInfoHash to emptyList() }
+            val cacheBody = cacheResponse.body()
+            if (!cacheResponse.isSuccessful ||
+                cacheBody == null ||
+                !cacheBody.status.equals("success", ignoreCase = true)
+            ) {
+                return candidates.associate { it.normalizedInfoHash to emptyList() }
+            }
+
+            val resolved = LinkedHashMap<String, List<ResolvedServiceWrapStream>>()
+            candidates.zip(cacheBody.response).forEach { (candidate, cached) ->
+                resolved[candidate.normalizedInfoHash] = if (cached) {
+                    resolveCachedCandidate(candidate, requestContext, apiKey)
+                } else {
+                    emptyList()
+                }
+            }
+            candidates.drop(cacheBody.response.size).forEach { candidate ->
+                resolved[candidate.normalizedInfoHash] = emptyList()
+            }
+            return resolved
+        }
+
+        private suspend fun resolveCachedCandidate(
+            candidate: WrapCandidate,
+            requestContext: ServiceWrapRequestContext,
+            apiKey: String
+        ): List<ResolvedServiceWrapStream> {
             val directResponse = runCatching {
                 premiumizeApi.createDirectDownload(apiKey = apiKey, source = candidate.magnetUri)
             }.getOrNull() ?: return emptyList()
@@ -356,6 +399,53 @@ class DebridAvailabilityResolver @Inject constructor(
                 ?: return emptyList()
             val cachedSelection = chooseTorBoxFile(cachedTorrent, candidate, requestContext) ?: return emptyList()
 
+            return resolveCachedCandidate(candidate, requestContext, apiKey, cachedTorrent, cachedSelection)
+        }
+
+        override suspend fun resolveChunk(
+            candidates: List<WrapCandidate>,
+            requestContext: ServiceWrapRequestContext
+        ): Map<String, List<ResolvedServiceWrapStream>> {
+            val apiKey = torBoxSettingsDataStore.settings.first().apiKey.trim()
+            if (apiKey.isBlank() || candidates.isEmpty()) return emptyMap()
+
+            val cacheResponse = runCatching {
+                torBoxApi.checkCachedTorrents(
+                    authorization = "Bearer $apiKey",
+                    body = TorBoxCheckCachedRequestDto(hashes = candidates.map { it.normalizedInfoHash })
+                )
+            }.getOrNull() ?: return candidates.associate { it.normalizedInfoHash to emptyList() }
+            val cacheBody = cacheResponse.body()
+            if (!cacheResponse.isSuccessful || cacheBody == null || cacheBody.success == false) {
+                return candidates.associate { it.normalizedInfoHash to emptyList() }
+            }
+
+            val cachedByHash = cacheBody.data.orEmpty()
+                .mapNotNull { torrent ->
+                    val hash = torrent.hash?.uppercase(Locale.US) ?: return@mapNotNull null
+                    hash to torrent
+                }
+                .toMap()
+            val resolved = LinkedHashMap<String, List<ResolvedServiceWrapStream>>()
+            candidates.forEach { candidate ->
+                val cachedTorrent = cachedByHash[candidate.normalizedInfoHash]
+                val cachedSelection = cachedTorrent?.let { chooseTorBoxFile(it, candidate, requestContext) }
+                resolved[candidate.normalizedInfoHash] = if (cachedTorrent != null && cachedSelection != null) {
+                    resolveCachedCandidate(candidate, requestContext, apiKey, cachedTorrent, cachedSelection)
+                } else {
+                    emptyList()
+                }
+            }
+            return resolved
+        }
+
+        private suspend fun resolveCachedCandidate(
+            candidate: WrapCandidate,
+            requestContext: ServiceWrapRequestContext,
+            apiKey: String,
+            cachedTorrent: TorBoxCachedTorrentDto,
+            cachedSelection: TorBoxSelection
+        ): List<ResolvedServiceWrapStream> {
             val createResponse = runCatching {
                 torBoxApi.createTorrent(
                     authorization = "Bearer $apiKey",
@@ -429,6 +519,44 @@ class DebridAvailabilityResolver @Inject constructor(
 
             val lookupResult = lookupBody.result.firstOrNull()?.takeIf { it.cached } ?: return emptyList()
 
+            return resolveCachedCandidate(candidate, requestContext, authorization, lookupResult)
+        }
+
+        override suspend fun resolveChunk(
+            candidates: List<WrapCandidate>,
+            requestContext: ServiceWrapRequestContext
+        ): Map<String, List<ResolvedServiceWrapStream>> {
+            val apiKey = easyDebridSettingsDataStore.settings.first().apiKey.trim()
+            if (apiKey.isBlank() || candidates.isEmpty()) return emptyMap()
+
+            val authorization = "Bearer $apiKey"
+            val lookupBody = runCatching {
+                easyDebridApi.lookupDetails(
+                    authorization = authorization,
+                    body = EasyDebridLookupRequestDto(urls = candidates.map { it.magnetUri })
+                )
+            }.getOrNull()?.body() ?: return candidates.associate { it.normalizedInfoHash to emptyList() }
+
+            val resolved = LinkedHashMap<String, List<ResolvedServiceWrapStream>>()
+            candidates.zip(lookupBody.result).forEach { (candidate, lookupResult) ->
+                resolved[candidate.normalizedInfoHash] = if (lookupResult.cached) {
+                    resolveCachedCandidate(candidate, requestContext, authorization, lookupResult)
+                } else {
+                    emptyList()
+                }
+            }
+            candidates.drop(lookupBody.result.size).forEach { candidate ->
+                resolved[candidate.normalizedInfoHash] = emptyList()
+            }
+            return resolved
+        }
+
+        private suspend fun resolveCachedCandidate(
+            candidate: WrapCandidate,
+            requestContext: ServiceWrapRequestContext,
+            authorization: String,
+            lookupResult: EasyDebridLookupDetailsResultDto
+        ): List<ResolvedServiceWrapStream> {
             val generateBody = runCatching {
                 easyDebridApi.generate(
                     authorization = authorization,
