@@ -53,7 +53,8 @@ class DebridAvailabilityResolver @Inject constructor(
     private val torBoxService: TorBoxService,
     private val easyDebridApi: EasyDebridApi,
     private val easyDebridSettingsDataStore: EasyDebridSettingsDataStore,
-    private val easyDebridService: EasyDebridService
+    private val easyDebridService: EasyDebridService,
+    private val resolvedStreamCache: ServiceWrapResolvedStreamCache
 ) : ServiceWrapResolver {
 
     private val backends: List<ServiceWrapProviderBackend> = listOf(
@@ -68,8 +69,8 @@ class DebridAvailabilityResolver @Inject constructor(
         requestContext: ServiceWrapRequestContext
     ): List<ResolvedServiceWrapStream> {
         val resolved = mutableListOf<ResolvedServiceWrapStream>()
-        resolveProgressively(candidate, requestContext).collect { batch ->
-            resolved += batch.streams
+        resolveChunkProgressively(listOf(candidate), requestContext).collect { batch ->
+            resolved += batch.streamsByHash[candidate.normalizedInfoHash].orEmpty()
         }
         return resolved
     }
@@ -78,29 +79,78 @@ class DebridAvailabilityResolver @Inject constructor(
         candidate: WrapCandidate,
         requestContext: ServiceWrapRequestContext
     ): Flow<ServiceWrapResolutionBatch> = flow {
+        resolveChunkProgressively(listOf(candidate), requestContext).collect { batch ->
+            emit(
+                ServiceWrapResolutionBatch(
+                    streams = batch.streamsByHash[candidate.normalizedInfoHash].orEmpty(),
+                    isTerminal = batch.isTerminal
+                )
+            )
+        }
+    }
+
+    override fun resolveChunkProgressively(
+        candidates: List<WrapCandidate>,
+        requestContext: ServiceWrapRequestContext
+    ): Flow<ServiceWrapResolutionChunkBatch> = flow {
         val tasks = backends
             .filter { backend -> backend.isConfigured() }
         if (tasks.isEmpty()) {
-            emit(ServiceWrapResolutionBatch(streams = emptyList(), isTerminal = true))
+            emit(ServiceWrapResolutionChunkBatch.terminalEmpty(candidates.map { it.normalizedInfoHash }))
             return@flow
         }
 
         supervisorScope {
-            val results = Channel<List<ResolvedServiceWrapStream>>(Channel.UNLIMITED)
-            val jobs = tasks.map { backend ->
-                async {
-                    results.send(
-                        runCatching {
-                            backend.resolve(candidate, requestContext)
-                        }.getOrDefault(emptyList())
+            val cachedByHash = LinkedHashMap<String, MutableList<ResolvedServiceWrapStream>>()
+            val pendingByBackend = LinkedHashMap<ServiceWrapProviderBackend, List<WrapCandidate>>()
+            tasks.forEach { backend ->
+                val pending = candidates.filter { candidate ->
+                    val cached = resolvedStreamCache.get(backend.provider, candidate, requestContext)
+                    if (cached == null) {
+                        true
+                    } else {
+                        cachedByHash.getOrPut(candidate.normalizedInfoHash) { mutableListOf() } += cached
+                        false
+                    }
+                }
+                pendingByBackend[backend] = pending
+            }
+
+            val pendingEntries = pendingByBackend.filterValues { it.isNotEmpty() }
+            if (cachedByHash.isNotEmpty()) {
+                emit(
+                    ServiceWrapResolutionChunkBatch(
+                        streamsByHash = cachedByHash,
+                        isTerminal = pendingEntries.isEmpty()
                     )
+                )
+            }
+            if (pendingEntries.isEmpty()) return@supervisorScope
+
+            val results = Channel<Map<String, List<ResolvedServiceWrapStream>>>(Channel.UNLIMITED)
+            val jobs = pendingEntries.map { (backend, backendCandidates) ->
+                async {
+                    val resolved = runCatching {
+                        backend.resolveChunk(backendCandidates, requestContext)
+                    }.getOrDefault(emptyMap())
+                    val completeResolved = backendCandidates.associate { candidate ->
+                        val streams = resolved[candidate.normalizedInfoHash].orEmpty()
+                        resolvedStreamCache.put(
+                            provider = backend.provider,
+                            candidate = candidate,
+                            requestContext = requestContext,
+                            streams = streams
+                        )
+                        candidate.normalizedInfoHash to streams
+                    }
+                    results.send(completeResolved)
                 }
             }
-            repeat(tasks.size) { index ->
+            repeat(pendingEntries.size) { index ->
                 emit(
-                    ServiceWrapResolutionBatch(
-                        streams = results.receive(),
-                        isTerminal = index == tasks.lastIndex
+                    ServiceWrapResolutionChunkBatch(
+                        streamsByHash = results.receive(),
+                        isTerminal = index == pendingEntries.size - 1
                     )
                 )
             }
