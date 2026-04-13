@@ -133,9 +133,9 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
-    fun vodCacheFragmentSize_usesEightMbFragments() {
+    fun vodCacheFragmentSize_usesFourMbFragments() {
         assertEquals(
-            8L * 1024L * 1024L,
+            4L * 1024L * 1024L,
             PlayerMediaSourceFactory.VOD_CACHE_FRAGMENT_BYTES_FOR_TESTING
         )
     }

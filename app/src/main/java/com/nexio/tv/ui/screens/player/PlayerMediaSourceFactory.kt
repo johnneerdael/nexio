@@ -273,6 +273,9 @@ internal class PlayerMediaSourceFactory(
             transportSampleTimeMs = transportSampleTimeMs,
             onTransportBytesDownloaded = onTransportBytesDownloaded
         )
+        // Benchmarks don't have a first-frame gate — allow prefetch immediately
+        // so PRDS can overlap chunk downloads with cache-write consumption.
+        parallelStartupPrefetchUnlocked.set(true)
         val useVodCache = ENABLE_VOD_CACHE &&
             vodCacheEnabled &&
             !isHls &&
@@ -560,6 +563,7 @@ internal class PlayerMediaSourceFactory(
         val dataSinkFactory = CacheDataSink.Factory()
             .setCache(cache)
             .setFragmentSize(VOD_CACHE_FRAGMENT_BYTES_FOR_TESTING)
+            .setBufferSize(VOD_CACHE_SINK_BUFFER_SIZE)
         var flags = CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR
         if (blockOnCache) {
             flags = flags or CacheDataSource.FLAG_BLOCK_ON_CACHE
@@ -832,7 +836,8 @@ internal class PlayerMediaSourceFactory(
         private const val VOD_CACHE_FREE_SPACE_RESERVE_BYTES = 1024L * 1024L * 1024L
         private const val MIN_RUNTIME_VOD_CACHE_BYTES = 1L * 1024L * 1024L
         private const val PREFETCH_BLOCK_BYTES = 16L * 1024L * 1024L
-        internal const val VOD_CACHE_FRAGMENT_BYTES_FOR_TESTING = 8L * 1024L * 1024L
+        internal const val VOD_CACHE_FRAGMENT_BYTES_FOR_TESTING = 4L * 1024L * 1024L
+        private const val VOD_CACHE_SINK_BUFFER_SIZE = 256 * 1024
         private const val PREFETCH_ACTIVE_GUARD_BYTES = 8L * 1024L * 1024L
         private const val PREFETCH_REBASE_SLEEP_MS = 100L
         private const val PREFETCH_IDLE_SLEEP_MS = 250L
