@@ -47,6 +47,21 @@ class AioStrictStreamParserParityTest {
     }
 
     @Test
+    fun `stream parser extracts binary size units from description`() {
+        val stream = stream(
+            filename = "Movie.Title.2023.2160p.WEB-DL.H264-GROUP.mkv",
+            description = """
+                📄 Movie.Title.2023.2160p.WEB-DL.H264-GROUP.mkv
+                💾 72 GiB
+            """.trimIndent()
+        )
+
+        val parsed = AioStrictStreamParser.parse(stream.copy(behaviorHints = stream.behaviorHints?.copy(filename = null)))
+
+        assertEquals(72L * 1024L * 1024L * 1024L, parsed.sizeBytes)
+    }
+
+    @Test
     fun `stream parser cleans filename candidates like upstream aio`() {
         val stream = stream(
             filename = "",

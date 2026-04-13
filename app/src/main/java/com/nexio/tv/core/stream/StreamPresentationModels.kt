@@ -1133,7 +1133,7 @@ internal object AioStyleStreamParser {
         "Dual Audio" to tokenRegex("""dual[ ._-]?(?:audio|lang(?:uage)?)""")
     )
 
-    private val sizeRegex = Regex("""(?i)(\d+(?:\.\d+)?)\s?(KB|MB|GB|TB)""")
+    private val sizeRegex = Regex("""(?i)(\d+(?:\.\d+)?)\s?(KiB|MiB|GiB|TiB|KB|MB|GB|TB)""")
     private val durationRegex = Regex("""(?i)(\d{1,2}):(\d{2})(?::(\d{2}))?""")
     private val yearRegex = Regex("""\b(19|20)\d{2}\b""")
     private val seasonEpisodeRegex = Regex("""(?i)\bS(\d{1,2})(?:E(\d{1,2}))?\b""")
@@ -1350,10 +1350,10 @@ internal object AioStyleStreamParser {
         val value = match.groupValues[1].toDoubleOrNull() ?: return null
         val unit = match.groupValues[2].uppercase(Locale.US)
         val multiplier = when (unit) {
-            "KB" -> 1024.0
-            "MB" -> 1024.0 * 1024.0
-            "GB" -> 1024.0 * 1024.0 * 1024.0
-            "TB" -> 1024.0 * 1024.0 * 1024.0 * 1024.0
+            "KB", "KIB" -> 1024.0
+            "MB", "MIB" -> 1024.0 * 1024.0
+            "GB", "GIB" -> 1024.0 * 1024.0 * 1024.0
+            "TB", "TIB" -> 1024.0 * 1024.0 * 1024.0 * 1024.0
             else -> return null
         }
         return (value * multiplier).roundToLong()
