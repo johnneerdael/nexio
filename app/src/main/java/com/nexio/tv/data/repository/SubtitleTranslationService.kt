@@ -846,7 +846,9 @@ class SubtitleTranslationService @Inject constructor(
         responseText: String,
         blocks: List<TranslatableTimedTextBlock>
     ): Map<Int, String> {
-        val trimmed = sanitizeJsonResponse(responseText).trim()
+        val trimmed = sanitizeJsonResponse(responseText)
+            .replace("\\n", "\n")
+            .trim()
         if (trimmed.isBlank()) {
             throw IllegalStateException("Subtitle translation provider returned an empty translation payload.")
         }
