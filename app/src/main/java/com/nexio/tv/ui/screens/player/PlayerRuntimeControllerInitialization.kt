@@ -48,7 +48,9 @@ import com.nexio.tv.core.player.MatroskaDolbyVisionHookInstaller
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
+import com.nexio.tv.data.local.diskSpoolTargetBitrateMbps
 import com.nexio.tv.data.local.FrameRateMatchingMode
+import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import com.nexio.tv.domain.model.Subtitle
 import io.github.peerless2012.ass.media.type.AssRenderType
 import kotlinx.coroutines.Dispatchers
@@ -202,6 +204,10 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             mediaSourceFactory.vodCacheSizeMode = playerSettings.vodCacheSizeMode
             mediaSourceFactory.vodCacheSizeMb = playerSettings.vodCacheSizeMb
             mediaSourceFactory.vodCacheWarmAheadEnabled = playerSettings.vodCacheWarmAheadEnabled
+            mediaSourceFactory.progressivePlaybackDiskMode = playerSettings.progressivePlaybackDiskMode
+            mediaSourceFactory.spoolStorageProbeResult =
+                SpoolStorageProbeResult.fromJsonOrNull(playerSettings.spoolStorageProbeResultJson)
+            mediaSourceFactory.diskSpoolTargetBitrateMbps = playerSettings.diskSpoolTargetBitrateMbps()
             if (kodiCustomAudioSinkEnabled) {
                 safeAudioForcedStreamUrls.remove(url)
                 audioDisabledForcedStreamUrls.remove(url)

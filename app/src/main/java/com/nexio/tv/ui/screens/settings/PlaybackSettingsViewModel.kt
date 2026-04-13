@@ -1,6 +1,9 @@
 package com.nexio.tv.ui.screens.settings
 
+import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.nexio.tv.data.local.AutoplayBandwidthMode
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.LibassRenderType
@@ -10,6 +13,7 @@ import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
+import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
@@ -25,12 +29,23 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
 import com.nexio.tv.data.repository.benchmark.hasValidAutoplayBenchmarkFor
+import com.nexio.tv.ui.screens.player.spool.SpoolStorageCapabilityProbe
+import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.io.File
+import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 typealias TrackingProviderSelectorState = TrackingProviderState
@@ -44,6 +59,9 @@ class PlaybackSettingsViewModel @Inject constructor(
     private val debridBenchmarkService: DebridBenchmarkService,
     trackingProviderStateRepository: TrackingProviderStateRepository
 ) : ViewModel() {
+    private companion object {
+        const val TAG = "PlaybackSettingsVM"
+    }
 
     val playerSettings: Flow<PlayerSettings> = playerSettingsDataStore.playerSettings
     val trailerSettings: Flow<TrailerSettings> = trailerSettingsDataStore.settings
@@ -75,6 +93,11 @@ class PlaybackSettingsViewModel @Inject constructor(
             .distinct()
             .sorted()
     }
+    private var diskSpoolStorageProbeJob: Job? = null
+    private val diskSpoolStorageProbeGeneration = AtomicLong(0L)
+    private val diskSpoolStorageProbeCommitMutex = Mutex()
+    internal var diskSpoolStorageProbeRunnerForTesting: (suspend (File, () -> Boolean) -> SpoolStorageProbeResult)? = null
+
     suspend fun setPlayerPreference(preference: PlayerPreference) {
         playerSettingsDataStore.setPlayerPreference(preference)
     }
@@ -317,6 +340,52 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setVodCacheWarmAheadEnabled(enabled: Boolean) {
         playerSettingsDataStore.setVodCacheWarmAheadEnabled(enabled)
+    }
+
+    suspend fun setProgressivePlaybackDiskMode(mode: ProgressivePlaybackDiskMode) {
+        playerSettingsDataStore.setProgressivePlaybackDiskMode(mode)
+    }
+
+    fun runDiskSpoolStorageProbe(context: Context) {
+        val probeGeneration = diskSpoolStorageProbeGeneration.incrementAndGet()
+        diskSpoolStorageProbeJob?.cancel()
+        val applicationContext = context.applicationContext
+        diskSpoolStorageProbeJob = viewModelScope.launch(Dispatchers.IO) {
+            val spoolDirectory = File(applicationContext.cacheDir, "player_disk_spool")
+            fun isCurrentProbeGeneration(): Boolean {
+                return coroutineContext.isActive &&
+                    diskSpoolStorageProbeGeneration.get() == probeGeneration
+            }
+            suspend fun commitProbeResultIfCurrent(result: SpoolStorageProbeResult?) {
+                diskSpoolStorageProbeCommitMutex.withLock {
+                    if (isCurrentProbeGeneration()) {
+                        playerSettingsDataStore.setSpoolStorageProbeResult(result)
+                    }
+                }
+            }
+            try {
+                coroutineContext.ensureActive()
+                if (!isCurrentProbeGeneration()) return@launch
+                commitProbeResultIfCurrent(null)
+                coroutineContext.ensureActive()
+                val shouldContinue = {
+                    coroutineContext.isActive && !Thread.currentThread().isInterrupted
+                }
+                val result = diskSpoolStorageProbeRunnerForTesting?.invoke(spoolDirectory, shouldContinue)
+                    ?: SpoolStorageCapabilityProbe(
+                        directory = spoolDirectory,
+                        shouldContinue = shouldContinue
+                    ).run()
+                coroutineContext.ensureActive()
+                if (!isCurrentProbeGeneration()) return@launch
+                commitProbeResultIfCurrent(result)
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                commitProbeResultIfCurrent(null)
+                Log.w(TAG, "Disk spool storage probe failed", error)
+            }
+        }
     }
 
     suspend fun setVodCacheSizeMb(mb: Int) {
