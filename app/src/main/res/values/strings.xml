@@ -265,6 +265,8 @@
     <string name="playback_buffer_disk_spool_storage_external">External</string>
     <string name="playback_buffer_disk_spool_diagnostic">Run storage diagnostic</string>
     <string name="playback_buffer_disk_spool_diagnostic_not_checked">Storage diagnostic has not been run. Disk spool can still be tested.</string>
+    <string name="playback_buffer_disk_spool_diagnostic_running">Storage diagnostic is running...</string>
+    <string name="playback_buffer_disk_spool_diagnostic_failed">Storage diagnostic failed: %1$s</string>
     <string name="playback_buffer_disk_spool_diagnostic_stale">Storage diagnostic is stale for the selected storage.</string>
     <string name="playback_buffer_disk_spool_diagnostic_measured">Storage diagnostic: sequential write %1$d Mbps, sequential read %2$d Mbps.</string>
     <string name="playback_buffer_disk_spool_diagnostic_measured_random">Storage diagnostic: sequential write %1$d Mbps, sequential read %2$d Mbps, random write %3$d Mbps.</string>

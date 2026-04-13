@@ -100,6 +100,7 @@ internal fun PlaybackSettingsSections(
     initialFocusRequester: FocusRequester? = null,
     playerSettings: PlayerSettings,
     trailerSettings: TrailerSettings,
+    diskSpoolStorageProbeUiState: DiskSpoolStorageProbeUiState,
     onShowPlayerPreferenceDialog: () -> Unit,
     onShowAudioLanguageDialog: () -> Unit,
     onShowSecondaryAudioLanguageDialog: () -> Unit,
@@ -491,6 +492,7 @@ internal fun PlaybackSettingsSections(
         ) {
             bufferAndNetworkSettingsItems(
                 playerSettings = playerSettings,
+                diskSpoolStorageProbeUiState = diskSpoolStorageProbeUiState,
                 onSetVodCacheSizeMode = onSetVodCacheSizeMode,
                 onSetVodCacheSizeMb = onSetVodCacheSizeMb,
                 onSetVodCacheWarmAheadEnabled = onSetVodCacheWarmAheadEnabled,
