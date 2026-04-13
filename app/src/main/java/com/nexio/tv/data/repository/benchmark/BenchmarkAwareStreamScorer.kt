@@ -766,7 +766,13 @@ private fun applyViableBitrateBucket(
     val bitrateBucket = ranked.filter { candidate ->
         candidate.breakdown.averageBitrateMbps >= bitrateFloor
     }
-    val resolutionCollapsed = collapseResolutionBucket(bitrateBucket)
+    val expandedBucket = if (bitrateBucket.size < VIABLE_BUCKET_MIN_STREAMS && ranked.size > bitrateBucket.size) {
+        val sortedByBitrate = ranked.sortedByDescending { it.breakdown.averageBitrateMbps }
+        sortedByBitrate.take(VIABLE_BUCKET_MIN_STREAMS.coerceAtMost(ranked.size))
+    } else {
+        bitrateBucket
+    }
+    val resolutionCollapsed = collapseResolutionBucket(expandedBucket)
     return resolutionCollapsed.sortedWith(baseDecisionComparator())
 }
 
@@ -1235,6 +1241,7 @@ private fun shadowTransportOptionComparator(
 
 private val HDR_VISUAL_TAGS = setOf("DV", "HDR", "HDR10", "HDR10+", "HLG")
 private const val VIABLE_BUCKET_FRACTION = 0.70
+private const val VIABLE_BUCKET_MIN_STREAMS = 10
 private const val RESOLUTION_BUCKET_MIN_COUNT = 3
 
 private val PREMIUM_AUDIO_TIERS = setOf(
