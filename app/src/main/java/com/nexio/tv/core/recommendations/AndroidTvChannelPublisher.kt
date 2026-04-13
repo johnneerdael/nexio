@@ -3,6 +3,7 @@ package com.nexio.tv.core.recommendations
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.provider.BaseColumns
@@ -111,7 +112,7 @@ class AndroidTvChannelPublisher @Inject constructor(
             }
 
             val selectedByKey = selectedRows.associateBy { it.option.key }
-            val existingChannels = queryOwnedChannels().associateBy { it.internalProviderId ?: "" }
+            val existingChannels = queryOwnedChannels().associateBy { it.internalProviderId }
             val activeProviderIds = mutableSetOf<String>()
             val hadBrowsableOwnedChannel = existingChannels.values.any { it.isBrowsable }
             var autoBrowsableChannelId: Long? = null
@@ -160,8 +161,7 @@ class AndroidTvChannelPublisher @Inject constructor(
             }
 
             existingChannels.values.forEach { channel ->
-                val providerId = channel.internalProviderId ?: return@forEach
-                if (providerId !in activeProviderIds) {
+                if (channel.internalProviderId !in activeProviderIds) {
                     deleteChannel(channel.id)
                 }
             }
@@ -179,12 +179,24 @@ class AndroidTvChannelPublisher @Inject constructor(
         }
     }
 
-    private fun queryOwnedChannels(): List<PreviewChannel> {
+    private fun queryOwnedChannels(): List<AndroidTvOwnedChannel> {
         return runCatching {
-            previewChannelHelper.allChannels
-                .filter { channel ->
-                    (channel.internalProviderId ?: "").startsWith(CHANNEL_ID_PREFIX)
+            val channels = mutableListOf<AndroidTvOwnedChannel>()
+            context.contentResolver.query(
+                TvContractCompat.Channels.CONTENT_URI,
+                AndroidTvOwnedChannelRows.PROJECTION,
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val channel = AndroidTvOwnedChannelRows.fromCursor(cursor)
+                    if (channel.internalProviderId.startsWith(CHANNEL_ID_PREFIX)) {
+                        channels += channel
+                    }
                 }
+            }
+            channels
         }.getOrElse { error ->
             Log.w(TAG, "Failed to query existing Android TV channels", error)
             emptyList()
@@ -194,7 +206,7 @@ class AndroidTvChannelPublisher @Inject constructor(
     private fun upsertChannel(
         option: AndroidTvFeedOption,
         providerId: String,
-        existingChannel: PreviewChannel?
+        existingChannel: AndroidTvOwnedChannel?
     ): UpsertedChannel? {
         return runCatching {
             val logoBitmap = channelLogoBitmap
@@ -322,14 +334,6 @@ class AndroidTvChannelPublisher @Inject constructor(
         }
     }
 
-    private val PreviewChannel.id: Long
-        get() {
-            return runCatching {
-                val value = toContentValues().getAsLong(BaseColumns._ID)
-                value ?: -1L
-            }.getOrDefault(-1L)
-        }
-
     private fun channelProviderId(feedKey: String): String {
         return "$CHANNEL_ID_PREFIX$feedKey"
     }
@@ -349,4 +353,31 @@ class AndroidTvChannelPublisher @Inject constructor(
         val channelId: Long,
         val needsBrowsableRequest: Boolean
     )
+}
+
+internal data class AndroidTvOwnedChannel(
+    val id: Long,
+    val internalProviderId: String,
+    val isBrowsable: Boolean
+)
+
+internal object AndroidTvOwnedChannelRows {
+    val PROJECTION: Array<String> = arrayOf(
+        BaseColumns._ID,
+        TvContractCompat.Channels.COLUMN_INTERNAL_PROVIDER_ID,
+        TvContractCompat.Channels.COLUMN_BROWSABLE
+    )
+
+    fun fromCursor(cursor: Cursor): AndroidTvOwnedChannel {
+        return AndroidTvOwnedChannel(
+            id = cursor.getLong(COL_ID),
+            internalProviderId = cursor.getString(COL_INTERNAL_PROVIDER_ID).orEmpty(),
+            isBrowsable = cursor.getInt(COL_BROWSABLE) == IS_BROWSABLE
+        )
+    }
+
+    private const val COL_ID = 0
+    private const val COL_INTERNAL_PROVIDER_ID = 1
+    private const val COL_BROWSABLE = 2
+    private const val IS_BROWSABLE = 1
 }
