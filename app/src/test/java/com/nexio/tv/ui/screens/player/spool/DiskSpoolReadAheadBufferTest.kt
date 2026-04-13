@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.player.spool
 
+import androidx.media3.common.C
 import java.io.File
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -90,6 +91,27 @@ class DiskSpoolReadAheadBufferTest {
             val current = ByteArray(4)
             assertEquals(4, buffer.read(position = 4L, target = current, offset = 0, length = current.size))
             assertArrayEquals(byteArrayOf(5, 6, 7, 8), current)
+        } finally {
+            buffer.release()
+            session.close()
+        }
+    }
+
+    @Test
+    fun `background worker does not request priority when bytes are not spooled yet`() {
+        val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 50L)
+        val buffer = DiskSpoolReadAheadBuffer(
+            session = session,
+            capacityBytes = 8L,
+            chunkBytes = 4,
+            workerName = "test-disk-spool-read-ahead-no-priority"
+        )
+
+        try {
+            buffer.start(0L)
+            Thread.sleep(150L)
+
+            assertEquals(C.TIME_UNSET.toLong(), session.consumePriorityPosition())
         } finally {
             buffer.release()
             session.close()
