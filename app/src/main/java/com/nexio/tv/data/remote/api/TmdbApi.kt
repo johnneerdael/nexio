@@ -59,14 +59,18 @@ interface TmdbApi {
     suspend fun getMovieDetails(
         @Path("movie_id") movieId: Int,
         @Query("api_key") apiKey: String,
-        @Query("language") language: String? = null
+        @Query("language") language: String? = null,
+        @Query("append_to_response") appendToResponse: String? = null,
+        @Query("include_image_language") includeImageLanguage: String? = null
     ): Response<TmdbDetailsResponse>
 
     @GET("tv/{tv_id}")
     suspend fun getTvDetails(
         @Path("tv_id") tvId: Int,
         @Query("api_key") apiKey: String,
-        @Query("language") language: String? = null
+        @Query("language") language: String? = null,
+        @Query("append_to_response") appendToResponse: String? = null,
+        @Query("include_image_language") includeImageLanguage: String? = null
     ): Response<TmdbDetailsResponse>
 
     @GET("movie/{movie_id}/credits")
@@ -278,7 +282,13 @@ data class TmdbDetailsResponse(
     @Json(name = "last_air_date") val lastAirDate: String? = null,
     @Json(name = "status") val status: String? = null,
     @Json(name = "belongs_to_collection") val belongsToCollection: TmdbCollectionSummary? = null,
-    @Json(name = "seasons") val seasons: List<TmdbSeasonSummary>? = null
+    @Json(name = "seasons") val seasons: List<TmdbSeasonSummary>? = null,
+    @Json(name = "credits") val credits: TmdbCreditsResponse? = null,
+    @Json(name = "images") val images: TmdbImagesResponse? = null,
+    @Json(name = "release_dates") val releaseDates: TmdbMovieReleaseDatesResponse? = null,
+    @Json(name = "content_ratings") val contentRatings: TmdbTvContentRatingsResponse? = null,
+    @Json(name = "external_ids") val externalIds: TmdbExternalIdsResponse? = null,
+    @Json(name = "videos") val videos: TmdbVideosResponse? = null
 )
 
 @JsonClass(generateAdapter = true)
