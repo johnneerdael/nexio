@@ -108,6 +108,14 @@ internal fun shouldShowSearchManualStreamSelection(
     )
 }
 
+internal fun searchKeyboardCompletionLabels(suggestions: List<String>): List<String> = suggestions
+
+private fun buildSearchKeyboardCompletions(suggestions: List<String>): Array<CompletionInfo> {
+    return searchKeyboardCompletionLabels(suggestions).mapIndexed { index, name ->
+        CompletionInfo(index.toLong(), index, name)
+    }.toTypedArray()
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SearchScreen(
@@ -380,11 +388,7 @@ fun SearchScreen(
     LaunchedEffect(uiState.suggestions) {
         val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
             ?: return@LaunchedEffect
-        val reversed = uiState.suggestions.asReversed()
-        val completions = reversed.mapIndexed { index, name ->
-            CompletionInfo(index.toLong(), index, name)
-        }.toTypedArray()
-        imm.displayCompletions(view, completions)
+        imm.displayCompletions(view, buildSearchKeyboardCompletions(uiState.suggestions))
     }
 
     val latestPendingDiscoverRestore by rememberUpdatedState(pendingDiscoverRestoreOnResume)
@@ -844,7 +848,10 @@ private fun SearchInputField(
                     }
                     false
                 },
-            keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done),
+            keyboardOptions = KeyboardOptions.Default.copy(
+                imeAction = ImeAction.Done,
+                autoCorrectEnabled = false
+            ),
             keyboardActions = KeyboardActions(
                 onDone = {
                     onSubmit()
