@@ -10,6 +10,7 @@ import com.nexio.tv.data.remote.dto.trakt.TraktDeviceCodeResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktDeviceTokenRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktRefreshTokenRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktRevokeRequestDto
+import com.nexio.tv.data.remote.TraktRequestGate
 import android.util.Log
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -34,7 +35,8 @@ sealed interface TraktTokenPollResult {
 @Singleton
 class TraktAuthService @Inject constructor(
     private val traktApi: TraktApi,
-    private val traktAuthDataStore: TraktAuthDataStore
+    private val traktAuthDataStore: TraktAuthDataStore,
+    private val requestGate: TraktRequestGate
 ) {
     private val refreshLeewaySeconds = 60L
     private val tokenRefreshMutex = Mutex()
@@ -276,7 +278,7 @@ class TraktAuthService @Inject constructor(
 
         while (true) {
             val response = try {
-                call("Bearer $token")
+                requestGate.acquire { call("Bearer $token") }
             } catch (e: IOException) {
                 if (!retriedNetwork) {
                     trace("authorized request: network error, retrying once")
