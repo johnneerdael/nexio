@@ -95,6 +95,8 @@ internal object SpoolStoragePolicy {
     private const val MAX_P99_READ_LATENCY_MS = 100L
     private const val MAX_READ_STALL_MS = 500L
     private const val MAX_RESULT_AGE_MS = 7L * 24L * 60L * 60L * 1000L
+    private const val CACHE_SKEW_MIN_READ_MBPS = 3_200.0
+    private const val CACHE_SKEW_READ_TO_WRITE_MULTIPLIER = 8.0
 
     fun targetBitrateMbps(streamBitrateMbps: Double?, userCapMbps: Double?): Double {
         if (streamBitrateMbps != null && streamBitrateMbps.isFinite() && streamBitrateMbps > 0.0) {
@@ -135,7 +137,9 @@ internal object SpoolStoragePolicy {
     }
 
     fun underLoadReadMbps(result: SpoolStorageProbeResult): Double {
-        return result.concurrentSequentialReadMbps ?: result.readMbps
+        val writeMbps = underLoadWriteMbps(result)
+        val readMbps = result.concurrentSequentialReadMbps ?: result.readMbps
+        return if (isLikelyCacheSkewedRead(writeMbps, readMbps)) writeMbps else readMbps
     }
 
     fun underLoadRandomWriteMbps(result: SpoolStorageProbeResult): Double? {
@@ -157,10 +161,17 @@ internal object SpoolStoragePolicy {
         val writeMbps = result.concurrentSequentialWriteMbps
         val readMbps = result.concurrentSequentialReadMbps
         return if (writeMbps != null && readMbps != null) {
-            writeMbps + readMbps
+            writeMbps + underLoadReadMbps(result)
         } else {
             result.combinedMbps
         }
+    }
+
+    private fun isLikelyCacheSkewedRead(writeMbps: Double, readMbps: Double): Boolean {
+        if (!writeMbps.isFinite() || writeMbps <= 0.0) return false
+        if (!readMbps.isFinite() || readMbps <= 0.0) return false
+        return readMbps >= CACHE_SKEW_MIN_READ_MBPS &&
+            readMbps >= writeMbps * CACHE_SKEW_READ_TO_WRITE_MULTIPLIER
     }
 
     fun isFresh(result: SpoolStorageProbeResult, nowMs: Long, spoolDirectoryPath: String): Boolean {
