@@ -262,6 +262,8 @@
     <string name="playback_buffer_disk_spool_size_sub">Temporary rolling disk buffer for progressive playback.</string>
     <string name="playback_buffer_disk_spool_startup_buffer">Startup spool buffer</string>
     <string name="playback_buffer_disk_spool_startup_buffer_sub">Fill this much disk spool before playback starts.</string>
+    <string name="playback_buffer_disk_spool_ram_read_buffer">Disk spool RAM buffer</string>
+    <string name="playback_buffer_disk_spool_ram_read_buffer_sub">Reads ahead from disk spool into heap-capped memory. Does not open another network path.</string>
     <string name="playback_buffer_disk_spool_storage_location">Disk spool storage</string>
     <string name="playback_buffer_disk_spool_storage_location_sub">Choose where disk spool writes its temporary playback file.</string>
     <string name="playback_buffer_disk_spool_storage_location_no_external">No mounted external app storage detected.</string>

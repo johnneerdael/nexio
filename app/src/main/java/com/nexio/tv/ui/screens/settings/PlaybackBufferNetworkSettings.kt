@@ -37,6 +37,7 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
     onSetProgressivePlaybackDiskMode: (ProgressivePlaybackDiskMode) -> Unit,
     onSetDiskSpoolSizeMb: (Int) -> Unit,
     onSetDiskSpoolStartupBufferMb: (Int) -> Unit,
+    onSetDiskSpoolRamReadBufferMb: (Int) -> Unit,
     onSetDiskSpoolStorageLocation: (DiskSpoolStorageLocation) -> Unit,
     onRunDiskSpoolStorageProbe: () -> Unit,
     onItemFocused: () -> Unit
@@ -220,6 +221,21 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
                 maxValue = effectiveSpoolSizeMb,
                 step = 64,
                 onValueChange = onSetDiskSpoolStartupBufferMb,
+                onFocused = onItemFocused
+            )
+        }
+
+        item(key = "network_cache_disk_spool_ram_read_buffer") {
+            SliderSettingsItem(
+                icon = Icons.Default.Storage,
+                title = stringResource(R.string.playback_buffer_disk_spool_ram_read_buffer),
+                subtitle = stringResource(R.string.playback_buffer_disk_spool_ram_read_buffer_sub),
+                value = playerSettings.diskSpoolRamReadBufferMb,
+                valueText = "${playerSettings.diskSpoolRamReadBufferMb} MB",
+                minValue = PlayerSettings.MIN_DISK_SPOOL_RAM_READ_BUFFER_MB,
+                maxValue = PlayerSettings.MAX_DISK_SPOOL_RAM_READ_BUFFER_MB,
+                step = 16,
+                onValueChange = onSetDiskSpoolRamReadBufferMb,
                 onFocused = onItemFocused
             )
         }

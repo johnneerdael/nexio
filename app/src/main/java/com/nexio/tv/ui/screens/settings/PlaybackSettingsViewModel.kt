@@ -370,6 +370,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setDiskSpoolStartupBufferMb(mb)
     }
 
+    suspend fun setDiskSpoolRamReadBufferMb(mb: Int) {
+        playerSettingsDataStore.setDiskSpoolRamReadBufferMb(mb)
+    }
+
     suspend fun setDiskSpoolStorageLocation(location: DiskSpoolStorageLocation) {
         playerSettingsDataStore.setDiskSpoolStorageLocation(location)
     }

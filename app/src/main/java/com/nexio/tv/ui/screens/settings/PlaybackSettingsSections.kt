@@ -173,6 +173,7 @@ internal fun PlaybackSettingsSections(
     onSetProgressivePlaybackDiskMode: (ProgressivePlaybackDiskMode) -> Unit,
     onSetDiskSpoolSizeMb: (Int) -> Unit,
     onSetDiskSpoolStartupBufferMb: (Int) -> Unit,
+    onSetDiskSpoolRamReadBufferMb: (Int) -> Unit,
     onSetDiskSpoolStorageLocation: (DiskSpoolStorageLocation) -> Unit,
     onRunDiskSpoolStorageProbe: () -> Unit,
     // Troubleshooting — data collection
@@ -502,6 +503,7 @@ internal fun PlaybackSettingsSections(
                 onSetProgressivePlaybackDiskMode = onSetProgressivePlaybackDiskMode,
                 onSetDiskSpoolSizeMb = onSetDiskSpoolSizeMb,
                 onSetDiskSpoolStartupBufferMb = onSetDiskSpoolStartupBufferMb,
+                onSetDiskSpoolRamReadBufferMb = onSetDiskSpoolRamReadBufferMb,
                 onSetDiskSpoolStorageLocation = onSetDiskSpoolStorageLocation,
                 onRunDiskSpoolStorageProbe = onRunDiskSpoolStorageProbe,
                 onItemFocused = { focusedSection = PlaybackSection.BUFFER_NETWORK }
