@@ -470,12 +470,7 @@ internal fun ModernRowSection(
                 itemsIndexed(
                     items = row.items,
                     key = { _, item -> item.key },
-                    contentType = { _, item ->
-                        when (item.payload) {
-                            is ModernPayload.ContinueWatching -> "modern_cw_card"
-                            is ModernPayload.Catalog -> "modern_catalog_card"
-                        }
-                    }
+                    contentType = { _, item -> modernRowItemContentType(item) }
                 ) { index, item ->
                     val requester = uiCaches.requesterFor(row.key, item.key)
                     val isContinueWatchingRow = row.key == "continue_watching"
