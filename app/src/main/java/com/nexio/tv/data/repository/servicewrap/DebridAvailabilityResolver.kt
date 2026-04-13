@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository.servicewrap
 
+import android.util.Log
 import com.nexio.tv.data.repository.extractFilenameFromCandidatePath
 import com.nexio.tv.data.repository.isStrictPlayableVideoCandidate
 import com.nexio.tv.data.local.EasyDebridSettingsDataStore
@@ -40,6 +41,8 @@ import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
+
+private const val TAG = "DebridAvailabilityResolver"
 
 @Singleton
 class DebridAvailabilityResolver @Inject constructor(
@@ -130,9 +133,17 @@ class DebridAvailabilityResolver @Inject constructor(
             val results = Channel<Map<String, List<ResolvedServiceWrapStream>>>(Channel.UNLIMITED)
             val jobs = pendingEntries.map { (backend, backendCandidates) ->
                 async {
+                    val backendStartedAtMs = System.currentTimeMillis()
                     val resolved = runCatching {
                         backend.resolveChunk(backendCandidates, requestContext)
                     }.getOrDefault(emptyMap())
+                    Log.d(
+                        TAG,
+                        "SERVICE_WRAP_DIAG provider=${backend.provider.providerId} " +
+                            "chunk=${backendCandidates.size} " +
+                            "durationMs=${System.currentTimeMillis() - backendStartedAtMs} " +
+                            "resolved=${resolved.values.sumOf { it.size }}"
+                    )
                     val completeResolved = backendCandidates.associate { candidate ->
                         val streams = resolved[candidate.normalizedInfoHash].orEmpty()
                         resolvedStreamCache.put(

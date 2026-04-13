@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository.servicewrap
 
+import android.util.Log
 import com.nexio.tv.domain.model.Stream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +17,7 @@ import javax.inject.Singleton
 private const val DEFAULT_MAX_CONCURRENT_SERVICE_WRAP_RESOLUTIONS = 6
 private const val DEFAULT_SERVICE_WRAP_CHUNK_SIZE = 20
 private const val DEFAULT_SERVICE_WRAP_CHUNK_FLUSH_DELAY_MS = 250L
+private const val TAG = "ServiceWrapSessionFactory"
 
 @Singleton
 class ServiceWrapSessionFactory @Inject constructor(
@@ -137,6 +139,7 @@ class ServiceWrapSessionFactory @Inject constructor(
 
         private fun launchChunkResolution(candidates: List<WrapCandidate>) {
             scope.launch {
+                val chunkStartedAtMs = System.currentTimeMillis()
                 val terminalHashes = HashSet<String>()
                 try {
                     resolutionPermits.withPermit {
@@ -163,6 +166,11 @@ class ServiceWrapSessionFactory @Inject constructor(
                                 )
                             }
                         }
+                        Log.d(
+                            TAG,
+                            "SERVICE_WRAP_DIAG chunk size=${candidates.size} " +
+                                "durationMs=${System.currentTimeMillis() - chunkStartedAtMs}"
+                        )
                     }
                 } catch (error: CancellationException) {
                     throw error
