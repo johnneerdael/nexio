@@ -20,4 +20,20 @@ interface ServiceWrapResolver {
             )
         )
     }
+
+    fun resolveChunkProgressively(
+        candidates: List<WrapCandidate>,
+        requestContext: ServiceWrapRequestContext
+    ): Flow<ServiceWrapResolutionChunkBatch> = flow {
+        val resultsByHash = LinkedHashMap<String, List<ResolvedServiceWrapStream>>()
+        candidates.forEach { candidate ->
+            resultsByHash[candidate.normalizedInfoHash] = resolve(candidate, requestContext)
+        }
+        emit(
+            ServiceWrapResolutionChunkBatch(
+                streamsByHash = resultsByHash,
+                isTerminal = true
+            )
+        )
+    }
 }
