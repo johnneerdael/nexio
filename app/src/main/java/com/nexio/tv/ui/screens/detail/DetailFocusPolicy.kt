@@ -3,7 +3,6 @@ package com.nexio.tv.ui.screens.detail
 internal enum class HeroAction {
     PLAY,
     LIBRARY,
-    WATCHED,
     TRAILER
 }
 
@@ -40,14 +39,10 @@ internal fun shouldAutoResetFocusToHero(
 }
 
 internal fun buildHeroActionOrder(
-    isMovie: Boolean,
     trailerAvailable: Boolean
 ): List<HeroAction> = buildList {
     add(HeroAction.PLAY)
     add(HeroAction.LIBRARY)
-    if (isMovie) {
-        add(HeroAction.WATCHED)
-    }
     if (trailerAvailable) {
         add(HeroAction.TRAILER)
     }

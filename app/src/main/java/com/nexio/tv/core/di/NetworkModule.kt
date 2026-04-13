@@ -41,8 +41,6 @@ import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import java.io.File
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.locks.ReentrantLock
 import javax.inject.Named
 import javax.inject.Singleton
 
@@ -165,57 +163,14 @@ object NetworkModule {
     fun provideTraktOkHttpClient(
         okHttpClient: OkHttpClient
     ): OkHttpClient {
-        // Rate-limit state — captured once per singleton, shared across all requests on this client.
-        val lastMutatingRequestMs = AtomicLong(0L)
-        val getWindowTimestamps = ArrayDeque<Long>()
-        val getWindowLock = ReentrantLock()
-        val getWindowMs = 5 * 60_000L
-        val getWindowMax = 950 // conservative buffer under the 1000-call hard limit
-
+        // Rate limiting is now handled by TraktRequestGate at the coroutine layer (500ms serial
+        // queue) instead of Thread.sleep in this interceptor. This interceptor only injects
+        // required headers and provides debug logging.
         return okHttpClient.newBuilder()
-            // Discovery feeds are app-cached separately; bypass OkHttp disk cache for Trakt GET traffic.
             .disableDiskCacheForGetRequests()
             .addInterceptor { chain ->
                 val request = chain.request()
                 val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
-
-                // Trakt rate limits — enforced here so every request on this client is covered.
-                when (request.method) {
-                    "POST", "PUT", "DELETE" -> {
-                        // 1 mutating request per second per client
-                        synchronized(lastMutatingRequestMs) {
-                            val last = lastMutatingRequestMs.get()
-                            if (last != 0L) {
-                                val elapsed = System.currentTimeMillis() - last
-                                if (elapsed < 1_000L) Thread.sleep(1_000L - elapsed)
-                            }
-                            lastMutatingRequestMs.set(System.currentTimeMillis())
-                        }
-                    }
-                    "GET" -> {
-                        // 1000 requests per 5-minute sliding window per client (950 budget for safety)
-                        getWindowLock.lock()
-                        try {
-                            val now = System.currentTimeMillis()
-                            val windowStart = now - getWindowMs
-                            while (getWindowTimestamps.isNotEmpty() && getWindowTimestamps.first() < windowStart) {
-                                getWindowTimestamps.removeFirst()
-                            }
-                            if (getWindowTimestamps.size >= getWindowMax) {
-                                val waitMs = getWindowTimestamps.first() + getWindowMs - now + 100L
-                                if (waitMs > 0) Thread.sleep(waitMs)
-                                val afterDelay = System.currentTimeMillis()
-                                val newWindowStart = afterDelay - getWindowMs
-                                while (getWindowTimestamps.isNotEmpty() && getWindowTimestamps.first() < newWindowStart) {
-                                    getWindowTimestamps.removeFirst()
-                                }
-                            }
-                            getWindowTimestamps.addLast(System.currentTimeMillis())
-                        } finally {
-                            getWindowLock.unlock()
-                        }
-                    }
-                }
 
                 val requestBuilder = request.newBuilder()
                     .header("Content-Type", "application/json")

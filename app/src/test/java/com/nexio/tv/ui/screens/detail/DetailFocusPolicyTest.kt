@@ -36,7 +36,6 @@ class DetailFocusPolicyTest {
     @Test
     fun trailerActionTrapsRightNavigationAtTheEndOfTheHeroRow() {
         val actions = buildHeroActionOrder(
-            isMovie = true,
             trailerAvailable = true
         )
 
@@ -49,12 +48,11 @@ class DetailFocusPolicyTest {
             listOf(
                 HeroAction.PLAY,
                 HeroAction.LIBRARY,
-                HeroAction.WATCHED,
                 HeroAction.TRAILER
             ),
             actions
         )
-        assertEquals(HeroAction.WATCHED, trailerDirections.left)
+        assertEquals(HeroAction.LIBRARY, trailerDirections.left)
         assertEquals(null, trailerDirections.right)
         assertTrue(trailerDirections.trapRight)
     }
@@ -62,7 +60,6 @@ class DetailFocusPolicyTest {
     @Test
     fun finalHeroActionTrapsRightWhenTrailerIsUnavailable() {
         val actions = buildHeroActionOrder(
-            isMovie = false,
             trailerAvailable = false
         )
 

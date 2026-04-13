@@ -605,8 +605,6 @@ fun MetaDetailsScreen(
                         watchedEpisodes = uiState.watchedEpisodes,
                         episodeWatchedPendingKeys = uiState.episodeWatchedPendingKeys,
                         blurUnwatchedEpisodes = uiState.blurUnwatchedEpisodes,
-                        isMovieWatched = uiState.isMovieWatched,
-                        isMovieWatchedPending = uiState.isMovieWatchedPending,
                         moreLikeThis = uiState.moreLikeThis,
                         reviews = uiState.reviews,
                         isReviewsLoading = uiState.isReviewsLoading,
@@ -694,7 +692,6 @@ fun MetaDetailsScreen(
                         onPlayButtonFocused = { viewModel.onEvent(MetaDetailsEvent.OnPlayButtonFocused) },
                         onToggleLibrary = { viewModel.onEvent(MetaDetailsEvent.OnToggleLibrary) },
                         onLibraryLongPress = { viewModel.onEvent(MetaDetailsEvent.OnLibraryLongPress) },
-                        onToggleMovieWatched = { viewModel.onEvent(MetaDetailsEvent.OnToggleMovieWatched) },
                         onToggleEpisodeWatched = { video ->
                             viewModel.onEvent(MetaDetailsEvent.OnToggleEpisodeWatched(video))
                         },
@@ -953,8 +950,6 @@ private fun MetaDetailsContent(
     watchedEpisodes: Set<Pair<Int, Int>>,
     episodeWatchedPendingKeys: Set<String>,
     blurUnwatchedEpisodes: Boolean,
-    isMovieWatched: Boolean,
-    isMovieWatchedPending: Boolean,
     moreLikeThis: List<MetaPreview>,
     reviews: List<MetaReview>,
     isReviewsLoading: Boolean,
@@ -977,7 +972,6 @@ private fun MetaDetailsContent(
     onPlayButtonFocused: () -> Unit,
     onToggleLibrary: () -> Unit,
     onLibraryLongPress: () -> Unit,
-    onToggleMovieWatched: () -> Unit,
     onToggleEpisodeWatched: (Video) -> Unit,
     onClearEpisodeProgress: (Video) -> Unit,
     onCheckInEpisode: (Video) -> Unit,
@@ -1672,9 +1666,6 @@ private fun MetaDetailsContent(
                         onLibraryLongPress()
                     }
                 },
-                isMovieWatched = isMovieWatched,
-                isMovieWatchedPending = isMovieWatchedPending,
-                onToggleMovieWatched = onToggleMovieWatched,
                 mdbListRatings = mdbListRatings,
                 hideMetaInfoImdb = showMdbListImdb,
                 trailerAvailable = shouldShowDetailTrailerButton(
