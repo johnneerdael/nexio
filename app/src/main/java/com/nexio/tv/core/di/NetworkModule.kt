@@ -229,28 +229,15 @@ object NetworkModule {
     fun provideSimklOkHttpClient(
         okHttpClient: OkHttpClient
     ): OkHttpClient {
-        // Rate-limit state — captured once per singleton, shared across all requests on this client.
-        val lastMutatingRequestMs = AtomicLong(0L)
-
+        // Rate limiting is now handled by SimklRequestGate at the coroutine layer (500ms serial
+        // queue) instead of Thread.sleep in this interceptor. This interceptor only injects
+        // required headers and query parameters.
         return okHttpClient.newBuilder()
             .disableDiskCacheForGetRequests()
             .addInterceptor { chain ->
                 val request = chain.request()
                 val version = BuildConfig.VERSION_NAME.ifBlank { "dev" }
                 val appName = "NEXIO"
-
-                // Simkl rate limit — enforced here so every request on this client is covered.
-                // 1 mutating request per second per client
-                if (request.method == "POST" || request.method == "DELETE") {
-                    synchronized(lastMutatingRequestMs) {
-                        val last = lastMutatingRequestMs.get()
-                        if (last != 0L) {
-                            val elapsed = System.currentTimeMillis() - last
-                            if (elapsed < 1_000L) Thread.sleep(1_000L - elapsed)
-                        }
-                        lastMutatingRequestMs.set(System.currentTimeMillis())
-                    }
-                }
 
                 val urlBuilder = request.url.newBuilder()
                 if (request.url.queryParameter("client_id").isNullOrBlank() && BuildConfig.SIMKL_CLIENT_ID.isNotBlank()) {

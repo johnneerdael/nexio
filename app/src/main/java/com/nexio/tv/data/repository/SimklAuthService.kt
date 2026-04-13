@@ -5,6 +5,7 @@ import com.nexio.tv.BuildConfig
 import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklAuthState
 import com.nexio.tv.data.remote.api.SimklApi
+import com.nexio.tv.data.remote.SimklRequestGate
 import kotlinx.coroutines.flow.first
 import retrofit2.Response
 import java.io.IOException
@@ -21,7 +22,8 @@ sealed interface SimklTokenPollResult {
 @Singleton
 class SimklAuthService @Inject constructor(
     private val simklApi: SimklApi,
-    private val simklAuthDataStore: SimklAuthDataStore
+    private val simklAuthDataStore: SimklAuthDataStore,
+    private val requestGate: SimklRequestGate
 ) {
     fun hasRequiredCredentials(): Boolean = BuildConfig.SIMKL_CLIENT_ID.isNotBlank()
 
@@ -100,7 +102,7 @@ class SimklAuthService @Inject constructor(
     ): Response<T>? {
         val token = getCurrentAuthState().accessToken ?: return null
         return try {
-            call("Bearer $token")
+            requestGate.acquire { call("Bearer $token") }
         } catch (e: IOException) {
             Log.w("SimklAuthService", "Network error during authorized request", e)
             null
