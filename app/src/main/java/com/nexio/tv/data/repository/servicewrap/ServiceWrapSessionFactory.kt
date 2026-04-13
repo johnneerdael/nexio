@@ -5,9 +5,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val DEFAULT_MAX_CONCURRENT_SERVICE_WRAP_RESOLUTIONS = 6
 
 @Singleton
 class ServiceWrapSessionFactory @Inject constructor(
@@ -15,6 +19,20 @@ class ServiceWrapSessionFactory @Inject constructor(
     private val resolver: ServiceWrapResolver,
     private val wrappedStreamBuilder: WrappedStreamBuilder
 ) {
+    private var maxConcurrentResolutions: Int = DEFAULT_MAX_CONCURRENT_SERVICE_WRAP_RESOLUTIONS
+
+    internal constructor(
+        extractor: WrapCandidateExtractor,
+        resolver: ServiceWrapResolver,
+        wrappedStreamBuilder: WrappedStreamBuilder,
+        maxConcurrentResolutions: Int
+    ) : this(
+        extractor = extractor,
+        resolver = resolver,
+        wrappedStreamBuilder = wrappedStreamBuilder
+    ) {
+        this.maxConcurrentResolutions = maxConcurrentResolutions.coerceAtLeast(1)
+    }
 
     fun createSession(
         requestContext: ServiceWrapRequestContext,
@@ -27,6 +45,7 @@ class ServiceWrapSessionFactory @Inject constructor(
             extractor = extractor,
             resolver = resolver,
             wrappedStreamBuilder = wrappedStreamBuilder,
+            maxConcurrentResolutions = maxConcurrentResolutions,
             onResolved = onResolved
         )
     }
@@ -37,10 +56,12 @@ class ServiceWrapSessionFactory @Inject constructor(
         private val extractor: WrapCandidateExtractor,
         private val resolver: ServiceWrapResolver,
         private val wrappedStreamBuilder: WrappedStreamBuilder,
+        maxConcurrentResolutions: Int,
         private val onResolved: suspend (ServiceWrapResolvedBatch) -> Unit
     ) : ServiceWrapSession {
         private val seenHashes = HashSet<String>()
         private val inFlight = AtomicInteger(0)
+        private val resolutionPermits = Semaphore(maxConcurrentResolutions)
 
         override fun processAddonStreams(
             addonName: String,
@@ -67,25 +88,27 @@ class ServiceWrapSessionFactory @Inject constructor(
                 scope.launch {
                     var emittedTerminalBatch = false
                     try {
-                        resolver.resolveProgressively(
-                            candidate = candidate,
-                            requestContext = requestContext
-                        ).collect { resolution ->
-                            val wrappedStreams = wrappedStreamBuilder.build(candidate, resolution.streams)
-                            if (wrappedStreams.isEmpty() && !resolution.isTerminal) {
-                                return@collect
-                            }
-                            if (resolution.isTerminal) {
-                                emittedTerminalBatch = true
-                            }
-                            onResolved(
-                                ServiceWrapResolvedBatch(
-                                    addonName = addonName,
-                                    addonLogo = addonLogo,
-                                    wrappedStreams = wrappedStreams,
-                                    isTerminal = resolution.isTerminal
+                        resolutionPermits.withPermit {
+                            resolver.resolveProgressively(
+                                candidate = candidate,
+                                requestContext = requestContext
+                            ).collect { resolution ->
+                                val wrappedStreams = wrappedStreamBuilder.build(candidate, resolution.streams)
+                                if (wrappedStreams.isEmpty() && !resolution.isTerminal) {
+                                    return@collect
+                                }
+                                if (resolution.isTerminal) {
+                                    emittedTerminalBatch = true
+                                }
+                                onResolved(
+                                    ServiceWrapResolvedBatch(
+                                        addonName = addonName,
+                                        addonLogo = addonLogo,
+                                        wrappedStreams = wrappedStreams,
+                                        isTerminal = resolution.isTerminal
+                                    )
                                 )
-                            )
+                            }
                         }
                         if (!emittedTerminalBatch) {
                             onResolved(
