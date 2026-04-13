@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.player.spool
 
 import android.content.Context
+import android.os.Build
 import android.os.Environment
 import java.io.File
 
@@ -16,8 +17,19 @@ internal object DiskSpoolStorageResolver {
         return File(cacheDir, DISK_SPOOL_DIR)
     }
 
+    internal fun builtinSpoolDirectory(cacheDir: File, deviceProtectedCacheDir: File?): File {
+        return builtinSpoolDirectory(deviceProtectedCacheDir ?: cacheDir)
+    }
+
     fun builtinSpoolDirectory(context: Context): File {
-        return builtinSpoolDirectory(context.cacheDir)
+        val deviceCacheDir = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            runCatching {
+                context.createDeviceProtectedStorageContext()?.cacheDir
+            }.getOrNull()
+        } else {
+            null
+        }
+        return builtinSpoolDirectory(context.cacheDir, deviceCacheDir)
     }
 
     fun externalSpoolDirectoryOrNull(context: Context): File? {

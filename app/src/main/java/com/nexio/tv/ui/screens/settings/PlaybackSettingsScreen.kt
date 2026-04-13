@@ -362,6 +362,12 @@ internal fun PlaybackSettingsContent(
                 onSetProgressivePlaybackDiskMode = { mode: ProgressivePlaybackDiskMode ->
                     coroutineScope.launch { viewModel.setProgressivePlaybackDiskMode(mode) }
                 },
+                onSetDiskSpoolSizeMb = { mb ->
+                    coroutineScope.launch { viewModel.setDiskSpoolSizeMb(mb) }
+                },
+                onSetDiskSpoolStartupBufferMb = { mb ->
+                    coroutineScope.launch { viewModel.setDiskSpoolStartupBufferMb(mb) }
+                },
                 onSetDiskSpoolStorageLocation = { location: DiskSpoolStorageLocation ->
                     coroutineScope.launch { viewModel.setDiskSpoolStorageLocation(location) }
                 },
@@ -943,7 +949,8 @@ internal fun SliderSettingsItem(
                         .clip(RoundedCornerShape(4.dp))
                         .background(NexioColors.BackgroundElevated)
                 ) {
-                    val progress = ((value - minValue).toFloat() / (maxValue - minValue).toFloat()).coerceIn(0f, 1f)
+                    val valueRange = (maxValue - minValue).coerceAtLeast(1)
+                    val progress = ((value - minValue).toFloat() / valueRange.toFloat()).coerceIn(0f, 1f)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth(progress)

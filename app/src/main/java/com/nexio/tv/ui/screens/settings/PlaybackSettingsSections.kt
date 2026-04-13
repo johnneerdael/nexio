@@ -171,6 +171,8 @@ internal fun PlaybackSettingsSections(
     onSetVodCacheSizeMb: (Int) -> Unit,
     onSetVodCacheWarmAheadEnabled: (Boolean) -> Unit,
     onSetProgressivePlaybackDiskMode: (ProgressivePlaybackDiskMode) -> Unit,
+    onSetDiskSpoolSizeMb: (Int) -> Unit,
+    onSetDiskSpoolStartupBufferMb: (Int) -> Unit,
     onSetDiskSpoolStorageLocation: (DiskSpoolStorageLocation) -> Unit,
     onRunDiskSpoolStorageProbe: () -> Unit,
     // Troubleshooting — data collection
@@ -498,6 +500,8 @@ internal fun PlaybackSettingsSections(
                 onSetVodCacheWarmAheadEnabled = onSetVodCacheWarmAheadEnabled,
                 onSetUseParallelConnections = onSetUseParallelConnections,
                 onSetProgressivePlaybackDiskMode = onSetProgressivePlaybackDiskMode,
+                onSetDiskSpoolSizeMb = onSetDiskSpoolSizeMb,
+                onSetDiskSpoolStartupBufferMb = onSetDiskSpoolStartupBufferMb,
                 onSetDiskSpoolStorageLocation = onSetDiskSpoolStorageLocation,
                 onRunDiskSpoolStorageProbe = onRunDiskSpoolStorageProbe,
                 onItemFocused = { focusedSection = PlaybackSection.BUFFER_NETWORK }

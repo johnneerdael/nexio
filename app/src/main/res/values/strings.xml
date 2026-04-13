@@ -258,6 +258,10 @@
     <string name="playback_buffer_parallel_connections_disk_spool_warning">Disk spool can use parallel fetching, but this may become random write heavy. Use fast storage for best results.</string>
     <string name="playback_buffer_disk_spool_mode">Disk spool playback</string>
     <string name="playback_buffer_disk_spool_mode_sub">Experimental: plays progressive VOD from a temporary disk spool.</string>
+    <string name="playback_buffer_disk_spool_size">Disk spool size</string>
+    <string name="playback_buffer_disk_spool_size_sub">Temporary rolling disk buffer for progressive playback.</string>
+    <string name="playback_buffer_disk_spool_startup_buffer">Startup spool buffer</string>
+    <string name="playback_buffer_disk_spool_startup_buffer_sub">Fill this much disk spool before playback starts.</string>
     <string name="playback_buffer_disk_spool_storage_location">Disk spool storage</string>
     <string name="playback_buffer_disk_spool_storage_location_sub">Choose where disk spool writes its temporary playback file.</string>
     <string name="playback_buffer_disk_spool_storage_location_no_external">No mounted external app storage detected.</string>

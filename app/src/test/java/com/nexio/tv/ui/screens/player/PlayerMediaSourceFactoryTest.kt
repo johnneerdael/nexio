@@ -1005,7 +1005,7 @@ class PlayerMediaSourceFactoryTest {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
             diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
             diskSpoolWriterExecutorForTesting = Executor { }
-            diskSpoolWriterProfileObserverForTesting = { connections, chunkBytes ->
+            diskSpoolWriterProfileObserverForTesting = { connections, chunkBytes, _ ->
                 capturedProfiles += connections to (chunkBytes / 1024 / 1024)
             }
         }
@@ -1016,6 +1016,36 @@ class PlayerMediaSourceFactoryTest {
         )
 
         assertEquals(listOf(2 to 18), capturedProfiles)
+        factory.shutdown()
+    }
+
+    @Test
+    fun progressivePlayback_usesConfiguredDiskSpoolCapacityAndStartupBuffer() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val capturedSpoolFiles = mutableListOf<File>()
+        val capturedStartupBuffers = mutableListOf<Int>()
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = noNetworkOkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            diskSpoolSizeMb = 2_048
+            diskSpoolStartupBufferMb = 384
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+            diskSpoolWriterExecutorForTesting = Executor { }
+            diskSpoolSessionObserverForTesting = { file, _ -> capturedSpoolFiles += file }
+            diskSpoolWriterProfileObserverForTesting = { _, _, startupBufferBytes ->
+                capturedStartupBuffers.add((startupBufferBytes / 1024L / 1024L).toInt())
+            }
+        }
+
+        factory.progressiveUpstreamFactoryForTesting(
+            url = "https://real-debrid.com/path/video.mkv",
+            headers = emptyMap()
+        )
+
+        assertEquals(2_048L * 1024L * 1024L, capturedSpoolFiles.single().length())
+        assertEquals(listOf(384), capturedStartupBuffers)
         factory.shutdown()
     }
 

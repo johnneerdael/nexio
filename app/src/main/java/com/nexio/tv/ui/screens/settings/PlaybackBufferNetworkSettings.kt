@@ -35,6 +35,8 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
     onSetVodCacheWarmAheadEnabled: (Boolean) -> Unit,
     onSetUseParallelConnections: (Boolean) -> Unit,
     onSetProgressivePlaybackDiskMode: (ProgressivePlaybackDiskMode) -> Unit,
+    onSetDiskSpoolSizeMb: (Int) -> Unit,
+    onSetDiskSpoolStartupBufferMb: (Int) -> Unit,
     onSetDiskSpoolStorageLocation: (DiskSpoolStorageLocation) -> Unit,
     onRunDiskSpoolStorageProbe: () -> Unit,
     onItemFocused: () -> Unit
@@ -166,6 +168,61 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
             },
             onFocused = onItemFocused
         )
+    }
+
+    if (playerSettings.progressivePlaybackDiskMode == ProgressivePlaybackDiskMode.SPOOL) {
+        item(key = "network_cache_disk_spool_size") {
+            val context = LocalContext.current
+            val spoolDirectory = DiskSpoolStorageResolver.resolveSpoolDirectory(
+                context,
+                playerSettings.diskSpoolStorageLocation
+            ) ?: DiskSpoolStorageResolver.builtinSpoolDirectory(context)
+            val maxSpoolSizeMb = resolveDiskSpoolSizeMaxMb(spoolDirectory.usableSpace)
+            val spoolSizeMb = playerSettings.diskSpoolSizeMb.coerceIn(
+                PlayerSettings.MIN_DISK_SPOOL_SIZE_MB,
+                maxSpoolSizeMb
+            )
+            SliderSettingsItem(
+                icon = Icons.Default.Storage,
+                title = stringResource(R.string.playback_buffer_disk_spool_size),
+                subtitle = stringResource(R.string.playback_buffer_disk_spool_size_sub),
+                value = spoolSizeMb,
+                valueText = "${spoolSizeMb} MB",
+                minValue = PlayerSettings.MIN_DISK_SPOOL_SIZE_MB,
+                maxValue = maxSpoolSizeMb,
+                step = 256,
+                onValueChange = onSetDiskSpoolSizeMb,
+                onFocused = onItemFocused
+            )
+        }
+
+        item(key = "network_cache_disk_spool_startup_buffer") {
+            val context = LocalContext.current
+            val spoolDirectory = DiskSpoolStorageResolver.resolveSpoolDirectory(
+                context,
+                playerSettings.diskSpoolStorageLocation
+            ) ?: DiskSpoolStorageResolver.builtinSpoolDirectory(context)
+            val effectiveSpoolSizeMb = playerSettings.diskSpoolSizeMb.coerceIn(
+                PlayerSettings.MIN_DISK_SPOOL_SIZE_MB,
+                resolveDiskSpoolSizeMaxMb(spoolDirectory.usableSpace)
+            )
+            val startupBufferMb = playerSettings.diskSpoolStartupBufferMb.coerceIn(
+                PlayerSettings.MIN_DISK_SPOOL_STARTUP_BUFFER_MB,
+                effectiveSpoolSizeMb
+            )
+            SliderSettingsItem(
+                icon = Icons.Default.Storage,
+                title = stringResource(R.string.playback_buffer_disk_spool_startup_buffer),
+                subtitle = stringResource(R.string.playback_buffer_disk_spool_startup_buffer_sub),
+                value = startupBufferMb,
+                valueText = "${startupBufferMb} MB",
+                minValue = PlayerSettings.MIN_DISK_SPOOL_STARTUP_BUFFER_MB,
+                maxValue = effectiveSpoolSizeMb,
+                step = 64,
+                onValueChange = onSetDiskSpoolStartupBufferMb,
+                onFocused = onItemFocused
+            )
+        }
     }
 
     item(key = "network_cache_disk_spool_storage_location") {
@@ -411,4 +468,17 @@ private fun resolveManualVodCacheMaxMb(freeDiskBytes: Long): Int {
     return boundedMb.toInt()
 }
 
+internal fun resolveDiskSpoolSizeMaxMb(freeDiskBytes: Long): Int {
+    val freeDiskMb = freeDiskBytes.coerceAtLeast(0L) / (1024L * 1024L)
+    val dynamicMaxMb = (freeDiskMb - DISK_SPOOL_FREE_SPACE_RESERVE_MB)
+        .coerceAtLeast(PlayerSettings.MIN_DISK_SPOOL_SIZE_MB.toLong())
+    val boundedMb = min(
+        min(PlayerSettings.MAX_DISK_SPOOL_SIZE_MB.toLong(), DISK_SPOOL_SETTINGS_HARD_MAX_MB),
+        dynamicMaxMb
+    )
+    return boundedMb.toInt()
+}
+
 private const val VOD_CACHE_FREE_SPACE_RESERVE_MB = 1024L
+private const val DISK_SPOOL_FREE_SPACE_RESERVE_MB = 512L
+private const val DISK_SPOOL_SETTINGS_HARD_MAX_MB = 16_384L

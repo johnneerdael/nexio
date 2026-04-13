@@ -14,7 +14,9 @@ internal class DiskSpoolDataSource(
     private val uri: Uri,
     private val contentLength: Long = C.LENGTH_UNSET.toLong(),
     private val randomAccessFallbackFactory: DataSource.Factory? = null,
-    private val randomAccessBypassDistanceBytes: Long = RANDOM_ACCESS_BYPASS_DISTANCE_BYTES
+    private val randomAccessBypassDistanceBytes: Long = RANDOM_ACCESS_BYPASS_DISTANCE_BYTES,
+    private val startupPrebufferBytes: Long = 0L,
+    private val startupPrebufferWaitTimeoutMs: Long = STARTUP_PREBUFFER_WAIT_TIMEOUT_MS
 ) : DataSource {
 
     private val transferListeners = mutableListOf<TransferListener>()
@@ -51,6 +53,9 @@ internal class DiskSpoolDataSource(
             dataSpec.length != C.LENGTH_UNSET.toLong() -> dataSpec.length
             resolvedContentLength != C.LENGTH_UNSET.toLong() -> (resolvedContentLength - position).coerceAtLeast(0L)
             else -> C.LENGTH_UNSET.toLong()
+        }
+        if (!awaitStartupPrebuffer(dataSpec) && randomAccessFallbackFactory != null) {
+            return openFallback(dataSpec)
         }
 
         transferListeners.forEach { it.onTransferInitializing(this, dataSpec, false) }
@@ -124,6 +129,22 @@ internal class DiskSpoolDataSource(
         return requestedPosition > frontier + bypassDistance
     }
 
+    private fun awaitStartupPrebuffer(dataSpec: DataSpec): Boolean {
+        if (dataSpec.position != 0L) return true
+        val safePrebufferBytes = startupPrebufferBytes.coerceAtLeast(0L)
+        if (safePrebufferBytes == 0L) return true
+        val target = if (resolvedContentLength != C.LENGTH_UNSET.toLong()) {
+            minOf(safePrebufferBytes, resolvedContentLength)
+        } else {
+            safePrebufferBytes
+        }
+        if (target <= 0L) return true
+        return session.awaitFrontierAtLeast(
+            targetFrontierBytes = target,
+            timeoutMs = startupPrebufferWaitTimeoutMs
+        )
+    }
+
     private fun openFallbackForCurrentPosition(): DataSource? {
         if (randomAccessFallbackFactory == null) return null
         val dataSpec = openedDataSpec ?: return null
@@ -181,19 +202,22 @@ internal class DiskSpoolDataSource(
         private val session: DiskSpoolSession,
         private val uri: Uri,
         private val contentLength: Long = C.LENGTH_UNSET.toLong(),
-        private val randomAccessFallbackFactory: DataSource.Factory? = null
+        private val randomAccessFallbackFactory: DataSource.Factory? = null,
+        private val startupPrebufferBytes: Long = 0L
     ) : DataSource.Factory {
         override fun createDataSource(): DataSource {
             return DiskSpoolDataSource(
                 session = session,
                 uri = uri,
                 contentLength = contentLength,
-                randomAccessFallbackFactory = randomAccessFallbackFactory
+                randomAccessFallbackFactory = randomAccessFallbackFactory,
+                startupPrebufferBytes = startupPrebufferBytes
             )
         }
     }
 
     private companion object {
         const val RANDOM_ACCESS_BYPASS_DISTANCE_BYTES = 64L * 1024L * 1024L
+        const val STARTUP_PREBUFFER_WAIT_TIMEOUT_MS = 120_000L
     }
 }

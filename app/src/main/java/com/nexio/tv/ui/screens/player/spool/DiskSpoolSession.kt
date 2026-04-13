@@ -205,6 +205,41 @@ internal class DiskSpoolSession(
         }
     }
 
+    fun awaitFrontierAtLeast(targetFrontierBytes: Long, timeoutMs: Long): Boolean {
+        if (targetFrontierBytes <= 0L) return true
+        val safeTimeoutMs = timeoutMs.coerceAtLeast(0L)
+        synchronized(lock) {
+            val startedAtMs = SystemClock.elapsedRealtime()
+            var remainingMs = safeTimeoutMs
+            while (true) {
+                if (closed.get()) return false
+                val knownContentLength = contentLength.get()
+                val effectiveTarget = if (knownContentLength > 0L) {
+                    minOf(targetFrontierBytes, knownContentLength)
+                } else {
+                    targetFrontierBytes
+                }
+                if (frontier.get() >= effectiveTarget) return true
+                val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
+                if (elapsedMs >= safeTimeoutMs || remainingMs <= 0L) return false
+                val waitSliceMs = minOf(remainingMs, 50L)
+                val beforeWaitMs = SystemClock.elapsedRealtime()
+                try {
+                    lock.wait(waitSliceMs)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return false
+                }
+                val afterWaitMs = SystemClock.elapsedRealtime()
+                remainingMs = if (afterWaitMs <= beforeWaitMs) {
+                    (remainingMs - waitSliceMs).coerceAtLeast(0L)
+                } else {
+                    (safeTimeoutMs - (afterWaitMs - startedAtMs)).coerceAtLeast(0L)
+                }
+            }
+        }
+    }
+
     override fun close() {
         val closeFailure = arrayListOf<IOException>()
         synchronized(lock) {
