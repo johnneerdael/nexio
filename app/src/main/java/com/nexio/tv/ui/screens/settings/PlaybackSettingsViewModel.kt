@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.settings
 
 import android.content.Context
 import android.util.Log
+import androidx.annotation.MainThread
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.data.local.AutoplayBandwidthMode
@@ -40,6 +41,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -51,6 +54,12 @@ import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 typealias TrackingProviderSelectorState = TrackingProviderState
+
+sealed class DiskSpoolStorageProbeUiState {
+    object NotChecked : DiskSpoolStorageProbeUiState()
+    object Running : DiskSpoolStorageProbeUiState()
+    data class Failed(val message: String) : DiskSpoolStorageProbeUiState()
+}
 
 @HiltViewModel
 class PlaybackSettingsViewModel @Inject constructor(
@@ -100,6 +109,10 @@ class PlaybackSettingsViewModel @Inject constructor(
     private val diskSpoolStorageProbeCommitMutex = Mutex()
     internal var diskSpoolStorageProbeRunnerForTesting: (suspend (File, () -> Boolean) -> SpoolStorageProbeResult)? = null
     internal var diskSpoolDirectoryResolverForTesting: ((Context, DiskSpoolStorageLocation) -> File?)? = null
+    private val _diskSpoolStorageProbeUiState =
+        MutableStateFlow<DiskSpoolStorageProbeUiState>(DiskSpoolStorageProbeUiState.NotChecked)
+    val diskSpoolStorageProbeUiState: StateFlow<DiskSpoolStorageProbeUiState> =
+        _diskSpoolStorageProbeUiState
 
     suspend fun setPlayerPreference(preference: PlayerPreference) {
         playerSettingsDataStore.setPlayerPreference(preference)
@@ -353,37 +366,49 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setDiskSpoolStorageLocation(location)
     }
 
+    @MainThread
     fun runDiskSpoolStorageProbe(context: Context) {
         val probeGeneration = diskSpoolStorageProbeGeneration.incrementAndGet()
         diskSpoolStorageProbeJob?.cancel()
+        _diskSpoolStorageProbeUiState.value = DiskSpoolStorageProbeUiState.Running
         val applicationContext = context.applicationContext
         diskSpoolStorageProbeJob = viewModelScope.launch(Dispatchers.IO) {
             fun isCurrentProbeGeneration(): Boolean {
                 return coroutineContext.isActive &&
                     diskSpoolStorageProbeGeneration.get() == probeGeneration
             }
-            suspend fun commitProbeResultIfCurrent(result: SpoolStorageProbeResult?) {
+            suspend fun commitProbeResultIfCurrent(result: SpoolStorageProbeResult) {
                 diskSpoolStorageProbeCommitMutex.withLock {
                     if (isCurrentProbeGeneration()) {
                         playerSettingsDataStore.setSpoolStorageProbeResult(result)
+                        _diskSpoolStorageProbeUiState.value = DiskSpoolStorageProbeUiState.NotChecked
+                    }
+                }
+            }
+            suspend fun failProbeIfCurrent(message: String) {
+                diskSpoolStorageProbeCommitMutex.withLock {
+                    if (isCurrentProbeGeneration()) {
+                        _diskSpoolStorageProbeUiState.value = DiskSpoolStorageProbeUiState.Failed(message)
                     }
                 }
             }
             try {
                 coroutineContext.ensureActive()
                 if (!isCurrentProbeGeneration()) return@launch
-                commitProbeResultIfCurrent(null)
-                coroutineContext.ensureActive()
                 val settings = playerSettingsDataStore.playerSettings.first()
-                val spoolDirectory = diskSpoolDirectoryResolverForTesting?.invoke(
-                    applicationContext,
-                    settings.diskSpoolStorageLocation
-                ) ?: DiskSpoolStorageResolver.resolveSpoolDirectory(
-                    applicationContext,
-                    settings.diskSpoolStorageLocation
-                )
+                val spoolDirectory = if (diskSpoolDirectoryResolverForTesting != null) {
+                    diskSpoolDirectoryResolverForTesting?.invoke(
+                        applicationContext,
+                        settings.diskSpoolStorageLocation
+                    )
+                } else {
+                    DiskSpoolStorageResolver.resolveSpoolDirectory(
+                        applicationContext,
+                        settings.diskSpoolStorageLocation
+                    )
+                }
                 if (spoolDirectory == null) {
-                    commitProbeResultIfCurrent(null)
+                    failProbeIfCurrent("Disk spool storage location is unavailable")
                     return@launch
                 }
                 val shouldContinue = {
@@ -401,7 +426,7 @@ class PlaybackSettingsViewModel @Inject constructor(
             } catch (error: kotlinx.coroutines.CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                commitProbeResultIfCurrent(null)
+                failProbeIfCurrent(error.message ?: "Disk spool storage diagnostic failed")
                 Log.w(TAG, "Disk spool storage probe failed", error)
             }
         }
