@@ -1589,8 +1589,11 @@ internal suspend fun selectDeterministicAutoplayCandidate(
 
 private fun StreamCardModel.matchesShadowStreamKey(streamKey: String?): Boolean {
     if (streamKey.isNullOrBlank()) return false
-    return stream.wrappedOriginalStreamKey == streamKey ||
-        parsed.exactDuplicateKey == streamKey
+    if (stream.wrappedOriginalStreamKey == streamKey) return true
+    if (parsed.exactDuplicateKey == streamKey) return true
+    val serviceId = parsed.serviceId
+    if (serviceId != null && streamKey == "${parsed.exactDuplicateKey}|$serviceId") return true
+    return false
 }
 
 private object AutoplayPlaybackUrlPreflight {

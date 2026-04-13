@@ -1069,8 +1069,10 @@ private fun StreamCardModel.shadowParsedFacts(request: ShadowRequestContext): Sh
 }
 
 private fun StreamCardModel.shadowStreamKey(): String {
-    return stream.wrappedOriginalStreamKey
+    val baseKey = stream.wrappedOriginalStreamKey
         ?: parsed.exactDuplicateKey
+    val serviceId = parsed.serviceId ?: return baseKey
+    return "$baseKey|$serviceId"
 }
 
 private fun calculateAverageBitrateMbps(sizeBytes: Long, runtimeMs: Long): Double {
