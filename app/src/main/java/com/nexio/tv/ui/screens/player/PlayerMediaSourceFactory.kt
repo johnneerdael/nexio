@@ -37,6 +37,7 @@ import com.nexio.tv.ui.screens.player.spool.DiskSpoolDataSource
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolSession
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageResolver
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageDiagnostic
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolWriter
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import java.io.File
@@ -386,6 +387,7 @@ internal class PlayerMediaSourceFactory(
         runCatching {
             val directory = diskSpoolDirectoryOrNull() ?: return
             if (directory.exists()) {
+                DiskSpoolStorageDiagnostic.cleanupStaleDiagnosticFiles(directory)
                 directory.listFiles()?.forEach { file ->
                     if (file.isFile && file.name.startsWith("spool-") && file.name.endsWith(".bin")) {
                         file.delete()
