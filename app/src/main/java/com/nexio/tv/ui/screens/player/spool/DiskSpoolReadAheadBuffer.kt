@@ -93,15 +93,26 @@ internal class DiskSpoolReadAheadBuffer(
     private fun runWorker() {
         val scratch = ByteArray(chunkBytes.coerceAtLeast(1))
         while (true) {
-            val (startPosition, readGeneration) = synchronized(lock) {
+            val (startPosition, readLength, readGeneration) = synchronized(lock) {
                 while (!released && bufferedBytes >= capacity) {
                     lock.wait(50L)
                 }
                 if (released) return
-                nextReadPosition to generation
+                val windowStart = session.windowStartBytes()
+                if (nextReadPosition < windowStart) {
+                    resetLocked(windowStart)
+                }
+                val availableBytes = session.contiguousFrontierBytes() - nextReadPosition
+                if (availableBytes <= 0L) {
+                    lock.wait(NON_POSITIVE_READ_BACKOFF_MS)
+                    return@synchronized Triple(nextReadPosition, 0, generation)
+                }
+                val readLength = minOf(scratch.size.toLong(), availableBytes).toInt()
+                Triple(nextReadPosition, readLength, generation)
             }
+            if (readLength <= 0) continue
 
-            val read = session.read(startPosition, scratch, 0, scratch.size)
+            val read = session.read(startPosition, scratch, 0, readLength)
             if (read <= 0) {
                 if (Thread.currentThread().isInterrupted || session.isClosed()) return
                 synchronized(lock) {
