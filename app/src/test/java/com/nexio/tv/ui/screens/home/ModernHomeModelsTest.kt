@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
@@ -131,6 +132,56 @@ class ModernHomeModelsTest {
         )
 
         assertEquals("88", resolved?.tomatoesText)
+    }
+
+    @Test
+    fun `buildCatalogItem carries frozen artwork from previous cached item`() {
+        val row = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "catalog",
+            catalogName = "Catalog",
+            type = ContentType.MOVIE,
+            items = emptyList()
+        )
+        val original = MetaPreview(
+            id = "tt123",
+            type = ContentType.MOVIE,
+            name = "Original",
+            poster = "poster",
+            posterShape = PosterShape.POSTER,
+            background = "original-backdrop",
+            logo = "original-logo",
+            description = null,
+            releaseInfo = "2025",
+            runtime = null,
+            imdbRating = null,
+            genres = emptyList()
+        )
+        val cached = buildCatalogItem(
+            item = original,
+            row = row,
+            useLandscapePosters = true,
+            occurrence = 0
+        )
+        val enriched = original.copy(
+            background = "enriched-backdrop",
+            logo = "enriched-logo"
+        )
+
+        val rebuilt = buildCatalogItem(
+            item = enriched,
+            row = row,
+            useLandscapePosters = true,
+            occurrence = 0,
+            previousCachedItem = cached
+        )
+
+        assertEquals("original-backdrop", rebuilt.heroPreview.frozenBackdropUrl)
+        assertEquals("original-logo", rebuilt.heroPreview.frozenLogoUrl)
+        assertEquals("enriched-backdrop", rebuilt.heroPreview.backdrop)
+        assertEquals("enriched-logo", rebuilt.heroPreview.logo)
     }
 
     @Test

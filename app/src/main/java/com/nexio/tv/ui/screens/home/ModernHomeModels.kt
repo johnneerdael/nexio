@@ -41,7 +41,9 @@ internal data class HeroPreview(
     val genres: List<String>,
     val poster: String?,
     val backdrop: String?,
-    val imageUrl: String?
+    val imageUrl: String?,
+    val frozenBackdropUrl: String? = null,
+    val frozenLogoUrl: String? = null
 )
 
 @Immutable
@@ -494,9 +496,14 @@ internal fun buildCatalogItem(
     item: MetaPreview,
     row: CatalogRow,
     useLandscapePosters: Boolean,
-    occurrence: Int
+    occurrence: Int,
+    previousCachedItem: ModernCarouselItem? = null
 ): ModernCarouselItem {
     val displayMetadata = item.toHomeDisplayMetadata()
+    val frozenBackdrop = previousCachedItem?.heroPreview?.frozenBackdropUrl?.takeIf { it.isNotBlank() }
+        ?: firstNonBlank(item.background, displayMetadata.backdrop)
+    val frozenLogo = previousCachedItem?.heroPreview?.frozenLogoUrl?.takeIf { it.isNotBlank() }
+        ?: firstNonBlank(item.logo, displayMetadata.logo)
     val heroPreview = HeroPreview(
         title = displayMetadata.title ?: item.name,
         logo = displayMetadata.logo ?: item.logo,
@@ -512,7 +519,9 @@ internal fun buildCatalogItem(
             firstNonBlank(displayMetadata.backdrop, displayMetadata.poster, item.background, item.poster)
         } else {
             firstNonBlank(displayMetadata.poster, displayMetadata.backdrop, item.poster, item.background)
-        }
+        },
+        frozenBackdropUrl = frozenBackdrop,
+        frozenLogoUrl = frozenLogo
     )
 
     return ModernCarouselItem(

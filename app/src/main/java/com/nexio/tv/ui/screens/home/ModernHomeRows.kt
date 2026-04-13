@@ -608,10 +608,22 @@ private fun ModernCarouselCard(
         rememberUpdatedState(cardWidth)
     }
     val animatedCardWidth by animatedCardWidthState
+    val frozenBackdropUrl = remember(item.key) {
+        mutableStateOf(item.heroPreview.frozenBackdropUrl ?: item.heroPreview.backdrop)
+    }
+    if (frozenBackdropUrl.value.isNullOrBlank() && !item.heroPreview.backdrop.isNullOrBlank()) {
+        frozenBackdropUrl.value = item.heroPreview.backdrop
+    }
+    val frozenLogoUrl = remember(item.key) {
+        mutableStateOf(item.heroPreview.frozenLogoUrl ?: item.heroPreview.logo)
+    }
+    if (frozenLogoUrl.value.isNullOrBlank() && !item.heroPreview.logo.isNullOrBlank()) {
+        frozenLogoUrl.value = item.heroPreview.logo
+    }
     val imageUrl = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
         item.heroPreview.backdrop ?: item.imageUrl ?: item.heroPreview.poster
     } else {
-        item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
+        frozenBackdropUrl.value ?: item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
     }
     // Keep decode target stable across expand/collapse to avoid recreating image requests/painters
     // purely due to animated width changes.
@@ -643,8 +655,9 @@ private fun ModernCarouselCard(
     val maxLogoWidthPx = remember(maxRequestCardWidth, density) {
         with(density) { (maxRequestCardWidth * 0.62f).roundToPx() }
     }
-    val logoModel = remember(context, item.heroPreview.logo, maxLogoWidthPx, logoHeightPx) {
-        item.heroPreview.logo?.let {
+    val effectiveLogoUrl = frozenLogoUrl.value
+    val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx) {
+        effectiveLogoUrl?.let {
             ImageRequest.Builder(context)
                 .data(it)
                 .crossfade(false)
@@ -653,13 +666,13 @@ private fun ModernCarouselCard(
                 .build()
         }
     }
-    var landscapeLogoLoadFailed by remember(item.heroPreview.logo) { mutableStateOf(false) }
+    var landscapeLogoLoadFailed by remember(effectiveLogoUrl) { mutableStateOf(false) }
     var trailerFirstFrameRendered by remember(trailerPreviewUrl) { mutableStateOf(false) }
     var lastExternalTrailerLaunchKey by remember { mutableStateOf<String?>(null) }
     val hasImage = !imageUrl.isNullOrBlank()
     val hasLandscapeLogo =
         (useLandscapePosters || isBackdropExpanded) &&
-            !item.heroPreview.logo.isNullOrBlank() &&
+            !effectiveLogoUrl.isNullOrBlank() &&
             !landscapeLogoLoadFailed
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }
