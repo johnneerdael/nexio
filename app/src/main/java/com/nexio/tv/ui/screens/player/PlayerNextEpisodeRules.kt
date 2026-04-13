@@ -27,6 +27,12 @@ object PlayerNextEpisodeRules {
         }
     }
 
+    private fun hasTidbPlayNextInterval(skipIntervals: List<SkipInterval>): Boolean =
+        skipIntervals.any { interval ->
+            interval.provider == "theintrodb" &&
+                (interval.type == "credits" || interval.type == "preview")
+        }
+
     fun resolveNextEpisode(
         videos: List<Video>,
         currentSeason: Int,
@@ -53,7 +59,7 @@ object PlayerNextEpisodeRules {
         thresholdMinutesBeforeEnd: Float,
         tidbManagedContent: Boolean = isTidbManaged(skipIntervals)
     ): Boolean {
-        if (tidbManagedContent) {
+        if (tidbManagedContent && hasTidbPlayNextInterval(skipIntervals)) {
             return isTidbPlayNextWindow(positionMs, skipIntervals)
         }
 
