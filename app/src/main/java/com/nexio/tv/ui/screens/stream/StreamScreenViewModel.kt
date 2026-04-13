@@ -559,7 +559,7 @@ class StreamScreenViewModel @Inject constructor(
                 }
 
                 updateSourceChipsForFetchStart(installedAddons)
-                val organizeChannel = Channel<PendingOrganizeRequest>(Channel.CONFLATED)
+                val organizeChannel = Channel<PendingOrganizeRequest>(Channel.UNLIMITED)
                 var latestAddonStreamGroups: List<AddonStreams> = emptyList()
                 val queuedPresentationVersion = AtomicLong(0L)
                 val appliedPresentationVersion = AtomicLong(0L)
