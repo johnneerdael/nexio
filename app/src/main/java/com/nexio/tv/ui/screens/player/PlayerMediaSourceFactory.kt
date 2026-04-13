@@ -819,12 +819,20 @@ internal class PlayerMediaSourceFactory(
             return null
         }
         diskSpoolSessionObserverForTesting?.invoke(spoolFile, requestedSpoolBytes)
+        val startupPrebufferBytes = resolveDiskSpoolStartupBufferBytes(requestedSpoolBytes)
 
         val registrationGeneration = synchronized(diskSpoolLock) {
             diskSpoolLifecycleGeneration
         }
         val writerFuture = runCatching {
-            scheduleDiskSpoolWriter(url, session, requestedSpoolBytes, requestHeaders, diskSpoolProfile)
+            scheduleDiskSpoolWriter(
+                url = url,
+                session = session,
+                requestedSpoolBytes = requestedSpoolBytes,
+                requestHeaders = requestHeaders,
+                profile = diskSpoolProfile,
+                startupPrebufferBytes = startupPrebufferBytes
+            )
         }.getOrElse { error ->
             Log.w(TAG, "Disk spool writer scheduling failed; falling back to normal progressive upstream", error)
             closeDiskSpoolSession(session, reason = "writer scheduling failure")
@@ -840,13 +848,18 @@ internal class PlayerMediaSourceFactory(
             closeDiskSpoolSession(session, reason = "disk spool session invalidated before factory return")
             return null
         }
+        if (!prewarmDiskSpoolStartup(session, writerFuture, startupPrebufferBytes)) {
+            writerFuture?.cancel(true)
+            closeDiskSpoolSession(session, reason = "startup prewarm failure")
+            return null
+        }
         // Playback can stop after this factory is returned; DiskSpoolDataSource.open
         // rechecks the session so a closed spool cannot masquerade as playable media.
         return DiskSpoolDataSource.Factory(
             session = session,
             uri = Uri.parse(url),
             randomAccessFallbackFactory = createOkHttpDataSourceFactory(requestHeaders),
-            startupPrebufferBytes = resolveDiskSpoolStartupBufferBytes(requestedSpoolBytes),
+            startupPrebufferBytes = startupPrebufferBytes,
             ramReadAheadBytes = resolveDiskSpoolRamReadAheadBytes()
         )
     }
@@ -894,10 +907,10 @@ internal class PlayerMediaSourceFactory(
         session: DiskSpoolSession,
         requestedSpoolBytes: Long,
         requestHeaders: Map<String, String>,
-        profile: ParallelProviderProfile
+        profile: ParallelProviderProfile,
+        startupPrebufferBytes: Long
     ): Future<*>? {
         val chunkBytes = profile.chunkSizeMb * 1024 * 1024
-        val startupPrebufferBytes = resolveDiskSpoolStartupBufferBytes(requestedSpoolBytes)
         diskSpoolWriterProfileObserverForTesting?.invoke(profile.connectionCount, chunkBytes, startupPrebufferBytes)
         val task = Runnable {
             runCatching {
@@ -923,6 +936,27 @@ internal class PlayerMediaSourceFactory(
         } else {
             diskSpoolExecutor.submit(task)
         }
+    }
+
+    private fun prewarmDiskSpoolStartup(
+        session: DiskSpoolSession,
+        writerFuture: Future<*>?,
+        startupPrebufferBytes: Long
+    ): Boolean {
+        if (startupPrebufferBytes <= 0L) return true
+        if (writerFuture == null) return true
+        val didPrewarm = session.awaitFrontierAtLeast(
+            targetFrontierBytes = startupPrebufferBytes,
+            timeoutMs = DISK_SPOOL_STARTUP_PREWARM_TIMEOUT_MS
+        )
+        if (!didPrewarm) {
+            Log.w(
+                TAG,
+                "Disk spool startup prewarm failed frontier=${session.contiguousFrontierBytes()} " +
+                    "target=$startupPrebufferBytes done=${writerFuture.isDone}"
+            )
+        }
+        return didPrewarm
     }
 
     private fun registerActiveDiskSpoolSession(
@@ -1180,6 +1214,7 @@ internal class PlayerMediaSourceFactory(
         private const val PREFETCH_MAX_IDLE_CYCLES = 20
         private const val LIVE_CACHE_RECONFIGURE_MIN_DELTA_BYTES = 64L * 1024L * 1024L
         private const val SAFE_DEFAULT_PARALLEL_CHUNK_SIZE_MB = 24
+        private const val DISK_SPOOL_STARTUP_PREWARM_TIMEOUT_MS = 120_000L
         private const val DEFAULT_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"

@@ -2,8 +2,10 @@ package com.nexio.tv.ui.screens.player.spool
 
 import androidx.media3.common.C
 import java.io.File
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -112,6 +114,33 @@ class DiskSpoolReadAheadBufferTest {
             Thread.sleep(150L)
 
             assertEquals(C.TIME_UNSET.toLong(), session.consumePriorityPosition())
+        } finally {
+            buffer.release()
+            session.close()
+        }
+    }
+
+    @Test
+    fun `release treats worker wait interruption as normal shutdown`() {
+        val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 50L)
+        val uncaught = AtomicReference<Throwable?>()
+        val buffer = DiskSpoolReadAheadBuffer(
+            session = session,
+            capacityBytes = 8L,
+            chunkBytes = 4,
+            workerName = "test-disk-spool-read-ahead-release",
+            uncaughtExceptionHandler = Thread.UncaughtExceptionHandler { _, throwable ->
+                uncaught.set(throwable)
+            }
+        )
+
+        try {
+            buffer.start(0L)
+            Thread.sleep(25L)
+            buffer.release()
+            Thread.sleep(100L)
+
+            assertNull(uncaught.get())
         } finally {
             buffer.release()
             session.close()
