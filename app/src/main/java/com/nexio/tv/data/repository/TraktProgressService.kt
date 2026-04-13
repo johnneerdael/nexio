@@ -46,9 +46,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -246,21 +244,15 @@ class TraktProgressService @Inject constructor(
     private val hiddenProgressFetchThrottleMs = 15_000L
     private val episodeProgressCacheTtlMs = 5 * 60_000L
     private val episodeProgressFetchThrottleMs = 15_000L
-    private val showNextUpCacheTtlMs = 5 * 60_000L
-    private val showNextUpFetchThrottleMs = 15_000L
     private val optimisticTtlMs = 3 * 60_000L
     private val maxRecentEpisodeHistoryEntries = 300
     private val metadataHydrationLimit = 110
     private val metadataFetchSemaphore = Semaphore(5)
-    private val nextUpFetchSemaphore = Semaphore(4)
-    private val fastSyncThrottleMs = 3_000L
+    private val fastSyncThrottleMs = 15_000L
     private val manualRefreshSignalThrottleMs = 2_000L
-    private val baseRefreshIntervalMs = 60_000L
-    private val maxRefreshIntervalMs = 10 * 60_000L
+    private val eventDrivenRefreshThrottleMs = 30_000L
     @Volatile
-    private var refreshIntervalMs = baseRefreshIntervalMs
-    @Volatile
-    private var consecutiveRefreshFailures = 0
+    private var lastEventDrivenRefreshMs: Long = 0L
     @Volatile
     private var continueWatchingWindowDays: Int = TraktSettingsDataStore.DEFAULT_CONTINUE_WATCHING_DAYS_CAP
     @Volatile
@@ -285,15 +277,12 @@ class TraktProgressService @Inject constructor(
             }
         }
         scope.launch {
-            refreshEvents().collectLatest {
-                val success = try {
+            refreshSignals.collectLatest {
+                try {
                     refreshRemoteSnapshot()
-                    true
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to refresh remote snapshot", e)
-                    false
                 }
-                updateRefreshBackoff(success)
             }
         }
     }
@@ -321,6 +310,27 @@ class TraktProgressService @Inject constructor(
         }
         lastManualRefreshSignalMs = now
         trace("refreshNow: emitting signal, force window active for 30s")
+        refreshSignals.emit(Unit)
+    }
+
+    /**
+     * Event-driven refresh for navigation triggers (Home screen focus, Library focus, app resume).
+     * Uses a 30-second throttle to prevent rapid re-fetching during normal navigation.
+     * For mutation-driven refreshes, use [refreshNow] which has a shorter throttle.
+     */
+    suspend fun requestEventDrivenRefresh() {
+        ensureStartupGateInitialized()
+        if (isStartupRefreshGated()) {
+            trace("requestEventDrivenRefresh: deferred by startup gate")
+            return
+        }
+        val now = System.currentTimeMillis()
+        if (now - lastEventDrivenRefreshMs < eventDrivenRefreshThrottleMs) {
+            trace("requestEventDrivenRefresh: suppressed (${now - lastEventDrivenRefreshMs}ms since last)")
+            return
+        }
+        lastEventDrivenRefreshMs = now
+        trace("requestEventDrivenRefresh: emitting signal")
         refreshSignals.emit(Unit)
     }
 
@@ -880,39 +890,6 @@ class TraktProgressService @Inject constructor(
         refreshNow()
     }
 
-    private fun refreshTicker(): Flow<Unit> = flow {
-        while (true) {
-            delay(refreshIntervalMs)
-            emit(Unit)
-        }
-    }
-
-    private fun refreshEvents(): Flow<Unit> {
-        return merge(refreshTicker(), refreshSignals).onStart { emit(Unit) }
-    }
-
-    private fun updateRefreshBackoff(success: Boolean) {
-        if (success) {
-            if (consecutiveRefreshFailures > 0 || refreshIntervalMs != baseRefreshIntervalMs) {
-                Log.d(TAG, "Refresh recovered. Resetting Trakt poll interval to ${baseRefreshIntervalMs}ms")
-            }
-            consecutiveRefreshFailures = 0
-            refreshIntervalMs = baseRefreshIntervalMs
-            return
-        }
-
-        consecutiveRefreshFailures += 1
-        val nextInterval = (baseRefreshIntervalMs shl (consecutiveRefreshFailures - 1))
-            .coerceAtMost(maxRefreshIntervalMs)
-        if (nextInterval != refreshIntervalMs) {
-            Log.w(
-                TAG,
-                "Refresh failed $consecutiveRefreshFailures time(s). Backing off Trakt poll interval to ${nextInterval}ms"
-            )
-        }
-        refreshIntervalMs = nextInterval
-    }
-
     private suspend fun refreshRemoteSnapshot() {
         ensureStartupGateInitialized()
         if (isStartupRefreshGated()) {
@@ -944,21 +921,26 @@ class TraktProgressService @Inject constructor(
         } else {
             remoteProgress.value
         }
-        val allNextUpSnapshot = fetchMyShowsNextUpSnapshot(force = activityChanged || force)
-        val nextUpSnapshot = filterAiredNextUpEntries(
-            entries = allNextUpSnapshot,
-            nowMs = System.currentTimeMillis()
-        )
         if (activityChanged) {
             remoteProgress.value = progressSnapshot
             hasLoadedRemoteProgress.value = true
             reconcileOptimistic(progressSnapshot)
         }
+
+        // Derive next-up locally from already-fetched data instead of calling
+        // GET /shows/{id}/progress/watched per show (the old rate-limit hot path).
+        val watchedShows = getWatchedShowsSnapshot(forceRefresh = activityChanged || force)
+        val hiddenProgress = getHiddenProgressSnapshot(forceRefresh = false)
+        val allNextUpSnapshot = deriveNextUpFromHistory(
+            progressSnapshot = progressSnapshot,
+            watchedShows = watchedShows,
+            hiddenProgress = hiddenProgress
+        )
         hydrateMetadata(
             progressList = progressSnapshot +
                 allNextUpSnapshot.map(::nextUpEntryToWatchProgress)
         )
-        myShowsNextUp.value = nextUpSnapshot
+        myShowsNextUp.value = allNextUpSnapshot
         myShowsNextUpAll.value = allNextUpSnapshot
     }
 
@@ -1362,221 +1344,6 @@ class TraktProgressService @Inject constructor(
         return items
     }
 
-    private suspend fun fetchMyShowsNextUpSnapshot(force: Boolean): List<NextUpEntry> {
-        val hiddenProgress = getHiddenProgressSnapshot(forceRefresh = force)
-        val watchedShows = getWatchedShowsSnapshot(forceRefresh = force)
-        if (watchedShows.isEmpty()) return emptyList()
-
-        val now = System.currentTimeMillis()
-        val candidates = buildWatchedShowCandidates(
-            watchedShows = watchedShows,
-            hiddenProgress = hiddenProgress,
-            nowMs = now
-        )
-        if (candidates.isEmpty()) return emptyList()
-
-        return coroutineScope {
-            candidates.map { candidate ->
-                async {
-                    nextUpFetchSemaphore.withPermit {
-                        ensureShowNextUpEntry(candidate = candidate, forceRefresh = force)
-                    }
-                }
-            }.awaitAll()
-        }.filterNotNull()
-            .filterNot { entry -> entry.contentId in hiddenProgress.hiddenShowIds || entry.contentId in hiddenProgress.droppedShowIds }
-            .filterNot { entry -> hiddenProgress.hiddenSeasonKeys.contains(hiddenSeasonKey(entry.contentId, entry.season)) }
-            .sortedByDescending { it.activityAtMs }
-    }
-
-    private fun filterAiredNextUpEntries(
-        entries: List<NextUpEntry>,
-        nowMs: Long
-    ): List<NextUpEntry> {
-        return entries.filter { entry ->
-            entry.firstAiredMs <= 0L || entry.firstAiredMs <= nowMs
-        }
-    }
-
-    private fun buildWatchedShowCandidates(
-        watchedShows: Map<String, WatchedShowIndexEntry>,
-        hiddenProgress: HiddenProgressSnapshot,
-        nowMs: Long
-    ): List<WatchedShowIndexEntry> {
-        val cachedActiveIds = showNextUpState.value
-            .filterValues { it.entry != null || it.hasCompletedSnapshot }
-            .keys
-        val prioritized = linkedMapOf<String, WatchedShowIndexEntry>()
-
-        cachedActiveIds.forEach { contentId ->
-            val watchedShow = watchedShows[contentId]
-            if (watchedShow != null) {
-                prioritized.putIfAbsent(contentId, watchedShow)
-            }
-        }
-
-        watchedShows.values
-            .asSequence()
-            .filter { it.contentId !in hiddenProgress.hiddenShowIds }
-            .filter { it.contentId !in hiddenProgress.droppedShowIds }
-            .filter { isWithinContinueWatchingWindow(it.lastWatchedAtMs, nowMs) }
-            .sortedByDescending { it.lastWatchedAtMs }
-            .forEach { entry ->
-                prioritized.putIfAbsent(entry.contentId, entry)
-            }
-
-        val prioritizedValues = prioritized.values.toList()
-        return if (isAllHistoryWindow()) {
-            prioritizedValues
-        } else {
-            prioritizedValues.take(maxOf(maxRecentEpisodeHistoryEntries / 5, 40))
-        }
-    }
-
-    private fun isWithinContinueWatchingWindow(
-        lastWatchedAtMs: Long,
-        nowMs: Long
-    ): Boolean {
-        val windowMs = recentWatchWindowMs() ?: return true
-        if (lastWatchedAtMs <= 0L) return false
-        return nowMs - lastWatchedAtMs <= windowMs
-    }
-
-    private suspend fun ensureShowNextUpEntry(
-        candidate: WatchedShowIndexEntry,
-        forceRefresh: Boolean
-    ): NextUpEntry? {
-        val cacheKey = canonicalLookupKey(candidate.contentId)
-        val now = System.currentTimeMillis()
-
-        var cachedEntry: ShowNextUpCacheEntry? = null
-        var shouldFetch = false
-
-        showNextUpMutex.withLock {
-            val existing = showNextUpState.value[cacheKey]
-            cachedEntry = existing
-            if (!forceRefresh && isShowNextUpCacheFresh(existing, now)) {
-                return@withLock
-            }
-
-            val lastAttempt = showNextUpLastAttemptAtMs[cacheKey] ?: 0L
-            if (!forceRefresh && now - lastAttempt < showNextUpFetchThrottleMs) {
-                return@withLock
-            }
-
-            if (!inFlightShowNextUpKeys.add(cacheKey)) {
-                return@withLock
-            }
-
-            showNextUpLastAttemptAtMs[cacheKey] = now
-            shouldFetch = true
-        }
-
-        if (!shouldFetch) {
-            return cachedEntry?.entry ?: showNextUpState.value[cacheKey]?.entry
-        }
-
-        return try {
-            when (val result = fetchShowNextUpEntry(candidate = candidate, cached = cachedEntry)) {
-                is ShowNextUpFetchResult.Success -> {
-                    val updatedEntry = ShowNextUpCacheEntry(
-                        entry = result.entry,
-                        updatedAtMs = System.currentTimeMillis(),
-                        activityVersion = showNextUpActivityVersion.get(),
-                        hasCompletedSnapshot = result.hasCompletedSnapshot
-                    )
-                    showNextUpState.update { current ->
-                        current + (cacheKey to updatedEntry)
-                    }
-                    result.entry
-                }
-
-                ShowNextUpFetchResult.Failure -> cachedEntry?.entry ?: showNextUpState.value[cacheKey]?.entry
-            }
-        } finally {
-            showNextUpMutex.withLock {
-                inFlightShowNextUpKeys.remove(cacheKey)
-            }
-        }
-    }
-
-    private fun isShowNextUpCacheFresh(
-        entry: ShowNextUpCacheEntry?,
-        now: Long
-    ): Boolean {
-        if (entry == null) return false
-        if (!entry.hasCompletedSnapshot) return false
-        if (entry.activityVersion != showNextUpActivityVersion.get()) return false
-        return now - entry.updatedAtMs <= showNextUpCacheTtlMs
-    }
-
-    private suspend fun fetchShowNextUpEntry(
-        candidate: WatchedShowIndexEntry,
-        cached: ShowNextUpCacheEntry?
-    ): ShowNextUpFetchResult {
-        val pathId = toTraktPathId(candidate.contentId)
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getShowProgressWatched(
-                authorization = authHeader,
-                id = pathId,
-                lastActivity = "watched"
-            )
-        } ?: return ShowNextUpFetchResult.Failure
-
-        if (!response.isSuccessful) {
-            return ShowNextUpFetchResult.Failure
-        }
-
-        val body = response.body() ?: return ShowNextUpFetchResult.Success(
-            entry = null,
-            hasCompletedSnapshot = true
-        )
-        val nextEpisode = body.nextEpisode ?: return ShowNextUpFetchResult.Success(
-            entry = null,
-            hasCompletedSnapshot = true
-        )
-        val season = nextEpisode.season?.takeIf { it > 0 } ?: return ShowNextUpFetchResult.Success(
-            entry = null,
-            hasCompletedSnapshot = true
-        )
-        val episode = nextEpisode.number?.takeIf { it > 0 } ?: return ShowNextUpFetchResult.Success(
-            entry = null,
-            hasCompletedSnapshot = true
-        )
-
-        val cachedNextUp = cached?.entry
-        val sameEpisodeAsCached = cachedNextUp?.season == season && cachedNextUp.episode == episode
-        val episodeSummary = if (sameEpisodeAsCached) {
-            null
-        } else {
-            fetchEpisodeSummary(pathId = pathId, season = season, episode = episode)
-        }
-        val firstAired = episodeSummary?.firstAired ?: cachedNextUp?.firstAired
-        val firstAiredMs = episodeSummary?.firstAired?.let(::parseIsoToMillis)
-            ?: cachedNextUp?.firstAiredMs
-            ?: 0L
-
-        val entry = NextUpEntry(
-            contentId = candidate.contentId,
-            contentType = "series",
-            name = candidate.name,
-            season = season,
-            episode = episode,
-            episodeTitle = nextEpisode.title ?: episodeSummary?.title,
-            videoId = resolveEpisodeVideoId(candidate.contentId, season, episode),
-            firstAired = firstAired,
-            firstAiredMs = firstAiredMs,
-            activityAtMs = parseIsoToMillis(body.lastWatchedAt).takeIf { it > 0L } ?: candidate.lastWatchedAtMs,
-            traktShowId = candidate.traktShowId,
-            traktEpisodeId = nextEpisode.ids?.trakt
-        )
-
-        return ShowNextUpFetchResult.Success(
-            entry = entry,
-            hasCompletedSnapshot = true
-        )
-    }
-
     /**
      * Resolve Trakt integer episode IDs for all (season, episode-number) pairs in [episodeNumbers].
      * Calls [fetchEpisodeSummary] in parallel (one request per episode).
@@ -1651,6 +1418,98 @@ class TraktProgressService @Inject constructor(
         } ?: return null
         if (!response.isSuccessful) return null
         return response.body()
+    }
+
+    /**
+     * Derives the "next up" list locally from episode history and watched-shows data.
+     *
+     * This replaces the old bulk-fetch approach that called
+     * `GET /shows/{id}/progress/watched` per show (the #1 Trakt rate-limit hot path).
+     * Instead, we determine the next unwatched episode by looking at the most recently
+     * completed episode per show and incrementing, using addon metadata when available.
+     */
+    private fun deriveNextUpFromHistory(
+        progressSnapshot: List<WatchProgress>,
+        watchedShows: Map<String, WatchedShowIndexEntry>,
+        hiddenProgress: HiddenProgressSnapshot
+    ): List<NextUpEntry> {
+        val completedByShow = progressSnapshot
+            .filter { it.season != null && it.episode != null }
+            .filter { (it.progressPercent ?: 0f) >= 90f }
+            .groupBy { it.contentId }
+
+        val entries = mutableListOf<NextUpEntry>()
+
+        for ((contentId, episodes) in completedByShow) {
+            val canonicalId = canonicalLookupKey(contentId)
+            if (canonicalId in hiddenProgress.hiddenShowIds || canonicalId in hiddenProgress.droppedShowIds) continue
+            if (contentId in hiddenProgress.hiddenShowIds || contentId in hiddenProgress.droppedShowIds) continue
+
+            val showInfo = watchedShows[contentId] ?: watchedShows[canonicalId]
+            val showName = showInfo?.name ?: contentId
+
+            val latestEpisode = episodes.maxByOrNull { it.lastWatched } ?: continue
+            val lastSeason = latestEpisode.season ?: continue
+            val lastEpisode = latestEpisode.episode ?: continue
+
+            val (nextSeason, nextEpisode) = determineNextEpisode(
+                contentId = contentId,
+                lastSeason = lastSeason,
+                lastEpisode = lastEpisode
+            ) ?: continue
+
+            if (hiddenProgress.hiddenSeasonKeys.contains(hiddenSeasonKey(contentId, nextSeason))) continue
+
+            val videoId = "$contentId:$nextSeason:$nextEpisode"
+
+            entries.add(
+                NextUpEntry(
+                    contentId = contentId,
+                    contentType = "series",
+                    name = showName,
+                    season = nextSeason,
+                    episode = nextEpisode,
+                    episodeTitle = null,
+                    videoId = videoId,
+                    firstAired = null,
+                    firstAiredMs = 0L,
+                    activityAtMs = latestEpisode.lastWatched,
+                    traktShowId = showInfo?.traktShowId ?: latestEpisode.traktShowId,
+                    traktEpisodeId = null
+                )
+            )
+        }
+
+        return entries.sortedByDescending { it.activityAtMs }
+    }
+
+    /**
+     * Determines the next episode after [lastSeason]/[lastEpisode].
+     * Uses addon metadata to find the exact next episode when available.
+     * Returns null if the show appears completed (no more episodes in metadata).
+     * Falls back to (lastSeason, lastEpisode+1) when no metadata is available.
+     */
+    private fun determineNextEpisode(
+        contentId: String,
+        lastSeason: Int,
+        lastEpisode: Int
+    ): Pair<Int, Int>? {
+        val metadata = metadataState.value[contentId]
+        if (metadata != null && metadata.episodes.isNotEmpty()) {
+            val nextInSeason = metadata.episodes.keys
+                .filter { (s, e) -> s == lastSeason && e > lastEpisode }
+                .minByOrNull { (_, e) -> e }
+            if (nextInSeason != null) return nextInSeason
+
+            val nextSeasonEp = metadata.episodes.keys
+                .filter { (s, _) -> s > lastSeason }
+                .minByOrNull { (s, e) -> s * 10000 + e }
+            if (nextSeasonEp != null) return nextSeasonEp
+
+            return null
+        }
+
+        return lastSeason to (lastEpisode + 1)
     }
 
     private fun hiddenSeasonKey(contentId: String, season: Int): String {

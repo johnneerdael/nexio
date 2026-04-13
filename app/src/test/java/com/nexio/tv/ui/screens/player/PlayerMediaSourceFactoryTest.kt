@@ -44,6 +44,27 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
+    fun diskSpoolDiagnosticsLogging_isGatedByTroubleshootingToggle() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val logs = mutableListOf<String>()
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = noNetworkOkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            diskSpoolDiagnosticsLoggerForTesting = { logs += it }
+        }
+
+        factory.createMediaSource("https://example.com/video.mkv", emptyMap())
+        assertEquals(emptyList<String>(), logs)
+
+        factory.diskSpoolDiagnosticsEnabled = true
+        factory.createMediaSource("https://example.com/video.mkv", emptyMap())
+
+        assertTrue(logs.any { it.contains("DISK_SPOOL_DIAG: createMediaSource") })
+    }
+
+    @Test
     fun sanitizeHeaders_stripsRangeAndBlankValues() {
         val sanitized = PlayerMediaSourceFactory.sanitizeHeaders(
             mapOf(

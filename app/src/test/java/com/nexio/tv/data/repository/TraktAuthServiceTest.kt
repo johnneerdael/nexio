@@ -42,7 +42,8 @@ class TraktAuthServiceTest {
         val service = spyk(
             TraktAuthService(
                 traktApi = traktApi,
-                traktAuthDataStore = traktAuthDataStore
+                traktAuthDataStore = traktAuthDataStore,
+                requestGate = com.nexio.tv.data.remote.TraktRequestGate()
             )
         )
         every { service.hasRequiredCredentials() } returns true

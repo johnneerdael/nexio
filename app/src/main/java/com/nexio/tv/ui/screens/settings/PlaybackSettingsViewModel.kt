@@ -78,6 +78,7 @@ class PlaybackSettingsViewModel @Inject constructor(
     val trailerSettings: Flow<TrailerSettings> = trailerSettingsDataStore.settings
     val streamDiagnosticsEnabled: Flow<Boolean> = debugSettingsDataStore.streamDiagnosticsEnabled
     val startupPerfTelemetryEnabled: Flow<Boolean> = debugSettingsDataStore.startupPerfTelemetryEnabled
+    val diskSpoolDiagnosticsEnabled: Flow<Boolean> = debugSettingsDataStore.diskSpoolDiagnosticsEnabled
     val trackingProviderSelectorState: Flow<TrackingProviderSelectorState> = trackingProviderStateRepository.state
     private val latestBenchmarkResults: Flow<List<DebridBenchmarkResult>> = combine(
         debridBenchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID),
@@ -230,6 +231,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setStartupPerfTelemetryEnabled(enabled: Boolean) {
         debugSettingsDataStore.setStartupPerfTelemetryEnabled(enabled)
+    }
+
+    suspend fun setDiskSpoolDiagnosticsEnabled(enabled: Boolean) {
+        debugSettingsDataStore.setDiskSpoolDiagnosticsEnabled(enabled)
     }
 
     suspend fun setExperimentalDv5ToDv81Enabled(enabled: Boolean) {
