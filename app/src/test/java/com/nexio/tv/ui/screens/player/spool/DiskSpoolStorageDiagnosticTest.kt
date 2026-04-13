@@ -30,6 +30,8 @@ class DiskSpoolStorageDiagnosticTest {
         assertTrue((result.concurrentSequentialWriteMbps ?: -1.0) > 0.0)
         assertTrue((result.concurrentSequentialReadMbps ?: -1.0) > 0.0)
         assertTrue(result.concurrentRandomWriteMbps != null)
+        assertTrue(result.p99ReadLatencyMs > 0L)
+        assertTrue(result.maxReadStallMs > 0L)
         assertEquals(File(temp.root, "spool-diagnostic").absolutePath, result.spoolDirectoryPath)
     }
 

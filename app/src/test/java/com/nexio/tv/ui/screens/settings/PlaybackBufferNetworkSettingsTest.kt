@@ -86,6 +86,84 @@ class PlaybackBufferNetworkSettingsTest {
     }
 
     @Test
+    fun diskSpoolDiagnosticStatus_reportsUnderLoadMBpsRecommendationAndAutoplayCap() {
+        val path = "/data/user/0/com.nexio.tv/cache/player_disk_spool"
+        val nowMs = 1_776_047_818_725L
+        val result = SpoolStorageProbeResult(
+            writeMbps = 1_600.0,
+            readMbps = 3_200.0,
+            combinedMbps = 1_200.0,
+            p99ReadLatencyMs = 40L,
+            maxReadStallMs = 70L,
+            measuredAtMs = nowMs - 1_000L,
+            durationMs = 60_000L,
+            bytesWritten = 1_350_000_000L,
+            bytesRead = 1_350_000_000L,
+            spoolDirectoryPath = path,
+            concurrentSequentialWriteMbps = 400.0,
+            concurrentSequentialReadMbps = 800.0,
+            concurrentRandomWriteMbps = 320.0
+        )
+
+        assertEquals(
+            DiskSpoolDiagnosticStatus.Measured(
+                recommendation = DiskSpoolDiagnosticRecommendation.Recommended,
+                autoplayCapMbps = 200,
+                underLoadWriteMBps = 50,
+                underLoadReadMBps = 100,
+                randomWriteMBps = 40,
+                p99ReadLatencyMs = 40L,
+                maxReadStallMs = 70L
+            ),
+            resolveDiskSpoolDiagnosticStatus(
+                result = result,
+                probeUiState = DiskSpoolStorageProbeUiState.NotChecked,
+                nowMs = nowMs,
+                spoolDirectoryPath = path
+            )
+        )
+    }
+
+    @Test
+    fun diskSpoolDiagnosticStatus_rejectsStorageWhenStallsAreHigh() {
+        val path = "/data/user/0/com.nexio.tv/cache/player_disk_spool"
+        val nowMs = 1_776_047_818_725L
+        val result = SpoolStorageProbeResult(
+            writeMbps = 1_600.0,
+            readMbps = 3_200.0,
+            combinedMbps = 1_200.0,
+            p99ReadLatencyMs = 40L,
+            maxReadStallMs = 900L,
+            measuredAtMs = nowMs - 1_000L,
+            durationMs = 60_000L,
+            bytesWritten = 1_350_000_000L,
+            bytesRead = 1_350_000_000L,
+            spoolDirectoryPath = path,
+            concurrentSequentialWriteMbps = 400.0,
+            concurrentSequentialReadMbps = 800.0,
+            concurrentRandomWriteMbps = 320.0
+        )
+
+        assertEquals(
+            DiskSpoolDiagnosticStatus.Measured(
+                recommendation = DiskSpoolDiagnosticRecommendation.NotRecommended,
+                autoplayCapMbps = 200,
+                underLoadWriteMBps = 50,
+                underLoadReadMBps = 100,
+                randomWriteMBps = 40,
+                p99ReadLatencyMs = 40L,
+                maxReadStallMs = 900L
+            ),
+            resolveDiskSpoolDiagnosticStatus(
+                result = result,
+                probeUiState = DiskSpoolStorageProbeUiState.NotChecked,
+                nowMs = nowMs,
+                spoolDirectoryPath = path
+            )
+        )
+    }
+
+    @Test
     fun diskSpoolProbeStatus_reflectsMissingPassedFailedAndStaleResults() {
         val path = "/data/user/0/com.nexio.tv/cache/player_disk_spool"
         val nowMs = 1_776_047_818_725L

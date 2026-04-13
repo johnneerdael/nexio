@@ -63,13 +63,14 @@ internal class DiskSpoolStorageDiagnostic(
                 null
             }
             val durationMs = (nowMs() - measuredAtMs).coerceAtLeast(1L)
+            val stallSource = concurrentRandom ?: concurrentSequential
 
             SpoolStorageProbeResult(
                 writeMbps = sequentialWriteMbps,
                 readMbps = sequentialReadMbps,
                 combinedMbps = concurrentSequential.writeMbps + concurrentSequential.readMbps,
-                p99ReadLatencyMs = 0L,
-                maxReadStallMs = 0L,
+                p99ReadLatencyMs = stallSource.p99ReadLatencyMs,
+                maxReadStallMs = stallSource.maxReadStallMs,
                 measuredAtMs = measuredAtMs,
                 durationMs = durationMs,
                 bytesWritten = totalBytes,
@@ -142,12 +143,12 @@ internal class DiskSpoolStorageDiagnostic(
                 ensureRunning()
                 writer.fd.sync()
             },
-            readWork = { reader ->
+            readWork = { reader, readTiming ->
                 var position = 0L
                 while (position < totalBytes && shouldContinue()) {
                     val length = minOf(readBuffer.size.toLong(), totalBytes - position).toInt()
                     reader.seek(position)
-                    reader.readFully(readBuffer, 0, length)
+                    readTiming.record(timedNs { reader.readFully(readBuffer, 0, length) })
                     position += length.toLong()
                 }
                 ensureRunning()
@@ -180,12 +181,12 @@ internal class DiskSpoolStorageDiagnostic(
                 ensureRunning()
                 writer.fd.sync()
             },
-            readWork = { reader ->
+            readWork = { reader, readTiming ->
                 var position = 0L
                 while (position < totalBytes && shouldContinue()) {
                     val length = minOf(readBuffer.size.toLong(), totalBytes - position).toInt()
                     reader.seek(position)
-                    reader.readFully(readBuffer, 0, length)
+                    readTiming.record(timedNs { reader.readFully(readBuffer, 0, length) })
                     position += length.toLong()
                 }
                 ensureRunning()
@@ -199,12 +200,13 @@ internal class DiskSpoolStorageDiagnostic(
         writeBytes: Long,
         readBytes: Long,
         writeWork: (RandomAccessFile) -> Unit,
-        readWork: (RandomAccessFile) -> Unit,
+        readWork: (RandomAccessFile, ReadTimingRecorder) -> Unit,
         readFile: File,
         writeFile: File
     ): ConcurrentResult {
         val start = CountDownLatch(1)
         val failure = AtomicReference<Throwable?>()
+        val readTiming = ReadTimingRecorder()
         var writeElapsedNs = 1L
         var readElapsedNs = 1L
         val writer = Thread {
@@ -222,7 +224,7 @@ internal class DiskSpoolStorageDiagnostic(
             try {
                 RandomAccessFile(readFile, "r").use { access ->
                     start.await()
-                    readElapsedNs = timedNs { readWork(access) }
+                    readElapsedNs = timedNs { readWork(access, readTiming) }
                 }
             } catch (throwable: Throwable) {
                 failure.compareAndSet(null, throwable)
@@ -238,7 +240,9 @@ internal class DiskSpoolStorageDiagnostic(
         failure.get()?.let { throw it }
         return ConcurrentResult(
             writeMbps = mbps(writeBytes, writeElapsedNs),
-            readMbps = mbps(readBytes, readElapsedNs)
+            readMbps = mbps(readBytes, readElapsedNs),
+            p99ReadLatencyMs = readTiming.p99Ms(),
+            maxReadStallMs = readTiming.maxMs()
         )
     }
 
@@ -277,8 +281,33 @@ internal class DiskSpoolStorageDiagnostic(
 
     private data class ConcurrentResult(
         val writeMbps: Double,
-        val readMbps: Double
+        val readMbps: Double,
+        val p99ReadLatencyMs: Long,
+        val maxReadStallMs: Long
     )
+
+    private class ReadTimingRecorder {
+        private val samplesNs = ArrayList<Long>()
+
+        fun record(elapsedNs: Long) {
+            samplesNs += elapsedNs.coerceAtLeast(1L)
+        }
+
+        fun p99Ms(): Long {
+            if (samplesNs.isEmpty()) return 0L
+            val sorted = samplesNs.sorted()
+            val index = (((sorted.size * 99) + 99) / 100 - 1).coerceIn(0, sorted.lastIndex)
+            return nsToMsCeil(sorted[index])
+        }
+
+        fun maxMs(): Long {
+            return samplesNs.maxOrNull()?.let(::nsToMsCeil) ?: 0L
+        }
+
+        private fun nsToMsCeil(ns: Long): Long {
+            return ((ns + 999_999L) / 1_000_000L).coerceAtLeast(1L)
+        }
+    }
 }
 
 private fun Long.positiveModulo(divisor: Long): Long {

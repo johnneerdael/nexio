@@ -228,19 +228,33 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
             is DiskSpoolDiagnosticStatus.Failed ->
                 stringResource(R.string.playback_buffer_disk_spool_diagnostic_failed, status.message)
             is DiskSpoolDiagnosticStatus.Measured -> {
-                val randomWriteMbps = status.randomWriteMbps
-                if (randomWriteMbps != null) {
+                val recommendation = when (status.recommendation) {
+                    DiskSpoolDiagnosticRecommendation.Recommended ->
+                        stringResource(R.string.playback_buffer_disk_spool_diagnostic_recommended)
+                    DiskSpoolDiagnosticRecommendation.NotRecommended ->
+                        stringResource(R.string.playback_buffer_disk_spool_diagnostic_not_recommended)
+                }
+                val randomWriteMBps = status.randomWriteMBps
+                if (randomWriteMBps != null) {
                     stringResource(
                         R.string.playback_buffer_disk_spool_diagnostic_measured_random,
-                        status.sequentialWriteMbps,
-                        status.sequentialReadMbps,
-                        randomWriteMbps
+                        recommendation,
+                        status.underLoadWriteMBps,
+                        status.underLoadReadMBps,
+                        randomWriteMBps,
+                        status.autoplayCapMbps,
+                        status.p99ReadLatencyMs,
+                        status.maxReadStallMs
                     )
                 } else {
                     stringResource(
                         R.string.playback_buffer_disk_spool_diagnostic_measured,
-                        status.sequentialWriteMbps,
-                        status.sequentialReadMbps
+                        recommendation,
+                        status.underLoadWriteMBps,
+                        status.underLoadReadMBps,
+                        status.autoplayCapMbps,
+                        status.p99ReadLatencyMs,
+                        status.maxReadStallMs
                     )
                 }
             }
@@ -289,10 +303,19 @@ internal sealed class DiskSpoolDiagnosticStatus {
     object Stale : DiskSpoolDiagnosticStatus()
     data class Failed(val message: String) : DiskSpoolDiagnosticStatus()
     data class Measured(
-        val sequentialWriteMbps: Int,
-        val sequentialReadMbps: Int,
-        val randomWriteMbps: Int?
+        val recommendation: DiskSpoolDiagnosticRecommendation,
+        val autoplayCapMbps: Int,
+        val underLoadWriteMBps: Int,
+        val underLoadReadMBps: Int,
+        val randomWriteMBps: Int?,
+        val p99ReadLatencyMs: Long,
+        val maxReadStallMs: Long
     ) : DiskSpoolDiagnosticStatus()
+}
+
+internal enum class DiskSpoolDiagnosticRecommendation {
+    Recommended,
+    NotRecommended
 }
 
 internal fun resolveDiskSpoolDiagnosticStatus(
@@ -312,9 +335,17 @@ internal fun resolveDiskSpoolDiagnosticStatus(
         return DiskSpoolDiagnosticStatus.Stale
     }
     return DiskSpoolDiagnosticStatus.Measured(
-        sequentialWriteMbps = (result.concurrentSequentialWriteMbps ?: result.writeMbps).roundToInt(),
-        sequentialReadMbps = (result.concurrentSequentialReadMbps ?: result.readMbps).roundToInt(),
-        randomWriteMbps = result.concurrentRandomWriteMbps?.roundToInt()
+        recommendation = if (SpoolStoragePolicy.isRecommended(result)) {
+            DiskSpoolDiagnosticRecommendation.Recommended
+        } else {
+            DiskSpoolDiagnosticRecommendation.NotRecommended
+        },
+        autoplayCapMbps = SpoolStoragePolicy.recommendedAutoplayCapMbps(result),
+        underLoadWriteMBps = mbpsToMBpsInt(SpoolStoragePolicy.underLoadWriteMbps(result)),
+        underLoadReadMBps = mbpsToMBpsInt(SpoolStoragePolicy.underLoadReadMbps(result)),
+        randomWriteMBps = SpoolStoragePolicy.underLoadRandomWriteMbps(result)?.let(::mbpsToMBpsInt),
+        p99ReadLatencyMs = result.p99ReadLatencyMs,
+        maxReadStallMs = result.maxReadStallMs
     )
 }
 
@@ -361,6 +392,10 @@ private fun formatStorageSize(bytes: Long): String {
     if (gb >= 1.0) return String.format("%.1f GB", gb)
     val mb = bytes / (1024.0 * 1024.0)
     return String.format("%.0f MB", mb)
+}
+
+private fun mbpsToMBpsInt(mbps: Double): Int {
+    return (mbps / 8.0).roundToInt()
 }
 
 private fun resolveManualVodCacheMaxMb(freeDiskBytes: Long): Int {

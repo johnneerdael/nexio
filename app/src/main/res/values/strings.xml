@@ -268,8 +268,10 @@
     <string name="playback_buffer_disk_spool_diagnostic_running">Storage diagnostic is running...</string>
     <string name="playback_buffer_disk_spool_diagnostic_failed">Storage diagnostic failed: %1$s</string>
     <string name="playback_buffer_disk_spool_diagnostic_stale">Storage diagnostic is stale for the selected storage.</string>
-    <string name="playback_buffer_disk_spool_diagnostic_measured">Storage diagnostic: sequential write %1$d Mbps, sequential read %2$d Mbps.</string>
-    <string name="playback_buffer_disk_spool_diagnostic_measured_random">Storage diagnostic: sequential write %1$d Mbps, sequential read %2$d Mbps, random write %3$d Mbps.</string>
+    <string name="playback_buffer_disk_spool_diagnostic_recommended">recommended</string>
+    <string name="playback_buffer_disk_spool_diagnostic_not_recommended">not recommended</string>
+    <string name="playback_buffer_disk_spool_diagnostic_measured">Disk spool %1$s. Under load: write %2$d MB/s, read %3$d MB/s. Suggested autoplay cap: %4$d Mbps. Read stalls: p99 %5$d ms, max %6$d ms.</string>
+    <string name="playback_buffer_disk_spool_diagnostic_measured_random">Disk spool %1$s. Under load: write %2$d MB/s, read %3$d MB/s, random write %4$d MB/s. Suggested autoplay cap: %5$d Mbps. Read stalls: p99 %6$d ms, max %7$d ms.</string>
     <string name="playback_buffer_disk_spool_probe">Run disk speed check</string>
     <string name="playback_buffer_disk_spool_probe_status_disabled">Speed check: disk spool playback is off.</string>
     <string name="playback_buffer_disk_spool_probe_status_not_checked">Speed check: not checked.</string>
