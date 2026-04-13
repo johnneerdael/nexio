@@ -414,7 +414,8 @@ internal fun ModernHomeContent(
                                     item = item,
                                     row = row,
                                     useLandscapePosters = useLandscapePosters,
-                                    occurrence = occurrence
+                                    occurrence = occurrence,
+                                    previousCachedItem = cachedItem?.carouselItem
                                 )
                                 rowItemCache[cacheKey] = CachedCarouselItem(
                                     source = item,
