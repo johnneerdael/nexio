@@ -1,0 +1,236 @@
+package com.nexio.tv.ui.screens.player.spool
+
+import android.os.SystemClock
+import java.io.File
+import java.io.RandomAccessFile
+import java.util.Random
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicReference
+
+internal class DiskSpoolStorageDiagnostic(
+    private val directory: File,
+    private val totalBytes: Long = 512L * 1024L * 1024L,
+    private val sequentialBlockBytes: Int = 1024 * 1024,
+    private val randomBlockBytes: Int = 4 * 1024,
+    private val randomWriteEnabled: Boolean,
+    private val randomSeed: Long = System.nanoTime(),
+    private val nowMs: () -> Long = { System.currentTimeMillis() },
+    private val shouldContinue: () -> Boolean = { !Thread.currentThread().isInterrupted }
+) {
+    fun run(): SpoolStorageProbeResult {
+        require(totalBytes > 0L) { "totalBytes must be positive" }
+        require(sequentialBlockBytes > 0) { "sequentialBlockBytes must be positive" }
+        require(randomBlockBytes > 0) { "randomBlockBytes must be positive" }
+
+        directory.mkdirs()
+        val measuredAtMs = nowMs()
+        val file = File(directory, "spool-diagnostic-${SystemClock.elapsedRealtimeNanos()}.bin")
+        val randomFile = File(directory, "${file.name}.random")
+        val concurrentFile = File(directory, "${file.name}.concurrent")
+        return try {
+            val sequentialWriteMbps = sequentialWrite(file)
+            val sequentialReadMbps = sequentialRead(file)
+            val concurrentSequential = concurrentSequentialReadWrite(
+                readFile = file,
+                writeFile = concurrentFile
+            )
+            val concurrentRandom = if (randomWriteEnabled) {
+                sequentialWrite(randomFile)
+                concurrentSequentialReadRandomWrite(readFile = file, writeFile = randomFile)
+            } else {
+                null
+            }
+            val durationMs = (nowMs() - measuredAtMs).coerceAtLeast(1L)
+
+            SpoolStorageProbeResult(
+                writeMbps = sequentialWriteMbps,
+                readMbps = sequentialReadMbps,
+                combinedMbps = concurrentSequential.writeMbps + concurrentSequential.readMbps,
+                p99ReadLatencyMs = 0L,
+                maxReadStallMs = 0L,
+                measuredAtMs = measuredAtMs,
+                durationMs = durationMs,
+                bytesWritten = totalBytes,
+                bytesRead = totalBytes,
+                spoolDirectoryPath = directory.absolutePath,
+                concurrentSequentialWriteMbps = concurrentSequential.writeMbps,
+                concurrentSequentialReadMbps = concurrentSequential.readMbps,
+                concurrentRandomWriteMbps = concurrentRandom?.writeMbps
+            )
+        } finally {
+            file.delete()
+            randomFile.delete()
+            concurrentFile.delete()
+        }
+    }
+
+    private fun sequentialWrite(file: File): Double {
+        val buffer = ByteArray(sequentialBlockBytes) { (it and 0xFF).toByte() }
+        val elapsedNs = timedNs {
+            RandomAccessFile(file, "rw").use { writer ->
+                writer.setLength(totalBytes)
+                var position = 0L
+                while (position < totalBytes && shouldContinue()) {
+                    val length = minOf(buffer.size.toLong(), totalBytes - position).toInt()
+                    writer.seek(position)
+                    writer.write(buffer, 0, length)
+                    position += length.toLong()
+                }
+                writer.fd.sync()
+            }
+        }
+        return mbps(totalBytes, elapsedNs)
+    }
+
+    private fun sequentialRead(file: File): Double {
+        val buffer = ByteArray(sequentialBlockBytes)
+        val elapsedNs = timedNs {
+            RandomAccessFile(file, "r").use { reader ->
+                var position = 0L
+                while (position < totalBytes && shouldContinue()) {
+                    val length = minOf(buffer.size.toLong(), totalBytes - position).toInt()
+                    reader.seek(position)
+                    reader.readFully(buffer, 0, length)
+                    position += length.toLong()
+                }
+            }
+        }
+        return mbps(totalBytes, elapsedNs)
+    }
+
+    private fun concurrentSequentialReadWrite(
+        readFile: File,
+        writeFile: File
+    ): ConcurrentResult {
+        val writeBuffer = ByteArray(sequentialBlockBytes) { 0x33.toByte() }
+        val readBuffer = ByteArray(sequentialBlockBytes)
+        return runConcurrent(
+            writeBytes = totalBytes,
+            readBytes = totalBytes,
+            writeWork = { writer ->
+                var position = 0L
+                while (position < totalBytes && shouldContinue()) {
+                    val length = minOf(writeBuffer.size.toLong(), totalBytes - position).toInt()
+                    writer.seek(position)
+                    writer.write(writeBuffer, 0, length)
+                    position += length.toLong()
+                }
+                writer.fd.sync()
+            },
+            readWork = { reader ->
+                var position = 0L
+                while (position < totalBytes && shouldContinue()) {
+                    val length = minOf(readBuffer.size.toLong(), totalBytes - position).toInt()
+                    reader.seek(position)
+                    reader.readFully(readBuffer, 0, length)
+                    position += length.toLong()
+                }
+            },
+            readFile = readFile,
+            writeFile = writeFile
+        )
+    }
+
+    private fun concurrentSequentialReadRandomWrite(
+        readFile: File,
+        writeFile: File
+    ): ConcurrentResult {
+        val writeBuffer = ByteArray(randomBlockBytes) { 0x55.toByte() }
+        val readBuffer = ByteArray(sequentialBlockBytes)
+        val random = Random(randomSeed)
+        val randomBlocks = (totalBytes / randomBlockBytes.toLong()).coerceAtLeast(1L)
+        return runConcurrent(
+            writeBytes = totalBytes,
+            readBytes = totalBytes,
+            writeWork = { writer ->
+                var writtenBytes = 0L
+                while (writtenBytes < totalBytes && shouldContinue()) {
+                    val length = minOf(writeBuffer.size.toLong(), totalBytes - writtenBytes).toInt()
+                    val block = random.nextLong().positiveModulo(randomBlocks)
+                    writer.seek(block * randomBlockBytes.toLong())
+                    writer.write(writeBuffer, 0, length)
+                    writtenBytes += length.toLong()
+                }
+                writer.fd.sync()
+            },
+            readWork = { reader ->
+                var position = 0L
+                while (position < totalBytes && shouldContinue()) {
+                    val length = minOf(readBuffer.size.toLong(), totalBytes - position).toInt()
+                    reader.seek(position)
+                    reader.readFully(readBuffer, 0, length)
+                    position += length.toLong()
+                }
+            },
+            readFile = readFile,
+            writeFile = writeFile
+        )
+    }
+
+    private fun runConcurrent(
+        writeBytes: Long,
+        readBytes: Long,
+        writeWork: (RandomAccessFile) -> Unit,
+        readWork: (RandomAccessFile) -> Unit,
+        readFile: File,
+        writeFile: File
+    ): ConcurrentResult {
+        val start = CountDownLatch(1)
+        val failure = AtomicReference<Throwable?>()
+        var writeElapsedNs = 1L
+        var readElapsedNs = 1L
+        val writer = Thread {
+            try {
+                RandomAccessFile(writeFile, "rw").use { access ->
+                    access.setLength(writeBytes)
+                    start.await()
+                    writeElapsedNs = timedNs { writeWork(access) }
+                }
+            } catch (throwable: Throwable) {
+                failure.compareAndSet(null, throwable)
+            }
+        }
+        val reader = Thread {
+            try {
+                RandomAccessFile(readFile, "r").use { access ->
+                    start.await()
+                    readElapsedNs = timedNs { readWork(access) }
+                }
+            } catch (throwable: Throwable) {
+                failure.compareAndSet(null, throwable)
+            }
+        }
+        writer.name = "DiskSpoolDiagnosticWriter"
+        reader.name = "DiskSpoolDiagnosticReader"
+        writer.start()
+        reader.start()
+        start.countDown()
+        writer.join()
+        reader.join()
+        failure.get()?.let { throw it }
+        return ConcurrentResult(
+            writeMbps = mbps(writeBytes, writeElapsedNs),
+            readMbps = mbps(readBytes, readElapsedNs)
+        )
+    }
+
+    private fun timedNs(block: () -> Unit): Long {
+        val startedAt = System.nanoTime()
+        block()
+        return (System.nanoTime() - startedAt).coerceAtLeast(1L)
+    }
+
+    private fun mbps(bytes: Long, elapsedNs: Long): Double {
+        return (bytes.toDouble() * 8.0) / elapsedNs.toDouble() * 1000.0
+    }
+
+    private data class ConcurrentResult(
+        val writeMbps: Double,
+        val readMbps: Double
+    )
+}
+
+private fun Long.positiveModulo(divisor: Long): Long {
+    val result = this % divisor
+    return if (result >= 0L) result else result + divisor
+}

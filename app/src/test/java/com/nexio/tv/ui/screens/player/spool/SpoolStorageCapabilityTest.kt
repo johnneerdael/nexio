@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.player.spool
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.json.JSONObject
 import org.junit.Test
 import java.util.concurrent.CancellationException
 
@@ -126,6 +127,59 @@ class SpoolStorageCapabilityTest {
         val restored = SpoolStorageProbeResult.fromJson(result.toJson())
 
         assertEquals(result, restored)
+    }
+
+    @Test
+    fun jsonRoundTrip_preservesDiagnosticWorkloadResults() {
+        val result = SpoolStorageProbeResult(
+            writeMbps = 180.0,
+            readMbps = 180.0,
+            combinedMbps = 360.0,
+            p99ReadLatencyMs = 40L,
+            maxReadStallMs = 70L,
+            measuredAtMs = 1_776_047_817_725L,
+            durationMs = 60_000L,
+            bytesWritten = 1_350_000_000L,
+            bytesRead = 1_350_000_000L,
+            spoolDirectoryPath = "/data/user/0/com.nexio.tv/cache/player_disk_spool",
+            concurrentSequentialWriteMbps = 120.0,
+            concurrentSequentialReadMbps = 240.0,
+            concurrentRandomWriteMbps = 35.0
+        )
+
+        val restored = SpoolStorageProbeResult.fromJson(result.toJson())
+
+        assertEquals(result, restored)
+    }
+
+    @Test
+    fun legacyJsonWithoutDiagnosticWorkloadResultsStillParses() {
+        val result = SpoolStorageProbeResult(
+            writeMbps = 180.0,
+            readMbps = 180.0,
+            combinedMbps = 360.0,
+            p99ReadLatencyMs = 40L,
+            maxReadStallMs = 70L,
+            measuredAtMs = 1_776_047_817_725L,
+            durationMs = 60_000L,
+            bytesWritten = 1_350_000_000L,
+            bytesRead = 1_350_000_000L,
+            spoolDirectoryPath = "/data/user/0/com.nexio.tv/cache/player_disk_spool",
+            concurrentSequentialWriteMbps = 120.0,
+            concurrentSequentialReadMbps = 240.0,
+            concurrentRandomWriteMbps = 35.0
+        )
+        val legacyJson = JSONObject(result.toJson()).also {
+            it.remove("concurrentSequentialWriteMbps")
+            it.remove("concurrentSequentialReadMbps")
+            it.remove("concurrentRandomWriteMbps")
+        }.toString()
+
+        val restored = SpoolStorageProbeResult.fromJson(legacyJson)
+
+        assertEquals(null, restored.concurrentSequentialWriteMbps)
+        assertEquals(null, restored.concurrentSequentialReadMbps)
+        assertEquals(null, restored.concurrentRandomWriteMbps)
     }
 
     @Test
