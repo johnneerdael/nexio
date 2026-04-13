@@ -144,7 +144,7 @@ internal fun SettingsBrandPanel(
             contentDescription = "NEXIO",
             modifier = Modifier
                 .fillMaxWidth(0.9f)
-                .height(72.dp),
+                .height(101.dp),
             contentScale = ContentScale.Fit
         )
 
