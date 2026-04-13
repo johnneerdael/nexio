@@ -368,6 +368,9 @@ internal fun PlaybackSettingsContent(
                 onSetDiskSpoolStartupBufferMb = { mb ->
                     coroutineScope.launch { viewModel.setDiskSpoolStartupBufferMb(mb) }
                 },
+                onSetDiskSpoolRamReadBufferMb = { mb ->
+                    coroutineScope.launch { viewModel.setDiskSpoolRamReadBufferMb(mb) }
+                },
                 onSetDiskSpoolStorageLocation = { location: DiskSpoolStorageLocation ->
                     coroutineScope.launch { viewModel.setDiskSpoolStorageLocation(location) }
                 },
