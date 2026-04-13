@@ -112,6 +112,10 @@ class PlayerViewModel @Inject constructor(
         controller.pausePlaybackForLifecycle()
     }
 
+    fun resumePlaybackForLifecycle() {
+        controller.resumePlaybackForLifecycle()
+    }
+
     fun onEvent(event: PlayerEvent) {
         controller.onEvent(event)
     }

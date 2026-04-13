@@ -52,8 +52,51 @@ internal fun PlayerRuntimeController.backendSetSubtitleDelay(delayMs: Int) {
     }
 }
 
+internal fun shouldResumeAutoplayAfterLifecyclePause(
+    hadAutoplayIntent: Boolean,
+    hasRenderedFirstFrame: Boolean,
+    userPausedManually: Boolean
+): Boolean {
+    return hadAutoplayIntent && !hasRenderedFirstFrame && !userPausedManually
+}
+
 internal fun PlayerRuntimeController.pausePlaybackForLifecycle() {
-    _exoPlayer?.pause()
+    val player = _exoPlayer
+    if (player == null) {
+        resumeAutoplayAfterLifecyclePause = false
+        return
+    }
+
+    resumeAutoplayAfterLifecyclePause = shouldResumeAutoplayAfterLifecyclePause(
+        hadAutoplayIntent = player.playWhenReady || shouldEnforceAutoplayOnFirstReady,
+        hasRenderedFirstFrame = hasRenderedFirstFrame,
+        userPausedManually = userPausedManually
+    )
+    player.pause()
+}
+
+internal fun PlayerRuntimeController.resumePlaybackForLifecycle() {
+    val player = _exoPlayer
+    if (player == null) {
+        resumeAutoplayAfterLifecyclePause = false
+        return
+    }
+
+    if (!resumeAutoplayAfterLifecyclePause) return
+    resumeAutoplayAfterLifecyclePause = false
+    if (!shouldResumeAutoplayAfterLifecyclePause(
+            hadAutoplayIntent = true,
+            hasRenderedFirstFrame = hasRenderedFirstFrame,
+            userPausedManually = userPausedManually
+        )
+    ) {
+        return
+    }
+    if (_uiState.value.error != null || _uiState.value.playbackEnded) return
+    if (player.playbackState == Player.STATE_ENDED) return
+
+    player.playWhenReady = true
+    player.play()
 }
 
 internal fun PlayerRuntimeController.isPlaybackCurrentlyPlaying(): Boolean {

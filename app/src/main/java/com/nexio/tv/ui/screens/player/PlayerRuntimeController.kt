@@ -238,6 +238,7 @@ class PlayerRuntimeController(
     
     internal var hasRenderedFirstFrame = false
     internal var shouldEnforceAutoplayOnFirstReady = true
+    internal var resumeAutoplayAfterLifecyclePause = false
     internal var metaVideos: List<Video> = emptyList()
     internal var nextEpisodeVideo: Video? = null
     internal var userPausedManually = false
