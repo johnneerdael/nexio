@@ -62,6 +62,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -273,6 +274,9 @@ fun SearchScreen(
     val hasPendingUnsubmittedQuery = remember(isDiscoverMode, trimmedQuery, trimmedSubmittedQuery) {
         !isDiscoverMode && trimmedQuery.length >= 2 && trimmedQuery != trimmedSubmittedQuery
     }
+    val showRecentSearches = remember(trimmedQuery, uiState.recentSearches) {
+        trimmedQuery.isEmpty() && uiState.recentSearches.isNotEmpty()
+    }
     val canMoveToResults = remember(
         isDiscoverMode,
         uiState.discoverResults,
@@ -311,6 +315,13 @@ fun SearchScreen(
         viewModel.onEvent(SearchEvent.QueryChanged(nextQuery))
         if (selectedSuggestion) {
             submitCurrentQuery(trimmedNextQuery)
+        }
+    }
+    val submitRecentSearch: (String) -> Unit = { recentQuery ->
+        val trimmedRecentQuery = recentQuery.trim()
+        if (trimmedRecentQuery.isNotEmpty()) {
+            viewModel.onEvent(SearchEvent.QueryChanged(trimmedRecentQuery))
+            submitCurrentQuery(trimmedRecentQuery)
         }
     }
 
@@ -444,11 +455,20 @@ fun SearchScreen(
                         .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
-                    EmptyScreenState(
-                        title = stringResource(R.string.search_start_title),
-                        subtitle = stringResource(R.string.search_start_subtitle),
-                        icon = Icons.Default.Search
-                    )
+                    if (showRecentSearches) {
+                        RecentSearchesSection(
+                            recentSearches = uiState.recentSearches,
+                            onRecentSearch = submitRecentSearch,
+                            onClear = { viewModel.onEvent(SearchEvent.ClearRecentSearches) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        EmptyScreenState(
+                            title = stringResource(R.string.search_start_title),
+                            subtitle = stringResource(R.string.search_start_subtitle),
+                            icon = Icons.Default.Search
+                        )
+                    }
                 }
             }
         } else {
@@ -491,8 +511,19 @@ fun SearchScreen(
                     }
                 }
 
+                if (showRecentSearches) {
+                    item {
+                        RecentSearchesSection(
+                            recentSearches = uiState.recentSearches,
+                            onRecentSearch = submitRecentSearch,
+                            onClear = { viewModel.onEvent(SearchEvent.ClearRecentSearches) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
                 when {
-                    trimmedSubmittedQuery.length < 2 && !hasPendingUnsubmittedQuery -> {
+                    trimmedSubmittedQuery.length < 2 && !hasPendingUnsubmittedQuery && !showRecentSearches -> {
                         item {
                             EmptyScreenState(
                                 title = stringResource(R.string.search_start_title),
@@ -528,7 +559,7 @@ fun SearchScreen(
                         }
                     }
 
-                    uiState.catalogRows.isEmpty() || uiState.catalogRows.none { it.items.isNotEmpty() } -> {
+                    !showRecentSearches && (uiState.catalogRows.isEmpty() || uiState.catalogRows.none { it.items.isNotEmpty() }) -> {
                         item {
                             EmptyScreenState(
                                 title = stringResource(R.string.search_no_results_title),
@@ -611,6 +642,58 @@ fun SearchScreen(
                 searchManualStreamSelectionTarget = null
             }
         )
+    }
+}
+
+@Composable
+private fun RecentSearchesSection(
+    recentSearches: List<String>,
+    onRecentSearch: (String) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.padding(horizontal = 52.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.search_recent_title),
+                style = androidx.tv.material3.MaterialTheme.typography.titleMedium,
+                color = NexioColors.TextPrimary
+            )
+
+            Button(
+                onClick = onClear,
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(stringResource(R.string.search_recent_clear))
+            }
+        }
+
+        recentSearches.forEach { query ->
+            Button(
+                onClick = { onRecentSearch(query) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.BackgroundCard,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text(
+                    text = query,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
     }
 }
 
