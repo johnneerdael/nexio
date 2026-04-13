@@ -17,6 +17,12 @@ enum class ShadowReleaseType {
     WEBRIP,
     BLURAY_ENCODE,
     REMUX,
+    HDTV,
+    HDRIP,
+    SCREENER,
+    TELESYNC,
+    TELECINE,
+    CAM,
     UNKNOWN
 }
 
@@ -69,7 +75,9 @@ data class ShadowViabilityConfig(
 data class ShadowContentRewardConfig(
     val codec: Map<ShadowVideoCodecTier, Int>,
     val hdr: Map<ShadowHdrTier, Int>,
-    val audio: Map<ShadowAudioTier, Int>
+    val audio: Map<ShadowAudioTier, Int>,
+    val releaseType: Map<ShadowReleaseType, Int>? = null,
+    val resolution: Map<ShadowResolutionTier, Int>? = null
 )
 
 data class ShadowRatioBand(
@@ -125,6 +133,12 @@ data class BenchmarkAwareStreamScoringConfig(
                     ShadowReleaseType.WEBRIP to 1.35,
                     ShadowReleaseType.BLURAY_ENCODE to 1.35,
                     ShadowReleaseType.REMUX to 1.60,
+                    ShadowReleaseType.HDTV to 1.35,
+                    ShadowReleaseType.HDRIP to 1.35,
+                    ShadowReleaseType.SCREENER to 1.35,
+                    ShadowReleaseType.TELESYNC to 1.35,
+                    ShadowReleaseType.TELECINE to 1.35,
+                    ShadowReleaseType.CAM to 1.35,
                     ShadowReleaseType.UNKNOWN to 1.35
                 ),
                 contentRewards = ShadowContentRewardConfig(
@@ -156,6 +170,28 @@ data class BenchmarkAwareStreamScoringConfig(
                         ShadowAudioTier.AC3 to 7,
                         ShadowAudioTier.DTS to 7,
                         ShadowAudioTier.OTHER to 0
+                    ),
+                    releaseType = mapOf(
+                        ShadowReleaseType.REMUX to 8,
+                        ShadowReleaseType.BLURAY_ENCODE to 6,
+                        ShadowReleaseType.WEBDL to 5,
+                        ShadowReleaseType.WEBRIP to 3,
+                        ShadowReleaseType.HIGH_BITRATE_ENCODE to 1,
+                        ShadowReleaseType.NORMAL_ENCODE to 0,
+                        ShadowReleaseType.HDTV to -2,
+                        ShadowReleaseType.SMALL_ENCODE to -2,
+                        ShadowReleaseType.HDRIP to -4,
+                        ShadowReleaseType.UNKNOWN to -4,
+                        ShadowReleaseType.SCREENER to -12,
+                        ShadowReleaseType.TELESYNC to -18,
+                        ShadowReleaseType.TELECINE to -18,
+                        ShadowReleaseType.CAM to -24
+                    ),
+                    resolution = mapOf(
+                        ShadowResolutionTier.UHD_2160 to 6,
+                        ShadowResolutionTier.FHD_1080 to 3,
+                        ShadowResolutionTier.HD_720 to 0,
+                        ShadowResolutionTier.OTHER to -2
                     )
                 ),
                 transportRewards = ShadowTransportRewardConfig(

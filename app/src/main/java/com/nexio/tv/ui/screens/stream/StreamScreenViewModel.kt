@@ -78,6 +78,9 @@ private const val EMBEDDED_STREAM_GROUP_NAME = "Embedded Streams"
 private const val EMBEDDED_STREAM_FALLBACK_NAME = "Embed Stream"
 private const val DETERMINISTIC_AUTOPLAY_PREFLIGHT_CANDIDATE_LIMIT = 3
 private const val AUTOPLAY_PREFLIGHT_TIMEOUT_MS = 1_500
+private const val AUTOPLAY_MIN_CANDIDATE_POOL = 5
+private const val AUTOPLAY_MIN_QUALITY_SCORE = 10
+private const val AUTOPLAY_EARLY_FINISH_FALLBACK_MS = 15_000L
 @HiltViewModel
 class StreamScreenViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -94,6 +97,7 @@ class StreamScreenViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var autoPlayHandledForSession = false
+    private var autoPlayFirstScoringAtMs: Long = 0L
     private var directAutoPlayModeInitializedForSession = false
     private var directAutoPlayFlowEnabledForSession = false
     private var streamLoadJob: Job? = null
@@ -423,7 +427,7 @@ class StreamScreenViewModel @Inject constructor(
                         val autoplayMaxBitrateMbps = playerSettings.autoplayMaxBitrateForScoring(hasValidBenchmark)
                         val autoPlayPlaybackInfo = if (autoPlayHandledForSession) {
                             null
-                        } else if (deterministicAutoplay) {
+                        } else {
                             buildDeterministicAutoPlayPlaybackInfo(
                                 request = buildShadowRequestContext(requestId),
                                 organizedStreams = organizedStreams.items,
@@ -433,29 +437,8 @@ class StreamScreenViewModel @Inject constructor(
                                 isManualBandwidthMode = isManualBandwidthMode,
                                 isFinalPass = isFinalPass
                             )
-                        } else {
-                            buildBenchmarkAwareAutoPlayPlaybackInfo(
-                                request = buildShadowRequestContext(requestId),
-                                organizedStreams = organizedStreams.items,
-                                autoPlayCandidates = autoPlayCandidates,
-                                activeTransportMode = playerSettings.toShadowActiveTransportMode(),
-                                benchmarkSessions = validBenchmarkSessions,
-                                autoplayMaxBitrateMbps = autoplayMaxBitrateMbps,
-                                isManualBandwidthMode = isManualBandwidthMode
-                            )
                         }
-                        val selectedAutoPlayStream = if (!deterministicAutoplay && autoPlayPlaybackInfo == null && !autoPlayHandledForSession) {
-                            StreamAutoPlaySelector.selectAutoPlayStream(
-                                streams = autoPlayCandidates,
-                                mode = playerSettings.streamAutoPlayMode,
-                                regexPattern = playerSettings.streamAutoPlayRegex,
-                                source = playerSettings.streamAutoPlaySource,
-                                installedAddonNames = installedAddonOrder.toSet(),
-                                selectedAddons = playerSettings.streamAutoPlaySelectedAddons
-                            )
-                        } else {
-                            null
-                        }
+                        val selectedAutoPlayStream: com.nexio.tv.domain.model.Stream? = null
                         OrganizedStreamPayload(
                             orderedAddonStreams = orderedAddonStreams,
                             allStreams = allStreams,
@@ -1099,6 +1082,12 @@ class StreamScreenViewModel @Inject constructor(
                 autoplayMaxBitrateMbps = autoplayMaxBitrateMbps
             )
         }
+        if (event.winners.size < AUTOPLAY_MIN_CANDIDATE_POOL) {
+            val topScore = event.selected?.contentQualityScore ?: 0
+            if (topScore < AUTOPLAY_MIN_QUALITY_SCORE) {
+                return null
+            }
+        }
         val selectedKey = event.selected?.streamKey ?: return null
         val selectedItem = candidateItems.firstOrNull { item ->
             item.stream.wrappedOriginalStreamKey == selectedKey ||
@@ -1151,6 +1140,22 @@ class StreamScreenViewModel @Inject constructor(
                 autoplayMaxBitrateMbps = autoplayMaxBitrateMbps
             )
         }
+        if (autoPlayFirstScoringAtMs == 0L && event.winners.isNotEmpty()) {
+            autoPlayFirstScoringAtMs = System.currentTimeMillis()
+        }
+        val earlyFinishFallbackElapsed = if (autoPlayFirstScoringAtMs > 0L) {
+            System.currentTimeMillis() - autoPlayFirstScoringAtMs
+        } else {
+            0L
+        }
+        val earlyFinishFallbackReached = earlyFinishFallbackElapsed >= AUTOPLAY_EARLY_FINISH_FALLBACK_MS
+
+        if (!isFinalPass && !earlyFinishFallbackReached && event.winners.size < AUTOPLAY_MIN_CANDIDATE_POOL) {
+            val topScore = event.selected?.contentQualityScore ?: 0
+            if (topScore < AUTOPLAY_MIN_QUALITY_SCORE) {
+                return null
+            }
+        }
         val earlyFinishDecision = deterministicAutoplayEarlyFinishDecision(event.winners, request)
         if (!isFinalPass) {
             Log.i(
@@ -1158,10 +1163,11 @@ class StreamScreenViewModel @Inject constructor(
                 "DETERMINISTIC_EARLY_FINISH triggered=${earlyFinishDecision.triggered} " +
                     "reason=${earlyFinishDecision.reason} count=${earlyFinishDecision.matchingCount} " +
                     "resolution=${earlyFinishDecision.resolution} releaseType=${earlyFinishDecision.releaseType} " +
-                    "hasRemux=${earlyFinishDecision.hasRemux}"
+                    "hasRemux=${earlyFinishDecision.hasRemux} " +
+                    "fallbackElapsedMs=$earlyFinishFallbackElapsed fallbackReached=$earlyFinishFallbackReached"
             )
         }
-        if (!isFinalPass && !earlyFinishDecision.triggered) {
+        if (!isFinalPass && !earlyFinishDecision.triggered && !earlyFinishFallbackReached) {
             return null
         }
 
@@ -1709,46 +1715,59 @@ internal fun deterministicAutoplayEarlyFinishDecision(
             candidate.breakdown.averageBitrateMbps >= minMbps
     }
 
-    val remuxThreshold = when {
-        has4k && movie -> 45.0
-        has4k && !movie -> 30.0
-        !has4k && movie -> 25.0
-        else -> 18.0
-    }
-    val webdlThreshold = when {
-        has4k && movie -> 15.0
-        has4k && !movie -> 10.0
-        !has4k && movie -> 10.0
-        else -> 6.0
-    }
-    val resolution = if (has4k) "2160p" else "1080p"
+    fun tryResolution(targetResolution: String, is4k: Boolean): DeterministicEarlyFinishDecision? {
+        val remuxThreshold = when {
+            is4k && movie -> 45.0
+            is4k && !movie -> 30.0
+            !is4k && movie -> 25.0
+            else -> 18.0
+        }
+        val webdlThreshold = when {
+            is4k && movie -> 15.0
+            is4k && !movie -> 10.0
+            !is4k && movie -> 10.0
+            else -> 6.0
+        }
 
-    val remuxCount = countMatching(resolution, "remux", remuxThreshold)
-    if (remuxCount >= 3) {
-        return DeterministicEarlyFinishDecision(
-            triggered = true,
-            reason = "threshold_met",
-            matchingCount = remuxCount,
-            resolution = resolution,
-            releaseType = "remux",
-            hasRemux = hasRemux
-        )
+        val remuxCount = countMatching(targetResolution, "remux", remuxThreshold)
+        if (remuxCount >= 3) {
+            return DeterministicEarlyFinishDecision(
+                triggered = true,
+                reason = "threshold_met",
+                matchingCount = remuxCount,
+                resolution = targetResolution,
+                releaseType = "remux",
+                hasRemux = hasRemux
+            )
+        }
+        val localHasRemux = countedWinners.any {
+            it.resolution.equals(targetResolution, ignoreCase = true) &&
+                it.breakdown.releaseType == "remux"
+        }
+        val webdlCount = countMatching(targetResolution, "webdl", webdlThreshold)
+        if (!localHasRemux && webdlCount >= 3) {
+            return DeterministicEarlyFinishDecision(
+                triggered = true,
+                reason = "threshold_met",
+                matchingCount = webdlCount,
+                resolution = targetResolution,
+                releaseType = "webdl",
+                hasRemux = hasRemux
+            )
+        }
+        return null
     }
-    val webdlCount = countMatching(resolution, "webdl", webdlThreshold)
-    if (!hasRemux && webdlCount >= 3) {
-        return DeterministicEarlyFinishDecision(
-            triggered = true,
-            reason = "threshold_met",
-            matchingCount = webdlCount,
-            resolution = resolution,
-            releaseType = "webdl",
-            hasRemux = hasRemux
-        )
+
+    if (has4k) {
+        tryResolution("2160p", is4k = true)?.let { return it }
     }
+    tryResolution("1080p", is4k = false)?.let { return it }
+
+    val resolution = if (has4k) "2160p" else "1080p"
     return DeterministicEarlyFinishDecision(
         triggered = false,
         reason = if (hasRemux) "insufficient_remux_count" else "insufficient_count",
-        matchingCount = if (hasRemux) remuxCount else webdlCount,
+        matchingCount = 0,
         resolution = resolution,
         releaseType = if (hasRemux) "remux" else "webdl",
         hasRemux = hasRemux
