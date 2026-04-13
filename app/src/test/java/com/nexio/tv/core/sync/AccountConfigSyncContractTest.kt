@@ -141,10 +141,7 @@ class AccountConfigSyncContractTest {
         assertEquals("\"OPENAI\"", subtitleTranslation["provider"].toString())
         assertEquals("\"openai/gpt-5.2\"", subtitleTranslation["model"].toString())
         assertEquals("\"https://openrouter.ai/api/v1\"", subtitleTranslation["baseUrl"].toString())
-        assertEquals(
-            "true",
-            json["integrations"]?.jsonObject?.get("gemini")?.jsonObject?.get("enabled")?.toString()
-        )
+        assertEquals(null, json["integrations"]?.jsonObject?.get("gemini")?.jsonObject?.get("enabled"))
         assertEquals(
             "https://custom.imdb.example",
             json["integrations"]?.jsonObject?.get("imdb")?.jsonObject?.get("baseUrl")?.toString()?.trim('"')
