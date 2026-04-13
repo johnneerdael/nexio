@@ -37,6 +37,8 @@ private class FocusSnapshot(
     var itemIndex: Int
 )
 
+internal fun catalogRowContentType(row: com.nexio.tv.domain.model.CatalogRow): String = row.apiType
+
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ClassicHomeContent(
@@ -245,7 +247,7 @@ fun ClassicHomeContent(
         itemsIndexed(
             items = visibleCatalogRows,
             key = { _, item -> "${item.addonId}_${item.apiType}_${item.catalogId}" },
-            contentType = { _, _ -> "catalog_row" }
+            contentType = { _, item -> catalogRowContentType(item) }
         ) { index, catalogRow ->
             val catalogKey = "${catalogRow.addonId}_${catalogRow.apiType}_${catalogRow.catalogId}"
             val shouldRestoreFocus = restoringFocus && index == focusState.focusedRowIndex

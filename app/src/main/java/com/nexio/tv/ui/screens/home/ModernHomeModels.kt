@@ -146,6 +146,15 @@ internal data class ModernCatalogRowBuildCacheEntry(
     val mappedRow: HeroCarouselRow
 )
 
+internal fun modernHomeRowContentType(row: HeroCarouselRow): String = row.apiType ?: "modern_home_row"
+
+internal fun modernRowItemContentType(item: ModernCarouselItem): String {
+    return when (val payload = item.payload) {
+        is ModernPayload.ContinueWatching -> "modern_cw_card"
+        is ModernPayload.Catalog -> payload.itemType
+    }
+}
+
 @Stable
 internal class ModernHomeUiCaches {
     val focusedItemByRow = mutableMapOf<String, Int>()

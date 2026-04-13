@@ -1337,7 +1337,7 @@ internal fun ModernHomeContent(
                     itemsIndexed(
                         items = carouselRows,
                         key = { _, row -> row.key },
-                        contentType = { _, _ -> "modern_home_row" }
+                        contentType = { _, row -> modernHomeRowContentType(row) }
                     ) { _, row ->
                         ModernRowSection(
                             row = row,
