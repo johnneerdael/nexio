@@ -1049,6 +1049,31 @@ class PlayerMediaSourceFactoryTest {
         factory.shutdown()
     }
 
+    @Test
+    fun progressivePlayback_passesHeapCappedRamReadAheadBufferToDiskSpoolDataSource() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val capturedReadAheadBytes = mutableListOf<Long>()
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = noNetworkOkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            diskSpoolRamReadBufferMb = 128
+            diskSpoolHeapLimitBytesForTesting = 256L * 1024L * 1024L
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+            diskSpoolWriterExecutorForTesting = Executor { }
+            diskSpoolReadAheadObserverForTesting = { bytes -> capturedReadAheadBytes += bytes }
+        }
+
+        factory.progressiveUpstreamFactoryForTesting(
+            url = "https://real-debrid.com/path/video.mkv",
+            headers = emptyMap()
+        )
+
+        assertEquals(listOf(64L * 1024L * 1024L), capturedReadAheadBytes)
+        factory.shutdown()
+    }
+
     private fun noNetworkOkHttpClient(): OkHttpClient {
         return OkHttpClient.Builder()
             .addInterceptor {

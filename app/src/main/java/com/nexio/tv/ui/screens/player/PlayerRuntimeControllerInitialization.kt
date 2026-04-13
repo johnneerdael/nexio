@@ -209,6 +209,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             mediaSourceFactory.progressivePlaybackDiskMode = playerSettings.progressivePlaybackDiskMode
             mediaSourceFactory.diskSpoolSizeMb = playerSettings.diskSpoolSizeMb
             mediaSourceFactory.diskSpoolStartupBufferMb = playerSettings.diskSpoolStartupBufferMb
+            mediaSourceFactory.diskSpoolRamReadBufferMb = playerSettings.diskSpoolRamReadBufferMb
             mediaSourceFactory.diskSpoolStorageLocation = playerSettings.diskSpoolStorageLocation
             mediaSourceFactory.spoolStorageProbeResult =
                 SpoolStorageProbeResult.fromJsonOrNull(playerSettings.spoolStorageProbeResultJson)
