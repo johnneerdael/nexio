@@ -110,7 +110,9 @@ internal object SpoolStoragePolicy {
         if (!targetVideoMbps.isFinite() || targetVideoMbps <= 0.0) return false
 
         val requiredThroughputMbps = targetVideoMbps * MIN_HEADROOM_MULTIPLIER
-        return underLoadWriteMbps(result) >= requiredThroughputMbps &&
+        return underLoadWriteMbps(result) >= targetVideoMbps &&
+            underLoadReadMbps(result) >= targetVideoMbps &&
+            underLoadCombinedMbps(result) >= requiredThroughputMbps &&
             result.p99ReadLatencyMs <= MAX_P99_READ_LATENCY_MS &&
             result.maxReadStallMs <= MAX_READ_STALL_MS
     }
@@ -132,17 +134,33 @@ internal object SpoolStoragePolicy {
         return result.concurrentSequentialWriteMbps ?: result.writeMbps
     }
 
+    fun underLoadReadMbps(result: SpoolStorageProbeResult): Double {
+        return result.concurrentSequentialReadMbps ?: result.readMbps
+    }
+
     fun underLoadRandomWriteMbps(result: SpoolStorageProbeResult): Double? {
         return result.concurrentRandomWriteMbps
     }
 
     private fun safeAutoplayCapMbps(result: SpoolStorageProbeResult): Double {
         return listOfNotNull(
-            underLoadWriteMbps(result) / MIN_HEADROOM_MULTIPLIER,
+            underLoadWriteMbps(result),
+            underLoadReadMbps(result),
+            underLoadCombinedMbps(result) / MIN_HEADROOM_MULTIPLIER,
             underLoadRandomWriteMbps(result)
         ).filter { it.isFinite() && it > 0.0 }
             .minOrNull()
             ?: 0.0
+    }
+
+    private fun underLoadCombinedMbps(result: SpoolStorageProbeResult): Double {
+        val writeMbps = result.concurrentSequentialWriteMbps
+        val readMbps = result.concurrentSequentialReadMbps
+        return if (writeMbps != null && readMbps != null) {
+            writeMbps + readMbps
+        } else {
+            result.combinedMbps
+        }
     }
 
     fun isFresh(result: SpoolStorageProbeResult, nowMs: Long, spoolDirectoryPath: String): Boolean {

@@ -38,9 +38,9 @@ class SpoolStorageCapabilityTest {
     @Test
     fun canSustain_respectsThroughputAndLatencyThresholds() {
         val pass = SpoolStorageProbeResult(
-            writeMbps = 240.0,
+            writeMbps = 180.0,
             readMbps = 180.0,
-            combinedMbps = 420.0,
+            combinedMbps = 360.0,
             p99ReadLatencyMs = 40L,
             maxReadStallMs = 70L,
             measuredAtMs = 1_776_047_817_725L,
@@ -69,11 +69,11 @@ class SpoolStorageCapabilityTest {
     }
 
     @Test
-    fun recommendedAutoplayCap_ignoresCacheSkewedReadThroughput() {
+    fun recommendedAutoplayCap_usesCachePurgedReadThroughput() {
         val result = SpoolStorageProbeResult(
             writeMbps = 1_600.0,
             readMbps = 3_200.0,
-            combinedMbps = 100_000.0,
+            combinedMbps = 1_200.0,
             p99ReadLatencyMs = 40L,
             maxReadStallMs = 70L,
             measuredAtMs = 1_776_047_817_725L,
@@ -82,11 +82,11 @@ class SpoolStorageCapabilityTest {
             bytesRead = 1_350_000_000L,
             spoolDirectoryPath = "/data/user/0/com.nexio.tv/cache/player_disk_spool",
             concurrentSequentialWriteMbps = 400.0,
-            concurrentSequentialReadMbps = 100_000.0,
+            concurrentSequentialReadMbps = 800.0,
             concurrentRandomWriteMbps = 320.0
         )
 
-        assertEquals(160, SpoolStoragePolicy.recommendedAutoplayCapMbps(result))
+        assertEquals(200, SpoolStoragePolicy.recommendedAutoplayCapMbps(result))
     }
 
     @Test
@@ -107,27 +107,7 @@ class SpoolStorageCapabilityTest {
             concurrentRandomWriteMbps = 156.0
         )
 
-        assertEquals(140, SpoolStoragePolicy.recommendedAutoplayCapMbps(result))
-    }
-
-    @Test
-    fun canSustain_usesReadStallsInsteadOfCacheSkewedReadThroughput() {
-        val result = SpoolStorageProbeResult(
-            writeMbps = 90.0,
-            readMbps = 100_000.0,
-            combinedMbps = 100_090.0,
-            p99ReadLatencyMs = 40L,
-            maxReadStallMs = 70L,
-            measuredAtMs = 1_776_047_817_725L,
-            durationMs = 60_000L,
-            bytesWritten = 1_350_000_000L,
-            bytesRead = 1_350_000_000L,
-            spoolDirectoryPath = "/data/user/0/com.nexio.tv/cache/player_disk_spool",
-            concurrentSequentialWriteMbps = 90.0,
-            concurrentSequentialReadMbps = 100_000.0
-        )
-
-        assertFalse(SpoolStoragePolicy.canSustain(result, 80.0))
+        assertEquals(155, SpoolStoragePolicy.recommendedAutoplayCapMbps(result))
     }
 
     @Test
