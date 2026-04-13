@@ -1,12 +1,52 @@
 package com.nexio.tv.ui.screens.settings
 
 import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import com.nexio.tv.ui.screens.player.spool.SpoolStoragePolicy
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class PlaybackBufferNetworkSettingsTest {
+    @Test
+    fun parallelConnectionsSubtitle_warnsWhenDiskSpoolAndParallelAreEnabled() {
+        assertEquals(
+            ParallelConnectionsSubtitle.WarningForDiskSpool,
+            resolveParallelConnectionsSubtitle(
+                useParallelConnections = true,
+                progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            )
+        )
+    }
+
+    @Test
+    fun nextDiskSpoolStorageLocation_togglesOnlyWhenExternalIsAvailable() {
+        assertEquals(
+            DiskSpoolStorageLocation.EXTERNAL,
+            nextDiskSpoolStorageLocation(DiskSpoolStorageLocation.BUILTIN, externalAvailable = true)
+        )
+        assertEquals(
+            DiskSpoolStorageLocation.BUILTIN,
+            nextDiskSpoolStorageLocation(DiskSpoolStorageLocation.EXTERNAL, externalAvailable = true)
+        )
+        assertEquals(
+            DiskSpoolStorageLocation.BUILTIN,
+            nextDiskSpoolStorageLocation(DiskSpoolStorageLocation.EXTERNAL, externalAvailable = false)
+        )
+    }
+
+    @Test
+    fun diskSpoolDiagnosticStatus_doesNotDisableSpoolWhenResultIsMissingOrFailed() {
+        assertEquals(
+            DiskSpoolDiagnosticStatus.NotChecked,
+            resolveDiskSpoolDiagnosticStatus(
+                result = null,
+                nowMs = 1_776_047_818_725L,
+                spoolDirectoryPath = "/cache/player_disk_spool"
+            )
+        )
+    }
+
     @Test
     fun diskSpoolProbeStatus_reflectsMissingPassedFailedAndStaleResults() {
         val path = "/data/user/0/com.nexio.tv/cache/player_disk_spool"

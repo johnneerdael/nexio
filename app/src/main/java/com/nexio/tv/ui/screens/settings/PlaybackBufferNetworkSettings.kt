@@ -19,6 +19,8 @@ import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.diskSpoolTargetBitrateMbps
 import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
 import com.nexio.tv.data.local.VodCacheSizeMode
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageResolver
 import com.nexio.tv.ui.screens.player.spool.SpoolStoragePolicy
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import com.nexio.tv.ui.theme.NexioColors
@@ -32,6 +34,7 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
     onSetVodCacheWarmAheadEnabled: (Boolean) -> Unit,
     onSetUseParallelConnections: (Boolean) -> Unit,
     onSetProgressivePlaybackDiskMode: (ProgressivePlaybackDiskMode) -> Unit,
+    onSetDiskSpoolStorageLocation: (DiskSpoolStorageLocation) -> Unit,
     onRunDiskSpoolStorageProbe: () -> Unit,
     onItemFocused: () -> Unit
 ) {
@@ -128,10 +131,21 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
     }
 
     item(key = "network_cache_parallel_enabled") {
+        val parallelSubtitle = when (
+            resolveParallelConnectionsSubtitle(
+                useParallelConnections = playerSettings.useParallelConnections,
+                progressivePlaybackDiskMode = playerSettings.progressivePlaybackDiskMode
+            )
+        ) {
+            ParallelConnectionsSubtitle.Default ->
+                stringResource(R.string.playback_buffer_parallel_connections_sub)
+            ParallelConnectionsSubtitle.WarningForDiskSpool ->
+                stringResource(R.string.playback_buffer_parallel_connections_disk_spool_warning)
+        }
         ToggleSettingsItem(
             icon = Icons.Default.Wifi,
             title = stringResource(R.string.playback_buffer_parallel_connections),
-            subtitle = stringResource(R.string.playback_buffer_parallel_connections_sub),
+            subtitle = parallelSubtitle,
             isChecked = playerSettings.useParallelConnections,
             onCheckedChange = onSetUseParallelConnections,
             onFocused = onItemFocused
@@ -153,9 +167,40 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
         )
     }
 
+    item(key = "network_cache_disk_spool_storage_location") {
+        val context = LocalContext.current
+        val externalAvailable = DiskSpoolStorageResolver.externalSpoolDirectoryOrNull(context) != null
+        val effectiveLocation = if (externalAvailable) {
+            playerSettings.diskSpoolStorageLocation
+        } else {
+            DiskSpoolStorageLocation.BUILTIN
+        }
+        SettingsActionRow(
+            title = stringResource(R.string.playback_buffer_disk_spool_storage_location),
+            subtitle = if (externalAvailable) {
+                stringResource(R.string.playback_buffer_disk_spool_storage_location_sub)
+            } else {
+                stringResource(R.string.playback_buffer_disk_spool_storage_location_no_external)
+            },
+            value = when (effectiveLocation) {
+                DiskSpoolStorageLocation.BUILTIN ->
+                    stringResource(R.string.playback_buffer_disk_spool_storage_builtin)
+                DiskSpoolStorageLocation.EXTERNAL ->
+                    stringResource(R.string.playback_buffer_disk_spool_storage_external)
+            },
+            enabled = externalAvailable,
+            onClick = {
+                onSetDiskSpoolStorageLocation(
+                    nextDiskSpoolStorageLocation(effectiveLocation, externalAvailable)
+                )
+            },
+            onFocused = onItemFocused
+        )
+    }
+
     item(key = "network_cache_disk_spool_probe") {
         SettingsActionRow(
-            title = stringResource(R.string.playback_buffer_disk_spool_probe),
+            title = stringResource(R.string.playback_buffer_disk_spool_diagnostic),
             subtitle = null,
             onClick = onRunDiskSpoolStorageProbe,
             onFocused = onItemFocused
@@ -164,36 +209,37 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
 
     item(key = "network_cache_disk_spool_probe_status") {
         val context = LocalContext.current
-        val spoolDirectoryPath = context.cacheDir.resolve("player_disk_spool").absolutePath
-        val status = resolveDiskSpoolProbeStatus(
+        val spoolDirectory = DiskSpoolStorageResolver.resolveSpoolDirectory(
+            context,
+            playerSettings.diskSpoolStorageLocation
+        ) ?: DiskSpoolStorageResolver.builtinSpoolDirectory(context)
+        val status = resolveDiskSpoolDiagnosticStatus(
             result = SpoolStorageProbeResult.fromJsonOrNull(playerSettings.spoolStorageProbeResultJson),
-            progressivePlaybackDiskMode = playerSettings.progressivePlaybackDiskMode,
             nowMs = System.currentTimeMillis(),
-            spoolDirectoryPath = spoolDirectoryPath,
-            targetVideoMbps = SpoolStoragePolicy.targetBitrateMbps(
-                streamBitrateMbps = null,
-                userCapMbps = playerSettings.diskSpoolTargetBitrateMbps()
-            )
+            spoolDirectoryPath = spoolDirectory.absolutePath
         )
         val statusText = when (status) {
-            DiskSpoolProbeStatus.Disabled ->
-                stringResource(R.string.playback_buffer_disk_spool_probe_status_disabled)
-            DiskSpoolProbeStatus.NotChecked ->
-                stringResource(R.string.playback_buffer_disk_spool_probe_status_not_checked)
-            is DiskSpoolProbeStatus.Passed ->
-                stringResource(
-                    R.string.playback_buffer_disk_spool_probe_status_passed,
-                    status.combinedMbps,
-                    status.p99ReadLatencyMs
-                )
-            is DiskSpoolProbeStatus.Failed ->
-                stringResource(
-                    R.string.playback_buffer_disk_spool_probe_status_failed,
-                    status.combinedMbps,
-                    status.p99ReadLatencyMs
-                )
-            DiskSpoolProbeStatus.Stale ->
-                stringResource(R.string.playback_buffer_disk_spool_probe_status_stale)
+            DiskSpoolDiagnosticStatus.NotChecked ->
+                stringResource(R.string.playback_buffer_disk_spool_diagnostic_not_checked)
+            is DiskSpoolDiagnosticStatus.Measured -> {
+                val randomWriteMbps = status.randomWriteMbps
+                if (randomWriteMbps != null) {
+                    stringResource(
+                        R.string.playback_buffer_disk_spool_diagnostic_measured_random,
+                        status.sequentialWriteMbps,
+                        status.sequentialReadMbps,
+                        randomWriteMbps
+                    )
+                } else {
+                    stringResource(
+                        R.string.playback_buffer_disk_spool_diagnostic_measured,
+                        status.sequentialWriteMbps,
+                        status.sequentialReadMbps
+                    )
+                }
+            }
+            DiskSpoolDiagnosticStatus.Stale ->
+                stringResource(R.string.playback_buffer_disk_spool_diagnostic_stale)
         }
         Text(
             text = statusText,
@@ -202,6 +248,59 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
             modifier = Modifier.padding(bottom = 8.dp)
         )
     }
+}
+
+internal enum class ParallelConnectionsSubtitle {
+    Default,
+    WarningForDiskSpool
+}
+
+internal fun resolveParallelConnectionsSubtitle(
+    useParallelConnections: Boolean,
+    progressivePlaybackDiskMode: ProgressivePlaybackDiskMode
+): ParallelConnectionsSubtitle {
+    return if (useParallelConnections && progressivePlaybackDiskMode == ProgressivePlaybackDiskMode.SPOOL) {
+        ParallelConnectionsSubtitle.WarningForDiskSpool
+    } else {
+        ParallelConnectionsSubtitle.Default
+    }
+}
+
+internal fun nextDiskSpoolStorageLocation(
+    current: DiskSpoolStorageLocation,
+    externalAvailable: Boolean
+): DiskSpoolStorageLocation {
+    if (!externalAvailable) return DiskSpoolStorageLocation.BUILTIN
+    return when (current) {
+        DiskSpoolStorageLocation.BUILTIN -> DiskSpoolStorageLocation.EXTERNAL
+        DiskSpoolStorageLocation.EXTERNAL -> DiskSpoolStorageLocation.BUILTIN
+    }
+}
+
+internal sealed class DiskSpoolDiagnosticStatus {
+    object NotChecked : DiskSpoolDiagnosticStatus()
+    object Stale : DiskSpoolDiagnosticStatus()
+    data class Measured(
+        val sequentialWriteMbps: Int,
+        val sequentialReadMbps: Int,
+        val randomWriteMbps: Int?
+    ) : DiskSpoolDiagnosticStatus()
+}
+
+internal fun resolveDiskSpoolDiagnosticStatus(
+    result: SpoolStorageProbeResult?,
+    nowMs: Long,
+    spoolDirectoryPath: String
+): DiskSpoolDiagnosticStatus {
+    if (result == null) return DiskSpoolDiagnosticStatus.NotChecked
+    if (!SpoolStoragePolicy.isFresh(result, nowMs, spoolDirectoryPath)) {
+        return DiskSpoolDiagnosticStatus.Stale
+    }
+    return DiskSpoolDiagnosticStatus.Measured(
+        sequentialWriteMbps = (result.concurrentSequentialWriteMbps ?: result.writeMbps).roundToInt(),
+        sequentialReadMbps = (result.concurrentSequentialReadMbps ?: result.readMbps).roundToInt(),
+        randomWriteMbps = result.concurrentRandomWriteMbps?.roundToInt()
+    )
 }
 
 internal sealed class DiskSpoolProbeStatus {

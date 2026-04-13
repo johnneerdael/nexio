@@ -29,7 +29,9 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
 import com.nexio.tv.data.repository.benchmark.hasValidAutoplayBenchmarkFor
-import com.nexio.tv.ui.screens.player.spool.SpoolStorageCapabilityProbe
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageDiagnostic
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageResolver
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
@@ -97,6 +99,7 @@ class PlaybackSettingsViewModel @Inject constructor(
     private val diskSpoolStorageProbeGeneration = AtomicLong(0L)
     private val diskSpoolStorageProbeCommitMutex = Mutex()
     internal var diskSpoolStorageProbeRunnerForTesting: (suspend (File, () -> Boolean) -> SpoolStorageProbeResult)? = null
+    internal var diskSpoolDirectoryResolverForTesting: ((Context, DiskSpoolStorageLocation) -> File?)? = null
 
     suspend fun setPlayerPreference(preference: PlayerPreference) {
         playerSettingsDataStore.setPlayerPreference(preference)
@@ -346,12 +349,15 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setProgressivePlaybackDiskMode(mode)
     }
 
+    suspend fun setDiskSpoolStorageLocation(location: DiskSpoolStorageLocation) {
+        playerSettingsDataStore.setDiskSpoolStorageLocation(location)
+    }
+
     fun runDiskSpoolStorageProbe(context: Context) {
         val probeGeneration = diskSpoolStorageProbeGeneration.incrementAndGet()
         diskSpoolStorageProbeJob?.cancel()
         val applicationContext = context.applicationContext
         diskSpoolStorageProbeJob = viewModelScope.launch(Dispatchers.IO) {
-            val spoolDirectory = File(applicationContext.cacheDir, "player_disk_spool")
             fun isCurrentProbeGeneration(): Boolean {
                 return coroutineContext.isActive &&
                     diskSpoolStorageProbeGeneration.get() == probeGeneration
@@ -368,12 +374,25 @@ class PlaybackSettingsViewModel @Inject constructor(
                 if (!isCurrentProbeGeneration()) return@launch
                 commitProbeResultIfCurrent(null)
                 coroutineContext.ensureActive()
+                val settings = playerSettingsDataStore.playerSettings.first()
+                val spoolDirectory = diskSpoolDirectoryResolverForTesting?.invoke(
+                    applicationContext,
+                    settings.diskSpoolStorageLocation
+                ) ?: DiskSpoolStorageResolver.resolveSpoolDirectory(
+                    applicationContext,
+                    settings.diskSpoolStorageLocation
+                )
+                if (spoolDirectory == null) {
+                    commitProbeResultIfCurrent(null)
+                    return@launch
+                }
                 val shouldContinue = {
                     coroutineContext.isActive && !Thread.currentThread().isInterrupted
                 }
                 val result = diskSpoolStorageProbeRunnerForTesting?.invoke(spoolDirectory, shouldContinue)
-                    ?: SpoolStorageCapabilityProbe(
+                    ?: DiskSpoolStorageDiagnostic(
                         directory = spoolDirectory,
+                        randomWriteEnabled = settings.useParallelConnections,
                         shouldContinue = shouldContinue
                     ).run()
                 coroutineContext.ensureActive()

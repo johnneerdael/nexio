@@ -11,6 +11,7 @@ import com.nexio.tv.data.repository.TrackingProviderStateRepository
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
 import com.nexio.tv.domain.repository.AddonRepository
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -165,6 +166,39 @@ class PlaybackSettingsViewModelSpoolModeTest {
             playerSettingsDataStore.setSpoolStorageProbeResult(successResult)
         }
         assertEquals(successResult, committedResults.last())
+    }
+
+    @Test
+    fun `disk spool storage diagnostic uses selected external spool directory`() {
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>(relaxed = true)
+        val context = mockk<Context>(relaxed = true)
+        val cacheDirectory = temp.newFolder("cache-dir")
+        val externalSpoolDirectory = temp.newFolder("external-spool-dir")
+        val probedDirectories = CopyOnWriteArrayList<File>()
+        every { context.applicationContext } returns context
+        every { context.cacheDir } returns cacheDirectory
+
+        val viewModel = createViewModel(playerSettingsDataStore).apply {
+            diskSpoolDirectoryResolverForTesting = { _, location ->
+                if (location == DiskSpoolStorageLocation.EXTERNAL) externalSpoolDirectory else cacheDirectory
+            }
+            diskSpoolStorageProbeRunnerForTesting = { directory, _ ->
+                probedDirectories += directory
+                passingProbeResult(directory)
+            }
+        }
+        every { playerSettingsDataStore.playerSettings } returns flowOf(
+            PlayerSettings(diskSpoolStorageLocation = DiskSpoolStorageLocation.EXTERNAL)
+        )
+
+        viewModel.runDiskSpoolStorageProbe(context)
+
+        coVerify(timeout = 5_000) {
+            playerSettingsDataStore.setSpoolStorageProbeResult(match { result ->
+                result?.spoolDirectoryPath == externalSpoolDirectory.absolutePath
+            })
+        }
+        assertEquals(listOf(externalSpoolDirectory), probedDirectories.toList())
     }
 
     private fun createViewModel(

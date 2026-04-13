@@ -102,6 +102,7 @@ import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.data.local.TrailerSettings
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.ui.components.NexioDialog
+import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.launch
 import android.widget.Toast
@@ -358,6 +359,9 @@ internal fun PlaybackSettingsContent(
                 },
                 onSetProgressivePlaybackDiskMode = { mode: ProgressivePlaybackDiskMode ->
                     coroutineScope.launch { viewModel.setProgressivePlaybackDiskMode(mode) }
+                },
+                onSetDiskSpoolStorageLocation = { location: DiskSpoolStorageLocation ->
+                    coroutineScope.launch { viewModel.setDiskSpoolStorageLocation(location) }
                 },
                 onRunDiskSpoolStorageProbe = {
                     viewModel.runDiskSpoolStorageProbe(context)
