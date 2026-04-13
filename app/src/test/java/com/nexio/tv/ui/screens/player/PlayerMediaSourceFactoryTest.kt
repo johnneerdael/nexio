@@ -16,6 +16,7 @@ import java.io.IOException
 import java.io.File
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -215,6 +216,7 @@ class PlayerMediaSourceFactoryTest {
                 measuredAtMs = System.currentTimeMillis() - 8L * 24L * 60L * 60L * 1000L
             )
             diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+            diskSpoolWriterExecutorForTesting = Executor { }
         }
 
         val dataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
@@ -1047,6 +1049,55 @@ class PlayerMediaSourceFactoryTest {
         assertEquals(2_048L * 1024L * 1024L, capturedSpoolFiles.single().length())
         assertEquals(listOf(384), capturedStartupBuffers)
         factory.shutdown()
+    }
+
+    @Test
+    fun progressivePlayback_prewarmsStartupBufferBeforeReturningMediaSource() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val requestCount = AtomicInteger(0)
+        val content = ByteArray(1024 * 1024) { (it % 251).toByte() }
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                requestCount.incrementAndGet()
+                return when (request.getHeader("Range")) {
+                    "bytes=0-0" -> MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Accept-Ranges", "bytes")
+                        .setHeader("Content-Range", "bytes 0-0/${content.size}")
+                        .setHeader("Content-Length", 1)
+                        .setBody(Buffer().writeByte(0x2A))
+
+                    "bytes=0-1048575" -> MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Accept-Ranges", "bytes")
+                        .setHeader("Content-Range", "bytes 0-1048575/${content.size}")
+                        .setHeader("Content-Length", content.size)
+                        .setBody(Buffer().write(content))
+
+                    else -> MockResponse().setResponseCode(400)
+                }
+            }
+        }
+        server.start()
+        val factory = PlayerMediaSourceFactory(
+            context = context,
+            playbackOkHttpClient = OkHttpClient()
+        ).apply {
+            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            diskSpoolSizeMb = 256
+            diskSpoolStartupBufferMb = 1
+            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
+        }
+
+        try {
+            factory.createMediaSource(server.url("/video.mkv").toString(), emptyMap())
+
+            assertEquals(2, requestCount.get())
+        } finally {
+            factory.shutdown()
+            server.shutdown()
+        }
     }
 
     @Test

@@ -4,7 +4,8 @@ internal class DiskSpoolReadAheadBuffer(
     private val session: DiskSpoolSession,
     capacityBytes: Long,
     private val chunkBytes: Int = DEFAULT_CHUNK_BYTES,
-    workerName: String = "Nexio-disk-spool-read-ahead"
+    workerName: String = "Nexio-disk-spool-read-ahead",
+    private val uncaughtExceptionHandler: Thread.UncaughtExceptionHandler? = null
 ) {
     private data class Chunk(
         val start: Long,
@@ -36,6 +37,7 @@ internal class DiskSpoolReadAheadBuffer(
             }
             worker = Thread(::runWorker, workerName).apply {
                 isDaemon = true
+                uncaughtExceptionHandler?.let(::setUncaughtExceptionHandler)
                 start()
             }
             lock.notifyAll()
@@ -95,7 +97,12 @@ internal class DiskSpoolReadAheadBuffer(
         while (true) {
             val (startPosition, readLength, readGeneration) = synchronized(lock) {
                 while (!released && bufferedBytes >= capacity) {
-                    lock.wait(50L)
+                    try {
+                        lock.wait(50L)
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        return
+                    }
                 }
                 if (released) return
                 val windowStart = session.windowStartBytes()
@@ -104,7 +111,12 @@ internal class DiskSpoolReadAheadBuffer(
                 }
                 val availableBytes = session.contiguousFrontierBytes() - nextReadPosition
                 if (availableBytes <= 0L) {
-                    lock.wait(NON_POSITIVE_READ_BACKOFF_MS)
+                    try {
+                        lock.wait(NON_POSITIVE_READ_BACKOFF_MS)
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        return
+                    }
                     return@synchronized Triple(nextReadPosition, 0, generation)
                 }
                 val readLength = minOf(scratch.size.toLong(), availableBytes).toInt()
@@ -120,7 +132,12 @@ internal class DiskSpoolReadAheadBuffer(
                         resetLocked(session.windowStartBytes())
                     }
                 }
-                Thread.sleep(NON_POSITIVE_READ_BACKOFF_MS)
+                try {
+                    Thread.sleep(NON_POSITIVE_READ_BACKOFF_MS)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return
+                }
                 continue
             }
 
