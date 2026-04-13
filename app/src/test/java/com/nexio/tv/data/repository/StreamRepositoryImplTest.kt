@@ -12,6 +12,7 @@ import com.nexio.tv.data.remote.dto.StreamResponseDto
 import com.nexio.tv.data.repository.servicewrap.ResolvedServiceWrapStream
 import com.nexio.tv.data.repository.servicewrap.ServiceWrapProvider
 import com.nexio.tv.data.repository.servicewrap.ServiceWrapResolutionBatch
+import com.nexio.tv.data.repository.servicewrap.ServiceWrapResolutionChunkBatch
 import com.nexio.tv.data.repository.servicewrap.ServiceWrapRequestContext
 import com.nexio.tv.data.repository.servicewrap.ServiceWrapResolver
 import com.nexio.tv.data.repository.servicewrap.ServiceWrapSessionFactory
@@ -268,6 +269,93 @@ class StreamRepositoryImplTest {
         assertTrue(successes[0].data.single().streams.isEmpty())
         assertEquals(setOf("RD"), successes[1].data.single().streams.mapNotNull { it.wrappedProviderId }.toSet())
         assertEquals(setOf("RD", "PM"), successes[2].data.single().streams.mapNotNull { it.wrappedProviderId }.toSet())
+    }
+
+    @Test
+    fun `getStreamsFromAllAddons emits first service-wrap chunk before later chunks finish`() = runTest {
+        mockAndroidLog()
+
+        val addonApi = mockk<AddonApi>()
+        val addonRepository = mockk<AddonRepository>()
+        val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
+        val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
+        val okHttpClient = mockk<OkHttpClient>(relaxed = true)
+        val dispatcher = mockk<Dispatcher>()
+        every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
+        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings(serviceWrapEnabled = true))
+        every { okHttpClient.dispatcher } returns dispatcher
+        every { dispatcher.runningCalls() } returns mutableListOf()
+        every { dispatcher.queuedCalls() } returns mutableListOf()
+
+        val addonA = streamAddon("https://addon-a.example", "Addon A")
+        every { addonRepository.getInstalledAddons() } returns flowOf(listOf(addonA))
+        coEvery { addonApi.getStreams(match { it.contains("addon-a.example") }, any()) } returns Response.success(
+            StreamResponseDto(
+                streams = (1..25).map { index ->
+                    streamDto(
+                        name = "P2P Candidate $index",
+                        url = null,
+                        infoHash = "%040x".format(index),
+                        description = "Movie.2024.2160p.REMUX"
+                    )
+                }
+            )
+        )
+
+        val serviceWrapSessionFactory = ServiceWrapSessionFactory(
+            extractor = WrapCandidateExtractor(),
+            resolver = object : ServiceWrapResolver {
+                override suspend fun resolve(
+                    candidate: WrapCandidate,
+                    requestContext: ServiceWrapRequestContext
+                ): List<ResolvedServiceWrapStream> = error("chunk path should be used")
+
+                override fun resolveChunkProgressively(
+                    candidates: List<WrapCandidate>,
+                    requestContext: ServiceWrapRequestContext
+                ): Flow<ServiceWrapResolutionChunkBatch> = flow {
+                    if (candidates.size == 5) delay(1_000L)
+                    emit(
+                        ServiceWrapResolutionChunkBatch(
+                            streamsByHash = candidates.associate { candidate ->
+                                candidate.normalizedInfoHash to listOf(
+                                    resolvedStream(ServiceWrapProvider.REAL_DEBRID, candidate.normalizedInfoHash)
+                                )
+                            },
+                            isTerminal = true
+                        )
+                    )
+                }
+            },
+            wrappedStreamBuilder = WrappedStreamBuilder(),
+            maxConcurrentResolutions = 2,
+            chunkSize = 20,
+            chunkFlushDelayMs = 250L
+        )
+
+        val repository = StreamRepositoryImpl(
+            api = addonApi,
+            addonRepository = addonRepository,
+            debugSettingsDataStore = debugSettingsDataStore,
+            playerSettingsDataStore = playerSettingsDataStore,
+            serviceWrapSessionFactory = serviceWrapSessionFactory,
+            okHttpClient = okHttpClient
+        )
+
+        val emissions = withContext(Dispatchers.Default.limitedParallelism(1)) {
+            withTimeout(5_000L) {
+                repository.getStreamsFromAllAddons(
+                    type = "movie",
+                    videoId = "tt1234567",
+                    requestOrigin = "test_service_wrap_chunk_early",
+                    requestId = "request-service-wrap-chunk-early"
+                ).toList()
+            }
+        }
+
+        val successes = emissions.filterIsInstance<NetworkResult.Success<List<com.nexio.tv.domain.model.AddonStreams>>>()
+        assertTrue(successes.any { success -> success.data.single().streams.size == 20 })
+        assertEquals(25, successes.last().data.single().streams.size)
     }
 
     @Test
