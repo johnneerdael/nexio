@@ -19,9 +19,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -133,9 +132,15 @@ private fun CompanyLogoCard(
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     contentScale = ContentScale.Fit,
-                    colorFilter = ColorFilter.tint(
-                        color = Color.White,
-                        blendMode = BlendMode.SrcIn
+                    colorFilter = ColorFilter.colorMatrix(
+                        ColorMatrix(
+                            floatArrayOf(
+                                -1f, 0f, 0f, 0f, 255f,
+                                 0f, -1f, 0f, 0f, 255f,
+                                 0f, 0f, -1f, 0f, 255f,
+                                 0f, 0f, 0f, 1f, 0f
+                            )
+                        )
                     )
                 )
             } else {
