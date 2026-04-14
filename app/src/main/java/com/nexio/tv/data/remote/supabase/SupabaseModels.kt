@@ -128,6 +128,7 @@ data class SupabaseProfile(
     @SerialName("profile_index") val profileIndex: Int,
     val name: String = "",
     @SerialName("avatar_color_hex") val avatarColorHex: String = "#1E88E5",
+    @SerialName("avatar_url") val avatarUrl: String? = null,
     @SerialName("uses_primary_addons") val usesPrimaryAddons: Boolean = false,
     @SerialName("uses_primary_plugins") val usesPrimaryPlugins: Boolean = false,
     @SerialName("avatar_id") val avatarId: String? = null,
