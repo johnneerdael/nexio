@@ -47,10 +47,10 @@ Plans:
   5. Shared settings (addons, debrid, TMDB, MDBList, IMDB, OMDB, auto-translate, top-posters, RPDB) are only configurable from the default profile
 **Plans:** 4 plans
 Plans:
-- [ ] 02-01-PLAN.md — TraktAuthDataStore + TraktSettingsDataStore migration to factory pattern
-- [ ] 02-02-PLAN.md — SimklAuthDataStore + SimklSettingsDataStore migration to factory pattern
-- [ ] 02-03-PLAN.md — PlayerSettings, LayoutPreference, Theme, SearchHistory migration to factory pattern
-- [ ] 02-04-PLAN.md — Sync guard, profileSwitched event, and isPrimaryProfile settings gating
+- [x] 02-01-PLAN.md — TraktAuthDataStore + TraktSettingsDataStore migration to factory pattern
+- [x] 02-02-PLAN.md — SimklAuthDataStore + SimklSettingsDataStore migration to factory pattern
+- [x] 02-03-PLAN.md — PlayerSettings, LayoutPreference, Theme, SearchHistory migration to factory pattern
+- [x] 02-04-PLAN.md — Sync guard, profileSwitched event, and isPrimaryProfile settings gating
 
 ### Phase 3: Profile UI
 **Goal**: Users can select, switch, and manage profiles through a fully D-pad navigable interface that stays invisible for single-profile households
