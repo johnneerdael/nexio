@@ -98,6 +98,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -191,6 +193,7 @@ class AccountSettingsSyncService @Inject constructor(
 
     @Volatile
     private var isApplyingRemote = false
+    private val applyingRemoteMutex = Mutex()
 
     // Generation counter: incremented on every profile switch, cleared after the
     // post-switch pull succeeds. Replaces the fixed 2-second boolean window, which
@@ -416,35 +419,37 @@ class AccountSettingsSyncService @Inject constructor(
                 ).decodeAs<AccountConfigSnapshotRpcResponse>()
             }
 
-            isApplyingRemote = true
-            try {
-                applyAccountConfigSyncSettings(
-                    settings = snapshot.settings,
-                    layoutPreferenceDataStore = layoutPreferenceDataStore,
-                    tmdbSettingsDataStore = tmdbSettingsDataStore,
-                    mdbListSettingsDataStore = mdbListSettingsDataStore,
-                    omdbSettingsDataStore = omdbSettingsDataStore,
-                    theIntroDbSettingsDataStore = theIntroDbSettingsDataStore,
-                    animeSkipSettingsDataStore = animeSkipSettingsDataStore,
-                    subtitleTranslationSettingsDataStore = subtitleTranslationSettingsDataStore,
-                    imdbSettingsDataStore = imdbSettingsDataStore,
-                    posterRatingsSettingsDataStore = posterRatingsSettingsDataStore,
-                    traktSettingsDataStore = traktSettingsDataStore,
-                    simklSettingsDataStore = simklSettingsDataStore,
-                    playerSettingsDataStore = playerSettingsDataStore
-                )
-                applyRemoteSecrets(snapshot.settings)
-                lastAppliedRemoteRevision = snapshot.settingsRevision
-                clearSuppression(switchGenAtPullStart)
-                if (clearPendingChanges) {
-                    synchronized(pendingChangedPaths) {
-                        if (pendingChangedPathsGeneration == pullStartedGeneration) {
-                            pendingChangedPaths.clear()
+            applyingRemoteMutex.withLock {
+                isApplyingRemote = true
+                try {
+                    applyAccountConfigSyncSettings(
+                        settings = snapshot.settings,
+                        layoutPreferenceDataStore = layoutPreferenceDataStore,
+                        tmdbSettingsDataStore = tmdbSettingsDataStore,
+                        mdbListSettingsDataStore = mdbListSettingsDataStore,
+                        omdbSettingsDataStore = omdbSettingsDataStore,
+                        theIntroDbSettingsDataStore = theIntroDbSettingsDataStore,
+                        animeSkipSettingsDataStore = animeSkipSettingsDataStore,
+                        subtitleTranslationSettingsDataStore = subtitleTranslationSettingsDataStore,
+                        imdbSettingsDataStore = imdbSettingsDataStore,
+                        posterRatingsSettingsDataStore = posterRatingsSettingsDataStore,
+                        traktSettingsDataStore = traktSettingsDataStore,
+                        simklSettingsDataStore = simklSettingsDataStore,
+                        playerSettingsDataStore = playerSettingsDataStore
+                    )
+                    applyRemoteSecrets(snapshot.settings)
+                    lastAppliedRemoteRevision = snapshot.settingsRevision
+                    clearSuppression(switchGenAtPullStart)
+                    if (clearPendingChanges) {
+                        synchronized(pendingChangedPaths) {
+                            if (pendingChangedPathsGeneration == pullStartedGeneration) {
+                                pendingChangedPaths.clear()
+                            }
                         }
                     }
+                } finally {
+                    isApplyingRemote = false
                 }
-            } finally {
-                isApplyingRemote = false
             }
 
             Result.success(buildRemoteAddonInstallConfigs(snapshot.addons, ::resolveRemoteAddonUrl))
