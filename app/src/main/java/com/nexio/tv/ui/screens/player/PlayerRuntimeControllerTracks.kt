@@ -14,7 +14,7 @@ import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.domain.model.Subtitle
-import com.nexio.tv.ui.screens.player.ass.isAssSsaFormat
+import com.nexio.tv.ui.screens.player.ass.isEmbeddedAssSsaFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -162,7 +162,7 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                     val isSelected = trackGroup.isTrackSelected(i)
                     if (isSelected) {
                         selectedSubtitleIndex = subtitleTracks.size
-                        if (format.isAssSsaFormat()) {
+                        if (format.isEmbeddedAssSsaFormat()) {
                             assSsaRenderController?.selectTrackByFormat(format)
                         }
                     }
@@ -680,7 +680,7 @@ private fun Tracks.hasSelectedAssSsaTextTrack(): Boolean {
         for (index in 0 until trackGroup.length) {
             if (!trackGroup.isTrackSelected(index)) continue
             val format = trackGroup.getTrackFormat(index)
-            if (format.isAssSsaFormat()) return true
+            if (format.isEmbeddedAssSsaFormat()) return true
         }
     }
     return false
