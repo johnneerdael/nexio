@@ -59,20 +59,20 @@ Source: `NexioDialog.kt` line 52 (`padding(24.dp)`), `SettingsScreen.kt` (`32.dp
 
 ## Typography
 
-Uses `buildNexioTypography` from `Type.kt`. This phase uses only four roles from the existing type scale.
+Uses `buildNexioTypography` from `Type.kt`. This phase uses only three roles from the existing type scale. Active font weights are Normal (400) and Medium (500) only.
 
 | Role | Style Token | Size | Weight | Line Height |
 |------|-------------|------|--------|-------------|
 | Body | `bodyMedium` | 14sp | Normal (400) | 20sp (1.43) |
 | Label | `labelLarge` | 14sp | Medium (500) | 20sp (1.43) |
 | Title | `titleLarge` | 20sp | Medium (500) | 28sp (1.40) |
-| Heading | `headlineMedium` | 24sp | SemiBold (600) | 32sp (1.33) |
 
 Usage in this phase:
 - `titleLarge` — dialog title (e.g. "Delete Profile?"), sync section headers
 - `bodyMedium` — dialog subtitle / description text, sync status messages
 - `labelLarge` — button labels, status chip text
-- `headlineMedium` — not introduced by this phase; referenced only if a top-level "Sync" settings section header is added
+
+Note: `headlineMedium` (24sp / SemiBold 600) is not introduced by this phase and is excluded from the active weight set. If a top-level "Sync" settings section header is added in a future phase, the weight set must be re-evaluated at that time.
 
 Source: `Type.kt` — verified values. `NexioDialog.kt` uses `MaterialTheme.typography.titleLarge` for title and `bodyMedium` for subtitle.
 
@@ -105,16 +105,16 @@ Phase 4 introduces two new UI-visible interaction moments: profile deletion conf
 | Primary CTA — sync settings row | "Sync Now" |
 | Delete dialog title | "Delete Profile" |
 | Delete dialog subtitle | "This will permanently delete [Profile Name] and remove all associated data from this device and the cloud. This cannot be undone." |
-| Delete dialog cancel button | "Cancel" |
+| Delete dialog cancel button | "Keep Profile" |
 | Sync status — idle | "Last synced [relative time, e.g. 'just now' / '3 min ago']" |
 | Sync status — in progress | "Syncing..." |
 | Sync status — success (transient, 3s) | "Synced successfully" |
 | Sync status — error | "Sync failed. Check your connection and try again." |
 | Empty state — no profiles to sync | Not applicable (profile 1 always exists; sync runs silently in background) |
-| Destructive confirmation approach | Inline dialog via `NexioDialog`; delete button is D-pad-focusable; cancel button auto-focused on dialog open to prevent accidental deletion |
+| Destructive confirmation approach | Inline dialog via `NexioDialog`; delete button is D-pad-focusable; "Keep Profile" button auto-focused on dialog open to prevent accidental deletion |
 
 Destructive actions in this phase:
-1. **Delete Profile** — confirmation required via `NexioDialog` (title + subtitle + destructive button + cancel). Cancel button receives initial focus. Profile name interpolated into subtitle. Matches established `ConfirmDeleteDialog` pattern from `LibraryScreen.kt`.
+1. **Delete Profile** — confirmation required via `NexioDialog` (title + subtitle + destructive button + "Keep Profile" cancel button). "Keep Profile" button receives initial focus. Profile name interpolated into subtitle. Matches established `ConfirmDeleteDialog` pattern from `LibraryScreen.kt`.
 2. **Revoke OAuth tokens** — occurs as a side effect of profile deletion; no separate confirmation required (covered by the delete dialog). Best-effort; failure does not block deletion.
 
 Source: RESEARCH.md D-11, D-12, D-13 (best-effort deletion); `LibraryScreen.kt` `ConfirmDeleteDialog` pattern.
@@ -127,7 +127,7 @@ Source: RESEARCH.md D-11, D-12, D-13 (best-effort deletion); `LibraryScreen.kt` 
 
 1. Triggered by: "Delete Profile" action in profile management settings (Phase 3 UI — this phase extends the deletion backend only; the dialog may already exist from Phase 3 or be added here if not yet present).
 2. Component: `NexioDialog(title, subtitle, width = 420.dp)`.
-3. Cancel button: auto-focused on open (prevents D-pad accidental confirmation).
+3. "Keep Profile" button: auto-focused on open (prevents D-pad accidental confirmation).
 4. Delete button: `containerColor = Color(0xFF4A2323)`, `contentColor = NexioColors.TextPrimary`.
 5. While deletion is in progress (`pending = true`): delete button disabled (`enabled = !pending`).
 6. On completion: dialog dismissed, profile removed from list with no animation lag.
@@ -136,9 +136,10 @@ Source: RESEARCH.md D-11, D-12, D-13 (best-effort deletion); `LibraryScreen.kt` 
 ### Sync Status Display (Settings Screen)
 
 1. Location: within the existing Settings screen, adjacent to the profile management section. Rendered as a subtitle-style `Text` below the "Profiles" section header.
-2. States: idle (last synced time), in-progress (text + `CircularProgressIndicator` at 16dp size), success (transient 3s then revert to idle), error (error text in `NexioColors.Error`).
-3. "Sync Now" button: visible only when sync is not in progress; fires `ProfileSyncService.pushToRemote()` + `ProfileSettingsSyncService` push.
-4. No dedicated sync screen — all feedback is inline within Settings.
+2. Visual hierarchy: the "Sync Now" button (`labelLarge`, Medium 500) is the primary visual anchor within the sync status row. The status text (`bodyMedium`, Normal 400, muted color) is secondary and renders to the left of or above the button. The `CircularProgressIndicator` (16dp) replaces the button during in-progress state and inherits the button's visual weight.
+3. States: idle (last synced time), in-progress (text + `CircularProgressIndicator` at 16dp size), success (transient 3s then revert to idle), error (error text in `NexioColors.Error`).
+4. "Sync Now" button: visible only when sync is not in progress; fires `ProfileSyncService.pushToRemote()` + `ProfileSettingsSyncService` push.
+5. No dedicated sync screen — all feedback is inline within Settings.
 
 ### Profile Settings Blob Sync (Background — No UI)
 
