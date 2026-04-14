@@ -56,6 +56,26 @@ class ProfileSettingsSyncServiceTest {
         )
     }
 
+    private fun extractMethodBody(source: String, methodName: String): String {
+        val methodStart = source.indexOf("fun $methodName()")
+        assertTrue("$methodName method should exist", methodStart >= 0)
+        val bodyStart = source.indexOf('{', methodStart)
+        assertTrue("$methodName method body should start", bodyStart >= 0)
+
+        var depth = 0
+        for (index in bodyStart until source.length) {
+            when (source[index]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) return source.substring(bodyStart, index + 1)
+                }
+            }
+        }
+
+        throw AssertionError("$methodName method body should be balanced")
+    }
+
     @Test
     fun `encodePreferenceValue string returns correct type and value`() {
         val encoded = service().encodePreferenceValue("hello")
@@ -257,5 +277,23 @@ class ProfileSettingsSyncServiceTest {
         )
 
         assertTrue(store.data.first().asMap().isEmpty())
+    }
+
+    @Test
+    fun `startObserving pulls selected profile before observing settings for push`() {
+        val source = java.io.File(
+            "app/src/main/java/com/nexio/tv/core/sync/ProfileSettingsSyncService.kt"
+        ).readText()
+        val startObservingText = extractMethodBody(source, "startObserving")
+
+        assertTrue(startObservingText.contains("distinctUntilChanged()"))
+        assertTrue(startObservingText.contains("pullBlobForProfile(profileId)"))
+        assertTrue(startObservingText.contains("observeProfileSettings(profileId)"))
+        assertTrue(
+            startObservingText.indexOf("pullBlobForProfile(profileId)") <
+                startObservingText.indexOf("observeProfileSettings(profileId)")
+        )
+        assertTrue(startObservingText.contains("debounce(2000)"))
+        assertTrue(startObservingText.contains("pushBlobForProfile(profileId)"))
     }
 }
