@@ -1,6 +1,8 @@
 package com.nexio.tv.data.local
 
 import android.content.Context
+import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.sync.profilePrefsName
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -12,18 +14,49 @@ data class SimklProgressSyncState(
 )
 
 @Singleton
-class SimklProgressSyncStateStore @Inject constructor(
-    @ApplicationContext private val context: Context
+class SimklProgressSyncStateStore private constructor(
+    private val context: Context,
+    private val activeProfileId: () -> Int,
+    private val injectedProfileManager: ProfileManager?
 ) {
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        profileManager: ProfileManager
+    ) : this(
+        context = context,
+        activeProfileId = { profileManager.activeProfileId.value },
+        injectedProfileManager = profileManager
+    )
+
+    constructor(context: Context) : this(
+        context = context,
+        activeProfileId = { 1 },
+        injectedProfileManager = null
+    )
+
     companion object {
-        private const val PREFS_NAME = "simkl_progress_sync_state"
+        internal const val BASE_PREFS_NAME = "simkl_progress_sync_state"
         private const val KEY_LAST_ALL = "last_all_activity_at"
         private const val KEY_LAST_PLAYBACK = "last_playback_activity_at"
         private const val KEY_LAST_REMOVED = "last_removed_from_list_activity_at"
     }
 
+    private val profileManager: ProfileManager
+        get() = injectedProfileManager ?: error("ProfileManager unavailable")
+
+    private fun injectedPrefsName(): String =
+        profilePrefsName(BASE_PREFS_NAME, profileManager.activeProfileId.value)
+
+    private fun prefsName(): String =
+        if (injectedProfileManager != null) {
+            injectedPrefsName()
+        } else {
+            profilePrefsName(BASE_PREFS_NAME, activeProfileId())
+        }
+
     fun read(): SimklProgressSyncState {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
         return SimklProgressSyncState(
             lastAllActivityAt = prefs.getString(KEY_LAST_ALL, null),
             lastPlaybackActivityAt = prefs.getString(KEY_LAST_PLAYBACK, null),
@@ -32,7 +65,7 @@ class SimklProgressSyncStateStore @Inject constructor(
     }
 
     fun write(state: SimklProgressSyncState) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_LAST_ALL, state.lastAllActivityAt)
             .putString(KEY_LAST_PLAYBACK, state.lastPlaybackActivityAt)
@@ -41,7 +74,7 @@ class SimklProgressSyncStateStore @Inject constructor(
     }
 
     fun clear() {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
             .edit()
             .remove(KEY_LAST_ALL)
             .remove(KEY_LAST_PLAYBACK)

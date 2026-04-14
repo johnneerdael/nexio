@@ -1,6 +1,7 @@
 package com.nexio.tv.data.local
 
 import android.content.Context
+import com.nexio.tv.core.sync.profilePrefsName
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.PosterShape
@@ -62,9 +63,9 @@ class TraktLibrarySnapshotStoreTest {
 
         val raw = prefs.getString("snapshot", null).orEmpty()
         assertFalse(raw.isBlank())
-        org.junit.Assert.assertTrue(raw.contains("\"listTabs\""))
-        org.junit.Assert.assertTrue(raw.contains("\"entriesByList\""))
-        org.junit.Assert.assertTrue(raw.contains("\"metadataByContentKey\""))
+        assertTrue(raw.contains("\"listTabs\""))
+        assertTrue(raw.contains("\"entriesByList\""))
+        assertTrue(raw.contains("\"metadataByContentKey\""))
     }
 
     @Test
@@ -123,6 +124,35 @@ class TraktLibrarySnapshotStoreTest {
         assertEquals(listOf("watchlist"), restored!!.listTabs.map { it.key })
         assertEquals(listOf("tt1234567"), restored.entriesByList["watchlist"].orEmpty().map { it.id })
         assertEquals(1234L, restored.updatedAtMs)
+    }
+
+    @Test
+    fun `prefsName resolves to bare name for profile 1`() {
+        assertEquals(
+            "trakt_library_snapshot",
+            profilePrefsName(TraktLibrarySnapshotStore.BASE_PREFS_NAME, 1)
+        )
+    }
+
+    @Test
+    fun `prefsName resolves to suffixed name for profile 2`() {
+        assertEquals(
+            "trakt_library_snapshot_p2",
+            profilePrefsName(TraktLibrarySnapshotStore.BASE_PREFS_NAME, 2)
+        )
+    }
+
+    @Test
+    fun `prefsName resolves to suffixed name for profile 4`() {
+        assertEquals(
+            "trakt_library_snapshot_p4",
+            profilePrefsName(TraktLibrarySnapshotStore.BASE_PREFS_NAME, 4)
+        )
+    }
+
+    @Test
+    fun `BASE_PREFS_NAME is trakt_library_snapshot`() {
+        assertEquals("trakt_library_snapshot", TraktLibrarySnapshotStore.BASE_PREFS_NAME)
     }
 
     private fun sampleSnapshot(): TraktLibrarySnapshotStore.Snapshot {

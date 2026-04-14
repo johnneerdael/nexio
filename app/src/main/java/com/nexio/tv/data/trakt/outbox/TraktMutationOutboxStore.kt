@@ -5,6 +5,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.sync.profilePrefsName
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -12,11 +14,29 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class TraktMutationOutboxStore @Inject constructor(
-    @ApplicationContext private val context: Context
+class TraktMutationOutboxStore private constructor(
+    private val context: Context,
+    private val activeProfileId: () -> Int,
+    private val injectedProfileManager: ProfileManager?
 ) {
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        profileManager: ProfileManager
+    ) : this(
+        context = context,
+        activeProfileId = { profileManager.activeProfileId.value },
+        injectedProfileManager = profileManager
+    )
+
+    constructor(context: Context) : this(
+        context = context,
+        activeProfileId = { 1 },
+        injectedProfileManager = null
+    )
+
     companion object {
-        private const val PREFS_NAME = "trakt_mutation_outbox"
+        internal const val BASE_PREFS_NAME = "trakt_mutation_outbox"
         private const val SNAPSHOT_KEY = "snapshot"
         private const val SCHEMA_VERSION = 1
         private const val JSON_SCHEMA_VERSION = "schemaVersion"
@@ -29,9 +49,22 @@ class TraktMutationOutboxStore @Inject constructor(
     private val gson = Gson()
     private val mutex = Mutex()
 
+    private val profileManager: ProfileManager
+        get() = injectedProfileManager ?: error("ProfileManager unavailable")
+
+    private fun injectedPrefsName(): String =
+        profilePrefsName(BASE_PREFS_NAME, profileManager.activeProfileId.value)
+
+    private fun prefsName(): String =
+        if (injectedProfileManager != null) {
+            injectedPrefsName()
+        } else {
+            profilePrefsName(BASE_PREFS_NAME, activeProfileId())
+        }
+
     suspend fun read(): TraktMutationOutboxSnapshot {
         return mutex.withLock {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
             val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() }
                 ?: return@withLock TraktMutationOutboxSnapshot()
             val root = runCatching {
@@ -46,7 +79,7 @@ class TraktMutationOutboxStore @Inject constructor(
 
     suspend fun write(snapshot: TraktMutationOutboxSnapshot) {
         mutex.withLock {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
                 addProperty(JSON_SCHEMA_VERSION, SCHEMA_VERSION)
                 add(JSON_SNAPSHOT, snapshot.toJson())
@@ -59,7 +92,7 @@ class TraktMutationOutboxStore @Inject constructor(
 
     suspend fun clear() {
         mutex.withLock {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
             prefs.edit().remove(SNAPSHOT_KEY).commit()
         }
     }

@@ -5,6 +5,8 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.sync.profilePrefsName
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
 import com.nexio.tv.domain.model.MetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -12,12 +14,30 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class SimklDiscoverySnapshotStore @Inject constructor(
-    @ApplicationContext private val context: Context
+class SimklDiscoverySnapshotStore private constructor(
+    private val context: Context,
+    private val activeProfileId: () -> Int,
+    private val injectedProfileManager: ProfileManager?
 ) {
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        profileManager: ProfileManager
+    ) : this(
+        context = context,
+        activeProfileId = { profileManager.activeProfileId.value },
+        injectedProfileManager = profileManager
+    )
+
+    constructor(context: Context) : this(
+        context = context,
+        activeProfileId = { 1 },
+        injectedProfileManager = null
+    )
+
     companion object {
         private const val TAG = "SimklDiscoveryStore"
-        private const val PREFS_NAME = "simkl_discovery_snapshot_v2"
+        internal const val BASE_PREFS_NAME = "simkl_discovery_snapshot_v2"
         private const val LEGACY_PREFS_NAME = "simkl_discovery_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
     }
@@ -25,9 +45,22 @@ class SimklDiscoverySnapshotStore @Inject constructor(
     private val gson = Gson()
     private val itemsByCatalogType = object : TypeToken<Map<String, List<MetaPreview>>>() {}.type
 
+    private val profileManager: ProfileManager
+        get() = injectedProfileManager ?: error("ProfileManager unavailable")
+
+    private fun injectedPrefsName(): String =
+        profilePrefsName(BASE_PREFS_NAME, profileManager.activeProfileId.value)
+
+    private fun prefsName(): String =
+        if (injectedProfileManager != null) {
+            injectedPrefsName()
+        } else {
+            profilePrefsName(BASE_PREFS_NAME, activeProfileId())
+        }
+
     fun read(): SimklDiscoverySnapshot? {
         return runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
             val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
             decode(raw)
         }.onFailure {
@@ -38,7 +71,7 @@ class SimklDiscoverySnapshotStore @Inject constructor(
 
     fun write(snapshot: SimklDiscoverySnapshot) {
         runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
                 add("itemsByCatalog", gson.toJsonTree(snapshot.itemsByCatalog))
                 addProperty("updatedAtMs", snapshot.updatedAtMs)
@@ -53,7 +86,7 @@ class SimklDiscoverySnapshotStore @Inject constructor(
 
     fun clear() {
         runCatching {
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().remove(SNAPSHOT_KEY).commit()
+            context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE).edit().remove(SNAPSHOT_KEY).commit()
         }
     }
 

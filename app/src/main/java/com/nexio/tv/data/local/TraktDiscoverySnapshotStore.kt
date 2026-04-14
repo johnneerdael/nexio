@@ -5,6 +5,8 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.sync.profilePrefsName
 import com.nexio.tv.data.repository.TraktCustomListCatalog
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.data.repository.TraktPopularListOption
@@ -15,21 +17,51 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class TraktDiscoverySnapshotStore @Inject constructor(
-    @ApplicationContext private val context: Context
+class TraktDiscoverySnapshotStore private constructor(
+    private val context: Context,
+    private val activeProfileId: () -> Int,
+    private val injectedProfileManager: ProfileManager?
 ) {
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        profileManager: ProfileManager
+    ) : this(
+        context = context,
+        activeProfileId = { profileManager.activeProfileId.value },
+        injectedProfileManager = profileManager
+    )
+
+    constructor(context: Context) : this(
+        context = context,
+        activeProfileId = { 1 },
+        injectedProfileManager = null
+    )
 
     companion object {
         private const val TAG = "TraktDiscoveryStore"
-        private const val PREFS_NAME = "trakt_discovery_snapshot"
+        internal const val BASE_PREFS_NAME = "trakt_discovery_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
     }
 
     private val gson = Gson()
 
+    private val profileManager: ProfileManager
+        get() = injectedProfileManager ?: error("ProfileManager unavailable")
+
+    private fun injectedPrefsName(): String =
+        profilePrefsName(BASE_PREFS_NAME, profileManager.activeProfileId.value)
+
+    private fun prefsName(): String =
+        if (injectedProfileManager != null) {
+            injectedPrefsName()
+        } else {
+            profilePrefsName(BASE_PREFS_NAME, activeProfileId())
+        }
+
     fun read(): TraktDiscoverySnapshot? {
         return runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
             val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
             decode(raw)
         }.onFailure { error ->
@@ -40,7 +72,7 @@ class TraktDiscoverySnapshotStore @Inject constructor(
 
     fun write(snapshot: TraktDiscoverySnapshot) {
         runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
                 add("calendarItems", gson.toJsonTree(snapshot.calendarItems))
                 add("recommendationMovieItems", gson.toJsonTree(snapshot.recommendationMovieItems))
@@ -62,7 +94,7 @@ class TraktDiscoverySnapshotStore @Inject constructor(
 
     fun clear() {
         runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
             prefs.edit().remove(SNAPSHOT_KEY).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear Trakt discovery snapshot", error)
