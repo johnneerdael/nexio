@@ -352,22 +352,19 @@ private const val TVDB_IDENTITY_SCHEMA_VERSION = 1
 | A2 | A refresh skew before one-month token expiry is acceptable even though `tvdb.yml` does not specify an exact refresh-before-expiry window. | Architecture Patterns / Token Cache | If TVDB revokes tokens early or requires a specific refresh policy, token handling needs live validation or provider docs confirmation. |
 | A3 | Official-site remote IDs can be normalized by source name plus URL canonicalization because `tvdb.yml` exposes `RemoteID.id` and `RemoteID.sourceName` without a fixed official-site enum. | Architecture Patterns / Identity Lookup | If source names differ in live API data, matching may miss some official-site aliases until telemetry/tests add synonyms. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should TVDB credentials be locally encrypted at rest?**
    - What we know: Existing local integration settings store API keys in Preferences DataStore, while remote account sync stores API keys through the secret channel. [VERIFIED: TmdbSettingsDataStore.kt; VERIFIED: AccountSettingsSyncService.kt]
-   - What's unclear: D-02 may mean remote sync secret-backed only, or it may require a new local encrypted secret store. [VERIFIED: 06-CONTEXT.md; ASSUMED]
-   - Recommendation: Plan using existing local pattern unless the user explicitly upgrades the security requirement before implementation. [ASSUMED]
+   - Decision: Phase 6 local storage follows the existing Preferences DataStore integration pattern, while account sync remains secret-backed through the existing secret channel per D-02. No new encrypted local store or checkpoint is required unless the user explicitly upgrades the local-at-rest requirement before implementation. [VERIFIED: 06-CONTEXT.md; VERIFIED: TmdbSettingsDataStore.kt; VERIFIED: AccountSettingsSyncService.kt]
 
 2. **Should `tvdb.yml` be committed before implementation plans depend on it?**
    - What we know: `tvdb.yml` exists in the worktree, but `git status --short` shows it as untracked. [VERIFIED: git status]
-   - What's unclear: The user called it checked-in, so the worktree may be ahead of git or the file may need adding intentionally. [VERIFIED: user prompt; VERIFIED: git status]
-   - Recommendation: Treat `tvdb.yml` as the local contract for planning, and include a Wave 0 check to either commit it or document the authoritative source. [VERIFIED: user prompt; ASSUMED]
+   - Decision: Treat the local `tvdb.yml` as the canonical Phase 6 API contract for planning and implementation. Plan 06-01 includes a Wave 0 static preflight target that asserts the contract exists before downstream implementation uses it; no human checkpoint is needed. [VERIFIED: user prompt; VERIFIED: 06-01-PLAN.md]
 
 3. **Which exact `RemoteID.sourceName` strings appear in production for TV Maze, Wikidata, official site, and TMDB?**
    - What we know: `RemoteID.sourceName` is a string and context says live validation returned those categories. [VERIFIED: tvdb.yml; VERIFIED: 06-CONTEXT.md]
-   - What's unclear: `tvdb.yml` does not enumerate source names. [VERIFIED: tvdb.yml]
-   - Recommendation: Implement tolerant normalization with synonym tests and preserve unknown IDs as `OTHER`. [ASSUMED]
+   - Decision: Implement tolerant normalization with synonym tests for known categories and preserve unknown source names as `OTHER` with the original source name/value retained. Do not block Phase 6 on live source-name enumeration. [VERIFIED: 06-CONTEXT.md; VERIFIED: 06-03-PLAN.md]
 
 ## Environment Availability
 
