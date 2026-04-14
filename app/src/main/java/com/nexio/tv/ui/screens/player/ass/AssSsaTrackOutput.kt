@@ -44,7 +44,7 @@ internal class AssSsaTrackOutput(
 
         val buffer = ByteArray(length)
         val bytesRead = input.read(buffer, 0, length)
-        if (bytesRead == C.RESULT_END_OF_INPUT) {
+        if (bytesRead < 0) {
             if (allowEndOfInput) return C.RESULT_END_OF_INPUT
             throw EOFException()
         }
