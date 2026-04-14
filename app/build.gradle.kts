@@ -111,13 +111,11 @@ android {
         buildConfigField("String", "GITHUB_REPO", "\"nexio\"")
     }
 
-    if (enableDoviNative) {
-        externalNativeBuild {
-            cmake {
-                path = file("src/main/cpp/CMakeLists.txt")
-                version = "3.22.1"
-                buildStagingDirectory = file("${rootProject.projectDir}/.cxx-build")
-            }
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+            buildStagingDirectory = file("${rootProject.projectDir}/.cxx-build")
         }
     }
 
