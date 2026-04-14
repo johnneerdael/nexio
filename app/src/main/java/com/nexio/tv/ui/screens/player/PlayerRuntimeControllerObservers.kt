@@ -231,6 +231,7 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                     showLoadingOverlay = shouldShowOverlay,
                     pauseOverlayEnabled = settings.pauseOverlayEnabled,
                     osdClockEnabled = settings.osdClockEnabled,
+                    internalPlayerEngine = settings.internalPlayerEngine,
                     frameRateMatchingMode = settings.frameRateMatchingMode
                 )
             }

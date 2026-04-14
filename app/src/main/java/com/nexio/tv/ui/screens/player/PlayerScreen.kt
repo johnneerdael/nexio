@@ -115,6 +115,7 @@ import coil.request.ImageRequest
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
 import com.nexio.tv.core.player.ExternalPlayerLauncher
+import com.nexio.tv.data.local.InternalPlayerEngine
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.theme.NexioColors
 import android.text.format.DateFormat
@@ -555,22 +556,44 @@ fun PlayerScreen(
             }
     ) {
         // Video Player
-        viewModel.exoPlayer?.let { player ->
-            PlayerVideoSurface(
-                player = player,
-                renderState = PlayerSurfaceRenderState(
-                    resizeMode = uiState.resizeMode,
-                    subtitleStyle = uiState.subtitleStyle,
-                    keepScreenOn = uiState.isPlaying || uiState.isBuffering,
-                    overlayCues = resolveOverlayCues(
-                        useAiOverlay = uiState.useBuiltInAiSubtitleOverlay,
-                        translatedBuiltInCues = uiState.translatedBuiltInCues,
-                        addonOverlayCues = uiState.addonOverlayCues
-                    ),
-                    suppressNativeSubtitles = uiState.useBuiltInAiSubtitleOverlay
-                ),
+        if (uiState.internalPlayerEngine == InternalPlayerEngine.LIBMPV) {
+            AndroidView(
+                factory = { context ->
+                    NexioMpvSurfaceView(context).also { view ->
+                        viewModel.attachMpvView(view)
+                    }
+                },
+                update = { view ->
+                    viewModel.attachMpvView(view)
+                    view.keepScreenOn = uiState.isPlaying || uiState.isBuffering
+                    view.applyResizeMode(uiState.resizeMode)
+                    view.applySubtitleStyle(uiState.subtitleStyle)
+                },
                 modifier = Modifier.fillMaxSize()
             )
+            DisposableEffect(Unit) {
+                onDispose {
+                    viewModel.attachMpvView(null)
+                }
+            }
+        } else {
+            viewModel.exoPlayer?.let { player ->
+                PlayerVideoSurface(
+                    player = player,
+                    renderState = PlayerSurfaceRenderState(
+                        resizeMode = uiState.resizeMode,
+                        subtitleStyle = uiState.subtitleStyle,
+                        keepScreenOn = uiState.isPlaying || uiState.isBuffering,
+                        overlayCues = resolveOverlayCues(
+                            useAiOverlay = uiState.useBuiltInAiSubtitleOverlay,
+                            translatedBuiltInCues = uiState.translatedBuiltInCues,
+                            addonOverlayCues = uiState.addonOverlayCues
+                        ),
+                        suppressNativeSubtitles = uiState.useBuiltInAiSubtitleOverlay
+                    ),
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
 
         LoadingOverlay(
