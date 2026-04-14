@@ -22,7 +22,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -59,9 +58,9 @@ fun ProfileSelectionScreen(
     onProfileSelected: () -> Unit,
     viewModel: ProfileSelectionViewModel = hiltViewModel()
 ) {
-    val profiles by viewModel.profiles.collectAsState()
-    val activeProfileId by viewModel.activeProfileId.collectAsState()
-    val profilePinEnabled by viewModel.profilePinEnabled.collectAsState()
+    val profiles by viewModel.profiles.collectAsStateWithLifecycle()
+    val activeProfileId by viewModel.activeProfileId.collectAsStateWithLifecycle()
+    val profilePinEnabled by viewModel.profilePinEnabled.collectAsStateWithLifecycle()
     val pinState by viewModel.pinState.collectAsStateWithLifecycle()
 
     var focusedIndex by remember { mutableIntStateOf(0) }
