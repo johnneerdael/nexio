@@ -2,119 +2,124 @@
 
 ## Overview
 
-v1.0 Multi-Profile Support transforms Nexio from a single-account app into a household-ready streaming client. The work proceeds in strict dependency order: first the DataStore factory foundation that everything builds on, then per-profile auth and settings isolation, then the profile selection and switching UI, then Supabase sync and cleanup infrastructure, and finally nexio-web management for the companion web surface. Each phase delivers a coherent capability; nothing is partially built across phase boundaries.
+v1.1 TVDB First-Class TV Metadata makes TheTVDB the authoritative TV metadata provider when configured. The milestone proceeds in dependency order: first the TVDB settings/client foundation and identity matching, then provider replacement across TV surfaces with poster-ratings precedence, then exact Continue Watching air-time gating, then advanced TVDB value surfaces, and finally cache/update reliability and diagnostics. Phase numbering continues from the previous roadmap, so this milestone starts at Phase 6.
 
 ## Phases
 
 **Phase Numbering:**
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+- Integer phases (6, 7, 8): Planned milestone work
+- Decimal phases (7.1, 7.2): Urgent insertions (marked with INSERTED)
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - ProfileDataStoreFactory, ProfileManager, and UserProfile model extension — the base layer every subsequent phase depends on
-- [ ] **Phase 2: Per-Profile Auth and Settings** - Migrate 8 DataStores from singleton delegate to factory pattern, making Trakt/Simkl and all per-profile settings automatically profile-scoped
-- [ ] **Phase 3: Profile UI** - Profile selection screen, PIN entry, sidebar switcher, and settings header — all D-pad navigable and gated by profile count
-- [ ] **Phase 4: Sync and Cleanup** - Supabase sync for profile metadata and per-profile settings blobs, plus full cleanup on profile deletion
-- [ ] **Phase 5: nexio-web Integration** - Master account profile CRUD, per-profile Trakt/Simkl auth, catalog and formatter config, and photo upload from the companion web app
+- [ ] **Phase 6: TVDB Foundation and Identity** - TVDB settings, API validation, auth token handling, remote-ID matching, fallback diagnostics, and first-pass metadata caching
+- [ ] **Phase 7: TVDB Provider Replacement** - Replace TMDB TV metadata paths with TVDB-backed TV detail, episode, artwork, poster precedence, and settings-facing provider rules
+- [ ] **Phase 8: Exact Continue Watching Air Timing** - Compute device-local TVDB airing instants, gate future next-up rows, and re-emit when episodes become available
+- [ ] **Phase 9: TVDB Advanced TV Surfaces** - Preserve TVDB season ordering and replace remaining TMDB TV surfaces such as trailers, cast, companies, networks, genres, and content ratings
+- [ ] **Phase 10: TVDB Reliability, Updates, and Diagnostics** - Update-aware cache invalidation, heavily cached reference data, graceful failure behavior, diagnostics, and documentation
 
 ## Phase Details
 
-### Phase 1: Foundation
-**Goal**: The ProfileDataStoreFactory, ProfileManager, and extended UserProfile model exist and all downstream code can depend on them
-**Depends on**: Nothing (first phase)
-**Requirements**: INFRA-01, INFRA-02, INFRA-03, INFRA-04, INFRA-05, INFRA-06, INFRA-07
+### Phase 6: TVDB Foundation and Identity
+**Goal**: Users can configure TVDB, Nexio can authenticate and cache TVDB responses, and TVDB-backed TV identity matching works without TMDB lookup dependency
+**Depends on**: Phase 5 completion or explicit branch decision to pause the previous milestone
+**Requirements**: PREF-01, PREF-04, PREF-05, PREF-06, CACHE-01
 **Success Criteria** (what must be TRUE):
-  1. A developer can call `ProfileDataStoreFactory.get(profileId, featureName)` and receive a distinct DataStore instance per profile, with profile 1 using bare filenames
-  2. User can create up to 4 named profiles, edit name and avatar color, and delete any non-primary profile
-  3. Profile 1 cannot be deleted and its DataStore files use no suffix, preserving existing single-profile user data
-  4. UserProfile model carries `avatarId` and `pinEnabled` fields without breaking existing serialization
-  5. Hilt module provides ProfileDataStoreFactory and ProfileManager as singletons across the app
-**Plans:** 2 plans
-Plans:
-- [x] 01-01-PLAN.md — UserProfile model extension and ProfileDataStoreFactory
-- [x] 01-02-PLAN.md — ProfileDataStore, ProfileManager, and ProfileModule (Hilt DI)
+  1. User can enable TVDB, save an API key, and receive validation feedback without exposing the key in logs or synced public payloads
+  2. TVDB settings sync through the account settings system with the key handled through the existing secret channel pattern
+  3. TVDB auth tokens are cached and reused so normal browsing does not log in repeatedly
+  4. TVDB search and remote IDs can resolve a TV series through IMDb, TMDB, TV Maze, Wikidata, official-site, or TVDB IDs without using TMDB only for identification
+  5. If TVDB is inactive, TMDB-backed TV metadata behavior remains unchanged; if TVDB is active but unusable, fallback is explicit and diagnostically visible
 
-### Phase 2: Per-Profile Auth and Settings
-**Goal**: Users have isolated Trakt and Simkl accounts per profile, and per-profile settings persist independently across profile switches
-**Depends on**: Phase 1
-**Requirements**: AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-06
+### Phase 7: TVDB Provider Replacement
+**Goal**: TVDB replaces TMDB as the normal TV metadata provider across existing TV enrichment surfaces, while poster-ratings integrations remain authoritative for poster imagery
+**Depends on**: Phase 6
+**Requirements**: PREF-02, PREF-03, PREF-07, META-01, META-02, META-04, UX-01
 **Success Criteria** (what must be TRUE):
-  1. User can authenticate a distinct Trakt account on each profile; scrobbles and library sync are scoped to the active profile
-  2. User can authenticate a distinct Simkl account on each profile; Simkl sync is scoped to the active profile
-  3. Switching profiles instantly reflects that profile's Trakt and Simkl tokens without re-authentication
-  4. Per-profile settings (language, theme, player preferences, catalog order) persist independently when switching between profiles
-  5. Shared settings (addons, debrid, TMDB, MDBList, IMDB, OMDB, auto-translate, top-posters, RPDB) are only configurable from the default profile
-**Plans:** 4 plans
-Plans:
-- [x] 02-01-PLAN.md — TraktAuthDataStore + TraktSettingsDataStore migration to factory pattern
-- [x] 02-02-PLAN.md — SimklAuthDataStore + SimklSettingsDataStore migration to factory pattern
-- [x] 02-03-PLAN.md — PlayerSettings, LayoutPreference, Theme, SearchHistory migration to factory pattern
-- [x] 02-04-PLAN.md — Sync guard, profileSwitched event, and isPrimaryProfile settings gating
+  1. With TVDB enabled and TMDB enabled, normal TV detail, TV Home enrichment, episode metadata, TV artwork, and Continue Watching metadata paths do not issue TMDB TV metadata fetches
+  2. TVDB series and episode fields populate the same user-facing metadata roles currently served by TMDB where TVDB provides equivalent data
+  3. Poster-ratings provider URLs override TVDB and TMDB poster metadata for supported titles without suppressing non-poster artwork such as backdrops, logos, or episode images
+  4. Settings copy or UI state clearly communicates provider precedence: TVDB for TV when configured, TMDB for movies and TV fallback, poster-ratings for supported posters
+  5. Tests or instrumentation cover at least one TVDB-enabled path proving TMDB TV calls are skipped in normal success behavior
 
-### Phase 3: Profile UI
-**Goal**: Users can select, switch, and manage profiles through a fully D-pad navigable interface that stays invisible for single-profile households
-**Depends on**: Phase 2
-**Requirements**: UI-01, UI-02, UI-03, UI-04, UI-05, UI-06, UI-07, UI-08
+### Phase 8: Exact Continue Watching Air Timing
+**Goal**: Continue Watching shows TVDB-backed new episodes at their computed device-local airing instant instead of at the start of the release date
+**Depends on**: Phase 7
+**Requirements**: AIR-01, AIR-02, AIR-03, AIR-04, AIR-05, AIR-06
 **Success Criteria** (what must be TRUE):
-  1. Profile selection screen appears exactly once per session when 2 or more profiles exist, and never appears for single-profile users
-  2. All profile selection interactions (navigate, choose, PIN entry) are completable using only the D-pad on an Android TV remote
-  3. User can set an optional PIN on a profile; a locked profile requires correct PIN entry before switching into it, with server-enforced rate limiting displayed when exceeded
-  4. User can switch to any profile from the sidebar menu without returning to the home screen
-  5. Active profile name and avatar are visible in the settings header at all times
-**Plans:** 3 plans
-Plans:
-- [x] 03-01-PLAN.md — ProfileAvatarCircle, ProfileSelectionScreen, session gating in MainActivity
-- [x] 03-02-PLAN.md — PIN entry UI (numpad, dots, shake, overlay) and verification flow
-- [x] 03-03-PLAN.md — Sidebar profile switcher and settings header profile display
-**UI hint**: yes
+  1. For TVDB records with episode aired date plus series `airsTime`, Nexio computes an exact availability instant using the correct source-timezone policy
+  2. Continue Watching withholds future TV episodes until the computed instant in the Android TV device timezone
+  3. Future next-up entries schedule a re-evaluation for the computed availability instant and can appear without waiting for a day-level refresh
+  4. Date-only TVDB entries preserve existing date-only gating and expose diagnostics explaining that precise timing was unavailable
+  5. TV detail screens can still show future unaired episodes while Continue Watching remains exact-air-time gated
 
-### Phase 4: Sync and Cleanup
-**Goal**: Profile metadata and per-profile settings sync to Supabase, and deleting a profile leaves no orphaned data anywhere on-device or in the cloud
-**Depends on**: Phase 2
-**Requirements**: SYNC-01, SYNC-02, SYNC-03, SYNC-04
+### Phase 9: TVDB Advanced TV Surfaces
+**Goal**: Nexio captures the TV-specific value that makes TVDB more useful than TMDB for series metadata beyond basic enrichment and air timing
+**Depends on**: Phase 7
+**Requirements**: META-03, META-05, UX-02
 **Success Criteria** (what must be TRUE):
-  1. Profile metadata (name, avatar, PIN state) syncs to Supabase and is restored on a fresh install or new device
-  2. Per-profile settings push and pull via independent blob RPCs, not the shared v7 contract, so Profile 2 changes never overwrite Profile 1 data
-  3. Deleting a profile removes all associated DataStore files, SharedPreferences files, and Supabase remote data with no orphans remaining
-  4. TraktLibrary and ContinueWatching snapshot stores are classified and scoped per-profile where applicable, with shared stores remaining shared
-**Plans:** 3 plans
-Plans:
-- [ ] 04-01-PLAN.md — ProfileSyncService, profilePrefsName helper, and 7 snapshot store per-profile migration
-- [ ] 04-02-PLAN.md — ProfileSettingsSyncService v8 blob sync with typed encoding and flatMapLatest observer
-- [ ] 04-03-PLAN.md — Startup integration, v7 cleanup, deletion with SP + remote cleanup, and verification
+  1. TVDB default season type is preserved in Nexio's season/episode model without assuming TMDB-style aired ordering
+  2. Trakt progress matching remains stable when TVDB season ordering data is present
+  3. TVDB trailers replace TMDB TV trailer discovery where TVDB provides usable trailer data, or the fallback behavior is explicitly staged and diagnosable
+  4. TVDB characters/cast, companies, networks, genres, and content ratings replace equivalent TMDB TV surfaces where those surfaces already exist
+  5. Users receive exact-air-time Continue Watching behavior automatically once TVDB is configured, with no extra provider-specific toggle
 
-### Phase 5: nexio-web Integration
-**Goal**: The master account holder can manage all profiles from nexio-web, and non-default profiles can self-manage auth, catalogs, and formatter config without touching the TV
-**Depends on**: Phase 4
-**Requirements**: WEB-01, WEB-02, WEB-03, WEB-04, WEB-05
+### Phase 10: TVDB Reliability, Updates, and Diagnostics
+**Goal**: TVDB metadata stays reliable over time through update-aware caching, heavily cached reference data, graceful failure behavior, and clear diagnostics
+**Depends on**: Phase 8 and Phase 9
+**Requirements**: UX-03, CACHE-02, CACHE-03
 **Success Criteria** (what must be TRUE):
-  1. Master account holder can create, rename, and delete profiles from nexio-web with changes reflected on-device after next sync
-  2. A non-default profile can link and unlink its Trakt and Simkl accounts from nexio-web without requiring access to the TV
-  3. A non-default profile can reorder its catalog list from nexio-web with the order persisting on-device
-  4. A non-default profile can adjust formatter settings from nexio-web with changes applying on next sync
-  5. Profile photo uploaded via nexio-web is stored in Supabase Storage and displayed as the profile avatar in the TV app
-**Plans:** 6 plans
-Plans:
-- [ ] 05-01-PLAN.md — Supabase schema (profile_auth_tokens, Storage bucket, CRUD RPCs) + web profile API routes + sharp install
-- [ ] 05-02-PLAN.md — Web profile dashboard (useProfileStore, ProfileDashboard, ProfileCard, ProfileDetailShell, nav wiring)
-- [ ] 05-03-PLAN.md — Per-profile Trakt/Simkl auth routes with revoke-on-disconnect + ProfileAuthTab
-- [ ] 05-04-PLAN.md — Per-profile catalog and formatter settings routes + ProfileCatalogsTab + ProfileFormatterTab wiring
-- [ ] 05-05-PLAN.md — Photo upload with sharp resize + ProfilePhotoUpload + ProfileEditorSection
-- [ ] 05-06-PLAN.md — Android sync layer (Storage plugin, SupabaseProfile.avatarUrl, ProfileWebSyncService, ProfileAvatarImage)
-**UI hint**: yes
+  1. TVDB metadata cache invalidation uses TVDB update signals or record timestamps so stale metadata can refresh without aggressive refetching
+  2. Stable TVDB reference data such as artwork types, genres, languages, statuses, and content ratings is cached heavily
+  3. TVDB outages or invalid credentials do not blank existing TV detail or Continue Watching data when a safe fallback is available
+  4. Diagnostics can explain provider choice, fallback reason, missing `airsTime`, date-only gating, poster-ratings override, and skipped TMDB TV fetches
+  5. User-facing docs describe TVDB setup, provider precedence, poster-ratings precedence, and exact Continue Watching air-time behavior
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
+Phases execute in dependency order: 6 -> 7 -> 8 and 9 -> 10.
 
-Note: Phase 3 (UI) and Phase 4 (Sync) both depend on Phase 2 and can be developed in parallel, but Phase 5 requires Phase 4 complete.
+Note: Phase 9 can begin after Phase 7 while Phase 8 is being validated, but Phase 10 depends on both exact air timing and advanced TVDB surface replacement.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/2 | Planned | - |
-| 2. Per-Profile Auth and Settings | 0/4 | Planned | - |
-| 3. Profile UI | 0/3 | Planned | - |
-| 4. Sync and Cleanup | 0/3 | Planned | - |
-| 5. nexio-web Integration | 0/6 | Planned | - |
+| 6. TVDB Foundation and Identity | 0/? | Planned | - |
+| 7. TVDB Provider Replacement | 0/? | Planned | - |
+| 8. Exact Continue Watching Air Timing | 0/? | Planned | - |
+| 9. TVDB Advanced TV Surfaces | 0/? | Planned | - |
+| 10. TVDB Reliability, Updates, and Diagnostics | 0/? | Planned | - |
+
+## Requirement Coverage
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| PREF-01 | Phase 6 | Pending |
+| PREF-04 | Phase 6 | Pending |
+| PREF-05 | Phase 6 | Pending |
+| PREF-06 | Phase 6 | Pending |
+| CACHE-01 | Phase 6 | Pending |
+| PREF-02 | Phase 7 | Pending |
+| PREF-03 | Phase 7 | Pending |
+| PREF-07 | Phase 7 | Pending |
+| META-01 | Phase 7 | Pending |
+| META-02 | Phase 7 | Pending |
+| META-04 | Phase 7 | Pending |
+| UX-01 | Phase 7 | Pending |
+| AIR-01 | Phase 8 | Pending |
+| AIR-02 | Phase 8 | Pending |
+| AIR-03 | Phase 8 | Pending |
+| AIR-04 | Phase 8 | Pending |
+| AIR-05 | Phase 8 | Pending |
+| AIR-06 | Phase 8 | Pending |
+| META-03 | Phase 9 | Pending |
+| META-05 | Phase 9 | Pending |
+| UX-02 | Phase 9 | Pending |
+| UX-03 | Phase 10 | Pending |
+| CACHE-02 | Phase 10 | Pending |
+| CACHE-03 | Phase 10 | Pending |
+
+**Coverage:**
+- v1.1 requirements: 24 total
+- Mapped to phases: 24
+- Unmapped: 0

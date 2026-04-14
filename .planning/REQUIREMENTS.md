@@ -1,84 +1,76 @@
 # Requirements: Nexio
 
 **Defined:** 2026-04-14
+**Milestone:** v1.1 TVDB First-Class TV Metadata
 **Core Value:** Reliable, high-quality streaming playback with smart source selection and seamless library tracking across debrid providers.
 
-## v1.0 Requirements
+## v1.1 Requirements
 
-Requirements for multi-profile support milestone. Each maps to roadmap phases.
+Requirements for the TVDB first-class TV metadata milestone. Each maps to roadmap phases.
 
-### Profile Infrastructure
+### Provider Precedence
 
-- [ ] **INFRA-01**: App isolates DataStore preferences per profile via ProfileDataStoreFactory
-- [ ] **INFRA-02**: User can create up to 4 named profiles
-- [ ] **INFRA-03**: User can edit profile name and avatar color
-- [ ] **INFRA-04**: User can delete non-primary profiles (profile 1 protected)
-- [ ] **INFRA-05**: Profile 1 uses bare DataStore filenames for zero-migration from single-profile
-- [ ] **INFRA-06**: 7 DataStores converted from singleton delegate to factory pattern with flatMapLatest
-- [ ] **INFRA-07**: UserProfile model extended with avatarId and pinEnabled fields
+- [ ] **PREF-01**: User can configure TVDB with API key validation, local settings storage, and account sync support comparable to TMDB
+- [ ] **PREF-02**: When TVDB is active, TVDB replaces TMDB as the metadata authority for TV/series metadata, detail pages, episodes, Continue Watching next-up metadata, artwork, trailers, related content, credits/cast, and networks
+- [ ] **PREF-03**: When TVDB is active for TV, normal success paths do not perform duplicate TMDB TV metadata fetches for the same TV metadata purpose
+- [ ] **PREF-04**: When TVDB is inactive, existing TMDB-backed TV behavior continues to work when TMDB is configured
+- [ ] **PREF-05**: When active TVDB is invalid, unavailable, or lacks a required TV record, fallback is explicit, observable in diagnostics/logs, and does not silently double-fetch during normal success paths
+- [ ] **PREF-06**: TVDB remote IDs are used for cross-provider identity matching so TVDB-backed TV records do not require TMDB lookups just to identify TV content
+- [ ] **PREF-07**: When a poster-ratings integration supports a title, poster imagery comes from poster-ratings instead of TMDB or TVDB poster metadata
 
-### Per-Profile Auth
+### Continue Watching Air Timing
 
-- [ ] **AUTH-01**: User can link a unique Trakt account per profile
-- [ ] **AUTH-02**: Trakt scrobbles, library sync, and watch progress are scoped to the active profile
-- [ ] **AUTH-03**: User can link a unique Simkl account per profile
-- [ ] **AUTH-04**: Simkl sync is scoped to the active profile
-- [ ] **AUTH-05**: Shared settings (addons, debrid, TMDB, MDBList, IMDB, OMDB, auto-translate, top-posters, RPDB) are configurable only from default profile
-- [ ] **AUTH-06**: Per-profile settings (language, theme, player, catalog order) persist across profile switches
+- [ ] **AIR-01**: Continue Watching computes a precise TV episode availability instant from TVDB episode aired date plus series `airsTime` when both fields are available
+- [ ] **AIR-02**: TVDB availability instants are converted to the Android TV device's local timezone before Continue Watching visibility decisions
+- [ ] **AIR-03**: Future TV episodes are withheld from Continue Watching until the computed device-local TVDB availability instant
+- [ ] **AIR-04**: Withheld future TVDB next-up entries schedule re-evaluation at the computed availability instant
+- [ ] **AIR-05**: Date-only TVDB metadata falls back to existing date-only gating and exposes diagnostics explaining precise timing was unavailable
+- [ ] **AIR-06**: TV detail screens can continue showing future unaired episodes while Continue Watching remains exact-air-time gated
 
-### Profile UI
+### TV Metadata Value
 
-- [ ] **UI-01**: User sees profile selection screen only when 2+ profiles exist
-- [ ] **UI-02**: Profile selection is session-scoped (shown once per session, not per launch)
-- [ ] **UI-03**: Profile selection screen is fully D-pad navigable on Android TV
-- [ ] **UI-04**: User can optionally set a PIN on their profile (server-side hash)
-- [ ] **UI-05**: PIN entry uses a D-pad-friendly on-screen numpad
-- [ ] **UI-06**: PIN verification respects server rate limiting (retryAfterSeconds)
-- [ ] **UI-07**: User can switch profiles from the sidebar menu
-- [ ] **UI-08**: Active profile name/avatar is visible in settings header
+- [ ] **META-01**: TVDB enriches TV titles with TV-specific fields including `airsDays`, `airsTime`, average runtime, original/latest network, original country/language, status, aliases, translations, content ratings, and remote IDs
+- [ ] **META-02**: TVDB enriches episode rows with title, overview, image, runtime, aired date, absolute number, specials placement fields, linked movie data when present, and finale type when present
+- [ ] **META-03**: TVDB season ordering is preserved at least through the default TVDB season type, without assuming TMDB-style aired ordering when TVDB exposes a different season-type model
+- [ ] **META-04**: TVDB artwork replaces TMDB TV artwork for TV records where TVDB provides artwork, while still honoring existing artwork controls and poster-ratings precedence
+- [ ] **META-05**: TVDB trailers, characters/cast, companies, networks, genres, and content ratings replace TMDB TV metadata where Nexio already has equivalent TV surfaces
 
-### Sync & Cleanup
+### User Experience and Diagnostics
 
-- [ ] **SYNC-01**: Profile metadata (name, avatar, PIN state) syncs to Supabase
-- [ ] **SYNC-02**: Per-profile settings sync via independent blob push/pull (not v7 contract)
-- [ ] **SYNC-03**: Profile deletion removes all DataStore files, SharedPreferences, and Supabase remote data
-- [ ] **SYNC-04**: Snapshot stores (TraktLibrary, ContinueWatching) are classified and scoped per-profile where applicable
+- [ ] **UX-01**: Settings explain provider precedence: TVDB is the TV metadata source when configured, TMDB remains movie metadata and TV fallback when TVDB is not configured, and poster-ratings is authoritative for supported poster imagery
+- [ ] **UX-02**: Users benefit from exact-air-time Continue Watching automatically once TVDB is configured, without needing additional provider-specific toggles
+- [ ] **UX-03**: TVDB failures degrade gracefully with validation or diagnostic signals instead of making Continue Watching or TV detail look randomly late, empty, or inconsistent
 
-### nexio-web Integration
+### Caching and API Use
 
-- [ ] **WEB-01**: Master account can create, edit, and delete profiles via nexio-web
-- [ ] **WEB-02**: Non-default profiles can manage Trakt/Simkl auth via nexio-web
-- [ ] **WEB-03**: Non-default profiles can configure catalog ordering via nexio-web
-- [ ] **WEB-04**: Non-default profiles can configure formatter settings via nexio-web
-- [ ] **WEB-05**: Profile photo upload via nexio-web stored in Supabase
+- [ ] **CACHE-01**: TVDB authentication tokens and metadata responses are cached so normal browsing does not repeatedly authenticate or refetch stable TV metadata
+- [ ] **CACHE-02**: TVDB cache invalidation accounts for TVDB update signals or record timestamps so metadata can improve without aggressive refetching
+- [ ] **CACHE-03**: Stable TVDB reference data such as artwork types, genres, languages, statuses, and content ratings is heavily cached in line with TVDB guidance
 
 ## v2 Requirements
 
 Deferred to future release. Tracked but not in current roadmap.
 
-### Parental Controls
+### TVDB Scale and Operations
 
-- **PARENT-01**: User can set content maturity ratings per profile
-- **PARENT-02**: Content filtered based on profile maturity settings
+- **OPS-01**: TVDB metadata is served through a dedicated caching proxy if direct client access becomes a scale, policy, or reliability constraint
+- **OPS-02**: Nexio can maintain a broader local TVDB mirror or warmed cache for popular records if API usage patterns require it
 
-### Advanced Profiles
+### Advanced TV Ordering
 
-- **ADV-01**: Guest profile (temporary, no sync, auto-delete on session end)
-- **ADV-02**: Profile import/restore from Supabase backup
-- **ADV-03**: PIN complexity options (longer PIN, alphanumeric)
+- **ORDER-01**: User can choose between TVDB season order types such as official, DVD, absolute, alternate, and regional where TVDB provides them
+- **ORDER-02**: Nexio exposes explicit UI for alternate season ordering without breaking Trakt progress matching
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| On-device photo upload | TV remote cannot drive file pickers; use nexio-web instead |
-| More than 4 profiles | Keeps DataStore file count manageable; matches Netflix/Disney+ household limits |
-| Per-profile addon configurations | Addons involve OAuth and network state; high complexity for minimal gain |
-| Per-profile debrid accounts | Debrid subscriptions are shared per household; separating has no UX benefit |
-| Deleting the primary profile | Profile 1 is the fallback; deleting creates unrecoverable state |
-| Per-profile parental controls | Requires catalogue content rating metadata Nexio doesn't have |
-| Mandatory profile selection on every launch | Creates friction for single-user households |
-| Profile-specific notification preferences | Nexio doesn't have push notifications yet |
+| Replacing TMDB for movie metadata | This milestone is TV-specific; TMDB remains valid for movies |
+| Parallel TMDB and TVDB TV enrichment in normal success paths | The milestone goal is clear provider precedence and no duplicate TV metadata fetches |
+| Home feed redesign | Continue Watching timing and TVDB-backed enrichment are in scope, but the feed structure is not |
+| Requiring users to configure a TVDB caching proxy | Useful later, but too much setup burden for the first implementation |
+| Full user-facing season-order picker | TVDB default season type must be preserved first; broad order selection is deferred |
+| User toggle to show unaired next-up items in Continue Watching | Continue Watching should stay availability-gated |
 
 ## Traceability
 
@@ -86,40 +78,34 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | Phase 1 | Pending |
-| INFRA-02 | Phase 1 | Pending |
-| INFRA-03 | Phase 1 | Pending |
-| INFRA-04 | Phase 1 | Pending |
-| INFRA-05 | Phase 1 | Pending |
-| INFRA-06 | Phase 1 | Pending |
-| INFRA-07 | Phase 1 | Pending |
-| AUTH-01 | Phase 2 | Pending |
-| AUTH-02 | Phase 2 | Pending |
-| AUTH-03 | Phase 2 | Pending |
-| AUTH-04 | Phase 2 | Pending |
-| AUTH-05 | Phase 2 | Pending |
-| AUTH-06 | Phase 2 | Pending |
-| UI-01 | Phase 3 | Pending |
-| UI-02 | Phase 3 | Pending |
-| UI-03 | Phase 3 | Pending |
-| UI-04 | Phase 3 | Pending |
-| UI-05 | Phase 3 | Pending |
-| UI-06 | Phase 3 | Pending |
-| UI-07 | Phase 3 | Pending |
-| UI-08 | Phase 3 | Pending |
-| SYNC-01 | Phase 4 | Pending |
-| SYNC-02 | Phase 4 | Pending |
-| SYNC-03 | Phase 4 | Pending |
-| SYNC-04 | Phase 4 | Pending |
-| WEB-01 | Phase 5 | Pending |
-| WEB-02 | Phase 5 | Pending |
-| WEB-03 | Phase 5 | Pending |
-| WEB-04 | Phase 5 | Pending |
-| WEB-05 | Phase 5 | Pending |
+| PREF-01 | Phase 6 | Pending |
+| PREF-04 | Phase 6 | Pending |
+| PREF-05 | Phase 6 | Pending |
+| PREF-06 | Phase 6 | Pending |
+| CACHE-01 | Phase 6 | Pending |
+| PREF-02 | Phase 7 | Pending |
+| PREF-03 | Phase 7 | Pending |
+| PREF-07 | Phase 7 | Pending |
+| META-01 | Phase 7 | Pending |
+| META-02 | Phase 7 | Pending |
+| META-04 | Phase 7 | Pending |
+| UX-01 | Phase 7 | Pending |
+| AIR-01 | Phase 8 | Pending |
+| AIR-02 | Phase 8 | Pending |
+| AIR-03 | Phase 8 | Pending |
+| AIR-04 | Phase 8 | Pending |
+| AIR-05 | Phase 8 | Pending |
+| AIR-06 | Phase 8 | Pending |
+| META-03 | Phase 9 | Pending |
+| META-05 | Phase 9 | Pending |
+| UX-02 | Phase 9 | Pending |
+| UX-03 | Phase 10 | Pending |
+| CACHE-02 | Phase 10 | Pending |
+| CACHE-03 | Phase 10 | Pending |
 
 **Coverage:**
-- v1.0 requirements: 30 total
-- Mapped to phases: 30
+- v1.1 requirements: 24 total
+- Mapped to phases: 24
 - Unmapped: 0
 
 ---
