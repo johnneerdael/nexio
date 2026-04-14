@@ -60,13 +60,12 @@ All text uses the active user font (default: Inter variable). New composables mu
 
 | Role | Style Token | Size | Weight | Line Height | Usage |
 |------|-------------|------|--------|-------------|-------|
-| Screen heading | `headlineLarge` | 28sp | SemiBold (600) | 36sp | "Who's watching?" on selection screen |
-| Profile name (selection) | `titleLarge` | 20sp | Medium (500) | 28sp | Profile name below avatar on selection screen |
-| Profile name (sidebar) | `titleMedium` | 16sp | Medium (500) | 24sp | Active profile name in sidebar header |
-| Body / label | `bodyMedium` | 14sp | Normal (400) | 20sp | PIN entry prompt, rate-limit countdown, settings header subtitle |
-| Badge / status | `labelMedium` | 12sp | Medium (500) | 16sp | "Default" badge on settings header, "Wrong PIN" error text |
+| Screen heading | `headlineLarge` | 28sp | Medium/SemiBold (500/600) | 36sp | "Who's watching?" on selection screen |
+| Profile name (selection) | `titleLarge` | 20sp | Medium/SemiBold (500/600) | 28sp | Profile name below avatar on selection screen |
+| Profile name (sidebar) | `titleMedium` | 16sp | Medium/SemiBold (500/600) | 24sp | Active profile name in sidebar header |
+| Body / label | `bodyMedium` | 14sp | Normal (400) | 20sp | PIN entry prompt, rate-limit countdown, settings header subtitle, "Default" badge, "Wrong PIN" error text |
 
-Weights used: Normal (400) and Medium/SemiBold (500/600) — matches existing two-weight convention.
+Weights used: Normal (400) for body text, Medium/SemiBold (500/600) for all non-body text — matches existing two-weight convention.
 
 Focus state: text color transitions from `NexioColors.TextSecondary` (#B3B3B3) to `NexioColors.TextPrimary` (#FFFFFF) via `animateColorAsState`.
 
@@ -110,7 +109,7 @@ New composables required for this phase:
 | `ProfileSelectionViewModel` | `ui/screens/profile/ProfileSelectionViewModel.kt` | New (simplified NuvioTV) | Derives pinEnabled from profile.pinEnabled directly — no ProfileSyncService in Phase 3 |
 | `ProfilePinNumpad` | `ui/screens/profile/ProfilePinNumpad.kt` | New (no NuvioTV equivalent) | 3×4 grid: 1-2-3 / 4-5-6 / 7-8-9 / Clear-0-Confirm. All cells D-pad focusable |
 | `ProfilePinBoxes` | `ui/screens/profile/ProfilePinBoxes.kt` | Port verbatim from NuvioTV | 4 filled/unfilled dot indicators with shake animation |
-| `ProfileSwitcherSection` | Extension of `SidebarNavigation.kt` | New (no NuvioTV equivalent) | Collapsible inline section at top of sidebar. AnimatedVisibility + expandVertically |
+| `ProfileSwitcherSection` | Extension of `SidebarNavigation.kt` | New (no NuvioTV equivalent) | Collapsible inline section at top of sidebar. AnimatedVisibility + expandVertically. Hidden when `profiles.size == 1` (D-14). |
 | `ProfileHeaderRow` | Extension of `SettingsScreen.kt` | New, uses SettingsDesignSystem | ProfileAvatarCircle (40dp) + name + "Default" badge. Inserted above category LazyColumn |
 
 Reused without modification:
@@ -203,6 +202,7 @@ Source: D-06 through D-09; NuvioTV ProfileSelectionScreen.kt verified shake valu
 | Focused | 2dp `NexioColors.FocusRing` border (matches existing `SidebarNavItem`) |
 | Expanded | `AnimatedVisibility` reveals other profile rows below, arrow rotates 180deg |
 | Other profile row (focused) | Same focus ring treatment as nav items |
+| Hidden (single profile) | Entire `ProfileSwitcherSection` not rendered when `profiles.size == 1` (D-14) |
 
 ---
 
