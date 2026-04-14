@@ -60,6 +60,8 @@ import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.AutoplayBandwidthMode
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.IecPackerChannelLayout
+import com.nexio.tv.data.local.InternalPlayerEngine
+import com.nexio.tv.data.local.MpvHardwareDecodeMode
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
@@ -102,9 +104,11 @@ internal fun PlaybackSettingsSections(
     trailerSettings: TrailerSettings,
     diskSpoolStorageProbeUiState: DiskSpoolStorageProbeUiState,
     onShowPlayerPreferenceDialog: () -> Unit,
+    onShowInternalPlayerEngineDialog: () -> Unit,
     onShowAudioLanguageDialog: () -> Unit,
     onShowSecondaryAudioLanguageDialog: () -> Unit,
     onShowDecoderPriorityDialog: () -> Unit,
+    onShowMpvHardwareDecodeModeDialog: () -> Unit,
     onShowIecPackerChannelLayoutDialog: () -> Unit,
     onShowLanguageDialog: () -> Unit,
     onShowSecondaryLanguageDialog: () -> Unit,
@@ -133,6 +137,7 @@ internal fun PlaybackSettingsSections(
     onSetFilterWebDolbyVisionStreamsEnabled: (Boolean) -> Unit,
     onSetFilterEpisodeMismatchStreamsEnabled: (Boolean) -> Unit,
     onSetFilterMovieYearMismatchStreamsEnabled: (Boolean) -> Unit,
+    onSetAutoSwitchInternalPlayerOnError: (Boolean) -> Unit,
     onSetLoadingOverlayEnabled: (Boolean) -> Unit,
     onSetPauseOverlayEnabled: (Boolean) -> Unit,
     onSetOsdClockEnabled: (Boolean) -> Unit,
@@ -377,6 +382,33 @@ internal fun PlaybackSettingsSections(
                 )
             }
 
+            item(key = "stream_internal_player_engine") {
+                val engineLabel = when (playerSettings.internalPlayerEngine) {
+                    InternalPlayerEngine.EXOPLAYER -> stringResource(R.string.playback_engine_exoplayer)
+                    InternalPlayerEngine.LIBMPV -> stringResource(R.string.playback_engine_libmpv)
+                }
+                NavigationSettingsItem(
+                    icon = Icons.Default.Tune,
+                    title = stringResource(R.string.playback_internal_player_engine),
+                    subtitle = engineLabel,
+                    onClick = onShowInternalPlayerEngineDialog,
+                    onFocused = { focusedSection = PlaybackSection.STREAM_SELECTION },
+                    enabled = playerSettings.playerPreference != PlayerPreference.EXTERNAL
+                )
+            }
+
+            item(key = "stream_auto_switch_internal_player_on_error") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Tune,
+                    title = stringResource(R.string.playback_auto_switch_internal_player_on_error),
+                    subtitle = stringResource(R.string.playback_auto_switch_internal_player_on_error_sub),
+                    isChecked = playerSettings.autoSwitchInternalPlayerOnError,
+                    onCheckedChange = onSetAutoSwitchInternalPlayerOnError,
+                    onFocused = { focusedSection = PlaybackSection.STREAM_SELECTION },
+                    enabled = playerSettings.playerPreference != PlayerPreference.EXTERNAL
+                )
+            }
+
             if (trackingProviderVisible) {
                 item(key = "stream_tracking_provider") {
                     NavigationSettingsItem(
@@ -443,6 +475,7 @@ internal fun PlaybackSettingsSections(
                 onShowAudioLanguageDialog = onShowAudioLanguageDialog,
                 onShowSecondaryAudioLanguageDialog = onShowSecondaryAudioLanguageDialog,
                 onShowDecoderPriorityDialog = onShowDecoderPriorityDialog,
+                onShowMpvHardwareDecodeModeDialog = onShowMpvHardwareDecodeModeDialog,
                 onShowIecPackerChannelLayoutDialog = onShowIecPackerChannelLayoutDialog,
                 onSetSkipSilence = onSetSkipSilence,
                 onSetExperimentalDtsIecPassthroughEnabled = onSetExperimentalDtsIecPassthroughEnabled,
@@ -729,6 +762,7 @@ internal fun PlaybackSettingsDialogsHost(
     playerSettings: PlayerSettings,
     installedAddonNames: List<String>,
     showPlayerPreferenceDialog: Boolean,
+    showInternalPlayerEngineDialog: Boolean,
     showLanguageDialog: Boolean,
     showSecondaryLanguageDialog: Boolean,
     showSubtitleStartupModeDialog: Boolean,
@@ -738,13 +772,16 @@ internal fun PlaybackSettingsDialogsHost(
     showAudioLanguageDialog: Boolean,
     showSecondaryAudioLanguageDialog: Boolean,
     showDecoderPriorityDialog: Boolean,
+    showMpvHardwareDecodeModeDialog: Boolean,
     showIecPackerChannelLayoutDialog: Boolean,
     showAutoplayBandwidthModeDialog: Boolean,
     showNextEpisodeThresholdModeDialog: Boolean,
     showReuseLastLinkCacheDialog: Boolean,
     autoplayBenchmarkAvailable: Boolean,
     onSetPlayerPreference: (PlayerPreference) -> Unit,
+    onSetInternalPlayerEngine: (InternalPlayerEngine) -> Unit,
     onDismissPlayerPreferenceDialog: () -> Unit,
+    onDismissInternalPlayerEngineDialog: () -> Unit,
     onSetSubtitlePreferredLanguage: (String?) -> Unit,
     onSetSubtitleSecondaryLanguage: (String?) -> Unit,
     onSetAddonSubtitleStartupMode: (AddonSubtitleStartupMode) -> Unit,
@@ -754,6 +791,7 @@ internal fun PlaybackSettingsDialogsHost(
     onSetPreferredAudioLanguage: (String) -> Unit,
     onSetSecondaryPreferredAudioLanguage: (String?) -> Unit,
     onSetDecoderPriority: (Int) -> Unit,
+    onSetMpvHardwareDecodeMode: (MpvHardwareDecodeMode) -> Unit,
     onSetIecPackerMaxPcmChannelLayout: (IecPackerChannelLayout) -> Unit,
     onSetAutoplayBandwidthMode: (AutoplayBandwidthMode) -> Unit,
     onSetNextEpisodeThresholdMode: (com.nexio.tv.data.local.NextEpisodeThresholdMode) -> Unit,
@@ -767,6 +805,7 @@ internal fun PlaybackSettingsDialogsHost(
     onDismissAudioLanguageDialog: () -> Unit,
     onDismissSecondaryAudioLanguageDialog: () -> Unit,
     onDismissDecoderPriorityDialog: () -> Unit,
+    onDismissMpvHardwareDecodeModeDialog: () -> Unit,
     onDismissIecPackerChannelLayoutDialog: () -> Unit,
     onDismissAutoplayBandwidthModeDialog: () -> Unit,
     onDismissNextEpisodeThresholdModeDialog: () -> Unit,
@@ -780,6 +819,17 @@ internal fun PlaybackSettingsDialogsHost(
                 onDismissPlayerPreferenceDialog()
             },
             onDismiss = onDismissPlayerPreferenceDialog
+        )
+    }
+
+    if (showInternalPlayerEngineDialog) {
+        InternalPlayerEngineDialog(
+            currentEngine = playerSettings.internalPlayerEngine,
+            onEngineSelected = { engine ->
+                onSetInternalPlayerEngine(engine)
+                onDismissInternalPlayerEngineDialog()
+            },
+            onDismiss = onDismissInternalPlayerEngineDialog
         )
     }
 
@@ -809,18 +859,22 @@ internal fun PlaybackSettingsDialogsHost(
         showAudioLanguageDialog = showAudioLanguageDialog,
         showSecondaryAudioLanguageDialog = showSecondaryAudioLanguageDialog,
         showDecoderPriorityDialog = showDecoderPriorityDialog,
+        showMpvHardwareDecodeModeDialog = showMpvHardwareDecodeModeDialog,
         showIecPackerChannelLayoutDialog = showIecPackerChannelLayoutDialog,
         selectedLanguage = playerSettings.preferredAudioLanguage,
         selectedSecondaryLanguage = playerSettings.secondaryPreferredAudioLanguage,
         selectedPriority = playerSettings.decoderPriority,
+        selectedMpvHardwareDecodeMode = playerSettings.mpvHardwareDecodeMode,
         selectedIecPackerChannelLayout = playerSettings.iecPackerMaxPcmChannelLayout,
         onSetPreferredAudioLanguage = onSetPreferredAudioLanguage,
         onSetSecondaryPreferredAudioLanguage = onSetSecondaryPreferredAudioLanguage,
         onSetDecoderPriority = onSetDecoderPriority,
+        onSetMpvHardwareDecodeMode = onSetMpvHardwareDecodeMode,
         onSetIecPackerChannelLayout = onSetIecPackerMaxPcmChannelLayout,
         onDismissAudioLanguageDialog = onDismissAudioLanguageDialog,
         onDismissSecondaryAudioLanguageDialog = onDismissSecondaryAudioLanguageDialog,
         onDismissDecoderPriorityDialog = onDismissDecoderPriorityDialog,
+        onDismissMpvHardwareDecodeModeDialog = onDismissMpvHardwareDecodeModeDialog,
         onDismissIecPackerChannelLayoutDialog = onDismissIecPackerChannelLayoutDialog
     )
 
@@ -920,6 +974,94 @@ private fun PlayerPreferenceDialog(
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InternalPlayerEngineDialog(
+    currentEngine: InternalPlayerEngine,
+    onEngineSelected: (InternalPlayerEngine) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    val options = listOf(
+        Triple(
+            InternalPlayerEngine.EXOPLAYER,
+            stringResource(R.string.playback_engine_exoplayer),
+            stringResource(R.string.playback_engine_exoplayer_desc)
+        ),
+        Triple(
+            InternalPlayerEngine.LIBMPV,
+            stringResource(R.string.playback_engine_libmpv),
+            stringResource(R.string.playback_engine_libmpv_desc)
+        )
+    )
+
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.playback_internal_player_engine),
+        width = 420.dp,
+        suppressFirstKeyUp = false
+    ) {
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(vertical = 4.dp)
+        ) {
+            items(
+                count = options.size,
+                key = { index -> options[index].first.name }
+            ) { index ->
+                val (engine, title, description) = options[index]
+                val isSelected = engine == currentEngine
+                Card(
+                    onClick = { onEngineSelected(engine) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
+                    colors = CardDefaults.colors(
+                        containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                        focusedContainerColor = NexioColors.FocusBackground
+                    ),
+                    shape = CardDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                    scale = CardDefaults.scale(focusedScale = 1f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = title,
+                                color = if (isSelected) NexioColors.Primary else NexioColors.TextPrimary,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = description,
+                                color = NexioColors.TextSecondary,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        if (isSelected) {
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = stringResource(R.string.cd_selected),
+                                tint = NexioColors.Primary,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
                 }
