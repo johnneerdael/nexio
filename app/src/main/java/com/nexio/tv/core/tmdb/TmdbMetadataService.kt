@@ -22,11 +22,14 @@ import com.nexio.tv.domain.model.MetaReview
 import com.nexio.tv.domain.model.MetaReviewSource
 import com.nexio.tv.domain.model.PersonDetail
 import com.nexio.tv.domain.model.PosterShape
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import java.util.Locale
@@ -46,7 +49,8 @@ class TmdbMetadataService @Inject constructor(
 ) {
     // In-memory caches
     private val enrichmentCache = ConcurrentHashMap<String, TmdbEnrichment>()
-    private val episodeCache = ConcurrentHashMap<String, Map<Pair<Int, Int>, TmdbEpisodeEnrichment>>()
+    private val episodeSeasonCache = ConcurrentHashMap<String, Map<Int, TmdbEpisodeEnrichment>>()
+    private val episodeSeasonInFlight = ConcurrentHashMap<String, CompletableDeferred<Map<Int, TmdbEpisodeEnrichment>?>>()
     private val personCache = ConcurrentHashMap<String, PersonDetail>()
     private val moreLikeThisCache = ConcurrentHashMap<String, List<MetaPreview>>()
     private val reviewsCache = ConcurrentHashMap<String, List<MetaReview>>()
@@ -86,44 +90,29 @@ class TmdbMetadataService @Inject constructor(
                     append(",en,null")
                 }
 
-                // Fetch details, credits, and images in parallel
-                val (details, credits, images, ageRating) = coroutineScope {
-                    val detailsDeferred = async {
-                        when (tmdbType) {
-                            "tv" -> tmdbApi.getTvDetails(numericId, apiKey, normalizedLanguage)
-                            else -> tmdbApi.getMovieDetails(numericId, apiKey, normalizedLanguage)
-                        }.body()
-                    }
-                    val creditsDeferred = async {
-                        when (tmdbType) {
-                            "tv" -> tmdbApi.getTvCredits(numericId, apiKey, normalizedLanguage)
-                            else -> tmdbApi.getMovieCredits(numericId, apiKey, normalizedLanguage)
-                        }.body()
-                    }
-                    val imagesDeferred = async {
-                        when (tmdbType) {
-                            "tv" -> tmdbApi.getTvImages(numericId, apiKey, includeImageLanguage)
-                            else -> tmdbApi.getMovieImages(numericId, apiKey, includeImageLanguage)
-                        }.body()
-                    }
-                    val ageRatingDeferred = async {
-                        when (tmdbType) {
-                            "tv" -> {
-                                val ratings = tmdbApi.getTvContentRatings(numericId, apiKey).body()?.results.orEmpty()
-                                selectTvAgeRating(ratings, normalizedLanguage)
-                            }
-                            else -> {
-                                val releases = tmdbApi.getMovieReleaseDates(numericId, apiKey).body()?.results.orEmpty()
-                                selectMovieAgeRating(releases, normalizedLanguage)
-                            }
-                        }
-                    }
-                    Quadruple(
-                        detailsDeferred.await(),
-                        creditsDeferred.await(),
-                        imagesDeferred.await(),
-                        ageRatingDeferred.await()
+                val details = when (tmdbType) {
+                    "tv" -> tmdbApi.getTvDetails(
+                        tvId = numericId,
+                        apiKey = apiKey,
+                        language = normalizedLanguage,
+                        appendToResponse = "credits,images,content_ratings",
+                        includeImageLanguage = includeImageLanguage
                     )
+
+                    else -> tmdbApi.getMovieDetails(
+                        movieId = numericId,
+                        apiKey = apiKey,
+                        language = normalizedLanguage,
+                        appendToResponse = "credits,images,release_dates",
+                        includeImageLanguage = includeImageLanguage
+                    )
+                }.body()
+
+                val credits = details?.credits
+                val images = details?.images
+                val ageRating = when (tmdbType) {
+                    "tv" -> selectTvAgeRating(details?.contentRatings?.results.orEmpty(), normalizedLanguage)
+                    else -> selectMovieAgeRating(details?.releaseDates?.results.orEmpty(), normalizedLanguage)
                 }
 
                 val genres = details?.genres?.mapNotNull { genre ->
@@ -366,31 +355,104 @@ class TmdbMetadataService @Inject constructor(
         language: String? = null
     ): Map<Pair<Int, Int>, TmdbEpisodeEnrichment> = withContext(Dispatchers.IO) {
         val normalizedLanguage = normalizeTmdbLanguage(language ?: currentTmdbLanguageTag())
-        val cacheKey = "$tmdbId:${seasonNumbers.sorted().joinToString(",")}:$normalizedLanguage"
-        episodeCache[cacheKey]?.let { return@withContext it }
         val apiKey = requireApiKey() ?: return@withContext emptyMap()
 
         val numericId = tmdbId.toIntOrNull() ?: return@withContext emptyMap()
-        val result = mutableMapOf<Pair<Int, Int>, TmdbEpisodeEnrichment>()
+        val distinctSeasons = seasonNumbers.distinct().sorted()
+        if (distinctSeasons.isEmpty()) return@withContext emptyMap()
 
-        seasonNumbers.distinct().forEach { season ->
-            try {
-                val response = tmdbApi.getTvSeasonDetails(numericId, season, apiKey, normalizedLanguage)
-                val episodes = response.body()?.episodes.orEmpty()
-                episodes.forEach { ep ->
-                    val epNum = ep.episodeNumber ?: return@forEach
-                    result[season to epNum] = ep.toEnrichment()
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to fetch TMDB season $season: ${e.message}")
+        val cachedSeasonData = mutableMapOf<Int, Map<Int, TmdbEpisodeEnrichment>>()
+        val missingSeasons = mutableListOf<Int>()
+
+        distinctSeasons.forEach { season ->
+            val cacheKey = episodeSeasonCacheKey(tmdbId, season, normalizedLanguage)
+            val cached = episodeSeasonCache[cacheKey]
+            if (cached != null) {
+                cachedSeasonData[season] = cached
+            } else {
+                missingSeasons += season
             }
         }
 
-        if (result.isNotEmpty()) {
-            episodeCache[cacheKey] = result
+        val fetchedSeasonData = if (missingSeasons.isNotEmpty()) {
+            val semaphore = Semaphore(MAX_CONCURRENT_SEASON_REQUESTS)
+            coroutineScope {
+                missingSeasons.map { season ->
+                    async {
+                        semaphore.withPermit {
+                            season to fetchSeasonEpisodeEnrichment(
+                                tmdbId = tmdbId,
+                                numericId = numericId,
+                                seasonNumber = season,
+                                apiKey = apiKey,
+                                language = normalizedLanguage
+                            )
+                        }
+                    }
+                }.awaitAll().toMap()
+            }
+        } else {
+            emptyMap()
         }
-        result
+
+        buildMap {
+            distinctSeasons.forEach { season ->
+                val seasonEpisodes = cachedSeasonData[season] ?: fetchedSeasonData[season] ?: return@forEach
+                seasonEpisodes.forEach { (episodeNumber, enrichment) ->
+                    put(season to episodeNumber, enrichment)
+                }
+            }
+        }
     }
+
+    private suspend fun fetchSeasonEpisodeEnrichment(
+        tmdbId: String,
+        numericId: Int,
+        seasonNumber: Int,
+        apiKey: String,
+        language: String
+    ): Map<Int, TmdbEpisodeEnrichment>? {
+        val cacheKey = episodeSeasonCacheKey(tmdbId, seasonNumber, language)
+        episodeSeasonCache[cacheKey]?.let { return it }
+        episodeSeasonInFlight[cacheKey]?.let { return it.await() }
+
+        val deferred = CompletableDeferred<Map<Int, TmdbEpisodeEnrichment>?>()
+        val existingDeferred = episodeSeasonInFlight.putIfAbsent(cacheKey, deferred)
+        if (existingDeferred != null) {
+            return existingDeferred.await()
+        }
+
+        return try {
+            val response = tmdbApi.getTvSeasonDetails(numericId, seasonNumber, apiKey, language)
+            if (!response.isSuccessful) {
+                Log.w(TAG, "Failed to fetch TMDB season $seasonNumber: HTTP ${response.code()} ${response.message()}")
+                deferred.complete(null)
+                null
+            } else {
+                val seasonData = response.body()?.episodes.orEmpty()
+                    .mapNotNull { episode ->
+                        val episodeNumber = episode.episodeNumber ?: return@mapNotNull null
+                        episodeNumber to episode.toEnrichment()
+                    }
+                    .toMap()
+                episodeSeasonCache[cacheKey] = seasonData
+                deferred.complete(seasonData)
+                seasonData
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch TMDB season $seasonNumber: ${e.message}")
+            deferred.complete(null)
+            null
+        } finally {
+            episodeSeasonInFlight.remove(cacheKey, deferred)
+        }
+    }
+
+    private fun episodeSeasonCacheKey(
+        tmdbId: String,
+        seasonNumber: Int,
+        language: String
+    ): String = "$tmdbId:$seasonNumber:$language"
 
     suspend fun fetchMoreLikeThis(
         tmdbId: String,
@@ -756,7 +818,8 @@ class TmdbMetadataService @Inject constructor(
 
     fun clearCache() {
         enrichmentCache.clear()
-        episodeCache.clear()
+        episodeSeasonCache.clear()
+        episodeSeasonInFlight.clear()
         personCache.clear()
         moreLikeThisCache.clear()
         reviewsCache.clear()
@@ -884,13 +947,6 @@ private fun TmdbReviewResult.toMetaReview(): MetaReview? {
     )
 }
 
-private data class Quadruple<A, B, C, D>(
-    val first: A,
-    val second: B,
-    val third: C,
-    val fourth: D
-)
-
 private fun preferredRegions(normalizedLanguage: String): List<String> {
     val fromLanguage = normalizedLanguage.substringAfter("-", "").uppercase(Locale.US).takeIf { it.length == 2 }
     return buildList {
@@ -969,6 +1025,8 @@ data class TmdbEpisodeEnrichment(
     val airDate: String?,
     val runtimeMinutes: Int?
 )
+
+private const val MAX_CONCURRENT_SEASON_REQUESTS = 3
 
 private fun TmdbEpisode.toEnrichment(): TmdbEpisodeEnrichment {
     val title = name?.takeIf { it.isNotBlank() }

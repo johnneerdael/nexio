@@ -7,6 +7,7 @@ package com.nexio.tv.ui.screens.home
 
 import android.content.Intent
 import android.net.Uri
+import android.os.SystemClock
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.AnimationSpec
@@ -63,6 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -70,6 +72,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -109,9 +112,43 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
-private const val KEY_REPEAT_THROTTLE_MS = 80L
 private const val MODERN_HERO_RAPID_NAV_THRESHOLD_MS = 130L
 private const val MODERN_HERO_RAPID_NAV_SETTLE_MS = 170L
+
+internal enum class ModernHomeRepeatFocusDirection {
+    Up,
+    Down,
+    Left,
+    Right
+}
+
+internal fun modernHomeRepeatFocusDirectionForKeyCode(keyCode: Int): ModernHomeRepeatFocusDirection? {
+    return when (keyCode) {
+        AndroidKeyEvent.KEYCODE_DPAD_UP -> ModernHomeRepeatFocusDirection.Up
+        AndroidKeyEvent.KEYCODE_DPAD_DOWN -> ModernHomeRepeatFocusDirection.Down
+        AndroidKeyEvent.KEYCODE_DPAD_LEFT -> ModernHomeRepeatFocusDirection.Left
+        AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> ModernHomeRepeatFocusDirection.Right
+        else -> null
+    }
+}
+
+internal fun modernHomeRepeatThrottleMs(direction: ModernHomeRepeatFocusDirection): Long {
+    return when (direction) {
+        ModernHomeRepeatFocusDirection.Up,
+        ModernHomeRepeatFocusDirection.Down -> 112L
+        ModernHomeRepeatFocusDirection.Left,
+        ModernHomeRepeatFocusDirection.Right -> 80L
+    }
+}
+
+private fun ModernHomeRepeatFocusDirection.toComposeFocusDirection(): FocusDirection {
+    return when (this) {
+        ModernHomeRepeatFocusDirection.Up -> FocusDirection.Up
+        ModernHomeRepeatFocusDirection.Down -> FocusDirection.Down
+        ModernHomeRepeatFocusDirection.Left -> FocusDirection.Left
+        ModernHomeRepeatFocusDirection.Right -> FocusDirection.Right
+    }
+}
 private const val MODERN_HOME_CONTENT_LOG_TAG = "ModernHomeContent"
 
 private fun modernHomeDebugLog(message: String) {
@@ -290,6 +327,7 @@ internal fun ModernHomeContent(
     val defaultBringIntoViewSpec = LocalBringIntoViewSpec.current
     val useLandscapePosters = contentState.modernLandscapePostersEnabled
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val navLifecycleOwner = LocalLifecycleOwner.current
     val lifecycleOwner = remember(context, navLifecycleOwner) {
         context.findLifecycleOwner() ?: navLifecycleOwner
@@ -414,7 +452,8 @@ internal fun ModernHomeContent(
                                     item = item,
                                     row = row,
                                     useLandscapePosters = useLandscapePosters,
-                                    occurrence = occurrence
+                                    occurrence = occurrence,
+                                    previousCachedItem = cachedItem?.carouselItem
                                 )
                                 rowItemCache[cacheKey] = CachedCarouselItem(
                                     source = item,
@@ -506,7 +545,7 @@ internal fun ModernHomeContent(
     var restoredFromSavedState by remember { mutableStateOf(false) }
     var optionsItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
     val lastFocusedContinueWatchingIndexRef = remember { AtomicInteger(-1) }
-    val lastKeyRepeatTimeRef = remember { AtomicLong(0L) }
+    val lastKeyRepeatDispatchRef = remember { AtomicLong(0L) }
     val lastHeroNavigationAtMsRef = remember { AtomicLong(0L) }
     val heroFocusSettleDelayMsRef = remember { AtomicLong(MODERN_HERO_FOCUS_DEBOUNCE_MS) }
     var focusedCatalogSelection by remember { mutableStateOf<FocusedCatalogSelection?>(null) }
@@ -1323,11 +1362,15 @@ internal fun ModernHomeContent(
                         .onPreviewKeyEvent { event ->
                             val native = event.nativeKeyEvent
                             if (native.action == AndroidKeyEvent.ACTION_DOWN && native.repeatCount > 0) {
-                                val now = System.currentTimeMillis()
-                                if (now - lastKeyRepeatTimeRef.get() < KEY_REPEAT_THROTTLE_MS) {
+                                val direction = modernHomeRepeatFocusDirectionForKeyCode(native.keyCode)
+                                    ?: return@onPreviewKeyEvent false
+                                val now = SystemClock.uptimeMillis()
+                                if (now - lastKeyRepeatDispatchRef.get() < modernHomeRepeatThrottleMs(direction)) {
                                     return@onPreviewKeyEvent true
                                 }
-                                lastKeyRepeatTimeRef.set(now)
+                                lastKeyRepeatDispatchRef.set(now)
+                                focusManager.moveFocus(direction.toComposeFocusDirection())
+                                return@onPreviewKeyEvent true
                             }
                             false
                         },
@@ -1337,10 +1380,12 @@ internal fun ModernHomeContent(
                     itemsIndexed(
                         items = carouselRows,
                         key = { _, row -> row.key },
-                        contentType = { _, _ -> "modern_home_row" }
+                        contentType = { _, row -> modernHomeRowContentType(row) }
                     ) { _, row ->
                         ModernRowSection(
                             row = row,
+                            isActiveRow = activeRowKey == row.key,
+                            isVerticalRowsScrolling = isVerticalRowsScrolling,
                             rowTitleBottom = rowTitleBottom,
                             defaultBringIntoViewSpec = defaultBringIntoViewSpec,
                             initialScrollIndex = focusState.catalogRowScrollStates[row.key] ?: 0,
