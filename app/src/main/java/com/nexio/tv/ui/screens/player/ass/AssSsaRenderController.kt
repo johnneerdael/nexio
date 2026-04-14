@@ -77,6 +77,9 @@ internal class AssSsaRenderController(
 ) : AssSsaSampleSink {
     @Volatile var currentTimeUs: Long = 0L
 
+    // Guards all mutable controller state and calls using the native ASS handle. Media3 extractor
+    // callbacks arrive on the loading thread while rendering runs on the UI thread.
+    private val stateLock = Any()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val tracks = linkedMapOf<Int, TrackState>()
     private val eventChunks = mutableListOf<AssSsaEventChunk>()
@@ -97,15 +100,20 @@ internal class AssSsaRenderController(
 
     private val renderRunnable = object : Runnable {
         override fun run() {
-            renderLoopScheduled = false
-            if (!canRunRenderLoop()) return
+            val shouldRender = synchronized(stateLock) {
+                renderLoopScheduled = false
+                canRunRenderLoop()
+            }
+            if (!shouldRender) return
             renderCurrentFrame()
             startRenderLoopIfNeeded()
         }
     }
 
     fun setPlayer(player: ExoPlayer?) {
-        this.player = player
+        synchronized(stateLock) {
+            this.player = player
+        }
         if (player == null) {
             stopRenderLoop()
         } else {
@@ -114,49 +122,56 @@ internal class AssSsaRenderController(
     }
 
     fun setVideoSize(width: Int, height: Int) {
-        if (width <= 0 || height <= 0) return
-        if (renderWidth == width && renderHeight == height) return
+        synchronized(stateLock) {
+            if (width <= 0 || height <= 0) return
+            if (renderWidth == width && renderHeight == height) return
 
-        renderWidth = width
-        renderHeight = height
-        renderBitmap?.recycle()
-        renderBitmap = null
-        destroyNativeHandle()
-        ensureNativeInitialized(replayEvents = true)
+            renderWidth = width
+            renderHeight = height
+            renderBitmap?.recycle()
+            renderBitmap = null
+            destroyNativeHandle()
+            ensureNativeInitialized(replayEvents = true)
+        }
         startRenderLoopIfNeeded()
     }
 
     fun onSeekStarted() {
         clearOverlay()
-        val activeHandle = handle
-        if (activeHandle == 0L) return
+        synchronized(stateLock) {
+            val activeHandle = handle
+            if (activeHandle == 0L) return
 
-        native.flush(activeHandle)
-        loadedTrackId = null
-        loadSelectedTrackHeader(activeHandle)
-        replayActiveTrackEvents(activeHandle)
-        replayActiveRawSamples(activeHandle)
+            native.flush(activeHandle)
+            loadedTrackId = null
+            loadSelectedTrackHeader(activeHandle)
+            replayActiveTrackEvents(activeHandle)
+            replayActiveRawSamples(activeHandle)
+        }
         startRenderLoopIfNeeded()
     }
 
     fun selectTrackByFormat(format: Format) {
-        val trackId = findTrackIdByFormat(format) ?: return
-        if (selectedTrackId == trackId) {
-            startRenderLoopIfNeeded()
-            return
-        }
+        synchronized(stateLock) {
+            val trackId = findTrackIdByFormat(format) ?: return
+            if (selectedTrackId == trackId) {
+                startRenderLoopIfNeeded()
+                return
+            }
 
-        selectedTrackId = trackId
-        loadedTrackId = null
-        clearOverlay()
-        val activeHandle = handle
-        if (activeHandle != 0L) {
-            native.flush(activeHandle)
-            loadSelectedTrackHeader(activeHandle)
-            replayActiveTrackEvents(activeHandle)
-            replayActiveRawSamples(activeHandle)
-        } else {
-            ensureNativeInitialized(replayEvents = true)
+            selectedTrackId = trackId
+            loadedTrackId = null
+            stopRenderLoop()
+            clearOverlayView()
+            val activeHandle = handle
+            if (activeHandle != 0L) {
+                native.flush(activeHandle)
+                loadSelectedTrackHeader(activeHandle)
+                replayActiveTrackEvents(activeHandle)
+                replayActiveRawSamples(activeHandle)
+            } else {
+                ensureNativeInitialized(replayEvents = true)
+            }
         }
         startRenderLoopIfNeeded()
     }
@@ -169,75 +184,90 @@ internal class AssSsaRenderController(
     }
 
     fun release() {
-        if (released) return
-        released = true
-        stopRenderLoop()
-        player = null
-        destroyNativeHandle()
-        renderBitmap?.recycle()
-        renderBitmap = null
-        tracks.clear()
-        eventChunks.clear()
-        rawSamples.clear()
-        fontAttachments.clear()
-        selectedTrackId = null
-        loadedTrackId = null
+        synchronized(stateLock) {
+            if (released) return
+            released = true
+            stopRenderLoop()
+            player = null
+            destroyNativeHandle()
+            renderBitmap?.recycle()
+            renderBitmap = null
+            tracks.clear()
+            eventChunks.clear()
+            rawSamples.clear()
+            fontAttachments.clear()
+            selectedTrackId = null
+            loadedTrackId = null
+        }
         clearOverlay()
     }
 
     override fun onTrackHeader(trackId: Int, headerData: ByteArray, format: Format) {
-        if (released) return
-        tracks[trackId] = TrackState(trackId, headerData, format)
-        if (selectedTrackId == null && tracks.size == 1) {
-            selectedTrackId = trackId
-            startRenderLoopIfNeeded()
-        }
-        if (selectedTrackId == trackId && handle != 0L) {
-            loadedTrackId = null
-            loadSelectedTrackHeader(handle)
+        synchronized(stateLock) {
+            if (released) return
+            tracks[trackId] = TrackState(trackId, headerData, format)
+            if (selectedTrackId == null && tracks.size == 1) {
+                selectedTrackId = trackId
+                startRenderLoopIfNeeded()
+            }
+            if (selectedTrackId == trackId && handle != 0L) {
+                loadedTrackId = null
+                loadSelectedTrackHeader(handle)
+            }
         }
     }
 
     override fun onSubtitleSample(trackId: Int, timeUs: Long, data: ByteArray) {
-        if (released) return
         val chunk = data.decodeToString()
             .lineSequence()
             .mapNotNull { line -> line.toAssSsaEventChunk(trackId, timeUs) }
             .firstOrNull()
 
-        if (chunk != null) {
-            eventChunks += chunk
+        synchronized(stateLock) {
+            if (released) return
+
+            if (chunk != null) {
+                eventChunks += chunk
+                if (trackId == selectedTrackId && ensureNativeInitialized(replayEvents = false)) {
+                    native.processChunk(handle, chunk.chunkData, chunk.startMs, chunk.durationMs)
+                }
+                startRenderLoopIfNeeded()
+                return
+            }
+
+            val rawSample = RawSample(trackId, data)
+            rawSamples += rawSample
             if (trackId == selectedTrackId && ensureNativeInitialized(replayEvents = false)) {
-                native.processChunk(handle, chunk.chunkData, chunk.startMs, chunk.durationMs)
+                native.processData(handle, rawSample.data)
             }
             startRenderLoopIfNeeded()
-            return
         }
-
-        val rawSample = RawSample(trackId, data)
-        rawSamples += rawSample
-        if (trackId == selectedTrackId && ensureNativeInitialized(replayEvents = false)) {
-            native.processData(handle, rawSample.data)
-        }
-        startRenderLoopIfNeeded()
     }
 
     override fun onFontAttachment(name: String, data: ByteArray) {
-        if (released) return
-        val attachment = FontAttachment(name, data)
-        fontAttachments += attachment
-        if (handle != 0L) {
-            native.addFont(handle, attachment.name, attachment.data)
+        synchronized(stateLock) {
+            if (released) return
+            val attachment = FontAttachment(name, data)
+            fontAttachments += attachment
+            if (handle != 0L) {
+                native.addFont(handle, attachment.name, attachment.data)
+            }
         }
     }
 
-    internal fun eventChunksForTesting(): List<AssSsaEventChunk> = eventChunks.toList()
-
-    internal fun findTrackIdByFormatForTesting(format: Format): Int? {
-        return findTrackIdByFormat(format)
+    internal fun eventChunksForTesting(): List<AssSsaEventChunk> = synchronized(stateLock) {
+        eventChunks.toList()
     }
 
-    internal fun isRenderLoopScheduledForTesting(): Boolean = renderLoopScheduled
+    internal fun findTrackIdByFormatForTesting(format: Format): Int? {
+        return synchronized(stateLock) {
+            findTrackIdByFormat(format)
+        }
+    }
+
+    internal fun isRenderLoopScheduledForTesting(): Boolean = synchronized(stateLock) {
+        renderLoopScheduled
+    }
 
     // Test hook; production rendering is scheduled through renderRunnable on the main thread.
     internal fun renderCurrentFrameForTesting() {
@@ -245,37 +275,45 @@ internal class AssSsaRenderController(
     }
 
     private fun renderCurrentFrame() {
-        if (!ensureNativeInitialized(replayEvents = true)) {
-            clearOverlay()
-            return
-        }
+        synchronized(stateLock) {
+            if (!ensureNativeInitialized(replayEvents = true)) {
+                clearOverlay()
+                return
+            }
 
-        val bitmap = renderBitmapForCurrentSize()
-        val adjustedPositionMs = (
-            (player?.currentPosition ?: (currentTimeUs / 1000L)) -
-                (subtitleDelayUsProvider() / 1000L)
-            ).coerceAtLeast(0L)
-        if (native.render(handle, adjustedPositionMs, bitmap)) {
-            overlayView.setRenderedBitmap(bitmap)
-        } else {
-            clearOverlayView()
+            val bitmap = renderBitmapForCurrentSize()
+            val adjustedPositionMs = (
+                (player?.currentPosition ?: (currentTimeUs / 1000L)) -
+                    (subtitleDelayUsProvider() / 1000L)
+                ).coerceAtLeast(0L)
+            if (native.render(handle, adjustedPositionMs, bitmap)) {
+                overlayView.setRenderedBitmap(bitmap)
+            } else {
+                clearOverlayView()
+            }
         }
     }
 
     private fun startRenderLoopIfNeeded() {
-        if (!canRunRenderLoop() || renderLoopScheduled) return
-        renderLoopScheduled = true
+        synchronized(stateLock) {
+            if (!canRunRenderLoop() || renderLoopScheduled) return
+            renderLoopScheduled = true
+        }
         runOnMainThread {
-            if (!canRunRenderLoop() || !renderLoopScheduled) {
-                renderLoopScheduled = false
-                return@runOnMainThread
+            synchronized(stateLock) {
+                if (!canRunRenderLoop() || !renderLoopScheduled) {
+                    renderLoopScheduled = false
+                    return@runOnMainThread
+                }
             }
             overlayView.postOnAnimation(renderRunnable)
         }
     }
 
     private fun stopRenderLoop() {
-        renderLoopScheduled = false
+        synchronized(stateLock) {
+            renderLoopScheduled = false
+        }
         runOnMainThread {
             overlayView.removeCallbacks(renderRunnable)
         }
