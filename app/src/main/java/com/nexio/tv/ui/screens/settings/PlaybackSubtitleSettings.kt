@@ -31,7 +31,6 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
-import com.nexio.tv.data.local.LibassRenderType
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
@@ -77,8 +76,6 @@ internal fun LazyListScope.subtitleSettingsItems(
     onSetSubtitleVerticalOffset: (Int) -> Unit,
     onSetSubtitleBold: (Boolean) -> Unit,
     onSetSubtitleOutlineEnabled: (Boolean) -> Unit,
-    onSetUseLibass: (Boolean) -> Unit,
-    onSetLibassRenderType: (LibassRenderType) -> Unit,
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
 ) {
@@ -230,88 +227,6 @@ internal fun LazyListScope.subtitleSettingsItems(
         }
     }
 
-    item(key = "subtitle_advanced_header") {
-        Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
-        Text(
-            text = stringResource(R.string.sub_advanced_section),
-            style = MaterialTheme.typography.titleMedium,
-            color = NexioColors.TextSecondary,
-            modifier = androidx.compose.ui.Modifier.padding(vertical = 8.dp)
-        )
-    }
-
-    item(key = "subtitle_libass") {
-        ToggleSettingsItem(
-            icon = Icons.Default.Subtitles,
-            title = stringResource(R.string.sub_libass),
-            subtitle = stringResource(R.string.sub_libass_sub),
-            isChecked = playerSettings.useLibass,
-            onCheckedChange = onSetUseLibass,
-            onFocused = onItemFocused,
-            enabled = enabled
-        )
-    }
-
-    if (playerSettings.useLibass) {
-        item(key = "subtitle_libass_render_header") {
-            Text(
-                text = stringResource(R.string.sub_libass_mode),
-                style = MaterialTheme.typography.titleMedium,
-                color = NexioColors.TextSecondary,
-                modifier = androidx.compose.ui.Modifier.padding(vertical = 8.dp)
-            )
-        }
-
-        item(key = "subtitle_libass_overlay_gl") {
-            RenderTypeSettingsItem(
-                title = stringResource(R.string.sub_mode_overlay_gl),
-                subtitle = stringResource(R.string.sub_mode_overlay_gl_sub),
-                isSelected = playerSettings.libassRenderType == LibassRenderType.OVERLAY_OPEN_GL,
-                onClick = { onSetLibassRenderType(LibassRenderType.OVERLAY_OPEN_GL) },
-                onFocused = onItemFocused
-            )
-        }
-
-        item(key = "subtitle_libass_overlay_canvas") {
-            RenderTypeSettingsItem(
-                title = stringResource(R.string.sub_mode_overlay_canvas),
-                subtitle = stringResource(R.string.sub_mode_overlay_canvas_sub),
-                isSelected = playerSettings.libassRenderType == LibassRenderType.OVERLAY_CANVAS,
-                onClick = { onSetLibassRenderType(LibassRenderType.OVERLAY_CANVAS) },
-                onFocused = onItemFocused
-            )
-        }
-
-        item(key = "subtitle_libass_effects_gl") {
-            RenderTypeSettingsItem(
-                title = stringResource(R.string.sub_mode_effects_gl),
-                subtitle = stringResource(R.string.sub_mode_effects_gl_sub),
-                isSelected = playerSettings.libassRenderType == LibassRenderType.EFFECTS_OPEN_GL,
-                onClick = { onSetLibassRenderType(LibassRenderType.EFFECTS_OPEN_GL) },
-                onFocused = onItemFocused
-            )
-        }
-
-        item(key = "subtitle_libass_effects_canvas") {
-            RenderTypeSettingsItem(
-                title = stringResource(R.string.sub_mode_effects_canvas),
-                subtitle = stringResource(R.string.sub_mode_effects_canvas_sub),
-                isSelected = playerSettings.libassRenderType == LibassRenderType.EFFECTS_CANVAS,
-                onClick = { onSetLibassRenderType(LibassRenderType.EFFECTS_CANVAS) },
-                onFocused = onItemFocused
-            )
-        }
-
-        item(key = "subtitle_libass_cues") {
-            RenderTypeSettingsItem(
-                title = stringResource(R.string.sub_mode_standard),
-                subtitle = stringResource(R.string.sub_mode_standard_sub),
-                isSelected = playerSettings.libassRenderType == LibassRenderType.CUES,
-                onClick = { onSetLibassRenderType(LibassRenderType.CUES) },
-                onFocused = onItemFocused
-            )
-        }
-    }
 }
 
 @Composable

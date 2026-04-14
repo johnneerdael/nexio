@@ -14,6 +14,7 @@ import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.domain.model.Subtitle
+import com.nexio.tv.ui.screens.player.ass.isEmbeddedAssSsaFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -159,7 +160,12 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                     // Skip addon subtitle tracks — they are managed separately
                     if (format.id?.contains(PlayerRuntimeController.ADDON_SUBTITLE_TRACK_ID_PREFIX) == true) continue
                     val isSelected = trackGroup.isTrackSelected(i)
-                    if (isSelected) selectedSubtitleIndex = subtitleTracks.size
+                    if (isSelected) {
+                        selectedSubtitleIndex = subtitleTracks.size
+                        if (format.isEmbeddedAssSsaFormat()) {
+                            assSsaRenderController?.selectTrackByFormat(format)
+                        }
+                    }
                     
                     val hasForcedFlag = (format.selectionFlags and C.SELECTION_FLAG_FORCED) != 0
                     val trackTexts = listOfNotNull(format.label, format.language, format.id)
@@ -443,7 +449,7 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
         cancelFirstFrameWatchdog()
     }
     tryAutoSelectPreferredSubtitleFromAvailableTracks()
-    maybeAdjustLibassPipelineForTracks(tracks)
+    maybeAdjustAssSsaPipelineForTracks(tracks)
 }
 
 /**
@@ -640,16 +646,20 @@ internal fun PlayerRuntimeController.detectStartupAudioCapabilitySupport(): Star
     )
 }
 
-internal fun PlayerRuntimeController.maybeAdjustLibassPipelineForTracks(tracks: Tracks) {
-    if (libassPipelineSwitchInFlight) return
+internal fun PlayerRuntimeController.maybeAdjustAssSsaPipelineForTracks(tracks: Tracks) {
+    if (assSsaPipelineSwitchInFlight) return
 
-    val desiredUseLibass = requestedUseLibassByUser && tracks.hasSelectedAssSsaTextTrack()
-    if (desiredUseLibass == activePlayerUsesLibass) return
+    val desiredUseAssSsaPipeline = tracks.hasSelectedAssSsaTextTrack()
+    if (desiredUseAssSsaPipeline && assSsaPipelineFallbackHandledForCurrentStream) {
+        assSsaPipelineOverrideForCurrentStream = false
+        return
+    }
+    if (desiredUseAssSsaPipeline == activePlayerUsesAssSsaRenderer) return
 
     val player = _exoPlayer ?: return
     val resumePosition = player.currentPosition.takeIf { it > 0L }
-    libassPipelineOverrideForCurrentStream = desiredUseLibass
-    libassPipelineSwitchInFlight = true
+    assSsaPipelineOverrideForCurrentStream = desiredUseAssSsaPipeline
+    assSsaPipelineSwitchInFlight = true
 
     _uiState.update { state ->
         state.copy(
@@ -664,50 +674,20 @@ internal fun PlayerRuntimeController.maybeAdjustLibassPipelineForTracks(tracks: 
     }
 }
 
-private fun Tracks.hasAssSsaTextTrack(): Boolean {
-    groups.forEach { trackGroup ->
-        if (trackGroup.type != C.TRACK_TYPE_TEXT) return@forEach
-        for (index in 0 until trackGroup.length) {
-            val format = trackGroup.getTrackFormat(index)
-            if (format.sampleMimeType == MimeTypes.TEXT_SSA) return true
-
-            val hasAssCodec = format.codecs
-                ?.split(',')
-                ?.asSequence()
-                ?.map { it.trim().lowercase(Locale.US) }
-                ?.any { codec ->
-                    codec == MimeTypes.TEXT_SSA ||
-                        codec == "s_text/ass" ||
-                        codec == "s_text/ssa" ||
-                        codec.endsWith("/x-ssa")
-                } == true
-            if (hasAssCodec) return true
-        }
-    }
-    return false
-}
-
 private fun Tracks.hasSelectedAssSsaTextTrack(): Boolean {
     groups.forEach { trackGroup ->
         if (trackGroup.type != C.TRACK_TYPE_TEXT) return@forEach
         for (index in 0 until trackGroup.length) {
             if (!trackGroup.isTrackSelected(index)) continue
             val format = trackGroup.getTrackFormat(index)
-            if (format.sampleMimeType == MimeTypes.TEXT_SSA) return true
-            val hasAssCodec = format.codecs
-                ?.split(',')
-                ?.asSequence()
-                ?.map { it.trim().lowercase(Locale.US) }
-                ?.any { codec ->
-                    codec == MimeTypes.TEXT_SSA ||
-                        codec == "s_text/ass" ||
-                        codec == "s_text/ssa" ||
-                        codec.endsWith("/x-ssa")
-                } == true
-            if (hasAssCodec) return true
+            if (format.isEmbeddedAssSsaFormat()) return true
         }
     }
     return false
+}
+
+internal fun Tracks.hasSelectedAssSsaTextTrackForTesting(): Boolean {
+    return hasSelectedAssSsaTextTrack()
 }
 
 internal fun PlayerRuntimeController.maybeApplyTrackBasedAfrFallback(

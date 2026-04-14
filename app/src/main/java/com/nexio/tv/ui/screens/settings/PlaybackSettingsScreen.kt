@@ -94,7 +94,6 @@ import com.nexio.tv.data.local.AutoplayBandwidthMode
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.InternalPlayerEngine
-import com.nexio.tv.data.local.LibassRenderType
 import com.nexio.tv.data.local.MpvHardwareDecodeMode
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
@@ -361,8 +360,6 @@ internal fun PlaybackSettingsContent(
                 onSetSubtitleVerticalOffset = { newOffset -> coroutineScope.launch { viewModel.setSubtitleVerticalOffset(newOffset) } },
                 onSetSubtitleBold = { bold -> coroutineScope.launch { viewModel.setSubtitleBold(bold) } },
                 onSetSubtitleOutlineEnabled = { enabled -> coroutineScope.launch { viewModel.setSubtitleOutlineEnabled(enabled) } },
-                onSetUseLibass = { enabled -> coroutineScope.launch { viewModel.setUseLibass(enabled) } },
-                onSetLibassRenderType = { renderType -> coroutineScope.launch { viewModel.setLibassRenderType(renderType) } },
                 onSetUseParallelConnections = { enabled ->
                     coroutineScope.launch { viewModel.setUseParallelConnections(enabled) }
                 },

@@ -14,6 +14,52 @@ add_library(
 
 find_library(log-lib log)
 
+add_library(
+    assrender_direct
+    SHARED
+    ass_direct.c
+    ass_direct_jni.c
+)
+
+set(ASSRENDER_JNILIBS_DIR "${CMAKE_CURRENT_LIST_DIR}/../jniLibs/${ANDROID_ABI}")
+
+function(add_assrender_imported_library target_name library_name)
+    add_library(${target_name} SHARED IMPORTED)
+    set_target_properties(
+        ${target_name}
+        PROPERTIES
+        IMPORTED_LOCATION "${ASSRENDER_JNILIBS_DIR}/${library_name}"
+    )
+endfunction()
+
+add_assrender_imported_library(assrender_ass libass.so)
+add_assrender_imported_library(assrender_freetype libfreetype.so)
+add_assrender_imported_library(assrender_fribidi libfribidi.so)
+add_assrender_imported_library(assrender_harfbuzz libharfbuzz.so)
+add_assrender_imported_library(assrender_fontconfig libfontconfig.so)
+add_assrender_imported_library(assrender_expat libexpat.so)
+
+target_include_directories(
+    assrender_direct
+    PRIVATE
+    "${CMAKE_CURRENT_LIST_DIR}/assrender_include"
+    "${CMAKE_CURRENT_LIST_DIR}/assrender_include/freetype2"
+)
+
+target_compile_options(assrender_direct PRIVATE -Wall -Wextra -Wno-unused-parameter)
+target_link_libraries(
+    assrender_direct
+    assrender_ass
+    assrender_freetype
+    assrender_fribidi
+    assrender_harfbuzz
+    assrender_fontconfig
+    assrender_expat
+    android
+    jnigraphics
+    ${log-lib}
+)
+
 target_compile_features(dovi_bridge PRIVATE cxx_std_17)
 target_compile_options(dovi_bridge PRIVATE -Wall -Wextra -Wno-unused-parameter)
 

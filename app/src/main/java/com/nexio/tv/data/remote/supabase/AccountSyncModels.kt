@@ -392,8 +392,7 @@ data class SubtitleSyncSettings(
     val textColor: Int = -1,
     val backgroundColor: Int = 0,
     val outlineEnabled: Boolean = true,
-    val outlineColor: Int = -16777216,
-    val useLibass: Boolean = false
+    val outlineColor: Int = -16777216
 )
 
 @Serializable

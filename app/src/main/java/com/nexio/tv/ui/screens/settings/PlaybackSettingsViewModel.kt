@@ -7,7 +7,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.data.local.AutoplayBandwidthMode
 import com.nexio.tv.data.local.DebugSettingsDataStore
-import com.nexio.tv.data.local.LibassRenderType
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PlayerPreference
@@ -269,20 +268,6 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setExperimentalDv7ToDv81PreserveMappingEnabled(enabled: Boolean) {
         playerSettingsDataStore.setExperimentalDv7ToDv81PreserveMappingEnabled(enabled)
-    }
-
-    /**
-     * Set whether to use libass for ASS/SSA subtitle rendering
-     */
-    suspend fun setUseLibass(enabled: Boolean) {
-        playerSettingsDataStore.setUseLibass(enabled)
-    }
-
-    /**
-     * Set the libass render type
-     */
-    suspend fun setLibassRenderType(renderType: LibassRenderType) {
-        playerSettingsDataStore.setLibassRenderType(renderType)
     }
 
     // Subtitle style settings functions

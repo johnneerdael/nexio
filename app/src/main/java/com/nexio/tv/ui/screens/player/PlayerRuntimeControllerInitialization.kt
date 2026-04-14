@@ -15,6 +15,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -30,6 +31,7 @@ import androidx.media3.exoplayer.audio.kodi.KodiNativeAudioSink
 import androidx.media3.exoplayer.audio.kodi.KodiTrueHdEntryAudioSink
 import androidx.media3.exoplayer.audio.kodi.KodiTrueHdNativeAudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.metadata.MetadataOutput
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.text.CueGroupSubtitleTranslator
 import androidx.media3.exoplayer.text.TextOutput
@@ -54,7 +56,11 @@ import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.InternalPlayerEngine
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import com.nexio.tv.domain.model.Subtitle
-import io.github.peerless2012.ass.media.type.AssRenderType
+import com.nexio.tv.ui.screens.player.ass.AssNoOpSubtitleParserFactory
+import com.nexio.tv.ui.screens.player.ass.AssSsaExtractorsFactory
+import com.nexio.tv.ui.screens.player.ass.AssSsaNativeBridge
+import com.nexio.tv.ui.screens.player.ass.AssSsaRenderController
+import com.nexio.tv.ui.screens.player.ass.AssSsaTimeRenderer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -72,6 +78,47 @@ internal data class StartupSubtitlePreparation(
     val attachedSubtitles: List<Subtitle>,
     val fetchCompleted: Boolean
 )
+
+internal data class AssSsaPipelineDecisionState(
+    val decisionStreamUrl: String,
+    val overrideForCurrentStream: Boolean?,
+    val switchInFlight: Boolean,
+    val fallbackHandled: Boolean
+)
+
+internal fun resetAssSsaPipelineDecisionStateForStream(
+    streamUrl: String
+): AssSsaPipelineDecisionState {
+    return AssSsaPipelineDecisionState(
+        decisionStreamUrl = streamUrl,
+        overrideForCurrentStream = null,
+        switchInFlight = false,
+        fallbackHandled = false
+    )
+}
+
+internal fun PlayerRuntimeController.resetAssSsaPipelineDecisionForStream(streamUrl: String) {
+    val reset = resetAssSsaPipelineDecisionStateForStream(streamUrl)
+    assSsaPipelineDecisionStreamUrl = reset.decisionStreamUrl
+    assSsaPipelineOverrideForCurrentStream = reset.overrideForCurrentStream
+    assSsaPipelineSwitchInFlight = reset.switchInFlight
+    assSsaPipelineFallbackHandledForCurrentStream = reset.fallbackHandled
+}
+
+internal data class AssSsaPipelineOverlayDecision(
+    val useAssSsaPipeline: Boolean,
+    val disableOverrideForCurrentStream: Boolean
+)
+
+internal fun resolveAssSsaPipelineOverlayDecision(
+    requestedUseAssSsaPipeline: Boolean,
+    overlayAttached: Boolean
+): AssSsaPipelineOverlayDecision {
+    return AssSsaPipelineOverlayDecision(
+        useAssSsaPipeline = requestedUseAssSsaPipeline && overlayAttached,
+        disableOverrideForCurrentStream = requestedUseAssSsaPipeline && !overlayAttached
+    )
+}
 
 @androidx.annotation.OptIn(UnstableApi::class)
 internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<String, String>) {
@@ -168,26 +215,43 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     frameRateMatchingMode = playerSettings.frameRateMatchingMode
                 )
             }
-            requestedUseLibassByUser = playerSettings.useLibass
-            if (libassPipelineDecisionStreamUrl != currentStreamUrl) {
-                libassPipelineDecisionStreamUrl = currentStreamUrl
-                libassPipelineOverrideForCurrentStream = null
-                libassPipelineSwitchInFlight = false
+            if (assSsaPipelineDecisionStreamUrl != currentStreamUrl) {
+                resetAssSsaPipelineDecisionForStream(currentStreamUrl)
             }
             val retainedSelectedSubtitle = _uiState.value.selectedAddonSubtitle
             Dv5HardwareToneMapRpuTap.setEnabledForPlayback(enabled = false, streamUrl = url)
-            val useLibass = when {
-                !requestedUseLibassByUser -> false
-                libassPipelineOverrideForCurrentStream != null -> libassPipelineOverrideForCurrentStream == true
-                else -> false
+            val requestedUseAssSsaPipeline = AssSsaNativeBridge.nativeAvailable &&
+                assSsaPipelineOverrideForCurrentStream == true
+            if (!AssSsaNativeBridge.nativeAvailable &&
+                assSsaPipelineOverrideForCurrentStream == true
+            ) {
+                Log.w(
+                    PlayerRuntimeController.TAG,
+                    "ASS_SSA_RENDER: native renderer unavailable; using Media3 fallback " +
+                        "host=${url.safeHost()}"
+                )
+                assSsaPipelineOverrideForCurrentStream = false
+                assSsaPipelineFallbackHandledForCurrentStream = true
             }
-            val requestedLibassRenderType = playerSettings.libassRenderType.toAssRenderType()
-            val libassRenderType = when {
-                !useLibass -> requestedLibassRenderType
-                requestedLibassRenderType == AssRenderType.OVERLAY_OPEN_GL -> AssRenderType.EFFECTS_OPEN_GL
-                requestedLibassRenderType == AssRenderType.OVERLAY_CANVAS -> AssRenderType.EFFECTS_CANVAS
-                else -> requestedLibassRenderType
+            val assSsaOverlayView = if (requestedUseAssSsaPipeline) {
+                assSsaOverlayViewProvider?.invoke()
+            } else {
+                null
             }
+            val overlayDecision = resolveAssSsaPipelineOverlayDecision(
+                requestedUseAssSsaPipeline = requestedUseAssSsaPipeline,
+                overlayAttached = assSsaOverlayView != null
+            )
+            if (overlayDecision.disableOverrideForCurrentStream) {
+                Log.w(
+                    PlayerRuntimeController.TAG,
+                    "ASS_SSA_RENDER: overlay view unavailable; using Media3 fallback " +
+                        "host=${url.safeHost()}"
+                )
+                assSsaPipelineOverrideForCurrentStream = false
+                assSsaPipelineFallbackHandledForCurrentStream = true
+            }
+            val useAssSsaPipeline = overlayDecision.useAssSsaPipeline
             DoviBridge.resetRuntimeCounters()
             MatroskaDolbyVisionHookInstaller.resetRuntimeCounters()
             val dv7ToDv81Probe = if (playerSettings.experimentalDv7ToDv81Enabled) {
@@ -432,7 +496,8 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 disableDav1dForAv1 = av1FfmpegFallbackActive,
                 experimentalDv5HardwareToneMapEnabled = dv5HardwareToneMapActive,
                 experimentalDv5HardwareToneMapCpuFallbackEnabled =
-                    dv5HardwareToneMapCpuFallbackEnabled
+                    dv5HardwareToneMapCpuFallbackEnabled,
+                assSsaRenderControllerProvider = { assSsaRenderController }
             )
                 .setExtensionRendererMode(effectiveDecoderPriority)
                 .setEnableDecoderFallback(true)
@@ -459,36 +524,40 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     "host=${url.safeHost()}"
             )
 
-            val buildDefaultPlayer = {
+            assSsaRenderController?.release()
+            assSsaRenderController = null
+            val assController = if (useAssSsaPipeline && assSsaOverlayView != null) {
+                AssSsaRenderController(
+                    context = context,
+                    overlayView = assSsaOverlayView,
+                    subtitleDelayUsProvider = subtitleDelayUs::get
+                )
+            } else {
+                null
+            }
+            assSsaRenderController = assController
+            if (assController != null) {
+                mediaSourceFactory.configureSubtitleParsing(
+                    extractorsFactory = AssSsaExtractorsFactory(extractorsFactory, assController),
+                    subtitleParserFactory = AssNoOpSubtitleParserFactory()
+                )
+            } else {
                 mediaSourceFactory.configureSubtitleParsing(
                     extractorsFactory = null,
                     subtitleParserFactory = null
                 )
-                ExoPlayer.Builder(context)
-                    .setTrackSelector(trackSelector!!)
-                    .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractorsFactory))
-                    .setRenderersFactory(renderersFactory)
-                    .setLoadControl(loadControl)
-                    .build()
             }
 
-            _exoPlayer = if (useLibass) {
-                ExoPlayer.Builder(context)
-                    .setLoadControl(loadControl)
-                    .setTrackSelector(trackSelector!!)
-                    .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractorsFactory))
-                    .buildWithAssSupportCompat(
-                        context = context,
-                        renderType = libassRenderType,
-                        playerMediaSourceFactory = mediaSourceFactory,
-                        extractorsFactory = extractorsFactory,
-                        renderersFactory = renderersFactory
-                    )
-            } else {
-                buildDefaultPlayer()
-            }
-            activePlayerUsesLibass = useLibass
-            libassPipelineSwitchInFlight = false
+            _exoPlayer = ExoPlayer.Builder(context)
+                .setTrackSelector(trackSelector!!)
+                .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractorsFactory))
+                .setRenderersFactory(renderersFactory)
+                .setLoadControl(loadControl)
+                .build()
+                .also { assController?.setPlayer(it) }
+            activePlayerUsesAssSsaRenderer = useAssSsaPipeline
+            assSsaPipelineSwitchInFlight = false
+            _uiState.update { it.copy(useAssSsaRenderOverlay = useAssSsaPipeline) }
 
             _exoPlayer?.apply {
                 
@@ -687,6 +756,22 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     override fun onTracksChanged(tracks: Tracks) {
                         if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
                         updateAvailableTracks(tracks)
+                    }
+
+                    override fun onVideoSizeChanged(videoSize: VideoSize) {
+                        if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
+                        assSsaRenderController?.setVideoSize(videoSize.width, videoSize.height)
+                    }
+
+                    override fun onPositionDiscontinuity(
+                        oldPosition: Player.PositionInfo,
+                        newPosition: Player.PositionInfo,
+                        reason: Int
+                    ) {
+                        if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) return
+                        if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                            assSsaRenderController?.onSeekStarted()
+                        }
                     }
 
                     override fun onRenderedFirstFrame() {
@@ -981,6 +1066,11 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             }
         } catch (e: Exception) {
             com.nexio.tv.core.player.FrameRateUtils.endMainPlayerDisplayModeSession()
+            assSsaPipelineSwitchInFlight = false
+            assSsaRenderController?.release()
+            assSsaRenderController = null
+            activePlayerUsesAssSsaRenderer = false
+            _uiState.update { it.copy(useAssSsaRenderOverlay = false) }
             if (!playbackSessionGuard.shouldHandleCallback(playbackSessionId)) {
                 return@launch
             }
@@ -1246,8 +1336,29 @@ private class SubtitleOffsetRenderersFactory(
     private val experimentalFireOsIecPassthroughEnabled: Boolean,
     private val disableDav1dForAv1: Boolean,
     private val experimentalDv5HardwareToneMapEnabled: Boolean,
-    private val experimentalDv5HardwareToneMapCpuFallbackEnabled: Boolean
+    private val experimentalDv5HardwareToneMapCpuFallbackEnabled: Boolean,
+    private val assSsaRenderControllerProvider: () -> AssSsaRenderController?
 ) : DefaultRenderersFactory(context) {
+
+    override fun createRenderers(
+        eventHandler: android.os.Handler,
+        videoRendererEventListener: VideoRendererEventListener,
+        audioRendererEventListener: AudioRendererEventListener,
+        textRendererOutput: TextOutput,
+        metadataRendererOutput: MetadataOutput
+    ): Array<Renderer> {
+        val renderers = super.createRenderers(
+            eventHandler,
+            videoRendererEventListener,
+            audioRendererEventListener,
+            textRendererOutput,
+            metadataRendererOutput
+        ).toMutableList()
+        assSsaRenderControllerProvider()?.let { controller ->
+            renderers += AssSsaTimeRenderer(controller)
+        }
+        return renderers.toTypedArray()
+    }
 
     override fun buildVideoRenderers(
         context: Context,
