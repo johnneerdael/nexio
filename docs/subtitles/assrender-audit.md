@@ -6,16 +6,18 @@ Replace the optional `io.github.peerless2012:ass-media` path with a local, alway
 
 ## Sources Audited
 
-- `/Users/jneerdael/Scripts/assrender/assrender/src/main/kotlin/io/github/assrender/AssSubtitleParserFactory.kt`
-- `/Users/jneerdael/Scripts/assrender/assrender/src/main/kotlin/io/github/assrender/AssMatroskaExtractor.kt`
-- `/Users/jneerdael/Scripts/assrender/assrender/src/main/kotlin/io/github/assrender/AssExtractorOutput.kt`
-- `/Users/jneerdael/Scripts/assrender/assrender/src/main/kotlin/io/github/assrender/AssTrackOutput.kt`
-- `/Users/jneerdael/Scripts/assrender/assrender/src/main/kotlin/io/github/assrender/AssHandler.kt`
-- `/Users/jneerdael/Scripts/assrender/assrender/src/main/kotlin/io/github/assrender/AssTimeRenderer.kt`
-- `/Users/jneerdael/Scripts/assrender/assrender/src/main/kotlin/io/github/assrender/SubtitleOverlayView.kt`
-- `/Users/jneerdael/Scripts/assrender/assrender/src/main/cpp/ass_direct.c`
-- `/Users/jneerdael/Scripts/assrender/assrender/src/main/cpp/ass_direct_jni.c`
-- `/Users/jneerdael/Scripts/assrender/assrender/src/main/cpp/ass_direct.h`
+Reference checkout: `~/Scripts/assrender`. Paths below are relative to that checkout.
+
+- `assrender/src/main/kotlin/io/github/assrender/AssSubtitleParserFactory.kt`
+- `assrender/src/main/kotlin/io/github/assrender/AssMatroskaExtractor.kt`
+- `assrender/src/main/kotlin/io/github/assrender/AssExtractorOutput.kt`
+- `assrender/src/main/kotlin/io/github/assrender/AssTrackOutput.kt`
+- `assrender/src/main/kotlin/io/github/assrender/AssHandler.kt`
+- `assrender/src/main/kotlin/io/github/assrender/AssTimeRenderer.kt`
+- `assrender/src/main/kotlin/io/github/assrender/SubtitleOverlayView.kt`
+- `assrender/src/main/cpp/ass_direct.c`
+- `assrender/src/main/cpp/ass_direct_jni.c`
+- `assrender/src/main/cpp/ass_direct.h`
 - Aegisub ASS tag reference: https://aegisub.org/docs/latest/ass_tags/
 
 ## Port Decisions
