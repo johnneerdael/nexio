@@ -491,22 +491,22 @@ private fun encodePreferenceValue(rawValue: Any?): JsonObject? {
 | A5 | All 5 per-profile DataStores (trakt_settings, simkl_settings, player_settings, layout_preferences, theme_settings) use ProfileDataStoreFactory before Phase 4 starts | Architecture Patterns - Pattern 3 | HIGH — flatMapLatest usage verified in codebase for all 5, but if any still use singleton delegates, syncedFeatures must be scoped accordingly |
 | A6 | Retry mechanism for remote cleanup uses a lightweight shared prefs set persisted across app starts | Architecture Patterns - Pattern 5 | Low — other implementations possible; Claude's discretion |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Profiles Table Overlap with Phase 3 (PIN)**
    - What we know: Phase 3 implements PIN-related RPCs (set_profile_pin, verify_profile_pin). These may already create the `profiles` table in Supabase.
    - What's unclear: Does Phase 3 fully create the `profiles` table including `avatar_id` and `pin_enabled`, or does Phase 4 need to add those columns?
-   - Recommendation: Phase 4 SQL should be fully idempotent using `CREATE TABLE IF NOT EXISTS` and `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. Planner should add a note to coordinate with Phase 3 SQL migrations.
+   - Recommendation: RESOLVED — Phase 4 SQL should be fully idempotent using `CREATE TABLE IF NOT EXISTS` and `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. Planner should add a note to coordinate with Phase 3 SQL migrations.
 
 2. **SimklDiscoverySnapshotStore Legacy Name**
    - What we know: `SimklDiscoverySnapshotStore` has both `PREFS_NAME = "simkl_discovery_snapshot_v2"` and `LEGACY_PREFS_NAME = "simkl_discovery_snapshot"` (read-only migration path). [VERIFIED: codebase grep]
    - What's unclear: Should per-profile naming apply to the legacy name during deletion?
-   - Recommendation: Only apply per-profile naming to `PREFS_NAME` (`"simkl_discovery_snapshot_v2"`). The legacy name only exists for Profile 1 (pre-multi-profile users) and is read-only for migration — no deletion needed.
+   - Recommendation: RESOLVED — Only apply per-profile naming to `PREFS_NAME` (`"simkl_discovery_snapshot_v2"`). The legacy name only exists for Profile 1 (pre-multi-profile users) and is read-only for migration — no deletion needed.
 
 3. **AccountConfigStartupPushGate Sequencing for v8**
    - What we know: v7 pushes are gated by `AccountConfigStartupPushGate` until remote pull succeeds. Removing per-profile paths from v7 requires the v8 blob pull to run first, or upgrade users lose settings.
    - What's unclear: Should one gate block both services, or should they each have independent gates?
-   - Recommendation: Independent gates per service. The v8 ProfileSettingsSyncService should gate its own pushes with its own pull-completion tracker, analogous to the existing v7 gate. Both gates must complete before any push from either service fires.
+   - Recommendation: RESOLVED — Independent gates per service. The v8 ProfileSettingsSyncService should gate its own pushes with its own pull-completion tracker, analogous to the existing v7 gate. Both gates must complete before any push from either service fires.
 
 ## Project Constraints (from CLAUDE.md)
 
