@@ -64,8 +64,8 @@ Plans:
   5. Active profile name and avatar are visible in the settings header at all times
 **Plans:** 3 plans
 Plans:
-- [ ] 03-01-PLAN.md — ProfileAvatarCircle, ProfileSelectionScreen, session gating in MainActivity
-- [ ] 03-02-PLAN.md — PIN entry UI (numpad, dots, shake, overlay) and verification flow
+- [x] 03-01-PLAN.md — ProfileAvatarCircle, ProfileSelectionScreen, session gating in MainActivity
+- [x] 03-02-PLAN.md — PIN entry UI (numpad, dots, shake, overlay) and verification flow
 - [ ] 03-03-PLAN.md — Sidebar profile switcher and settings header profile display
 **UI hint**: yes
 
@@ -78,7 +78,11 @@ Plans:
   2. Per-profile settings push and pull via independent blob RPCs, not the shared v7 contract, so Profile 2 changes never overwrite Profile 1 data
   3. Deleting a profile removes all associated DataStore files, SharedPreferences files, and Supabase remote data with no orphans remaining
   4. TraktLibrary and ContinueWatching snapshot stores are classified and scoped per-profile where applicable, with shared stores remaining shared
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 04-01-PLAN.md — ProfileSyncService, profilePrefsName helper, and 7 snapshot store per-profile migration
+- [ ] 04-02-PLAN.md — ProfileSettingsSyncService v8 blob sync with typed encoding and flatMapLatest observer
+- [ ] 04-03-PLAN.md — Startup integration, v7 cleanup, deletion with SP + remote cleanup, and verification
 
 ### Phase 5: nexio-web Integration
 **Goal**: The master account holder can manage all profiles from nexio-web, and non-default profiles can self-manage auth, catalogs, and formatter config without touching the TV
@@ -105,5 +109,5 @@ Note: Phase 3 (UI) and Phase 4 (Sync) both depend on Phase 2 and can be develope
 | 1. Foundation | 0/2 | Planned | - |
 | 2. Per-Profile Auth and Settings | 0/4 | Planned | - |
 | 3. Profile UI | 0/3 | Planned | - |
-| 4. Sync and Cleanup | 0/? | Not started | - |
+| 4. Sync and Cleanup | 0/3 | Planned | - |
 | 5. nexio-web Integration | 0/? | Not started | - |
