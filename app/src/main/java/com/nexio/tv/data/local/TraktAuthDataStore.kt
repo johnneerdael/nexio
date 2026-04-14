@@ -60,31 +60,36 @@ class TraktAuthDataStore @Inject constructor(
     private fun store(profileId: Int = profileManager.activeProfileId.value) =
         factory.get(profileId, FEATURE)
 
+    fun stateForProfile(profileId: Int): Flow<TraktAuthState> = store(profileId).data.map { preferences ->
+        TraktAuthState(
+            accessToken = preferences[accessTokenKey],
+            refreshToken = preferences[refreshTokenKey],
+            tokenType = preferences[tokenTypeKey],
+            createdAt = preferences[createdAtKey],
+            expiresIn = preferences[expiresInKey],
+            username = preferences[usernameKey],
+            userSlug = preferences[userSlugKey],
+            deviceCode = preferences[deviceCodeKey],
+            userCode = preferences[userCodeKey],
+            verificationUrl = preferences[verificationUrlKey],
+            expiresAt = preferences[expiresAtKey],
+            pollInterval = preferences[pollIntervalKey]
+        )
+    }
+
     val state: Flow<TraktAuthState> = profileManager.activeProfileId.flatMapLatest { profileId ->
-        store(profileId).data.map { preferences ->
-            TraktAuthState(
-                accessToken = preferences[accessTokenKey],
-                refreshToken = preferences[refreshTokenKey],
-                tokenType = preferences[tokenTypeKey],
-                createdAt = preferences[createdAtKey],
-                expiresIn = preferences[expiresInKey],
-                username = preferences[usernameKey],
-                userSlug = preferences[userSlugKey],
-                deviceCode = preferences[deviceCodeKey],
-                userCode = preferences[userCodeKey],
-                verificationUrl = preferences[verificationUrlKey],
-                expiresAt = preferences[expiresAtKey],
-                pollInterval = preferences[pollIntervalKey]
-            )
-        }
+        stateForProfile(profileId)
     }
 
     val isAuthenticated: Flow<Boolean> = state.map { it.isAuthenticated }
 
     val isEffectivelyAuthenticated: Flow<Boolean> = isAuthenticated
 
-    suspend fun saveToken(token: TraktTokenResponseDto) {
-        store().edit { preferences ->
+    suspend fun saveToken(
+        token: TraktTokenResponseDto,
+        profileId: Int = profileManager.activeProfileId.value
+    ) {
+        store(profileId).edit { preferences ->
             preferences[accessTokenKey] = token.accessToken
             preferences[refreshTokenKey] = token.refreshToken
             preferences[tokenTypeKey] = token.tokenType
@@ -93,8 +98,12 @@ class TraktAuthDataStore @Inject constructor(
         }
     }
 
-    suspend fun saveUser(username: String?, userSlug: String?) {
-        store().edit { preferences ->
+    suspend fun saveUser(
+        username: String?,
+        userSlug: String?,
+        profileId: Int = profileManager.activeProfileId.value
+    ) {
+        store(profileId).edit { preferences ->
             if (username.isNullOrBlank()) {
                 preferences.remove(usernameKey)
             } else {

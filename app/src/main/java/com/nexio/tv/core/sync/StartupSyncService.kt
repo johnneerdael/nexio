@@ -26,6 +26,7 @@ class StartupSyncService @Inject constructor(
     private val accountSettingsSyncService: AccountSettingsSyncService,
     private val profileSyncService: ProfileSyncService,
     private val profileSettingsSyncService: ProfileSettingsSyncService,
+    private val profileWebSyncService: ProfileWebSyncService,
     private val profileManager: ProfileManager,
     private val addonRepository: AddonRepositoryImpl,
     private val accountSyncRefreshNotifier: AccountSyncRefreshNotifier,
@@ -61,6 +62,17 @@ class StartupSyncService @Inject constructor(
                     lastAuthenticatedUserId = null
                     forceSyncRequested = false
                     pendingResyncKey = null
+                }
+            }
+        }
+        scope.launch {
+            profileManager.profileSwitched.collect {
+                val activeId = profileManager.activeProfileId.value
+                val result = profileWebSyncService.syncActiveProfile(activeId)
+                if (result.isSuccess) {
+                    Log.d(TAG, "Profile web token sync succeeded for switched profile $activeId")
+                } else {
+                    Log.w(TAG, "Profile web token sync failed for switched profile $activeId", result.exceptionOrNull())
                 }
             }
         }
@@ -145,13 +157,21 @@ class StartupSyncService @Inject constructor(
             Log.w(TAG, "Profile settings blob pull failed for profile $activeId", blobPullResult.exceptionOrNull())
         }
 
+        val webTokenPullResult = profileWebSyncService.syncActiveProfile(activeId)
+        if (webTokenPullResult.isSuccess) {
+            Log.d(TAG, "Profile web token pull succeeded for profile $activeId")
+        } else {
+            Log.w(TAG, "Profile web token pull failed for profile $activeId", webTokenPullResult.exceptionOrNull())
+        }
+
         profileSettingsSyncService.startObserving()
-        return if (profilePullResult.isSuccess && blobPullResult.isSuccess) {
+        return if (profilePullResult.isSuccess && blobPullResult.isSuccess && webTokenPullResult.isSuccess) {
             Result.success(Unit)
         } else {
             Result.failure(
                 profilePullResult.exceptionOrNull()
                     ?: blobPullResult.exceptionOrNull()
+                    ?: webTokenPullResult.exceptionOrNull()
                     ?: IllegalStateException("Startup profile sync failed")
             )
         }

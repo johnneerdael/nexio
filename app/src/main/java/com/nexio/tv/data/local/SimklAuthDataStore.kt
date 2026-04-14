@@ -51,33 +51,43 @@ class SimklAuthDataStore @Inject constructor(
     private fun store(profileId: Int = profileManager.activeProfileId.value) =
         factory.get(profileId, FEATURE)
 
+    fun stateForProfile(profileId: Int): Flow<SimklAuthState> = store(profileId).data.map { preferences ->
+        SimklAuthState(
+            accessToken = preferences[accessTokenKey],
+            username = preferences[usernameKey],
+            accountId = preferences[accountIdKey],
+            accountType = preferences[accountTypeKey],
+            deviceCode = preferences[deviceCodeKey],
+            userCode = preferences[userCodeKey],
+            verificationUrl = preferences[verificationUrlKey],
+            expiresAt = preferences[expiresAtKey],
+            pollInterval = preferences[pollIntervalKey]
+        )
+    }
+
     val state: Flow<SimklAuthState> = profileManager.activeProfileId.flatMapLatest { profileId ->
-        store(profileId).data.map { preferences ->
-            SimklAuthState(
-                accessToken = preferences[accessTokenKey],
-                username = preferences[usernameKey],
-                accountId = preferences[accountIdKey],
-                accountType = preferences[accountTypeKey],
-                deviceCode = preferences[deviceCodeKey],
-                userCode = preferences[userCodeKey],
-                verificationUrl = preferences[verificationUrlKey],
-                expiresAt = preferences[expiresAtKey],
-                pollInterval = preferences[pollIntervalKey]
-            )
-        }
+        stateForProfile(profileId)
     }
 
     val isAuthenticated: Flow<Boolean> = state.map { it.isAuthenticated }
     val isEffectivelyAuthenticated: Flow<Boolean> = isAuthenticated
 
-    suspend fun saveAccessToken(accessToken: String) {
-        store().edit { preferences ->
+    suspend fun saveAccessToken(
+        accessToken: String,
+        profileId: Int = profileManager.activeProfileId.value
+    ) {
+        store(profileId).edit { preferences ->
             preferences[accessTokenKey] = accessToken
         }
     }
 
-    suspend fun saveUser(username: String?, accountId: Long?, accountType: String?) {
-        store().edit { preferences ->
+    suspend fun saveUser(
+        username: String?,
+        accountId: Long?,
+        accountType: String?,
+        profileId: Int = profileManager.activeProfileId.value
+    ) {
+        store(profileId).edit { preferences ->
             if (username.isNullOrBlank()) preferences.remove(usernameKey) else preferences[usernameKey] = username
             if (accountId == null) preferences.remove(accountIdKey) else preferences[accountIdKey] = accountId
             if (accountType.isNullOrBlank()) preferences.remove(accountTypeKey) else preferences[accountTypeKey] = accountType
@@ -101,8 +111,8 @@ class SimklAuthDataStore @Inject constructor(
         }
     }
 
-    suspend fun clearDeviceFlow() {
-        store().edit { preferences ->
+    suspend fun clearDeviceFlow(profileId: Int = profileManager.activeProfileId.value) {
+        store(profileId).edit { preferences ->
             preferences.remove(deviceCodeKey)
             preferences.remove(userCodeKey)
             preferences.remove(verificationUrlKey)
@@ -111,8 +121,8 @@ class SimklAuthDataStore @Inject constructor(
         }
     }
 
-    suspend fun clearAuth() {
-        store().edit { preferences ->
+    suspend fun clearAuth(profileId: Int = profileManager.activeProfileId.value) {
+        store(profileId).edit { preferences ->
             preferences.remove(accessTokenKey)
             preferences.remove(usernameKey)
             preferences.remove(accountIdKey)
