@@ -3,7 +3,6 @@ package com.nexio.tv.ui.screens.player
 import android.util.Log
 import com.nexio.tv.core.player.AndroidFrameRateSettings
 import com.nexio.tv.core.player.FrameRateUtils
-import com.nexio.tv.data.local.FrameRateMatchingMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.update
@@ -15,13 +14,11 @@ private const val AFR_PREFLIGHT_PROBE_TIMEOUT_MS = 6500L
 
 internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
     url: String,
-    headers: Map<String, String>,
-    frameRateMatchingMode: FrameRateMatchingMode,
-    resolutionMatchingEnabled: Boolean
+    headers: Map<String, String>
 ) {
     if (currentStreamUrl != url) return
 
-    if (frameRateMatchingMode == FrameRateMatchingMode.OFF) {
+    if (!AndroidFrameRateSettings.canRequestFrameRate(context)) {
         if (currentStreamUrl == url) {
             _uiState.update {
                 it.copy(
@@ -122,17 +119,13 @@ internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
 
 internal fun PlayerRuntimeController.launchStartupAfrPreflight(
     url: String,
-    headers: Map<String, String>,
-    frameRateMatchingMode: FrameRateMatchingMode,
-    resolutionMatchingEnabled: Boolean
+    headers: Map<String, String>
 ) {
     startupAfrPreflightJob?.cancel()
     startupAfrPreflightJob = scope.launch {
         runAfrPreflightIfEnabled(
             url = url,
-            headers = headers,
-            frameRateMatchingMode = frameRateMatchingMode,
-            resolutionMatchingEnabled = resolutionMatchingEnabled
+            headers = headers
         )
     }
 }

@@ -111,12 +111,6 @@
   <string name="playback_section_subtitles_desc">Idioma, estilo y modo de renderizado.</string>
   <string name="playback_afr_open">Abierto</string>
   <string name="playback_afr_closed">Cerrado</string>
-  <string name="playback_afr_off">Apagado</string>
-  <string name="playback_afr_off_sub">No cambiar la frecuencia de actualización de la pantalla.</string>
-  <string name="playback_afr_on_start">Al iniciar</string>
-  <string name="playback_afr_on_start_sub">Cambiar cuando comienza la reproducción.</string>
-  <string name="playback_afr_on_start_stop">Al iniciar/parar</string>
-  <string name="playback_afr_on_start_stop_sub">Cambiar al iniciar y restaurar al detener.</string>
   <string name="playback_player_external_desc">Abrir streams siempre en una aplicación externa</string>
   <string name="playback_player_ask_desc">Elegir el reproductor cada vez</string>
   <string name="audio_section">Audio</string>

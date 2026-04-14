@@ -444,7 +444,6 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     _exoPlayer?.let { player ->
         scope.launch {
             try {
-                val playerSettings = playerSettingsDataStore.playerSettings.first()
                 val mediaSource = withContext(Dispatchers.IO) {
                     mediaSourceFactory.createMediaSource(url, newHeaders)
                 }
@@ -453,9 +452,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
                 player.prepare()
                 launchStartupAfrPreflight(
                     url = url,
-                    headers = newHeaders,
-                    frameRateMatchingMode = playerSettings.frameRateMatchingMode,
-                    resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
+                    headers = newHeaders
                 )
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to play selected stream") }
@@ -782,7 +779,6 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     _exoPlayer?.let { player ->
         scope.launch {
             try {
-                val playerSettings = playerSettingsDataStore.playerSettings.first()
                 val mediaSource = withContext(Dispatchers.IO) {
                     mediaSourceFactory.createMediaSource(url, newHeaders)
                 }
@@ -791,9 +787,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
                 player.prepare()
                 launchStartupAfrPreflight(
                     url = url,
-                    headers = newHeaders,
-                    frameRateMatchingMode = playerSettings.frameRateMatchingMode,
-                    resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
+                    headers = newHeaders
                 )
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: "Failed to play selected stream") }

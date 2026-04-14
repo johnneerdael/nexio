@@ -293,12 +293,6 @@
   <string name="playback_memory_usage_estimate">Geschätzte Speichernutzung: %1$d / %2$d MB</string>
   <string name="playback_afr_open">Öffnen</string>
   <string name="playback_afr_closed">Schließen</string>
-  <string name="playback_afr_off">Aus</string>
-  <string name="playback_afr_off_sub">Ändere nicht die Bildwiederholrate des Bildschirms.</string>
-  <string name="playback_afr_on_start">Beim Start</string>
-  <string name="playback_afr_on_start_sub">Wechsle, wenn die Wiedergabe beginnt.</string>
-  <string name="playback_afr_on_start_stop">Bei Start/Stopp</string>
-  <string name="playback_afr_on_start_stop_sub">Beim Start wechseln und beim Stopp wiederherstellen.</string>
   <string name="playback_player_external_desc">Streams immer in einer externen App öffnen</string>
   <string name="playback_player_ask_desc">Jedes Mal den Player wählen</string>
   <string name="video_section">Video</string>

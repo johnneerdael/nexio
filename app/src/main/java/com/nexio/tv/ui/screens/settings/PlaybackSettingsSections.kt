@@ -60,7 +60,6 @@ import androidx.tv.material3.Text
 import com.nexio.tv.core.player.AndroidFrameRateSettings
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.AutoplayBandwidthMode
-import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.InternalPlayerEngine
 import com.nexio.tv.data.local.MpvHardwareDecodeMode
@@ -82,22 +81,9 @@ private enum class PlaybackSection {
     LOGGING
 }
 
-private data class PlaybackGeneralUi(
-    val isExternalPlayer: Boolean,
-    val frameRateMatchingLabel: String
-)
-
 private data class PlaybackStreamSelectionUi(
     val playerPreferenceLabel: String
 )
-
-private fun frameRateMatchingModeLabel(mode: FrameRateMatchingMode, off: String, onStart: String, onStartStop: String): String {
-    return when (mode) {
-        FrameRateMatchingMode.OFF -> off
-        FrameRateMatchingMode.START -> onStart
-        FrameRateMatchingMode.START_STOP -> onStartStop
-    }
-}
 
 @Composable
 internal fun PlaybackSettingsSections(
@@ -146,10 +132,8 @@ internal fun PlaybackSettingsSections(
     onSetSkipIntroEnabled: (Boolean) -> Unit,
     onSetTrailerEnabled: (Boolean) -> Unit,
     onSetTrailerDelaySeconds: (Int) -> Unit,
-    onSetFrameRateMatchingMode: (FrameRateMatchingMode) -> Unit,
     androidFrameRateStatus: AndroidFrameRateSettings.Status,
     onOpenAndroidDisplaySettings: () -> Unit,
-    onSetResolutionMatchingEnabled: (Boolean) -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
@@ -211,9 +195,6 @@ internal fun PlaybackSettingsSections(
 
     var focusedSection by remember { mutableStateOf<PlaybackSection?>(null) }
 
-    val strAfrOff = stringResource(R.string.playback_afr_off)
-    val strAfrOnStart = stringResource(R.string.playback_afr_on_start)
-    val strAfrOnStartStop = stringResource(R.string.playback_afr_on_start_stop)
     val strSectionGeneral = stringResource(R.string.playback_section_general)
     val strSectionGeneralDesc = stringResource(R.string.playback_section_general_desc)
     val strSectionPlayer = stringResource(R.string.playback_section_player)
@@ -226,15 +207,7 @@ internal fun PlaybackSettingsSections(
     val strSectionNetworkCacheDesc = stringResource(R.string.playback_section_network_cache_desc)
     val strSectionLogging = stringResource(R.string.playback_section_logging)
     val strSectionLoggingDesc = stringResource(R.string.playback_section_logging_desc)
-    val generalUi = PlaybackGeneralUi(
-        isExternalPlayer = playerSettings.playerPreference == PlayerPreference.EXTERNAL,
-        frameRateMatchingLabel = frameRateMatchingModeLabel(
-            mode = playerSettings.frameRateMatchingMode,
-            off = strAfrOff,
-            onStart = strAfrOnStart,
-            onStartStop = strAfrOnStartStop
-        )
-    )
+    val isExternalPlayer = playerSettings.playerPreference == PlayerPreference.EXTERNAL
     val streamSelectionUi = PlaybackStreamSelectionUi(
         playerPreferenceLabel = when (playerSettings.playerPreference) {
             PlayerPreference.INTERNAL -> stringResource(R.string.playback_player_internal)
@@ -296,7 +269,7 @@ internal fun PlaybackSettingsSections(
                     isChecked = playerSettings.loadingOverlayEnabled,
                     onCheckedChange = onSetLoadingOverlayEnabled,
                     onFocused = { focusedSection = PlaybackSection.GENERAL },
-                    enabled = !generalUi.isExternalPlayer
+                    enabled = !isExternalPlayer
                 )
             }
 
@@ -308,7 +281,7 @@ internal fun PlaybackSettingsSections(
                     isChecked = playerSettings.pauseOverlayEnabled,
                     onCheckedChange = onSetPauseOverlayEnabled,
                     onFocused = { focusedSection = PlaybackSection.GENERAL },
-                    enabled = !generalUi.isExternalPlayer
+                    enabled = !isExternalPlayer
                 )
             }
 
@@ -320,7 +293,7 @@ internal fun PlaybackSettingsSections(
                     isChecked = playerSettings.osdClockEnabled,
                     onCheckedChange = onSetOsdClockEnabled,
                     onFocused = { focusedSection = PlaybackSection.GENERAL },
-                    enabled = !generalUi.isExternalPlayer
+                    enabled = !isExternalPlayer
                 )
             }
 
@@ -332,7 +305,7 @@ internal fun PlaybackSettingsSections(
                     isChecked = playerSettings.skipIntroEnabled,
                     onCheckedChange = onSetSkipIntroEnabled,
                     onFocused = { focusedSection = PlaybackSection.GENERAL },
-                    enabled = !generalUi.isExternalPlayer
+                    enabled = !isExternalPlayer
                 )
             }
 
@@ -458,19 +431,17 @@ internal fun PlaybackSettingsSections(
         ) {
             videoSettingsItems(
                 playerSettings = playerSettings,
-                frameRateMatchingLabel = generalUi.frameRateMatchingLabel,
                 androidFrameRateStatus = androidFrameRateStatus,
                 afrExpanded = afrExpanded,
                 onToggleAfrExpanded = { afrExpanded = !afrExpanded },
                 afrHeaderFocusRequester = afrHeaderFocus,
-                onSetFrameRateMatchingMode = onSetFrameRateMatchingMode,
                 onOpenAndroidDisplaySettings = onOpenAndroidDisplaySettings,
                 onSetTunnelingEnabled = onSetTunnelingEnabled,
                 onSetExperimentalDv7ToDv81Enabled = onSetExperimentalDv7ToDv81Enabled,
                 onSetExperimentalDv7ToDv81PreserveMappingEnabled =
                     onSetExperimentalDv7ToDv81PreserveMappingEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.AUDIO },
-                enabled = !generalUi.isExternalPlayer
+                enabled = !isExternalPlayer
             )
 
             audioSettingsItems(
@@ -490,7 +461,7 @@ internal fun PlaybackSettingsSections(
                 onSetIecPackerDtshdCoreFallbackEnabled = onSetIecPackerDtshdCoreFallbackEnabled,
                 onSetFireOsIecSuperviseAudioDelayEnabled = onSetFireOsIecSuperviseAudioDelayEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.AUDIO },
-                enabled = !generalUi.isExternalPlayer
+                enabled = !isExternalPlayer
             )
         }
 
@@ -516,7 +487,7 @@ internal fun PlaybackSettingsSections(
                 onSetSubtitleBold = onSetSubtitleBold,
                 onSetSubtitleOutlineEnabled = onSetSubtitleOutlineEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.SUBTITLES },
-                enabled = !generalUi.isExternalPlayer
+                enabled = !isExternalPlayer
             )
         }
 
@@ -704,47 +675,12 @@ internal fun PlaybackSectionHeader(
 }
 
 @Composable
-internal fun FrameRateMatchingModeOptions(
-    selectedMode: FrameRateMatchingMode,
-    onSelect: (FrameRateMatchingMode) -> Unit,
+internal fun AndroidFrameRateSettingsAction(
     onOpenAndroidDisplaySettings: () -> Unit,
     onFocused: () -> Unit,
     enabled: Boolean
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        RenderTypeSettingsItem(
-            title = stringResource(R.string.playback_afr_off),
-            subtitle = stringResource(R.string.playback_afr_off_sub),
-            isSelected = selectedMode == FrameRateMatchingMode.OFF,
-            onClick = { onSelect(FrameRateMatchingMode.OFF) },
-            onFocused = onFocused,
-            enabled = enabled
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        RenderTypeSettingsItem(
-            title = stringResource(R.string.playback_afr_on_start),
-            subtitle = stringResource(R.string.playback_afr_on_start_sub),
-            isSelected = selectedMode == FrameRateMatchingMode.START,
-            onClick = { onSelect(FrameRateMatchingMode.START) },
-            onFocused = onFocused,
-            enabled = enabled
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        RenderTypeSettingsItem(
-            title = stringResource(R.string.playback_afr_on_start_stop),
-            subtitle = stringResource(R.string.playback_afr_on_start_stop_sub),
-            isSelected = selectedMode == FrameRateMatchingMode.START_STOP,
-            onClick = { onSelect(FrameRateMatchingMode.START_STOP) },
-            onFocused = onFocused,
-            enabled = enabled
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
         NavigationSettingsItem(
             icon = Icons.AutoMirrored.Filled.OpenInNew,
             title = stringResource(R.string.playback_afr_android_open),

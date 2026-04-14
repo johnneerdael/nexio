@@ -112,12 +112,6 @@
   <string name="playback_section_subtitles_desc">Langue, style et mode de rendu.</string>
   <string name="playback_afr_open">Ouvert</string>
   <string name="playback_afr_closed">Fermé</string>
-  <string name="playback_afr_off">Désactivé</string>
-  <string name="playback_afr_off_sub">Ne pas modifier la fréquence de rafraîchissement de l\'écran.</string>
-  <string name="playback_afr_on_start">Au démarrage</string>
-  <string name="playback_afr_on_start_sub">Changer au début de la lecture.</string>
-  <string name="playback_afr_on_start_stop">Au démarrage/arrêt</string>
-  <string name="playback_afr_on_start_stop_sub">Changer au début et restaurer à l\'arrêt.</string>
   <string name="playback_player_external_desc">Toujours ouvrir les flux dans une application externe</string>
   <string name="playback_player_ask_desc">Choisir le lecteur à chaque fois</string>
   <string name="audio_section">Audio</string>
