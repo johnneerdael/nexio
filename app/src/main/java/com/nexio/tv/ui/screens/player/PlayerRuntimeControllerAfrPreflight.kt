@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.player
 
 import android.util.Log
+import com.nexio.tv.core.player.AndroidFrameRateSettings
 import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import kotlinx.coroutines.Dispatchers
@@ -10,8 +11,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 
-private const val AFR_PREFLIGHT_NEXTLIB_TIMEOUT_MS = 60000L
-private const val AFR_PREFLIGHT_FALLBACK_TIMEOUT_MS = 5500L
+private const val AFR_PREFLIGHT_PROBE_TIMEOUT_MS = 6500L
 
 internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
     url: String,
@@ -54,37 +54,20 @@ internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
     val probeHeaders = headers.filterKeys { !it.equals("Range", ignoreCase = true) }
 
     try {
-        val nextLibDetection = withTimeoutOrNull(AFR_PREFLIGHT_NEXTLIB_TIMEOUT_MS) {
+        val detection = withTimeoutOrNull(AFR_PREFLIGHT_PROBE_TIMEOUT_MS) {
             withContext(Dispatchers.IO) {
-                FrameRateUtils.detectFrameRateFromNextLib(
+                FrameRateUtils.detectFrameRateFromSource(
                     context = context,
                     sourceUrl = url,
                     headers = probeHeaders
                 )
             }
         }
-        val detection = if (nextLibDetection != null) {
-            nextLibDetection
-        } else {
-            Log.w(
-                PlayerRuntimeController.TAG,
-                "AFR preflight NextLib probe failed/timed out after ${AFR_PREFLIGHT_NEXTLIB_TIMEOUT_MS}ms; trying extractor fallback"
-            )
-            withTimeoutOrNull(AFR_PREFLIGHT_FALLBACK_TIMEOUT_MS) {
-                withContext(Dispatchers.IO) {
-                    FrameRateUtils.detectFrameRateFromExtractor(
-                        context = context,
-                        sourceUrl = url,
-                        headers = probeHeaders
-                    )
-                }
-            }
-        }
 
         if (detection == null) {
             Log.w(
                 PlayerRuntimeController.TAG,
-                "AFR preflight probe timed out/failed (NextLib + extractor fallback)"
+                "AFR preflight probe timed out/failed after ${AFR_PREFLIGHT_PROBE_TIMEOUT_MS}ms"
             )
             return
         }
@@ -101,6 +84,7 @@ internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
         }
 
         val prefer23976ProbeBias = detection.raw in 23.95f..24.12f
+        val allowResolutionSwitch = AndroidFrameRateSettings.canRequestResolutionSwitch(context)
         val targetFrameRate = FrameRateUtils.refineFrameRateForDisplay(
             activity = activity,
             detectedFps = detection.snapped,
@@ -112,7 +96,7 @@ internal suspend fun PlayerRuntimeController.runAfrPreflightIfEnabled(
             frameRate = targetFrameRate,
             videoWidth = detection.videoWidth,
             videoHeight = detection.videoHeight,
-            resolutionMatchingEnabled = resolutionMatchingEnabled
+            resolutionMatchingEnabled = allowResolutionSwitch
         )
 
         if (result != null && currentStreamUrl == url) {

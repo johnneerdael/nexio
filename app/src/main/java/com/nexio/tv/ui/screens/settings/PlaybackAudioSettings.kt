@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
@@ -40,6 +41,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
+import com.nexio.tv.core.player.AndroidFrameRateSettings
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
@@ -59,11 +61,12 @@ import com.nexio.tv.ui.theme.NexioColors
 internal fun LazyListScope.videoSettingsItems(
     playerSettings: PlayerSettings,
     frameRateMatchingLabel: String,
+    androidFrameRateStatus: AndroidFrameRateSettings.Status,
     afrExpanded: Boolean,
     onToggleAfrExpanded: () -> Unit,
     afrHeaderFocusRequester: FocusRequester,
     onSetFrameRateMatchingMode: (FrameRateMatchingMode) -> Unit,
-    onSetResolutionMatchingEnabled: (Boolean) -> Unit,
+    onOpenAndroidDisplaySettings: () -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
@@ -82,7 +85,7 @@ internal fun LazyListScope.videoSettingsItems(
     item(key = "video_afr_header") {
         PlaybackSectionHeader(
             title = stringResource(R.string.playback_auto_frame_rate),
-            description = frameRateMatchingLabel,
+            description = "$frameRateMatchingLabel • ${androidFrameRateStatus.localizedLabel()}",
             expanded = afrExpanded,
             onToggle = onToggleAfrExpanded,
             focusRequester = afrHeaderFocusRequester,
@@ -95,9 +98,8 @@ internal fun LazyListScope.videoSettingsItems(
         item(key = "video_afr_options") {
             FrameRateMatchingModeOptions(
                 selectedMode = playerSettings.frameRateMatchingMode,
-                resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled,
                 onSelect = onSetFrameRateMatchingMode,
-                onSetResolutionMatchingEnabled = onSetResolutionMatchingEnabled,
+                onOpenAndroidDisplaySettings = onOpenAndroidDisplaySettings,
                 onFocused = onItemFocused,
                 enabled = enabled
             )
@@ -138,6 +140,16 @@ internal fun LazyListScope.videoSettingsItems(
             onFocused = onItemFocused,
             enabled = enabled && playerSettings.experimentalDv7ToDv81Enabled
         )
+    }
+}
+
+@Composable
+private fun AndroidFrameRateSettings.Status.localizedLabel(): String {
+    return when (this) {
+        AndroidFrameRateSettings.Status.Disabled -> stringResource(R.string.playback_afr_android_disabled)
+        AndroidFrameRateSettings.Status.SeamlessOnly -> stringResource(R.string.playback_afr_android_seamless)
+        AndroidFrameRateSettings.Status.Always -> stringResource(R.string.playback_afr_android_enabled)
+        AndroidFrameRateSettings.Status.Unknown -> stringResource(R.string.playback_afr_android_unknown)
     }
 }
 

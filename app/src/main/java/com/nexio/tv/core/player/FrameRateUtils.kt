@@ -7,8 +7,9 @@ import android.net.Uri
 import android.os.Build
 import android.util.Log
 import android.view.Display
-import io.github.anilbeesetti.nextlib.mediainfo.MediaInfo
-import io.github.anilbeesetti.nextlib.mediainfo.MediaInfoBuilder
+import androidx.media3.decoder.ffmpeg.FfmpegLibrary
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -33,16 +34,6 @@ object FrameRateUtils {
     private const val CINEMA_24_FPS = 24f
     private const val MIN_VALID_VIDEO_FPS = 10f
     private const val MAX_VALID_VIDEO_FPS = 120f
-    private val NEXTLIB_HTTP_SCHEMES = setOf("http", "https")
-    private val LIVE_STREAM_EXTENSIONS = listOf(".m3u8", ".mpd", ".ism/manifest")
-    private const val MKV_EXTENSION = ".mkv"
-    private val VC1_SOURCE_HINTS = listOf(
-        "wvc1",
-        "vc-1",
-        "video/wvc1",
-        "codec=vc1",
-        "codec=wvc1"
-    )
     private const val SWITCH_POLL_INTERVAL_MS = 60L
     private const val SWITCH_REQUIRED_STABLE_POLLS = 2
     @Volatile
@@ -403,6 +394,22 @@ object FrameRateUtils {
         }
     }
 
+    private fun parseProbeRational(value: String?): Float? {
+        val normalized = value?.trim().orEmpty()
+        if (normalized.isBlank()) return null
+        val slash = normalized.indexOf('/')
+        val parsed = if (slash >= 0) {
+            val numerator = normalized.substring(0, slash).toDoubleOrNull() ?: return null
+            val denominator = normalized.substring(slash + 1).toDoubleOrNull() ?: return null
+            if (numerator <= 0.0 || denominator <= 0.0) return null
+            numerator / denominator
+        } else {
+            normalized.toDoubleOrNull() ?: return null
+        }
+        val frameRate = parsed.toFloat()
+        return if (isValidVideoFrameRate(frameRate)) frameRate else null
+    }
+
     private fun snapProbeRateByFrameDuration(measuredFps: Float, averageFrameDurationUs: Float): Float {
         if (measuredFps in 23.5f..24.5f) {
             val frameUs23976 = 1_000_000f / NTSC_FILM_FPS
@@ -424,25 +431,63 @@ object FrameRateUtils {
         return frameRate.isFinite() && frameRate in MIN_VALID_VIDEO_FPS..MAX_VALID_VIDEO_FPS
     }
 
+    private fun parseFfmpegStreamMetadata(json: String?): FrameRateDetection? {
+        if (json.isNullOrBlank()) return null
+        val streams = runCatching {
+            JsonParser.parseString(json)
+                .asJsonObject
+                .getAsJsonArray("streams")
+                ?.mapNotNull { element ->
+                    element?.takeIf { it.isJsonObject }?.asJsonObject
+                }
+                .orEmpty()
+        }.getOrNull() ?: return null
+
+        val video = streams.firstOrNull { stream ->
+            stream.stringOrNull("codec_type").equals("video", ignoreCase = true)
+        } ?: return null
+
+        val width = video.intOrNull("width")?.takeIf { it > 0 }
+        val height = video.intOrNull("height")?.takeIf { it > 0 }
+        val measured = parseProbeRational(video.stringOrNull("avg_frame_rate"))
+            ?: parseProbeRational(video.stringOrNull("r_frame_rate"))
+            ?: return null
+
+        return FrameRateDetection(
+            raw = measured,
+            snapped = snapToStandardRate(measured),
+            videoWidth = width,
+            videoHeight = height
+        )
+    }
+
+    fun detectFrameRateFromFfmpegProbe(
+        sourceUrl: String,
+        headers: Map<String, String> = emptyMap()
+    ): FrameRateDetection? {
+        val headerBlob = headers
+            .filterKeys { !it.equals("Range", ignoreCase = true) }
+            .entries
+            .joinToString(separator = "") { (key, value) -> "$key: $value\r\n" }
+            .ifBlank { null }
+
+        return runCatching {
+            parseFfmpegStreamMetadata(
+                FfmpegLibrary.probeDolbyVisionStreamMetadataJson(sourceUrl, headerBlob)
+            )
+        }.getOrElse { error ->
+            Log.w(TAG, "FFmpeg frame rate probe failed: ${error.message}")
+            null
+        }
+    }
+
     fun detectFrameRateFromSource(
         context: Context,
         sourceUrl: String,
         headers: Map<String, String> = emptyMap()
     ): FrameRateDetection? {
-        if (isMkvSource(sourceUrl)) {
-            detectFrameRateFromExtractor(context, sourceUrl, headers)?.let { return it }
-            return detectFrameRateFromNextLib(context, sourceUrl, headers)
-        }
-        detectFrameRateFromNextLib(context, sourceUrl, headers)?.let { return it }
+        detectFrameRateFromFfmpegProbe(sourceUrl, headers)?.let { return it }
         return detectFrameRateFromExtractor(context, sourceUrl, headers)
-    }
-
-    fun detectFrameRateFromNextLib(
-        context: Context,
-        sourceUrl: String,
-        headers: Map<String, String> = emptyMap()
-    ): FrameRateDetection? {
-        return detectFrameRateWithNextLib(context, sourceUrl, headers)
     }
 
     fun detectFrameRateFromExtractor(
@@ -457,54 +502,6 @@ object FrameRateUtils {
             }
         }
         return detectFrameRateWithExtractor(context, sourceUrl, headers)
-    }
-
-    private fun detectFrameRateWithNextLib(
-        context: Context,
-        sourceUrl: String,
-        headers: Map<String, String>
-    ): FrameRateDetection? {
-        if (!shouldUseNextLibProbe(sourceUrl, headers)) return null
-
-        val embeddedResolveUrl = extractEmbeddedResolveUrl(sourceUrl)
-        val shouldPreferEmbedded = isResolveProxyUrl(sourceUrl)
-        val candidates = buildList {
-            if (shouldPreferEmbedded && !embeddedResolveUrl.isNullOrBlank() && embeddedResolveUrl != sourceUrl) {
-                add(embeddedResolveUrl)
-                add(sourceUrl)
-                return@buildList
-            }
-
-            add(sourceUrl)
-            if (!embeddedResolveUrl.isNullOrBlank() && embeddedResolveUrl != sourceUrl) {
-                add(embeddedResolveUrl)
-            }
-        }
-
-        candidates.forEach { candidateUrl ->
-            var mediaInfo: MediaInfo? = null
-            try {
-                val uri = Uri.parse(candidateUrl)
-                val builder = MediaInfoBuilder().from(context = context, uri = uri)
-                mediaInfo = builder.build() ?: return@forEach
-
-                val video = mediaInfo.videoStream ?: return@forEach
-                val measured = video.frameRate.toFloat()
-                if (!isValidVideoFrameRate(measured)) return@forEach
-
-                return FrameRateDetection(
-                    raw = measured,
-                    snapped = snapToStandardRate(measured),
-                    videoWidth = video.frameWidth.takeIf { it > 0 },
-                    videoHeight = video.frameHeight.takeIf { it > 0 }
-                )
-            } catch (e: Throwable) {
-                Log.w(TAG, "NextLib frame rate probe failed: ${e.message}")
-            } finally {
-                runCatching { mediaInfo?.release() }
-            }
-        }
-        return null
     }
 
     private fun detectFrameRateWithExtractor(
@@ -602,36 +599,6 @@ object FrameRateUtils {
         }
     }
 
-    private fun shouldUseNextLibProbe(sourceUrl: String, headers: Map<String, String>): Boolean {
-        if (sourceUrl.isBlank()) return false
-        if (isLiveStreamUrl(sourceUrl)) return false
-        if (isLikelyVc1Source(sourceUrl)) return false
-        if (isMkvSource(sourceUrl)) return true
-
-        val scheme = Uri.parse(sourceUrl).scheme?.lowercase(Locale.ROOT)
-        return when (scheme) {
-            in NEXTLIB_HTTP_SCHEMES -> true
-            "file", "content" -> true
-            null -> true
-            else -> false
-        }
-    }
-
-    private fun isLiveStreamUrl(sourceUrl: String): Boolean {
-        val normalized = sourceUrl.substringBefore('?').lowercase(Locale.ROOT)
-        return LIVE_STREAM_EXTENSIONS.any { ext -> normalized.endsWith(ext) }
-    }
-
-    private fun isMkvSource(sourceUrl: String): Boolean {
-        val normalized = sourceUrl.substringBefore('?').lowercase(Locale.ROOT)
-        return normalized.endsWith(MKV_EXTENSION)
-    }
-
-    private fun isLikelyVc1Source(sourceUrl: String): Boolean {
-        val normalized = sourceUrl.lowercase(Locale.ROOT)
-        return VC1_SOURCE_HINTS.any { hint -> normalized.contains(hint) }
-    }
-
     private fun isResolveProxyUrl(sourceUrl: String): Boolean {
         val normalized = sourceUrl.substringBefore('?').lowercase(Locale.ROOT)
         return "/resolve/" in normalized
@@ -660,9 +627,28 @@ object FrameRateUtils {
         return canChangeDisplayModeForPlayback()
     }
 
+    internal fun parseProbeRationalForTests(value: String?): Float? = parseProbeRational(value)
+
+    internal fun parseFfmpegStreamMetadataForTests(json: String?): FrameRateDetection? =
+        parseFfmpegStreamMetadata(json)
+
     internal fun resetDisplayModeSessionStateForTests() {
         blockDisplayModeChangesOutsideMainPlayer = true
         mainPlayerDisplayModeSessionActive = false
         originalModeId = null
     }
+}
+
+private fun JsonObject.stringOrNull(name: String): String? {
+    return get(name)
+        ?.takeUnless { it.isJsonNull }
+        ?.runCatching { asString }
+        ?.getOrNull()
+}
+
+private fun JsonObject.intOrNull(name: String): Int? {
+    return get(name)
+        ?.takeUnless { it.isJsonNull }
+        ?.runCatching { asInt }
+        ?.getOrNull()
 }

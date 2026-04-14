@@ -2,6 +2,10 @@
 
 package com.nexio.tv.ui.screens.settings
 
+import android.content.Intent
+import android.provider.Settings
+import android.view.KeyEvent
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -44,6 +48,7 @@ import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,11 +73,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
 import androidx.compose.ui.text.input.KeyboardType
-import android.view.KeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.unit.dp
 import androidx.activity.compose.BackHandler
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyColumn
@@ -101,12 +108,12 @@ import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamAutoPlaySource
 import com.nexio.tv.data.local.TrailerSettings
+import com.nexio.tv.core.player.AndroidFrameRateSettings
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.launch
-import android.widget.Toast
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Timer
@@ -144,6 +151,27 @@ internal fun PlaybackSettingsContent(
     val diskSpoolStorageProbeUiState by viewModel.diskSpoolStorageProbeUiState.collectAsStateWithLifecycle()
     val debridUiState by debridViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var androidFrameRateStatus by remember { mutableStateOf(viewModel.androidFrameRateStatus()) }
+    DisposableEffect(lifecycleOwner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                androidFrameRateStatus = viewModel.androidFrameRateStatus()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val openAndroidDisplaySettings: () -> Unit = {
+        runCatching {
+            context.startActivity(AndroidFrameRateSettings.displaySettingsIntent())
+        }.onFailure {
+            context.startActivity(
+                Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+        Unit
+    }
     LaunchedEffect(debridViewModel) {
         debridViewModel.messages.collect { message ->
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -293,6 +321,8 @@ internal fun PlaybackSettingsContent(
                     coroutineScope.launch { viewModel.setTrailerDelaySeconds(seconds) }
                 },
                 onSetFrameRateMatchingMode = { mode -> coroutineScope.launch { viewModel.setFrameRateMatchingMode(mode) } },
+                androidFrameRateStatus = androidFrameRateStatus,
+                onOpenAndroidDisplaySettings = openAndroidDisplaySettings,
                 onSetResolutionMatchingEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setResolutionMatchingEnabled(enabled) }
                 },
