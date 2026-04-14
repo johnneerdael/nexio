@@ -46,7 +46,7 @@ internal class DiskSpoolSession(
         var setupFailure: Throwable? = null
         try {
             openedWriter = RandomAccessFile(spoolFile, "rw")
-            openedWriter.setLength(capacityBytes)
+            openedWriter.setLength(0L)
             openedReader = RandomAccessFile(spoolFile, "r")
 
             writer = openedWriter
