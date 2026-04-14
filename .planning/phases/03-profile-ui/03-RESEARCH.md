@@ -453,14 +453,14 @@ LaunchedEffect(pin, isWorking) {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Session flag semantics: `remember` vs `rememberSaveable`**
+1. **Session flag semantics: `remember` vs `rememberSaveable`** (RESOLVED — Plan 01 Task 2 uses `remember {}`)
    - What we know: NuvioTV uses `rememberSaveable` (survives config changes + process death restore). Both are valid.
    - What's unclear: Should the selection screen re-appear after rotation? Or only after process death?
    - Recommendation: Use `remember {}` for strict "once per process" semantics. This matches Netflix/Disney+ behavior. If user wants rotation-safe session, use `rememberSaveable`.
 
-2. **D-12 Sidebar Inline Expansion: how far to implement in Phase 3**
+2. **D-12 Sidebar Inline Expansion: how far to implement in Phase 3** (RESOLVED — Plan 03 Task 1 uses `AnimatedVisibility`)
    - What we know: D-12 specifies inline profile list expansion in the sidebar. NuvioTV has no equivalent.
    - What's unclear: Should this animate with `AnimatedVisibility` pushing items down, or use a modal overlay?
    - Recommendation: `AnimatedVisibility` with `expandVertically` + `shrinkVertically` pushing nav items down. This is the most natural D-pad flow and avoids overlay z-order complexity.
