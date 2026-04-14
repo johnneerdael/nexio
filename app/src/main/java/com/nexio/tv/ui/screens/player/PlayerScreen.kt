@@ -115,6 +115,7 @@ import coil.request.ImageRequest
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
 import com.nexio.tv.core.player.ExternalPlayerLauncher
+import com.nexio.tv.data.local.InternalPlayerEngine
 import com.nexio.tv.ui.components.LoadingIndicator
 import com.nexio.tv.ui.theme.NexioColors
 import android.text.format.DateFormat
@@ -555,22 +556,44 @@ fun PlayerScreen(
             }
     ) {
         // Video Player
-        viewModel.exoPlayer?.let { player ->
-            PlayerVideoSurface(
-                player = player,
-                renderState = PlayerSurfaceRenderState(
-                    resizeMode = uiState.resizeMode,
-                    subtitleStyle = uiState.subtitleStyle,
-                    keepScreenOn = uiState.isPlaying || uiState.isBuffering,
-                    overlayCues = resolveOverlayCues(
-                        useAiOverlay = uiState.useBuiltInAiSubtitleOverlay,
-                        translatedBuiltInCues = uiState.translatedBuiltInCues,
-                        addonOverlayCues = uiState.addonOverlayCues
-                    ),
-                    suppressNativeSubtitles = uiState.useBuiltInAiSubtitleOverlay
-                ),
+        if (uiState.internalPlayerEngine == InternalPlayerEngine.LIBMPV) {
+            AndroidView(
+                factory = { context ->
+                    NexioMpvSurfaceView(context).also { view ->
+                        viewModel.attachMpvView(view)
+                    }
+                },
+                update = { view ->
+                    viewModel.attachMpvView(view)
+                    view.keepScreenOn = uiState.isPlaying || uiState.isBuffering
+                    view.applyResizeMode(uiState.resizeMode)
+                    view.applySubtitleStyle(uiState.subtitleStyle)
+                },
                 modifier = Modifier.fillMaxSize()
             )
+            DisposableEffect(Unit) {
+                onDispose {
+                    viewModel.attachMpvView(null)
+                }
+            }
+        } else {
+            viewModel.exoPlayer?.let { player ->
+                PlayerVideoSurface(
+                    player = player,
+                    renderState = PlayerSurfaceRenderState(
+                        resizeMode = uiState.resizeMode,
+                        subtitleStyle = uiState.subtitleStyle,
+                        keepScreenOn = uiState.isPlaying || uiState.isBuffering,
+                        overlayCues = resolveOverlayCues(
+                            useAiOverlay = uiState.useBuiltInAiSubtitleOverlay,
+                            translatedBuiltInCues = uiState.translatedBuiltInCues,
+                            addonOverlayCues = uiState.addonOverlayCues
+                        ),
+                        suppressNativeSubtitles = uiState.useBuiltInAiSubtitleOverlay
+                    ),
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
 
         LoadingOverlay(
@@ -745,6 +768,7 @@ fun PlayerScreen(
                     Log.d("PlayerScreen", "onToggleAspectRatio called - dispatching event")
                     viewModel.onEvent(PlayerEvent.OnToggleAspectRatio)
                 },
+                onSwitchPlayerEngine = { viewModel.onEvent(PlayerEvent.OnSwitchInternalPlayerEngine) },
                 onToggleMoreActions = {
                     if (uiState.showMoreDialog) {
                         viewModel.onEvent(PlayerEvent.OnDismissMoreDialog)
@@ -792,6 +816,17 @@ fun PlayerScreen(
                 .padding(top = 128.dp)
         ) {
             StreamSourceIndicator(text = uiState.streamSourceIndicatorText)
+        }
+
+        AnimatedVisibility(
+            visible = uiState.showPlayerEngineSwitchInfo && uiState.error == null,
+            enter = fadeIn(animationSpec = tween(180)),
+            exit = fadeOut(animationSpec = tween(180)),
+            modifier = Modifier
+                .align(Alignment.Center)
+                .zIndex(2.35f)
+        ) {
+            StreamSourceIndicator(text = uiState.playerEngineSwitchInfoText)
         }
 
         // Seek-only overlay (progress bar + time) when controls are hidden
@@ -975,6 +1010,7 @@ private fun PlayerControlsOverlayHost(
     onShowSubtitleDialog: () -> Unit,
     onShowSpeedDialog: () -> Unit,
     onToggleAspectRatio: () -> Unit,
+    onSwitchPlayerEngine: () -> Unit,
     onToggleMoreActions: () -> Unit,
     onOpenInExternalPlayer: () -> Unit,
     onResetHideTimer: () -> Unit,
@@ -1001,6 +1037,7 @@ private fun PlayerControlsOverlayHost(
         onShowSubtitleDialog = onShowSubtitleDialog,
         onShowSpeedDialog = onShowSpeedDialog,
         onToggleAspectRatio = onToggleAspectRatio,
+        onSwitchPlayerEngine = onSwitchPlayerEngine,
         onToggleMoreActions = onToggleMoreActions,
         onOpenInExternalPlayer = onOpenInExternalPlayer,
         onResetHideTimer = onResetHideTimer,
@@ -1035,6 +1072,7 @@ private fun PlayerControlsOverlay(
     onShowSubtitleDialog: () -> Unit,
     onShowSpeedDialog: () -> Unit,
     onToggleAspectRatio: () -> Unit,
+    onSwitchPlayerEngine: () -> Unit,
     onToggleMoreActions: () -> Unit,
     onOpenInExternalPlayer: () -> Unit,
     onResetHideTimer: () -> Unit,
@@ -1333,6 +1371,15 @@ private fun PlayerControlsOverlay(
                                 contentDescription = stringResource(R.string.cd_aspect_ratio),
                                 onClick = {
                                     onToggleAspectRatio()
+                                },
+                                upFocusRequester = progressBarFocusRequester,
+                                onFocused = onResetHideTimer
+                            )
+                            ControlButton(
+                                icon = Icons.Default.SwapHoriz,
+                                contentDescription = stringResource(R.string.cd_switch_player_engine),
+                                onClick = {
+                                    onSwitchPlayerEngine()
                                 },
                                 upFocusRequester = progressBarFocusRequester,
                                 onFocused = onResetHideTimer
