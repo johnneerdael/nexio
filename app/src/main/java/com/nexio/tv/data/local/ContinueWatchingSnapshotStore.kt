@@ -6,6 +6,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.sync.profilePrefsName
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.TrackingNextUpEntry
@@ -16,23 +18,59 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class ContinueWatchingSnapshotStore @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val metadataDiskCacheStore: MetadataDiskCacheStore
+class ContinueWatchingSnapshotStore private constructor(
+    private val context: Context,
+    private val metadataDiskCacheStore: MetadataDiskCacheStore,
+    private val activeProfileId: () -> Int,
+    private val injectedProfileManager: ProfileManager?
 ) {
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        metadataDiskCacheStore: MetadataDiskCacheStore,
+        profileManager: ProfileManager
+    ) : this(
+        context = context,
+        metadataDiskCacheStore = metadataDiskCacheStore,
+        activeProfileId = { profileManager.activeProfileId.value },
+        injectedProfileManager = profileManager
+    )
+
+    constructor(
+        context: Context,
+        metadataDiskCacheStore: MetadataDiskCacheStore
+    ) : this(
+        context = context,
+        metadataDiskCacheStore = metadataDiskCacheStore,
+        activeProfileId = { 1 },
+        injectedProfileManager = null
+    )
 
     companion object {
         private const val TAG = "ContinueWatchingStore"
-        private const val PREFS_NAME = "continue_watching_snapshot"
+        internal const val BASE_PREFS_NAME = "continue_watching_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
         private const val SCHEMA_VERSION = 4
     }
 
     private val gson = Gson()
 
+    private val profileManager: ProfileManager
+        get() = injectedProfileManager ?: error("ProfileManager unavailable")
+
+    private fun injectedPrefsName(): String =
+        profilePrefsName(BASE_PREFS_NAME, profileManager.activeProfileId.value)
+
+    private fun prefsName(): String =
+        if (injectedProfileManager != null) {
+            injectedPrefsName()
+        } else {
+            profilePrefsName(BASE_PREFS_NAME, activeProfileId())
+        }
+
     fun read(): ContinueWatchingSnapshot? {
         return runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
             val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
             decode(raw)
         }.onFailure { error ->
@@ -43,7 +81,7 @@ class ContinueWatchingSnapshotStore @Inject constructor(
 
     fun write(snapshot: ContinueWatchingSnapshot) {
         runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
                 addProperty("schemaVersion", SCHEMA_VERSION)
                 addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
@@ -62,7 +100,7 @@ class ContinueWatchingSnapshotStore @Inject constructor(
 
     fun clear() {
         runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
             prefs.edit().remove(SNAPSHOT_KEY).apply()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear continue watching snapshot", error)

@@ -6,6 +6,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.sync.profilePrefsName
 import com.nexio.tv.domain.model.LibraryEntry
 import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.PosterShape
@@ -15,13 +17,37 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class SimklLibrarySnapshotStore @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val metadataDiskCacheStore: MetadataDiskCacheStore
+class SimklLibrarySnapshotStore private constructor(
+    private val context: Context,
+    private val metadataDiskCacheStore: MetadataDiskCacheStore,
+    private val activeProfileId: () -> Int,
+    private val injectedProfileManager: ProfileManager?
 ) {
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        metadataDiskCacheStore: MetadataDiskCacheStore,
+        profileManager: ProfileManager
+    ) : this(
+        context = context,
+        metadataDiskCacheStore = metadataDiskCacheStore,
+        activeProfileId = { profileManager.activeProfileId.value },
+        injectedProfileManager = profileManager
+    )
+
+    constructor(
+        context: Context,
+        metadataDiskCacheStore: MetadataDiskCacheStore
+    ) : this(
+        context = context,
+        metadataDiskCacheStore = metadataDiskCacheStore,
+        activeProfileId = { 1 },
+        injectedProfileManager = null
+    )
+
     companion object {
         private const val TAG = "SimklLibraryStore"
-        private const val PREFS_NAME = "simkl_library_snapshot"
+        internal const val BASE_PREFS_NAME = "simkl_library_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
         private const val SCHEMA_VERSION = 1
     }
@@ -53,9 +79,22 @@ class SimklLibrarySnapshotStore @Inject constructor(
 
     private val gson = Gson()
 
+    private val profileManager: ProfileManager
+        get() = injectedProfileManager ?: error("ProfileManager unavailable")
+
+    private fun injectedPrefsName(): String =
+        profilePrefsName(BASE_PREFS_NAME, profileManager.activeProfileId.value)
+
+    private fun prefsName(): String =
+        if (injectedProfileManager != null) {
+            injectedPrefsName()
+        } else {
+            profilePrefsName(BASE_PREFS_NAME, activeProfileId())
+        }
+
     fun read(): Snapshot? {
         return runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
             val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
             decodeSnapshot(raw)
         }.onFailure { error ->
@@ -66,7 +105,7 @@ class SimklLibrarySnapshotStore @Inject constructor(
 
     fun write(snapshot: Snapshot) {
         runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
                 addProperty("schemaVersion", SCHEMA_VERSION)
                 addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
@@ -89,7 +128,7 @@ class SimklLibrarySnapshotStore @Inject constructor(
 
     fun clear() {
         runCatching {
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().remove(SNAPSHOT_KEY).commit()
+            context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE).edit().remove(SNAPSHOT_KEY).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear SIMKL library snapshot", error)
         }
