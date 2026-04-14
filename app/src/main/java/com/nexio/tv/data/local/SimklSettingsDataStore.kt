@@ -1,15 +1,21 @@
 package com.nexio.tv.data.local
 
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
-import com.nexio.tv.core.profile.ProfileManager
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import androidx.datastore.preferences.preferencesDataStore
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private val Context.simklSettingsDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "simkl_settings"
+)
 
 object SimklCatalogIds {
     const val TV_TRENDING_TODAY = "simkl_tv_trending_today"
@@ -45,36 +51,28 @@ data class SimklCatalogPreferences(
 )
 
 @Singleton
-@OptIn(ExperimentalCoroutinesApi::class)
 class SimklSettingsDataStore @Inject constructor(
-    private val factory: ProfileDataStoreFactory,
-    private val profileManager: ProfileManager
+    @ApplicationContext private val context: Context
 ) {
-    companion object {
-        private const val FEATURE = "simkl_settings"
-    }
+    private val dataStore = context.simklSettingsDataStore
+    private fun store() = dataStore
 
     private val catalogEnabledSetKey = stringSetPreferencesKey("catalog_enabled_set")
     private val catalogOrderCsvKey = stringPreferencesKey("catalog_order_csv")
 
-    private fun store(profileId: Int = profileManager.activeProfileId.value) =
-        factory.get(profileId, FEATURE)
-
-    val catalogPreferences: Flow<SimklCatalogPreferences> = profileManager.activeProfileId.flatMapLatest { pid ->
-        store(pid).data.map { prefs ->
-            val enabled = sanitizeEnabledCatalogs(prefs[catalogEnabledSetKey] ?: SimklCatalogIds.DEFAULT_ENABLED)
-            val order = sanitizeCatalogOrder(
-                prefs[catalogOrderCsvKey]
-                    ?.split(',')
-                    ?.map { it.trim() }
-                    ?.filter { it.isNotBlank() }
-                    ?: SimklCatalogIds.BUILT_IN_ORDER
-            )
-            SimklCatalogPreferences(
-                enabledCatalogs = enabled,
-                catalogOrder = order
-            )
-        }
+    val catalogPreferences: Flow<SimklCatalogPreferences> = dataStore.data.map { prefs ->
+        val enabled = sanitizeEnabledCatalogs(prefs[catalogEnabledSetKey] ?: SimklCatalogIds.DEFAULT_ENABLED)
+        val order = sanitizeCatalogOrder(
+            prefs[catalogOrderCsvKey]
+                ?.split(',')
+                ?.map { it.trim() }
+                ?.filter { it.isNotBlank() }
+                ?: SimklCatalogIds.BUILT_IN_ORDER
+        )
+        SimklCatalogPreferences(
+            enabledCatalogs = enabled,
+            catalogOrder = order
+        )
     }
 
     suspend fun setCatalogEnabled(catalogId: String, enabled: Boolean) {
