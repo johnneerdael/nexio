@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(nexio_native LANGUAGES C CXX)
+project(dovi_bridge LANGUAGES C CXX)
 
 option(DOVI_ENABLE_LIBDOVI "Link against a real libdovi static library" OFF)
 set(DOVI_LIBDOVI_STATIC_LIB "" CACHE FILEPATH "Path to libdovi static archive (.a)")
