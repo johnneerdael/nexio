@@ -403,10 +403,12 @@ internal fun HomeViewModel.loadDisabledHomeCatalogPreferencePipeline() {
             disabledHomeCatalogKeys = newKeys
             rebuildCatalogOrder(addonsCache)
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_disabled_home_catalogs")
+            catalogUpdateJob?.cancel()
+            catalogUpdateJob = viewModelScope.launch {
+                updateCatalogRowsPipeline()
+            }
             if (addonsCache.isNotEmpty()) {
                 loadAllCatalogsPipeline(addonsCache)
-            } else {
-                scheduleUpdateCatalogRows()
             }
         }
     }
@@ -1407,6 +1409,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             mdbListSnapshot = effectiveMDBListSnapshot,
             mdbListPrefs = mdbListPrefs,
             persistedMDBListSyntheticGroups = persistedMDBListSyntheticGroups,
+            disabledHomeCatalogKeys = disabledHomeCatalogKeys,
             startupHydrationPending = startupHydrationPending,
             refreshInProgress = refreshInProgress,
             hasPersistedCatalogSnapshot = hasPersistedCatalogSnapshot,
@@ -1420,8 +1423,11 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
 
     val updateResult = withContext(Dispatchers.Default) {
         val syntheticTraktGroups = persistedTraktSyntheticGroups.toSyntheticCatalogOrderGroups()
+            .filterNot { isSyntheticHomeCatalogDisabled(it.orderKey, disabledHomeCatalogKeys) }
         val syntheticSimklGroups = persistedSimklSyntheticGroups.toSyntheticCatalogOrderGroups()
+            .filterNot { isSyntheticHomeCatalogDisabled(it.orderKey, disabledHomeCatalogKeys) }
         val syntheticMDBListGroups = persistedMDBListSyntheticGroups.toSyntheticCatalogOrderGroups()
+            .filterNot { isSyntheticHomeCatalogDisabled(it.orderKey, disabledHomeCatalogKeys) }
         val rawRowsByKey = orderedKeys
             .mapNotNull { key ->
                 catalogSnapshot[key]?.let { row ->
@@ -1689,12 +1695,24 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
 internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
     snapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot
 ) {
-    _fullCatalogRows.value = snapshot.fullCatalogRows
+    val filteredSnapshot = snapshot.filterDisabledHomeCatalogRows(
+        disabledHomeCatalogKeys = disabledHomeCatalogKeys,
+        isAddonRowDisabled = { row ->
+            isCatalogDisabled(
+                addonBaseUrl = row.addonBaseUrl,
+                addonId = row.addonId,
+                type = row.apiType,
+                catalogId = row.catalogId,
+                catalogName = row.catalogName
+            )
+        }
+    )
+    _fullCatalogRows.value = filteredSnapshot.fullCatalogRows
     _uiState.update { state ->
         val snapshotGridItems = if (state.homeLayout == HomeLayout.GRID) {
             buildGridItemsFromRowsPipeline(
-                rows = snapshot.catalogRows,
-                heroItems = snapshot.heroItems,
+                rows = filteredSnapshot.catalogRows,
+                heroItems = filteredSnapshot.heroItems,
                 heroSectionEnabled = state.heroSectionEnabled
             )
         } else {
@@ -1702,14 +1720,63 @@ internal fun HomeViewModel.applyHomeSnapshotToUiPipeline(
         }
 
         state.copy(
-            catalogRows = snapshot.catalogRows,
-            heroItems = snapshot.heroItems,
+            catalogRows = filteredSnapshot.catalogRows,
+            heroItems = filteredSnapshot.heroItems,
             gridItems = if (state.gridItems == snapshotGridItems) state.gridItems else snapshotGridItems,
             isLoading = false,
             error = null
         )
     }
-    refreshTrailerMetadataAvailabilityPipeline(snapshot.catalogRows)
+    refreshTrailerMetadataAvailabilityPipeline(filteredSnapshot.catalogRows)
+}
+
+private fun com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot.filterDisabledHomeCatalogRows(
+    disabledHomeCatalogKeys: Set<String>,
+    isAddonRowDisabled: (CatalogRow) -> Boolean
+): com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot {
+    fun isDisabled(row: CatalogRow): Boolean {
+        return when (row.addonId) {
+            TRAKT_RAIL_ADDON_ID,
+            SIMKL_RAIL_ADDON_ID,
+            MDBLIST_RAIL_ADDON_ID -> {
+                isSyntheticHomeCatalogDisabled(row.catalogId, disabledHomeCatalogKeys) ||
+                    isSyntheticHomeCatalogDisabled(homeCatalogGlobalKey(row), disabledHomeCatalogKeys) ||
+                    disabledHomeCatalogKeys.any { disabledKey ->
+                        val disabledSlug = slugifySyntheticHomeCatalogKey(disabledKey)
+                        disabledSlug != "custom" && row.catalogId.lowercase().contains(disabledSlug)
+                    }
+            }
+            else -> isAddonRowDisabled(row)
+        }
+    }
+
+    val filteredFullRows = fullCatalogRows.filterNot(::isDisabled)
+    val filteredDisplayRows = catalogRows.filterNot(::isDisabled)
+    if (filteredFullRows.size == fullCatalogRows.size && filteredDisplayRows.size == catalogRows.size) {
+        return this
+    }
+
+    val retainedItemKeys = filteredFullRows
+        .asSequence()
+        .flatMap { row -> row.items.asSequence() }
+        .map { item -> "${item.apiType}:${item.id}" }
+        .toSet()
+    return copy(
+        catalogRows = filteredDisplayRows,
+        fullCatalogRows = filteredFullRows,
+        heroItems = heroItems.filter { item -> "${item.apiType}:${item.id}" in retainedItemKeys },
+        orderedGroupKeys = orderedGroupKeys.filterNot { key ->
+            isSyntheticHomeCatalogDisabled(key, disabledHomeCatalogKeys)
+        }
+    )
+}
+
+private fun slugifySyntheticHomeCatalogKey(value: String): String {
+    return canonicalSyntheticCatalogOrderKey(value)
+        .lowercase()
+        .replace(Regex("[^a-z0-9]+"), "_")
+        .trim('_')
+        .ifBlank { "custom" }
 }
 
 internal fun HomeViewModel.applyPendingPersistedHomeSnapshotIfPossiblePipeline(reason: String) {
@@ -1885,6 +1952,7 @@ private fun buildCatalogComputationSignature(
     mdbListSnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot,
     mdbListPrefs: MDBListCatalogPreferences,
     persistedMDBListSyntheticGroups: List<PersistedSyntheticCatalogGroup>,
+    disabledHomeCatalogKeys: Set<String>,
     startupHydrationPending: Boolean,
     refreshInProgress: Boolean,
     hasPersistedCatalogSnapshot: Boolean,
@@ -1908,6 +1976,7 @@ private fun buildCatalogComputationSignature(
     signature = (signature * 31) + mdbListSnapshot.hashCode()
     signature = (signature * 31) + mdbListPrefs.hashCode()
     signature = (signature * 31) + persistedMDBListSyntheticGroups.hashCode()
+    signature = (signature * 31) + disabledHomeCatalogKeys.hashCode()
     signature = (signature * 31) + startupHydrationPending.hashCode()
     signature = (signature * 31) + refreshInProgress.hashCode()
     signature = (signature * 31) + hasPersistedCatalogSnapshot.hashCode()

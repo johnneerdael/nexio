@@ -98,8 +98,11 @@ internal fun buildExpectedConfiguredHomeOrderKeys(
     mdbSnapshot: MDBListDiscoverySnapshot
 ): List<String> {
     val traktKeys = buildExpectedConfiguredTraktOrderKeys(traktPrefs)
+        .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
     val simklKeys = buildExpectedConfiguredSimklOrderKeys(simklPrefs)
+        .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
     val mdbKeys = buildExpectedConfiguredMDBListOrderKeys(mdbPrefs, mdbSnapshot)
+        .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
     val addonKeys = buildExpectedConfiguredAddonOrderKeys(addons, disabledHomeCatalogKeys)
     return (traktKeys + simklKeys + mdbKeys + addonKeys).distinct()
 }
@@ -120,15 +123,15 @@ internal fun buildPublishableConfiguredHomeOrderKeys(
         prefs = traktPrefs,
         snapshot = traktSnapshot,
         hasTraktUpNextItems = hasTraktUpNextItems
-    )
+    ).filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
     val simklKeys = buildPublishableConfiguredSimklOrderKeys(
         prefs = simklPrefs,
         snapshot = simklSnapshot
-    )
+    ).filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
     val mdbKeys = buildPublishableConfiguredMDBListOrderKeys(
         prefs = mdbPrefs,
         snapshot = mdbSnapshot
-    )
+    ).filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
     val addonKeys = buildExpectedConfiguredAddonOrderKeys(addons, disabledHomeCatalogKeys)
         .filter { it in availableAddonOrderKeys }
     return (traktKeys + simklKeys + mdbKeys + addonKeys).distinct()
@@ -328,6 +331,18 @@ internal fun canonicalSyntheticCatalogOrderKey(value: String): String {
         }
 
         else -> trimmed
+    }
+}
+
+internal fun isSyntheticHomeCatalogDisabled(
+    key: String,
+    disabledHomeCatalogKeys: Set<String>
+): Boolean {
+    if (key in disabledHomeCatalogKeys) return true
+    val canonicalKey = canonicalSyntheticCatalogOrderKey(key)
+    if (canonicalKey.isBlank()) return false
+    return disabledHomeCatalogKeys.any { disabledKey ->
+        canonicalSyntheticCatalogOrderKey(disabledKey) == canonicalKey
     }
 }
 
