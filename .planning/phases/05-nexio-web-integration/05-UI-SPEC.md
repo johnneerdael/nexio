@@ -25,7 +25,7 @@ created: 2026-04-14
 | Preset | not applicable |
 | Component library | none (hand-rolled Vue components following Obsidian Lens spec) |
 | Icon library | Material Symbols Outlined (loaded via Google Fonts, `material-symbols-outlined` class) |
-| Font | Manrope (display/headlines, weights 400/700/800) + Inter (body/labels, weights 400/500/700) |
+| Font | Manrope (display/headlines, weights 400/700) + Inter (body/labels, weights 400/700) |
 
 Source: `nexio-web/DESIGN.md`, `nexio-web/tailwind.config.ts`, `nexio-web/assets/css/main.css`
 
@@ -64,11 +64,12 @@ All sizes use the existing Manrope + Inter dual-typeface strategy. No new font s
 
 | Role | Size | Tailwind | Weight | Line Height | Font | Usage |
 |------|------|----------|--------|-------------|------|-------|
+| Meta | 10px (0.625rem) | text-[10px] | 700 (bold) | 1.0 | Inter | Section eyebrows in all-caps + 0.18em tracking, form labels, metadata chips, uppercase tracking labels, badge pattern (matches existing badge pattern) |
 | Body | 14px (0.875rem) | text-sm | 400 (regular) | 1.6 | Inter | Card descriptions, helper text, panel body copy |
-| Label | 12px (0.75rem) | text-xs | 500 (medium) | 1.4 | Inter | Form labels, metadata chips, uppercase tracking labels |
-| Meta | 10px (0.625rem) | text-[10px] | 700 (bold) | 1.0 | Inter | Section eyebrows in all-caps + 0.18em tracking (matches existing badge pattern) |
 | Heading | 18px (1.125rem) | text-lg | 700 (bold) | 1.25 | Manrope | Panel section titles, profile name in card |
-| Display | 32px (2rem) | text-4xl | 800 (extrabold) | 1.1 | Manrope | Profile dashboard page hero title ("Manage Profiles") |
+| Display | 32px (2rem) | text-4xl | 700 (bold) | 1.1 | Manrope | Profile dashboard page hero title ("Manage Profiles") |
+
+**Weights in use:** 400 (regular) for body copy; 700 (bold) for all emphasis — Meta eyebrows, Heading titles, Display hero. No other weights.
 
 Pairing rule: all-caps `text-[10px] font-bold tracking-[0.18em] text-zinc-500` eyebrow label above `text-lg font-bold text-on-surface` section heading — this is the existing "High-Low" signature already used in FormatterWorkspace and CatalogInventory.
 
@@ -143,7 +144,7 @@ Each profile shown as a card in the dashboard grid.
 - Primary profile indicator: small badge `"Master"` in `text-[10px] font-bold uppercase text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full`
 - Footer action row: `flex items-center justify-between mt-auto`
   - Left: `"Manage"` button as `text-sm font-semibold text-primary hover:underline`
-  - Right (non-primary profiles only): delete icon button — `rounded-full p-2 text-zinc-600 hover:text-danger hover:bg-danger/10 transition-colors`
+  - Right (non-primary profiles only): delete icon button — `rounded-full p-2 text-zinc-600 hover:text-danger hover:bg-danger/10 transition-colors` with `aria-label="Delete {profile name}"` (e.g. `aria-label="Delete Profile 2"`)
 
 ### ProfileDetailShell
 
@@ -251,7 +252,8 @@ All copy is English. Tone: precise, direct, no filler phrases. Matches existing 
 | Primary CTA — save name | "Save Name" |
 | Primary CTA — link Trakt | "Link Trakt" |
 | Primary CTA — link Simkl | "Link Simkl" |
-| Primary CTA — unlink | "Unlink" |
+| Primary CTA — unlink Trakt | "Unlink Trakt" |
+| Primary CTA — unlink Simkl | "Unlink Simkl" |
 | Primary CTA — save catalog order | "Save Configuration" (reuse from CatalogInventory) |
 | Primary CTA — apply formatter | "Apply Changes" (reuse from FormatterWorkspace) |
 | Dashboard page heading | "Profiles" |
