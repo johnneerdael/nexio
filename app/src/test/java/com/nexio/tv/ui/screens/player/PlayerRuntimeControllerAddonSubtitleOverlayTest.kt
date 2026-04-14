@@ -18,6 +18,11 @@ class PlayerRuntimeControllerAddonSubtitleOverlayTest {
     }
 
     @Test
+    fun assSsaDoesNotUseSimpleCueOverlay() {
+        assertFalse(addonSubtitleSupportsOverlay(MimeTypes.TEXT_SSA))
+    }
+
+    @Test
     fun `ai translation accepts ass and ssa but overlay still rejects them`() {
         assertTrue(subtitleSupportsAiTranslationForTest("https://example.test/subtitle.ass"))
         assertTrue(subtitleSupportsAiTranslationForTest("https://example.test/subtitle.ssa"))
