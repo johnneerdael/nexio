@@ -5,6 +5,7 @@ data class UserProfile(
     val name: String,
     val avatarColorHex: String,
     val usesPrimaryAddons: Boolean = false,
+    val avatarUrl: String? = null,
     val avatarId: String? = null,       // D-02: Supabase avatar catalog ref
     val pinEnabled: Boolean = false     // D-03: server-side PIN lock state
 ) {

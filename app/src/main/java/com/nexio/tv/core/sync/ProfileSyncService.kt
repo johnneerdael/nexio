@@ -42,6 +42,7 @@ class ProfileSyncService @Inject constructor(
                                 put("profile_index", profile.id)
                                 put("name", profile.name)
                                 put("avatar_color_hex", profile.avatarColorHex)
+                                profile.avatarUrl?.let { put("avatar_url", it) }
                                 put("uses_primary_addons", profile.usesPrimaryAddons)
                                 profile.avatarId?.let { put("avatar_id", it) } ?: put("avatar_id", JsonNull)
                                 put("pin_enabled", profile.pinEnabled)
@@ -79,6 +80,7 @@ class ProfileSyncService @Inject constructor(
                         name = profile.name,
                         avatarColorHex = profile.avatarColorHex,
                         usesPrimaryAddons = profile.usesPrimaryAddons,
+                        avatarUrl = profile.avatarUrl,
                         avatarId = profile.avatarId,
                         pinEnabled = profile.pinEnabled
                     )
