@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
+import com.nexio.tv.data.local.DEFAULT_MAX_RECENT_SEARCHES
+import com.nexio.tv.data.local.SearchHistoryDataStore
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
@@ -33,7 +35,8 @@ class SearchViewModel @Inject constructor(
     private val addonRepository: AddonRepository,
     private val catalogRepository: CatalogRepository,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
-    private val playerSettingsDataStore: PlayerSettingsDataStore
+    private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val searchHistoryDataStore: SearchHistoryDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -114,6 +117,13 @@ class SearchViewModel @Inject constructor(
                 _uiState.update { it.copy(catalogTypeSuffixEnabled = enabled) }
             }
         }
+        viewModelScope.launch {
+            searchHistoryDataStore.recentSearches.collectLatest { recentSearches ->
+                _uiState.update {
+                    it.copy(recentSearches = recentSearches.take(DEFAULT_MAX_RECENT_SEARCHES))
+                }
+            }
+        }
     }
 
     private data class LayoutPrefs(
@@ -128,6 +138,7 @@ class SearchViewModel @Inject constructor(
         when (event) {
             is SearchEvent.QueryChanged -> onQueryChanged(event.query)
             SearchEvent.SubmitSearch -> submitSearch()
+            SearchEvent.ClearRecentSearches -> clearRecentSearches()
             is SearchEvent.LoadMoreCatalog -> loadMoreCatalogItems(
                 catalogId = event.catalogId,
                 addonId = event.addonId,
@@ -241,6 +252,12 @@ class SearchViewModel @Inject constructor(
         performSearch(_uiState.value.query)
     }
 
+    private fun clearRecentSearches() {
+        viewModelScope.launch {
+            searchHistoryDataStore.clearRecentSearches()
+        }
+    }
+
     private fun performSearch(rawQuery: String) {
         val query = rawQuery.trim()
         suggestionJob?.cancel()
@@ -250,6 +267,12 @@ class SearchViewModel @Inject constructor(
                 query = rawQuery,
                 suggestions = emptyList()
             )
+        }
+
+        if (query.length >= 2) {
+            viewModelScope.launch {
+                searchHistoryDataStore.saveRecentSearch(query, DEFAULT_MAX_RECENT_SEARCHES)
+            }
         }
 
         // Cancel any in-flight work from the previous query.

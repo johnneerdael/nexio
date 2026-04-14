@@ -75,7 +75,6 @@
   <string name="trakt_catalogs_enabled_count">%1$d 个已启用</string>
   <string name="animeskip_enable_title">启用 Anime Skip</string>
   <string name="trakt_hide_recommendation">隐藏推荐</string>
-  <string name="trakt_unaired_now_shown">目前显示尚未播出的后续剧集</string>
   <string name="trakt_catalog_popular_shows_subtitle">长期人气最高的剧集。</string>
   <string name="audio_dv5_compatibility_sub">允许 DV5 流使用 DV8.1 兼容路径。可能会修复某些设备上的颜色/信号问题，但可能导致其他设备出现异常。</string>
   <string name="tmdb_dialog_placeholder">输入 TMDB API 密钥</string>
@@ -91,7 +90,6 @@
   <string name="mdblist_list_item_count_subtitle">%1$d 个项目</string>
   <string name="trakt_catalog_up_next">继续观看 (Next Up)</string>
   <string name="animeskip_dialog_subtitle">在 anime-skip.com/account/settings 创建您自己的客户端 ID</string>
-  <string name="trakt_unaired_now_hidden">尚未播出的后续剧集现已隐藏</string>
   <string name="animeskip_enable_subtitle">从 anime-skip.com 获取跳过时间戳</string>
   <string name="trakt_catalog_trending_shows_subtitle">当前观众活跃度最高的剧集。</string>
   <string name="trakt_catalog_recommended_shows">推荐剧集</string>
@@ -521,10 +519,6 @@
   <string name="trakt_missing_credentials">local.properties 中缺少 TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET。</string>
   <string name="trakt_continue_watching_window">“继续观看”的时间窗口</string>
   <string name="trakt_continue_watching_subtitle">包含在“继续观看”栏目中的 Trakt 历史记录时长</string>
-  <string name="trakt_unaired_next_up">未播出的下一集</string>
-  <string name="trakt_unaired_next_up_subtitle">在播出前显示即将播出的剧集</string>
-  <string name="trakt_unaired_shown">已显示</string>
-  <string name="trakt_unaired_hidden">已隐藏</string>
   <string name="trakt_cached_label">已缓存</string>
   <string name="trakt_stat_movies">电影</string>
   <string name="trakt_stat_shows">剧集</string>
@@ -538,8 +532,6 @@
   <string name="trakt_back">返回</string>
   <string name="trakt_cw_window_title">“继续观看”的时间窗口</string>
   <string name="trakt_cw_window_subtitle">选择多长时间内的 Trakt 历史记录应该显示在“继续观看”中。</string>
-  <string name="trakt_unaired_dialog_title">未播出的下一集</string>
-  <string name="trakt_unaired_dialog_subtitle">选择“继续观看”是否应该包含尚未播出的即将推出的剧集。</string>
   <string name="trakt_show_unaired">显示未播出的剧集</string>
   <string name="trakt_hide_unaired">隐藏未播出的剧集</string>
   <string name="trakt_all_history">全部历史记录</string>

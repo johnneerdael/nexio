@@ -159,6 +159,30 @@ class TraktProgressService @Inject constructor(
         val hasCompletedSnapshot: Boolean
     )
 
+    private data class DerivedNextUpCandidate(
+        val entry: NextUpEntry,
+        val weakDerivation: Boolean
+    )
+
+    private data class NextEpisodeDecision(
+        val season: Int,
+        val episode: Int,
+        val weakDerivation: Boolean
+    )
+
+    private data class CachedNextUpValidation(
+        val result: TraktNextUpValidationResult,
+        val updatedAtMs: Long,
+        val ttlMs: Long
+    ) {
+        fun freshness(): TraktNextUpValidationCacheEntry {
+            return TraktNextUpValidationCacheEntry(
+                updatedAtMs = updatedAtMs,
+                ttlMs = ttlMs
+            )
+        }
+    }
+
     private sealed interface ShowNextUpFetchResult {
         data class Success(val entry: NextUpEntry?, val hasCompletedSnapshot: Boolean) : ShowNextUpFetchResult
         data object Failure : ShowNextUpFetchResult
@@ -188,6 +212,8 @@ class TraktProgressService @Inject constructor(
     private val hiddenProgressState = MutableStateFlow(HiddenProgressSnapshot())
     private val episodeProgressState = MutableStateFlow<Map<String, EpisodeProgressCacheEntry>>(emptyMap())
     private val showNextUpState = MutableStateFlow<Map<String, ShowNextUpCacheEntry>>(emptyMap())
+    private val nextUpValidationCache = mutableMapOf<String, CachedNextUpValidation>()
+    private val nextUpValidationBypassKeys = mutableSetOf<String>()
     private val hasLoadedRemoteProgress = MutableStateFlow(false)
     private val cacheMutex = Mutex()
     private val metadataMutex = Mutex()
@@ -248,9 +274,14 @@ class TraktProgressService @Inject constructor(
     private val maxRecentEpisodeHistoryEntries = 300
     private val metadataHydrationLimit = 110
     private val metadataFetchSemaphore = Semaphore(5)
+    private val nextUpValidationSemaphore = Semaphore(2)
     private val fastSyncThrottleMs = 15_000L
     private val manualRefreshSignalThrottleMs = 2_000L
     private val eventDrivenRefreshThrottleMs = 30_000L
+    private val nextUpValidationVisibleCandidateLimit = 20
+    private val nextUpValidationBudget = 5
+    private val nextUpValidationPositiveTtlMs = 10 * 60_000L
+    private val nextUpValidationNegativeTtlMs = 5 * 60_000L
     @Volatile
     private var lastEventDrivenRefreshMs: Long = 0L
     @Volatile
@@ -1042,6 +1073,8 @@ class TraktProgressService @Inject constructor(
             keys.forEach { key ->
                 showNextUpLastAttemptAtMs.remove(key)
                 inFlightShowNextUpKeys.remove(key)
+                nextUpValidationCache.remove(key)
+                nextUpValidationBypassKeys.add(key)
             }
         }
         trace("next-up cache invalidated: keys=${keys.joinToString()}")
@@ -1428,7 +1461,7 @@ class TraktProgressService @Inject constructor(
      * Instead, we determine the next unwatched episode by looking at the most recently
      * completed episode per show and incrementing, using addon metadata when available.
      */
-    private fun deriveNextUpFromHistory(
+    private suspend fun deriveNextUpFromHistory(
         progressSnapshot: List<WatchProgress>,
         watchedShows: Map<String, WatchedShowIndexEntry>,
         hiddenProgress: HiddenProgressSnapshot
@@ -1438,7 +1471,7 @@ class TraktProgressService @Inject constructor(
             .filter { (it.progressPercent ?: 0f) >= 90f }
             .groupBy { it.contentId }
 
-        val entries = mutableListOf<NextUpEntry>()
+        val entries = mutableListOf<DerivedNextUpCandidate>()
 
         for ((contentId, episodes) in completedByShow) {
             val canonicalId = canonicalLookupKey(contentId)
@@ -1452,35 +1485,43 @@ class TraktProgressService @Inject constructor(
             val lastSeason = latestEpisode.season ?: continue
             val lastEpisode = latestEpisode.episode ?: continue
 
-            val (nextSeason, nextEpisode) = determineNextEpisode(
+            val nextEpisodeDecision = determineNextEpisode(
                 contentId = contentId,
                 lastSeason = lastSeason,
                 lastEpisode = lastEpisode
             ) ?: continue
+            val nextSeason = nextEpisodeDecision.season
+            val nextEpisode = nextEpisodeDecision.episode
 
             if (hiddenProgress.hiddenSeasonKeys.contains(hiddenSeasonKey(contentId, nextSeason))) continue
 
             val videoId = "$contentId:$nextSeason:$nextEpisode"
 
             entries.add(
-                NextUpEntry(
-                    contentId = contentId,
-                    contentType = "series",
-                    name = showName,
-                    season = nextSeason,
-                    episode = nextEpisode,
-                    episodeTitle = null,
-                    videoId = videoId,
-                    firstAired = null,
-                    firstAiredMs = 0L,
-                    activityAtMs = latestEpisode.lastWatched,
-                    traktShowId = showInfo?.traktShowId ?: latestEpisode.traktShowId,
-                    traktEpisodeId = null
+                DerivedNextUpCandidate(
+                    entry = NextUpEntry(
+                        contentId = contentId,
+                        contentType = "series",
+                        name = showName,
+                        season = nextSeason,
+                        episode = nextEpisode,
+                        episodeTitle = null,
+                        videoId = videoId,
+                        firstAired = null,
+                        firstAiredMs = 0L,
+                        activityAtMs = latestEpisode.lastWatched,
+                        traktShowId = showInfo?.traktShowId ?: latestEpisode.traktShowId,
+                        traktEpisodeId = null
+                    ),
+                    weakDerivation = nextEpisodeDecision.weakDerivation
                 )
             )
         }
 
-        return entries.sortedByDescending { it.activityAtMs }
+        return validateNextUpCandidates(
+            candidates = entries.sortedByDescending { it.entry.activityAtMs },
+            hiddenProgress = hiddenProgress
+        )
     }
 
     /**
@@ -1493,23 +1534,174 @@ class TraktProgressService @Inject constructor(
         contentId: String,
         lastSeason: Int,
         lastEpisode: Int
-    ): Pair<Int, Int>? {
+    ): NextEpisodeDecision? {
         val metadata = metadataState.value[contentId]
         if (metadata != null && metadata.episodes.isNotEmpty()) {
             val nextInSeason = metadata.episodes.keys
                 .filter { (s, e) -> s == lastSeason && e > lastEpisode }
                 .minByOrNull { (_, e) -> e }
-            if (nextInSeason != null) return nextInSeason
+            if (nextInSeason != null) {
+                return NextEpisodeDecision(
+                    season = nextInSeason.first,
+                    episode = nextInSeason.second,
+                    weakDerivation = false
+                )
+            }
 
             val nextSeasonEp = metadata.episodes.keys
                 .filter { (s, _) -> s > lastSeason }
                 .minByOrNull { (s, e) -> s * 10000 + e }
-            if (nextSeasonEp != null) return nextSeasonEp
+            if (nextSeasonEp != null) {
+                return NextEpisodeDecision(
+                    season = nextSeasonEp.first,
+                    episode = nextSeasonEp.second,
+                    weakDerivation = false
+                )
+            }
 
             return null
         }
 
-        return lastSeason to (lastEpisode + 1)
+        return NextEpisodeDecision(
+            season = lastSeason,
+            episode = lastEpisode + 1,
+            weakDerivation = true
+        )
+    }
+
+    private suspend fun validateNextUpCandidates(
+        candidates: List<DerivedNextUpCandidate>,
+        hiddenProgress: HiddenProgressSnapshot
+    ): List<NextUpEntry> {
+        if (candidates.isEmpty()) return emptyList()
+
+        val now = System.currentTimeMillis()
+        val cacheSnapshot = showNextUpMutex.withLock {
+            nextUpValidationCache.mapValues { it.value.freshness() }
+        }
+        val bypassSnapshot = showNextUpMutex.withLock {
+            nextUpValidationBypassKeys.toSet()
+        }
+        val validationCandidates = candidates.mapIndexed { index, candidate ->
+            val key = canonicalLookupKey(candidate.entry.contentId)
+            TraktNextUpValidationCandidate(
+                contentId = key,
+                activityAtMs = candidate.entry.activityAtMs,
+                visibleRank = index + 1,
+                weakDerivation = candidate.weakDerivation,
+                mutationAffected = key in bypassSnapshot,
+                staleValidation = cacheSnapshot[key]?.isFresh(now) == false
+            )
+        }
+        val selectedKeys = TraktNextUpValidationPolicy.selectCandidates(
+            candidates = validationCandidates,
+            nowMs = now,
+            cache = cacheSnapshot,
+            visibleCandidateLimit = nextUpValidationVisibleCandidateLimit,
+            validationBudget = nextUpValidationBudget
+        ).mapTo(linkedSetOf()) { it.contentId }
+
+        val freshCachedResults = showNextUpMutex.withLock {
+            nextUpValidationCache
+                .filterValues { it.freshness().isFresh(now) }
+                .mapValues { it.value.result }
+        }
+        val validatedResults = coroutineScope {
+            candidates
+                .filter { canonicalLookupKey(it.entry.contentId) in selectedKeys }
+                .map { candidate ->
+                    async {
+                        val key = canonicalLookupKey(candidate.entry.contentId)
+                        val result = nextUpValidationSemaphore.withPermit {
+                            validateNextUpCandidate(candidate.entry, hiddenProgress)
+                        }
+                        val ttl = if (result is TraktNextUpValidationResult.CurrentAiredNextEpisode) {
+                            nextUpValidationPositiveTtlMs
+                        } else {
+                            nextUpValidationNegativeTtlMs
+                        }
+                        showNextUpMutex.withLock {
+                            nextUpValidationCache[key] = CachedNextUpValidation(
+                                result = result,
+                                updatedAtMs = System.currentTimeMillis(),
+                                ttlMs = ttl
+                            )
+                            nextUpValidationBypassKeys.remove(key)
+                        }
+                        key to result
+                    }
+                }
+                .awaitAll()
+                .toMap()
+        }
+        val resultsByKey = freshCachedResults + validatedResults
+
+        return candidates.mapNotNull { candidate ->
+            val key = canonicalLookupKey(candidate.entry.contentId)
+            val result = resultsByKey[key]
+            if (result != null) {
+                TraktNextUpValidationPolicy.resolvePublishableCandidate(
+                    localCandidate = candidate.entry,
+                    validationResult = result,
+                    nowMs = now
+                )
+            } else {
+                candidate.entry.takeIf {
+                    AirDateGate.isAired(
+                        firstAiredMs = it.firstAiredMs,
+                        tmdbAirDate = it.firstAired,
+                        nowMs = now
+                    )
+                }
+            }
+        }.sortedByDescending { it.activityAtMs }
+    }
+
+    private suspend fun validateNextUpCandidate(
+        candidate: NextUpEntry,
+        hiddenProgress: HiddenProgressSnapshot
+    ): TraktNextUpValidationResult {
+        return try {
+            val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+                traktApi.getShowProgressWatched(
+                    authorization = authHeader,
+                    id = toTraktPathId(candidate.contentId),
+                    lastActivity = "watched"
+                )
+            } ?: return TraktNextUpValidationResult.Failed
+
+            if (!response.isSuccessful) {
+                trace("next-up validation failed: show=${candidate.contentId} code=${response.code()}")
+                return TraktNextUpValidationResult.Failed
+            }
+
+            val nextEpisode = response.body()?.nextEpisode
+                ?: return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
+            val season = nextEpisode.season ?: return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
+            val episode = nextEpisode.number ?: return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
+            val canonicalId = canonicalLookupKey(candidate.contentId)
+            if (hiddenProgress.hiddenSeasonKeys.contains(hiddenSeasonKey(candidate.contentId, season)) ||
+                hiddenProgress.hiddenSeasonKeys.contains(hiddenSeasonKey(canonicalId, season))
+            ) {
+                trace("next-up validation suppressed hidden season: show=$canonicalId season=$season")
+                return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
+            }
+
+            TraktNextUpValidationResult.CurrentAiredNextEpisode(
+                candidate.copy(
+                    season = season,
+                    episode = episode,
+                    episodeTitle = nextEpisode.title ?: candidate.episodeTitle,
+                    videoId = resolveEpisodeVideoId(candidate.contentId, season, episode),
+                    firstAired = null,
+                    firstAiredMs = 0L,
+                    traktEpisodeId = nextEpisode.ids?.trakt ?: candidate.traktEpisodeId
+                )
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to validate next-up for show=${candidate.contentId}", e)
+            TraktNextUpValidationResult.Failed
+        }
     }
 
     private fun hiddenSeasonKey(contentId: String, season: Int): String {

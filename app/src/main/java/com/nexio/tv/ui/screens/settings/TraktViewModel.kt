@@ -46,7 +46,6 @@ data class TraktUiState(
     val pollIntervalSeconds: Int = 5,
     val deviceCodeExpiresAtMillis: Long? = null,
     val continueWatchingDaysCap: Int = TraktSettingsDataStore.DEFAULT_CONTINUE_WATCHING_DAYS_CAP,
-    val showUnairedNextUp: Boolean = TraktSettingsDataStore.DEFAULT_SHOW_UNAIRED_NEXT_UP,
     val connectedStats: TraktProgressService.TraktCachedStats? = null,
     val watchingNowActive: Boolean = false,
     val watchingNowTitle: String? = null,
@@ -93,22 +92,6 @@ class TraktViewModel @Inject constructor(
                 it.copy(
                     continueWatchingDaysCap = days,
                     statusMessage = "Continue watching window updated"
-                )
-            }
-        }
-    }
-
-    fun onShowUnairedNextUpChanged(enabled: Boolean) {
-        viewModelScope.launch {
-            traktSettingsDataStore.setShowUnairedNextUp(enabled)
-            _uiState.update {
-                it.copy(
-                    showUnairedNextUp = enabled,
-                    statusMessage = if (enabled) {
-                        context.getString(R.string.trakt_unaired_now_shown)
-                    } else {
-                        context.getString(R.string.trakt_unaired_now_hidden)
-                    }
                 )
             }
         }
@@ -210,15 +193,13 @@ class TraktViewModel @Inject constructor(
         viewModelScope.launch {
             combine(
                 traktSettingsDataStore.continueWatchingDaysCap,
-                traktSettingsDataStore.showUnairedNextUp,
                 traktSettingsDataStore.catalogPreferences
-            ) { daysCap, showUnairedNextUp, catalogPreferences ->
-                Triple(daysCap, showUnairedNextUp, catalogPreferences)
-            }.collectLatest { (daysCap, showUnairedNextUp, catalogPreferences) ->
+            ) { daysCap, catalogPreferences ->
+                daysCap to catalogPreferences
+            }.collectLatest { (daysCap, catalogPreferences) ->
                 _uiState.update {
                     it.copy(
                         continueWatchingDaysCap = daysCap,
-                        showUnairedNextUp = showUnairedNextUp,
                         catalogPreferences = catalogPreferences
                     )
                 }

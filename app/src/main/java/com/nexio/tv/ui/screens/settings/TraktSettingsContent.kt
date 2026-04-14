@@ -47,7 +47,6 @@ fun TraktSettingsContent(
 
     var showDisconnectConfirm by remember { mutableStateOf(false) }
     var showDaysCapDialog by remember { mutableStateOf(false) }
-    var showUnairedDialog by remember { mutableStateOf(false) }
     var showCatalogDialog by remember { mutableStateOf(false) }
     val strAllHistory = stringResource(R.string.trakt_all_history)
     val strDaysFormat = stringResource(R.string.trakt_days_format)
@@ -141,18 +140,6 @@ fun TraktSettingsContent(
                                 subtitle = stringResource(R.string.trakt_continue_watching_subtitle),
                                 value = cwWindowFormatter(uiState.continueWatchingDaysCap),
                                 onClick = { showDaysCapDialog = true }
-                            )
-                        }
-                        item(key = "trakt_unaired") {
-                            SettingsActionRow(
-                                title = stringResource(R.string.trakt_unaired_next_up),
-                                subtitle = stringResource(R.string.trakt_unaired_next_up_subtitle),
-                                value = if (uiState.showUnairedNextUp) {
-                                    stringResource(R.string.trakt_unaired_shown)
-                                } else {
-                                    stringResource(R.string.trakt_unaired_hidden)
-                                },
-                                onClick = { showUnairedDialog = true }
                             )
                         }
                     }
@@ -354,45 +341,6 @@ fun TraktSettingsContent(
                             Spacer(modifier = Modifier.weight(1f))
                         }
                     }
-                }
-            }
-        }
-    }
-
-    if (showUnairedDialog) {
-        NexioDialog(
-            onDismiss = { showUnairedDialog = false },
-            title = stringResource(R.string.trakt_unaired_dialog_title),
-            subtitle = stringResource(R.string.trakt_unaired_dialog_subtitle),
-            width = 620.dp,
-            suppressFirstKeyUp = false
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = {
-                        viewModel.onShowUnairedNextUpChanged(true)
-                        showUnairedDialog = false
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.colors(
-                        containerColor = if (uiState.showUnairedNextUp) NexioColors.Primary else NexioColors.BackgroundCard,
-                        contentColor = if (uiState.showUnairedNextUp) Color.Black else NexioColors.TextPrimary
-                    )
-                ) {
-                    Text(stringResource(R.string.trakt_show_unaired))
-                }
-                Button(
-                    onClick = {
-                        viewModel.onShowUnairedNextUpChanged(false)
-                        showUnairedDialog = false
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.colors(
-                        containerColor = if (!uiState.showUnairedNextUp) NexioColors.Primary else NexioColors.BackgroundCard,
-                        contentColor = if (!uiState.showUnairedNextUp) Color.Black else NexioColors.TextPrimary
-                    )
-                ) {
-                    Text(stringResource(R.string.trakt_hide_unaired))
                 }
             }
         }

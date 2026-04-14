@@ -184,15 +184,15 @@
           ]
         }
       ],
-      "expectedWinnerStreamKey": "healthy_1080p",
+      "expectedWinnerStreamKey": "tiny_fake_4k",
       "acceptableWinnerKeys": [
-        "healthy_1080p"
+        "tiny_fake_4k"
       ],
       "preferredPairs": [
         {
-          "preferredStreamKey": "healthy_1080p",
-          "otherStreamKey": "tiny_fake_4k",
-          "reason": "fake 4K penalty"
+          "preferredStreamKey": "tiny_fake_4k",
+          "otherStreamKey": "healthy_1080p",
+          "reason": "simplified scorer favors tagged 4K DV/Atmos when it fits transport"
         }
       ]
     }

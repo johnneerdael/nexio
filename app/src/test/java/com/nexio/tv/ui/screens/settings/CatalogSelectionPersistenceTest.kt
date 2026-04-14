@@ -60,7 +60,6 @@ class CatalogSelectionPersistenceTest {
 
         val traktSettingsDataStore = mockk<TraktSettingsDataStore>(relaxed = true)
         every { traktSettingsDataStore.continueWatchingDaysCap } returns flowOf(60)
-        every { traktSettingsDataStore.showUnairedNextUp } returns flowOf(true)
         every {
             traktSettingsDataStore.catalogPreferences
         } returns flowOf(TraktCatalogPreferences())

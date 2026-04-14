@@ -3,7 +3,6 @@ package com.nexio.tv.data.local
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -62,7 +61,6 @@ class TraktSettingsDataStore @Inject constructor(
     companion object {
         const val CONTINUE_WATCHING_DAYS_CAP_ALL = 0
         const val DEFAULT_CONTINUE_WATCHING_DAYS_CAP = 60
-        const val DEFAULT_SHOW_UNAIRED_NEXT_UP = true
         const val MIN_CONTINUE_WATCHING_DAYS_CAP = 7
         const val MAX_CONTINUE_WATCHING_DAYS_CAP = 365
     }
@@ -73,7 +71,6 @@ class TraktSettingsDataStore @Inject constructor(
     private val continueWatchingDaysCapKey = intPreferencesKey("continue_watching_days_cap")
     private val dismissedNextUpKeysKey = stringSetPreferencesKey("dismissed_next_up_keys")
     private val dismissedRecommendationKeysKey = stringSetPreferencesKey("dismissed_recommendation_keys")
-    private val showUnairedNextUpKey = booleanPreferencesKey("show_unaired_next_up")
     private val catalogEnabledSetKey = stringSetPreferencesKey("catalog_enabled_set")
     private val catalogOrderCsvKey = stringPreferencesKey("catalog_order_csv")
     private val selectedPopularListKeysKey = stringSetPreferencesKey("selected_popular_list_keys")
@@ -90,10 +87,6 @@ class TraktSettingsDataStore @Inject constructor(
 
     val dismissedRecommendationKeys: Flow<Set<String>> = dataStore.data.map { prefs ->
         prefs[dismissedRecommendationKeysKey] ?: emptySet()
-    }
-
-    val showUnairedNextUp: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[showUnairedNextUpKey] ?: DEFAULT_SHOW_UNAIRED_NEXT_UP
     }
 
     val catalogPreferences: Flow<TraktCatalogPreferences> = dataStore.data.map { prefs ->
@@ -132,12 +125,6 @@ class TraktSettingsDataStore @Inject constructor(
         store().edit { prefs ->
             val current = prefs[dismissedNextUpKeysKey] ?: emptySet()
             prefs[dismissedNextUpKeysKey] = current + key
-        }
-    }
-
-    suspend fun setShowUnairedNextUp(enabled: Boolean) {
-        store().edit { prefs ->
-            prefs[showUnairedNextUpKey] = enabled
         }
     }
 
