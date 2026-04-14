@@ -537,27 +537,23 @@ fun TvdbDiagnosticReason.toDebugLine(): String = when (this) {
 | A4 | Unknown update entity types should produce diagnostics but not broad cache purge by default. | Cache Invalidation Map | If stale data risk is judged higher than refetch cost, planner may choose broader invalidation for unknown entity types. |
 | A5 | Reference cache can live in or beside `MetadataDiskCacheStore` rather than a new Room database. | Architecture Patterns | If reference payload size grows beyond SharedPreferences comfort, planner may need a small file/Room-backed store. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Has Phase 6-9 source landed on the execution branch?** [VERIFIED: rg Tvdb app/src/main/java]
    - What we know: Planning artifacts for Phases 6-9 exist, but current production source only has incidental `tvdb` references in TMDB, Simkl, and poster-ratings code. [VERIFIED: rg Tvdb app/src/main/java; VERIFIED: .planning/phases/06-tvdb-foundation-and-identity/06-RESEARCH.md]
-   - What's unclear: Exact class names for TVDB auth, provider routing, exact-air-time diagnostics, and advanced mappers. [VERIFIED: rg Tvdb app/src/main/java]
-   - Recommendation: Make Wave 0 a dependency verification and class-name binding task before implementation. [VERIFIED: ROADMAP.md]
+   - Resolution: Plan `10-00` is the required Wave 0 binding gate. Execution must stop with `CHECKPOINT REACHED` if Phase 6-9 source files are absent; later plans read `10-BINDINGS.md` for exact class names. [VERIFIED: 10-00-PLAN.md]
 
 2. **Will the project accept WorkManager as a new dependency?** [VERIFIED: CLAUDE.md; VERIFIED: app/build.gradle.kts]
    - What we know: WorkManager is not currently in the app dependency catalog, but Phase 10 requires background periodic update checks. [VERIFIED: app/build.gradle.kts; VERIFIED: 10-CONTEXT.md]
-   - What's unclear: Whether the user prefers app-start-only catch-up if adding WorkManager is considered too much scope. [ASSUMED]
-   - Recommendation: Use WorkManager because the new dependency is justified by durable background periodic work; document the fallback as weaker and not fully satisfying D-03. [CITED: https://developer.android.com/reference/androidx/work/PeriodicWorkRequest; VERIFIED: 10-CONTEXT.md]
+   - Resolution: Use WorkManager in plan `10-02` because D-03 requires background periodic update checks plus app-start catch-up; app-start-only catch-up would not satisfy the locked decision. [VERIFIED: 10-02-PLAN.md; CITED: https://developer.android.com/reference/androidx/work/PeriodicWorkRequest]
 
 3. **Which diagnostics history depth should Debug settings retain?** [VERIFIED: DebugSettingsDataStore.kt]
    - What we know: Current Debug settings primarily store toggles, not a diagnostic event ring buffer. [VERIFIED: DebugSettingsDataStore.kt; VERIFIED: DebugSettingsScreen.kt]
-   - What's unclear: Whether Debug UI should show only current status/last event or a bounded history. [ASSUMED]
-   - Recommendation: Plan a bounded snapshot with "last provider decision", "last update refresh", "last fallback", and "last reference refresh failure" first; add a ring buffer only if tests/UI require it. [ASSUMED]
+   - Resolution: Plan a bounded current snapshot, not a ring buffer. Plan `10-05` stores last provider decision, fallback, update refresh, reference refresh, air-time, poster, skipped TMDB, invalid credential, and stale-cache status fields. [VERIFIED: 10-05-PLAN.md]
 
 4. **Where should user-facing TVDB docs live?** [VERIFIED: docs/nexio-power-user-setup-guide.md; VERIFIED: docs/nexio-features-list.md]
    - What we know: `docs/nexio-power-user-setup-guide.md` currently recommends TMDB as the primary metadata setup and does not describe TVDB setup/precedence. [VERIFIED: docs/nexio-power-user-setup-guide.md]
-   - What's unclear: Whether product wants a separate TVDB doc or updates to existing setup/features docs. [ASSUMED]
-   - Recommendation: Update the power-user setup guide and feature list in Phase 10; add a separate TVDB setup doc only if existing docs become too dense. [VERIFIED: 10-CONTEXT.md; ASSUMED]
+   - Resolution: Update the existing power-user setup guide and feature list in plan `10-06`; do not create a separate TVDB doc unless the executor finds the existing docs cannot stay readable. [VERIFIED: 10-CONTEXT.md; VERIFIED: 10-06-PLAN.md]
 
 ## Environment Availability
 

@@ -97,14 +97,15 @@ Plans:
 **Goal**: TVDB metadata stays reliable over time through update-aware caching, heavily cached reference data, graceful failure behavior, and clear diagnostics
 **Depends on**: Phase 8 and Phase 9
 **Requirements**: UX-03, CACHE-02, CACHE-03
-**Plans:** 6 plans
+**Plans:** 7 plans
 Plans:
 - [ ] 10-00-PLAN.md — Bind Phase 6-9 TVDB source contracts and create sanitized reliability diagnostics
 - [ ] 10-01-PLAN.md — Process TVDB `/updates` and invalidate TVDB cache namespaces safely
 - [ ] 10-02-PLAN.md — Schedule background update checks with startup catch-up and credential-health gating
 - [ ] 10-03-PLAN.md — Cache stable TVDB reference data heavily with stale-on-failure behavior
 - [ ] 10-04-PLAN.md — Preserve last-known-good TVDB metadata through outages and invalid credentials
-- [ ] 10-05-PLAN.md — Surface TVDB diagnostics in settings/debug UI and update user-facing docs
+- [ ] 10-05-PLAN.md — Surface TVDB diagnostics in settings/debug UI with shared recorder logging
+- [ ] 10-06-PLAN.md — Update user-facing TVDB setup and behavior docs
 **Success Criteria** (what must be TRUE):
   1. TVDB metadata cache invalidation uses TVDB update signals or record timestamps so stale metadata can refresh without aggressive refetching
   2. Stable TVDB reference data such as artwork types, genres, languages, statuses, and content ratings is cached heavily
