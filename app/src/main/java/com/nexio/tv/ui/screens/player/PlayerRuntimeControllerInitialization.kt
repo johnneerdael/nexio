@@ -79,6 +79,47 @@ internal data class StartupSubtitlePreparation(
     val fetchCompleted: Boolean
 )
 
+internal data class AssSsaPipelineDecisionState(
+    val decisionStreamUrl: String,
+    val overrideForCurrentStream: Boolean?,
+    val switchInFlight: Boolean,
+    val fallbackHandled: Boolean
+)
+
+internal fun resetAssSsaPipelineDecisionStateForStream(
+    streamUrl: String
+): AssSsaPipelineDecisionState {
+    return AssSsaPipelineDecisionState(
+        decisionStreamUrl = streamUrl,
+        overrideForCurrentStream = null,
+        switchInFlight = false,
+        fallbackHandled = false
+    )
+}
+
+internal fun PlayerRuntimeController.resetAssSsaPipelineDecisionForStream(streamUrl: String) {
+    val reset = resetAssSsaPipelineDecisionStateForStream(streamUrl)
+    assSsaPipelineDecisionStreamUrl = reset.decisionStreamUrl
+    assSsaPipelineOverrideForCurrentStream = reset.overrideForCurrentStream
+    assSsaPipelineSwitchInFlight = reset.switchInFlight
+    assSsaPipelineFallbackHandledForCurrentStream = reset.fallbackHandled
+}
+
+internal data class AssSsaPipelineOverlayDecision(
+    val useAssSsaPipeline: Boolean,
+    val disableOverrideForCurrentStream: Boolean
+)
+
+internal fun resolveAssSsaPipelineOverlayDecision(
+    requestedUseAssSsaPipeline: Boolean,
+    overlayAttached: Boolean
+): AssSsaPipelineOverlayDecision {
+    return AssSsaPipelineOverlayDecision(
+        useAssSsaPipeline = requestedUseAssSsaPipeline && overlayAttached,
+        disableOverrideForCurrentStream = requestedUseAssSsaPipeline && !overlayAttached
+    )
+}
+
 @androidx.annotation.OptIn(UnstableApi::class)
 internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<String, String>) {
     if (url.isEmpty()) {
@@ -175,14 +216,11 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 )
             }
             if (assSsaPipelineDecisionStreamUrl != currentStreamUrl) {
-                assSsaPipelineDecisionStreamUrl = currentStreamUrl
-                assSsaPipelineOverrideForCurrentStream = null
-                assSsaPipelineSwitchInFlight = false
-                assSsaNativeFallbackHandledForCurrentStream = false
+                resetAssSsaPipelineDecisionForStream(currentStreamUrl)
             }
             val retainedSelectedSubtitle = _uiState.value.selectedAddonSubtitle
             Dv5HardwareToneMapRpuTap.setEnabledForPlayback(enabled = false, streamUrl = url)
-            val useAssSsaPipeline = AssSsaNativeBridge.nativeAvailable &&
+            val requestedUseAssSsaPipeline = AssSsaNativeBridge.nativeAvailable &&
                 assSsaPipelineOverrideForCurrentStream == true
             if (!AssSsaNativeBridge.nativeAvailable &&
                 assSsaPipelineOverrideForCurrentStream == true
@@ -193,8 +231,27 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                         "host=${url.safeHost()}"
                 )
                 assSsaPipelineOverrideForCurrentStream = false
-                assSsaNativeFallbackHandledForCurrentStream = true
+                assSsaPipelineFallbackHandledForCurrentStream = true
             }
+            val assSsaOverlayView = if (requestedUseAssSsaPipeline) {
+                assSsaOverlayViewProvider?.invoke()
+            } else {
+                null
+            }
+            val overlayDecision = resolveAssSsaPipelineOverlayDecision(
+                requestedUseAssSsaPipeline = requestedUseAssSsaPipeline,
+                overlayAttached = assSsaOverlayView != null
+            )
+            if (overlayDecision.disableOverrideForCurrentStream) {
+                Log.w(
+                    PlayerRuntimeController.TAG,
+                    "ASS_SSA_RENDER: overlay view unavailable; using Media3 fallback " +
+                        "host=${url.safeHost()}"
+                )
+                assSsaPipelineOverrideForCurrentStream = false
+                assSsaPipelineFallbackHandledForCurrentStream = true
+            }
+            val useAssSsaPipeline = overlayDecision.useAssSsaPipeline
             DoviBridge.resetRuntimeCounters()
             MatroskaDolbyVisionHookInstaller.resetRuntimeCounters()
             val dv7ToDv81Probe = if (playerSettings.experimentalDv7ToDv81Enabled) {
@@ -469,12 +526,10 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
 
             assSsaRenderController?.release()
             assSsaRenderController = null
-            val assController = if (useAssSsaPipeline) {
+            val assController = if (useAssSsaPipeline && assSsaOverlayView != null) {
                 AssSsaRenderController(
                     context = context,
-                    overlayView = requireNotNull(assSsaOverlayViewProvider?.invoke()) {
-                        "ASS/SSA overlay view must be attached before enabling the ASS/SSA render pipeline"
-                    },
+                    overlayView = assSsaOverlayView,
                     subtitleDelayUsProvider = subtitleDelayUs::get
                 )
             } else {

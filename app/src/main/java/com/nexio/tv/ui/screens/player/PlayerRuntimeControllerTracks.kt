@@ -14,7 +14,6 @@ import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.domain.model.Subtitle
-import com.nexio.tv.ui.screens.player.ass.AssSsaNativeBridge
 import com.nexio.tv.ui.screens.player.ass.isAssSsaFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -651,10 +650,7 @@ internal fun PlayerRuntimeController.maybeAdjustAssSsaPipelineForTracks(tracks: 
     if (assSsaPipelineSwitchInFlight) return
 
     val desiredUseAssSsaPipeline = tracks.hasSelectedAssSsaTextTrack()
-    if (!AssSsaNativeBridge.nativeAvailable &&
-        desiredUseAssSsaPipeline &&
-        assSsaNativeFallbackHandledForCurrentStream
-    ) {
+    if (desiredUseAssSsaPipeline && assSsaPipelineFallbackHandledForCurrentStream) {
         assSsaPipelineOverrideForCurrentStream = false
         return
     }
