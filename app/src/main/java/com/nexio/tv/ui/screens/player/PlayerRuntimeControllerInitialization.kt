@@ -52,7 +52,6 @@ import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.data.local.diskSpoolTargetBitrateMbps
-import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.InternalPlayerEngine
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import com.nexio.tv.domain.model.Subtitle
@@ -211,8 +210,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             )
             _uiState.update {
                 it.copy(
-                    internalPlayerEngine = currentInternalPlayerEngine,
-                    frameRateMatchingMode = playerSettings.frameRateMatchingMode
+                    internalPlayerEngine = currentInternalPlayerEngine
                 )
             }
             if (assSsaPipelineDecisionStreamUrl != currentStreamUrl) {
@@ -1092,9 +1090,7 @@ private fun PlayerRuntimeController.launchStartupPreparationTasks(
 ) {
     launchStartupAfrPreflight(
         url = url,
-        headers = headers,
-        frameRateMatchingMode = playerSettings.frameRateMatchingMode,
-        resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
+        headers = headers
     )
 
     startupSubtitlePreparationJob?.cancel()

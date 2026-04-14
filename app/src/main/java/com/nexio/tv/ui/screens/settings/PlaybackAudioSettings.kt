@@ -51,7 +51,6 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nexio.tv.data.local.AudioLanguageOption
-import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.MpvHardwareDecodeMode
 import com.nexio.tv.data.local.PlayerSettings
@@ -60,12 +59,10 @@ import com.nexio.tv.ui.theme.NexioColors
 
 internal fun LazyListScope.videoSettingsItems(
     playerSettings: PlayerSettings,
-    frameRateMatchingLabel: String,
     androidFrameRateStatus: AndroidFrameRateSettings.Status,
     afrExpanded: Boolean,
     onToggleAfrExpanded: () -> Unit,
     afrHeaderFocusRequester: FocusRequester,
-    onSetFrameRateMatchingMode: (FrameRateMatchingMode) -> Unit,
     onOpenAndroidDisplaySettings: () -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
@@ -85,7 +82,7 @@ internal fun LazyListScope.videoSettingsItems(
     item(key = "video_afr_header") {
         PlaybackSectionHeader(
             title = stringResource(R.string.playback_auto_frame_rate),
-            description = "$frameRateMatchingLabel • ${androidFrameRateStatus.localizedLabel()}",
+            description = androidFrameRateStatus.localizedLabel(),
             expanded = afrExpanded,
             onToggle = onToggleAfrExpanded,
             focusRequester = afrHeaderFocusRequester,
@@ -96,9 +93,7 @@ internal fun LazyListScope.videoSettingsItems(
 
     if (afrExpanded) {
         item(key = "video_afr_options") {
-            FrameRateMatchingModeOptions(
-                selectedMode = playerSettings.frameRateMatchingMode,
-                onSelect = onSetFrameRateMatchingMode,
+            AndroidFrameRateSettingsAction(
                 onOpenAndroidDisplaySettings = onOpenAndroidDisplaySettings,
                 onFocused = onItemFocused,
                 enabled = enabled

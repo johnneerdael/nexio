@@ -320,12 +320,8 @@ internal fun PlaybackSettingsContent(
                 onSetTrailerDelaySeconds = { seconds ->
                     coroutineScope.launch { viewModel.setTrailerDelaySeconds(seconds) }
                 },
-                onSetFrameRateMatchingMode = { mode -> coroutineScope.launch { viewModel.setFrameRateMatchingMode(mode) } },
                 androidFrameRateStatus = androidFrameRateStatus,
                 onOpenAndroidDisplaySettings = openAndroidDisplaySettings,
-                onSetResolutionMatchingEnabled = { enabled ->
-                    coroutineScope.launch { viewModel.setResolutionMatchingEnabled(enabled) }
-                },
                 onSetSkipSilence = { enabled -> coroutineScope.launch { viewModel.setSkipSilence(enabled) } },
                 onSetTunnelingEnabled = { enabled -> coroutineScope.launch { viewModel.setTunnelingEnabled(enabled) } },
                 onSetExperimentalDv7ToDv81Enabled = {

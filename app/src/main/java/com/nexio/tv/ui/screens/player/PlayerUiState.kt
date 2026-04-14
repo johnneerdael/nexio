@@ -5,7 +5,6 @@ import androidx.media3.common.TrackGroup
 import androidx.media3.common.text.Cue
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.nexio.tv.core.stream.StreamCardModel
-import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.InternalPlayerEngine
 import com.nexio.tv.data.local.SubtitleOrganizationMode
 import com.nexio.tv.data.local.SubtitleStyleSettings
@@ -125,7 +124,6 @@ data class PlayerUiState(
     val detectedFrameRate: Float = 0f,
     val afrProbeRunning: Boolean = false,
     val internalPlayerEngine: InternalPlayerEngine = InternalPlayerEngine.EXOPLAYER,
-    val frameRateMatchingMode: FrameRateMatchingMode = FrameRateMatchingMode.OFF,
     val displayModeInfo: DisplayModeInfo? = null,
     val showDisplayModeInfo: Boolean = false,
     // Aspect ratio / resize mode

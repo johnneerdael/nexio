@@ -10,7 +10,6 @@ import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PlayerPreference
-import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.InternalPlayerEngine
 import com.nexio.tv.data.local.MpvHardwareDecodeMode
@@ -183,14 +182,6 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setSkipIntroEnabled(enabled: Boolean) {
         playerSettingsDataStore.setSkipIntroEnabled(enabled)
-    }
-
-    suspend fun setFrameRateMatchingMode(mode: FrameRateMatchingMode) {
-        playerSettingsDataStore.setFrameRateMatchingMode(mode)
-    }
-
-    suspend fun setResolutionMatchingEnabled(enabled: Boolean) {
-        playerSettingsDataStore.setResolutionMatchingEnabled(enabled)
     }
 
     suspend fun setExperimentalDv7ToDv81Enabled(enabled: Boolean) {

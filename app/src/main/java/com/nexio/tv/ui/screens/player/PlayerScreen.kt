@@ -307,13 +307,6 @@ fun PlayerScreen(
             viewModel.attachHostActivity(null)
         }
     }
-    LaunchedEffect(uiState.frameRateMatchingMode) {
-        if (activity != null &&
-            uiState.frameRateMatchingMode == com.nexio.tv.data.local.FrameRateMatchingMode.OFF
-        ) {
-            com.nexio.tv.core.player.FrameRateUtils.restoreOriginalDisplayMode(activity)
-        }
-    }
     // Request focus for key events when controls visibility or panel state changes
     LaunchedEffect(
         uiState.showControls,

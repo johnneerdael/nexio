@@ -293,12 +293,6 @@
   <string name="playback_memory_usage_estimate">预估内存占用：%1$d / %2$d MB</string>
   <string name="playback_afr_open">开启</string>
   <string name="playback_afr_closed">关闭</string>
-  <string name="playback_afr_off">关闭</string>
-  <string name="playback_afr_off_sub">不要更改显示刷新率。</string>
-  <string name="playback_afr_on_start">开始播放时</string>
-  <string name="playback_afr_on_start_sub">播放开始时切换帧率。</string>
-  <string name="playback_afr_on_start_stop">开始/停止播放时</string>
-  <string name="playback_afr_on_start_stop_sub">开始时切换，停止时恢复系统帧率。</string>
   <string name="playback_player_external_desc">始终使用外部应用程序打开视频流</string>
   <string name="playback_player_ask_desc">每次都选择播放器</string>
   <string name="video_section">视频</string>

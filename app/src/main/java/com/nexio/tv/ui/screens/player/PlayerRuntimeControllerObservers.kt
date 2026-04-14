@@ -3,12 +3,12 @@ package com.nexio.tv.ui.screens.player
 import android.net.Uri
 import android.content.res.Resources
 import android.util.Log
+import com.nexio.tv.core.player.AndroidFrameRateSettings
 import com.nexio.tv.core.player.OpenSubtitlesHasher
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.util.Util
 import androidx.media3.common.util.UnstableApi
-import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.SubtitleOrganizationMode
 import com.nexio.tv.data.local.diskSpoolTargetBitrateMbps
 import com.nexio.tv.domain.model.Subtitle
@@ -231,12 +231,11 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                     showLoadingOverlay = shouldShowOverlay,
                     pauseOverlayEnabled = settings.pauseOverlayEnabled,
                     osdClockEnabled = settings.osdClockEnabled,
-                    internalPlayerEngine = settings.internalPlayerEngine,
-                    frameRateMatchingMode = settings.frameRateMatchingMode
+                    internalPlayerEngine = settings.internalPlayerEngine
                 )
             }
             bufferLogsEnabled = settings.enableBufferLogs
-            if (settings.frameRateMatchingMode == FrameRateMatchingMode.OFF) {
+            if (!AndroidFrameRateSettings.canRequestFrameRate(context)) {
                 frameRateProbeJob?.cancel()
                 _uiState.update {
                     it.copy(

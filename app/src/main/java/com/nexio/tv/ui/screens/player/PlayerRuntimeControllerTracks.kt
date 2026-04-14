@@ -12,7 +12,6 @@ import androidx.media3.common.util.UnstableApi
 import com.nexio.tv.core.player.AndroidFrameRateSettings
 import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.data.local.AudioLanguageOption
-import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.domain.model.Subtitle
 import com.nexio.tv.ui.screens.player.ass.isEmbeddedAssSsaFormat
@@ -20,7 +19,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -703,8 +701,7 @@ internal fun PlayerRuntimeController.maybeApplyTrackBasedAfrFallback(
     trackAfrAppliedForCurrentStream = true
 
     scope.launch {
-        val playerSettings = playerSettingsDataStore.playerSettings.first()
-        if (playerSettings.frameRateMatchingMode == FrameRateMatchingMode.OFF) {
+        if (!AndroidFrameRateSettings.canRequestFrameRate(context)) {
             return@launch
         }
         if (currentStreamUrl != streamUrlSnapshot) {

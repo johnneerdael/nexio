@@ -19,7 +19,6 @@ import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
-import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.InternalPlayerEngine
 import com.nexio.tv.data.local.MpvHardwareDecodeMode
 import com.nexio.tv.data.repository.SkipIntroRepository
@@ -413,14 +412,8 @@ class PlayerRuntimeController(
 
     internal fun endDisplayModeSessionForExit() {
         val activity = currentHostActivity()
-        val frameRateMode = _uiState.value.frameRateMatchingMode
         if (activity != null) {
-            if (frameRateMode == FrameRateMatchingMode.START_STOP) {
-                com.nexio.tv.core.player.FrameRateUtils.restoreOriginalDisplayMode(activity)
-            } else {
-                com.nexio.tv.core.player.FrameRateUtils.cleanupDisplayListener()
-                com.nexio.tv.core.player.FrameRateUtils.clearOriginalDisplayMode()
-            }
+            com.nexio.tv.core.player.FrameRateUtils.restoreOriginalDisplayMode(activity)
             com.nexio.tv.core.player.FrameRateUtils.endMainPlayerDisplayModeSession()
             com.nexio.tv.core.player.FrameRateUtils.enforceUiPreferredRefreshRate(activity)
         } else {

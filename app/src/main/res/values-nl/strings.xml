@@ -295,12 +295,6 @@
   <string name="playback_player_ask">Vraag het elke keer</string>
   <string name="playback_afr_open">Openen</string>
   <string name="playback_afr_closed">Gesloten</string>
-  <string name="playback_afr_off">Uit</string>
-  <string name="playback_afr_off_sub">Wijzig de vernieuwingsfrequentie van het scherm niet.</string>
-  <string name="playback_afr_on_start">Aan het begin</string>
-  <string name="playback_afr_on_start_sub">Schakel over wanneer het afspelen begint.</string>
-  <string name="playback_afr_on_start_stop">Bij start/stop</string>
-  <string name="playback_afr_on_start_stop_sub">Schakel in bij start en herstel bij stop.</string>
   <string name="playback_player_external_desc">Open streams altijd in een externe app</string>
   <string name="playback_player_ask_desc">Kies elke keer de speler</string>
   <string name="video_section">Video</string>
