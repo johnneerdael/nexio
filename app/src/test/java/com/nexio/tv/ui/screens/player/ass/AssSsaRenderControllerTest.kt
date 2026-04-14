@@ -6,6 +6,9 @@ import androidx.media3.common.Format
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.core.app.ApplicationProvider
 import io.mockk.mockk
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -141,6 +144,68 @@ class AssSsaRenderControllerTest {
     }
 
     @Test
+    fun releasePreventsLaterSampleCallbacksFromInvokingNative() {
+        val native = FakeAssSsaNativeApi()
+        val controller = newController(native)
+        val format = Format.Builder().setLanguage("en").build()
+
+        controller.setVideoSize(640, 360)
+        controller.onTrackHeader(trackId = 11, headerData = "[Script Info]".toByteArray(), format)
+        controller.selectTrackByFormat(format)
+        controller.release()
+        native.clearRecordedCalls()
+
+        controller.onTrackHeader(trackId = 11, headerData = "[Script Info]".toByteArray(), format)
+        controller.onFontAttachment("font.ttf", byteArrayOf(1, 2, 3))
+        controller.onSubtitleSample(
+            trackId = 11,
+            timeUs = 1_000_000L,
+            data = "Dialogue: 0:00:00.00,0:00:01.00,1,0,Default,,0,0,0,,Late".toByteArray()
+        )
+        controller.renderCurrentFrameForTesting()
+
+        assertTrue(native.loadHeaderCalls.isEmpty())
+        assertTrue(native.addFontCalls.isEmpty())
+        assertTrue(native.chunks.isEmpty())
+        assertTrue(native.renders.isEmpty())
+        assertTrue(native.destroyedHandles.isEmpty())
+    }
+
+    @Test
+    fun serializesSampleIngestionAgainstNativeRender() {
+        val native = BlockingRenderNativeApi()
+        val controller = newController(native)
+        val format = Format.Builder().setLanguage("en").build()
+
+        controller.setVideoSize(640, 360)
+        controller.onTrackHeader(trackId = 12, headerData = "[Script Info]".toByteArray(), format)
+        controller.selectTrackByFormat(format)
+        controller.currentTimeUs = 1_000_000L
+
+        val renderThread = Thread { controller.renderCurrentFrameForTesting() }
+        renderThread.start()
+        assertTrue(native.renderEntered.await(5, TimeUnit.SECONDS))
+
+        val sampleThread = Thread {
+            controller.onSubtitleSample(
+                trackId = 12,
+                timeUs = 1_000_000L,
+                data = "Dialogue: 0:00:00.00,0:00:01.00,1,0,Default,,0,0,0,,During".toByteArray()
+            )
+        }
+        sampleThread.start()
+        Thread.sleep(50L)
+
+        native.allowRenderToFinish.countDown()
+        renderThread.join(5_000L)
+        sampleThread.join(5_000L)
+
+        assertFalse(renderThread.isAlive)
+        assertFalse(sampleThread.isAlive)
+        assertFalse(native.concurrentNativeAccess.get())
+    }
+
+    @Test
     fun onSeekStartedFlushesAndClearsOverlay() {
         val native = FakeAssSsaNativeApi()
         val overlay = newOverlay()
@@ -177,13 +242,15 @@ class AssSsaRenderControllerTest {
         return AssSsaRenderOverlayView(ApplicationProvider.getApplicationContext<Context>())
     }
 
-    private class FakeAssSsaNativeApi : AssSsaNativeApi {
+    private open class FakeAssSsaNativeApi : AssSsaNativeApi {
         override val nativeAvailable: Boolean = true
         private var nextHandle = 1L
         val chunks = mutableListOf<Chunk>()
         val renders = mutableListOf<Render>()
         val flushedHandles = mutableListOf<Long>()
         val destroyedHandles = mutableListOf<Long>()
+        val loadHeaderCalls = mutableListOf<Long>()
+        val addFontCalls = mutableListOf<Long>()
 
         override fun configureFontconfig(context: Context): Boolean = true
 
@@ -191,11 +258,16 @@ class AssSsaRenderControllerTest {
             return nextHandle++
         }
 
-        override fun loadHeader(handle: Long, headerData: ByteArray): Int = 0
+        override fun loadHeader(handle: Long, headerData: ByteArray): Int {
+            loadHeaderCalls += handle
+            return 0
+        }
 
-        override fun addFont(handle: Long, name: String?, fontData: ByteArray) = Unit
+        override fun addFont(handle: Long, name: String?, fontData: ByteArray) {
+            addFontCalls += handle
+        }
 
-        override fun processChunk(
+        open override fun processChunk(
             handle: Long,
             data: ByteArray,
             startMs: Long,
@@ -206,7 +278,7 @@ class AssSsaRenderControllerTest {
 
         override fun processData(handle: Long, data: ByteArray) = Unit
 
-        override fun render(handle: Long, timeMs: Long, bitmap: Bitmap): Boolean {
+        open override fun render(handle: Long, timeMs: Long, bitmap: Bitmap): Boolean {
             renders += Render(handle, timeMs)
             bitmap.eraseColor(0x55FFFFFF)
             return true
@@ -219,8 +291,53 @@ class AssSsaRenderControllerTest {
         override fun destroy(handle: Long) {
             destroyedHandles += handle
         }
+
+        fun clearRecordedCalls() {
+            chunks.clear()
+            renders.clear()
+            flushedHandles.clear()
+            destroyedHandles.clear()
+            loadHeaderCalls.clear()
+            addFontCalls.clear()
+        }
     }
 
     private data class Chunk(val data: ByteArray, val startMs: Long, val durationMs: Long)
     private data class Render(val handle: Long, val timeMs: Long)
+
+    private class BlockingRenderNativeApi : FakeAssSsaNativeApi() {
+        val renderEntered = CountDownLatch(1)
+        val allowRenderToFinish = CountDownLatch(1)
+        val concurrentNativeAccess = AtomicBoolean(false)
+        private val insideNative = AtomicBoolean(false)
+
+        override fun render(handle: Long, timeMs: Long, bitmap: Bitmap): Boolean {
+            if (!insideNative.compareAndSet(false, true)) {
+                concurrentNativeAccess.set(true)
+            }
+            try {
+                renderEntered.countDown()
+                assertTrue(allowRenderToFinish.await(5, TimeUnit.SECONDS))
+                return super.render(handle, timeMs, bitmap)
+            } finally {
+                insideNative.set(false)
+            }
+        }
+
+        override fun processChunk(
+            handle: Long,
+            data: ByteArray,
+            startMs: Long,
+            durationMs: Long
+        ) {
+            if (!insideNative.compareAndSet(false, true)) {
+                concurrentNativeAccess.set(true)
+            }
+            try {
+                super.processChunk(handle, data, startMs, durationMs)
+            } finally {
+                insideNative.set(false)
+            }
+        }
+    }
 }
