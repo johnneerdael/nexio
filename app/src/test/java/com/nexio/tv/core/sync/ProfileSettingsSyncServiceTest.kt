@@ -1,6 +1,7 @@
 package com.nexio.tv.core.sync
 
 import android.app.Application
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.test.core.app.ApplicationProvider
@@ -317,6 +318,111 @@ class ProfileSettingsSyncServiceTest {
             realLayoutStore.data.first()[homeCatalogOrderKeysKey]
         )
         assertTrue(unusedLayoutStore.data.first().asMap().isEmpty())
+    }
+
+    @Test
+    fun `importSettingsBlob imports web adapter catalog fixture into layout settings DataStore`() = runTest {
+        val settingsSyncService = realDataStoreService()
+        val realLayoutStore = realProfileDataStoreFactory.get(2, "layout_settings")
+        val homeCatalogOrderKeysKey = stringPreferencesKey("home_catalog_order_keys")
+        val disabledHomeCatalogKeysKey = stringPreferencesKey("disabled_home_catalog_keys")
+
+        realLayoutStore.edit { preferences -> preferences.clear() }
+
+        settingsSyncService.importSettingsBlob(
+            profileId = 2,
+            blob = buildJsonObject {
+                put(
+                    "layout_settings",
+                    buildJsonObject {
+                        put(
+                            "home_catalog_order_keys",
+                            buildJsonObject {
+                                put("type", "string")
+                                put("value", "[\"featured\",\"movies\"]")
+                            }
+                        )
+                        put(
+                            "disabled_home_catalog_keys",
+                            buildJsonObject {
+                                put("type", "string")
+                                put("value", "[\"addon-old\"]")
+                            }
+                        )
+                    }
+                )
+            }
+        )
+
+        val preferences = realLayoutStore.data.first()
+        assertEquals("[\"featured\",\"movies\"]", preferences[homeCatalogOrderKeysKey])
+        assertEquals("[\"addon-old\"]", preferences[disabledHomeCatalogKeysKey])
+    }
+
+    @Test
+    fun `importSettingsBlob imports web adapter formatter fixture into player settings DataStore`() = runTest {
+        val settingsSyncService = realDataStoreService()
+        val realPlayerStore = realProfileDataStoreFactory.get(2, "player_settings")
+        val formatterEnabledKey = booleanPreferencesKey("synced_formatter_enabled")
+        val selectedTemplateIdKey = stringPreferencesKey("synced_formatter_selected_template_id")
+        val customTemplateLabelKey = stringPreferencesKey("synced_formatter_custom_template_label")
+        val customNameTemplateKey = stringPreferencesKey("synced_formatter_custom_name_template")
+        val customDescriptionTemplateKey = stringPreferencesKey("synced_formatter_custom_description_template")
+
+        realPlayerStore.edit { preferences -> preferences.clear() }
+
+        settingsSyncService.importSettingsBlob(
+            profileId = 2,
+            blob = buildJsonObject {
+                put(
+                    "player_settings",
+                    buildJsonObject {
+                        put(
+                            "synced_formatter_enabled",
+                            buildJsonObject {
+                                put("type", "boolean")
+                                put("value", false)
+                            }
+                        )
+                        put(
+                            "synced_formatter_selected_template_id",
+                            buildJsonObject {
+                                put("type", "string")
+                                put("value", "custom")
+                            }
+                        )
+                        put(
+                            "synced_formatter_custom_template_label",
+                            buildJsonObject {
+                                put("type", "string")
+                                put("value", "Custom")
+                            }
+                        )
+                        put(
+                            "synced_formatter_custom_name_template",
+                            buildJsonObject {
+                                put("type", "string")
+                                put("value", "{title}")
+                            }
+                        )
+                        put(
+                            "synced_formatter_custom_description_template",
+                            buildJsonObject {
+                                put("type", "string")
+                                put("value", "{size}")
+                            }
+                        )
+                    }
+                )
+            }
+        )
+
+        val preferences = realPlayerStore.data.first()
+        assertEquals(false, preferences[formatterEnabledKey])
+        assertEquals("custom", preferences[selectedTemplateIdKey])
+        assertEquals("Custom", preferences[customTemplateLabelKey])
+        assertEquals("{title}", preferences[customNameTemplateKey])
+        assertEquals("{size}", preferences[customDescriptionTemplateKey])
     }
 
     @Test
