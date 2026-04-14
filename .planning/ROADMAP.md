@@ -30,7 +30,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Profile 1 cannot be deleted and its DataStore files use no suffix, preserving existing single-profile user data
   4. UserProfile model carries `avatarId` and `pinEnabled` fields without breaking existing serialization
   5. Hilt module provides ProfileDataStoreFactory and ProfileManager as singletons across the app
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 01-01-PLAN.md — UserProfile model extension and ProfileDataStoreFactory
+- [ ] 01-02-PLAN.md — ProfileDataStore, ProfileManager, and ProfileModule (Hilt DI)
 
 ### Phase 2: Per-Profile Auth and Settings
 **Goal**: Users have isolated Trakt and Simkl accounts per profile, and per-profile settings persist independently across profile switches
@@ -90,7 +93,7 @@ Note: Phase 3 (UI) and Phase 4 (Sync) both depend on Phase 2 and can be develope
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/? | Not started | - |
+| 1. Foundation | 0/2 | Planned | - |
 | 2. Per-Profile Auth and Settings | 0/? | Not started | - |
 | 3. Profile UI | 0/? | Not started | - |
 | 4. Sync and Cleanup | 0/? | Not started | - |
