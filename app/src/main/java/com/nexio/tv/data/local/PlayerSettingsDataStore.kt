@@ -170,8 +170,6 @@ data class PlayerSettings(
     val internalPlayerEngine: InternalPlayerEngine = InternalPlayerEngine.EXOPLAYER,
     val autoSwitchInternalPlayerOnError: Boolean = false,
     val mpvHardwareDecodeMode: MpvHardwareDecodeMode = MpvHardwareDecodeMode.AUTO_SAFE,
-    val useLibass: Boolean = false,
-    val libassRenderType: LibassRenderType = LibassRenderType.OVERLAY_OPEN_GL,
     val subtitleStyle: SubtitleStyleSettings = SubtitleStyleSettings(),
     val bufferSettings: BufferSettings = BufferSettings(),
     // Audio settings
@@ -440,18 +438,6 @@ enum class MpvHardwareDecodeMode {
     DISABLED
 }
 
-/**
- * Enum representing the different libass render types
- * Maps to io.github.peerless2012.ass.media.type.AssRenderType
- */
-enum class LibassRenderType {
-    CUES,              // Standard SubtitleView rendering (no animation support)
-    EFFECTS_CANVAS,    // Effect-based Canvas rendering (supports animations)
-    EFFECTS_OPEN_GL,   // Effect-based OpenGL rendering (supports animations, faster)
-    OVERLAY_CANVAS,    // Overlay Canvas rendering (supports HDR)
-    OVERLAY_OPEN_GL    // Overlay OpenGL rendering (supports HDR, recommended)
-}
-
 @Singleton
 class PlayerSettingsDataStore @Inject constructor(
     @ApplicationContext private val context: Context
@@ -467,10 +453,6 @@ class PlayerSettingsDataStore @Inject constructor(
     private val autoSwitchInternalPlayerOnErrorKey =
         booleanPreferencesKey("auto_switch_internal_player_on_error")
     private val mpvHardwareDecodeModeKey = stringPreferencesKey("mpv_hardware_decode_mode")
-
-    // Libass settings keys
-    private val useLibassKey = booleanPreferencesKey("use_libass")
-    private val libassRenderTypeKey = stringPreferencesKey("libass_render_type")
 
     // Audio settings keys
     private val decoderPriorityKey = intPreferencesKey("decoder_priority")
@@ -750,10 +732,6 @@ class PlayerSettingsDataStore @Inject constructor(
                 internalPlayerEngine = parseInternalPlayerEngine(prefs[internalPlayerEngineKey]),
                 autoSwitchInternalPlayerOnError = prefs[autoSwitchInternalPlayerOnErrorKey] ?: false,
                 mpvHardwareDecodeMode = parseMpvHardwareDecodeMode(prefs[mpvHardwareDecodeModeKey]),
-                useLibass = prefs[useLibassKey] ?: false,
-                libassRenderType = prefs[libassRenderTypeKey]?.let {
-                    try { LibassRenderType.valueOf(it) } catch (e: Exception) { LibassRenderType.OVERLAY_OPEN_GL }
-                } ?: LibassRenderType.OVERLAY_OPEN_GL,
                 decoderPriority = prefs[decoderPriorityKey] ?: 1,
                 tunnelingEnabled = prefs[tunnelingEnabledKey] ?: false,
                 skipSilence = prefs[skipSilenceKey] ?: false,
@@ -950,22 +928,6 @@ class PlayerSettingsDataStore @Inject constructor(
                     retainBackBufferFromKeyframe = prefs[retainBackBufferFromKeyframeKey] ?: false
                 )
             )
-    }
-
-    /**
-     * Flow for just the libass toggle
-     */
-    val useLibass: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[useLibassKey] ?: false
-    }
-
-    /**
-     * Flow for the libass render type
-     */
-    val libassRenderType: Flow<LibassRenderType> = dataStore.data.map { prefs ->
-        prefs[libassRenderTypeKey]?.let {
-            try { LibassRenderType.valueOf(it) } catch (e: Exception) { LibassRenderType.OVERLAY_OPEN_GL }
-        } ?: LibassRenderType.OVERLAY_OPEN_GL
     }
 
     internal val spoolStorageProbeResult: Flow<SpoolStorageProbeResult?> = dataStore.data.map { prefs ->
@@ -1520,24 +1482,6 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setExperimentalDv7ToDv81PreserveMappingEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[experimentalDv7ToDv81PreserveMappingEnabledKey] = enabled
-        }
-    }
-
-    /**
-     * Set whether to use libass for ASS/SSA subtitle rendering
-     */
-    suspend fun setUseLibass(enabled: Boolean) {
-        store().edit { prefs ->
-            prefs[useLibassKey] = enabled
-        }
-    }
-
-    /**
-     * Set the libass render type
-     */
-    suspend fun setLibassRenderType(renderType: LibassRenderType) {
-        store().edit { prefs ->
-            prefs[libassRenderTypeKey] = renderType.name
         }
     }
 

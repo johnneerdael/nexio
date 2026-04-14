@@ -16,7 +16,7 @@ class AssNoOpSubtitleParserFactoryTest {
     }
 
     @Test
-    fun assParserEmitsNoCuesBecauseLibassRendersTheTrack() {
+    fun assParserEmitsNoCuesBecauseAssRendererHandlesTheTrack() {
         val parser = AssNoOpSubtitleParserFactory()
             .create(Format.Builder().setSampleMimeType(MimeTypes.TEXT_SSA).build())
         var emitted = false
