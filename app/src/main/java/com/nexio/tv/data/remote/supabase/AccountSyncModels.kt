@@ -457,3 +457,12 @@ data class AccountRealDebridAccessSecretPayload(
 data class AccountRealDebridRefreshSecretPayload(
     val refreshToken: String = ""
 )
+
+@Serializable
+data class ProfileSettingsBlobResponse(
+    @SerialName("user_id") val userId: String? = null,
+    @SerialName("profile_id") val profileId: Int = 1,
+    val platform: String = "tv",
+    @SerialName("settings_json") val settingsJson: String = "{}",
+    @SerialName("updated_at") val updatedAt: String? = null
+)

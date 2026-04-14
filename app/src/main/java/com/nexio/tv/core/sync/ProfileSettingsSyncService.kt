@@ -1,0 +1,246 @@
+package com.nexio.tv.core.sync
+
+import android.util.Log
+import androidx.datastore.preferences.core.MutablePreferences
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.doublePreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
+import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.data.local.ProfileDataStoreFactory
+import com.nexio.tv.data.remote.supabase.ProfileSettingsBlobResponse
+import io.github.jan.supabase.postgrest.Postgrest
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.double
+import kotlinx.serialization.json.float
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import javax.inject.Inject
+import javax.inject.Singleton
+
+private const val TAG = "ProfileSettingsSyncService"
+
+@Singleton
+class ProfileSettingsSyncService @Inject constructor(
+    private val authManager: AuthManager,
+    private val postgrest: Postgrest,
+    private val profileManager: ProfileManager,
+    private val profileDataStoreFactory: ProfileDataStoreFactory
+) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val syncMutex = Mutex()
+    val syncedFeatures = listOf(
+        "trakt_settings",
+        "simkl_settings",
+        "player_settings",
+        "layout_preferences",
+        "theme_settings"
+    )
+
+    @Volatile private var applyingRemoteBlob = false
+    private var skipNextPushSignature: String? = null
+    private var observerJob: Job? = null
+
+    @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
+    fun startObserving() {
+        if (observerJob != null) return
+        observerJob = scope.launch {
+            profileManager.activeProfileId
+                .flatMapLatest { profileId ->
+                    observeProfileSettings(profileId)
+                        .drop(1)
+                        .debounce(2000)
+                        .flatMapLatest { kotlinx.coroutines.flow.flowOf(profileId) }
+                }
+                .collect { profileId ->
+                    if (applyingRemoteBlob) return@collect
+                    pushBlobForProfile(profileId)
+                }
+        }
+    }
+
+    fun stopObserving() {
+        observerJob?.cancel()
+        observerJob = null
+    }
+
+    suspend fun pushBlobForProfile(profileId: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        syncMutex.withLock {
+            try {
+                val blob = exportSettingsBlob(profileId)
+                val signature = buildSettingsSignature(blob)
+                if (signature == skipNextPushSignature) {
+                    skipNextPushSignature = null
+                    return@withLock Result.success(Unit)
+                }
+
+                withJwtRefreshRetry {
+                    postgrest.rpc(
+                        "sync_push_profile_settings_blob",
+                        buildJsonObject {
+                            put("p_profile_id", profileId)
+                            put("p_settings_json", blob.toString())
+                            put("p_platform", "tv")
+                        }
+                    )
+                }
+                Log.d(TAG, "Pushed settings blob for profile $profileId")
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to push settings blob for profile $profileId", e)
+                Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun pullBlobForProfile(profileId: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        syncMutex.withLock {
+            try {
+                val response = withJwtRefreshRetry {
+                    postgrest.rpc(
+                        "sync_pull_profile_settings_blob",
+                        buildJsonObject {
+                            put("p_profile_id", profileId)
+                            put("p_platform", "tv")
+                        }
+                    ).decodeAs<ProfileSettingsBlobResponse>()
+                }
+                val blob = Json.parseToJsonElement(response.settingsJson).jsonObject
+
+                applyingRemoteBlob = true
+                try {
+                    importSettingsBlob(profileId, blob)
+                    skipNextPushSignature = buildSettingsSignature(blob)
+                } finally {
+                    applyingRemoteBlob = false
+                }
+
+                Log.d(TAG, "Pulled settings blob for profile $profileId")
+                Result.success(Unit)
+            } catch (e: Exception) {
+                applyingRemoteBlob = false
+                Log.e(TAG, "Failed to pull settings blob for profile $profileId", e)
+                Result.failure(e)
+            }
+        }
+    }
+
+    private fun observeProfileSettings(profileId: Int): Flow<List<Preferences>> {
+        val featureFlows = syncedFeatures.map { feature ->
+            profileDataStoreFactory.get(profileId, feature).data
+        }
+        return combine(featureFlows) { preferences -> preferences.toList() }
+    }
+
+    private suspend fun exportSettingsBlob(profileId: Int): JsonObject {
+        return buildJsonObject {
+            syncedFeatures.forEach { feature ->
+                val preferences = profileDataStoreFactory.get(profileId, feature).data.first()
+                put(
+                    feature,
+                    buildJsonObject {
+                        preferences.asMap().forEach { (key, value) ->
+                            encodePreferenceValue(value)?.let { encoded ->
+                                put(key.name, encoded)
+                            }
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    private suspend fun importSettingsBlob(profileId: Int, blob: JsonObject) {
+        blob.forEach { (feature, featureElement) ->
+            if (feature !in syncedFeatures) return@forEach
+            val featureBlob = runCatching { featureElement.jsonObject }.getOrNull() ?: return@forEach
+            val store = profileDataStoreFactory.get(profileId, feature)
+            store.edit { preferences ->
+                featureBlob.forEach { (key, valueElement) ->
+                    val valueObj = runCatching { valueElement.jsonObject }.getOrNull() ?: return@forEach
+                    applyEncodedPreference(preferences, key, valueObj)
+                }
+            }
+        }
+    }
+
+    private fun encodePreferenceValue(rawValue: Any?): JsonObject? {
+        return when (rawValue) {
+            is String -> buildJsonObject { put("type", "string"); put("value", rawValue) }
+            is Boolean -> buildJsonObject { put("type", "boolean"); put("value", rawValue) }
+            is Int -> buildJsonObject { put("type", "int"); put("value", rawValue) }
+            is Long -> buildJsonObject { put("type", "long"); put("value", rawValue) }
+            is Float -> buildJsonObject { put("type", "float"); put("value", rawValue.toDouble()) }
+            is Double -> buildJsonObject { put("type", "double"); put("value", rawValue) }
+            is Set<*> -> buildJsonObject {
+                put("type", "string_set")
+                putJsonArray("value") { rawValue.filterIsInstance<String>().forEach { add(JsonPrimitive(it)) } }
+            }
+            else -> null
+        }
+    }
+
+    private fun applyEncodedPreference(prefs: MutablePreferences, key: String, valueObj: JsonObject) {
+        val type = valueObj["type"]?.jsonPrimitive?.contentOrNull ?: return
+        val value = valueObj["value"] ?: return
+        runCatching {
+            when (type) {
+                "string" -> prefs[stringPreferencesKey(key)] = value.jsonPrimitive.content
+                "boolean" -> prefs[booleanPreferencesKey(key)] = value.jsonPrimitive.boolean
+                "int" -> prefs[intPreferencesKey(key)] = value.jsonPrimitive.int
+                "long" -> prefs[longPreferencesKey(key)] = value.jsonPrimitive.long
+                "float" -> prefs[floatPreferencesKey(key)] = value.jsonPrimitive.float
+                "double" -> prefs[doublePreferencesKey(key)] = value.jsonPrimitive.double
+                "string_set" -> prefs[stringSetPreferencesKey(key)] =
+                    value.jsonArray.map { it.jsonPrimitive.content }.toSet()
+            }
+        }.onFailure { e ->
+            Log.w(TAG, "Skipping invalid encoded preference $key of type $type", e)
+        }
+    }
+
+    private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {
+        return try {
+            block()
+        } catch (e: Exception) {
+            if (!authManager.refreshSessionIfJwtExpired(e)) throw e
+            block()
+        }
+    }
+
+    private fun buildSettingsSignature(blob: JsonObject): String {
+        return blob.toString().hashCode().toString()
+    }
+}
