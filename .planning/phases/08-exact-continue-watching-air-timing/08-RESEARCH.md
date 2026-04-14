@@ -427,22 +427,25 @@ class ContinueWatchingAirAlarmReceiver : BroadcastReceiver() {
 | A3 | A project-owned country-to-source-zone policy table is acceptable when Phase 7 metadata does not expose a better network/platform timezone. | Architecture / Open Questions | Non-US multi-zone countries could receive fake precision unless the table is carefully limited and diagnostic fallback is used. |
 | A4 | The final Phase 7 TVDB model will expose episode `aired`, series `airsTime`, country/originalCountry, and network/platform metadata to `TrackingNextUpEntry` construction. | Architecture Patterns | Phase 8 tasks may need a preliminary integration task if Phase 7 stores these fields elsewhere. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Exact alarm permission posture**
    - What we know: The app targets SDK 36, and Android docs require alarms/reminders permission handling for exact alarm APIs on Android 12+. [VERIFIED: `app/build.gradle.kts`; CITED: Android alarms docs]
    - What's unclear: Whether Nexio should request `SCHEDULE_EXACT_ALARM`, rely on in-memory exact timer plus inexact durable fallback, or treat exact permission absence as a diagnostic-only degraded mode. [ASSUMED]
    - Recommendation: Plan a scheduler abstraction with `canScheduleExactAlarms()` branching and diagnostics; only add a user-facing permission request if product accepts the Play policy/UX cost. [CITED: Android alarms docs; ASSUMED]
+   - RESOLVED: Phase 8 plans use an AlarmManager wrapper that schedules an exact alarm when `canScheduleExactAlarms()` allows it, uses an inexact durable fallback with diagnostics when exact alarm permission is unavailable, and does not add a new user-facing permission flow unless implementation discovers that flow is mandatory. [VERIFIED: checker revision context]
 
 2. **Non-US country timezone data source**
    - What we know: TVDB policy requires country capital or most populous-city time for non-US series, and Android ICU can list country-associated timezone IDs for two-letter country codes. [CITED: TVDB FAQ; CITED: Android ICU TimeZone docs]
    - What's unclear: Android does not provide a direct "capital or most populous city timezone" API, and TVDB country fields in `tvdb.yml` are strings whose exact alpha-2/alpha-3 shape must be confirmed from Phase 7 DTO mapping. [CITED: `tvdb.yml`; ASSUMED]
    - Recommendation: Use TVDB/platform/network metadata first; for non-US fallback, create a small audited country policy table that returns null when confidence is low, causing date-only fallback with diagnostics. [ASSUMED]
+   - RESOLVED: Use an explicit audited policy table/mapper for TVDB-supported country and platform defaults; when no reliable mapping exists, fall back to date-only availability with diagnostics instead of inventing fake exact precision. [VERIFIED: checker revision context]
 
 3. **Phase 7 exact field names**
    - What we know: Phase 7 research recommends provider-neutral TV metadata and TVDB series/episode DTOs, but source code is not yet present in this checkout. [VERIFIED: `07-RESEARCH.md`; VERIFIED: codebase grep]
    - What's unclear: The exact class and field names Phase 8 will extend. [VERIFIED: codebase grep]
    - Recommendation: Plan Wave 0 to inspect Phase 7 implementation before editing, then adapt the timing model names to the implemented TVDB provider contracts. [VERIFIED: `07-CONTEXT.md`; ASSUMED]
+   - RESOLVED: Phase 8 plans introduce adapter-level nullable timing inputs so executors map final Phase 7 model names into `episodeAiredDate`, `seriesAirsTime`, `seriesCountry`, `networkName`, and `platformName` without depending on exact Phase 7 class names. [VERIFIED: checker revision context]
 
 ## Environment Availability
 
