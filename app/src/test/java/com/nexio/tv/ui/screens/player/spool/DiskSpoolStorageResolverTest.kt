@@ -51,6 +51,33 @@ class DiskSpoolStorageResolverTest {
     }
 
     @Test
+    fun `external directory uses mounted secondary adopted app cache directory`() {
+        val primary = temp.newFolder("primary")
+        val adopted = temp.newFolder("adopted")
+
+        val result = DiskSpoolStorageResolver.externalSpoolDirectoryFromCandidates(
+            externalCacheDirs = arrayOf(primary, adopted),
+            stateOf = { Environment.MEDIA_MOUNTED },
+            removableOf = { false }
+        )
+
+        assertEquals(File(adopted, "player_disk_spool"), result)
+    }
+
+    @Test
+    fun `external directory ignores single mounted primary app cache directory`() {
+        val primary = temp.newFolder("primary")
+
+        val result = DiskSpoolStorageResolver.externalSpoolDirectoryFromCandidates(
+            externalCacheDirs = arrayOf(primary),
+            stateOf = { Environment.MEDIA_MOUNTED },
+            removableOf = { false }
+        )
+
+        assertNull(result)
+    }
+
+    @Test
     fun `external directory is unavailable when no removable mounted app cache dir exists`() {
         val primary = temp.newFolder("primary")
         val usb = temp.newFolder("usb")

@@ -25,6 +25,40 @@ class DiskSpoolSessionTest {
     val temp = TemporaryFolder()
 
     @Test
+    fun `constructor creates empty spool file without preallocating capacity`() {
+        val spoolFile = File(temp.root, "movie.spool")
+        val session = DiskSpoolSession(spoolFile, capacityBytes = 1024L, waitTimeoutMs = 1_000L)
+
+        assertEquals(0L, spoolFile.length())
+
+        session.close()
+    }
+
+    @Test
+    fun `spool file grows only as bytes are written`() {
+        val spoolFile = File(temp.root, "movie.spool")
+        val session = DiskSpoolSession(spoolFile, capacityBytes = 1024L, waitTimeoutMs = 1_000L)
+
+        session.writeRange(start = 0L, bytes = byteArrayOf(1, 2, 3, 4), length = 4)
+
+        assertEquals(4L, spoolFile.length())
+
+        session.close()
+    }
+
+    @Test
+    fun `spool file does not grow beyond ring capacity`() {
+        val spoolFile = File(temp.root, "movie.spool")
+        val session = DiskSpoolSession(spoolFile, capacityBytes = 16L, waitTimeoutMs = 1_000L)
+
+        session.writeRange(start = 0L, bytes = ByteArray(64) { it.toByte() }, length = 64)
+
+        assertEquals(16L, spoolFile.length())
+
+        session.close()
+    }
+
+    @Test
     fun `write read advances frontier`() {
         val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 1_000L)
 
@@ -41,7 +75,7 @@ class DiskSpoolSessionTest {
     }
 
     @Test
-    fun `constructor deletes spool file when reader open fails after preallocation`() {
+    fun `constructor deletes spool file when reader open fails after writer open`() {
         val realSpoolFile = File(temp.root, "movie.spool")
         val readerFailurePath = temp.newFolder("reader-failure")
         val spoolFile = ReaderOpenFailingFile(realSpoolFile, readerFailurePath)

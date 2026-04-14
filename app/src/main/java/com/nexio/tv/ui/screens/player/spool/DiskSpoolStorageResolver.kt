@@ -72,9 +72,11 @@ internal object DiskSpoolStorageResolver {
         stateOf: (File) -> String,
         removableOf: (File) -> Boolean
     ): File? {
-        return externalCacheDirs
+        val mountedCandidates = externalCacheDirs
             .filter { file -> stateOf(file) == Environment.MEDIA_MOUNTED }
-            .firstOrNull { file -> removableOf(file) }
-            ?.resolve(DISK_SPOOL_DIR)
+        val selectedDirectory = mountedCandidates.firstOrNull { file -> removableOf(file) }
+            ?: mountedCandidates.drop(1).firstOrNull()
+
+        return selectedDirectory?.resolve(DISK_SPOOL_DIR)
     }
 }
