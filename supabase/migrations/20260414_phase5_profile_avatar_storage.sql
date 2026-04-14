@@ -1,3 +1,87 @@
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  profile_index INT NOT NULL CHECK (profile_index BETWEEN 1 AND 4),
+  name TEXT NOT NULL DEFAULT '',
+  avatar_color_hex TEXT NOT NULL DEFAULT '#1E88E5',
+  avatar_url TEXT DEFAULT NULL,
+  uses_primary_addons BOOLEAN NOT NULL DEFAULT false,
+  uses_primary_plugins BOOLEAN NOT NULL DEFAULT false,
+  avatar_id TEXT DEFAULT NULL,
+  pin_hash TEXT DEFAULT NULL,
+  pin_enabled BOOLEAN NOT NULL DEFAULT false,
+  pin_locked_until TIMESTAMPTZ DEFAULT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, profile_index)
+);
+
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT NULL;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS uses_primary_addons BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS uses_primary_plugins BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_id TEXT DEFAULT NULL;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS pin_hash TEXT DEFAULT NULL;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS pin_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS pin_locked_until TIMESTAMPTZ DEFAULT NULL;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.profiles'::regclass
+      AND conname = 'profiles_user_id_profile_index_key'
+  ) THEN
+    ALTER TABLE public.profiles
+      ADD CONSTRAINT profiles_user_id_profile_index_key UNIQUE (user_id, profile_index);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'profiles'
+      AND policyname = 'Users can read own profiles'
+  ) THEN
+    CREATE POLICY "Users can read own profiles"
+      ON public.profiles FOR SELECT
+      USING (auth.uid() = user_id);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'profiles'
+      AND policyname = 'Users can insert own profiles'
+  ) THEN
+    CREATE POLICY "Users can insert own profiles"
+      ON public.profiles FOR INSERT
+      WITH CHECK (auth.uid() = user_id);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'profiles'
+      AND policyname = 'Users can update own profiles'
+  ) THEN
+    CREATE POLICY "Users can update own profiles"
+      ON public.profiles FOR UPDATE
+      USING (auth.uid() = user_id);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'profiles'
+      AND policyname = 'Users can delete own profiles'
+  ) THEN
+    CREATE POLICY "Users can delete own profiles"
+      ON public.profiles FOR DELETE
+      USING (auth.uid() = user_id);
+  END IF;
+END;
+$$;
+
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'profiles') THEN
@@ -10,30 +94,62 @@ INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 VALUES ('profile-avatars', 'profile-avatars', true, 5242880, ARRAY['image/jpeg', 'image/png', 'image/webp'])
 ON CONFLICT (id) DO NOTHING;
 
-CREATE POLICY "Users can upload own avatars"
-  ON storage.objects FOR INSERT
-  WITH CHECK (
-    bucket_id = 'profile-avatars'
-    AND (storage.foldername(name))[1] = auth.uid()::text
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'storage'
+      AND tablename = 'objects'
+      AND policyname = 'Users can upload own avatars'
+  ) THEN
+    CREATE POLICY "Users can upload own avatars"
+      ON storage.objects FOR INSERT
+      WITH CHECK (
+        bucket_id = 'profile-avatars'
+        AND (storage.foldername(name))[1] = auth.uid()::text
+      );
+  END IF;
 
-CREATE POLICY "Public can read avatars"
-  ON storage.objects FOR SELECT
-  USING (bucket_id = 'profile-avatars');
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'storage'
+      AND tablename = 'objects'
+      AND policyname = 'Public can read avatars'
+  ) THEN
+    CREATE POLICY "Public can read avatars"
+      ON storage.objects FOR SELECT
+      USING (bucket_id = 'profile-avatars');
+  END IF;
 
-CREATE POLICY "Users can update own avatars"
-  ON storage.objects FOR UPDATE
-  USING (
-    bucket_id = 'profile-avatars'
-    AND (storage.foldername(name))[1] = auth.uid()::text
-  );
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'storage'
+      AND tablename = 'objects'
+      AND policyname = 'Users can update own avatars'
+  ) THEN
+    CREATE POLICY "Users can update own avatars"
+      ON storage.objects FOR UPDATE
+      USING (
+        bucket_id = 'profile-avatars'
+        AND (storage.foldername(name))[1] = auth.uid()::text
+      );
+  END IF;
 
-CREATE POLICY "Users can delete own avatars"
-  ON storage.objects FOR DELETE
-  USING (
-    bucket_id = 'profile-avatars'
-    AND (storage.foldername(name))[1] = auth.uid()::text
-  );
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'storage'
+      AND tablename = 'objects'
+      AND policyname = 'Users can delete own avatars'
+  ) THEN
+    CREATE POLICY "Users can delete own avatars"
+      ON storage.objects FOR DELETE
+      USING (
+        bucket_id = 'profile-avatars'
+        AND (storage.foldername(name))[1] = auth.uid()::text
+      );
+  END IF;
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION public.profile_upsert(
   p_profile_index INT,
