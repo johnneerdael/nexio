@@ -88,6 +88,35 @@ class HomeCatalogStartupReadinessTest {
     }
 
     @Test
+    fun `expected configured home keys exclude disabled synthetic rails`() {
+        val expected = buildExpectedConfiguredHomeOrderKeys(
+            addons = emptyList(),
+            disabledHomeCatalogKeys = setOf(
+                TraktCatalogIds.TRENDING_MOVIES,
+                SimklCatalogIds.TV_TRENDING_TODAY,
+                "top:top-rated"
+            ),
+            traktPrefs = TraktCatalogPreferences(
+                enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES),
+                catalogOrder = TraktCatalogIds.BUILT_IN_ORDER
+            ),
+            simklPrefs = SimklCatalogPreferences(
+                enabledCatalogs = setOf(SimklCatalogIds.TV_TRENDING_TODAY),
+                catalogOrder = listOf(SimklCatalogIds.TV_TRENDING_TODAY)
+            ),
+            mdbPrefs = MDBListCatalogPreferences(
+                selectedTopListKeys = setOf("top:top-rated"),
+                catalogOrder = listOf("top:top-rated")
+            ),
+            mdbSnapshot = MDBListDiscoverySnapshot(
+                topLists = listOf(listOption("top:top-rated", isPersonal = false))
+            )
+        )
+
+        assertEquals(emptyList<String>(), expected)
+    }
+
+    @Test
     fun `expected configured home keys preserve combined trakt simkl addon ordering`() {
         val addons = listOf(
             addonWithCatalog("cinemeta", "movie", "popular")

@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.addon
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier
 import com.nexio.tv.core.recommendations.AndroidTvFeedCatalogService
 import com.nexio.tv.core.recommendations.AndroidTvFeedOption
 import com.nexio.tv.core.sync.addonCatalogDisableKey
@@ -43,7 +44,8 @@ class CatalogOrderViewModel @Inject constructor(
     private val mdbListDiscoveryService: MDBListDiscoveryService,
     private val mdbListSettingsDataStore: MDBListSettingsDataStore,
     private val androidTvRecommendationsDataStore: AndroidTvRecommendationsDataStore,
-    private val androidTvFeedCatalogService: AndroidTvFeedCatalogService
+    private val androidTvFeedCatalogService: AndroidTvFeedCatalogService,
+    private val catalogPriorityHydrationNotifier: CatalogPriorityHydrationNotifier
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CatalogOrderUiState())
@@ -66,11 +68,15 @@ class CatalogOrderViewModel @Inject constructor(
 
     fun toggleCatalogEnabled(disableKey: String?) {
         if (disableKey.isNullOrBlank()) return
+        val wasDisabled = disableKey in disabledKeysCache
         val updatedDisabled = disabledKeysCache.toMutableSet().apply {
             if (disableKey in this) remove(disableKey) else add(disableKey)
         }
         viewModelScope.launch {
             layoutPreferenceDataStore.setDisabledHomeCatalogKeys(updatedDisabled.toList())
+            if (wasDisabled) {
+                catalogPriorityHydrationNotifier.notifyPriorityHydrationRequired()
+            }
         }
     }
 
