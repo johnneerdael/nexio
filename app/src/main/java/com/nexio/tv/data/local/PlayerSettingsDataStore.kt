@@ -167,6 +167,9 @@ enum class IecPackerChannelLayout(val storedValue: String, val kodiChannelLayout
  */
 data class PlayerSettings(
     val playerPreference: PlayerPreference = PlayerPreference.INTERNAL,
+    val internalPlayerEngine: InternalPlayerEngine = InternalPlayerEngine.EXOPLAYER,
+    val autoSwitchInternalPlayerOnError: Boolean = false,
+    val mpvHardwareDecodeMode: MpvHardwareDecodeMode = MpvHardwareDecodeMode.AUTO_SAFE,
     val useLibass: Boolean = false,
     val libassRenderType: LibassRenderType = LibassRenderType.OVERLAY_OPEN_GL,
     val subtitleStyle: SubtitleStyleSettings = SubtitleStyleSettings(),
@@ -424,6 +427,19 @@ enum class PlayerPreference {
     ASK_EVERY_TIME
 }
 
+enum class InternalPlayerEngine {
+    EXOPLAYER,
+    LIBMPV
+}
+
+enum class MpvHardwareDecodeMode {
+    LEGACY_DIRECT_COPY,
+    AUTO_SAFE,
+    HARDWARE_COPY,
+    HARDWARE_DIRECT,
+    DISABLED
+}
+
 /**
  * Enum representing the different libass render types
  * Maps to io.github.peerless2012.ass.media.type.AssRenderType
@@ -447,6 +463,10 @@ class PlayerSettingsDataStore @Inject constructor(
 
     // Player preference key
     private val playerPreferenceKey = stringPreferencesKey("player_preference")
+    private val internalPlayerEngineKey = stringPreferencesKey("internal_player_engine")
+    private val autoSwitchInternalPlayerOnErrorKey =
+        booleanPreferencesKey("auto_switch_internal_player_on_error")
+    private val mpvHardwareDecodeModeKey = stringPreferencesKey("mpv_hardware_decode_mode")
 
     // Libass settings keys
     private val useLibassKey = booleanPreferencesKey("use_libass")
@@ -727,6 +747,9 @@ class PlayerSettingsDataStore @Inject constructor(
                         else -> runCatching { PlayerPreference.valueOf(it) }.getOrDefault(PlayerPreference.INTERNAL)
                     }
                 } ?: PlayerPreference.INTERNAL,
+                internalPlayerEngine = parseInternalPlayerEngine(prefs[internalPlayerEngineKey]),
+                autoSwitchInternalPlayerOnError = prefs[autoSwitchInternalPlayerOnErrorKey] ?: false,
+                mpvHardwareDecodeMode = parseMpvHardwareDecodeMode(prefs[mpvHardwareDecodeModeKey]),
                 useLibass = prefs[useLibassKey] ?: false,
                 libassRenderType = prefs[libassRenderTypeKey]?.let {
                     try { LibassRenderType.valueOf(it) } catch (e: Exception) { LibassRenderType.OVERLAY_OPEN_GL }
@@ -954,6 +977,24 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setPlayerPreference(preference: PlayerPreference) {
         store().edit { prefs ->
             prefs[playerPreferenceKey] = preference.name
+        }
+    }
+
+    suspend fun setInternalPlayerEngine(engine: InternalPlayerEngine) {
+        store().edit { prefs ->
+            prefs[internalPlayerEngineKey] = engine.name
+        }
+    }
+
+    suspend fun setAutoSwitchInternalPlayerOnError(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[autoSwitchInternalPlayerOnErrorKey] = enabled
+        }
+    }
+
+    suspend fun setMpvHardwareDecodeMode(mode: MpvHardwareDecodeMode) {
+        store().edit { prefs ->
+            prefs[mpvHardwareDecodeModeKey] = mode.name
         }
     }
 
@@ -1280,6 +1321,25 @@ class PlayerSettingsDataStore @Inject constructor(
 
     private fun parseSubtitleOrganizationMode(value: String?): SubtitleOrganizationMode {
         return SubtitleOrganizationMode.BY_LANGUAGE
+    }
+
+    private fun parseInternalPlayerEngine(value: String?): InternalPlayerEngine {
+        return when (value) {
+            "LIBMPV", "MVP_PLAYER", "MPV_PLAYER" -> InternalPlayerEngine.LIBMPV
+            "EXOPLAYER" -> InternalPlayerEngine.EXOPLAYER
+            else -> InternalPlayerEngine.EXOPLAYER
+        }
+    }
+
+    private fun parseMpvHardwareDecodeMode(value: String?): MpvHardwareDecodeMode {
+        return when (value) {
+            null, "AUTO_SAFE" -> MpvHardwareDecodeMode.AUTO_SAFE
+            "HARDWARE_COPY" -> MpvHardwareDecodeMode.HARDWARE_COPY
+            "HARDWARE_DIRECT" -> MpvHardwareDecodeMode.HARDWARE_DIRECT
+            "DISABLED" -> MpvHardwareDecodeMode.DISABLED
+            "LEGACY_DIRECT_COPY" -> MpvHardwareDecodeMode.LEGACY_DIRECT_COPY
+            else -> MpvHardwareDecodeMode.AUTO_SAFE
+        }
     }
 
     private fun parseAddonSubtitleStartupMode(value: String?): AddonSubtitleStartupMode {

@@ -19,6 +19,39 @@ import org.robolectric.RobolectricTestRunner
 class PlayerSettingsDataStoreTest {
 
     @Test
+    fun `internal player engine defaults to exoplayer and persists libmpv selection`() = runTest {
+        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+
+        assertEquals(InternalPlayerEngine.EXOPLAYER, dataStore.playerSettings.first().internalPlayerEngine)
+
+        dataStore.setInternalPlayerEngine(InternalPlayerEngine.LIBMPV)
+
+        assertEquals(InternalPlayerEngine.LIBMPV, dataStore.playerSettings.first().internalPlayerEngine)
+    }
+
+    @Test
+    fun `auto switch internal player setting persists`() = runTest {
+        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+
+        assertEquals(false, dataStore.playerSettings.first().autoSwitchInternalPlayerOnError)
+
+        dataStore.setAutoSwitchInternalPlayerOnError(true)
+
+        assertEquals(true, dataStore.playerSettings.first().autoSwitchInternalPlayerOnError)
+    }
+
+    @Test
+    fun `mpv hardware decode mode defaults to auto safe and persists direct selection`() = runTest {
+        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+
+        assertEquals(MpvHardwareDecodeMode.AUTO_SAFE, dataStore.playerSettings.first().mpvHardwareDecodeMode)
+
+        dataStore.setMpvHardwareDecodeMode(MpvHardwareDecodeMode.HARDWARE_DIRECT)
+
+        assertEquals(MpvHardwareDecodeMode.HARDWARE_DIRECT, dataStore.playerSettings.first().mpvHardwareDecodeMode)
+    }
+
+    @Test
     fun `autoplay bandwidth mode defaults to manual with 40 mbps manual cap`() = runTest {
         val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
 
