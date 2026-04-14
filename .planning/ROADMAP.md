@@ -35,6 +35,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Goal**: TVDB replaces TMDB as the normal TV metadata provider across existing TV enrichment surfaces, while poster-ratings integrations remain authoritative for poster imagery
 **Depends on**: Phase 6
 **Requirements**: PREF-02, PREF-03, PREF-07, META-01, META-02, META-04, UX-01
+**Plans:** 6 plans
+Plans:
+- [ ] 07-01-PLAN.md — Verify Phase 6 TVDB foundation exists, then add provider-neutral TV metadata models, diagnostics, and TVDB cache namespaces
+- [ ] 07-02-PLAN.md — Implement TVDB metadata mapping and TVDB-first router with explicit TMDB fallback
+- [ ] 07-03-PLAN.md — Route Detail screen series metadata, episode rows, and season watched behavior through TVDB-first routing
+- [ ] 07-04-PLAN.md — Route Continue Watching display metadata and runtime hydration through TVDB-first routing
+- [ ] 07-05-PLAN.md — Route Home focused, hero, and catalog refresh TV metadata through TVDB-first routing
+- [ ] 07-06-PLAN.md — Update provider-precedence settings copy and poster-ratings TVDB poster assertions
 **Success Criteria** (what must be TRUE):
   1. With TVDB enabled and TMDB enabled, normal TV detail, TV Home enrichment, episode metadata, TV artwork, and Continue Watching metadata paths do not issue TMDB TV metadata fetches
   2. TVDB series and episode fields populate the same user-facing metadata roles currently served by TMDB where TVDB provides equivalent data
