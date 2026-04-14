@@ -384,22 +384,19 @@ fun `tvdb active detail enrichment does not call tmdb tv metadata`() = runTest {
 | A2 | Recommended exact TVDB cache-key string is a planning recommendation, not an existing app convention. | Cache And Diagnostics Patterns | Planner may need to align with Phase 6 cache helpers if they exist on the execution branch. |
 | A3 | Provider-neutral `TvMetadataEnrichment` is recommended instead of reusing `TmdbEnrichment`. | Architecture Patterns / State of the Art | If implementers prefer minimal diff, they may adapt `TmdbEnrichment`, but must avoid TMDB-named TVDB cache/schema leakage. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Has Phase 6 merged into the execution branch?**
    - What we know: This checkout has Phase 6 planning context but no app source classes named `Tvdb*`. [VERIFIED: rg tvdb app/src/main/java; VERIFIED: 06-CONTEXT.md]
-   - What's unclear: Exact Phase 6 class names for settings, auth token provider, diagnostics, and identity lookup. [ASSUMED]
-   - Recommendation: Plan Wave 0 to verify Phase 6 source exists; if absent, block Phase 7 implementation or add prerequisite tasks from Phase 6. [VERIFIED: 07-CONTEXT.md]
+   - Resolution: Phase 6 source availability is enforced by Plan 01's prerequisite gate. If the required Phase 6 settings, auth, identity, and TVDB API source files are absent, Phase 7 stops before provider replacement code is written. [VERIFIED: 07-01-PLAN.md]
 
 2. **Which TVDB artwork type IDs map to posters, backgrounds, and logos?**
    - What we know: TVDB artwork records have `type`, and `type` corresponds to `/artwork/types`. [CITED: tvdb.yml:2320; CITED: tvdb.yml:1685]
-   - What's unclear: The local research did not resolve stable type ID constants from `tvdb.yml`. [VERIFIED: tvdb.yml]
-   - Recommendation: Use Phase 6/10 reference-data caching if available; otherwise implement conservative heuristics from artwork metadata and add tests with representative fixtures. [ASSUMED]
+   - Resolution: Phase 7 uses local deterministic heuristics plus fixture tests: `type == 2` poster, `type == 3` backdrop, `type == 23` logo, sorted by descending score with `SeriesExtendedRecord.image` as poster fallback. Reference-data caching remains deferred to Phase 10. [VERIFIED: 07-02-PLAN.md]
 
 3. **How strict should no-TMDB-call assertions be around non-metadata integrations?**
    - What we know: Episode ratings, trailers, reviews, and MDBList can still trigger TMDB calls outside scoped Phase 7 metadata. [VERIFIED: EpisodeRatingsSelectionRepository.kt; VERIFIED: TrailerService.kt; VERIFIED: MetaDetailsViewModel.kt]
-   - What's unclear: Whether the phase gate should assert zero TMDB calls globally or zero TMDB TV metadata calls for scoped surfaces. [VERIFIED: 07-CONTEXT.md]
-   - Recommendation: Assert zero `TmdbMetadataService` calls for representative TVDB-success metadata paths, and classify non-scoped integrations explicitly in plan acceptance criteria. [VERIFIED: 07-CONTEXT.md]
+   - Resolution: No-TMDB assertions are scoped to Phase 7 TV metadata calls. They prove TVDB-success metadata paths avoid `TmdbMetadataService` and pre-router `TmdbService.ensureTmdbId`; they do not assert global zero TMDB usage for trailers, reviews, ratings, MDBList, or other deferred integrations. [VERIFIED: 07-CONTEXT.md; VERIFIED: 07-02-PLAN.md]
 
 ## Environment Availability
 
