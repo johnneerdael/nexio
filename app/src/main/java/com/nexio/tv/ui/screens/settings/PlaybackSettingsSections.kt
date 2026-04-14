@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
@@ -56,6 +57,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nexio.tv.core.player.AndroidFrameRateSettings
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.AutoplayBandwidthMode
 import com.nexio.tv.data.local.FrameRateMatchingMode
@@ -145,6 +147,8 @@ internal fun PlaybackSettingsSections(
     onSetTrailerEnabled: (Boolean) -> Unit,
     onSetTrailerDelaySeconds: (Int) -> Unit,
     onSetFrameRateMatchingMode: (FrameRateMatchingMode) -> Unit,
+    androidFrameRateStatus: AndroidFrameRateSettings.Status,
+    onOpenAndroidDisplaySettings: () -> Unit,
     onSetResolutionMatchingEnabled: (Boolean) -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
@@ -455,11 +459,12 @@ internal fun PlaybackSettingsSections(
             videoSettingsItems(
                 playerSettings = playerSettings,
                 frameRateMatchingLabel = generalUi.frameRateMatchingLabel,
+                androidFrameRateStatus = androidFrameRateStatus,
                 afrExpanded = afrExpanded,
                 onToggleAfrExpanded = { afrExpanded = !afrExpanded },
                 afrHeaderFocusRequester = afrHeaderFocus,
                 onSetFrameRateMatchingMode = onSetFrameRateMatchingMode,
-                onSetResolutionMatchingEnabled = onSetResolutionMatchingEnabled,
+                onOpenAndroidDisplaySettings = onOpenAndroidDisplaySettings,
                 onSetTunnelingEnabled = onSetTunnelingEnabled,
                 onSetExperimentalDv7ToDv81Enabled = onSetExperimentalDv7ToDv81Enabled,
                 onSetExperimentalDv7ToDv81PreserveMappingEnabled =
@@ -701,9 +706,8 @@ internal fun PlaybackSectionHeader(
 @Composable
 internal fun FrameRateMatchingModeOptions(
     selectedMode: FrameRateMatchingMode,
-    resolutionMatchingEnabled: Boolean,
     onSelect: (FrameRateMatchingMode) -> Unit,
-    onSetResolutionMatchingEnabled: (Boolean) -> Unit,
+    onOpenAndroidDisplaySettings: () -> Unit,
     onFocused: () -> Unit,
     enabled: Boolean
 ) {
@@ -741,12 +745,11 @@ internal fun FrameRateMatchingModeOptions(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        ToggleSettingsItem(
-            icon = Icons.Default.Image,
-            title = stringResource(R.string.playback_resolution_matching),
-            subtitle = stringResource(R.string.playback_resolution_matching_sub),
-            isChecked = resolutionMatchingEnabled,
-            onCheckedChange = onSetResolutionMatchingEnabled,
+        NavigationSettingsItem(
+            icon = Icons.AutoMirrored.Filled.OpenInNew,
+            title = stringResource(R.string.playback_afr_android_open),
+            subtitle = stringResource(R.string.playback_afr_android_open_sub),
+            onClick = onOpenAndroidDisplaySettings,
             onFocused = onFocused,
             enabled = enabled
         )
