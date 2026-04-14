@@ -650,12 +650,21 @@ private fun ModernCarouselCard(
     val requestHeightPx = remember(cardHeight, density) {
         with(density) { cardHeight.roundToPx() }
     }
-    val imageModel = remember(context, imageUrl, requestWidthPx, requestHeightPx) {
+    val imageModel = remember(context, imageUrl, requestWidthPx, requestHeightPx, item.metaPreview?.id, item.metaPreview?.posterProviderTag) {
         imageUrl?.let {
+            val isBackdrop = focusedPosterBackdropExpandEnabled && isBackdropExpanded
+            val diskKey = item.metaPreview?.let { meta ->
+                if (isBackdrop) {
+                    "${meta.id}_native_background"
+                } else {
+                    "${meta.id}_${meta.posterProviderTag ?: "native"}_poster"
+                }
+            }
             ImageRequest.Builder(context)
                 .data(it)
                 .crossfade(false)
                 .memoryCacheKey("${it}_${requestWidthPx}x${requestHeightPx}")
+                .apply { if (diskKey != null) diskCacheKey(diskKey) }
                 .size(width = requestWidthPx, height = requestHeightPx)
                 .build()
         }
@@ -668,12 +677,13 @@ private fun ModernCarouselCard(
         with(density) { (maxRequestCardWidth * 0.62f).roundToPx() }
     }
     val effectiveLogoUrl = frozenLogoUrl.value
-    val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx) {
+    val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx, item.metaPreview?.id) {
         effectiveLogoUrl?.let {
             ImageRequest.Builder(context)
                 .data(it)
                 .crossfade(false)
                 .memoryCacheKey("${it}_${maxLogoWidthPx}x${logoHeightPx}")
+                .apply { item.metaPreview?.let { meta -> diskCacheKey("${meta.id}_native_logo") } }
                 .size(width = maxLogoWidthPx, height = logoHeightPx)
                 .build()
         }

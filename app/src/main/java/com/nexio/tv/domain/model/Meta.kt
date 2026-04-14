@@ -29,7 +29,8 @@ data class Meta(
     val awards: String?,
     val language: String?,
     val links: List<MetaLink>,
-    val trailerYtIds: List<String> = emptyList()
+    val trailerYtIds: List<String> = emptyList(),
+    val posterProviderTag: String? = null
 ) {
     val apiType: String
         get() = type.toApiString(rawType)

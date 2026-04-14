@@ -6,6 +6,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -15,7 +16,8 @@ import javax.inject.Singleton
 @Singleton
 class HomeCatalogSnapshotStore @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val metadataDiskCacheStore: MetadataDiskCacheStore
+    private val metadataDiskCacheStore: MetadataDiskCacheStore,
+    private val posterRatingsUrlResolver: PosterRatingsUrlResolver
 ) {
 
     companion object {
@@ -27,6 +29,11 @@ class HomeCatalogSnapshotStore @Inject constructor(
 
     private val gson = Gson()
 
+    suspend fun currentPosterProviderToken(): String {
+        val provider = posterRatingsUrlResolver.getActiveProvider() ?: return "native"
+        return "${provider.provider.name}:${provider.apiKey.hashCode()}"
+    }
+
     data class Snapshot(
         val catalogRows: List<CatalogRow>,
         val fullCatalogRows: List<CatalogRow>,
@@ -34,24 +41,25 @@ class HomeCatalogSnapshotStore @Inject constructor(
         val orderedGroupKeys: List<String> = emptyList()
     )
 
-    fun read(): Snapshot? {
+    fun read(posterProviderToken: String): Snapshot? {
         return runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
-            decodeSnapshot(raw)?.sanitize()
+            decodeSnapshot(raw, posterProviderToken)?.sanitize()
         }.onFailure { error ->
             Log.w(TAG, "Failed to restore home snapshot", error)
             clear()
         }.getOrNull()
     }
 
-    fun write(snapshot: Snapshot) {
+    fun write(snapshot: Snapshot, posterProviderToken: String) {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
                 addProperty("schemaVersion", SCHEMA_VERSION)
                 addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
                 addProperty("languageTag", currentLanguageTag())
+                addProperty("posterProviderToken", posterProviderToken)
                 add("catalogRows", gson.toJsonTree(snapshot.catalogRows))
                 add("fullCatalogRows", gson.toJsonTree(snapshot.fullCatalogRows))
                 add("heroItems", gson.toJsonTree(snapshot.heroItems))
@@ -72,7 +80,7 @@ class HomeCatalogSnapshotStore @Inject constructor(
         }
     }
 
-    private fun decodeSnapshot(raw: String): Snapshot? {
+    private fun decodeSnapshot(raw: String, posterProviderToken: String): Snapshot? {
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
         val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
         if (schemaVersion != SCHEMA_VERSION) {
@@ -84,6 +92,11 @@ class HomeCatalogSnapshotStore @Inject constructor(
         }
         val languageTag = root.get("languageTag")?.asString?.trim().orEmpty()
         if (languageTag.isBlank() || languageTag != currentLanguageTag()) {
+            return null
+        }
+        val cachedPosterToken = root.get("posterProviderToken")?.asString?.trim().orEmpty()
+        if (cachedPosterToken != posterProviderToken) {
+            Log.d(TAG, "Poster provider changed ($cachedPosterToken -> $posterProviderToken), invalidating snapshot")
             return null
         }
         val canonical = Snapshot(

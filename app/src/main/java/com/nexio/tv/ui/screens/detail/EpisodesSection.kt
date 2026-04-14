@@ -512,6 +512,7 @@ private fun EpisodeCard(
             .data(episode.thumbnail)
             .crossfade(false)
             .size(width = thumbnailWidthPx, height = thumbnailHeightPx)
+            .diskCacheKey("${episode.id}_native_thumbnail")
             .apply {
                 if (shouldBlur) {
                     transformations(com.nexio.tv.ui.util.BlurTransformation())

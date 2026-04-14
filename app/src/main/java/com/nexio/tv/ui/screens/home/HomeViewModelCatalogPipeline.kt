@@ -86,7 +86,8 @@ private const val SIMKL_ROW_NAME_DVD_RELEASES = "SIMKL Popular DVD Releases"
 
 internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
     viewModelScope.launch(Dispatchers.IO) {
-        val snapshot = homeCatalogSnapshotStore.read()
+        val posterToken = homeCatalogSnapshotStore.currentPosterProviderToken()
+        val snapshot = homeCatalogSnapshotStore.read(posterToken)
         if (snapshot == null) {
             Log.d(HomeViewModel.TAG, "Restored merged home snapshot null")
             return@launch
@@ -1835,8 +1836,9 @@ internal fun HomeViewModel.persistHomeSnapshotDebouncedPipeline(
         delay(HomeViewModel.HOME_SNAPSHOT_PERSIST_DEBOUNCE_MS)
         if (homeSnapshotPersistGeneration != persistGeneration) return@launch
         val latestSnapshot = pendingHomeSnapshotPersist ?: return@launch
-        homeCatalogSnapshotStore.write(latestSnapshot)
-        val persistedSnapshot = homeCatalogSnapshotStore.read() ?: latestSnapshot
+        val posterToken = homeCatalogSnapshotStore.currentPosterProviderToken()
+        homeCatalogSnapshotStore.write(latestSnapshot, posterToken)
+        val persistedSnapshot = homeCatalogSnapshotStore.read(posterToken) ?: latestSnapshot
         Log.d(
             HomeViewModel.TAG,
             "Persisted merged home snapshot write rows=${latestSnapshot.catalogRows.size} fullRows=${latestSnapshot.fullCatalogRows.size} " +

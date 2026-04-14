@@ -332,6 +332,7 @@ fun ContinueWatchingCard(
             .data(imageModel)
             .crossfade(false)
             .memoryCacheKey("${imageModel}_${requestWidthPx}x${requestHeightPx}")
+            .diskCacheKey("${item.contentId()}_native_thumbnail")
             .size(width = requestWidthPx, height = requestHeightPx)
             .build()
     }

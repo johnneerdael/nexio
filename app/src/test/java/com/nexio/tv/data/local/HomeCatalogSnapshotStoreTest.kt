@@ -1,6 +1,7 @@
 package com.nexio.tv.data.local
 
 import android.content.Context
+import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
@@ -14,6 +15,8 @@ import org.junit.Test
 
 class HomeCatalogSnapshotStoreTest {
 
+    private val testPosterToken = "native"
+
     @Test
     fun `read restores persisted home snapshot for matching language and epoch`() {
         val snapshotPrefs = InMemorySharedPreferences()
@@ -21,15 +24,17 @@ class HomeCatalogSnapshotStoreTest {
         var epoch = 7
         val metadataStore = mockk<MetadataDiskCacheStore>()
         every { metadataStore.currentLanguageEpoch() } answers { epoch }
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
         val store = HomeCatalogSnapshotStore(
             context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
-            metadataDiskCacheStore = metadataStore
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver
         )
 
         val snapshot = sampleSnapshot()
-        store.write(snapshot)
+        store.write(snapshot, testPosterToken)
 
-        assertEquals(snapshot, store.read())
+        assertEquals(snapshot, store.read(testPosterToken))
     }
 
     @Test
@@ -38,15 +43,17 @@ class HomeCatalogSnapshotStoreTest {
         val localePrefs = localePrefs("en")
         val metadataStore = mockk<MetadataDiskCacheStore>()
         every { metadataStore.currentLanguageEpoch() } returns 7
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
         val store = HomeCatalogSnapshotStore(
             context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
-            metadataDiskCacheStore = metadataStore
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver
         )
 
-        store.write(sampleSnapshot())
+        store.write(sampleSnapshot(), testPosterToken)
         localePrefs.edit().putString("locale_tag", "nl").apply()
 
-        assertNull(store.read())
+        assertNull(store.read(testPosterToken))
     }
 
     @Test
@@ -55,9 +62,11 @@ class HomeCatalogSnapshotStoreTest {
         val localePrefs = localePrefs("en")
         val metadataStore = mockk<MetadataDiskCacheStore>()
         every { metadataStore.currentLanguageEpoch() } returns 7
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
         val store = HomeCatalogSnapshotStore(
             context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
-            metadataDiskCacheStore = metadataStore
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver
         )
 
         val row = sampleRow("simkl", "simkl_tv_trending_today")
@@ -72,9 +81,9 @@ class HomeCatalogSnapshotStoreTest {
             )
         )
 
-        store.write(snapshot)
+        store.write(snapshot, testPosterToken)
 
-        assertEquals(snapshot.orderedGroupKeys, store.read()?.orderedGroupKeys)
+        assertEquals(snapshot.orderedGroupKeys, store.read(testPosterToken)?.orderedGroupKeys)
     }
 
     private fun sampleSnapshot(): HomeCatalogSnapshotStore.Snapshot {
