@@ -75,7 +75,6 @@
   <string name="trakt_catalogs_enabled_count">%1$d aktiviert</string>
   <string name="animeskip_enable_title">Anime Skip aktivieren</string>
   <string name="trakt_hide_recommendation">Empfehlung ausblenden</string>
-  <string name="trakt_unaired_now_shown">Noch nicht ausgestrahlte Folgen werden jetzt angezeigt</string>
   <string name="trakt_catalog_popular_shows_subtitle">Serien mit der höchsten langfristigen Popularität.</string>
   <string name="audio_dv5_compatibility_sub">Ermöglicht DV5-Streams die Verwendung des DV8.1-Kompatibilitätspfads. Behebt möglicherweise Farb-/Signalisierungsprobleme auf einigen Geräten, kann bei anderen jedoch zu Problemen führen.</string>
   <string name="tmdb_dialog_placeholder">Gib den TMDB-API-Schlüssel ein</string>
@@ -91,7 +90,6 @@
   <string name="mdblist_list_item_count_subtitle">%1$d Titel</string>
   <string name="trakt_catalog_up_next">Als Nächstes</string>
   <string name="animeskip_dialog_subtitle">Erstelle deine eigene Client-ID unter anime-skip.com/account/settings</string>
-  <string name="trakt_unaired_now_hidden">Noch nicht ausgestrahlte Folgen sind jetzt ausgeblendet</string>
   <string name="animeskip_enable_subtitle">Rufe Skip-Zeitstempel von anime-skip.com ab</string>
   <string name="trakt_catalog_trending_shows_subtitle">Serien mit der derzeit höchsten Zuschaueraktivität.</string>
   <string name="trakt_catalog_recommended_shows">Empfohlene Serien</string>
@@ -521,10 +519,6 @@
   <string name="trakt_missing_credentials">Fehlende TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET in local.properties.</string>
   <string name="trakt_continue_watching_window">Zeitraum für Weiter ansehen</string>
   <string name="trakt_continue_watching_subtitle">Trakt-Verlauf, der für Weiter ansehen berücksichtigt wird</string>
-  <string name="trakt_unaired_next_up">Noch nicht ausgestrahlte Folgen</string>
-  <string name="trakt_unaired_next_up_subtitle">Zeige kommende Folgen, bevor sie ausgestrahlt werden</string>
-  <string name="trakt_unaired_shown">Sichtbar</string>
-  <string name="trakt_unaired_hidden">Verborgen</string>
   <string name="trakt_cached_label">Zwischengespeichert</string>
   <string name="trakt_stat_movies">Filme</string>
   <string name="trakt_stat_shows">Serien</string>
@@ -538,8 +532,6 @@
   <string name="trakt_back">Zurück</string>
   <string name="trakt_cw_window_title">Zeitraum für Weiter ansehen</string>
   <string name="trakt_cw_window_subtitle">Wähle aus, aus welchem Zeitraum Trakt-Aktivitäten bei Weiter ansehen angezeigt werden sollen.</string>
-  <string name="trakt_unaired_dialog_title">Noch nicht ausgestrahlte Folgen</string>
-  <string name="trakt_unaired_dialog_subtitle">Wähle aus, ob bei Weiter ansehen auch kommende Episoden vor der Veröffentlichung angezeigt werden sollen.</string>
   <string name="trakt_show_unaired">Noch nicht ausgestrahlte Episoden anzeigen</string>
   <string name="trakt_hide_unaired">Noch nicht ausgestrahlte Episoden ausblenden</string>
   <string name="trakt_all_history">Gesamter Verlauf</string>

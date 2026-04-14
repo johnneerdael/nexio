@@ -326,10 +326,6 @@
   <string name="trakt_missing_credentials">Falta TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET en local.properties.</string>
   <string name="trakt_continue_watching_window">Periodo de Continuar viendo</string>
   <string name="trakt_continue_watching_subtitle">Historial de Trakt considerado para Continuar viendo</string>
-  <string name="trakt_unaired_next_up">Próximos episodios sin emitir</string>
-  <string name="trakt_unaired_next_up_subtitle">Muestra los próximos episodios antes de que se emitan</string>
-  <string name="trakt_unaired_shown">Visible</string>
-  <string name="trakt_unaired_hidden">Oculto</string>
   <string name="trakt_cached_label">En caché</string>
   <string name="trakt_stat_movies">Películas</string>
   <string name="trakt_stat_shows">Series</string>
@@ -343,8 +339,6 @@
   <string name="trakt_back">Atrás</string>
   <string name="trakt_cw_window_title">Periodo de Continuar viendo</string>
   <string name="trakt_cw_window_subtitle">Elige el periodo de actividad de Trakt que debe aparecer en Continuar viendo.</string>
-  <string name="trakt_unaired_dialog_title">Próximos episodios sin emitir</string>
-  <string name="trakt_unaired_dialog_subtitle">Elige si Continuar viendo debe incluir los próximos episodios antes de su lanzamiento.</string>
   <string name="trakt_show_unaired">Mostrar episodios sin emitir</string>
   <string name="trakt_hide_unaired">Ocultar episodios sin emitir</string>
   <string name="trakt_all_history">Todo el historial</string>
@@ -568,7 +562,6 @@
   <string name="tmdb_collections_subtitle">Colecciones de películas de TMDB en orden de estreno</string>
   <string name="tmdb_api_key_title">Clave API</string>
   <string name="trakt_auth_status_subtitle">Estado actual de la conexión con Trakt</string>
-  <string name="trakt_unaired_now_hidden">Los próximos episodios sin emitir ahora están ocultos</string>
   <string name="settings_animeskip_subtitle">Marcas de tiempo para saltar el intro/outro del anime</string>
   <string name="animeskip_dialog_placeholder">Introduce tu Client ID</string>
   <string name="poster_ratings_api_key_title">Clave API</string>
@@ -650,7 +643,6 @@
   <string name="trakt_waiting_approval">Esperando aprobación…</string>
   <string name="trakt_move_down">Mover abajo</string>
   <string name="audio_dv_experimental_title">DV7 - Conversión a DV8.1</string>
-  <string name="trakt_unaired_now_shown">Los próximos episodios sin emitir ahora se muestran</string>
   <string name="animeskip_client_id_subtitle">Obligatorio para obtener las marcas de salto de anime-skip.com</string>
   <string name="animeskip_dialog_title">Client ID de Anime Skip</string>
   <string name="mdblist_top_lists_subtitle">Busca top-lists públicas y actívalas como filas personalizadas</string>

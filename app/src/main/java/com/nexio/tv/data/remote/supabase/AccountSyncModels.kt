@@ -410,7 +410,6 @@ data class BufferNetworkSettings(
 @Serializable
 data class TraktSettingsPayload(
     val continueWatchingDaysCap: Int = 60,
-    val showUnairedNextUp: Boolean = true,
     val catalogEnabledSet: List<String> = emptyList(),
     val catalogOrder: List<String> = emptyList(),
     val selectedPopularListKeys: List<String> = emptyList()

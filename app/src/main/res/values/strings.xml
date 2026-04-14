@@ -835,12 +835,6 @@
     <string name="trakt_missing_credentials">Missing TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET in local.properties.</string>
     <string name="trakt_continue_watching_window">Continue Watching Window</string>
     <string name="trakt_continue_watching_subtitle">Trakt history considered for continue watching</string>
-    <string name="trakt_unaired_next_up">Unaired Next Up Episodes</string>
-    <string name="trakt_unaired_next_up_subtitle">Show upcoming episodes before they air</string>
-    <string name="trakt_unaired_shown">Shown</string>
-    <string name="trakt_unaired_hidden">Hidden</string>
-    <string name="trakt_unaired_now_shown">Unaired Next Up episodes are now shown</string>
-    <string name="trakt_unaired_now_hidden">Unaired Next Up episodes are now hidden</string>
     <string name="trakt_cached_label">Cached</string>
     <string name="trakt_stat_movies">Movies</string>
     <string name="trakt_stat_shows">Shows</string>
@@ -890,8 +884,6 @@
     <string name="trakt_back">Back</string>
     <string name="trakt_cw_window_title">Continue Watching Window</string>
     <string name="trakt_cw_window_subtitle">Choose how much Trakt activity should appear in continue watching.</string>
-    <string name="trakt_unaired_dialog_title">Unaired Next Up Episodes</string>
-    <string name="trakt_unaired_dialog_subtitle">Choose whether Continue Watching should include upcoming episodes before release.</string>
     <string name="trakt_show_unaired">Show unaired episodes</string>
     <string name="trakt_hide_unaired">Hide unaired episodes</string>
     <string name="trakt_all_history">All history</string>
