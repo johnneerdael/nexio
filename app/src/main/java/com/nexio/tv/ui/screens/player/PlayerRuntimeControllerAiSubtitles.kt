@@ -256,7 +256,20 @@ private suspend fun PlayerRuntimeController.translateAndActivateAddonOverlayCues
 private fun supportsAiTranslation(subtitle: Subtitle): Boolean {
     return when (PlayerSubtitleUtils.mimeTypeFromUrl(subtitle.url)) {
         MimeTypes.APPLICATION_SUBRIP,
-        MimeTypes.TEXT_VTT -> true
+        MimeTypes.TEXT_VTT,
+        MimeTypes.TEXT_SSA -> true
         else -> false
     }
+}
+
+internal fun subtitleSupportsAiTranslationForTest(url: String): Boolean {
+    return supportsAiTranslation(
+        Subtitle(
+            id = "test",
+            url = url,
+            lang = "en",
+            addonName = "test",
+            addonLogo = null
+        )
+    )
 }
