@@ -57,14 +57,36 @@ internal class DiskSpoolReadAheadBuffer(
         if (capacity <= 0L || length <= 0) return 0
         synchronized(lock) {
             if (released) return 0
-            val chunk = chunks.firstOrNull { position >= it.start && position < it.endExclusive }
-                ?: return 0
-            val relative = (position - chunk.start).toInt()
-            val bytesToCopy = minOf(length, chunk.length - relative)
-            System.arraycopy(chunk.bytes, relative, target, offset, bytesToCopy)
-            dropChunksBefore(position + bytesToCopy)
-            lock.notifyAll()
-            return bytesToCopy
+            return readLocked(position, target, offset, length)
+        }
+    }
+
+    fun readOrAwait(
+        position: Long,
+        target: ByteArray,
+        offset: Int,
+        length: Int,
+        timeoutMs: Long = DEFAULT_READ_AWAIT_TIMEOUT_MS
+    ): Int {
+        if (capacity <= 0L || length <= 0) return 0
+        val deadlineMs = System.currentTimeMillis() + timeoutMs.coerceAtLeast(0L)
+        synchronized(lock) {
+            while (!released) {
+                val read = readLocked(position, target, offset, length)
+                if (read > 0) return read
+                if (position < nextReadPosition) return 0
+                if (position >= session.contiguousFrontierBytes()) return 0
+
+                val remainingMs = deadlineMs - System.currentTimeMillis()
+                if (remainingMs <= 0L) return 0
+                try {
+                    lock.wait(minOf(remainingMs, READ_AWAIT_POLL_MS))
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return 0
+                }
+            }
+            return 0
         }
     }
 
@@ -177,9 +199,22 @@ internal class DiskSpoolReadAheadBuffer(
         }
     }
 
+    private fun readLocked(position: Long, target: ByteArray, offset: Int, length: Int): Int {
+        val chunk = chunks.firstOrNull { position >= it.start && position < it.endExclusive }
+            ?: return 0
+        val relative = (position - chunk.start).toInt()
+        val bytesToCopy = minOf(length, chunk.length - relative)
+        System.arraycopy(chunk.bytes, relative, target, offset, bytesToCopy)
+        dropChunksBefore(position + bytesToCopy)
+        lock.notifyAll()
+        return bytesToCopy
+    }
+
     private companion object {
         const val DEFAULT_CHUNK_BYTES = 1024 * 1024
         const val MAX_CAPACITY_BYTES = 256L * 1024L * 1024L
         const val NON_POSITIVE_READ_BACKOFF_MS = 50L
+        const val DEFAULT_READ_AWAIT_TIMEOUT_MS = 500L
+        const val READ_AWAIT_POLL_MS = 25L
     }
 }

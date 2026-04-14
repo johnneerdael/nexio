@@ -85,7 +85,7 @@ internal class DiskSpoolDataSource(
                 minOf(length.toLong(), remaining).toInt()
             }
 
-            val bufferedRead = readAheadBuffer?.read(position, buffer, offset, readLength) ?: 0
+            val bufferedRead = readAheadBuffer?.readOrAwait(position, buffer, offset, readLength) ?: 0
             if (bufferedRead > 0) {
                 position += bufferedRead.toLong()
                 if (remaining != C.LENGTH_UNSET.toLong()) {
