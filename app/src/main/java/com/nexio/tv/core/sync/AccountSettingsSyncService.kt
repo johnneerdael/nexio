@@ -233,9 +233,10 @@ class AccountSettingsSyncService @Inject constructor(
     private fun observeLocalChanges() {
         scope.launch {
             observeAccountConfigSyncChangedPaths(
-                heroCatalogSelections = layoutPreferenceDataStore.heroCatalogSelections.drop(1).map { Unit },
-                homeCatalogOrderKeys = layoutPreferenceDataStore.homeCatalogOrderKeys.drop(1).map { Unit },
-                disabledHomeCatalogKeys = layoutPreferenceDataStore.disabledHomeCatalogKeys.drop(1).map { Unit },
+                // Layout/catalog-order settings moved to v8 per-profile blob sync.
+                heroCatalogSelections = emptyFlow(),
+                homeCatalogOrderKeys = emptyFlow(),
+                disabledHomeCatalogKeys = emptyFlow(),
                 tmdbSettings = tmdbSettingsDataStore.settings.drop(1).map { Unit },
                 mdbListSettings = mdbListSettingsDataStore.settings.drop(1).map { Unit },
                 mdbListCatalogPreferences = mdbListSettingsDataStore.catalogPreferences.drop(1).map { Unit },
@@ -556,9 +557,10 @@ class AccountSettingsSyncService @Inject constructor(
                     pending = simklAuth.userCode != null && !simklAuth.isAuthenticated
                 )
             ),
-            heroCatalogKeys = layoutPreferenceDataStore.heroCatalogSelections.first(),
-            homeCatalogOrderKeys = layoutPreferenceDataStore.homeCatalogOrderKeys.first(),
-            disabledHomeCatalogKeys = layoutPreferenceDataStore.disabledHomeCatalogKeys.first(),
+            // Layout/catalog-order settings moved to v8 per-profile blob sync.
+            heroCatalogKeys = emptyList(),
+            homeCatalogOrderKeys = emptyList(),
+            disabledHomeCatalogKeys = emptyList(),
             // Moved to v8 per-profile blob sync
             traktCatalogEnabledSet = emptyList(),
             traktCatalogOrder = emptyList(),
@@ -577,9 +579,8 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private suspend fun applySharedAccountConfigSyncSettings(settings: AccountConfigSyncPayload) {
-        layoutPreferenceDataStore.setHeroCatalogKeys(settings.catalogs.home.heroCatalogKeys)
-        layoutPreferenceDataStore.setHomeCatalogOrderKeys(settings.catalogs.home.homeCatalogOrderKeys)
-        layoutPreferenceDataStore.setDisabledHomeCatalogKeys(settings.catalogs.home.disabledHomeCatalogKeys)
+        // Layout/catalog-order settings moved to v8 per-profile blob sync.
+        // Do not apply settings.catalogs.home.* into LayoutPreferenceDataStore from v7.
 
         tmdbSettingsDataStore.setEnabled(settings.integrations.tmdb.enabled)
         tmdbSettingsDataStore.setUseArtwork(settings.integrations.tmdb.useArtwork)
