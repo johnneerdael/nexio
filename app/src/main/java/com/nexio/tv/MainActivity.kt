@@ -59,6 +59,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -97,6 +98,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -141,10 +143,12 @@ import com.nexio.tv.data.trailer.TrailerService
 import com.nexio.tv.domain.model.AppFont
 import com.nexio.tv.domain.model.AppTheme
 import com.nexio.tv.domain.model.AuthState
+import com.nexio.tv.domain.model.UserProfile
 import com.nexio.tv.core.sync.StartupSyncService
 import com.nexio.tv.ui.navigation.NexioNavHost
 import com.nexio.tv.ui.navigation.Screen
 import com.nexio.tv.ui.components.NexioScrollDefaults
+import com.nexio.tv.ui.components.ProfileAvatarCircle
 import com.nexio.tv.ui.screens.account.AuthQrSignInScreen
 import com.nexio.tv.ui.screensaver.IdleScreensaverController
 import com.nexio.tv.ui.screensaver.IdleScreensaverOverlay
@@ -970,6 +974,14 @@ class MainActivity : ComponentActivity() {
                                 onExitApp = {
                                     finishAffinity()
                                     finishAndRemoveTask()
+                                },
+                                profiles = profiles,
+                                activeProfileId = profileManager.activeProfileId.collectAsState().value,
+                                onSwitchProfile = { profileId ->
+                                    hasSelectedProfileThisSession = false
+                                    lifecycleScope.launch {
+                                        profileManager.setActiveProfile(profileId)
+                                    }
                                 }
                             )
                         }
@@ -1587,12 +1599,16 @@ private fun LegacySidebarScaffold(
     onHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onHomeTrailerFullscreenActiveChanged: (Boolean) -> Unit,
     onDetailTrailerPlaybackActiveChanged: (Boolean) -> Unit,
-    onExitApp: () -> Unit
+    onExitApp: () -> Unit,
+    profiles: List<UserProfile> = emptyList(),
+    activeProfileId: Int = 1,
+    onSwitchProfile: (Int) -> Unit = {}
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val drawerItemFocusRequesters = remember(drawerItems) {
         drawerItems.associate { item -> item.route to FocusRequester() }
     }
+    val profileSwitcherFocusRequester = remember { FocusRequester() }
     var homeTrailerFullscreenActive by remember { mutableStateOf(false) }
     val showSidebar = currentRoute in rootRoutes && !homeTrailerFullscreenActive
 
@@ -1630,11 +1646,15 @@ private fun LegacySidebarScaffold(
         if (!showSidebar || !pendingSidebarFocusRequest || drawerState.currentValue != DrawerValue.Open) {
             return@LaunchedEffect
         }
-        val targetRoute = selectedDrawerRoute ?: run {
-            pendingSidebarFocusRequest = false
-            return@LaunchedEffect
-        }
-        val requester = drawerItemFocusRequesters[targetRoute] ?: run {
+        val requester = if (profiles.size > 1) {
+            profileSwitcherFocusRequester
+        } else {
+            val targetRoute = selectedDrawerRoute ?: run {
+                pendingSidebarFocusRequest = false
+                return@LaunchedEffect
+            }
+            drawerItemFocusRequesters[targetRoute]
+        } ?: run {
             pendingSidebarFocusRequest = false
             return@LaunchedEffect
         }
@@ -1676,6 +1696,15 @@ private fun LegacySidebarScaffold(
                                 .height(59.dp)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
+                        if (profiles.size > 1) {
+                            LegacyProfileSwitcherSection(
+                                profiles = profiles,
+                                activeProfileId = activeProfileId,
+                                focusRequester = profileSwitcherFocusRequester,
+                                onSwitchProfile = onSwitchProfile
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
                     }
 
                     Spacer(modifier = Modifier.weight(1f))
@@ -1842,6 +1871,148 @@ private fun LegacySidebarButton(
 }
 
 @Composable
+private fun LegacyProfileSwitcherSection(
+    profiles: List<UserProfile>,
+    activeProfileId: Int,
+    focusRequester: FocusRequester,
+    onSwitchProfile: (Int) -> Unit
+) {
+    val activeProfile = profiles.find { it.id == activeProfileId } ?: profiles.firstOrNull() ?: return
+    val otherProfiles = profiles.filter { it.id != activeProfileId }
+    var expanded by remember { mutableStateOf(false) }
+    var focused by remember { mutableStateOf(false) }
+    val borderColor by animateColorAsState(
+        targetValue = if (focused) NexioColors.FocusRing else Color.Transparent,
+        animationSpec = tween(180),
+        label = "legacyProfileSwitcherBorder"
+    )
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(200),
+        label = "legacyProfileSwitcherArrow"
+    )
+
+    BackHandler(enabled = expanded) {
+        expanded = false
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(NexioColors.BackgroundCard)
+                .border(2.dp, borderColor, RoundedCornerShape(14.dp))
+                .focusRequester(focusRequester)
+                .onFocusChanged { focused = it.isFocused }
+                .focusable()
+                .onPreviewKeyEvent { event ->
+                    if (
+                        event.type == KeyEventType.KeyDown &&
+                        (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)
+                    ) {
+                        expanded = !expanded
+                        true
+                    } else {
+                        false
+                    }
+                }
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            ProfileAvatarCircle(
+                name = activeProfile.name,
+                colorHex = activeProfile.avatarColorHex,
+                size = 40.dp,
+                avatarImageUrl = activeProfile.avatarUrl
+            )
+            Text(
+                text = activeProfile.name,
+                color = NexioColors.TextPrimary,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowDown,
+                contentDescription = "Switch profile",
+                tint = NexioColors.TextSecondary,
+                modifier = Modifier.graphicsLayer { rotationZ = arrowRotation }
+            )
+        }
+
+        if (expanded) {
+            otherProfiles.forEach { profile ->
+                LegacyProfileSwitcherRow(
+                    profile = profile,
+                    onSelect = {
+                        expanded = false
+                        onSwitchProfile(profile.id)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LegacyProfileSwitcherRow(
+    profile: UserProfile,
+    onSelect: () -> Unit
+) {
+    var focused by remember { mutableStateOf(false) }
+    val borderColor by animateColorAsState(
+        targetValue = if (focused) NexioColors.FocusRing else Color.Transparent,
+        animationSpec = tween(180),
+        label = "legacyProfileSwitcherRowBorder"
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .border(2.dp, borderColor, RoundedCornerShape(14.dp))
+            .onFocusChanged { focused = it.isFocused }
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (
+                    event.type == KeyEventType.KeyDown &&
+                    (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)
+                ) {
+                    onSelect()
+                    true
+                } else {
+                    false
+                }
+            }
+            .clickable { onSelect() }
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        ProfileAvatarCircle(
+            name = profile.name,
+            colorHex = profile.avatarColorHex,
+            size = 32.dp,
+            avatarImageUrl = profile.avatarUrl
+        )
+        Text(
+            text = profile.name,
+            color = if (focused) NexioColors.TextPrimary else NexioColors.TextSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
 private fun ModernSidebarScaffold(
     navController: NavHostController,
     startDestination: String,
@@ -1860,7 +2031,7 @@ private fun ModernSidebarScaffold(
     onHomeTrailerFullscreenActiveChanged: (Boolean) -> Unit,
     onDetailTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onExitApp: () -> Unit,
-    profiles: List<com.nexio.tv.domain.model.UserProfile> = emptyList(),
+    profiles: List<UserProfile> = emptyList(),
     activeProfileId: Int = 1,
     onSwitchProfile: (Int) -> Unit = {}
 ) {
@@ -1874,6 +2045,7 @@ private fun ModernSidebarScaffold(
     val drawerItemFocusRequesters = remember(drawerItems) {
         drawerItems.associate { item -> item.route to FocusRequester() }
     }
+    val profileSwitcherFocusRequester = remember { FocusRequester() }
 
     var isSidebarExpanded by remember { mutableStateOf(false) }
     var sidebarCollapsePending by remember { mutableStateOf(false) }
@@ -2046,11 +2218,15 @@ private fun ModernSidebarScaffold(
         if (!showSidebar || !pendingSidebarFocusRequest || !isSidebarExpanded) {
             return@LaunchedEffect
         }
-        val targetRoute = selectedDrawerRoute ?: run {
-            pendingSidebarFocusRequest = false
-            return@LaunchedEffect
-        }
-        val requester = drawerItemFocusRequesters[targetRoute] ?: run {
+        val requester = if (profiles.size > 1) {
+            profileSwitcherFocusRequester
+        } else {
+            val targetRoute = selectedDrawerRoute ?: run {
+                pendingSidebarFocusRequest = false
+                return@LaunchedEffect
+            }
+            drawerItemFocusRequesters[targetRoute]
+        } ?: run {
             pendingSidebarFocusRequest = false
             return@LaunchedEffect
         }
@@ -2164,7 +2340,7 @@ private fun ModernSidebarScaffold(
                         }
                         when (keyEvent.key) {
                             Key.DirectionUp -> {
-                                focusedDrawerIndex == 0
+                                focusedDrawerIndex < 0
                             }
 
                             Key.DirectionDown -> {
@@ -2209,7 +2385,9 @@ private fun ModernSidebarScaffold(
                         },
                         profiles = profiles,
                         activeProfileId = activeProfileId,
-                        onSwitchProfile = onSwitchProfile
+                        onSwitchProfile = onSwitchProfile,
+                        profileSwitcherFocusRequester = profileSwitcherFocusRequester,
+                        onProfileSwitcherFocused = { focusedDrawerIndex = -1 }
                     )
                 }
             }

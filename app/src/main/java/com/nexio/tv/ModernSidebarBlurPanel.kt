@@ -88,7 +88,9 @@ internal fun ModernSidebarBlurPanel(
     onDrawerItemClick: (String) -> Unit,
     profiles: List<UserProfile> = emptyList(),
     activeProfileId: Int = 1,
-    onSwitchProfile: (Int) -> Unit = {}
+    onSwitchProfile: (Int) -> Unit = {},
+    profileSwitcherFocusRequester: FocusRequester = FocusRequester.Default,
+    onProfileSwitcherFocused: () -> Unit = {}
 ) {
     val delayedBlurProgress =
         ((sidebarExpandProgress - 0.34f) / 0.66f).coerceIn(0f, 1f)
@@ -167,7 +169,6 @@ internal fun ModernSidebarBlurPanel(
         ) {
             if (profiles.size > 1) {
                 var profileSectionExpanded by remember { mutableStateOf(false) }
-                val profileSwitcherFocusRequester = remember { FocusRequester() }
 
                 ProfileSwitcherSection(
                     profiles = profiles,
@@ -179,7 +180,8 @@ internal fun ModernSidebarBlurPanel(
                         onSwitchProfile(id)
                     },
                     sidebarLabelAlpha = sidebarLabelAlpha,
-                    focusRequester = profileSwitcherFocusRequester
+                    focusRequester = profileSwitcherFocusRequester,
+                    onProfileFocused = onProfileSwitcherFocused
                 )
                 Spacer(Modifier.height(12.dp))
             }
@@ -323,6 +325,7 @@ private fun ProfileSwitcherSection(
     onSwitchProfile: (Int) -> Unit,
     sidebarLabelAlpha: Float,
     focusRequester: FocusRequester,
+    onProfileFocused: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val activeProfile = profiles.find { it.id == activeProfileId } ?: profiles.firstOrNull() ?: return
@@ -353,7 +356,10 @@ private fun ProfileSwitcherSection(
                 .background(NexioColors.BackgroundCard)
                 .border(2.dp, borderColor, RoundedCornerShape(14.dp))
                 .focusRequester(focusRequester)
-                .onFocusChanged { isFocused = it.isFocused }
+                .onFocusChanged {
+                    isFocused = it.isFocused
+                    if (it.isFocused) onProfileFocused()
+                }
                 .focusable()
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown &&
@@ -409,7 +415,8 @@ private fun ProfileSwitcherSection(
                 otherProfiles.forEach { profile ->
                     ProfileSwitcherRow(
                         profile = profile,
-                        onSelect = { onSwitchProfile(profile.id) }
+                        onSelect = { onSwitchProfile(profile.id) },
+                        onProfileFocused = onProfileFocused
                     )
                 }
             }
@@ -420,7 +427,8 @@ private fun ProfileSwitcherSection(
 @Composable
 private fun ProfileSwitcherRow(
     profile: UserProfile,
-    onSelect: () -> Unit
+    onSelect: () -> Unit,
+    onProfileFocused: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val borderColor by animateColorAsState(
@@ -435,7 +443,10 @@ private fun ProfileSwitcherRow(
             .height(48.dp)
             .clip(RoundedCornerShape(14.dp))
             .border(2.dp, borderColor, RoundedCornerShape(14.dp))
-            .onFocusChanged { isFocused = it.isFocused }
+            .onFocusChanged {
+                isFocused = it.isFocused
+                if (it.isFocused) onProfileFocused()
+            }
             .focusable()
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown &&
