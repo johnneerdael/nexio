@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.player
 
 import android.view.View
+import android.widget.FrameLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -12,6 +13,9 @@ import androidx.media3.common.text.Cue
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.nexio.tv.data.local.SubtitleStyleSettings
+import com.nexio.tv.ui.screens.player.ass.AssSsaRenderOverlayView
+
+internal const val ASS_SSA_RENDER_OVERLAY_TAG = "ass-ssa-render-overlay"
 
 internal data class PlayerSurfaceRenderState(
     val resizeMode: Int,
@@ -62,11 +66,35 @@ internal fun enableComposeSurfaceSyncWorkaroundIfAvailable(target: Any): Boolean
     }.getOrDefault(false)
 }
 
+internal fun PlayerView.ensureAssSsaRenderOverlay(): AssSsaRenderOverlayView? {
+    val overlayFrameLayout = overlayFrameLayout ?: return null
+    val existing = overlayFrameLayout.findViewWithTag<AssSsaRenderOverlayView>(
+        ASS_SSA_RENDER_OVERLAY_TAG
+    )
+    if (existing != null) {
+        return existing
+    }
+
+    return AssSsaRenderOverlayView(context).apply {
+        tag = ASS_SSA_RENDER_OVERLAY_TAG
+        visibility = View.VISIBLE
+        isClickable = false
+        isFocusable = false
+        isFocusableInTouchMode = false
+        layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        )
+        overlayFrameLayout.addView(this)
+    }
+}
+
 @Composable
 internal fun PlayerVideoSurface(
     player: ExoPlayer,
     renderState: PlayerSurfaceRenderState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    assSsaRenderOverlayProvider: ((AssSsaRenderOverlayView) -> Unit)? = null
 ) {
     var lastAppliedState by remember(player) {
         mutableStateOf<PlayerSurfaceRenderState?>(null)
@@ -85,6 +113,9 @@ internal fun PlayerVideoSurface(
         update = { playerView ->
             if (playerView.player !== player) {
                 playerView.player = player
+            }
+            assSsaRenderOverlayProvider?.let { provider ->
+                playerView.ensureAssSsaRenderOverlay()?.let(provider)
             }
 
             val plan = buildPlayerViewMutationPlan(lastAppliedState, renderState)
