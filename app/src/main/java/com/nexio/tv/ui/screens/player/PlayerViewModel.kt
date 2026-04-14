@@ -104,6 +104,10 @@ class PlayerViewModel @Inject constructor(
         controller.attachHostActivity(activity)
     }
 
+    fun attachMpvView(view: NexioMpvSurfaceView?) {
+        controller.attachMpvView(view)
+    }
+
     fun startInitialPlaybackIfNeeded() {
         controller.startInitialPlaybackIfNeeded()
     }

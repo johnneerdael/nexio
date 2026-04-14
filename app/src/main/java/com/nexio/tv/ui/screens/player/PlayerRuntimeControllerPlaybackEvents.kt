@@ -872,6 +872,7 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 _uiState.update { it.copy(showAspectRatioIndicator = false) }
             }
         }
+        PlayerEvent.OnSwitchInternalPlayerEngine -> Unit
     }
 }
 

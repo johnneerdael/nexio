@@ -164,6 +164,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             )
             _uiState.update {
                 it.copy(
+                    internalPlayerEngine = currentInternalPlayerEngine,
                     frameRateMatchingMode = playerSettings.frameRateMatchingMode
                 )
             }
