@@ -12,7 +12,6 @@ internal class AssSsaTimeRenderer(
 
     override fun render(positionUs: Long, elapsedRealtimeUs: Long) {
         controller.currentTimeUs = positionUs
-        controller.renderCurrentFrame()
     }
 
     override fun isReady(): Boolean = true
