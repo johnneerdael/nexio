@@ -7,6 +7,7 @@ import java.net.URLEncoder
 
 sealed class Screen(val route: String) {
     data object Home : Screen("home")
+    data object ProfileSelection : Screen("profile_selection")
     data object Detail : Screen("detail/{itemId}/{itemType}?addonBaseUrl={addonBaseUrl}&detailSource={detailSource}&returnFocusSeason={returnFocusSeason}&returnFocusEpisode={returnFocusEpisode}") {
         private fun encode(value: String): String =
             URLEncoder.encode(value, "UTF-8").replace("+", "%20")
