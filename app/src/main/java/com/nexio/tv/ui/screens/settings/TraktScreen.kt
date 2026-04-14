@@ -73,7 +73,6 @@ fun TraktScreen(
     val primaryFocusRequester = remember { FocusRequester() }
     var showDisconnectConfirm by remember { mutableStateOf(false) }
     var showDaysCapDialog by remember { mutableStateOf(false) }
-    var showUnairedNextUpDialog by remember { mutableStateOf(false) }
     var showCatalogDialog by remember { mutableStateOf(false) }
     val strAllHistory = stringResource(R.string.trakt_all_history)
     val strDaysFormat = stringResource(R.string.trakt_days_format)
@@ -307,12 +306,6 @@ fun TraktScreen(
                     value = cwWindowFormatter(uiState.continueWatchingDaysCap),
                     onClick = { showDaysCapDialog = true }
                 )
-                SettingsActionRow(
-                    title = stringResource(R.string.trakt_unaired_next_up),
-                    subtitle = stringResource(R.string.trakt_unaired_next_up_subtitle),
-                    value = if (uiState.showUnairedNextUp) stringResource(R.string.trakt_unaired_shown) else stringResource(R.string.trakt_unaired_hidden),
-                    onClick = { showUnairedNextUpDialog = true }
-                )
             }
 
             if (uiState.mode != TraktConnectionMode.CONNECTED) {
@@ -400,59 +393,6 @@ fun TraktScreen(
                 ) {
                     Button(
                         onClick = { showDaysCapDialog = false },
-                        colors = ButtonDefaults.colors(
-                            containerColor = NexioColors.BackgroundCard,
-                            contentColor = NexioColors.TextPrimary
-                        )
-                    ) {
-                        Text(stringResource(R.string.action_cancel))
-                    }
-                }
-            }
-        }
-    }
-
-    if (showUnairedNextUpDialog) {
-        NexioDialog(
-            onDismiss = { showUnairedNextUpDialog = false },
-            title = stringResource(R.string.trakt_unaired_dialog_title),
-            subtitle = stringResource(R.string.trakt_unaired_dialog_subtitle),
-            width = 620.dp,
-            suppressFirstKeyUp = false
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = {
-                        viewModel.onShowUnairedNextUpChanged(true)
-                        showUnairedNextUpDialog = false
-                    },
-                    colors = ButtonDefaults.colors(
-                        containerColor = if (uiState.showUnairedNextUp) NexioColors.Primary else NexioColors.BackgroundCard,
-                        contentColor = if (uiState.showUnairedNextUp) Color.Black else NexioColors.TextPrimary
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(stringResource(R.string.trakt_show_unaired))
-                }
-                Button(
-                    onClick = {
-                        viewModel.onShowUnairedNextUpChanged(false)
-                        showUnairedNextUpDialog = false
-                    },
-                    colors = ButtonDefaults.colors(
-                        containerColor = if (!uiState.showUnairedNextUp) NexioColors.Primary else NexioColors.BackgroundCard,
-                        contentColor = if (!uiState.showUnairedNextUp) Color.Black else NexioColors.TextPrimary
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(stringResource(R.string.trakt_hide_unaired))
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Button(
-                        onClick = { showUnairedNextUpDialog = false },
                         colors = ButtonDefaults.colors(
                             containerColor = NexioColors.BackgroundCard,
                             contentColor = NexioColors.TextPrimary

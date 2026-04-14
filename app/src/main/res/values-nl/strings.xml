@@ -75,7 +75,6 @@
   <string name="trakt_catalogs_enabled_count">%1$d ingeschakeld</string>
   <string name="animeskip_enable_title">Anime Skip inschakelen</string>
   <string name="trakt_hide_recommendation">Aanbeveling verbergen</string>
-  <string name="trakt_unaired_now_shown">Nog niet uitgezonden \'Volgende\'-afleveringen worden nu getoond</string>
   <string name="trakt_catalog_popular_shows_subtitle">Series met de hoogste populariteit op lange termijn.</string>
   <string name="audio_dv5_compatibility_sub">Hiermee kunnen DV5-streams het DV8.1-compatibiliteitspad gebruiken. Kan op sommige apparaten kleur-/signaleringsproblemen oplossen, maar kan op andere apparaten problemen opleveren.</string>
   <string name="tmdb_dialog_placeholder">Voer de TMDB API-sleutel in</string>
@@ -91,7 +90,6 @@
   <string name="mdblist_list_item_count_subtitle">%1$d items</string>
   <string name="trakt_catalog_up_next">Volgende</string>
   <string name="animeskip_dialog_subtitle">Maak je eigen Client-ID aan op anime-skip.com/account/settings</string>
-  <string name="trakt_unaired_now_hidden">Nog niet uitgezonden \'Volgende\'-afleveringen zijn nu verborgen</string>
   <string name="animeskip_enable_subtitle">Haal tijdstempels voor overslaan op van anime-skip.com</string>
   <string name="trakt_catalog_trending_shows_subtitle">Series met de hoogste huidige kijkersactiviteit.</string>
   <string name="trakt_catalog_recommended_shows">Aanbevolen series</string>
@@ -523,10 +521,6 @@
   <string name="trakt_missing_credentials">TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET ontbreekt in local.properties.</string>
   <string name="trakt_continue_watching_window">Verder kijken venster</string>
   <string name="trakt_continue_watching_subtitle">Trakt-geschiedenis overwogen om verder te kijken</string>
-  <string name="trakt_unaired_next_up">Nog niet uitgezonden \'Volgende\'-afleveringen</string>
-  <string name="trakt_unaired_next_up_subtitle">Toon komende afleveringen voordat ze worden uitgezonden</string>
-  <string name="trakt_unaired_shown">Zichtbaar</string>
-  <string name="trakt_unaired_hidden">Verborgen</string>
   <string name="trakt_cached_label">In cache opgeslagen</string>
   <string name="trakt_stat_movies">Films</string>
   <string name="trakt_stat_shows">Series</string>
@@ -540,8 +534,6 @@
   <string name="trakt_back">Terug</string>
   <string name="trakt_cw_window_title">Verder kijken venster</string>
   <string name="trakt_cw_window_subtitle">Kies hoelang Trakt-activiteit moet verschijnen bij Verder kijken.</string>
-  <string name="trakt_unaired_dialog_title">Nog niet uitgezonden \'Volgende\'-afleveringen</string>
-  <string name="trakt_unaired_dialog_subtitle">Kies of \'Verder kijken\' aankomende afleveringen moet bevatten vóór de release.</string>
   <string name="trakt_show_unaired">Toon niet-uitgezonden afleveringen</string>
   <string name="trakt_hide_unaired">Verberg niet-uitgezonden afleveringen</string>
   <string name="trakt_all_history">Alle geschiedenis</string>
