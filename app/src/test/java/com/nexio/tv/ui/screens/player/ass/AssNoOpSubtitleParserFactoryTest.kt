@@ -33,4 +33,13 @@ class AssNoOpSubtitleParserFactoryTest {
 
         assertFalse(emitted)
     }
+
+    @Test
+    fun delegatesWebVttToMedia3Parser() {
+        val factory = AssNoOpSubtitleParserFactory()
+        val format = Format.Builder().setSampleMimeType(MimeTypes.TEXT_VTT).build()
+
+        assertTrue(factory.supportsFormat(format))
+        factory.create(format)
+    }
 }
