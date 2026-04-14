@@ -1,19 +1,20 @@
 package com.nexio.tv.data.local
 
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.PreferenceDataStoreFactory
-import androidx.datastore.preferences.core.Preferences
-import java.io.File
-import kotlinx.coroutines.CoroutineScope
+import com.nexio.tv.core.profile.FakeProfileManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class SearchHistoryDataStoreTest {
+    @get:Rule
+    val tempFolder = TemporaryFolder()
+
     @Test
     fun `next search history trims blanks deduplicates case-insensitively and keeps newest first`() {
         val updated = nextSearchHistory(
@@ -51,20 +52,13 @@ class SearchHistoryDataStoreTest {
 
     @Test
     fun `store persists recent searches`() = runTest {
-        val dataStore = SearchHistoryDataStore(createDataStore(backgroundScope))
+        val factory = FakeProfileDataStoreFactory(tempFolder.newFolder())
+        val profileManager = FakeProfileManager()
+        val dataStore = SearchHistoryDataStore(factory, profileManager)
 
         dataStore.clearRecentSearches()
         dataStore.saveRecentSearch("Severance")
 
         assertEquals(listOf("Severance"), dataStore.recentSearches.first())
-    }
-
-    private fun createDataStore(scope: CoroutineScope): DataStore<Preferences> {
-        val tempFile = File.createTempFile("search_history_store", ".preferences_pb")
-        tempFile.deleteOnExit()
-        return PreferenceDataStoreFactory.create(
-            scope = scope,
-            produceFile = { tempFile }
-        )
     }
 }

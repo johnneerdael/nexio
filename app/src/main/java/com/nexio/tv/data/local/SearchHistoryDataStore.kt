@@ -1,23 +1,17 @@
 package com.nexio.tv.data.local
 
-import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.nexio.tv.core.profile.ProfileManager
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
-
-private val Context.searchHistoryDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "search_history"
-)
 
 internal const val DEFAULT_MAX_RECENT_SEARCHES = 8
 
@@ -43,19 +37,24 @@ internal fun normalizeSearchHistory(items: List<String>): List<String> {
 }
 
 @Singleton
-class SearchHistoryDataStore internal constructor(
-    private val dataStore: DataStore<Preferences>,
+@OptIn(ExperimentalCoroutinesApi::class)
+class SearchHistoryDataStore @Inject constructor(
+    private val factory: ProfileDataStoreFactory,
+    private val profileManager: ProfileManager,
     private val gson: Gson = Gson()
 ) {
-    @Inject constructor(
-        @ApplicationContext context: Context
-    ) : this(context.searchHistoryDataStore)
+    companion object {
+        private const val FEATURE = "search_history"
+    }
 
     private val recentSearchesKey = stringPreferencesKey("recent_searches")
     private val searchHistoryListType = object : TypeToken<List<String>>() {}.type
 
-    val recentSearches: Flow<List<String>> = dataStore.data.map { prefs ->
-        decodeSearchHistory(prefs[recentSearchesKey])
+    private fun store(profileId: Int = profileManager.activeProfileId.value) =
+        factory.get(profileId, FEATURE)
+
+    val recentSearches: Flow<List<String>> = profileManager.activeProfileId.flatMapLatest { pid ->
+        store(pid).data.map { prefs -> decodeSearchHistory(prefs[recentSearchesKey]) }
     }
 
     suspend fun saveRecentSearch(
@@ -71,13 +70,13 @@ class SearchHistoryDataStore internal constructor(
             maxItems = maxItems
         )
 
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs[recentSearchesKey] = gson.toJson(updated)
         }
     }
 
     suspend fun clearRecentSearches() {
-        dataStore.edit { prefs ->
+        store().edit { prefs ->
             prefs.remove(recentSearchesKey)
         }
     }
