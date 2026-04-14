@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.flowOf
  */
 fun buildMetaDetailsViewModel(
     meta: Meta,
+    itemId: String = meta.id,
     itemType: String = "series",
     metaRepository: MetaRepository = defaultMetaRepository(meta),
     tmdbService: TmdbService = defaultTmdbService(),
@@ -93,7 +94,7 @@ fun buildMetaDetailsViewModel(
         trailerService = trailerService,
         savedStateHandle = SavedStateHandle(
             mapOf(
-                "itemId" to meta.id,
+                "itemId" to itemId,
                 "itemType" to itemType
             )
         )

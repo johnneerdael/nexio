@@ -49,6 +49,7 @@ class PlayerVideoSurfaceStateTest {
         assertFalse(plan.updateResizeMode)
         assertFalse(plan.updateSubtitleStyle)
         assertFalse(plan.updateOverlay)
+        assertFalse(plan.updateKeepScreenOn)
     }
 
     @Test
@@ -68,6 +69,7 @@ class PlayerVideoSurfaceStateTest {
         assertFalse(plan.updateResizeMode)
         assertFalse(plan.updateSubtitleStyle)
         assertTrue(plan.updateOverlay)
+        assertFalse(plan.updateKeepScreenOn)
     }
 
     @Test
@@ -85,5 +87,51 @@ class PlayerVideoSurfaceStateTest {
         assertFalse(plan.updateResizeMode)
         assertFalse(plan.updateSubtitleStyle)
         assertTrue(plan.updateOverlay)
+        assertFalse(plan.updateKeepScreenOn)
+    }
+
+    @Test
+    fun `mutation plan updates keep screen on only when playback wake state changes`() {
+        val previous = PlayerSurfaceRenderState(
+            resizeMode = 1,
+            subtitleStyle = SubtitleStyleSettings(),
+            overlayCues = emptyList(),
+            suppressNativeSubtitles = false,
+            keepScreenOn = false
+        )
+        val current = previous.copy(keepScreenOn = true)
+
+        val plan = buildPlayerViewMutationPlan(previous = previous, current = current)
+
+        assertFalse(plan.updateResizeMode)
+        assertFalse(plan.updateSubtitleStyle)
+        assertFalse(plan.updateOverlay)
+        assertTrue(plan.updateKeepScreenOn)
+    }
+
+    @Test
+    fun `compose surface sync workaround helper invokes optional media3 method`() {
+        val target = FakeComposeSurfaceSyncTarget()
+
+        val applied = enableComposeSurfaceSyncWorkaroundIfAvailable(target)
+
+        assertTrue(applied)
+        assertTrue(target.enabled)
+    }
+
+    @Test
+    fun `compose surface sync workaround helper ignores missing method`() {
+        val applied = enableComposeSurfaceSyncWorkaroundIfAvailable(Any())
+
+        assertFalse(applied)
+    }
+
+    private class FakeComposeSurfaceSyncTarget {
+        var enabled = false
+
+        @Suppress("unused")
+        fun setEnableComposeSurfaceSyncWorkaround(enabled: Boolean) {
+            this.enabled = enabled
+        }
     }
 }

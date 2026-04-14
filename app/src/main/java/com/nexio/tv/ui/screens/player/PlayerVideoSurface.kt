@@ -17,13 +17,15 @@ internal data class PlayerSurfaceRenderState(
     val resizeMode: Int,
     val subtitleStyle: SubtitleStyleSettings,
     val overlayCues: List<Cue>,
-    val suppressNativeSubtitles: Boolean
+    val suppressNativeSubtitles: Boolean,
+    val keepScreenOn: Boolean = false
 )
 
 internal data class PlayerViewMutationPlan(
     val updateResizeMode: Boolean,
     val updateSubtitleStyle: Boolean,
-    val updateOverlay: Boolean
+    val updateOverlay: Boolean,
+    val updateKeepScreenOn: Boolean
 )
 
 internal fun resolveOverlayCues(
@@ -46,8 +48,18 @@ internal fun buildPlayerViewMutationPlan(
         updateResizeMode = previous?.resizeMode != current.resizeMode,
         updateSubtitleStyle = previous?.subtitleStyle != current.subtitleStyle,
         updateOverlay = previous?.overlayCues != current.overlayCues ||
-            previous.suppressNativeSubtitles != current.suppressNativeSubtitles
+            previous.suppressNativeSubtitles != current.suppressNativeSubtitles,
+        updateKeepScreenOn = previous?.keepScreenOn != current.keepScreenOn
     )
+}
+
+internal fun enableComposeSurfaceSyncWorkaroundIfAvailable(target: Any): Boolean {
+    return runCatching {
+        target.javaClass
+            .getMethod("setEnableComposeSurfaceSyncWorkaround", java.lang.Boolean.TYPE)
+            .invoke(target, true)
+        true
+    }.getOrDefault(false)
 }
 
 @Composable
@@ -65,8 +77,9 @@ internal fun PlayerVideoSurface(
             PlayerView(context).apply {
                 this.player = player
                 useController = false
-                keepScreenOn = true
+                keepScreenOn = renderState.keepScreenOn
                 setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                enableComposeSurfaceSyncWorkaroundIfAvailable(this)
             }
         },
         update = { playerView ->
@@ -96,6 +109,9 @@ internal fun PlayerVideoSurface(
                             View.VISIBLE
                         }
                 }
+            }
+            if (plan.updateKeepScreenOn) {
+                playerView.keepScreenOn = renderState.keepScreenOn
             }
 
             lastAppliedState = renderState

@@ -20,4 +20,23 @@ class BenchmarkAwareStreamScoringConfigTest {
             reparsed.transportRewards.ratioBands.first().base
         )
     }
+
+    @Test
+    fun `config parser maps legacy source rewards to release type rewards`() {
+        val json = javaClass.classLoader!!
+            .getResourceAsStream("benchmark_scoring_corpus/variants/default.json")!!
+            .bufferedReader()
+            .readText()
+
+        val reparsed = BenchmarkAwareStreamScoringConfig.fromJson(json)
+
+        assertEquals(
+            28,
+            reparsed.contentRewards.releaseType?.get(ShadowReleaseType.REMUX)
+        )
+        assertEquals(
+            12,
+            reparsed.contentRewards.releaseType?.get(ShadowReleaseType.WEBDL)
+        )
+    }
 }
