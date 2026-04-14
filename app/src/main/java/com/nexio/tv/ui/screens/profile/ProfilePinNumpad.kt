@@ -102,23 +102,23 @@ internal fun ProfilePinNumpad(
     ) {
         // Row 1: 1, 2, 3
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            NumpadCell(label = "1", enabled = enabled, focusRequester = focusRequesters[0]) { onDigit('1') }
-            NumpadCell(label = "2", enabled = enabled, focusRequester = focusRequesters[1]) { onDigit('2') }
-            NumpadCell(label = "3", enabled = enabled, focusRequester = focusRequesters[2]) { onDigit('3') }
+            NumpadCell(label = "1", enabled = enabled, focusRequester = focusRequesters[0], onClick = { onDigit('1') })
+            NumpadCell(label = "2", enabled = enabled, focusRequester = focusRequesters[1], onClick = { onDigit('2') })
+            NumpadCell(label = "3", enabled = enabled, focusRequester = focusRequesters[2], onClick = { onDigit('3') })
         }
 
         // Row 2: 4, 5, 6
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            NumpadCell(label = "4", enabled = enabled, focusRequester = focusRequesters[3]) { onDigit('4') }
-            NumpadCell(label = "5", enabled = enabled, focusRequester = focusRequesters[4]) { onDigit('5') }
-            NumpadCell(label = "6", enabled = enabled, focusRequester = focusRequesters[5]) { onDigit('6') }
+            NumpadCell(label = "4", enabled = enabled, focusRequester = focusRequesters[3], onClick = { onDigit('4') })
+            NumpadCell(label = "5", enabled = enabled, focusRequester = focusRequesters[4], onClick = { onDigit('5') })
+            NumpadCell(label = "6", enabled = enabled, focusRequester = focusRequesters[5], onClick = { onDigit('6') })
         }
 
         // Row 3: 7, 8, 9
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            NumpadCell(label = "7", enabled = enabled, focusRequester = focusRequesters[6]) { onDigit('7') }
-            NumpadCell(label = "8", enabled = enabled, focusRequester = focusRequesters[7]) { onDigit('8') }
-            NumpadCell(label = "9", enabled = enabled, focusRequester = focusRequesters[8]) { onDigit('9') }
+            NumpadCell(label = "7", enabled = enabled, focusRequester = focusRequesters[6], onClick = { onDigit('7') })
+            NumpadCell(label = "8", enabled = enabled, focusRequester = focusRequesters[7], onClick = { onDigit('8') })
+            NumpadCell(label = "9", enabled = enabled, focusRequester = focusRequesters[8], onClick = { onDigit('9') })
         }
 
         // Row 4: Clear, 0, Confirm
@@ -134,10 +134,16 @@ internal fun ProfilePinNumpad(
                     )
                 },
                 enabled = enabled,
-                focusRequester = focusRequesters[9]
-            ) { onClear() }
+                focusRequester = focusRequesters[9],
+                onClick = { onClear() }
+            )
 
-            NumpadCell(label = "0", enabled = enabled, focusRequester = focusRequesters[10]) { onDigit('0') }
+            NumpadCell(
+                label = "0",
+                enabled = enabled,
+                focusRequester = focusRequesters[10],
+                onClick = { onDigit('0') }
+            )
 
             NumpadCell(
                 label = null,
@@ -150,8 +156,9 @@ internal fun ProfilePinNumpad(
                     )
                 },
                 enabled = enabled,
-                focusRequester = focusRequesters[11]
-            ) { onConfirm() }
+                focusRequester = focusRequesters[11],
+                onClick = { onConfirm() }
+            )
         }
     }
 }
