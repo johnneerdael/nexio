@@ -1,23 +1,17 @@
 package com.nexio.tv.data.local
 
-import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.remote.dto.simkl.SimklPinResponseDto
-import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
-
-private val Context.simklAuthDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "simkl_auth_store"
-)
 
 data class SimklAuthState(
     val accessToken: String? = null,
@@ -35,9 +29,15 @@ data class SimklAuthState(
 }
 
 @Singleton
+@OptIn(ExperimentalCoroutinesApi::class)
 class SimklAuthDataStore @Inject constructor(
-    @ApplicationContext private val context: Context
+    private val factory: ProfileDataStoreFactory,
+    private val profileManager: ProfileManager
 ) {
+    companion object {
+        private const val FEATURE = "simkl_auth_store"
+    }
+
     private val accessTokenKey = stringPreferencesKey("access_token")
     private val usernameKey = stringPreferencesKey("username")
     private val accountIdKey = longPreferencesKey("account_id")
@@ -48,31 +48,36 @@ class SimklAuthDataStore @Inject constructor(
     private val expiresAtKey = longPreferencesKey("expires_at")
     private val pollIntervalKey = intPreferencesKey("poll_interval")
 
-    val state: Flow<SimklAuthState> = context.simklAuthDataStore.data.map { preferences ->
-        SimklAuthState(
-            accessToken = preferences[accessTokenKey],
-            username = preferences[usernameKey],
-            accountId = preferences[accountIdKey],
-            accountType = preferences[accountTypeKey],
-            deviceCode = preferences[deviceCodeKey],
-            userCode = preferences[userCodeKey],
-            verificationUrl = preferences[verificationUrlKey],
-            expiresAt = preferences[expiresAtKey],
-            pollInterval = preferences[pollIntervalKey]
-        )
+    private fun store(profileId: Int = profileManager.activeProfileId.value) =
+        factory.get(profileId, FEATURE)
+
+    val state: Flow<SimklAuthState> = profileManager.activeProfileId.flatMapLatest { profileId ->
+        store(profileId).data.map { preferences ->
+            SimklAuthState(
+                accessToken = preferences[accessTokenKey],
+                username = preferences[usernameKey],
+                accountId = preferences[accountIdKey],
+                accountType = preferences[accountTypeKey],
+                deviceCode = preferences[deviceCodeKey],
+                userCode = preferences[userCodeKey],
+                verificationUrl = preferences[verificationUrlKey],
+                expiresAt = preferences[expiresAtKey],
+                pollInterval = preferences[pollIntervalKey]
+            )
+        }
     }
 
     val isAuthenticated: Flow<Boolean> = state.map { it.isAuthenticated }
     val isEffectivelyAuthenticated: Flow<Boolean> = isAuthenticated
 
     suspend fun saveAccessToken(accessToken: String) {
-        context.simklAuthDataStore.edit { preferences ->
+        store().edit { preferences ->
             preferences[accessTokenKey] = accessToken
         }
     }
 
     suspend fun saveUser(username: String?, accountId: Long?, accountType: String?) {
-        context.simklAuthDataStore.edit { preferences ->
+        store().edit { preferences ->
             if (username.isNullOrBlank()) preferences.remove(usernameKey) else preferences[usernameKey] = username
             if (accountId == null) preferences.remove(accountIdKey) else preferences[accountIdKey] = accountId
             if (accountType.isNullOrBlank()) preferences.remove(accountTypeKey) else preferences[accountTypeKey] = accountType
@@ -81,7 +86,7 @@ class SimklAuthDataStore @Inject constructor(
 
     suspend fun saveDeviceFlow(data: SimklPinResponseDto) {
         val now = System.currentTimeMillis()
-        context.simklAuthDataStore.edit { preferences ->
+        store().edit { preferences ->
             data.deviceCode?.let { preferences[deviceCodeKey] = it }
             data.userCode?.let { preferences[userCodeKey] = it }
             data.verificationUrl?.let { preferences[verificationUrlKey] = it }
@@ -91,13 +96,13 @@ class SimklAuthDataStore @Inject constructor(
     }
 
     suspend fun updatePollInterval(seconds: Int) {
-        context.simklAuthDataStore.edit { preferences ->
+        store().edit { preferences ->
             preferences[pollIntervalKey] = seconds
         }
     }
 
     suspend fun clearDeviceFlow() {
-        context.simklAuthDataStore.edit { preferences ->
+        store().edit { preferences ->
             preferences.remove(deviceCodeKey)
             preferences.remove(userCodeKey)
             preferences.remove(verificationUrlKey)
@@ -107,7 +112,7 @@ class SimklAuthDataStore @Inject constructor(
     }
 
     suspend fun clearAuth() {
-        context.simklAuthDataStore.edit { preferences ->
+        store().edit { preferences ->
             preferences.remove(accessTokenKey)
             preferences.remove(usernameKey)
             preferences.remove(accountIdKey)
