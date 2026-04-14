@@ -917,6 +917,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             retryCurrentStreamFromStartAfter416()
                             return
                         }
+                        if (maybeAutoSwitchInternalPlayerOnStartupError(detailedError)) {
+                            return
+                        }
                         _uiState.update {
                             it.copy(
                                 error = detailedError,
