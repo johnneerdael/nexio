@@ -11,11 +11,16 @@ import java.io.File
 object AssSsaNativeBridge {
     private const val TAG = "AssSsaNativeBridge"
 
-    val nativeAvailable: Boolean = runCatching {
+    private val nativeLoadResult = runCatching {
         System.loadLibrary("assrender_direct")
     }.onFailure { throwable ->
         Log.w(TAG, "ASS/SSA native renderer unavailable; falling back to Media3 subtitles", throwable)
-    }.isSuccess
+    }
+
+    val nativeAvailable: Boolean = nativeLoadResult.isSuccess
+    val nativeLoadError: String? = nativeLoadResult.exceptionOrNull()?.let { throwable ->
+        "${throwable::class.java.simpleName}: ${throwable.message}"
+    }
 
     fun configureFontconfig(context: Context): Boolean {
         return runCatching {

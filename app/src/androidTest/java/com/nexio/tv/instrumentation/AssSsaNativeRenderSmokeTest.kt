@@ -1,6 +1,7 @@
 package com.nexio.tv.instrumentation
 
 import android.graphics.Bitmap
+import android.os.Build
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.nexio.tv.ui.screens.player.ass.AssSsaNativeBridge
@@ -13,6 +14,7 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class AssSsaNativeRenderSmokeTest {
+    private val supportedNativeAbis = setOf("arm64-v8a", "armeabi-v7a")
     private var nativeHandle: Long = 0L
 
     @After
@@ -25,7 +27,14 @@ class AssSsaNativeRenderSmokeTest {
 
     @Test
     fun rendersSimpleAssDialogueChunk() {
-        assumeTrue("ASS/SSA native bridge unavailable on this device", AssSsaNativeBridge.nativeAvailable)
+        assumeTrue(
+            "ASS/SSA native bridge only packages $supportedNativeAbis; device ABIs=${Build.SUPPORTED_ABIS.joinToString()}",
+            Build.SUPPORTED_ABIS.any { it in supportedNativeAbis }
+        )
+        assertTrue(
+            "ASS/SSA native bridge should load on supported ABI; loadError=${AssSsaNativeBridge.nativeLoadError}",
+            AssSsaNativeBridge.nativeAvailable
+        )
         assertTrue(AssSsaNativeBridge.configureFontconfig(ApplicationProvider.getApplicationContext()))
 
         nativeHandle = AssSsaNativeBridge.nativeInit(width = 320, height = 180, fontScale = 1.0f)

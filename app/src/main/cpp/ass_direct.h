@@ -10,6 +10,10 @@ typedef struct AssDirectContext AssDirectContext;
  */
 AssDirectContext *ass_direct_init(int width, int height, float font_scale);
 
+int ass_direct_get_width(AssDirectContext *ctx);
+
+int ass_direct_get_height(AssDirectContext *ctx);
+
 /**
  * Load the ASS header (codec private data from ExoPlayer's Format).
  * This contains [Script Info], [V4+ Styles], etc.
@@ -37,7 +41,8 @@ void ass_direct_process_chunk(AssDirectContext *ctx, const char *data, int size,
  * @param out_pixels Output buffer (RGBA, width*height*4 bytes).
  * @return 1 if content was rendered, 0 if blank.
  */
-int ass_direct_render(AssDirectContext *ctx, int64_t time_ms, uint8_t *out_pixels);
+int ass_direct_render(AssDirectContext *ctx, int64_t time_ms, uint8_t *out_pixels,
+                      int out_stride);
 
 /**
  * Process raw ASS data (full dialogue lines with embedded timing).

@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include <android/log.h>
 #include <ass/ass.h>
 
@@ -20,6 +21,11 @@ struct AssDirectContext {
 };
 
 AssDirectContext *ass_direct_init(int width, int height, float font_scale) {
+    if (width <= 0 || height <= 0 || width > INT_MAX / 4) {
+        LOGE("Invalid render dimensions: %dx%d", width, height);
+        return NULL;
+    }
+
     AssDirectContext *ctx = calloc(1, sizeof(AssDirectContext));
     if (!ctx) return NULL;
 
@@ -53,6 +59,14 @@ AssDirectContext *ass_direct_init(int width, int height, float font_scale) {
 
     LOGI("ass_direct initialized: %dx%d, font_scale=%.2f (with system fonts)", width, height, font_scale);
     return ctx;
+}
+
+int ass_direct_get_width(AssDirectContext *ctx) {
+    return ctx ? ctx->width : 0;
+}
+
+int ass_direct_get_height(AssDirectContext *ctx) {
+    return ctx ? ctx->height : 0;
 }
 
 int ass_direct_load_header(AssDirectContext *ctx, const char *header_data, int header_size) {
@@ -98,15 +112,20 @@ void ass_direct_process_data(AssDirectContext *ctx, const char *data, int size) 
     ass_process_data(ctx->ass_track, (char *)data, size);
 }
 
-int ass_direct_render(AssDirectContext *ctx, int64_t time_ms, uint8_t *out_pixels) {
+int ass_direct_render(AssDirectContext *ctx, int64_t time_ms, uint8_t *out_pixels,
+                      int out_stride) {
     if (!ctx || !ctx->ass_track || !ctx->ass_renderer || !out_pixels)
+        return 0;
+    if (ctx->width <= 0 || ctx->height <= 0 || out_stride < ctx->width * 4)
         return 0;
 
     int changed = 0;
     ASS_Image *img = ass_render_frame(ctx->ass_renderer, ctx->ass_track,
                                       time_ms, &changed);
 
-    memset(out_pixels, 0, ctx->width * ctx->height * 4);
+    for (int y = 0; y < ctx->height; y++) {
+        memset(out_pixels + y * out_stride, 0, ctx->width * 4);
+    }
 
     if (!img) return 0;
 
@@ -125,22 +144,22 @@ int ass_direct_render(AssDirectContext *ctx, int64_t time_ms, uint8_t *out_pixel
 
         uint8_t *src = img->bitmap;
         for (int y = 0; y < img->h; y++) {
-            if (img->dst_y + y < 0 || img->dst_y + y >= ctx->height) {
+            int dst_y = img->dst_y + y;
+            if (dst_y < 0 || dst_y >= ctx->height) {
                 src += img->stride;
                 continue;
             }
-            uint8_t *dst = out_pixels + ((img->dst_y + y) * ctx->width + img->dst_x) * 4;
             for (int x = 0; x < img->w; x++) {
-                if (img->dst_x + x < 0 || img->dst_x + x >= ctx->width) {
-                    dst += 4;
+                int dst_x = img->dst_x + x;
+                if (dst_x < 0 || dst_x >= ctx->width) {
                     continue;
                 }
                 uint8_t alpha = (uint8_t)(((uint32_t)src[x] * a) >> 8);
                 if (alpha == 0) {
-                    dst += 4;
                     continue;
                 }
 
+                uint8_t *dst = out_pixels + dst_y * out_stride + dst_x * 4;
                 uint8_t dst_a = dst[3];
                 if (dst_a == 0) {
                     dst[0] = r;
@@ -154,7 +173,6 @@ int ass_direct_render(AssDirectContext *ctx, int64_t time_ms, uint8_t *out_pixel
                     dst[2] = (uint8_t)((alpha * b + inv * dst[2]) / 255);
                     dst[3] = (uint8_t)(alpha + (inv * dst_a) / 255);
                 }
-                dst += 4;
             }
             src += img->stride;
         }
