@@ -138,12 +138,13 @@ class ProfileSettingsSyncService @Inject constructor(
                         }
                     ).decodeAs<ProfileSettingsBlobResponse>()
                 }
-                val blob = Json.parseToJsonElement(response.settingsJson).jsonObject
+                val rawBlob = Json.parseToJsonElement(response.settingsJson).jsonObject
+                val normalizedBlob = normalizeSettingsBlob(rawBlob)
 
                 applyingRemoteBlob = true
                 try {
-                    importSettingsBlob(profileId, blob)
-                    skipNextPushSignature = buildSettingsSignature(blob)
+                    importSettingsBlob(profileId, normalizedBlob)
+                    skipNextPushSignature = buildSettingsSignature(normalizedBlob)
                 } finally {
                     applyingRemoteBlob = false
                 }
@@ -183,12 +184,26 @@ class ProfileSettingsSyncService @Inject constructor(
         }
     }
 
-    private suspend fun importSettingsBlob(profileId: Int, blob: JsonObject) {
-        blob.forEach { (feature, featureElement) ->
-            if (feature !in syncedFeatures) return@forEach
-            val featureBlob = runCatching { featureElement.jsonObject }.getOrNull() ?: return@forEach
+    @VisibleForTesting
+    internal fun normalizeSettingsBlob(blob: JsonObject): JsonObject {
+        return buildJsonObject {
+            syncedFeatures.forEach { feature ->
+                val featureBlob = blob[feature]?.let { element ->
+                    runCatching { element.jsonObject }.getOrNull()
+                } ?: buildJsonObject {}
+                put(feature, featureBlob)
+            }
+        }
+    }
+
+    @VisibleForTesting
+    internal suspend fun importSettingsBlob(profileId: Int, blob: JsonObject) {
+        val normalizedBlob = normalizeSettingsBlob(blob)
+        syncedFeatures.forEach { feature ->
+            val featureBlob = normalizedBlob[feature]?.jsonObject ?: buildJsonObject {}
             val store = profileDataStoreFactory.get(profileId, feature)
             store.edit { preferences ->
+                preferences.clear()
                 featureBlob.forEach { (key, valueElement) ->
                     val valueObj = runCatching { valueElement.jsonObject }.getOrNull() ?: return@forEach
                     applyEncodedPreference(preferences, key, valueObj)
