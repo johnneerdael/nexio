@@ -27,25 +27,29 @@ class PosterRatingsUrlResolver @Inject constructor(
 
     fun apply(meta: Meta, activeProvider: ActiveProvider?): Meta {
         if (activeProvider == null) return meta
+        val providerTag = activeProvider.provider.name.lowercase()
         return meta.copy(
             poster = resolvePosterUrl(
                 originalPosterUrl = meta.poster,
                 contentId = meta.id,
                 contentType = meta.type,
                 activeProvider = activeProvider
-            )
+            ),
+            posterProviderTag = providerTag
         )
     }
 
     fun apply(metaPreview: MetaPreview, activeProvider: ActiveProvider?): MetaPreview {
         if (activeProvider == null) return metaPreview
+        val providerTag = activeProvider.provider.name.lowercase()
         return metaPreview.copy(
             poster = resolvePosterUrl(
                 originalPosterUrl = metaPreview.poster,
                 contentId = metaPreview.id,
                 contentType = metaPreview.type,
                 activeProvider = activeProvider
-            )
+            ),
+            posterProviderTag = providerTag
         )
     }
 

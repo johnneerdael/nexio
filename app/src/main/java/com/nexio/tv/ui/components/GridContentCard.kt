@@ -141,12 +141,13 @@ fun GridContentCard(
                     .clip(cardShape)
             ) {
                 val context = LocalContext.current
-                val imageModel = remember(item.poster, requestWidthPx, requestHeightPx) {
+                val imageModel = remember(item.poster, requestWidthPx, requestHeightPx, item.id, item.posterProviderTag) {
                     ImageRequest.Builder(context)
                         .data(item.poster)
                         .crossfade(imageCrossfade)
                         .size(width = requestWidthPx, height = requestHeightPx)
                         .memoryCacheKey("${item.poster}_${requestWidthPx}x${requestHeightPx}")
+                        .diskCacheKey("${item.id}_${item.posterProviderTag ?: "native"}_poster")
                         .build()
                 }
                 if (item.poster.isNullOrBlank()) {

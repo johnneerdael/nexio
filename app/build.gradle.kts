@@ -340,6 +340,9 @@ dependencies {
     // DataStore
     implementation(libs.datastore.preferences)
 
+    // WorkManager
+    implementation(libs.work.runtime)
+
     // Lock-free queues for playback instrumentation
     implementation(libs.jctools.core)
 

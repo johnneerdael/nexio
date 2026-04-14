@@ -168,10 +168,10 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 onLog(itemEvent.first, "catalogKey=synthetic_home ${itemEvent.second}")
             }
         }
-        prefetchImageUrls(imageTelemetry.urlsToFetch)
+        prefetchImageEntries(imageTelemetry.entriesToFetch)
         onLog(
             "image_prefetch_end",
-            "catalogKey=synthetic_home fetched_urls=${imageTelemetry.urlsToFetch.size} skipped_cached_urls=${imageTelemetry.cachedUrls} " +
+            "catalogKey=synthetic_home fetched_urls=${imageTelemetry.entriesToFetch.size} skipped_cached_urls=${imageTelemetry.cachedUrls} " +
                 "items_cached=${imageTelemetry.itemsFullyCached} items_fetched=${imageTelemetry.itemsNeedingFetch}"
         )
 
@@ -301,10 +301,10 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                                 onLog(itemEvent.first, "catalogKey=$catalogKey ${itemEvent.second}")
                             }
                         }
-                        prefetchImageUrls(imageTelemetry.urlsToFetch)
+                        prefetchImageEntries(imageTelemetry.entriesToFetch)
                         onLog(
                             "image_prefetch_end",
-                            "catalogKey=$catalogKey fetched_urls=${imageTelemetry.urlsToFetch.size} skipped_cached_urls=${imageTelemetry.cachedUrls} " +
+                            "catalogKey=$catalogKey fetched_urls=${imageTelemetry.entriesToFetch.size} skipped_cached_urls=${imageTelemetry.cachedUrls} " +
                                 "items_cached=${imageTelemetry.itemsFullyCached} items_fetched=${imageTelemetry.itemsNeedingFetch}"
                         )
 
@@ -385,16 +385,21 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 onLog(itemEvent.first, "catalogKey=$catalogKey ${itemEvent.second}")
             }
         }
-        prefetchImageUrls(imageTelemetry.urlsToFetch)
+        prefetchImageEntries(imageTelemetry.entriesToFetch)
         onLog(
             "image_prefetch_end",
-            "catalogKey=$catalogKey fetched_urls=${imageTelemetry.urlsToFetch.size} skipped_cached_urls=${imageTelemetry.cachedUrls} " +
+            "catalogKey=$catalogKey fetched_urls=${imageTelemetry.entriesToFetch.size} skipped_cached_urls=${imageTelemetry.cachedUrls} " +
                 "items_cached=${imageTelemetry.itemsFullyCached} items_fetched=${imageTelemetry.itemsNeedingFetch}"
         )
     }
 
+    private data class ImageCacheEntry(
+        val url: String,
+        val diskCacheKey: String
+    )
+
     private data class ImagePrefetchTelemetry(
-        val urlsToFetch: List<String>,
+        val entriesToFetch: List<ImageCacheEntry>,
         val totalUrls: Int,
         val cachedUrls: Int,
         val missingUrls: Int,
@@ -405,7 +410,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     )
 
     private fun buildImagePrefetchTelemetry(items: List<MetaPreview>): ImagePrefetchTelemetry {
-        val orderedUrls = linkedSetOf<String>()
+        val orderedEntries = linkedSetOf<ImageCacheEntry>()
         val itemEvents = mutableListOf<Pair<String, String>>()
         var cachedUrls = 0
         var missingUrls = 0
@@ -414,28 +419,37 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
 
         items.forEach { item ->
             val itemKey = "${item.apiType}:${item.id}"
-            val urls = listOf(item.poster, item.background, item.logo)
-                .mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
-                .distinct()
-            if (urls.isEmpty()) {
+            val providerTag = item.posterProviderTag ?: "native"
+            val entries = buildList {
+                item.poster?.trim()?.takeIf(String::isNotEmpty)?.let {
+                    add(ImageCacheEntry(it, "${item.id}_${providerTag}_poster"))
+                }
+                item.background?.trim()?.takeIf(String::isNotEmpty)?.let {
+                    add(ImageCacheEntry(it, "${item.id}_native_background"))
+                }
+                item.logo?.trim()?.takeIf(String::isNotEmpty)?.let {
+                    add(ImageCacheEntry(it, "${item.id}_native_logo"))
+                }
+            }
+            if (entries.isEmpty()) {
                 itemEvents += "item_image_skipped_no_urls" to "itemKey=$itemKey"
                 return@forEach
             }
-            val missingForItem = urls.filterNot { hasImageCached(it) }
-            cachedUrls += (urls.size - missingForItem.size)
+            val missingForItem = entries.filterNot { hasImageCached(it.diskCacheKey) }
+            cachedUrls += (entries.size - missingForItem.size)
             missingUrls += missingForItem.size
-            orderedUrls.addAll(missingForItem)
+            orderedEntries.addAll(missingForItem)
             if (missingForItem.isEmpty()) {
                 itemsFullyCached += 1
-                itemEvents += "item_image_cached" to "itemKey=$itemKey urls=${urls.size}"
+                itemEvents += "item_image_cached" to "itemKey=$itemKey urls=${entries.size}"
             } else {
                 itemsNeedingFetch += 1
-                itemEvents += "item_image_fetch" to "itemKey=$itemKey urls=${missingForItem.size}/${urls.size}"
+                itemEvents += "item_image_fetch" to "itemKey=$itemKey urls=${missingForItem.size}/${entries.size}"
             }
         }
 
         return ImagePrefetchTelemetry(
-            urlsToFetch = orderedUrls.toList(),
+            entriesToFetch = orderedEntries.toList(),
             totalUrls = cachedUrls + missingUrls,
             cachedUrls = cachedUrls,
             missingUrls = missingUrls,
@@ -447,26 +461,27 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     }
 
     @OptIn(ExperimentalCoilApi::class)
-    private fun hasImageCached(url: String): Boolean {
+    private fun hasImageCached(diskCacheKey: String): Boolean {
         val imageLoader = appContext.imageLoader
-        val memoryCached = imageLoader.memoryCache?.get(coil.memory.MemoryCache.Key(url)) != null
+        val memoryCached = imageLoader.memoryCache?.get(coil.memory.MemoryCache.Key(diskCacheKey)) != null
         if (memoryCached) return true
         val diskCache = imageLoader.diskCache ?: return false
         return runCatching {
-            val snapshot = diskCache.openSnapshot(url) ?: return@runCatching false
+            val snapshot = diskCache.openSnapshot(diskCacheKey) ?: return@runCatching false
             snapshot.close()
             true
         }.getOrDefault(false)
     }
 
-    private suspend fun prefetchImageUrls(urls: List<String>) {
-        if (urls.isEmpty()) return
+    private suspend fun prefetchImageEntries(entries: List<ImageCacheEntry>) {
+        if (entries.isEmpty()) return
         val imageLoader = appContext.imageLoader
-        urls.forEach { url ->
+        entries.forEach { entry ->
             runCatching {
                 imageLoader.execute(
                     ImageRequest.Builder(appContext)
-                        .data(url)
+                        .data(entry.url)
+                        .diskCacheKey(entry.diskCacheKey)
                         .diskCachePolicy(CachePolicy.ENABLED)
                         .memoryCachePolicy(CachePolicy.ENABLED)
                         .build()

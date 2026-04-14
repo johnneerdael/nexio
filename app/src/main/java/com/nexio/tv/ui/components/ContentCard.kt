@@ -204,23 +204,31 @@ fun ContentCard(
         } else {
             item.poster
         }
-        val imageModel = remember(imageUrl, requestWidthPx, requestHeightPx) {
+        val imageModel = remember(imageUrl, requestWidthPx, requestHeightPx, item.id, item.posterProviderTag) {
+            val isBackdrop = focusedPosterBackdropExpandEnabled && imageUrl == item.background
+            val diskKey = if (isBackdrop) {
+                "${item.id}_native_background"
+            } else {
+                "${item.id}_${item.posterProviderTag ?: "native"}_poster"
+            }
             ImageRequest.Builder(context)
                 .data(imageUrl)
                 .crossfade(false)
                 .memoryCacheKey("${imageUrl}_${requestWidthPx}x${requestHeightPx}")
+                .diskCacheKey(diskKey)
                 .size(width = requestWidthPx, height = requestHeightPx)
                 .build()
         }
         val logoRequestHeightPx = remember(density) {
             with(density) { 48.dp.roundToPx() }
         }
-        val logoModel = remember(item.logo, requestWidthPx, logoRequestHeightPx) {
+        val logoModel = remember(item.logo, requestWidthPx, logoRequestHeightPx, item.id) {
             item.logo?.let { logoUrl ->
                 ImageRequest.Builder(context)
                     .data(logoUrl)
                     .crossfade(false)
                     .memoryCacheKey("${logoUrl}_${requestWidthPx}x${logoRequestHeightPx}")
+                    .diskCacheKey("${item.id}_native_logo")
                     .size(width = requestWidthPx, height = logoRequestHeightPx)
                     .build()
             }

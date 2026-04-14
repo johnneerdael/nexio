@@ -7,6 +7,10 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import com.nexio.tv.core.image.ImageCacheTtlWorker
 import com.nexio.tv.core.sync.StartupSyncService
 import com.nexio.tv.ui.screens.player.ObsoletePlaybackCacheCleanup
 import dagger.hilt.android.HiltAndroidApp
@@ -14,6 +18,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -29,7 +34,17 @@ class NexioApplication : Application(), ImageLoaderFactory {
         appScope.launch {
             ObsoletePlaybackCacheCleanup.cleanup(cacheDir)
             retainPosterCacheOnStartup()
+            ImageCacheTtlWorker.evictExpiredEntries(this@NexioApplication)
         }
+
+        val ttlWorkRequest = PeriodicWorkRequestBuilder<ImageCacheTtlWorker>(
+            repeatInterval = 1, repeatIntervalTimeUnit = TimeUnit.DAYS
+        ).build()
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            ImageCacheTtlWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            ttlWorkRequest
+        )
     }
 
     override fun newImageLoader(): ImageLoader {
