@@ -584,14 +584,20 @@ fun PlayerScreen(
                         resizeMode = uiState.resizeMode,
                         subtitleStyle = uiState.subtitleStyle,
                         keepScreenOn = uiState.isPlaying || uiState.isBuffering,
-                        overlayCues = resolveOverlayCues(
-                            useAiOverlay = uiState.useBuiltInAiSubtitleOverlay,
-                            translatedBuiltInCues = uiState.translatedBuiltInCues,
-                            addonOverlayCues = uiState.addonOverlayCues
-                        ),
-                        suppressNativeSubtitles = uiState.useBuiltInAiSubtitleOverlay
+                        overlayCues = if (uiState.useAssSsaRenderOverlay) {
+                            emptyList()
+                        } else {
+                            resolveOverlayCues(
+                                useAiOverlay = uiState.useBuiltInAiSubtitleOverlay,
+                                translatedBuiltInCues = uiState.translatedBuiltInCues,
+                                addonOverlayCues = uiState.addonOverlayCues
+                            )
+                        },
+                        suppressNativeSubtitles =
+                            uiState.useBuiltInAiSubtitleOverlay || uiState.useAssSsaRenderOverlay
                     ),
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    assSsaRenderOverlayProvider = viewModel::setAssSsaRenderOverlayViewProvider
                 )
             }
         }

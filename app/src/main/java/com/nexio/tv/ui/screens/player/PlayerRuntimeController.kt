@@ -38,6 +38,8 @@ import com.nexio.tv.domain.repository.StreamRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import androidx.media3.session.MediaSession
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
+import com.nexio.tv.ui.screens.player.ass.AssSsaRenderController
+import com.nexio.tv.ui.screens.player.ass.AssSsaRenderOverlayView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -352,11 +354,13 @@ class PlayerRuntimeController(
     internal var hasRequestedScrobbleStartForCurrentItem: Boolean = false
     internal var scrobbleStartRequestGeneration: Long = 0L
     internal var hasSentCompletionScrobbleForCurrentItem: Boolean = false
-    internal var requestedUseLibassByUser: Boolean = false
-    internal var libassPipelineOverrideForCurrentStream: Boolean? = null
-    internal var activePlayerUsesLibass: Boolean = false
-    internal var libassPipelineSwitchInFlight: Boolean = false
-    internal var libassPipelineDecisionStreamUrl: String? = null
+    internal var assSsaPipelineOverrideForCurrentStream: Boolean? = null
+    internal var activePlayerUsesAssSsaRenderer: Boolean = false
+    internal var assSsaPipelineSwitchInFlight: Boolean = false
+    internal var assSsaPipelineDecisionStreamUrl: String? = null
+    internal var assSsaNativeFallbackHandledForCurrentStream: Boolean = false
+    internal var assSsaRenderController: AssSsaRenderController? = null
+    internal var assSsaOverlayViewProvider: (() -> AssSsaRenderOverlayView?)? = null
     internal var trackAfrAppliedForCurrentStream: Boolean = false
     internal var currentStreamHasVideoTrack: Boolean = false
     internal var currentVideoTrackIsLikelyDv5: Boolean = false

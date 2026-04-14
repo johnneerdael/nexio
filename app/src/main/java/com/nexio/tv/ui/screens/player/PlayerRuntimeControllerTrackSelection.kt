@@ -286,6 +286,7 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(
             "ADDON_SUB: select id=${subtitle.id} lang=${subtitle.lang} url=${subtitle.url.take(120)}"
         )
         deactivateAddonSubtitleOverlay()
+        assSsaRenderController?.clearOverlay()
 
         val normalizedLang = PlayerSubtitleUtils.normalizeLanguageCode(subtitle.lang)
         val subtitleMimeType = PlayerSubtitleUtils.mimeTypeFromUrl(subtitle.url)
@@ -331,6 +332,7 @@ internal fun PlayerRuntimeController.selectAddonSubtitle(
                 PlayerRuntimeController.TAG,
                 "ADDON_SUB: overlay-path selected (no media reload) id=${subtitle.id} mime=$subtitleMimeType"
             )
+            assSsaPipelineOverrideForCurrentStream = false
             activateAddonSubtitleOverlay(
                 subtitle = subtitle,
                 selectedSubtitle = selectedSubtitle

@@ -3,8 +3,13 @@ package com.nexio.tv.ui.screens.player
 import android.content.Intent
 import android.media.audiofx.AudioEffect
 import androidx.media3.common.C
+import kotlinx.coroutines.flow.update
 
 internal fun PlayerRuntimeController.releasePlayer() {
+    assSsaRenderController?.release()
+    assSsaRenderController = null
+    activePlayerUsesAssSsaRenderer = false
+    _uiState.update { it.copy(useAssSsaRenderOverlay = false) }
     flushPlaybackSnapshotForSwitchOrExit()
     playbackSessionGuard.onPlayerReleased()
     playbackIdleGateState.onPlayerSessionEnded()
