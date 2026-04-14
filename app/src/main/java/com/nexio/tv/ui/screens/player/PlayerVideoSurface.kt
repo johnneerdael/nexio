@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.player
 import android.view.View
 import android.widget.FrameLayout
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -94,10 +95,21 @@ internal fun PlayerVideoSurface(
     player: ExoPlayer,
     renderState: PlayerSurfaceRenderState,
     modifier: Modifier = Modifier,
-    assSsaRenderOverlayProvider: ((AssSsaRenderOverlayView) -> Unit)? = null
+    assSsaRenderOverlayProvider: (((() -> AssSsaRenderOverlayView?)?) -> Unit)? = null
 ) {
     var lastAppliedState by remember(player) {
         mutableStateOf<PlayerSurfaceRenderState?>(null)
+    }
+    var assSsaOverlayView by remember(player) {
+        mutableStateOf<AssSsaRenderOverlayView?>(null)
+    }
+
+    DisposableEffect(player, assSsaRenderOverlayProvider) {
+        assSsaRenderOverlayProvider?.invoke { assSsaOverlayView }
+        onDispose {
+            assSsaOverlayView = null
+            assSsaRenderOverlayProvider?.invoke(null)
+        }
     }
 
     AndroidView(
@@ -114,8 +126,8 @@ internal fun PlayerVideoSurface(
             if (playerView.player !== player) {
                 playerView.player = player
             }
-            assSsaRenderOverlayProvider?.let { provider ->
-                playerView.ensureAssSsaRenderOverlay()?.let(provider)
+            if (assSsaRenderOverlayProvider != null) {
+                assSsaOverlayView = playerView.ensureAssSsaRenderOverlay()
             }
 
             val plan = buildPlayerViewMutationPlan(lastAppliedState, renderState)
