@@ -418,16 +418,25 @@ internal class AssSsaRenderController(
     }
 
     private fun findTrackIdByFormat(format: Format): Int? {
-        val language = format.language.normalizedLanguage()
-        if (language != null) {
-            tracks.values.firstOrNull { it.format.language.normalizedLanguage() == language }?.let {
-                return it.trackId
-            }
-        }
-
         val id = format.id
         if (!id.isNullOrBlank()) {
             tracks.values.firstOrNull { it.format.id == id }?.let { return it.trackId }
+        }
+
+        val label = format.label.normalizedLabel()
+        if (label != null) {
+            tracks.values
+                .filter { it.format.label.normalizedLabel() == label }
+                .singleOrNull()
+                ?.let { return it.trackId }
+        }
+
+        val language = format.language.normalizedLanguage()
+        if (language != null) {
+            tracks.values
+                .filter { it.format.language.normalizedLanguage() == language }
+                .singleOrNull()
+                ?.let { return it.trackId }
         }
 
         return tracks.values.singleOrNull()?.trackId
@@ -489,18 +498,30 @@ private fun String.toAssSsaEventChunk(trackId: Int, timeUs: Long): AssSsaEventCh
 
 private fun parseAssTimeMs(value: String): Long? {
     val timeParts = value.split(":")
-    if (timeParts.size != 3) return null
+    if (timeParts.size != 3 && timeParts.size != 4) return null
     val hours = timeParts[0].toLongOrNull() ?: return null
     val minutes = timeParts[1].toLongOrNull() ?: return null
-    val secondsParts = timeParts[2].split(".", limit = 2)
-    val seconds = secondsParts[0].toLongOrNull() ?: return null
-    val millis = secondsParts.getOrNull(1)
-        ?.padEnd(3, '0')
-        ?.take(3)
-        ?.toLongOrNull()
-        ?: 0L
+    val seconds: Long
+    val millis: Long
+    if (timeParts.size == 4) {
+        seconds = timeParts[2].toLongOrNull() ?: return null
+        val centiseconds = timeParts[3].toLongOrNull() ?: return null
+        millis = centiseconds * 10L
+    } else {
+        val secondsParts = timeParts[2].split(".", limit = 2)
+        seconds = secondsParts[0].toLongOrNull() ?: return null
+        millis = secondsParts.getOrNull(1)
+            ?.padEnd(3, '0')
+            ?.take(3)
+            ?.toLongOrNull()
+            ?: 0L
+    }
 
     return hours * 3_600_000L + minutes * 60_000L + seconds * 1000L + millis
+}
+
+private fun String?.normalizedLabel(): String? {
+    return this?.trim()?.takeIf { it.isNotEmpty() }
 }
 
 private fun String?.normalizedLanguage(): String? {

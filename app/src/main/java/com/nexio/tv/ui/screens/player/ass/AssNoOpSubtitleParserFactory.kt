@@ -13,11 +13,11 @@ internal class AssNoOpSubtitleParserFactory : SubtitleParser.Factory {
     private val delegate = DefaultSubtitleParserFactory()
 
     override fun supportsFormat(format: Format): Boolean {
-        return format.isAssSsaFormat() || delegate.supportsFormat(format)
+        return format.isEmbeddedAssSsaFormat() || delegate.supportsFormat(format)
     }
 
     override fun getCueReplacementBehavior(format: Format): Int {
-        return if (format.isAssSsaFormat()) {
+        return if (format.isEmbeddedAssSsaFormat()) {
             Format.CUE_REPLACEMENT_BEHAVIOR_REPLACE
         } else {
             delegate.getCueReplacementBehavior(format)
@@ -25,7 +25,7 @@ internal class AssNoOpSubtitleParserFactory : SubtitleParser.Factory {
     }
 
     override fun create(format: Format): SubtitleParser {
-        return if (format.isAssSsaFormat()) AssNoOpSubtitleParser else delegate.create(format)
+        return if (format.isEmbeddedAssSsaFormat()) AssNoOpSubtitleParser else delegate.create(format)
     }
 }
 

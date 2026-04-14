@@ -26,6 +26,11 @@ internal fun Format.isAssSsaFormat(): Boolean {
     return initializationData.any { data -> hasAssSsaHeader(data) }
 }
 
+internal fun Format.isEmbeddedAssSsaFormat(): Boolean {
+    return isAssSsaFormat() &&
+        (containerMimeType == MimeTypes.VIDEO_MATROSKA || containerMimeType == MimeTypes.VIDEO_WEBM)
+}
+
 private fun hasAssSsaHeader(data: ByteArray): Boolean {
     return listOf(
         StandardCharsets.UTF_8,

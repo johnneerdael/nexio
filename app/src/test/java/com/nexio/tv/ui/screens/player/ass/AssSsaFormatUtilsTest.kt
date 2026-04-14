@@ -13,6 +13,38 @@ class AssSsaFormatUtilsTest {
     }
 
     @Test
+    fun sidecarAssSsaIsNotEmbeddedAssSsa() {
+        val format = Format.Builder()
+            .setSampleMimeType(MimeTypes.TEXT_SSA)
+            .build()
+
+        assertTrue(format.isAssSsaFormat())
+        assertFalse(format.isEmbeddedAssSsaFormat())
+    }
+
+    @Test
+    fun matroskaAssSsaIsEmbeddedAssSsa() {
+        val format = Format.Builder()
+            .setSampleMimeType(MimeTypes.TEXT_SSA)
+            .setContainerMimeType(MimeTypes.VIDEO_MATROSKA)
+            .build()
+
+        assertTrue(format.isAssSsaFormat())
+        assertTrue(format.isEmbeddedAssSsaFormat())
+    }
+
+    @Test
+    fun webmAssSsaIsEmbeddedAssSsa() {
+        val format = Format.Builder()
+            .setSampleMimeType(MimeTypes.TEXT_SSA)
+            .setContainerMimeType(MimeTypes.VIDEO_WEBM)
+            .build()
+
+        assertTrue(format.isAssSsaFormat())
+        assertTrue(format.isEmbeddedAssSsaFormat())
+    }
+
+    @Test
     fun detectsAssSsaByExplicitAssMimeTypeAlias() {
         assertTrue(Format.Builder().setSampleMimeType("text/x-ass").build().isAssSsaFormat())
     }

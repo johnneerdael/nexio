@@ -44,6 +44,30 @@ class AssSsaRenderControllerTest {
     }
 
     @Test
+    fun convertsMedia3MatroskaDialogueSampleToLibassChunk() {
+        val native = FakeAssSsaNativeApi()
+        val controller = newController(native)
+        val format = Format.Builder().setLanguage("en").build()
+        val sample = "Dialogue: 0:00:00:00,0:00:02:50,42,0,Default,,0,0,0,,{\\an5}Hello"
+
+        controller.setVideoSize(1920, 1080)
+        controller.onTrackHeader(trackId = 3, headerData = "[Script Info]".toByteArray(), format)
+        controller.selectTrackByFormat(format)
+        controller.onSubtitleSample(trackId = 3, timeUs = 1_000_000L, sample.toByteArray())
+
+        val event = controller.eventChunksForTesting().single()
+        assertEquals(3, event.trackId)
+        assertEquals(1000L, event.startMs)
+        assertEquals(2500L, event.durationMs)
+        assertArrayEquals("42,0,Default,,0,0,0,,{\\an5}Hello".toByteArray(), event.chunkData)
+
+        val nativeChunk = native.chunks.single()
+        assertEquals(1000L, nativeChunk.startMs)
+        assertEquals(2500L, nativeChunk.durationMs)
+        assertArrayEquals("42,0,Default,,0,0,0,,{\\an5}Hello".toByteArray(), nativeChunk.data)
+    }
+
+    @Test
     fun matchesTrackByFormatLanguage() {
         val native = FakeAssSsaNativeApi()
         val controller = newController(native)
@@ -58,6 +82,30 @@ class AssSsaRenderControllerTest {
             8,
             controller.findTrackIdByFormatForTesting(
                 Format.Builder().setLanguage("ja").build()
+            )
+        )
+    }
+
+    @Test
+    fun matchesTrackByExactFormatIdBeforeSharedLanguage() {
+        val native = FakeAssSsaNativeApi()
+        val controller = newController(native)
+
+        controller.onTrackHeader(
+            trackId = 8,
+            headerData = "[Script Info]".toByteArray(),
+            Format.Builder().setId("subtitle-1").setLanguage("en").build()
+        )
+        controller.onTrackHeader(
+            trackId = 9,
+            headerData = "[Script Info]".toByteArray(),
+            Format.Builder().setId("subtitle-2").setLanguage("en").build()
+        )
+
+        assertEquals(
+            9,
+            controller.findTrackIdByFormatForTesting(
+                Format.Builder().setId("subtitle-2").setLanguage("en").build()
             )
         )
     }

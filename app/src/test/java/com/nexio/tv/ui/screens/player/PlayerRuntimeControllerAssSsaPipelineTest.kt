@@ -15,6 +15,7 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
         val tracks = tracksFor(
             Format.Builder()
                 .setSampleMimeType(MimeTypes.TEXT_SSA)
+                .setContainerMimeType(MimeTypes.VIDEO_MATROSKA)
                 .build(),
             selected = true
         )
@@ -27,6 +28,7 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
         val tracks = tracksFor(
             Format.Builder()
                 .setSampleMimeType(MimeTypes.TEXT_SSA)
+                .setContainerMimeType(MimeTypes.VIDEO_MATROSKA)
                 .build(),
             selected = false
         )
@@ -40,6 +42,7 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
             Format.Builder()
                 .setSampleMimeType(MimeTypes.APPLICATION_SUBRIP)
                 .setCodecs("avc1.640028, s_text/ass")
+                .setContainerMimeType(MimeTypes.VIDEO_MATROSKA)
                 .build(),
             selected = true
         )
@@ -53,11 +56,24 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
             Format.Builder()
                 .setSampleMimeType(MimeTypes.APPLICATION_SUBRIP)
                 .setInitializationData(listOf("[Script Info]\nScriptType: v4.00+".toByteArray()))
+                .setContainerMimeType(MimeTypes.VIDEO_MATROSKA)
                 .build(),
             selected = true
         )
 
         assertTrue(tracks.hasSelectedAssSsaTextTrackForTesting())
+    }
+
+    @Test
+    fun selectedSidecarAssTrackDoesNotRequestAssSsaPipeline() {
+        val tracks = tracksFor(
+            Format.Builder()
+                .setSampleMimeType(MimeTypes.TEXT_SSA)
+                .build(),
+            selected = true
+        )
+
+        assertFalse(tracks.hasSelectedAssSsaTextTrackForTesting())
     }
 
     @Test
