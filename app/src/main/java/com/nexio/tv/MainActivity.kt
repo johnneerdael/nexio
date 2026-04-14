@@ -156,6 +156,7 @@ import com.nexio.tv.ui.screensaver.PlaybackIdleGateSnapshot
 import com.nexio.tv.ui.screensaver.buildIdleTrailerYouTubeUrl
 import com.nexio.tv.ui.screensaver.chooseIdleTrailerCandidates
 import com.nexio.tv.ui.screensaver.extractIdleTrailerReleaseYear
+import com.nexio.tv.ui.screens.profile.ProfileSelectionScreen
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
 import com.nexio.tv.updater.UpdateViewModel
@@ -269,6 +270,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var debridBenchmarkService: DebridBenchmarkService
+
+    @Inject
+    lateinit var profileManager: com.nexio.tv.core.profile.ProfileManager
 
     private lateinit var jankStats: JankStats
     private val pendingRecommendationNavigation = mutableStateOf<RecommendationNavigation?>(null)
@@ -472,6 +476,29 @@ class MainActivity : ComponentActivity() {
                     val modernSidebarBlurEnabled =
                         mainUiPrefs.modernSidebarBlurPref && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
                     val hideBuiltInHeadersForFloatingPill = modernSidebarEnabled && !sidebarCollapsed
+
+                    // Profile selection gating (D-02, UI-01, UI-02)
+                    var hasSelectedProfileThisSession by remember { mutableStateOf(false) }
+                    val profiles by profileManager.profiles.collectAsState()
+                    val shouldShowProfileSelection = !hasSelectedProfileThisSession && profiles.size > 1
+                    // Capture composition-local value at composable scope for use in LaunchedEffect
+                    val contentFocusRequesterForGating = LocalContentFocusRequester.current
+
+                    if (shouldShowProfileSelection) {
+                        ProfileSelectionScreen(
+                            onProfileSelected = { hasSelectedProfileThisSession = true },
+                            onPinRequired = { /* Phase 3 Plan 02 wires PIN overlay */ }
+                        )
+                        return@Surface
+                    }
+
+                    // Restore focus to content after profile selection exits (Pitfall 1)
+                    LaunchedEffect(hasSelectedProfileThisSession) {
+                        if (hasSelectedProfileThisSession) {
+                            repeat(2) { withFrameNanos { } }
+                            runCatching { contentFocusRequesterForGating.requestFocus() }
+                        }
+                    }
 
                     val updateViewModel: UpdateViewModel = hiltViewModel(this@MainActivity)
                     val updateState by updateViewModel.uiState.collectAsState()
