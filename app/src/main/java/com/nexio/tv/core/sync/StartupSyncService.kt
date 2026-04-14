@@ -1,14 +1,20 @@
 package com.nexio.tv.core.sync
 
+import android.content.Context
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.repository.AddonRepositoryImpl
+import dagger.hilt.android.qualifiers.ApplicationContext
+import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -18,8 +24,13 @@ private const val TAG = "StartupSyncService"
 class StartupSyncService @Inject constructor(
     private val authManager: AuthManager,
     private val accountSettingsSyncService: AccountSettingsSyncService,
+    private val profileSyncService: ProfileSyncService,
+    private val profileSettingsSyncService: ProfileSettingsSyncService,
+    private val profileManager: ProfileManager,
     private val addonRepository: AddonRepositoryImpl,
-    private val accountSyncRefreshNotifier: AccountSyncRefreshNotifier
+    private val accountSyncRefreshNotifier: AccountSyncRefreshNotifier,
+    private val postgrest: Postgrest,
+    @ApplicationContext private val context: Context
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var startupPullJob: Job? = null
@@ -45,6 +56,7 @@ class StartupSyncService @Inject constructor(
                 } else {
                     startupPullJob?.cancel()
                     startupPullJob = null
+                    profileSettingsSyncService.stopObserving()
                     lastPulledKey = null
                     lastAuthenticatedUserId = null
                     forceSyncRequested = false
@@ -86,7 +98,14 @@ class StartupSyncService @Inject constructor(
             repeat(maxAttempts) { index ->
                 val attempt = index + 1
                 Log.d(TAG, "Startup account snapshot sync attempt $attempt/$maxAttempts for key=$key")
-                val result = pullRemoteSnapshot()
+                val result = pullRemoteProfileState()
+                    .fold(
+                        onSuccess = { pullRemoteSnapshot() },
+                        onFailure = { profileError ->
+                            Log.w(TAG, "Startup profile sync failed before account snapshot sync", profileError)
+                            pullRemoteSnapshot()
+                        }
+                    )
                 if (result.isSuccess) {
                     lastPulledKey = key
                     accountSettingsSyncService.markStartupRemotePullSucceeded(userId)
@@ -108,6 +127,66 @@ class StartupSyncService @Inject constructor(
         return true
     }
 
+    private suspend fun pullRemoteProfileState(): Result<Unit> {
+        retryPendingRemoteCleanup()
+
+        val profilePullResult = profileSyncService.pullFromRemote()
+        if (profilePullResult.isSuccess) {
+            Log.d(TAG, "Profile metadata pull succeeded")
+        } else {
+            Log.w(TAG, "Profile metadata pull failed", profilePullResult.exceptionOrNull())
+        }
+
+        val activeId = profileManager.activeProfileId.value
+        val blobPullResult = profileSettingsSyncService.pullBlobForProfile(activeId)
+        if (blobPullResult.isSuccess) {
+            Log.d(TAG, "Profile settings blob pull succeeded for profile $activeId")
+        } else {
+            Log.w(TAG, "Profile settings blob pull failed for profile $activeId", blobPullResult.exceptionOrNull())
+        }
+
+        profileSettingsSyncService.startObserving()
+        return if (profilePullResult.isSuccess && blobPullResult.isSuccess) {
+            Result.success(Unit)
+        } else {
+            Result.failure(
+                profilePullResult.exceptionOrNull()
+                    ?: blobPullResult.exceptionOrNull()
+                    ?: IllegalStateException("Startup profile sync failed")
+            )
+        }
+    }
+
+    private suspend fun retryPendingRemoteCleanup() {
+        val prefs = context.getSharedPreferences("profile_cleanup_state", Context.MODE_PRIVATE)
+        val pendingIds = prefs.getStringSet("pending_remote_cleanup", emptySet()) ?: emptySet()
+        if (pendingIds.isEmpty()) return
+
+        val remaining = pendingIds.toMutableSet()
+        for (idStr in pendingIds) {
+            val profileId = idStr.toIntOrNull()
+            if (profileId == null) {
+                remaining.remove(idStr)
+                continue
+            }
+            try {
+                withJwtRefreshRetry {
+                    postgrest.rpc(
+                        "sync_delete_profile",
+                        buildJsonObject {
+                            put("p_profile_id", profileId)
+                        }
+                    )
+                }
+                remaining.remove(idStr)
+                Log.d(TAG, "Remote cleanup succeeded for profile $profileId")
+            } catch (e: Exception) {
+                Log.w(TAG, "Remote cleanup retry failed for profile $profileId", e)
+            }
+        }
+        prefs.edit().putStringSet("pending_remote_cleanup", remaining.take(4).toSet()).apply()
+    }
+
     private suspend fun pullRemoteSnapshot(): Result<Unit> {
         addonRepository.beginRemoteSyncReconcile()
         return try {
@@ -124,6 +203,15 @@ class StartupSyncService @Inject constructor(
             Result.failure(e)
         } finally {
             addonRepository.endRemoteSyncReconcile()
+        }
+    }
+
+    private suspend fun <T> withJwtRefreshRetry(block: suspend () -> T): T {
+        return try {
+            block()
+        } catch (e: Exception) {
+            if (!authManager.refreshSessionIfJwtExpired(e)) throw e
+            block()
         }
     }
 }
