@@ -1,11 +1,14 @@
 package com.nexio.tv.core.profile
 
 import android.content.Context
+import android.util.Log
+import com.nexio.tv.core.sync.profilePrefsName
 import com.nexio.tv.data.local.ProfileDataStore
 import com.nexio.tv.data.local.ProfileDataStoreFactory
 import com.nexio.tv.data.local.ProfileDataStoreImpl
 import com.nexio.tv.domain.model.UserProfile
 import dagger.hilt.android.qualifiers.ApplicationContext
+import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -16,16 +19,21 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val TAG = "ProfileManager"
 
 @Singleton
 class ProfileManager(
     private val dataStore: ProfileDataStoreImpl,
     private val factory: ProfileDataStoreFactory,
     private val context: Context,
-    scope: CoroutineScope
+    scope: CoroutineScope,
+    private val postgrest: Postgrest? = null
 ) {
     /**
      * Primary Hilt constructor. Creates its own SupervisorJob+IO scope for production use.
@@ -34,12 +42,14 @@ class ProfileManager(
     constructor(
         profileDataStore: ProfileDataStore,
         factory: ProfileDataStoreFactory,
-        @ApplicationContext context: Context
+        @ApplicationContext context: Context,
+        postgrest: Postgrest
     ) : this(
         dataStore = profileDataStore,
         factory = factory,
         context = context,
-        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        postgrest = postgrest
     )
 
     private val _profileSwitched = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -115,6 +125,7 @@ class ProfileManager(
     private suspend fun deleteProfileDataAsync(profileId: Int) {
         if (profileId == 1) return
 
+        deleteProfileRemote(profileId)
         factory.clearProfile(profileId)
 
         val suffixWithExtension = "_p${profileId}.preferences_pb"
@@ -125,6 +136,50 @@ class ProfileManager(
                     file.delete()
                 }
             }
+        }
+
+        deleteSharedPreferencesForProfile(profileId)
+    }
+
+    private fun deleteSharedPreferencesForProfile(profileId: Int) {
+        if (profileId == 1) return
+        val spStoreBaseNames = listOf(
+            "trakt_library_snapshot",
+            "continue_watching_snapshot",
+            "simkl_library_snapshot",
+            "simkl_discovery_snapshot_v2",
+            "simkl_progress_sync_state",
+            "trakt_mutation_outbox",
+            "trakt_discovery_snapshot"
+        )
+        spStoreBaseNames.forEach { baseName ->
+            val prefsName = profilePrefsName(baseName, profileId)
+            context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+                .edit().clear().commit()
+            val file = File(context.applicationInfo.dataDir, "shared_prefs/${prefsName}.xml")
+            if (file.exists()) file.delete()
+        }
+    }
+
+    private suspend fun deleteProfileRemote(profileId: Int) {
+        val pg = postgrest ?: return
+        try {
+            pg.rpc(
+                "sync_delete_profile",
+                buildJsonObject {
+                    put("p_profile_id", profileId)
+                }
+            )
+            Log.d(TAG, "Remote profile $profileId deleted")
+        } catch (e: Exception) {
+            Log.w(TAG, "Remote deletion failed for profile $profileId, scheduling retry", e)
+            val prefs = context.getSharedPreferences("profile_cleanup_state", Context.MODE_PRIVATE)
+            val pending = prefs.getStringSet("pending_remote_cleanup", emptySet())
+                ?.toMutableSet()
+                ?: mutableSetOf()
+            pending.add(profileId.toString())
+            if (pending.size > 4) pending.retainAll(pending.take(4).toSet())
+            prefs.edit().putStringSet("pending_remote_cleanup", pending).apply()
         }
     }
 }

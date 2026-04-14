@@ -6,15 +6,20 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.test.core.app.ApplicationProvider
 import com.google.gson.Gson
+import com.nexio.tv.core.sync.profilePrefsName
 import com.nexio.tv.data.local.ProfileDataStoreFactory
 import com.nexio.tv.data.local.ProfileDataStoreImpl
 import com.nexio.tv.domain.model.UserProfile
+import io.github.jan.supabase.postgrest.Postgrest
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -30,11 +35,30 @@ class ProfileManagerTest {
 
     private lateinit var context: Application
     private lateinit var factory: ProfileDataStoreFactory
+    private val spStoreBaseNames = listOf(
+        "trakt_library_snapshot",
+        "continue_watching_snapshot",
+        "simkl_library_snapshot",
+        "simkl_discovery_snapshot_v2",
+        "simkl_progress_sync_state",
+        "trakt_mutation_outbox",
+        "trakt_discovery_snapshot"
+    )
 
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         factory = ProfileDataStoreFactory(context)
+        context.getSharedPreferences("profile_cleanup_state", Application.MODE_PRIVATE)
+            .edit().clear().commit()
+        spStoreBaseNames.forEach { baseName ->
+            listOf(1, 2, 3, 4).forEach { profileId ->
+                val prefsName = profilePrefsName(baseName, profileId)
+                context.getSharedPreferences(prefsName, Application.MODE_PRIVATE)
+                    .edit().clear().commit()
+                sharedPreferencesFile(prefsName).delete()
+            }
+        }
     }
 
     private fun createDataStore(scope: CoroutineScope): DataStore<Preferences> {
@@ -50,14 +74,29 @@ class ProfileManagerTest {
      * Creates a ProfileManager whose DataStore and StateFlow coroutines run on the test's
      * virtual-time scheduler (backgroundScope), so all emissions are deterministic.
      */
-    private fun TestScope.makeManager(): ProfileManager {
+    private fun TestScope.makeManager(postgrest: Postgrest? = null): ProfileManager {
         val dataStoreImpl = ProfileDataStoreImpl(createDataStore(backgroundScope), Gson())
         return ProfileManager(
             dataStore = dataStoreImpl,
             factory = factory,
             context = context,
-            scope = backgroundScope
+            scope = backgroundScope,
+            postgrest = postgrest
         )
+    }
+
+    private fun sharedPreferencesFile(prefsName: String): File {
+        return File(context.applicationInfo.dataDir, "shared_prefs/${prefsName}.xml")
+    }
+
+    private fun writeProfileSharedPreferences(profileId: Int) {
+        spStoreBaseNames.forEach { baseName ->
+            val prefsName = profilePrefsName(baseName, profileId)
+            context.getSharedPreferences(prefsName, Application.MODE_PRIVATE)
+                .edit()
+                .putString("sentinel", "profile-$profileId")
+                .commit()
+        }
     }
 
     @Test
@@ -138,6 +177,21 @@ class ProfileManagerTest {
     }
 
     @Test
+    fun `deleteProfile does not delete SharedPreferences for profile 1`() = runTest {
+        val manager = makeManager()
+        writeProfileSharedPreferences(1)
+
+        val result = manager.deleteProfile(1)
+
+        assertFalse(result)
+        spStoreBaseNames.forEach { baseName ->
+            val prefsName = profilePrefsName(baseName, 1)
+            val prefs = context.getSharedPreferences(prefsName, Application.MODE_PRIVATE)
+            assertEquals("profile-1", prefs.getString("sentinel", null))
+        }
+    }
+
+    @Test
     fun `deleteProfile non-existent id returns false`() = runTest {
         val manager = makeManager()
         val result = manager.deleteProfile(99)
@@ -155,6 +209,49 @@ class ProfileManagerTest {
         assertTrue(result)
         val profilesAfterDelete = manager.profiles.first { p -> p.none { it.id == aliceId } }
         assertFalse(profilesAfterDelete.any { it.id == aliceId })
+    }
+
+    @Test
+    fun `deleteProfile clears SharedPreferences files for non-primary profile`() = runTest {
+        val manager = makeManager()
+        manager.createProfile("Alice", "#E53935")
+        val profilesAfterCreate = manager.profiles.first { it.size == 2 }
+        val aliceId = profilesAfterCreate.first { it.name == "Alice" }.id
+        writeProfileSharedPreferences(aliceId)
+
+        val result = manager.deleteProfile(aliceId)
+
+        assertTrue(result)
+        spStoreBaseNames.forEach { baseName ->
+            val prefsName = profilePrefsName(baseName, aliceId)
+            val prefs = context.getSharedPreferences(prefsName, Application.MODE_PRIVATE)
+            assertEquals(null, prefs.getString("sentinel", null))
+            assertFalse(sharedPreferencesFile(prefsName).exists())
+        }
+    }
+
+    @Test
+    fun `deleteProfile with remote failure still completes local deletion`() = runTest {
+        val postgrest = mockk<Postgrest>()
+        coEvery { postgrest.rpc<JsonObject>(any(), any()) } throws RuntimeException("remote down")
+        val manager = makeManager(postgrest)
+        manager.createProfile("Alice", "#E53935")
+        val profilesAfterCreate = manager.profiles.first { it.size == 2 }
+        val aliceId = profilesAfterCreate.first { it.name == "Alice" }.id
+        writeProfileSharedPreferences(aliceId)
+
+        val result = manager.deleteProfile(aliceId)
+
+        assertTrue(result)
+        val profilesAfterDelete = manager.profiles.first { p -> p.none { it.id == aliceId } }
+        assertFalse(profilesAfterDelete.any { it.id == aliceId })
+        spStoreBaseNames.forEach { baseName ->
+            val prefsName = profilePrefsName(baseName, aliceId)
+            assertFalse(sharedPreferencesFile(prefsName).exists())
+        }
+        val pending = context.getSharedPreferences("profile_cleanup_state", Application.MODE_PRIVATE)
+            .getStringSet("pending_remote_cleanup", emptySet())
+        assertTrue(pending?.contains(aliceId.toString()) == true)
     }
 
     @Test
