@@ -8,23 +8,20 @@ Nexio is an Android TV / Fire TV streaming app built with Kotlin and Jetpack Com
 
 Reliable, high-quality streaming playback with smart source selection and seamless library tracking across debrid providers.
 
-## Current Milestone: v1.0 Multi-Profile Support
+## Current Milestone: v1.1 TVDB First-Class TV Metadata
 
-**Goal:** Enable household multi-user support with per-profile Trakt/Simkl accounts, individualized settings, and customizable catalogs while keeping addons and debrid accounts shared.
+**Goal:** Make TheTVDB the authoritative TV metadata provider when configured, replacing TMDB for TV surfaces while adding exact Continue Watching airing behavior from TVDB air times.
 
 **Target features:**
-- ProfileDataStoreFactory for per-profile DataStore isolation
-- Profile CRUD (max 4 profiles, configurable name, optional PIN lock)
-- Profile selection screen (opt-in — only shown when 2+ profiles exist)
-- Per-profile Trakt accounts (OAuth, tokens, library, scrobble)
-- Per-profile Simkl accounts
-- Per-profile settings (language, theme, player, catalog order)
-- Per-profile catalog customization (enable/disable, ordering)
-- Profile photo upload via nexio-web (stored in Supabase)
-- Settings cascade: shared vs per-profile classification
-- Per-profile sync infrastructure to Supabase
-- Profile cleanup on deletion
-- nexio-web: profile CRUD from master account, per-profile management (Trakt/Simkl auth, catalog ordering, formatter config) for non-default profiles
+- TVDB integration settings, API key validation, token handling, local storage, and account sync support
+- Provider precedence: TVDB replaces TMDB for TV when configured; TMDB remains TV fallback when TVDB is not configured and continues serving movies
+- Poster-ratings integrations remain authoritative for poster imagery above both TVDB and TMDB
+- TVDB remote-ID matching for IMDb, TMDB, TV Maze, Wikidata, official-site, and related IDs
+- TVDB-backed TV detail, episode, artwork, trailers, related-content, credits/cast, networks, genres, and content ratings
+- Continue Watching exact availability using TVDB episode aired date plus series `airsTime`, converted to the Android TV device timezone
+- Re-evaluation scheduling when future TVDB next-up entries become available
+- TVDB cache/token strategy aligned with TVDB update signals and heavy-cache guidance
+- Diagnostics for provider precedence, fallback, and missing precise air-time metadata
 
 ## Requirements
 
@@ -44,19 +41,17 @@ Reliable, high-quality streaming playback with smart source selection and seamle
 
 <!-- Current scope. Building toward these. -->
 
-- [ ] Per-profile DataStore isolation via ProfileDataStoreFactory
-- [ ] Profile CRUD with max 4 profiles
-- [x] Profile selection screen (opt-in, only when 2+ profiles) — Validated in Phase 3: Profile UI
-- [ ] Per-profile Trakt OAuth and token storage
-- [ ] Per-profile Simkl accounts
-- [ ] Per-profile settings (language, theme, player, catalogs)
-- [ ] Profile photo upload via nexio-web
-- [x] Optional PIN lock per profile — Validated in Phase 3: Profile UI (UI built, server verification deferred to Phase 4)
-- [ ] Settings cascade (shared addons/debrid vs per-profile)
-- [ ] Per-profile sync to Supabase
-- [ ] Profile deletion with full cleanup
-- [ ] nexio-web profile CRUD from master account
-- [ ] nexio-web per-profile management for non-default profiles (Trakt/Simkl auth, catalog ordering, formatter config)
+- [ ] TVDB settings, API validation, auth token handling, and account sync support
+- [ ] TVDB provider precedence over TMDB for every TV metadata surface when TVDB is configured
+- [ ] TMDB fallback for TV only when TVDB is not configured or when explicit observable fallback is required
+- [ ] Poster-ratings precedence over TVDB/TMDB poster metadata when poster-ratings integrations are configured
+- [ ] TVDB remote-ID matching to avoid TMDB TV lookups for identity resolution
+- [ ] TVDB-backed TV detail, episode, artwork, trailer, related-content, credits/cast, network, genre, and content-rating metadata
+- [ ] Exact Continue Watching air-time gating using TVDB `airsTime` plus episode aired date
+- [ ] Device-local timezone conversion for TVDB availability decisions
+- [ ] Scheduled Continue Watching re-evaluation at the computed TVDB availability instant
+- [ ] TVDB metadata/token caching and update-aware invalidation
+- [ ] Diagnostics for provider precedence, fallback, and missing precise air times
 
 ### Out of Scope
 
@@ -78,6 +73,10 @@ Reliable, high-quality streaming playback with smart source selection and seamle
 ### Shared Settings (default profile only)
 
 Addons, TMDB, MDBList, IMDB Ratings, OMDB, Auto Translate, Top-Posters, RPDB, Real-Debrid, Premiumize, EasyDebrid, Torbox.
+
+### TV Metadata Provider Precedence
+
+When TVDB is configured, TVDB is the authoritative source for TV metadata surfaces and TMDB must not be queried for duplicate TV metadata in normal success paths. When TVDB is not configured, existing TMDB-backed TV behavior remains available. Poster-ratings integrations supersede both TVDB and TMDB for poster imagery wherever those integrations support the title.
 
 ### Per-Profile Settings
 
@@ -106,6 +105,9 @@ Trakt account, Simkl account, language, theme, player preferences, catalog order
 | Photo upload via nexio-web only | TV remote input is not suited for photo management | — Pending |
 | Opt-in profile selection | Single-profile users should never see profile management UI | — Pending |
 | Optional PIN per profile | Household privacy without mandatory complexity | — Pending |
+| TVDB replaces TMDB for TV metadata when configured | Avoids duplicate metadata fetches and makes TV provider precedence clear | — Pending |
+| Poster-ratings providers supersede TMDB/TVDB poster metadata | Poster-rating artwork is the explicit user-selected poster authority | — Pending |
+| Use TVDB `airsTime` for Continue Watching availability | Lets new episodes appear at actual airing/release time instead of date start | — Pending |
 
 ## Evolution
 
@@ -125,4 +127,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-14 after Phase 3 (Profile UI) completion*
+*Last updated: 2026-04-14 after starting v1.1 TVDB First-Class TV Metadata milestone*

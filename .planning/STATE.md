@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: executing
-stopped_at: Phase 5 UI-SPEC approved
-last_updated: "2026-04-14T13:02:40.720Z"
-last_activity: 2026-04-14
+milestone: v1.1
+milestone_name: TVDB First-Class TV Metadata
+status: planning
+stopped_at: Milestone v1.1 initialized
+last_updated: "2026-04-14T19:15:00.000Z"
+last_activity: 2026-04-14 -- Milestone v1.1 started from TVDB requirements doc
 progress:
   total_phases: 5
-  completed_phases: 3
-  total_plans: 18
-  completed_plans: 9
-  percent: 50
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** Reliable, high-quality streaming playback with smart source selection and seamless library tracking across debrid providers.
-**Current focus:** Phase 03 — profile-ui
+**Current focus:** Phase 06 — TVDB Foundation and Identity
 
 ## Current Position
 
-Phase: 04
-Plan: Not started
-Status: Executing Phase 03
-Last activity: 2026-04-14
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-14 -- Milestone v1.1 TVDB First-Class TV Metadata started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -36,7 +36,7 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 7
+- Total plans completed: 0
 - Average duration: —
 - Total execution time: —
 
@@ -44,8 +44,7 @@ Progress: [░░░░░░░░░░] 0%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 02 | 4 | - | - |
-| 03 | 3 | - | - |
+| 06 | - | - | - |
 
 **Recent Trend:**
 
@@ -61,10 +60,10 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- Foundation: Adopt NuvioTV ProfileDataStoreFactory pattern (ConcurrentHashMap + lazy init, Profile 1 uses bare filenames for zero-migration)
-- Foundation: Max 4 profiles — matches NuvioTV, keeps DataStore file count manageable
-- Foundation: Photo upload via nexio-web only — TV remote input not suited for file pickers
-- Foundation: Use Gson (not Moshi) for ProfileDataStore JSON serialization — Nexio already uses Gson elsewhere
+- TVDB replaces TMDB for TV metadata when configured; TMDB remains movie metadata and TV fallback when TVDB is not configured
+- Poster-ratings integrations supersede TVDB/TMDB poster metadata for supported poster imagery
+- TVDB `airsTime` plus episode aired date drives exact Continue Watching availability when precise data exists
+- Continue Watching remains exact-air-time gated; TV detail may continue to show future unaired episodes
 
 ### Pending Todos
 
@@ -72,13 +71,14 @@ None yet.
 
 ### Blockers/Concerns
 
-- Phase 2: Audit all 27+ DataStore files to classify each as shared vs per-profile before migrating
-- Phase 3: D-pad focus management and PIN entry UX need prototype testing with physical remote
-- Phase 4: Supabase schema design — RPC signatures and table structures need confirmation before implementation
-- Phase 4: SharedPreferences audit needed — TraktLibrarySnapshotStore, ContinueWatchingSnapshotStore, HomeCatalogSnapshotStore need classification
+- Phase 6: Decide TVDB API key mode (user key, subscriber key plus PIN, or app-level negotiated key path)
+- Phase 7: Inventory every TV path that currently calls TMDB directly and classify whether it is TV metadata that TVDB must replace
+- Phase 8: Define TVDB `airsTime` source-timezone mapping, including US EST/ET behavior, non-US country timezone lookup, streaming exceptions, daylight-saving behavior, and missing country/network cases
+- Phase 9: Preserve TVDB season type data without breaking Trakt progress matching
+- Phase 10: Align TVDB cache invalidation with `/updates` or record timestamps while heavily caching stable reference data
 
 ## Session Continuity
 
-Last session: 2026-04-14T11:47:43.473Z
-Stopped at: Phase 5 UI-SPEC approved
-Resume file: .planning/phases/05-nexio-web-integration/05-UI-SPEC.md
+Last session: 2026-04-14T19:15:00.000Z
+Stopped at: Milestone v1.1 initialized
+Resume file: .planning/ROADMAP.md
