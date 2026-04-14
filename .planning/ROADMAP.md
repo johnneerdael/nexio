@@ -13,7 +13,7 @@ v1.0 Multi-Profile Support transforms Nexio from a single-account app into a hou
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Foundation** - ProfileDataStoreFactory, ProfileManager, and UserProfile model extension — the base layer every subsequent phase depends on
-- [ ] **Phase 2: Per-Profile Auth and Settings** - Migrate 7 DataStores from singleton delegate to factory pattern, making Trakt/Simkl and all per-profile settings automatically profile-scoped
+- [ ] **Phase 2: Per-Profile Auth and Settings** - Migrate 8 DataStores from singleton delegate to factory pattern, making Trakt/Simkl and all per-profile settings automatically profile-scoped
 - [ ] **Phase 3: Profile UI** - Profile selection screen, PIN entry, sidebar switcher, and settings header — all D-pad navigable and gated by profile count
 - [ ] **Phase 4: Sync and Cleanup** - Supabase sync for profile metadata and per-profile settings blobs, plus full cleanup on profile deletion
 - [ ] **Phase 5: nexio-web Integration** - Master account profile CRUD, per-profile Trakt/Simkl auth, catalog and formatter config, and photo upload from the companion web app
@@ -45,7 +45,12 @@ Plans:
   3. Switching profiles instantly reflects that profile's Trakt and Simkl tokens without re-authentication
   4. Per-profile settings (language, theme, player preferences, catalog order) persist independently when switching between profiles
   5. Shared settings (addons, debrid, TMDB, MDBList, IMDB, OMDB, auto-translate, top-posters, RPDB) are only configurable from the default profile
-**Plans**: TBD
+**Plans:** 4 plans
+Plans:
+- [ ] 02-01-PLAN.md — TraktAuthDataStore + TraktSettingsDataStore migration to factory pattern
+- [ ] 02-02-PLAN.md — SimklAuthDataStore + SimklSettingsDataStore migration to factory pattern
+- [ ] 02-03-PLAN.md — PlayerSettings, LayoutPreference, Theme, SearchHistory migration to factory pattern
+- [ ] 02-04-PLAN.md — Sync guard, profileSwitched event, and isPrimaryProfile settings gating
 
 ### Phase 3: Profile UI
 **Goal**: Users can select, switch, and manage profiles through a fully D-pad navigable interface that stays invisible for single-profile households
@@ -94,7 +99,7 @@ Note: Phase 3 (UI) and Phase 4 (Sync) both depend on Phase 2 and can be develope
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 0/2 | Planned | - |
-| 2. Per-Profile Auth and Settings | 0/? | Not started | - |
+| 2. Per-Profile Auth and Settings | 0/4 | Planned | - |
 | 3. Profile UI | 0/? | Not started | - |
 | 4. Sync and Cleanup | 0/? | Not started | - |
 | 5. nexio-web Integration | 0/? | Not started | - |
