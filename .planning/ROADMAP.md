@@ -32,8 +32,8 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. Hilt module provides ProfileDataStoreFactory and ProfileManager as singletons across the app
 **Plans:** 2 plans
 Plans:
-- [x] 01-01-PLAN.md — UserProfile model extension and ProfileDataStoreFactory
-- [x] 01-02-PLAN.md — ProfileDataStore, ProfileManager, and ProfileModule (Hilt DI)
+- [ ] 01-01-PLAN.md — UserProfile model extension and ProfileDataStoreFactory
+- [ ] 01-02-PLAN.md — ProfileDataStore, ProfileManager, and ProfileModule (Hilt DI)
 
 ### Phase 2: Per-Profile Auth and Settings
 **Goal**: Users have isolated Trakt and Simkl accounts per profile, and per-profile settings persist independently across profile switches
