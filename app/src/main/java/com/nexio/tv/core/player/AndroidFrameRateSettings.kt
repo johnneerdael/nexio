@@ -2,6 +2,8 @@ package com.nexio.tv.core.player
 
 import android.content.Context
 import android.content.Intent
+import android.hardware.display.DisplayManager
+import android.os.Build
 import android.provider.Settings
 
 object AndroidFrameRateSettings {
@@ -15,14 +17,30 @@ object AndroidFrameRateSettings {
     }
 
     fun readStatus(context: Context): Status {
-        val value = runCatching {
-            Settings.Secure.getInt(context.contentResolver, MATCH_CONTENT_FRAME_RATE, 0)
-        }.getOrDefault(0)
+        return statusFromPlatformPreference(readPlatformPreference(context))
+    }
+
+    private fun readPlatformPreference(context: Context): Int? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val displayManager = context.getSystemService(DisplayManager::class.java)
+            val preference = runCatching {
+                displayManager?.matchContentFrameRateUserPreference
+            }.getOrNull()
+            if (preference != null) {
+                return preference
+            }
+        }
+
+        return runCatching {
+            Settings.Secure.getInt(context.contentResolver, MATCH_CONTENT_FRAME_RATE)
+        }.getOrNull()
+    }
+
+    private fun statusFromPlatformPreference(value: Int?): Status {
         return when (value) {
             0 -> Status.Disabled
             1 -> Status.SeamlessOnly
             2 -> Status.Always
-            3 -> Status.Always
             else -> Status.Unknown
         }
     }
@@ -37,7 +55,15 @@ object AndroidFrameRateSettings {
     }
 
     fun canRequestResolutionSwitch(context: Context): Boolean {
-        return readStatus(context) != Status.Disabled
+        return canRequestFrameRate(readStatus(context))
+    }
+
+    fun canRequestFrameRate(context: Context): Boolean {
+        return canRequestFrameRate(readStatus(context))
+    }
+
+    private fun canRequestFrameRate(status: Status): Boolean {
+        return status == Status.SeamlessOnly || status == Status.Always
     }
 
     fun displaySettingsIntent(): Intent {
@@ -46,4 +72,8 @@ object AndroidFrameRateSettings {
     }
 
     internal fun statusLabelForTests(status: Status): String = statusLabel(status)
+    internal fun statusFromPlatformPreferenceForTests(value: Int?): Status =
+        statusFromPlatformPreference(value)
+
+    internal fun canRequestFrameRateForTests(status: Status): Boolean = canRequestFrameRate(status)
 }
