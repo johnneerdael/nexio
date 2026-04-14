@@ -64,7 +64,7 @@ class AioTemplateFormatterTest {
                 year = "2023",
                 resolution = "2160p",
                 quality = "BluRay",
-                visualTags = listOf("DV"),
+                visualTags = listOf("DV", "HDR", "HDR10", "HDR10+", "HLG", "SDR", "AI"),
                 audioTags = listOf("Atmos", "TrueHD"),
                 audioChannels = listOf("7.1"),
                 duration = null,
@@ -99,8 +99,13 @@ class AioTemplateFormatterTest {
             ),
             detailLine.lines()
         )
-        assertTrue(result.badgeRow.contains("[[icon:dovi:1.75]]"))
-        assertTrue(result.badgeRow.contains("[[icon:atmos:1.75]]"))
+        assertTrue(result.badgeRow.contains("[[icon:dovi:1.40]]"))
+        assertTrue(result.badgeRow.contains("[[icon:hdr10:1.40]]"))
+        assertTrue(result.badgeRow.contains("[[icon:hdr10plus:1.40]]"))
+        assertTrue(result.badgeRow.contains("[[icon:hlg:1.40]]"))
+        assertTrue(result.badgeRow.contains("[[icon:sdr:1.40]]"))
+        assertTrue(result.badgeRow.contains("[[icon:ai:1.40]]"))
+        assertTrue(result.badgeRow.contains("[[icon:atmos:1.40]]"))
         assertTrue(result.badgeRow.contains("[[icon:truehd:1.40]]"))
     }
 
