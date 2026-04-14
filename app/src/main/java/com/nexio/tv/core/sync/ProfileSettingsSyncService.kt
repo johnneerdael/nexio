@@ -26,9 +26,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -79,11 +83,26 @@ class ProfileSettingsSyncService @Inject constructor(
         if (observerJob != null) return
         observerJob = scope.launch {
             profileManager.activeProfileId
+                .map { it }
+                .distinctUntilChanged()
                 .flatMapLatest { profileId ->
-                    observeProfileSettings(profileId)
-                        .drop(1)
-                        .debounce(2000)
-                        .flatMapLatest { kotlinx.coroutines.flow.flowOf(profileId) }
+                    flow {
+                        val pullResult = pullBlobForProfile(profileId)
+                        if (pullResult.isFailure) {
+                            Log.w(
+                                TAG,
+                                "Skipping settings observer push for profile $profileId because hydration failed",
+                                pullResult.exceptionOrNull()
+                            )
+                            return@flow
+                        }
+                        emitAll(
+                            observeProfileSettings(profileId)
+                                .drop(1)
+                                .debounce(2000)
+                                .map { profileId }
+                        )
+                    }
                 }
                 .collect { profileId ->
                     if (applyingRemoteBlob) return@collect
