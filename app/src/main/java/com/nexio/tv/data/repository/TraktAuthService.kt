@@ -231,7 +231,7 @@ class TraktAuthService @Inject constructor(
         }
     }
 
-    suspend fun revokeAndLogout() {
+    suspend fun revokeAndLogout(profileId: Int? = null) {
         val state = getCurrentAuthState()
         if (hasRequiredCredentials()) {
             state.accessToken?.let { accessToken ->
@@ -246,7 +246,11 @@ class TraktAuthService @Inject constructor(
                 }
             }
         }
-        traktAuthDataStore.clearAuth()
+        if (profileId != null) {
+            traktAuthDataStore.clearAuth(profileId)
+        } else {
+            traktAuthDataStore.clearAuth()
+        }
     }
 
     suspend fun fetchUserSettings(): String? {

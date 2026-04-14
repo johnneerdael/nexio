@@ -141,9 +141,10 @@ class TraktViewModel @Inject constructor(
     }
 
     fun onCancelDeviceFlow() {
+        val profileId = profileManager.activeProfileId.value  // snapshot before launch
         viewModelScope.launch {
             pollJob?.cancel()
-            traktAuthDataStore.clearDeviceFlow()
+            traktAuthDataStore.clearDeviceFlow(profileId)
             _uiState.update {
                 it.copy(
                     mode = TraktConnectionMode.DISCONNECTED,
@@ -156,10 +157,11 @@ class TraktViewModel @Inject constructor(
     }
 
     fun onDisconnectClick() {
+        val profileId = profileManager.activeProfileId.value  // snapshot before launch
         viewModelScope.launch {
             pollJob?.cancel()
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            traktAuthService.revokeAndLogout()
+            traktAuthService.revokeAndLogout(profileId)
             _uiState.update {
                 it.copy(
                     isLoading = false,
