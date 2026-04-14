@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.components.ProfileAvatarCircle
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,6 +28,7 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,6 +43,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -50,39 +54,17 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import com.nexio.tv.core.profile.ProfileManager
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
-import javax.inject.Inject
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
 import com.nexio.tv.domain.model.UserProfile
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.R
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
-
-@HiltViewModel
-internal class SettingsProfileViewModel @Inject constructor(
-    private val profileManager: ProfileManager
-) : ViewModel() {
-    val isPrimaryProfile: StateFlow<Boolean> = profileManager.activeProfileId
-        .map { it == 1 }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
-
-    val activeProfile: StateFlow<UserProfile?> = combine(
-        profileManager.profiles,
-        profileManager.activeProfileId
-    ) { profiles, activeId ->
-        profiles.find { it.id == activeId }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-}
 
 internal enum class SettingsCategory {
     ACCOUNT,
@@ -195,9 +177,11 @@ fun SettingsScreen(
     onNavigateToAuthQrSignIn: () -> Unit = {},
     onNavigateToYouTubeTrailerLogin: () -> Unit = {}
 ) {
-    val settingsProfileViewModel: SettingsProfileViewModel = hiltViewModel()
-    val isPrimaryProfile by settingsProfileViewModel.isPrimaryProfile.collectAsStateWithLifecycle()
-    val activeProfile by settingsProfileViewModel.activeProfile.collectAsStateWithLifecycle()
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
+    val isPrimaryProfile by settingsViewModel.isPrimaryProfile.collectAsStateWithLifecycle()
+    val activeProfile by settingsViewModel.activeProfile.collectAsStateWithLifecycle()
+    val profileToDelete by settingsViewModel.showDeleteDialog.collectAsStateWithLifecycle()
+    val deleteInProgress by settingsViewModel.deleteInProgress.collectAsStateWithLifecycle()
 
     val allSectionSpecs = rememberSettingsSectionSpecs()
     val visibleSections = remember(allSectionSpecs) {
@@ -444,6 +428,7 @@ fun SettingsScreen(
                             }
                         )
                         SettingsCategory.ACCOUNT -> AccountSettingsInline(
+                            settingsViewModel = settingsViewModel,
                             onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn
                         )
                         SettingsCategory.DEBUG -> DebugSettingsContent()
@@ -453,6 +438,15 @@ fun SettingsScreen(
             }
             } // end Column wrapper
         }
+    }
+
+    profileToDelete?.let { profile ->
+        DeleteProfileDialog(
+            profile = profile,
+            deleteInProgress = deleteInProgress,
+            onKeepProfile = { settingsViewModel.dismissDeleteDialog() },
+            onDeleteProfile = { settingsViewModel.confirmDeleteProfile() }
+        )
     }
 }
 
@@ -500,10 +494,14 @@ private fun ProfileHeaderRow(
 
 @Composable
 private fun AccountSettingsInline(
+    settingsViewModel: SettingsViewModel,
     onNavigateToAuthQrSignIn: () -> Unit
 ) {
     val accountViewModel: com.nexio.tv.ui.screens.account.AccountViewModel = hiltViewModel()
     val accountUiState by accountViewModel.uiState.collectAsStateWithLifecycle()
+    val activeProfile by settingsViewModel.activeProfile.collectAsStateWithLifecycle()
+    val isPrimaryProfile by settingsViewModel.isPrimaryProfile.collectAsStateWithLifecycle()
+    val syncStatus by settingsViewModel.syncStatus.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -513,12 +511,135 @@ private fun AccountSettingsInline(
             title = stringResource(R.string.settings_account),
             subtitle = stringResource(R.string.settings_account_section_subtitle)
         )
-        SettingsGroupCard(modifier = Modifier.fillMaxSize()) {
+        SettingsGroupCard(
+            modifier = Modifier.fillMaxWidth(),
+            title = "Profiles"
+        ) {
+            SyncNowRow(
+                syncStatus = syncStatus,
+                onSyncNow = { settingsViewModel.triggerSyncNow() }
+            )
+            activeProfile?.takeUnless { isPrimaryProfile }?.let { profile ->
+                Button(
+                    onClick = { settingsViewModel.requestDeleteProfile(profile) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.colors(
+                        containerColor = Color(0xFF4A2323),
+                        contentColor = NexioColors.TextPrimary
+                    )
+                ) {
+                    Text("Delete Profile", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+        SettingsGroupCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
             com.nexio.tv.ui.screens.account.AccountSettingsContent(
                 uiState = accountUiState,
                 viewModel = accountViewModel,
                 onNavigateToAuthQrSignIn = onNavigateToAuthQrSignIn
             )
+        }
+    }
+}
+
+@Composable
+private fun SyncNowRow(
+    syncStatus: SyncStatus,
+    onSyncNow: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = when (syncStatus) {
+                SyncStatus.IDLE -> ""
+                SyncStatus.SYNCING -> "Syncing..."
+                SyncStatus.SUCCESS -> "Synced successfully"
+                SyncStatus.ERROR -> "Sync failed. Check your connection and try again."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = when (syncStatus) {
+                SyncStatus.ERROR -> NexioColors.Error
+                SyncStatus.SUCCESS -> NexioColors.Success
+                else -> NexioColors.TextSecondary
+            },
+            modifier = Modifier.weight(1f)
+        )
+
+        if (syncStatus == SyncStatus.SYNCING) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.dp,
+                color = NexioColors.TextPrimary
+            )
+        } else {
+            Button(
+                onClick = onSyncNow,
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.Background,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text("Sync Now", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeleteProfileDialog(
+    profile: UserProfile,
+    deleteInProgress: Boolean,
+    onKeepProfile: () -> Unit,
+    onDeleteProfile: () -> Unit
+) {
+    val keepFocusRequester = remember { FocusRequester() }
+
+    NexioDialog(
+        onDismiss = onKeepProfile,
+        title = "Delete Profile",
+        subtitle = "This will permanently delete ${profile.name} and remove all associated data from this device and the cloud. This cannot be undone.",
+        width = 420.dp
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(
+                onClick = onKeepProfile,
+                enabled = !deleteInProgress,
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(keepFocusRequester),
+                colors = ButtonDefaults.colors(
+                    containerColor = NexioColors.Background,
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text("Keep Profile", style = MaterialTheme.typography.labelLarge)
+            }
+
+            Button(
+                onClick = onDeleteProfile,
+                enabled = !deleteInProgress,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.colors(
+                    containerColor = Color(0xFF4A2323),
+                    contentColor = NexioColors.TextPrimary
+                )
+            ) {
+                Text("Delete Profile", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+
+        LaunchedEffect(profile.id) {
+            runCatching { keepFocusRequester.requestFocus() }
         }
     }
 }
