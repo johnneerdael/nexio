@@ -93,20 +93,23 @@ internal class AssSsaRenderController(
     private var handleHeight = 0
     private var fontconfigConfigured = false
     private var released = false
+    @Volatile private var renderLoopScheduled = false
 
     private val renderRunnable = object : Runnable {
         override fun run() {
-            if (released || player == null) return
+            renderLoopScheduled = false
+            if (!canRunRenderLoop()) return
             renderCurrentFrame()
-            overlayView.postOnAnimation(this)
+            startRenderLoopIfNeeded()
         }
     }
 
     fun setPlayer(player: ExoPlayer?) {
         this.player = player
-        mainHandler.removeCallbacks(renderRunnable)
-        if (player != null && !released) {
-            overlayView.postOnAnimation(renderRunnable)
+        if (player == null) {
+            stopRenderLoop()
+        } else {
+            startRenderLoopIfNeeded()
         }
     }
 
@@ -120,6 +123,7 @@ internal class AssSsaRenderController(
         renderBitmap = null
         destroyNativeHandle()
         ensureNativeInitialized(replayEvents = true)
+        startRenderLoopIfNeeded()
     }
 
     fun onSeekStarted() {
@@ -132,11 +136,15 @@ internal class AssSsaRenderController(
         loadSelectedTrackHeader(activeHandle)
         replayActiveTrackEvents(activeHandle)
         replayActiveRawSamples(activeHandle)
+        startRenderLoopIfNeeded()
     }
 
     fun selectTrackByFormat(format: Format) {
         val trackId = findTrackIdByFormat(format) ?: return
-        if (selectedTrackId == trackId) return
+        if (selectedTrackId == trackId) {
+            startRenderLoopIfNeeded()
+            return
+        }
 
         selectedTrackId = trackId
         loadedTrackId = null
@@ -150,16 +158,20 @@ internal class AssSsaRenderController(
         } else {
             ensureNativeInitialized(replayEvents = true)
         }
+        startRenderLoopIfNeeded()
     }
 
     fun clearOverlay() {
-        overlayView.clearOverlay()
+        stopRenderLoop()
+        runOnMainThread {
+            overlayView.clearOverlay()
+        }
     }
 
     fun release() {
         if (released) return
         released = true
-        mainHandler.removeCallbacks(renderRunnable)
+        stopRenderLoop()
         player = null
         destroyNativeHandle()
         renderBitmap?.recycle()
@@ -178,6 +190,7 @@ internal class AssSsaRenderController(
         tracks[trackId] = TrackState(trackId, headerData, format)
         if (selectedTrackId == null && tracks.size == 1) {
             selectedTrackId = trackId
+            startRenderLoopIfNeeded()
         }
         if (selectedTrackId == trackId && handle != 0L) {
             loadedTrackId = null
@@ -197,6 +210,7 @@ internal class AssSsaRenderController(
             if (trackId == selectedTrackId && ensureNativeInitialized(replayEvents = false)) {
                 native.processChunk(handle, chunk.chunkData, chunk.startMs, chunk.durationMs)
             }
+            startRenderLoopIfNeeded()
             return
         }
 
@@ -205,6 +219,7 @@ internal class AssSsaRenderController(
         if (trackId == selectedTrackId && ensureNativeInitialized(replayEvents = false)) {
             native.processData(handle, rawSample.data)
         }
+        startRenderLoopIfNeeded()
     }
 
     override fun onFontAttachment(name: String, data: ByteArray) {
@@ -216,17 +231,20 @@ internal class AssSsaRenderController(
         }
     }
 
-    internal fun renderCurrentFrameForTesting() {
-        renderCurrentFrame()
-    }
-
     internal fun eventChunksForTesting(): List<AssSsaEventChunk> = eventChunks.toList()
 
     internal fun findTrackIdByFormatForTesting(format: Format): Int? {
         return findTrackIdByFormat(format)
     }
 
-    internal fun renderCurrentFrame() {
+    internal fun isRenderLoopScheduledForTesting(): Boolean = renderLoopScheduled
+
+    // Test hook; production rendering is scheduled through renderRunnable on the main thread.
+    internal fun renderCurrentFrameForTesting() {
+        renderCurrentFrame()
+    }
+
+    private fun renderCurrentFrame() {
         if (!ensureNativeInitialized(replayEvents = true)) {
             clearOverlay()
             return
@@ -240,7 +258,51 @@ internal class AssSsaRenderController(
         if (native.render(handle, adjustedPositionMs, bitmap)) {
             overlayView.setRenderedBitmap(bitmap)
         } else {
-            clearOverlay()
+            clearOverlayView()
+        }
+    }
+
+    private fun startRenderLoopIfNeeded() {
+        if (!canRunRenderLoop() || renderLoopScheduled) return
+        renderLoopScheduled = true
+        runOnMainThread {
+            if (!canRunRenderLoop() || !renderLoopScheduled) {
+                renderLoopScheduled = false
+                return@runOnMainThread
+            }
+            overlayView.postOnAnimation(renderRunnable)
+        }
+    }
+
+    private fun stopRenderLoop() {
+        renderLoopScheduled = false
+        runOnMainThread {
+            overlayView.removeCallbacks(renderRunnable)
+        }
+    }
+
+    private fun canRunRenderLoop(): Boolean {
+        val trackId = selectedTrackId
+        return !released &&
+            player != null &&
+            trackId != null &&
+            tracks.containsKey(trackId) &&
+            renderWidth > 0 &&
+            renderHeight > 0 &&
+            native.nativeAvailable
+    }
+
+    private fun runOnMainThread(action: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            action()
+        } else {
+            mainHandler.post(action)
+        }
+    }
+
+    private fun clearOverlayView() {
+        runOnMainThread {
+            overlayView.clearOverlay()
         }
     }
 

@@ -3,7 +3,9 @@ package com.nexio.tv.ui.screens.player.ass
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.media3.common.Format
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.core.app.ApplicationProvider
+import io.mockk.mockk
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -70,6 +72,51 @@ class AssSsaRenderControllerTest {
         controller.renderCurrentFrameForTesting()
 
         assertEquals(3500L, native.renders.single().timeMs)
+    }
+
+    @Test
+    fun timeRendererUpdatesControllerTimeWithoutNativeRender() {
+        val native = FakeAssSsaNativeApi()
+        val controller = newController(native)
+        val renderer = AssSsaTimeRenderer(controller)
+
+        controller.setVideoSize(1280, 720)
+
+        renderer.render(positionUs = 7_000_000L, elapsedRealtimeUs = 1_000L)
+
+        assertEquals(7_000_000L, controller.currentTimeUs)
+        assertTrue(native.renders.isEmpty())
+    }
+
+    @Test
+    fun setPlayerWithoutSelectedTrackDoesNotStartRenderLoop() {
+        val native = FakeAssSsaNativeApi()
+        val controller = newController(native)
+
+        controller.setVideoSize(1280, 720)
+        controller.setPlayer(mockk<ExoPlayer>(relaxed = true))
+
+        assertFalse(controller.isRenderLoopScheduledForTesting())
+    }
+
+    @Test
+    fun selectedTrackStartsRenderLoopAndClearOverlayStopsIt() {
+        val native = FakeAssSsaNativeApi()
+        val controller = newController(native)
+
+        controller.setVideoSize(1280, 720)
+        controller.setPlayer(mockk<ExoPlayer>(relaxed = true))
+        controller.onTrackHeader(
+            trackId = 9,
+            headerData = "[Script Info]".toByteArray(),
+            Format.Builder().setLanguage("en").build()
+        )
+
+        assertTrue(controller.isRenderLoopScheduledForTesting())
+
+        controller.clearOverlay()
+
+        assertFalse(controller.isRenderLoopScheduledForTesting())
     }
 
     @Test
