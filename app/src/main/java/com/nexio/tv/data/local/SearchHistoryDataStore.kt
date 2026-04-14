@@ -7,7 +7,6 @@ import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.profile.ProfileManager
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -63,14 +62,13 @@ class SearchHistoryDataStore @Inject constructor(
     ) {
         val normalized = query.trim()
         if (normalized.isEmpty()) return
-
-        val updated = nextSearchHistory(
-            current = recentSearches.first(),
-            query = normalized,
-            maxItems = maxItems
-        )
-
-        store().edit { prefs ->
+        // Capture the profile ID once before entering the edit block so that a concurrent
+        // profile switch cannot split the read (first()) and write (edit) across stores.
+        // The single-lambda edit also makes the whole operation atomic within DataStore.
+        val profileId = profileManager.activeProfileId.value
+        store(profileId).edit { prefs ->
+            val current = decodeSearchHistory(prefs[recentSearchesKey])
+            val updated = nextSearchHistory(current = current, query = normalized, maxItems = maxItems)
             prefs[recentSearchesKey] = gson.toJson(updated)
         }
     }
