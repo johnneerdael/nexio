@@ -51,6 +51,7 @@ import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.data.local.diskSpoolTargetBitrateMbps
 import com.nexio.tv.data.local.FrameRateMatchingMode
+import com.nexio.tv.data.local.InternalPlayerEngine
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import com.nexio.tv.domain.model.Subtitle
 import io.github.peerless2012.ass.media.type.AssRenderType
@@ -93,6 +94,28 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             val playerSettings = playerSettingsDataStore.playerSettings.first()
             lastPreferredAudioLanguage = playerSettings.preferredAudioLanguage
             lastSecondaryPreferredAudioLanguage = playerSettings.secondaryPreferredAudioLanguage
+            val localeList = Resources.getSystem().configuration.locales
+            val deviceLanguages = List(localeList.size()) { localeList[it].isO3Language }
+            val preferredAudioLanguages = resolvePreferredAudioLanguages(
+                preferredAudioLanguage = playerSettings.preferredAudioLanguage,
+                secondaryPreferredAudioLanguage = playerSettings.secondaryPreferredAudioLanguage,
+                deviceLanguages = deviceLanguages,
+                originalLanguage = originalLanguage
+            )
+            currentInternalPlayerEngine = playerSettings.internalPlayerEngine
+            autoSwitchInternalPlayerOnErrorEnabled = playerSettings.autoSwitchInternalPlayerOnError
+            mpvHardwareDecodeModeSetting = playerSettings.mpvHardwareDecodeMode
+            mpvPreferredAudioLanguages = preferredAudioLanguages
+            if (currentInternalPlayerEngine == InternalPlayerEngine.LIBMPV) {
+                mpvInitializationInProgress = true
+                try {
+                    initializeMpvPlayer(url, headers)
+                    fetchAddonSubtitles()
+                } finally {
+                    mpvInitializationInProgress = false
+                }
+                return@launch
+            }
             val experimentalFireOsIecPassthroughEnabled =
                 playerSettings.experimentalDtsIecPassthroughEnabled
             val kodiCustomAudioSinkEnabled = experimentalFireOsIecPassthroughEnabled
@@ -141,6 +164,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             )
             _uiState.update {
                 it.copy(
+                    internalPlayerEngine = currentInternalPlayerEngine,
                     frameRateMatchingMode = playerSettings.frameRateMatchingMode
                 )
             }
@@ -276,14 +300,6 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     )
                 }
 
-                val localeList = Resources.getSystem().configuration.locales
-                val deviceLanguages = List(localeList.size()) { localeList[it].isO3Language }
-                val preferredAudioLanguages = resolvePreferredAudioLanguages(
-                    preferredAudioLanguage = playerSettings.preferredAudioLanguage,
-                    secondaryPreferredAudioLanguage = playerSettings.secondaryPreferredAudioLanguage,
-                    deviceLanguages = deviceLanguages,
-                    originalLanguage = originalLanguage
-                )
                 if (preferredAudioLanguages.isNotEmpty()) {
                     setParameters(
                         buildUponParameters().setPreferredAudioLanguages(*preferredAudioLanguages.toTypedArray())
@@ -899,6 +915,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                             (error.cause as? androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)?.responseCode
                         if (responseCode == 416 && !hasRetriedCurrentStreamAfter416) {
                             retryCurrentStreamFromStartAfter416()
+                            return
+                        }
+                        if (maybeAutoSwitchInternalPlayerOnStartupError(detailedError)) {
                             return
                         }
                         _uiState.update {

@@ -13,6 +13,8 @@ import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.FrameRateMatchingMode
 import com.nexio.tv.data.local.IecPackerChannelLayout
+import com.nexio.tv.data.local.InternalPlayerEngine
+import com.nexio.tv.data.local.MpvHardwareDecodeMode
 import com.nexio.tv.data.local.NextEpisodeThresholdMode
 import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
 import com.nexio.tv.data.local.StreamAutoPlayMode
@@ -117,6 +119,18 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setPlayerPreference(preference: PlayerPreference) {
         playerSettingsDataStore.setPlayerPreference(preference)
+    }
+
+    suspend fun setInternalPlayerEngine(engine: InternalPlayerEngine) {
+        playerSettingsDataStore.setInternalPlayerEngine(engine)
+    }
+
+    suspend fun setAutoSwitchInternalPlayerOnError(enabled: Boolean) {
+        playerSettingsDataStore.setAutoSwitchInternalPlayerOnError(enabled)
+    }
+
+    suspend fun setMpvHardwareDecodeMode(mode: MpvHardwareDecodeMode) {
+        playerSettingsDataStore.setMpvHardwareDecodeMode(mode)
     }
 
     // Audio settings
