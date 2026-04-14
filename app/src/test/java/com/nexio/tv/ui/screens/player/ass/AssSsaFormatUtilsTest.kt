@@ -54,6 +54,24 @@ class AssSsaFormatUtilsTest {
     }
 
     @Test
+    fun detectsAssSsaByUtf16LeInitializationHeader() {
+        val format = Format.Builder()
+            .setInitializationData(listOf("[Script Info]\nScriptType: v4.00+".toByteArray(Charsets.UTF_16LE)))
+            .build()
+
+        assertTrue(format.isAssSsaFormat())
+    }
+
+    @Test
+    fun detectsAssSsaByUtf16BeInitializationHeader() {
+        val format = Format.Builder()
+            .setInitializationData(listOf("[Script Info]\nScriptType: v4.00+".toByteArray(Charsets.UTF_16BE)))
+            .build()
+
+        assertTrue(format.isAssSsaFormat())
+    }
+
+    @Test
     fun ignoresWebVttEvenWithAssLikeInitializationData() {
         val format = Format.Builder()
             .setSampleMimeType(MimeTypes.TEXT_VTT)
