@@ -26,6 +26,11 @@ gaps:
     missing:
       - "Restore or archive-link the Phase 04 SYNC requirement definitions so plan frontmatter requirement IDs can be verified against .planning/REQUIREMENTS.md."
       - "If the roadmap intentionally moved to a new milestone, provide a phase-local requirements mapping for completed Phase 04 verification."
+traceability:
+  phase_local_requirements: ".planning/phases/04-sync-and-cleanup/04-REQUIREMENTS-TRACE.md"
+  root_requirements_milestone: "v1.1 TVDB First-Class TV Metadata"
+  root_roadmap_starts_at_phase: 6
+  sync_ids_restored_locally: [SYNC-01, SYNC-02, SYNC-03, SYNC-04]
 ---
 
 # Phase 4: Sync and Cleanup Verification Report
@@ -113,6 +118,14 @@ gaps:
 | requirements traceability | `rg "SYNC-01|SYNC-02|SYNC-03|SYNC-04" .planning/REQUIREMENTS.md .planning/ROADMAP.md` | No matches in current files | FAIL |
 
 ### Requirements Coverage
+
+### Phase-Local Requirement Traceability Source
+
+The active root `.planning/REQUIREMENTS.md` and `.planning/ROADMAP.md` now describe v1.1 TVDB and do not define Phase 04 `SYNC-*` IDs.
+
+`.planning/phases/04-sync-and-cleanup/04-REQUIREMENTS-TRACE.md` is the verifier-readable historical trace source for `SYNC-01` through `SYNC-04`.
+
+Future verification of Phase 04 should use that trace artifact instead of restoring old Phase 04 requirements into the root v1.1 files.
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |---|---|---|---|---|
