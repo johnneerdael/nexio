@@ -1,136 +1,168 @@
 ---
 phase: 04-sync-and-cleanup
-verified: 2026-04-14T14:13:53Z
+verified: 2026-04-14T16:59:48Z
 status: gaps_found
-score: 17/18 must-haves verified
+score: 20/23 must-haves verified
 overrides_applied: 0
+re_verification:
+  previous_status: gaps_found
+  previous_score: 17/18
+  gaps_closed:
+    - "ProfileSettingsSyncService.importSettingsBlob() now clears each synced feature store before applying remote values, treats missing synced feature blobs as empty snapshots, normalizes remote blobs, and signs the normalized blob for echo-push suppression."
+    - "ProfileSettingsSyncService.startObserving() now calls pullBlobForProfile(profileId) before observeProfileSettings(profileId), and failed hydration prevents observer-driven pushes for that profile."
+  gaps_remaining:
+    - "SYNC-02 remains partial because the v8 settings blob watches layout_preferences while the real LayoutPreferenceDataStore uses layout_settings, and layout/catalog-order flows still participate in the shared v7 account sync path."
+  regressions: []
 gaps:
   - truth: "Per-profile settings push and pull via independent blob RPCs, not the shared v7 contract, so Profile 2 changes never overwrite Profile 1 data"
     status: partial
-    reason: "ProfileSettingsSyncService has v8 RPC push/pull and profileId-scoped DataStore access, but pull import is not a full snapshot apply: missing remote keys and omitted feature blobs leave old local preferences in place. The profile-switch observer also allows pushes for a newly selected profile without first pulling that profile's remote blob."
+    reason: "04-04 fixed full-snapshot import and pull-before-observe gating, but the actual layout/catalog-order settings do not flow through the v8 per-profile blob. ProfileSettingsSyncService syncs a separate layout_preferences DataStore, while LayoutPreferenceDataStore persists to layout_settings. AccountSettingsSyncService also still observes, exports, and applies layout catalog-order values through the shared v7 account contract."
     artifacts:
       - path: "app/src/main/java/com/nexio/tv/core/sync/ProfileSettingsSyncService.kt"
-        issue: "importSettingsBlob() writes only keys present in the remote blob and never clears absent keys or absent synced feature blobs."
-      - path: "app/src/main/java/com/nexio/tv/core/sync/ProfileSettingsSyncService.kt"
-        issue: "startObserving() switches to the selected profile and can push after debounce without a pullBlobForProfile(profileId) gate for that profile."
+        issue: "syncedFeatures contains layout_preferences, which is not the real LayoutPreferenceDataStore feature name."
+      - path: "app/src/main/java/com/nexio/tv/data/local/LayoutPreferenceDataStore.kt"
+        issue: "The real layout settings DataStore feature name is layout_settings."
+      - path: "app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt"
+        issue: "v7 account sync still observes, pushes, and applies layout catalog-order settings from LayoutPreferenceDataStore."
+      - path: "app/src/test/java/com/nexio/tv/core/sync/ProfileSettingsSyncServiceTest.kt"
+        issue: "The syncedFeatures regression test locks in layout_preferences instead of the actual layout_settings feature."
     missing:
-      - "Clear each synced feature DataStore, or reconcile deletions explicitly, before applying that feature's remote blob."
-      - "Treat a missing synced feature in the remote blob as an empty snapshot for that feature."
-      - "Hydrate a profile's settings blob on profile switch before enabling observer-driven pushes for that profile."
+      - "Change ProfileSettingsSyncService.syncedFeatures and tests from layout_preferences to layout_settings, or add an intentional compatibility bridge that reads/writes the real layout_settings store."
+      - "Remove or neutralize per-profile layout/catalog-order paths from the shared v7 account sync observer, payload builder, and apply path so non-primary profile layout changes cannot overwrite shared/Profile 1 data."
+      - "Add a regression that writes ProfileDataStoreFactory.get(profileId, \"layout_settings\") and proves v8 export/import observes that store, not layout_preferences."
 ---
 
 # Phase 4: Sync and Cleanup Verification Report
 
 **Phase Goal:** Profile metadata and per-profile settings sync to Supabase, and deleting a profile leaves no orphaned data anywhere on-device or in the cloud
-**Verified:** 2026-04-14T14:13:53Z
+**Verified:** 2026-04-14T16:59:48Z
 **Status:** gaps_found
-**Re-verification:** No - initial verification
+**Re-verification:** Yes - after gap closure plan 04-04
 
 ## Goal Achievement
 
 ### Observable Truths
 
 | # | Truth | Status | Evidence |
-|---|-------|--------|----------|
-| 1 | Profile metadata syncs to Supabase and is restored on startup/new device | VERIFIED | `ProfileSyncService.pushToRemote()` writes `profile_index`, `name`, `avatar_color_hex`, `avatar_id`, and `pin_enabled` to `sync_push_profiles`; `pullFromRemote()` calls `sync_pull_profiles`, maps to `UserProfile`, and calls `replaceAllProfiles()` on non-empty results. `StartupSyncService.pullRemoteProfileState()` calls `profileSyncService.pullFromRemote()` before v7 account snapshot sync. |
-| 2 | Per-profile settings push and pull via independent blob RPCs, not v7 | FAILED | `ProfileSettingsSyncService` uses `sync_push_profile_settings_blob` and `sync_pull_profile_settings_blob` keyed by `p_profile_id`, but `importSettingsBlob()` only writes remote-present keys and never clears old local keys. `startObserving()` pushes on profile switch without first pulling that switched profile's blob. This can leave stale local settings or overwrite remote profile settings with local defaults. |
-| 3 | Profile deletion removes DataStore files, SharedPreferences files, and remote data | VERIFIED | `ProfileManager.deleteProfile()` rejects profile 1, calls `deleteProfileRemote()`, `factory.clearProfile(profileId)`, deletes `_p{id}.preferences_pb` files, and calls `deleteSharedPreferencesForProfile()` for the 7 per-profile SP stores. Remote failure records `pending_remote_cleanup`; `StartupSyncService.retryPendingRemoteCleanup()` retries `sync_delete_profile`. |
-| 4 | Snapshot stores are classified and scoped per-profile where applicable | VERIFIED | The 7 migrated SP-backed stores import `profilePrefsName`, read `profileManager.activeProfileId.value` in production constructors, and call `context.getSharedPreferences(prefsName(), ...)`; profile 1 keeps bare names and profiles 2-4 get `_p{id}` suffixes. |
-| 5 | Each of 7 SharedPreferences snapshot stores resolves names dynamically at call time | VERIFIED | `TraktLibrarySnapshotStore`, `ContinueWatchingSnapshotStore`, `SimklLibrarySnapshotStore`, `SimklDiscoverySnapshotStore`, `SimklProgressSyncStateStore`, `TraktDiscoverySnapshotStore`, and `TraktMutationOutboxStore` all call `prefsName()` at read/write/clear sites. |
-| 6 | Profile 1 snapshot stores use bare PREFS_NAME | VERIFIED | `profilePrefsName(baseName, 1)` returns `baseName`; tests assert `trakt_library_snapshot` for profile 1. |
-| 7 | Profile 2-4 snapshot stores use `_p{id}` suffix | VERIFIED | `profilePrefsName(baseName, profileId)` returns `"${baseName}_p${profileId}"` when `profileId != 1`; tests cover profiles 2 and 4. |
-| 8 | TraktLibrarySnapshotStore resolves to `trakt_library_snapshot_p2` for profile 2 | VERIFIED | `TraktLibrarySnapshotStoreTest` asserts `profilePrefsName(TraktLibrarySnapshotStore.BASE_PREFS_NAME, 2) == "trakt_library_snapshot_p2"`. |
-| 9 | Settings blob push serializes typed preferences keyed by profileId | VERIFIED | `pushBlobForProfile(profileId)` exports five `syncedFeatures`, encodes typed preference values, and calls `sync_push_profile_settings_blob` with `p_profile_id`, `p_settings_json`, and `p_platform`. |
-| 10 | Settings blob pull applies preferences to the correct profile stores | FAILED | It targets `profileDataStoreFactory.get(profileId, feature)`, but the full snapshot semantics are incomplete because missing keys/features are not cleared. |
-| 11 | Settings observer debounces and cancels pending work on profile switch | VERIFIED | `startObserving()` uses `profileManager.activeProfileId.flatMapLatest`, `drop(1)`, and `debounce(2000)` before `pushBlobForProfile(profileId)`. |
-| 12 | Echo pushes after pull are suppressed | VERIFIED | `pullBlobForProfile()` sets `applyingRemoteBlob` during import and assigns `skipNextPushSignature`; `pushBlobForProfile()` returns early when the exported signature matches. |
-| 13 | Settings push and pull are mutex-serialized | VERIFIED | Both `pushBlobForProfile()` and `pullBlobForProfile()` wrap work in `syncMutex.withLock`. |
-| 14 | Startup pulls profile metadata and active settings before v7 account sync continues | VERIFIED | `scheduleStartupPull()` runs `pullRemoteProfileState().fold(... pullRemoteSnapshot() ...)`; `pullRemoteProfileState()` calls profile metadata pull, active profile blob pull, then `startObserving()`. |
-| 15 | Per-profile settings paths are removed from v7 observer and payload builder | VERIFIED | v7 observer passes `emptyFlow()` for `traktCatalogPreferences`, `simklCatalogPreferences`, and `playerSettings`; payload builder emits empty/default values with `Moved to v8` comments for Trakt/Simkl catalogs, tracking provider, and formatter. The old `applyRemoteSettings()` path appears uncalled. |
-| 16 | Failed remote cleanup is retried on next app start | VERIFIED | `deleteProfileRemote()` persists failed IDs in `profile_cleanup_state` under `pending_remote_cleanup`; `StartupSyncService.retryPendingRemoteCleanup()` reads and retries those IDs, removing successes. |
-| 17 | Settings Sync Now triggers profile metadata and settings blob push with feedback | VERIFIED | `SettingsViewModel.triggerSyncNow()` calls `profileSyncService.pushToRemote()` and `profileSettingsSyncService.pushBlobForProfile(activeId)` and drives `SyncStatus`; `SettingsScreen` renders `Sync Now`, progress, success, and error text. |
-| 18 | Delete confirmation uses NexioDialog with safe and destructive actions | VERIFIED | `DeleteProfileDialog()` uses `NexioDialog`, focuses `Keep Profile`, and exposes a destructive `Delete Profile` button that calls `confirmDeleteProfile()`. |
+|---|---|---|---|
+| 1 | Profile metadata syncs to Supabase and is restored on startup/new device | VERIFIED | `ProfileSyncService.pushToRemote()` calls `sync_push_profiles`; `pullFromRemote()` calls `sync_pull_profiles`, maps `avatar_id` and `pin_enabled`, filters profile IDs to 1..4, and calls `replaceAllProfiles()` on non-empty pulls. `StartupSyncService.pullRemoteProfileState()` calls `profileSyncService.pullFromRemote()` before v7 account sync. |
+| 2 | Per-profile settings push and pull via independent blob RPCs, not v7, so Profile 2 changes never overwrite Profile 1 data | FAILED | Dedicated v8 blob RPCs exist, and 04-04 fixed full-snapshot import plus pull-before-observe. However, `ProfileSettingsSyncService.syncedFeatures` uses `layout_preferences` while the real layout store uses `layout_settings`, and v7 account sync still observes/exports/applies layout catalog-order preferences. Layout/catalog-order changes can therefore bypass the intended per-profile v8 path. |
+| 3 | Deleting a profile removes DataStore files, SharedPreferences files, and Supabase remote data | VERIFIED | `ProfileManager.deleteProfile()` rejects profile 1, attempts `sync_delete_profile`, calls `factory.clearProfile(profileId)`, deletes `_p{id}.preferences_pb` files, clears/deletes the 7 per-profile SharedPreferences XML files, and persists `pending_remote_cleanup` on remote failure. |
+| 4 | TraktLibrary and ContinueWatching snapshot stores are classified and scoped per-profile where applicable, with shared stores remaining shared | VERIFIED | The 7 migrated SP-backed stores use `profilePrefsName()` and dynamic active-profile lookup; the shared stores listed in the plan were not migrated. |
+| 5 | Profile metadata can be pushed to Supabase via `ProfileSyncService.pushToRemote()` | VERIFIED | Push payload includes `profile_index`, `name`, `avatar_color_hex`, `uses_primary_addons`, `avatar_id`, and `pin_enabled`, then calls `postgrest.rpc("sync_push_profiles", params)`. |
+| 6 | Profile metadata can be pulled and replaces local profiles atomically | VERIFIED | Pull decodes `SupabaseProfile`, maps to `UserProfile`, and writes via `ProfileDataStore.replaceAllProfiles()` inside one DataStore edit. |
+| 7 | Each of 7 SharedPreferences snapshot stores resolves PREFS_NAME dynamically per active profile at call time | VERIFIED | All 7 SP stores call `prefsName()` at read/write/clear sites; production constructors source the active profile from `profileManager.activeProfileId.value`. |
+| 8 | Profile 1 snapshot stores use bare PREFS_NAME | VERIFIED | `profilePrefsName(baseName, 1)` returns `baseName`; tests assert bare `trakt_library_snapshot`. |
+| 9 | Profile 2-4 snapshot stores use `_p{id}` suffix | VERIFIED | `profilePrefsName(baseName, profileId)` returns `"${baseName}_p${profileId}"` for non-primary IDs; tests cover profiles 2 and 4. |
+| 10 | `TraktLibrarySnapshotStore` resolves to `trakt_library_snapshot_p2` for profile 2 | VERIFIED | `TraktLibrarySnapshotStoreTest` asserts `profilePrefsName(TraktLibrarySnapshotStore.BASE_PREFS_NAME, 2) == "trakt_library_snapshot_p2"`. |
+| 11 | Per-profile settings serialize into typed JSON blob and push keyed by profileId | FAILED | Typed encoding and profileId RPC push exist, but the blob includes `layout_preferences` instead of the real `layout_settings` DataStore. The blob does not serialize actual layout/catalog-order settings. |
+| 12 | Pulling a settings blob applies encoded preferences to the correct profile's DataStore instances | VERIFIED | After 04-04, `importSettingsBlob()` normalizes the blob, iterates synced features, calls `profileDataStoreFactory.get(profileId, feature)`, clears the feature store, and applies encoded values. This is verified for configured synced features; the layout feature-name mismatch is counted in truths 2 and 11. |
+| 13 | Settings observer debounces DataStore changes and cancels pending work on profile switch | VERIFIED | `startObserving()` uses `activeProfileId.map { it }.distinctUntilChanged().flatMapLatest`, then `drop(1).debounce(2000)` before pushing. |
+| 14 | Echo pushes after pull are suppressed | VERIFIED | `pullBlobForProfile()` sets `applyingRemoteBlob`, imports the normalized blob, stores `skipNextPushSignature`, and `pushBlobForProfile()` returns early when signatures match. |
+| 15 | Settings push and pull are mutex-serialized | VERIFIED | Both `pushBlobForProfile()` and `pullBlobForProfile()` run inside `syncMutex.withLock`. |
+| 16 | Startup pulls profile metadata and active settings before v7 push is allowed | VERIFIED | `pullRemoteProfileState()` retries pending cleanup, pulls metadata, pulls the active profile settings blob, starts the v8 observer, and only then the startup sequence proceeds to account snapshot sync. |
+| 17 | Per-profile settings paths are removed from v7 observer and payload builder | FAILED | Trakt catalog, Simkl catalog, and player paths were removed or emptied, but layout/catalog-order paths remain in v7: `heroCatalogSelections`, `homeCatalogOrderKeys`, and `disabledHomeCatalogKeys` are still observed, exported, and applied through `AccountSettingsSyncService`. |
+| 18 | Failed remote cleanup is retried on next app start | VERIFIED | `deleteProfileRemote()` stores failed IDs under `pending_remote_cleanup`; `StartupSyncService.retryPendingRemoteCleanup()` reads, retries `sync_delete_profile`, removes successes, and bounds the pending set. |
+| 19 | Settings Sync Now pushes profile metadata and settings blob with feedback | VERIFIED | `SettingsViewModel.triggerSyncNow()` calls `profileSyncService.pushToRemote()` and `profileSettingsSyncService.pushBlobForProfile(activeId)`; `SettingsScreen` renders Sync Now status feedback. |
+| 20 | Delete confirmation uses `NexioDialog` with safe and destructive actions | VERIFIED | `DeleteProfileDialog()` uses `NexioDialog`, shows "Keep Profile", and exposes a destructive "Delete Profile" action. |
+| 21 | Settings blob pull applies full snapshot semantics for every synced feature | VERIFIED | 04-04 added `normalizeSettingsBlob()` and `preferences.clear()` inside `importSettingsBlob()` for every synced feature. |
+| 22 | Remote-absent preference keys and missing synced feature blobs clear local preferences | VERIFIED | `importSettingsBlob()` normalizes missing features to `{}` and clears each feature store before applying remote-present keys; tests cover absent keys and missing feature blobs. |
+| 23 | Profile switch hydration runs before observer-driven pushes | VERIFIED | `startObserving()` calls `pullBlobForProfile(profileId)` before `observeProfileSettings(profileId)` and returns without emitting if hydration fails. |
 
-**Score:** 17/18 truths verified
+**Score:** 20/23 truths verified
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |---|---|---|---|
-| `app/src/main/java/com/nexio/tv/core/sync/ProfileSyncService.kt` | Profile metadata push/pull to Supabase | VERIFIED | Exists, substantive, uses `sync_push_profiles`, `sync_pull_profiles`, maps `avatarId` and `pinEnabled`, and is injected into startup/settings flows. |
-| `app/src/main/java/com/nexio/tv/core/sync/ProfilePrefsName.kt` | Per-profile SharedPreferences naming helper | VERIFIED | Exists and implements bare profile 1 plus `_p{id}` suffix for others. |
+| `app/src/main/java/com/nexio/tv/core/sync/ProfileSyncService.kt` | Profile metadata push/pull to Supabase | VERIFIED | Exists, substantive, calls `sync_push_profiles` and `sync_pull_profiles`, maps avatar/PIN fields, and is wired into startup and Sync Now. Review warning remains: push reads `profileManager.profiles.value`, which can lag direct DataStore writes. |
+| `app/src/main/java/com/nexio/tv/core/sync/ProfilePrefsName.kt` | Per-profile SharedPreferences naming helper | VERIFIED | Bare profile 1 and `_p{id}` suffix for profiles 2-4. |
 | `app/src/main/java/com/nexio/tv/data/remote/supabase/SupabaseModels.kt` | `SupabaseProfile` avatar/PIN metadata | VERIFIED | Contains `@SerialName("avatar_id") val avatarId` and `@SerialName("pin_enabled") val pinEnabled`. |
-| `app/src/main/java/com/nexio/tv/core/sync/ProfileSettingsSyncService.kt` | Per-profile settings blob sync | PARTIAL | Exists and wired, but pull import does not clear removed remote keys/features and profile-switch push can run before pull. |
-| `app/src/main/java/com/nexio/tv/data/remote/supabase/AccountSyncModels.kt` | `ProfileSettingsBlobResponse` model | VERIFIED | Contains `profile_id`, `settings_json`, platform, user ID, and updated-at fields. |
-| `app/src/main/java/com/nexio/tv/core/sync/StartupSyncService.kt` | Startup metadata/settings pull and remote cleanup retry | VERIFIED | Pulls profile metadata, active settings blob, starts observer, then continues v7 account sync; retries pending cleanup IDs. |
-| `app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt` | v7 cleanup for per-profile paths | VERIFIED | Per-profile observer inputs are `emptyFlow()` and v7 payload/apply sections mark Trakt/Simkl catalog and player tracking/formatter as moved to v8. |
-| `app/src/main/java/com/nexio/tv/core/profile/ProfileManager.kt` | Profile deletion cleanup | VERIFIED | Deletes non-primary local DataStore files, clears/deletes 7 SP files, calls remote cleanup RPC, and persists retry IDs on failure. |
-| `app/src/main/java/com/nexio/tv/ui/screens/settings/SettingsScreen.kt` | Sync Now and delete dialog UI | VERIFIED | Renders Sync Now status controls and a `NexioDialog` delete confirmation. |
-| `app/src/main/java/com/nexio/tv/ui/screens/settings/SettingsViewModel.kt` | Sync/delete actions | VERIFIED | Sync Now pushes metadata and active blob; delete action calls `ProfileManager.deleteProfile()`. |
+| `app/src/main/java/com/nexio/tv/core/sync/ProfileSettingsSyncService.kt` | Per-profile settings blob sync | PARTIAL | Full-snapshot import and pull-before-observe are now present, but `syncedFeatures` uses `layout_preferences` instead of actual `layout_settings`. |
+| `app/src/main/java/com/nexio/tv/data/remote/supabase/AccountSyncModels.kt` | `ProfileSettingsBlobResponse` model | VERIFIED | Contains the profile settings blob response model used by `pullBlobForProfile()`. |
+| `app/src/main/java/com/nexio/tv/data/local/LayoutPreferenceDataStore.kt` | Actual profile-scoped layout settings store | VERIFIED | Uses `ProfileDataStoreFactory.get(profileId, "layout_settings")`; this confirms the mismatch with `layout_preferences`. |
+| `app/src/main/java/com/nexio/tv/core/sync/StartupSyncService.kt` | Startup metadata/settings pull and cleanup retry | VERIFIED | Pulls profile metadata, pulls active settings blob, starts observer, and retries pending remote cleanup. |
+| `app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt` | v7 cleanup for per-profile settings paths | PARTIAL | Trakt/Simkl/player paths are emptied, but layout/catalog-order values still flow through shared v7 observer, payload, and apply paths. |
+| `app/src/main/java/com/nexio/tv/core/profile/ProfileManager.kt` | Profile deletion cleanup | VERIFIED | Deletes non-primary local DataStore and SP files and attempts/persists remote cleanup. |
+| `app/src/main/java/com/nexio/tv/ui/screens/settings/SettingsScreen.kt` | Sync Now and delete dialog UI | VERIFIED | Renders Sync Now and `NexioDialog` delete confirmation. |
+| `app/src/main/java/com/nexio/tv/ui/screens/settings/SettingsViewModel.kt` | Sync/delete actions | VERIFIED | Sync Now pushes metadata and active profile blob; delete action calls `ProfileManager.deleteProfile()`. |
+| `app/src/test/java/com/nexio/tv/core/sync/ProfileSettingsSyncServiceTest.kt` | Regression tests for 04-04 behavior | PARTIAL | Contains 04-04 regression tests, but also asserts `layout_preferences`, preserving the wrong feature-name contract. Test execution remains blocked by unrelated source-set compile drift. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |---|---|---|---|---|
-| `ProfileSyncService` | Supabase Postgrest | `sync_push_profiles` and `sync_pull_profiles` RPCs | WIRED | Manual grep found both RPCs and response handling. |
-| Snapshot stores | `ProfileManager.activeProfileId` | `profilePrefsName()` at read/write/clear | WIRED | All 7 migrated SP stores use an injected active profile lambda from `profileManager.activeProfileId.value` in production constructors. |
-| `ProfileSettingsSyncService` | `ProfileDataStoreFactory` | `profileDataStoreFactory.get(profileId, feature)` | WIRED | Used in observer, export, and import paths. |
-| Settings observer | Supabase Postgrest | debounce to `pushBlobForProfile(profileId)` | WIRED | Observer pushes after `flatMapLatest` and `debounce(2000)`, but lacks pull-before-push gating for newly selected profiles. |
-| `StartupSyncService` | `ProfileSyncService.pullFromRemote()` | startup pull sequence | WIRED | Called before account snapshot sync fallback proceeds. |
-| `StartupSyncService` | `ProfileSettingsSyncService.pullBlobForProfile()` | active profile blob pull | WIRED | Called for `profileManager.activeProfileId.value`. |
-| `ProfileManager.deleteProfile()` | SP cleanup | `deleteSharedPreferencesForProfile()` | WIRED | Called after DataStore cleanup in deletion sequence. |
-| `SettingsViewModel.triggerSyncNow()` | metadata/blob push | ProfileSyncService + ProfileSettingsSyncService | WIRED | Calls both push methods and reports combined status. |
+| `ProfileSyncService` | Supabase Postgrest | `sync_push_profiles` / `sync_pull_profiles` | WIRED | Both RPCs are present with response handling. |
+| `ProfileSyncService.pullFromRemote()` | `ProfileDataStore.replaceAllProfiles()` | decoded remote profile list | WIRED | Non-empty remote profile list replaces local profiles. |
+| Snapshot stores | `ProfileManager.activeProfileId` | `profilePrefsName()` at read/write/clear time | WIRED | All 7 migrated SP stores resolve profile-specific names dynamically. |
+| `ProfileSettingsSyncService` | Supabase Postgrest | `sync_push_profile_settings_blob` / `sync_pull_profile_settings_blob` | WIRED | Dedicated v8 RPCs are used with `p_profile_id` and `p_platform`. |
+| `ProfileSettingsSyncService` | `ProfileDataStoreFactory` | `profileDataStoreFactory.get(profileId, feature)` | PARTIAL | Correctly profile-scoped for listed features, but the listed layout feature is wrong (`layout_preferences` instead of `layout_settings`). |
+| `ProfileSettingsSyncService.pullBlobForProfile()` | `importSettingsBlob()` | normalized blob and signature | WIRED | `normalizeSettingsBlob(rawBlob)` is used for both import and `skipNextPushSignature`. |
+| `ProfileSettingsSyncService.startObserving()` | `pullBlobForProfile()` | profile hydration gate before observer | WIRED | Pull runs before `observeProfileSettings(profileId)` and failure skips pushes. |
+| `StartupSyncService` | metadata/settings pull | startup pull sequence | WIRED | Calls `profileSyncService.pullFromRemote()` and `profileSettingsSyncService.pullBlobForProfile(activeId)`. |
+| `AccountSettingsSyncService` | shared v7 account sync | layout preference observer/payload/apply | NOT_WIRED_TO_GOAL | Layout/catalog-order values remain wired to shared v7, contrary to SYNC-02's independent blob intent. |
+| `ProfileManager.deleteProfile()` | local/remote cleanup | DataStore, SP, and Supabase cleanup | WIRED | Cleanup code and retry persistence are present. |
+| `SettingsViewModel.triggerSyncNow()` | metadata/blob push | Sync Now button | WIRED | Calls both profile push services and updates status. |
 
 ### Data-Flow Trace (Level 4)
 
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 |---|---|---|---|---|
-| `ProfileSyncService.kt` | `profiles` | `profileManager.profiles.value` | Yes | FLOWING - payload built from current profile state and decoded remote rows replace local profiles. |
-| `ProfileSettingsSyncService.kt` | `blob` | Profile-scoped DataStore preferences via `ProfileDataStoreFactory.get(profileId, feature).data.first()` | Partial | HOLLOW - full snapshot semantics are incomplete on import because stale local keys survive if absent remotely. |
-| `StartupSyncService.kt` | active profile ID | `profileManager.activeProfileId.value` | Yes | FLOWING - pulls the active profile's settings blob before v7 sync. |
-| `SettingsScreen.kt` | sync/delete UI state | `SettingsViewModel` StateFlows | Yes | FLOWING - UI collects `syncStatus`, `activeProfile`, `showDeleteDialog`, and `deleteInProgress`. |
-| `ProfileManager.kt` | profile cleanup target | `deleteProfile(id)` argument plus current profile list | Yes | FLOWING - validates non-primary existing profile, then deletes local and remote profile-scoped data. |
+| `ProfileSyncService.kt` | `profiles` | `profileManager.profiles.value` | Yes, but possibly stale | FLOWING with warning - payload is real, but review correctly notes direct DataStore reads would avoid StateFlow lag after immediate profile edits. |
+| `ProfileSettingsSyncService.kt` | `blob` | `ProfileDataStoreFactory.get(profileId, feature).data.first()` | Partial | HOLLOW for layout - exports/imports a real blob for listed features, but the layout entry points at an unused `layout_preferences` store. |
+| `LayoutPreferenceDataStore.kt` | layout/catalog-order preferences | `ProfileDataStoreFactory.get(profileId, "layout_settings")` | Yes | DISCONNECTED from v8 - the actual layout store is not included in `ProfileSettingsSyncService.syncedFeatures`. |
+| `AccountSettingsSyncService.kt` | layout/catalog-order preferences | `layoutPreferenceDataStore` flows | Yes | MISROUTED - still flows through shared v7 account sync rather than the independent per-profile blob path. |
+| `StartupSyncService.kt` | active profile settings | `profileManager.activeProfileId.value` | Yes | FLOWING - pulls active settings blob and starts v8 observer. |
+| `ProfileManager.kt` | profile cleanup target | `deleteProfile(id)` and profile list | Yes | FLOWING - validates non-primary profile and deletes local/remote scoped data. |
+| `SettingsScreen.kt` | sync/delete UI state | `SettingsViewModel` state flows | Yes | FLOWING - UI actions reach push/delete services. |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |---|---|---|---|
-| Production Android build | Not rerun in verifier; known gate context says `./gradlew assembleArm64Debug` passed during each executor plan | Build previously passed | PASS |
-| Targeted unit tests | Not rerun in verifier; known gate context says `compileArm64DebugUnitTestKotlin` fails before execution due unrelated stale tests outside Phase 4 ownership | Blocked before phase tests can execute | SKIP |
-| Schema drift | Known gate context says schema drift check returned `drift_detected=false` | No schema drift | PASS |
-| Runtime Supabase RPC behavior | Not invoked; would require live auth/session and remote Supabase | External service integration | SKIP |
+| Production Android build | `./gradlew assembleArm64Debug` | Known gate context: passed after 04-04 | PASS |
+| ProfileSettingsSyncService targeted unit test | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.sync.ProfileSettingsSyncServiceTest"` | Known gate context: blocked by unrelated unit-test source-set compile drift; target file not reported as failing source | SKIP |
+| Schema drift | schema drift check | Known gate context: `drift_detected=false` | PASS |
+| Layout feature-name consistency | `rg "layout_preferences|layout_settings"` across sync/data-store files | Found `layout_preferences` in `ProfileSettingsSyncService` and tests; found actual `layout_settings` in `LayoutPreferenceDataStore` | FAIL |
+| Runtime Supabase behavior | Not run | Requires live auth/session and remote Supabase | SKIP |
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |---|---|---|---|---|
-| SYNC-01 | 04-01, 04-03 | Profile metadata syncs to Supabase | SATISFIED | Metadata push/pull RPCs exist, include name/avatar/PIN state, and startup pulls metadata before v7 account sync. |
-| SYNC-02 | 04-02, 04-03 | Per-profile settings sync via independent blob push/pull, not v7 contract | PARTIAL | Dedicated v8 blob RPCs and v7 cleanup exist, but remote deletes/absent keys are not applied locally and profile-switch push can run before remote blob pull. |
-| SYNC-03 | 04-03 | Profile deletion removes all DataStore files, SharedPreferences, and Supabase remote data | SATISFIED | Code deletes local profile DataStore/SP artifacts, calls `sync_delete_profile`, and persists retry IDs on remote failure. |
-| SYNC-04 | 04-01 | Snapshot stores are classified and scoped per-profile where applicable | SATISFIED | 7 SP stores use profile-scoped names; profile 1 bare naming is preserved. |
+| SYNC-01 | 04-01, 04-03 | Profile metadata syncs to Supabase | SATISFIED | Metadata push/pull RPCs exist, include avatar/PIN state, and startup pulls metadata before account snapshot sync. |
+| SYNC-02 | 04-02, 04-03, 04-04 | Per-profile settings sync via independent blob push/pull, not v7 contract | BLOCKED | v8 blob RPCs, full-snapshot import, and pull-before-observe exist, but actual layout/catalog-order settings use `layout_settings`, while v8 sync watches `layout_preferences`; v7 still observes/exports/applies layout/catalog-order paths. |
+| SYNC-03 | 04-03 | Profile deletion removes all DataStore files, SharedPreferences, and Supabase remote data | SATISFIED | `ProfileManager` local cleanup and remote cleanup retry are implemented. |
+| SYNC-04 | 04-01 | Snapshot stores are classified and scoped per-profile where applicable | SATISFIED | 7 SP-backed snapshot/outbox stores use per-profile names; profile 1 bare naming is preserved. |
 
-No orphaned Phase 4 requirement IDs were found in `.planning/REQUIREMENTS.md`; SYNC-01 through SYNC-04 are all claimed by Phase 4 plans.
+No orphaned Phase 4 requirement IDs were found. `.planning/REQUIREMENTS.md` maps SYNC-01 through SYNC-04 to Phase 4, and all four IDs appear in Phase 4 plan frontmatter.
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |---|---:|---|---|---|
-| `app/src/main/java/com/nexio/tv/core/sync/ProfileSettingsSyncService.kt` | 186 | Full snapshot import without clearing existing preferences | Blocker | Remote-cleared settings remain local and can be pushed back upstream. |
-| `app/src/main/java/com/nexio/tv/core/sync/ProfileSettingsSyncService.kt` | 82 | Profile-switch observer lacks pull-before-push gate | Warning | A newly selected profile can push local defaults/old data before remote settings are hydrated. |
-| `app/src/test/java/com/nexio/tv/core/sync/ProfileSyncServiceTest.kt` | 7 | Ignored placeholder test class | Info | New metadata sync behavior is unprotected by executable unit tests, but production code is present and wired. |
-| `app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt` | 218 | Account settings push suppression depends on external pull | Warning | Review debt: shared account auto-push can remain suppressed after profile switch. This affects shared account sync more than the Phase 4 profile metadata/settings/deletion goal. |
+| `app/src/main/java/com/nexio/tv/core/sync/ProfileSettingsSyncService.kt` | 73 | Wrong feature name: `layout_preferences` | Blocker | v8 settings blob sync misses the real `layout_settings` DataStore. |
+| `app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt` | 236 | v7 still observes layout catalog-order flows | Blocker | Non-primary profile layout/catalog-order changes can still enter the shared v7 account sync path. |
+| `app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt` | 559 | v7 payload still exports layout catalog-order values | Blocker | Shared account payload can be built from the active profile's layout settings. |
+| `app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt` | 580 | v7 apply path still writes layout catalog-order values | Blocker | Shared remote layout/catalog-order values can overwrite active profile layout settings. |
+| `app/src/test/java/com/nexio/tv/core/sync/ProfileSettingsSyncServiceTest.kt` | 160 | Test asserts `layout_preferences` | Warning | Regression coverage preserves the wrong feature-name contract. |
+| `app/src/main/java/com/nexio/tv/core/sync/ProfileSyncService.kt` | 35 | Reads `profileManager.profiles.value` | Warning | Immediate metadata sync after local profile edits can miss fresh DataStore writes if the StateFlow lags. |
+| `app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt` | 220 | Profile-switch suppression lacks local clear path except account pull | Warning | Advisory review debt for shared account sync; not the primary Phase 4 profile-settings blocker. |
+| `app/src/test/java/com/nexio/tv/core/sync/ProfileSyncServiceTest.kt` | 7 | Ignored placeholder test class | Info | Profile metadata RPC behavior is unprotected by executable tests. |
 
 ### Human Verification Required
 
-Not gating this report because automated verification already found a blocking gap. The Phase 04-03 human checkpoint remains true: non-primary profile deletion cannot be fully validated on-device until the app exposes a user-accessible way to add/select non-primary profiles.
+Not gating this report because automated verification found a blocking SYNC-02 gap. The known device UAT limitation remains: non-primary profile deletion cannot be fully validated on-device until the app exposes a user-accessible way to add/select non-primary profiles.
 
 ### Gaps Summary
 
-Phase 4 is mostly implemented and wired, but SYNC-02 is only partial. The v8 per-profile settings blob service exists and avoids the shared v7 contract, yet the pull path is not a real full-snapshot sync: old local preferences survive when remote keys are removed. In addition, profile switches can begin observing and pushing the selected profile without first hydrating that profile's remote blob.
+Plan 04-04 closed the previous verifier gap: settings blob pulls now normalize remote blobs, clear feature stores before import, treat missing features as empty snapshots, and hydrate selected profiles before observer-driven pushes.
 
-Fix `ProfileSettingsSyncService.importSettingsBlob()` to clear or reconcile each synced feature before applying remote values, and gate profile-switch observer pushes behind a successful `pullBlobForProfile(profileId)` for that profile.
+Phase 4 still does not achieve SYNC-02. The implementation syncs `layout_preferences`, but the real per-profile layout/catalog-order DataStore is named `layout_settings`. At the same time, `AccountSettingsSyncService` still watches, exports, and applies layout catalog-order values through the shared v7 account sync path. This directly conflicts with the roadmap contract that per-profile settings use independent blob RPCs so Profile 2 changes do not overwrite Profile 1 data.
+
+No later roadmap phase clearly owns this Android-side correction. Phase 5 depends on Phase 4 and plans to use Phase 4 blob RPCs, so this remains an actionable Phase 4 gap rather than a deferred item.
 
 ---
 
-_Verified: 2026-04-14T14:13:53Z_
+_Verified: 2026-04-14T16:59:48Z_
 _Verifier: Claude (gsd-verifier)_
