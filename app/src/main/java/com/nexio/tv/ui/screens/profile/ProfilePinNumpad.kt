@@ -184,8 +184,8 @@ private fun NumpadCell(
             .background(NexioColors.BackgroundCard)
             .border(2.dp, borderColor, RoundedCornerShape(12.dp))
             .focusRequester(focusRequester)
-            .focusable(enabled = enabled)
             .onFocusChanged { isFocused = it.isFocused }
+            .focusable(enabled = enabled)
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown &&
                     (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)
