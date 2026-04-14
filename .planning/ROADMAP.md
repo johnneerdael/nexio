@@ -78,13 +78,14 @@ Plans:
 **Goal**: Nexio captures the TV-specific value that makes TVDB more useful than TMDB for series metadata beyond basic enrichment and air timing
 **Depends on**: Phase 7
 **Requirements**: META-03, META-05, UX-02
-**Plans:** 5 plans
+**Plans:** 6 plans
 Plans:
 - [ ] 09-00-PLAN.md — Create Wave 0 validation scaffolds and block unless Phase 7 TVDB provider outputs exist
 - [ ] 09-01-PLAN.md — Preserve TVDB default season type and season-order context while keeping canonical Trakt progress keys stable
-- [ ] 09-02-PLAN.md — Map TVDB cast, companies, networks, genres, and content ratings into existing metadata surfaces
-- [ ] 09-03-PLAN.md — Route TV trailers through TVDB-first discovery before Streailer, fallback IDs, and explicit TMDB fallback
-- [ ] 09-04-PLAN.md — Lock no-toggle provider UX, diagnostics, and Phase 9 validation gates
+- [ ] 09-02-PLAN.md — Map TVDB cast, companies, networks, genres, and content ratings into provider output with diagnostics
+- [ ] 09-03-PLAN.md — Propagate TVDB advanced metadata through existing detail, Home, stream, screensaver, and player surfaces
+- [ ] 09-04-PLAN.md — Route TV trailers through TVDB-first discovery before Streailer, fallback IDs, and explicit TMDB fallback
+- [ ] 09-05-PLAN.md — Lock no-toggle provider UX, diagnostics, and Phase 9 validation gates
 **Success Criteria** (what must be TRUE):
   1. TVDB default season type is preserved in Nexio's season/episode model without assuming TMDB-style aired ordering
   2. Trakt progress matching remains stable when TVDB season ordering data is present
