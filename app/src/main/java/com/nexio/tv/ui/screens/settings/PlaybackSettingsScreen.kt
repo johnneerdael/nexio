@@ -93,7 +93,9 @@ import com.nexio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
 import com.nexio.tv.data.local.AutoplayBandwidthMode
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.IecPackerChannelLayout
+import com.nexio.tv.data.local.InternalPlayerEngine
 import com.nexio.tv.data.local.LibassRenderType
+import com.nexio.tv.data.local.MpvHardwareDecodeMode
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.ProgressivePlaybackDiskMode
@@ -163,12 +165,14 @@ internal fun PlaybackSettingsContent(
     var showAudioLanguageDialog by remember { mutableStateOf(false) }
     var showSecondaryAudioLanguageDialog by remember { mutableStateOf(false) }
     var showDecoderPriorityDialog by remember { mutableStateOf(false) }
+    var showMpvHardwareDecodeModeDialog by remember { mutableStateOf(false) }
     var showIecPackerChannelLayoutDialog by remember { mutableStateOf(false) }
     var showTrackingProviderDialog by remember { mutableStateOf(false) }
     var showAutoplayBandwidthModeDialog by remember { mutableStateOf(false) }
     var showNextEpisodeThresholdModeDialog by remember { mutableStateOf(false) }
     var showReuseLastLinkCacheDialog by remember { mutableStateOf(false) }
     var showPlayerPreferenceDialog by remember { mutableStateOf(false) }
+    var showInternalPlayerEngineDialog by remember { mutableStateOf(false) }
     var showCollectorDashboardDialog by remember { mutableStateOf(false) }
 
     fun dismissAllDialogs() {
@@ -181,12 +185,14 @@ internal fun PlaybackSettingsContent(
         showAudioLanguageDialog = false
         showSecondaryAudioLanguageDialog = false
         showDecoderPriorityDialog = false
+        showMpvHardwareDecodeModeDialog = false
         showIecPackerChannelLayoutDialog = false
         showTrackingProviderDialog = false
         showAutoplayBandwidthModeDialog = false
         showNextEpisodeThresholdModeDialog = false
         showReuseLastLinkCacheDialog = false
         showPlayerPreferenceDialog = false
+        showInternalPlayerEngineDialog = false
     }
 
     fun openDialog(setter: () -> Unit) {
@@ -214,9 +220,11 @@ internal fun PlaybackSettingsContent(
                 trailerSettings = trailerSettings,
                 diskSpoolStorageProbeUiState = diskSpoolStorageProbeUiState,
                 onShowPlayerPreferenceDialog = { openDialog { showPlayerPreferenceDialog = true } },
+                onShowInternalPlayerEngineDialog = { openDialog { showInternalPlayerEngineDialog = true } },
                 onShowAudioLanguageDialog = { openDialog { showAudioLanguageDialog = true } },
                 onShowSecondaryAudioLanguageDialog = { openDialog { showSecondaryAudioLanguageDialog = true } },
                 onShowDecoderPriorityDialog = { openDialog { showDecoderPriorityDialog = true } },
+                onShowMpvHardwareDecodeModeDialog = { openDialog { showMpvHardwareDecodeModeDialog = true } },
                 onShowIecPackerChannelLayoutDialog = { openDialog { showIecPackerChannelLayoutDialog = true } },
                 onShowLanguageDialog = { openDialog { showLanguageDialog = true } },
                 onShowSecondaryLanguageDialog = { openDialog { showSecondaryLanguageDialog = true } },
@@ -273,6 +281,9 @@ internal fun PlaybackSettingsContent(
                 },
                 onSetFilterMovieYearMismatchStreamsEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setFilterMovieYearMismatchStreamsEnabled(enabled) }
+                },
+                onSetAutoSwitchInternalPlayerOnError = { enabled ->
+                    coroutineScope.launch { viewModel.setAutoSwitchInternalPlayerOnError(enabled) }
                 },
                 onSetLoadingOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setLoadingOverlayEnabled(enabled) } },
                 onSetPauseOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setPauseOverlayEnabled(enabled) } },
@@ -399,6 +410,7 @@ internal fun PlaybackSettingsContent(
         playerSettings = playerSettings,
         installedAddonNames = installedAddonNames,
         showPlayerPreferenceDialog = showPlayerPreferenceDialog,
+        showInternalPlayerEngineDialog = showInternalPlayerEngineDialog,
         showLanguageDialog = showLanguageDialog,
         showSecondaryLanguageDialog = showSecondaryLanguageDialog,
         showSubtitleStartupModeDialog = showSubtitleStartupModeDialog,
@@ -408,6 +420,7 @@ internal fun PlaybackSettingsContent(
         showAudioLanguageDialog = showAudioLanguageDialog,
         showSecondaryAudioLanguageDialog = showSecondaryAudioLanguageDialog,
         showDecoderPriorityDialog = showDecoderPriorityDialog,
+        showMpvHardwareDecodeModeDialog = showMpvHardwareDecodeModeDialog,
         showIecPackerChannelLayoutDialog = showIecPackerChannelLayoutDialog,
         showAutoplayBandwidthModeDialog = showAutoplayBandwidthModeDialog,
         showNextEpisodeThresholdModeDialog = showNextEpisodeThresholdModeDialog,
@@ -416,7 +429,11 @@ internal fun PlaybackSettingsContent(
         onSetPlayerPreference = { preference ->
             coroutineScope.launch { viewModel.setPlayerPreference(preference) }
         },
+        onSetInternalPlayerEngine = { engine: InternalPlayerEngine ->
+            coroutineScope.launch { viewModel.setInternalPlayerEngine(engine) }
+        },
         onDismissPlayerPreferenceDialog = ::dismissAllDialogs,
+        onDismissInternalPlayerEngineDialog = ::dismissAllDialogs,
         onSetSubtitlePreferredLanguage = { language ->
             coroutineScope.launch { viewModel.setSubtitlePreferredLanguage(language ?: "none") }
         },
@@ -444,6 +461,9 @@ internal fun PlaybackSettingsContent(
         onSetDecoderPriority = { priority ->
             coroutineScope.launch { viewModel.setDecoderPriority(priority) }
         },
+        onSetMpvHardwareDecodeMode = { mode: MpvHardwareDecodeMode ->
+            coroutineScope.launch { viewModel.setMpvHardwareDecodeMode(mode) }
+        },
         onSetIecPackerMaxPcmChannelLayout = { layout: IecPackerChannelLayout ->
             coroutineScope.launch { viewModel.setIecPackerMaxPcmChannelLayout(layout) }
         },
@@ -465,6 +485,7 @@ internal fun PlaybackSettingsContent(
         onDismissAudioLanguageDialog = ::dismissAllDialogs,
         onDismissSecondaryAudioLanguageDialog = ::dismissAllDialogs,
         onDismissDecoderPriorityDialog = ::dismissAllDialogs,
+        onDismissMpvHardwareDecodeModeDialog = ::dismissAllDialogs,
         onDismissIecPackerChannelLayoutDialog = ::dismissAllDialogs,
         onDismissAutoplayBandwidthModeDialog = ::dismissAllDialogs,
         onDismissNextEpisodeThresholdModeDialog = ::dismissAllDialogs,
