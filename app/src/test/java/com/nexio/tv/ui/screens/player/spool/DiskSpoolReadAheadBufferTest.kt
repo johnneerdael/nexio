@@ -47,6 +47,30 @@ class DiskSpoolReadAheadBufferTest {
     }
 
     @Test
+    fun `read or await waits for background chunk before falling back to disk`() {
+        val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 1_000L)
+        session.writeRange(0L, byteArrayOf(1, 2, 3, 4), 4)
+        val buffer = DiskSpoolReadAheadBuffer(
+            session = session,
+            capacityBytes = 8L,
+            chunkBytes = 4,
+            workerName = "test-disk-spool-read-ahead-await"
+        )
+
+        try {
+            buffer.start(0L)
+
+            val out = ByteArray(4)
+            assertEquals(4, buffer.readOrAwait(position = 0L, target = out, offset = 0, length = out.size))
+
+            assertArrayEquals(byteArrayOf(1, 2, 3, 4), out)
+        } finally {
+            buffer.release()
+            session.close()
+        }
+    }
+
+    @Test
     fun `reset clears old chunks and restarts from requested position`() {
         val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 1_000L)
         session.writeRange(0L, byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8), 8)
