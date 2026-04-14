@@ -46,12 +46,12 @@ Reliable, high-quality streaming playback with smart source selection and seamle
 
 - [ ] Per-profile DataStore isolation via ProfileDataStoreFactory
 - [ ] Profile CRUD with max 4 profiles
-- [ ] Profile selection screen (opt-in, only when 2+ profiles)
+- [x] Profile selection screen (opt-in, only when 2+ profiles) — Validated in Phase 3: Profile UI
 - [ ] Per-profile Trakt OAuth and token storage
 - [ ] Per-profile Simkl accounts
 - [ ] Per-profile settings (language, theme, player, catalogs)
 - [ ] Profile photo upload via nexio-web
-- [ ] Optional PIN lock per profile
+- [x] Optional PIN lock per profile — Validated in Phase 3: Profile UI (UI built, server verification deferred to Phase 4)
 - [ ] Settings cascade (shared addons/debrid vs per-profile)
 - [ ] Per-profile sync to Supabase
 - [ ] Profile deletion with full cleanup
@@ -125,4 +125,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-14 after milestone v1.0 initialization*
+*Last updated: 2026-04-14 after Phase 3 (Profile UI) completion*
