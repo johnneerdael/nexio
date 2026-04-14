@@ -11,14 +11,11 @@ import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.HomeLayout
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.onStart
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -80,7 +77,6 @@ class LayoutPreferenceDataStore @Inject constructor(
     private fun store(profileId: Int = profileManager.activeProfileId.value) =
         factory.get(profileId, FEATURE)
 
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val gson = Gson()
 
     private val layoutKey = stringPreferencesKey("selected_layout")
@@ -109,17 +105,11 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val blurUnwatchedEpisodesKey = booleanPreferencesKey("blur_unwatched_episodes")
     private val detailPageTrailerButtonEnabledKey = booleanPreferencesKey("detail_page_trailer_button_enabled")
     private val preferExternalMetaAddonDetailKey = booleanPreferencesKey("prefer_external_meta_addon_detail")
-    init {
-        ioScope.launch {
-            store().edit { prefs ->
-                applyLayoutPreferenceMigrations(prefs)
-            }
-        }
-    }
-
     private fun <T> profileFlow(extract: (prefs: Preferences) -> T): Flow<T> =
         profileManager.activeProfileId.flatMapLatest { pid ->
-            store(pid).data.map { prefs -> extract(prefs) }
+            store(pid).data
+                .onStart { store(pid).edit { applyLayoutPreferenceMigrations(it) } }
+                .map { prefs -> extract(prefs) }
         }
 
     val selectedLayout: Flow<HomeLayout> = profileFlow { prefs ->
