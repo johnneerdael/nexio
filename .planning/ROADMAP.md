@@ -62,7 +62,11 @@ Plans:
   3. User can set an optional PIN on a profile; a locked profile requires correct PIN entry before switching into it, with server-enforced rate limiting displayed when exceeded
   4. User can switch to any profile from the sidebar menu without returning to the home screen
   5. Active profile name and avatar are visible in the settings header at all times
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 03-01-PLAN.md — ProfileAvatarCircle, ProfileSelectionScreen, session gating in MainActivity
+- [ ] 03-02-PLAN.md — PIN entry UI (numpad, dots, shake, overlay) and verification flow
+- [ ] 03-03-PLAN.md — Sidebar profile switcher and settings header profile display
 **UI hint**: yes
 
 ### Phase 4: Sync and Cleanup
@@ -100,6 +104,6 @@ Note: Phase 3 (UI) and Phase 4 (Sync) both depend on Phase 2 and can be develope
 |-------|----------------|--------|-----------|
 | 1. Foundation | 0/2 | Planned | - |
 | 2. Per-Profile Auth and Settings | 0/4 | Planned | - |
-| 3. Profile UI | 0/? | Not started | - |
+| 3. Profile UI | 0/3 | Planned | - |
 | 4. Sync and Cleanup | 0/? | Not started | - |
 | 5. nexio-web Integration | 0/? | Not started | - |
