@@ -100,6 +100,16 @@ internal fun shouldShowContinueWatchingManualStreamSelection(
         contentType.equals("series", ignoreCase = true)
 }
 
+internal fun hasRenderableHomeContent(uiState: HomeUiState): Boolean {
+    val hasCatalogContent = uiState.catalogRows.any { row ->
+        row.items.isNotEmpty() ||
+            (uiState.homeLayout == HomeLayout.MODERN && row.isLoading)
+    }
+    return hasCatalogContent ||
+        uiState.continueWatchingItems.isNotEmpty() ||
+        uiState.heroItems.isNotEmpty()
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -132,10 +142,7 @@ fun HomeScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
     val activity = context as? android.app.Activity
-    val hasCatalogContent = uiState.catalogRows.any { it.items.isNotEmpty() }
-    val hasRenderableContent = hasCatalogContent ||
-        uiState.continueWatchingItems.isNotEmpty() ||
-        uiState.heroItems.isNotEmpty()
+    val hasRenderableContent = hasRenderableHomeContent(uiState)
     var showHomeContentWithAnimation by rememberSaveable { mutableStateOf(false) }
     var startupContentGateTimedOut by rememberSaveable { mutableStateOf(false) }
     var posterOptionsTarget by remember { mutableStateOf<HomePosterOptionsTarget?>(null) }

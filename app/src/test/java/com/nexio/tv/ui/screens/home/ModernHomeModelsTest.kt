@@ -186,6 +186,42 @@ class ModernHomeModelsTest {
     }
 
     @Test
+    fun `modern visible catalog rows include loading rows and exclude empty settled rows`() {
+        val hydrated = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "hydrated",
+            catalogName = "Hydrated",
+            type = ContentType.MOVIE,
+            items = listOf(
+                MetaPreview(
+                    id = "tt123",
+                    type = ContentType.MOVIE,
+                    name = "Hydrated Movie",
+                    poster = null,
+                    posterShape = PosterShape.POSTER,
+                    background = null,
+                    logo = null,
+                    description = null,
+                    releaseInfo = null,
+                    imdbRating = null,
+                    genres = emptyList()
+                )
+            )
+        )
+        val loading = hydrated.copy(catalogId = "loading", catalogName = "Loading", items = emptyList(), isLoading = true)
+        val emptySettled = hydrated.copy(catalogId = "empty", catalogName = "Empty", items = emptyList(), isLoading = false)
+
+        assertEquals(listOf(hydrated, loading), modernVisibleCatalogRows(listOf(hydrated, loading, emptySettled)))
+    }
+
+    @Test
+    fun `loading placeholder count is stable for modern catalog rows`() {
+        assertEquals(8, modernLoadingPlaceholderCount())
+    }
+
+    @Test
     fun `applyTomatoesToContinueWatchingItem updates persisted display metadata`() {
         val item = ContinueWatchingItem.InProgress(
             progress = WatchProgress(

@@ -15,6 +15,7 @@ import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import kotlinx.coroutines.Job
 
@@ -24,6 +25,33 @@ internal const val MDBLIST_HOME_ADDON_ID = "mdblist"
 private const val TRAKT_HOME_KEY_PREFIX = "trakt_"
 private const val SIMKL_HOME_KEY_PREFIX = "simkl_"
 private const val MDBLIST_HOME_KEY_PREFIX = "mdblist_"
+
+internal data class ConfiguredHomeCatalogDescriptor(
+    val orderKey: String,
+    val addonId: String,
+    val addonName: String,
+    val addonBaseUrl: String,
+    val catalogId: String,
+    val catalogName: String,
+    val type: ContentType,
+    val rawType: String = type.toApiString()
+) {
+    fun toLoadingCatalogRow(): CatalogRow {
+        return CatalogRow(
+            addonId = addonId,
+            addonName = addonName,
+            addonBaseUrl = addonBaseUrl,
+            catalogId = catalogId,
+            catalogName = catalogName,
+            type = type,
+            rawType = rawType,
+            items = emptyList(),
+            isLoading = true,
+            hasMore = false,
+            supportsSkip = false
+        )
+    }
+}
 
 internal fun HomeViewModel.catalogKey(addonId: String, type: String, catalogId: String): String {
     return addonCatalogKey(addonId, type, catalogId)
@@ -52,6 +80,111 @@ internal fun HomeViewModel.buildHomeCatalogLoadSignature(addons: List<Addon>): S
         .sorted()
         .joinToString(separator = ",")
     return "$addonCatalogSignature::$disabledSignature"
+}
+
+internal fun buildConfiguredHomeCatalogDescriptors(
+    addons: List<Addon>,
+    disabledHomeCatalogKeys: Set<String>,
+    traktPrefs: TraktCatalogPreferences,
+    traktSnapshot: TraktDiscoverySnapshot,
+    hasTraktUpNextItems: Boolean = false,
+    simklPrefs: SimklCatalogPreferences,
+    mdbPrefs: MDBListCatalogPreferences,
+    mdbSnapshot: MDBListDiscoverySnapshot,
+    existingRowsByOrderKey: Map<String, CatalogRow> = emptyMap()
+): List<ConfiguredHomeCatalogDescriptor> {
+    val descriptorsByKey = linkedMapOf<String, ConfiguredHomeCatalogDescriptor>()
+
+    fun existingTitle(key: String): String? {
+        return existingRowsByOrderKey[key]?.catalogName?.takeIf { it.isNotBlank() }
+    }
+
+    buildExpectedConfiguredTraktOrderKeys(traktPrefs)
+        .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
+        .filter { key -> key != TraktCatalogIds.UP_NEXT || hasTraktUpNextItems }
+        .forEach { key ->
+            val type = traktCatalogContentType(key)
+            descriptorsByKey[key] = ConfiguredHomeCatalogDescriptor(
+                orderKey = key,
+                addonId = TRAKT_HOME_ADDON_ID,
+                addonName = "Trakt",
+                addonBaseUrl = "https://api.trakt.tv",
+                catalogId = key,
+                catalogName = existingTitle(key)
+                    ?: traktCustomListTitle(key, traktSnapshot)
+                    ?: traktCatalogTitle(key)
+                    ?: humanizeCatalogKey(key),
+                type = type,
+                rawType = type.toApiString("catalog")
+            )
+        }
+
+    buildExpectedConfiguredSimklOrderKeys(simklPrefs)
+        .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
+        .forEach { key ->
+            val type = simklCatalogContentTypeForDescriptor(key)
+            descriptorsByKey[key] = ConfiguredHomeCatalogDescriptor(
+                orderKey = key,
+                addonId = SIMKL_HOME_ADDON_ID,
+                addonName = "SIMKL",
+                addonBaseUrl = "https://data.simkl.in",
+                catalogId = key,
+                catalogName = existingTitle(key) ?: simklCatalogTitle(key) ?: humanizeCatalogKey(key),
+                type = type,
+                rawType = type.toApiString("catalog")
+            )
+        }
+
+    buildExpectedConfiguredMDBListOrderKeys(mdbPrefs, mdbSnapshot)
+        .filterNot { isSyntheticHomeCatalogDisabled(it, disabledHomeCatalogKeys) }
+        .forEach { key ->
+            descriptorsByKey[key] = ConfiguredHomeCatalogDescriptor(
+                orderKey = key,
+                addonId = MDBLIST_HOME_ADDON_ID,
+                addonName = "MDBList",
+                addonBaseUrl = "https://api.mdblist.com",
+                catalogId = "mdblist_pending_${slugifyCatalogKey(key)}",
+                catalogName = existingTitle(key)
+                    ?: mdbSnapshot.listTitle(key)
+                    ?: humanizeCatalogKey(key),
+                type = ContentType.UNKNOWN,
+                rawType = "catalog"
+            )
+        }
+
+    addons.forEach { addon ->
+        addon.catalogs
+            .filterNot { catalog ->
+                catalog.isSearchOnlyCatalog() ||
+                    isAddonCatalogDisabled(
+                        disabledKeys = disabledHomeCatalogKeys,
+                        addonBaseUrl = addon.baseUrl,
+                        addonId = addon.id,
+                        type = catalog.apiType,
+                        catalogId = catalog.id,
+                        catalogName = catalog.name
+                    )
+            }
+            .forEach { catalog ->
+                val key = addonCatalogKey(addon.id, catalog.apiType, catalog.id)
+                descriptorsByKey[key] = ConfiguredHomeCatalogDescriptor(
+                    orderKey = key,
+                    addonId = addon.id,
+                    addonName = addon.displayName,
+                    addonBaseUrl = addon.baseUrl,
+                    catalogId = catalog.id,
+                    catalogName = existingTitle(key) ?: catalog.name.ifBlank { humanizeCatalogKey(key) },
+                    type = catalog.type,
+                    rawType = catalog.apiType
+                )
+            }
+    }
+
+    return descriptorsByKey.values.toList()
+}
+
+internal fun persistableHomeCatalogRows(rows: List<CatalogRow>): List<CatalogRow> {
+    return rows.filterNot { row -> row.isLoading && row.items.isEmpty() }
 }
 
 internal fun HomeViewModel.registerCatalogLoadJob(job: Job) {
@@ -430,4 +563,93 @@ internal fun buildPublishableConfiguredSimklOrderKeys(
         .keys
         .toSet()
     return buildExpectedConfiguredSimklOrderKeys(prefs).filter { it in availableKeys }
+}
+
+private fun traktCustomListTitle(
+    key: String,
+    snapshot: TraktDiscoverySnapshot
+): String? {
+    return snapshot.popularLists.firstOrNull {
+        canonicalSyntheticCatalogOrderKey(it.key) == canonicalSyntheticCatalogOrderKey(key)
+    }?.title?.takeIf { it.isNotBlank() }
+}
+
+private fun MDBListDiscoverySnapshot.listTitle(key: String): String? {
+    val canonical = canonicalSyntheticCatalogOrderKey(key)
+    return (personalLists + topLists).firstOrNull {
+        canonicalSyntheticCatalogOrderKey(it.key) == canonical
+    }?.title?.takeIf { it.isNotBlank() }
+}
+
+private fun traktCatalogTitle(key: String): String? {
+    return when (key) {
+        TraktCatalogIds.UP_NEXT -> "Trakt Up Next"
+        TraktCatalogIds.TRENDING_MOVIES -> "Trakt Trending Movies"
+        TraktCatalogIds.TRENDING_SHOWS -> "Trakt Trending Shows"
+        TraktCatalogIds.POPULAR_MOVIES -> "Trakt Popular Movies"
+        TraktCatalogIds.POPULAR_SHOWS -> "Trakt Popular Shows"
+        TraktCatalogIds.RECOMMENDED_MOVIES -> "Trakt Recommended Movies"
+        TraktCatalogIds.RECOMMENDED_SHOWS -> "Trakt Recommended Shows"
+        TraktCatalogIds.CALENDAR -> "Trakt Calendar (Next 7 Days)"
+        else -> null
+    }
+}
+
+private fun traktCatalogContentType(key: String): ContentType {
+    return when (key) {
+        TraktCatalogIds.TRENDING_MOVIES,
+        TraktCatalogIds.POPULAR_MOVIES,
+        TraktCatalogIds.RECOMMENDED_MOVIES -> ContentType.MOVIE
+        TraktCatalogIds.UP_NEXT,
+        TraktCatalogIds.TRENDING_SHOWS,
+        TraktCatalogIds.POPULAR_SHOWS,
+        TraktCatalogIds.RECOMMENDED_SHOWS,
+        TraktCatalogIds.CALENDAR -> ContentType.SERIES
+        else -> ContentType.UNKNOWN
+    }
+}
+
+private fun simklCatalogTitle(key: String): String? {
+    return when (key) {
+        SimklCatalogIds.TV_TRENDING_TODAY -> "SIMKL Trending TV (Today)"
+        SimklCatalogIds.TV_TRENDING_WEEK -> "SIMKL Trending TV (Week)"
+        SimklCatalogIds.TV_TRENDING_MONTH -> "SIMKL Trending TV (Month)"
+        SimklCatalogIds.ANIME_TRENDING_TODAY -> "SIMKL Trending Anime (Today)"
+        SimklCatalogIds.ANIME_TRENDING_WEEK -> "SIMKL Trending Anime (Week)"
+        SimklCatalogIds.ANIME_TRENDING_MONTH -> "SIMKL Trending Anime (Month)"
+        SimklCatalogIds.MOVIE_TRENDING_TODAY -> "SIMKL Trending Movies (Today)"
+        SimklCatalogIds.MOVIE_TRENDING_WEEK -> "SIMKL Trending Movies (Week)"
+        SimklCatalogIds.MOVIE_TRENDING_MONTH -> "SIMKL Trending Movies (Month)"
+        SimklCatalogIds.DVD_RELEASES -> "SIMKL Popular DVD Releases"
+        else -> null
+    }
+}
+
+private fun simklCatalogContentTypeForDescriptor(key: String): ContentType {
+    return when (key) {
+        SimklCatalogIds.MOVIE_TRENDING_TODAY,
+        SimklCatalogIds.MOVIE_TRENDING_WEEK,
+        SimklCatalogIds.MOVIE_TRENDING_MONTH,
+        SimklCatalogIds.DVD_RELEASES -> ContentType.MOVIE
+        else -> ContentType.SERIES
+    }
+}
+
+private fun humanizeCatalogKey(key: String): String {
+    return canonicalSyntheticCatalogOrderKey(key)
+        .substringAfter(':')
+        .replace('_', ' ')
+        .replace('-', ' ')
+        .split(' ')
+        .filter { it.isNotBlank() }
+        .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
+        .ifBlank { key }
+}
+
+private fun slugifyCatalogKey(key: String): String {
+    return canonicalSyntheticCatalogOrderKey(key)
+        .lowercase()
+        .replace(Regex("[^a-z0-9]+"), "_")
+        .trim('_')
+        .ifBlank { "catalog" }
 }
