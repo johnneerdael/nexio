@@ -54,7 +54,6 @@ import com.nexio.tv.data.remote.supabase.AudioSettings
 import com.nexio.tv.data.remote.supabase.BufferNetworkSettings
 import com.nexio.tv.data.remote.supabase.DebridSyncSettings
 import com.nexio.tv.data.remote.supabase.DebugSettingsPayload
-import com.nexio.tv.data.remote.supabase.CustomFormatterSyncTemplate
 import com.nexio.tv.data.remote.supabase.EasyDebridSyncSettings
 import com.nexio.tv.data.remote.supabase.FormatterSyncSettings
 import com.nexio.tv.data.remote.supabase.GeminiSyncSettings
@@ -94,9 +93,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -267,10 +266,11 @@ class AccountSettingsSyncService @Inject constructor(
                 easyDebridAccountState = easyDebridService.observeAccountState().drop(1).map { Unit },
                 realDebridState = realDebridAuthDataStore.state.drop(1).map { Unit },
                 traktAuthState = traktAuthDataStore.state.drop(1).map { Unit },
-                traktCatalogPreferences = traktSettingsDataStore.catalogPreferences.drop(1).map { Unit },
-                simklCatalogPreferences = simklSettingsDataStore.catalogPreferences.drop(1).map { Unit },
+                // Per-profile settings removed from v7 — synced via ProfileSettingsSyncService (v8 blob)
+                traktCatalogPreferences = emptyFlow(),
+                simklCatalogPreferences = emptyFlow(),
                 simklAuthState = simklAuthDataStore.state.drop(1).map { Unit },
-                playerSettings = playerSettingsDataStore.playerSettings.drop(1).map { Unit }
+                playerSettings = emptyFlow()
             ).collect { changedPath ->
                 if (isApplyingRemote || suppressPushForSwitchGeneration != 0L) return@collect
                 synchronized(pendingChangedPaths) {
@@ -422,21 +422,7 @@ class AccountSettingsSyncService @Inject constructor(
             applyingRemoteMutex.withLock {
                 isApplyingRemote = true
                 try {
-                    applyAccountConfigSyncSettings(
-                        settings = snapshot.settings,
-                        layoutPreferenceDataStore = layoutPreferenceDataStore,
-                        tmdbSettingsDataStore = tmdbSettingsDataStore,
-                        mdbListSettingsDataStore = mdbListSettingsDataStore,
-                        omdbSettingsDataStore = omdbSettingsDataStore,
-                        theIntroDbSettingsDataStore = theIntroDbSettingsDataStore,
-                        animeSkipSettingsDataStore = animeSkipSettingsDataStore,
-                        subtitleTranslationSettingsDataStore = subtitleTranslationSettingsDataStore,
-                        imdbSettingsDataStore = imdbSettingsDataStore,
-                        posterRatingsSettingsDataStore = posterRatingsSettingsDataStore,
-                        traktSettingsDataStore = traktSettingsDataStore,
-                        simklSettingsDataStore = simklSettingsDataStore,
-                        playerSettingsDataStore = playerSettingsDataStore
-                    )
+                    applySharedAccountConfigSyncSettings(snapshot.settings)
                     applyRemoteSecrets(snapshot.settings)
                     lastAppliedRemoteRevision = snapshot.settingsRevision
                     clearSuppression(switchGenAtPullStart)
@@ -468,7 +454,6 @@ class AccountSettingsSyncService @Inject constructor(
         val animeSkipClientId = animeSkipSettingsDataStore.clientId.first()
         val subtitleTranslation = subtitleTranslationSettingsDataStore.settings.first()
         val posterRatings = posterRatingsSettingsDataStore.settings.first()
-        val playerSettings = playerSettingsDataStore.playerSettings.first()
         val premiumize = premiumizeSettingsDataStore.settings.first()
         val premiumizeAccount = premiumizeService.observeAccountState().first()
         val torBox = torBoxSettingsDataStore.settings.first()
@@ -478,8 +463,6 @@ class AccountSettingsSyncService @Inject constructor(
         val realDebrid = realDebridAuthDataStore.state.first()
         val traktAuth = traktAuthDataStore.state.first()
         val simklAuth = simklAuthDataStore.state.first()
-        val traktCatalogPrefs = traktSettingsDataStore.catalogPreferences.first()
-        val simklCatalogPrefs = simklSettingsDataStore.catalogPreferences.first()
 
         return buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(
@@ -576,32 +559,79 @@ class AccountSettingsSyncService @Inject constructor(
             heroCatalogKeys = layoutPreferenceDataStore.heroCatalogSelections.first(),
             homeCatalogOrderKeys = layoutPreferenceDataStore.homeCatalogOrderKeys.first(),
             disabledHomeCatalogKeys = layoutPreferenceDataStore.disabledHomeCatalogKeys.first(),
-            traktCatalogEnabledSet = traktCatalogPrefs.enabledCatalogs.toList(),
-            traktCatalogOrder = traktCatalogPrefs.catalogOrder,
-            traktSelectedPopularListKeys = traktCatalogPrefs.selectedPopularListKeys.toList(),
-            simklCatalogEnabledSet = simklCatalogPrefs.enabledCatalogs.toList(),
-            simklCatalogOrder = simklCatalogPrefs.catalogOrder,
+            // Moved to v8 per-profile blob sync
+            traktCatalogEnabledSet = emptyList(),
+            traktCatalogOrder = emptyList(),
+            traktSelectedPopularListKeys = emptyList(),
+            // Moved to v8 per-profile blob sync
+            simklCatalogEnabledSet = emptyList(),
+            simklCatalogOrder = emptyList(),
             mdbListHiddenPersonalListKeys = mdbListPrefs.hiddenPersonalListKeys.toList(),
             mdbListSelectedTopListKeys = mdbListPrefs.selectedTopListKeys.toList(),
             mdbListCatalogOrder = mdbListPrefs.catalogOrder,
-            trackingProvider = playerSettings.trackingProvider,
-            formatter = FormatterSyncSettings(
-                enabled = playerSettings.syncedFormatterTemplate.enabled,
-                selectedTemplateId = playerSettings.syncedFormatterTemplate.selectedTemplateId,
-                customTemplate = playerSettings.syncedFormatterTemplate.customNameTemplate
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let {
-                        CustomFormatterSyncTemplate(
-                            id = "custom",
-                            label = playerSettings.syncedFormatterTemplate.customTemplateLabel ?: "Custom",
-                            nameTemplate = it,
-                            descriptionTemplate = playerSettings.syncedFormatterTemplate.customDescriptionTemplate.orEmpty(),
-                            badgeRowTemplate = playerSettings.syncedFormatterTemplate.customBadgeRowTemplate.orEmpty()
-                        )
-                    }
-                    ?.takeIf { it.descriptionTemplate.isNotBlank() }
-            )
+            // Moved to v8 per-profile blob sync
+            trackingProvider = TrackingProvider.TRAKT,
+            // Moved to v8 per-profile blob sync
+            formatter = FormatterSyncSettings()
         )
+    }
+
+    private suspend fun applySharedAccountConfigSyncSettings(settings: AccountConfigSyncPayload) {
+        layoutPreferenceDataStore.setHeroCatalogKeys(settings.catalogs.home.heroCatalogKeys)
+        layoutPreferenceDataStore.setHomeCatalogOrderKeys(settings.catalogs.home.homeCatalogOrderKeys)
+        layoutPreferenceDataStore.setDisabledHomeCatalogKeys(settings.catalogs.home.disabledHomeCatalogKeys)
+
+        tmdbSettingsDataStore.setEnabled(settings.integrations.tmdb.enabled)
+        tmdbSettingsDataStore.setUseArtwork(settings.integrations.tmdb.useArtwork)
+        tmdbSettingsDataStore.setUseBasicInfo(settings.integrations.tmdb.useBasicInfo)
+        tmdbSettingsDataStore.setUseDetails(settings.integrations.tmdb.useDetails)
+        tmdbSettingsDataStore.setUseCredits(settings.integrations.tmdb.useCredits)
+        tmdbSettingsDataStore.setUseProductions(settings.integrations.tmdb.useProductions)
+        tmdbSettingsDataStore.setUseNetworks(settings.integrations.tmdb.useNetworks)
+        tmdbSettingsDataStore.setUseEpisodes(settings.integrations.tmdb.useEpisodes)
+        tmdbSettingsDataStore.setUseMoreLikeThis(settings.integrations.tmdb.useMoreLikeThis)
+        tmdbSettingsDataStore.setUseCollections(settings.integrations.tmdb.useCollections)
+
+        mdbListSettingsDataStore.setEnabled(settings.integrations.mdblist.enabled)
+        mdbListSettingsDataStore.setShowTrakt(settings.integrations.mdblist.showTrakt)
+        mdbListSettingsDataStore.setShowImdb(settings.integrations.mdblist.showImdb)
+        mdbListSettingsDataStore.setShowTmdb(settings.integrations.mdblist.showTmdb)
+        mdbListSettingsDataStore.setShowLetterboxd(settings.integrations.mdblist.showLetterboxd)
+        mdbListSettingsDataStore.setShowTomatoes(settings.integrations.mdblist.showTomatoes)
+        mdbListSettingsDataStore.setShowAudience(settings.integrations.mdblist.showAudience)
+        mdbListSettingsDataStore.setShowMetacritic(settings.integrations.mdblist.showMetacritic)
+        mdbListSettingsDataStore.setCatalogPreferences(
+            hiddenPersonalListKeys = settings.catalogs.mdblist.hiddenPersonalListKeys.toSet(),
+            selectedTopListKeys = settings.catalogs.mdblist.selectedTopListKeys.toSet(),
+            catalogOrder = settings.catalogs.mdblist.catalogOrder
+        )
+
+        omdbSettingsDataStore.setEnabled(settings.integrations.omdb.enabled)
+
+        theIntroDbSettingsDataStore.setEnabled(settings.integrations.theIntroDb.enabled)
+        theIntroDbSettingsDataStore.setShowIntroButton(settings.integrations.theIntroDb.showIntroButton)
+        theIntroDbSettingsDataStore.setShowRecapButton(settings.integrations.theIntroDb.showRecapButton)
+        theIntroDbSettingsDataStore.setShowCreditsButton(settings.integrations.theIntroDb.showCreditsButton)
+        theIntroDbSettingsDataStore.setShowPreviewButton(settings.integrations.theIntroDb.showPreviewButton)
+
+        animeSkipSettingsDataStore.setEnabled(settings.integrations.animeSkip.enabled)
+        animeSkipSettingsDataStore.setClientId(settings.integrations.animeSkip.clientId)
+
+        val remoteTranslation = settings.integrations.subtitleTranslation
+        subtitleTranslationSettingsDataStore.saveSyncedPublicSettings(
+            enabled = remoteTranslation.enabled,
+            provider = remoteTranslation.toDomainSettings().provider,
+            model = remoteTranslation.model,
+            baseUrl = remoteTranslation.baseUrl
+        )
+
+        posterRatingsSettingsDataStore.setRpdbEnabled(settings.integrations.posterRatings.rpdbEnabled)
+        posterRatingsSettingsDataStore.setTopPostersEnabled(settings.integrations.posterRatings.topPostersEnabled)
+
+        // Moved to v8 per-profile blob sync: Trakt catalog preferences
+        // Moved to v8 per-profile blob sync: Simkl catalog preferences
+        // Moved to v8 per-profile blob sync: player tracking provider and formatter settings
+        applyImdbSyncSettings(settings.integrations.imdb, imdbSettingsDataStore)
     }
 
     private suspend fun applyRemoteSettings(settings: AccountSettingsPayload) {
