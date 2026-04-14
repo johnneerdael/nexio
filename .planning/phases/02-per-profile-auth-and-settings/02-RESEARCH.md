@@ -518,7 +518,7 @@ The following classes inject one or more of the 8 migrated DataStores. Their con
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Playback stop wiring scope in Phase 2**
    - What we know: D-04 requires stop on profile switch; Phase 3 is UI scope; Phase 2 provides `switchProfile()` method
