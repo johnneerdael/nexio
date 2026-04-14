@@ -43,7 +43,7 @@ created: 2026-04-14
 | 06-01-03 | 01 | 0 | PREF-01, PREF-05 | T-06-01 | TVDB settings expose validation state and prevent enabling with missing/invalid credentials | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.ui.screens.settings.TvdbSettingsViewModelTest"` | ❌ W0 | ⬜ pending |
 | 06-01-04 | 01 | 0 | PREF-01 | T-06-01 | Account sync public payload includes TVDB non-secret state and omits API key/PIN/token | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.sync.AccountConfigSyncContractTest"` | ✅ | ⬜ pending |
 | 06-01-05 | 01 | 0 | PREF-04, PREF-05 | T-06-03 | Inactive TVDB leaves TMDB behavior unchanged; active unusable TVDB records diagnostic fallback | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbProviderFallbackTest" --tests "com.nexio.tv.core.tvdb.TvdbDiagnosticsTest"` | ❌ W0 | ⬜ pending |
-| 06-01-06 | 01 | 0 | PREF-01 | T-06-01 | Supabase secret allowlists accept `tvdb_api_key` everywhere required | static | `grep -n "tvdb_api_key" supabase/account_settings_sync.sql` | ❌ W0 | ⬜ pending |
+| 06-01-06 | 01 | 0 | PREF-01 | T-06-01 | Supabase secret allowlists accept `tvdb_api_key` everywhere required and the local `tvdb.yml` contract exists | static | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.sync.TvdbSecretAllowlistStaticTest"` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -55,7 +55,7 @@ created: 2026-04-14
 - [ ] `app/src/test/java/com/nexio/tv/core/tvdb/TvdbIdentityServiceTest.kt` — covers broad remote-ID normalization, in-flight de-duping, cache hit, and no TMDB dependency.
 - [ ] `app/src/test/java/com/nexio/tv/ui/screens/settings/TvdbSettingsViewModelTest.kt` — covers validation states and enablement gating.
 - [ ] Extend `app/src/test/java/com/nexio/tv/core/sync/AccountConfigSyncContractTest.kt` — covers TVDB public sync fields and credential omission.
-- [ ] Add SQL/static verification for every `tvdb_api_key` allowlist occurrence in `supabase/account_settings_sync.sql`.
+- [ ] `app/src/test/java/com/nexio/tv/core/sync/TvdbSecretAllowlistStaticTest.kt` — covers every `tvdb_api_key` allowlist occurrence in `supabase/account_settings_sync.sql` and verifies the local `tvdb.yml` contract exists.
 
 ---
 
