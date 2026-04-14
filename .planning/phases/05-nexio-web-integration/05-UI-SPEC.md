@@ -1,7 +1,8 @@
 ---
 phase: 5
 slug: nexio-web-integration
-status: draft
+status: approved
+reviewed_at: 2026-04-14
 shadcn_initialized: false
 preset: none
 created: 2026-04-14
