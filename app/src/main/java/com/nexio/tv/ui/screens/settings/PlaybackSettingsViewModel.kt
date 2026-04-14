@@ -31,11 +31,13 @@ import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
 import com.nexio.tv.data.repository.benchmark.hasValidAutoplayBenchmarkFor
+import com.nexio.tv.core.player.AndroidFrameRateSettings
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageDiagnostic
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageResolver
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.Dispatchers
@@ -69,7 +71,8 @@ class PlaybackSettingsViewModel @Inject constructor(
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val addonRepository: AddonRepository,
     private val debridBenchmarkService: DebridBenchmarkService,
-    trackingProviderStateRepository: TrackingProviderStateRepository
+    trackingProviderStateRepository: TrackingProviderStateRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
     private companion object {
         const val TAG = "PlaybackSettingsVM"
@@ -81,6 +84,10 @@ class PlaybackSettingsViewModel @Inject constructor(
     val startupPerfTelemetryEnabled: Flow<Boolean> = debugSettingsDataStore.startupPerfTelemetryEnabled
     val diskSpoolDiagnosticsEnabled: Flow<Boolean> = debugSettingsDataStore.diskSpoolDiagnosticsEnabled
     val trackingProviderSelectorState: Flow<TrackingProviderSelectorState> = trackingProviderStateRepository.state
+    fun androidFrameRateStatus(): AndroidFrameRateSettings.Status {
+        return AndroidFrameRateSettings.readStatus(context)
+    }
+
     private val latestBenchmarkResults: Flow<List<DebridBenchmarkResult>> = combine(
         debridBenchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID),
         debridBenchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE),

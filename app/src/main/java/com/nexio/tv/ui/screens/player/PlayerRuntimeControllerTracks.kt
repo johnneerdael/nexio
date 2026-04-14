@@ -9,6 +9,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.Util
 import androidx.media3.common.util.UnstableApi
+import com.nexio.tv.core.player.AndroidFrameRateSettings
 import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.FrameRateMatchingMode
@@ -720,7 +721,7 @@ internal fun PlayerRuntimeController.maybeApplyTrackBasedAfrFallback(
             frameRate = targetFrameRate,
             videoWidth = videoWidth.takeIf { it > 0 },
             videoHeight = videoHeight.takeIf { it > 0 },
-            resolutionMatchingEnabled = playerSettings.resolutionMatchingEnabled
+            resolutionMatchingEnabled = AndroidFrameRateSettings.canRequestResolutionSwitch(context)
         )
         if (result != null && currentStreamUrl == streamUrlSnapshot) {
             _uiState.update {

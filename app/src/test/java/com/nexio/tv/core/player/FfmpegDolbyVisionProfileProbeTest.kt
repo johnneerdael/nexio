@@ -158,6 +158,39 @@ class FfmpegDolbyVisionProfileProbeTest {
         assertEquals("eac3", result.audioCodec)
     }
 
+    @Test
+    fun `stream metadata ignores frame metadata for dolby vision decision`() = runBlocking {
+        val probe = FfmpegDolbyVisionProfileProbe(
+            backend = fakeBackend(
+                streamMetadataJson = """
+                    {
+                      "streams": [
+                        {
+                          "codec_type":"video",
+                          "codec_name":"hevc",
+                          "width":3840,
+                          "height":2160,
+                          "avg_frame_rate":"24000/1001",
+                          "r_frame_rate":"24/1",
+                          "color_transfer":"smpte2084",
+                          "color_primaries":"bt2020",
+                          "dv_profile":7
+                        },
+                        {"codec_type":"audio","codec_name":"truehd"}
+                      ]
+                    }
+                """.trimIndent()
+            )
+        )
+
+        val result = probe.probe(context, "https://example.com/test.mkv", null, "test.mkv")
+
+        assertEquals(DolbyVisionProfileProbeStatus.DETECTED, result.status)
+        assertEquals(7, result.profileNumber)
+        assertEquals("hevc", result.videoCodec)
+        assertEquals("truehd", result.audioCodec)
+    }
+
     private fun fakeBackend(
         streamMetadataJson: String?
     ): NativeDolbyVisionProfileBackend {
