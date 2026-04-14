@@ -486,8 +486,7 @@ class MainActivity : ComponentActivity() {
 
                     if (shouldShowProfileSelection) {
                         ProfileSelectionScreen(
-                            onProfileSelected = { hasSelectedProfileThisSession = true },
-                            onPinRequired = { /* Phase 3 Plan 02 wires PIN overlay */ }
+                            onProfileSelected = { hasSelectedProfileThisSession = true }
                         )
                         return@Surface
                     }
