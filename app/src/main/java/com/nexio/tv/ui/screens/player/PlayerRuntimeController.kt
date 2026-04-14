@@ -358,7 +358,7 @@ class PlayerRuntimeController(
     internal var activePlayerUsesAssSsaRenderer: Boolean = false
     internal var assSsaPipelineSwitchInFlight: Boolean = false
     internal var assSsaPipelineDecisionStreamUrl: String? = null
-    internal var assSsaNativeFallbackHandledForCurrentStream: Boolean = false
+    internal var assSsaPipelineFallbackHandledForCurrentStream: Boolean = false
     internal var assSsaRenderController: AssSsaRenderController? = null
     internal var assSsaOverlayViewProvider: (() -> AssSsaRenderOverlayView?)? = null
     internal var trackAfrAppliedForCurrentStream: Boolean = false

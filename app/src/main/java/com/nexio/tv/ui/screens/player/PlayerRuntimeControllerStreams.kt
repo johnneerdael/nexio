@@ -378,6 +378,7 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
     backendStop()
 
     currentStreamUrl = url
+    resetAssSsaPipelineDecisionForStream(url)
     currentHeaders = newHeaders
     currentStreamServiceKey = normalizedBenchmarkServiceKey(stream.wrappedProviderId)
     currentStreamBingeGroup = StreamBingeGroupResolver.resolve(stream)
@@ -704,6 +705,7 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
     backendStop()
 
     currentStreamUrl = url
+    resetAssSsaPipelineDecisionForStream(url)
     currentHeaders = newHeaders
     currentStreamServiceKey = normalizedBenchmarkServiceKey(stream.wrappedProviderId)
     currentStreamBingeGroup = StreamBingeGroupResolver.resolve(stream)

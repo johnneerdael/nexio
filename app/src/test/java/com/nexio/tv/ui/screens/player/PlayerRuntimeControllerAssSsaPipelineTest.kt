@@ -60,6 +60,27 @@ class PlayerRuntimeControllerAssSsaPipelineTest {
         assertTrue(tracks.hasSelectedAssSsaTextTrackForTesting())
     }
 
+    @Test
+    fun pipelineDecisionResetForNewStreamClearsStaleOverride() {
+        val reset = resetAssSsaPipelineDecisionStateForStream("https://example.test/new.mkv")
+
+        assertTrue(reset.decisionStreamUrl == "https://example.test/new.mkv")
+        assertFalse(reset.switchInFlight)
+        assertFalse(reset.fallbackHandled)
+        assertTrue(reset.overrideForCurrentStream == null)
+    }
+
+    @Test
+    fun overlayProviderNullFallsBackWithoutAssSsaPipeline() {
+        val decision = resolveAssSsaPipelineOverlayDecision(
+            requestedUseAssSsaPipeline = true,
+            overlayAttached = false
+        )
+
+        assertFalse(decision.useAssSsaPipeline)
+        assertTrue(decision.disableOverrideForCurrentStream)
+    }
+
     private fun tracksFor(format: Format, selected: Boolean): Tracks {
         return Tracks(
             listOf(
