@@ -1,14 +1,21 @@
 package com.nexio.tv.core.sync
 
+import android.app.Application
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.test.core.app.ApplicationProvider
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.ProfileDataStoreFactory
 import io.github.jan.supabase.postgrest.Postgrest
 import io.mockk.mockk
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
@@ -24,12 +31,28 @@ typealias AndroidJUnit4 = RobolectricTestRunner
 
 @RunWith(AndroidJUnit4::class)
 class ProfileSettingsSyncServiceTest {
+    private companion object {
+        val realProfileDataStoreFactory: ProfileDataStoreFactory by lazy {
+            val context = ApplicationProvider.getApplicationContext<Application>()
+            ProfileDataStoreFactory(context)
+        }
+    }
+
     private fun service(): ProfileSettingsSyncService {
         return ProfileSettingsSyncService(
             authManager = mockk<AuthManager>(relaxed = true),
             postgrest = mockk<Postgrest>(relaxed = true),
             profileManager = mockk<ProfileManager>(relaxed = true),
             profileDataStoreFactory = mockk<ProfileDataStoreFactory>(relaxed = true)
+        )
+    }
+
+    private fun realDataStoreService(): ProfileSettingsSyncService {
+        return ProfileSettingsSyncService(
+            authManager = mockk<AuthManager>(relaxed = true),
+            postgrest = mockk<Postgrest>(relaxed = true),
+            profileManager = mockk<ProfileManager>(relaxed = true),
+            profileDataStoreFactory = realProfileDataStoreFactory
         )
     }
 
@@ -151,5 +174,88 @@ class ProfileSettingsSyncServiceTest {
             settingsSyncService.buildSettingsSignature(blob),
             settingsSyncService.buildSettingsSignature(blob)
         )
+    }
+
+    @Test
+    fun `normalizeSettingsBlob inserts empty objects for missing synced features`() {
+        val settingsSyncService = service()
+        val normalized = settingsSyncService.normalizeSettingsBlob(
+            buildJsonObject {
+                put("theme_settings", buildJsonObject {})
+            }
+        )
+
+        settingsSyncService.syncedFeatures.forEach { feature ->
+            assertNotNull(normalized[feature])
+            if (feature != "theme_settings") {
+                assertEquals(buildJsonObject {}, normalized[feature]!!.jsonObject)
+            }
+        }
+    }
+
+    @Test
+    fun `normalizeSettingsBlob ignores unknown feature keys`() {
+        val normalized = service().normalizeSettingsBlob(
+            buildJsonObject {
+                put("theme_settings", buildJsonObject {})
+                put("unknown_feature", buildJsonObject {})
+            }
+        )
+
+        assertTrue("unknown_feature should not be normalized", "unknown_feature" !in normalized)
+    }
+
+    @Test
+    fun `importSettingsBlob clears absent local keys before applying remote values`() = runTest {
+        val settingsSyncService = realDataStoreService()
+        val store = realProfileDataStoreFactory.get(2, "theme_settings")
+        val oldThemeKey = stringPreferencesKey("old_theme")
+        val themeKey = stringPreferencesKey("theme")
+        store.edit { preferences ->
+            preferences.clear()
+            preferences[oldThemeKey] = "ocean"
+        }
+
+        settingsSyncService.importSettingsBlob(
+            profileId = 2,
+            blob = buildJsonObject {
+                put(
+                    "theme_settings",
+                    buildJsonObject {
+                        put(
+                            "theme",
+                            buildJsonObject {
+                                put("type", "string")
+                                put("value", "crimson")
+                            }
+                        )
+                    }
+                )
+            }
+        )
+
+        val preferences = store.data.first()
+        assertNull(preferences[oldThemeKey])
+        assertEquals("crimson", preferences[themeKey])
+    }
+
+    @Test
+    fun `importSettingsBlob clears missing synced feature blob as empty snapshot`() = runTest {
+        val settingsSyncService = realDataStoreService()
+        val store = realProfileDataStoreFactory.get(2, "player_settings")
+        val arbitraryKey = stringPreferencesKey("arbitrary_player_setting")
+        store.edit { preferences ->
+            preferences.clear()
+            preferences[arbitraryKey] = "enabled"
+        }
+
+        settingsSyncService.importSettingsBlob(
+            profileId = 2,
+            blob = buildJsonObject {
+                put("theme_settings", buildJsonObject {})
+            }
+        )
+
+        assertTrue(store.data.first().asMap().isEmpty())
     }
 }
