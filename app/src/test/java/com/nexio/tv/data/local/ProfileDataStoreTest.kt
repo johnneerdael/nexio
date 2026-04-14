@@ -124,19 +124,41 @@ class ProfileDataStoreTest {
     }
 
     @Test
-    fun `ProfileJson round-trip preserves all fields including avatarId and pinEnabled`() = runTest {
+    fun `ProfileJson round-trip preserves all fields including avatarUrl, avatarId and pinEnabled`() = runTest {
         val store = makeStore(backgroundScope)
+        val avatarUrl = "https://example.test/profile-avatars/user/2.jpg?t=123"
         val original = UserProfile(
             id = 2,
             name = "Alice",
             avatarColorHex = "#E53935",
             usesPrimaryAddons = true,
+            avatarUrl = avatarUrl,
             avatarId = "avatar_001",
             pinEnabled = true
         )
         store.upsertProfile(original)
         val retrieved = store.profilesList.first().first { it.id == 2 }
         assertEquals(original, retrieved)
+    }
+
+    @Test
+    fun `replaceAllProfiles preserves avatarUrl from web sync`() = runTest {
+        val store = makeStore(backgroundScope)
+        val avatarUrl = "https://example.test/profile-avatars/user/2.jpg?t=123"
+        val webSyncedProfiles = listOf(
+            UserProfile(id = 1, name = "Default", avatarColorHex = "#1E88E5"),
+            UserProfile(
+                id = 2,
+                name = "Alice",
+                avatarColorHex = "#E53935",
+                avatarUrl = avatarUrl
+            )
+        )
+
+        store.replaceAllProfiles(webSyncedProfiles)
+
+        val profile = store.profilesList.first().first { it.id == 2 }
+        assertEquals(avatarUrl, profile.avatarUrl)
     }
 
     @Test
