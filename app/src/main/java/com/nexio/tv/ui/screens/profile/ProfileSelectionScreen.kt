@@ -80,10 +80,9 @@ fun ProfileSelectionScreen(
     }
 
     // Detect successful PIN verification: active profile switched to the overlay profile
-    val currentActiveId by viewModel.activeProfileId.collectAsStateWithLifecycle()
-    LaunchedEffect(currentActiveId) {
+    LaunchedEffect(activeProfileId) {
         val overlayProfile = activePinOverlayProfile
-        if (overlayProfile != null && currentActiveId == overlayProfile.id) {
+        if (overlayProfile != null && activeProfileId == overlayProfile.id) {
             activePinOverlayProfile = null
             viewModel.resetPinState()
             onProfileSelected()
