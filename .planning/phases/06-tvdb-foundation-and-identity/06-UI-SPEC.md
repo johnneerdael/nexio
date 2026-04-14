@@ -43,7 +43,7 @@ Declared values (must be multiples of 4):
 | 2xl | 48px | Reserved for major section breaks; not expected on this compact settings screen |
 | 3xl | 64px | Reserved for page-level spacing; not expected on this compact settings screen |
 
-Exceptions: preserve existing settings constants and row dimensions from `SettingsDesignSystem.kt`: 6dp header title/subtitle gap, 10dp lazy-list row gap, 12dp row trailing gaps, 14dp group-card padding and row vertical padding, 18dp row horizontal padding, 20dp workspace padding, 28dp workspace radius, 44dp brand icon size, 56dp rail item minimum height, 62dp settings row height/minimum height, 700dp credential dialog width, and pill radius `999.dp`.
+Phase 6 must not introduce new spacing outside this scale. Existing settings primitives may retain their internal dimensions from `SettingsDesignSystem.kt`; those inherited values are implementation details of the reused components, not new phase-level spacing tokens.
 
 ---
 
@@ -103,7 +103,7 @@ Status colors:
 | Empty state heading | TVDB not configured |
 | Empty state body | Add a TVDB API key to use TVDB for TV metadata and identity matching. |
 | Error state | TVDB validation failed. Check the API key or PIN, then save again. |
-| Destructive confirmation | Clear TVDB credentials: no separate confirmation; the explicit Clear action appears only inside the credentials dialog and returns the status to Not configured. |
+| Destructive confirmation | Clear TVDB credentials: no separate confirmation; the explicit Clear TVDB credentials action appears only inside the credentials dialog and returns the status to Not configured. |
 
 Required English strings for the TVDB settings surface:
 
@@ -137,8 +137,8 @@ Required English strings for the TVDB settings surface:
 | Dialog subtitle | Enter your TVDB API key. Add the subscriber PIN only if your TVDB account requires one. |
 | API key placeholder | Enter TVDB API key |
 | PIN placeholder | Optional subscriber PIN |
-| Dialog secondary action | Clear |
-| Dialog cancel action | Cancel |
+| Dialog secondary action | Clear TVDB credentials |
+| Dialog cancel action | Close credentials |
 | Dialog saving state | Saving credentials... |
 | Missing credentials error | TVDB API key is required |
 | Invalid credentials error | Invalid TVDB credentials |
@@ -171,6 +171,8 @@ The TVDB detail screen contains one compact settings group unless the implementa
 
 Do not add per-surface toggles for artwork, trailers, cast, related content, networks, or episodes in Phase 6. Those controls are explicitly out of scope.
 
+Primary visual anchor: the focused Enable TVDB row. Secondary emphasis: the TVDB status row value, which communicates whether credentials are not configured, validating, valid, invalid, or fallback active.
+
 ---
 
 ## Interaction Contract
@@ -194,8 +196,8 @@ Credential dialog contract:
 |---------|----------|
 | Dialog shell | Existing `NexioDialog`, width 700dp, 16dp radius, elevated background, 1dp border |
 | API key field | Existing BasicTextField-in-Card pattern, single line, focused border 2dp `NexioColors.FocusRing` |
-| Optional PIN field | Same field style as API key, placed below it with 10dp to 16dp vertical spacing |
-| Buttons | Right-aligned row: Cancel, Clear, Save credentials |
+| Optional PIN field | Same field style as API key, placed below it with 8dp or 16dp vertical spacing |
+| Buttons | Right-aligned row: Close credentials, Clear TVDB credentials, Save credentials |
 | Secret display | API key masked outside dialog; PIN never shown after save |
 
 ---
