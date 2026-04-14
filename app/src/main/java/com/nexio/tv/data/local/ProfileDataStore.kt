@@ -125,6 +125,7 @@ internal data class ProfileJson(
     @SerializedName("name") val name: String,
     @SerializedName("avatar_color_hex") val avatarColorHex: String,
     @SerializedName("uses_primary_addons") val usesPrimaryAddons: Boolean = false,
+    @SerializedName("avatar_url") val avatarUrl: String? = null,
     @SerializedName("avatar_id") val avatarId: String? = null,
     @SerializedName("pin_enabled") val pinEnabled: Boolean = false
 ) {
@@ -133,6 +134,7 @@ internal data class ProfileJson(
         name = name,
         avatarColorHex = avatarColorHex,
         usesPrimaryAddons = usesPrimaryAddons,
+        avatarUrl = avatarUrl,
         avatarId = avatarId,
         pinEnabled = pinEnabled
     )
@@ -143,6 +145,7 @@ internal data class ProfileJson(
             name = p.name,
             avatarColorHex = p.avatarColorHex,
             usesPrimaryAddons = p.usesPrimaryAddons,
+            avatarUrl = p.avatarUrl,
             avatarId = p.avatarId,
             pinEnabled = p.pinEnabled
         )
