@@ -20,13 +20,9 @@ class ProfileDataStoreFactory @Inject constructor(
 
     fun get(profileId: Int, featureName: String): DataStore<Preferences> {
         val fileName = if (profileId == 1) featureName else "${featureName}_p${profileId}"
-        if (profileId != 1 && profileId in deletedProfileIds) {
-            return cache.compute(fileName) { _, _ ->
-                PreferenceDataStoreFactory.create {
-                    context.preferencesDataStoreFile(fileName)
-                }
-            }!!
-        }
+        // Always use getOrPut. clearProfile() already removes keys from the cache when a
+        // profile is deleted, so a recycled profile ID naturally gets one fresh instance
+        // on next get() without creating a second DataStore over the same file path.
         return cache.getOrPut(fileName) {
             PreferenceDataStoreFactory.create {
                 context.preferencesDataStoreFile(fileName)
