@@ -70,20 +70,29 @@ class ProfileManagerTest {
         )
     }
 
+    private data class ManagerHarness(
+        val manager: ProfileManager,
+        val dataStore: ProfileDataStoreImpl
+    )
+
     /**
      * Creates a ProfileManager whose DataStore and StateFlow coroutines run on the test's
      * virtual-time scheduler (backgroundScope), so all emissions are deterministic.
      */
-    private fun TestScope.makeManager(postgrest: Postgrest? = null): ProfileManager {
+    private fun TestScope.makeManagerHarness(postgrest: Postgrest? = null): ManagerHarness {
         val dataStoreImpl = ProfileDataStoreImpl(createDataStore(backgroundScope), Gson())
-        return ProfileManager(
+        val manager = ProfileManager(
             dataStore = dataStoreImpl,
             factory = factory,
             context = context,
             scope = backgroundScope,
             postgrest = postgrest
         )
+        return ManagerHarness(manager, dataStoreImpl)
     }
+
+    private fun TestScope.makeManager(postgrest: Postgrest? = null): ProfileManager =
+        makeManagerHarness(postgrest).manager
 
     private fun sharedPreferencesFile(prefsName: String): File {
         return File(context.applicationInfo.dataDir, "shared_prefs/${prefsName}.xml")
@@ -284,6 +293,29 @@ class ProfileManagerTest {
         val updatedProfile = profilesAfterUpdate.first { it.id == alice.id }
         assertEquals("Alice Updated", updatedProfile.name)
         assertEquals("#43A047", updatedProfile.avatarColorHex)
+    }
+
+    @Test
+    fun `ProfileManager profiles emits avatarUrl preserved by replaceAllProfiles`() = runTest {
+        val harness = makeManagerHarness()
+        val avatarUrl = "https://example.test/profile-avatars/user/2.jpg?t=123"
+        harness.dataStore.replaceAllProfiles(
+            listOf(
+                UserProfile(id = 1, name = "Default", avatarColorHex = "#1E88E5"),
+                UserProfile(
+                    id = 2,
+                    name = "Alice",
+                    avatarColorHex = "#E53935",
+                    avatarUrl = avatarUrl
+                )
+            )
+        )
+
+        val profiles = harness.manager.profiles.first { emitted ->
+            emitted.any { it.id == 2 && it.avatarUrl == avatarUrl }
+        }
+
+        assertEquals(avatarUrl, profiles.first { it.id == 2 }.avatarUrl)
     }
 
     @Test
