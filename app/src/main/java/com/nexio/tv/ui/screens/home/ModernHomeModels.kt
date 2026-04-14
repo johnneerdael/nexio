@@ -157,6 +157,11 @@ internal fun modernRowItemContentType(item: ModernCarouselItem): String {
     }
 }
 
+internal fun shouldPrefetchModernRow(
+    isActiveRow: Boolean,
+    isVerticalRowsScrolling: Boolean
+): Boolean = isActiveRow && !isVerticalRowsScrolling
+
 @Stable
 internal class ModernHomeUiCaches {
     val focusedItemByRow = mutableMapOf<String, Int>()
