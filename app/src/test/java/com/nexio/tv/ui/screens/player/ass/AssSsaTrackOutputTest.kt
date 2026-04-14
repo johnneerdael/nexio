@@ -63,6 +63,28 @@ class AssSsaTrackOutputTest {
     }
 
     @Test
+    fun dataReaderShortReadCapturesAndForwardsOnlyBytesActuallyRead() {
+        val delegate = RecordingTrackOutput()
+        val sink = RecordingAssSampleSink()
+        val output = AssSsaTrackOutput(delegate, sink, trackId = 5)
+        val sample = "Dialogue: 0:00:00.00,0:00:01.00,1,0,Default,,0,0,0,,Short".toByteArray()
+        val firstReadSize = 12
+
+        output.format(Format.Builder().setSampleMimeType(MimeTypes.TEXT_SSA).build())
+        val bytesRead = output.sampleData(
+            ByteArrayDataReader(sample, maxBytesPerRead = firstReadSize),
+            sample.size,
+            allowEndOfInput = false,
+            TrackOutput.SAMPLE_DATA_PART_MAIN
+        )
+        output.sampleMetadata(3_000_000L, C.BUFFER_FLAG_KEY_FRAME, bytesRead, 0, null)
+
+        assertEquals(firstReadSize, bytesRead)
+        assertArrayEquals(sample.copyOf(firstReadSize), delegate.forwardedSample)
+        assertArrayEquals(sample.copyOf(firstReadSize), sink.samples.single().data)
+    }
+
+    @Test
     fun nonAssTracksAreForwardedAndNotCaptured() {
         val delegate = RecordingTrackOutput()
         val sink = RecordingAssSampleSink()
@@ -147,12 +169,15 @@ class AssSsaTrackOutputTest {
         ) = Unit
     }
 
-    private class ByteArrayDataReader(private val data: ByteArray) : DataReader {
+    private class ByteArrayDataReader(
+        private val data: ByteArray,
+        private val maxBytesPerRead: Int = Int.MAX_VALUE
+    ) : DataReader {
         private var position = 0
 
         override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
             if (position == data.size) return C.RESULT_END_OF_INPUT
-            val bytesToRead = minOf(length, data.size - position)
+            val bytesToRead = minOf(length, maxBytesPerRead, data.size - position)
             data.copyInto(buffer, offset, position, position + bytesToRead)
             position += bytesToRead
             return bytesToRead
