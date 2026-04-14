@@ -17,6 +17,7 @@ import com.nexio.tv.data.remote.api.TmdbMovieReleaseDatesResponse
 import com.nexio.tv.data.remote.api.TmdbEpisode
 import com.nexio.tv.data.remote.api.TmdbSeasonResponse
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.PosterRatingsProvider
 import com.nexio.tv.domain.model.TmdbSettings
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 import retrofit2.Response
 
@@ -94,6 +96,46 @@ class TmdbMetadataPerformanceTest {
     }
 
     @Test
+    fun `fetchEnrichment does not expose tmdb poster when poster provider is active`() = runTest {
+        val tmdbApi = mockk<TmdbApi>()
+        val activePosterProvider = PosterRatingsUrlResolver.ActiveProvider(
+            provider = PosterRatingsProvider.RPDB,
+            apiKey = "rpdb-key"
+        )
+        val service = buildMetadataService(tmdbApi, activePosterProvider = activePosterProvider)
+
+        coEvery {
+            tmdbApi.getMovieDetails(
+                movieId = 550,
+                apiKey = "tmdb-key",
+                language = "en-US",
+                appendToResponse = "credits,images,release_dates",
+                includeImageLanguage = "en,en-US,en,null"
+            )
+        } returns Response.success(
+            TmdbDetailsResponse(
+                id = 550,
+                title = "Fight Club",
+                overview = "An insomniac office worker crosses paths with a soap maker.",
+                genres = listOf(TmdbGenre(id = 18, name = "Drama")),
+                posterPath = "/tmdb-poster.jpg",
+                credits = TmdbCreditsResponse(cast = emptyList(), crew = emptyList()),
+                images = TmdbImagesResponse(logos = emptyList(), backdrops = emptyList()),
+                releaseDates = TmdbMovieReleaseDatesResponse(results = emptyList())
+            )
+        )
+
+        val enrichment = service.fetchEnrichment(
+            tmdbId = "550",
+            contentType = ContentType.MOVIE,
+            language = "en-US"
+        )
+
+        assertNotNull(enrichment)
+        assertNull(enrichment?.poster)
+    }
+
+    @Test
     fun `imdbToTmdb joins duplicate concurrent lookups`() = runTest {
         val tmdbApi = mockk<TmdbApi>()
         val settingsDataStore = mockk<TmdbSettingsDataStore>()
@@ -150,7 +192,10 @@ class TmdbMetadataPerformanceTest {
         coVerify(exactly = 1) { tmdbApi.getTvSeasonDetails(100, 3, "tmdb-key", "en-US") }
     }
 
-    private fun buildMetadataService(tmdbApi: TmdbApi): TmdbMetadataService {
+    private fun buildMetadataService(
+        tmdbApi: TmdbApi,
+        activePosterProvider: PosterRatingsUrlResolver.ActiveProvider? = null
+    ): TmdbMetadataService {
         val context = mockk<Context>(relaxed = true)
         val posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>()
         val settingsDataStore = mockk<TmdbSettingsDataStore>()
@@ -163,11 +208,16 @@ class TmdbMetadataPerformanceTest {
         every {
             metadataDiskCacheStore.writeTmdbEnrichment(any(), any(), any(), any())
         } returns Unit
-        coEvery { posterRatingsUrlResolver.getActiveProvider() } returns null
+        coEvery { posterRatingsUrlResolver.getActiveProvider() } returns activePosterProvider
         every {
             posterRatingsUrlResolver.resolvePosterUrl(any(), any(), any(), null)
         } answers {
             firstArg()
+        }
+        if (activePosterProvider != null) {
+            every {
+                posterRatingsUrlResolver.resolvePosterUrl(any(), any(), any(), activePosterProvider)
+            } returns "provider-poster"
         }
 
         return TmdbMetadataService(

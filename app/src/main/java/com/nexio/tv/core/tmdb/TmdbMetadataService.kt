@@ -151,12 +151,11 @@ class TmdbMetadataService @Inject constructor(
                             kind = MetaCompanyKind.NETWORK
                         )
                     }
-                val poster = posterRatingsUrlResolver.resolvePosterUrl(
-                    originalPosterUrl = buildImageUrl(details?.posterPath, size = "w500"),
-                    contentId = "tmdb:$numericId",
-                    contentType = contentType,
-                    activeProvider = activePosterProvider
-                )
+                val poster = if (activePosterProvider == null) {
+                    buildImageUrl(details?.posterPath, size = "w500")
+                } else {
+                    null
+                }
                 val backdrop = buildImageUrl(details?.backdropPath, size = "w1280")
                 
                 val collectionId = details?.belongsToCollection?.id

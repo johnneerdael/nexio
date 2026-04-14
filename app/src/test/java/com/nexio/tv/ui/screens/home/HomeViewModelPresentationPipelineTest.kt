@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
@@ -225,6 +226,47 @@ class HomeViewModelPresentationPipelineTest {
 
         assertEquals(listOf("dQw4w9WgXcQ"), merged.trailerYtIds)
         assertEquals("Updated description", merged.description)
+    }
+
+    @Test
+    fun `mergeFocusedItemEnrichment keeps current poster when tmdb artwork is merged`() {
+        val preview = testPreview("tt15940132", "War Machine").copy(
+            poster = "https://api.ratingposterdb.com/key/imdb/poster-default/tt15940132.jpg",
+            background = "addon-backdrop",
+            logo = "addon-logo"
+        )
+        val merged = mergeFocusedItemEnrichment(
+            currentItem = preview,
+            tmdbEnrichment = TmdbEnrichment(
+                localizedTitle = "Localized War Machine",
+                description = "Localized description",
+                genres = listOf("Thriller"),
+                backdrop = "tmdb-backdrop",
+                logo = "tmdb-logo",
+                poster = "https://image.tmdb.org/t/p/w500/tmdb-poster.jpg",
+                directorMembers = emptyList(),
+                writerMembers = emptyList(),
+                castMembers = emptyList(),
+                releaseInfo = "2025",
+                rating = 7.3,
+                runtimeMinutes = 120,
+                director = emptyList(),
+                writer = emptyList(),
+                productionCompanies = emptyList(),
+                networks = emptyList(),
+                ageRating = null,
+                countries = null,
+                language = "en",
+                collectionId = null,
+                collectionName = null
+            ),
+            externalMeta = null
+        )
+
+        assertEquals("https://api.ratingposterdb.com/key/imdb/poster-default/tt15940132.jpg", merged.poster)
+        assertEquals("tmdb-backdrop", merged.background)
+        assertEquals("tmdb-logo", merged.logo)
+        assertEquals("Localized War Machine", merged.name)
     }
 
     private fun testPreview(id: String, title: String): MetaPreview {
