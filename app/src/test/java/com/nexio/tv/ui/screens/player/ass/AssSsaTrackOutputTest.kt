@@ -6,12 +6,16 @@ import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.ParsableByteArray
 import androidx.media3.extractor.ExtractorOutput
+import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.SeekMap
 import androidx.media3.extractor.TrackOutput
+import androidx.media3.extractor.mkv.MatroskaExtractor
+import androidx.media3.extractor.text.SubtitleParser
 import java.io.ByteArrayOutputStream
-import java.io.IOException
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -112,6 +116,54 @@ class AssSsaTrackOutputTest {
         extractor.wrapExtractorOutputForTesting()
     }
 
+    @Test
+    fun extractorsFactoryReplacesMatroskaExtractorWithAssSsaExtractor() {
+        val sourceExtractor = MatroskaExtractor(SubtitleParser.Factory.UNSUPPORTED)
+        val factory = AssSsaExtractorsFactory(
+            delegate = ExtractorsFactory { arrayOf(sourceExtractor) },
+            sink = RecordingAssSampleSink()
+        )
+
+        val extractors = factory.createExtractors()
+
+        assertTrue(extractors.single() is AssSsaMatroskaExtractor)
+    }
+
+    @Test
+    fun matroskaStatePreservesDisabledSeekFlagAndDolbyVisionTransformer() {
+        val transformer = RecordingDolbyVisionSampleTransformer()
+        val sourceExtractor = MatroskaExtractor(
+            SubtitleParser.Factory.UNSUPPORTED,
+            MatroskaExtractor.FLAG_DISABLE_SEEK_FOR_CUES,
+            transformer
+        )
+
+        val state = AssSsaMatroskaExtractor.matroskaStateForTesting(sourceExtractor)
+
+        assertTrue(state.flags and MatroskaExtractor.FLAG_EMIT_RAW_SUBTITLE_DATA != 0)
+        assertTrue(state.flags and MatroskaExtractor.FLAG_DISABLE_SEEK_FOR_CUES != 0)
+        assertSame(transformer, state.dolbyVisionSampleTransformer)
+    }
+
+    @Test
+    fun matroskaStateFallsBackWhenReflectionFieldsAreUnavailable() {
+        val sourceExtractor = MatroskaExtractor(
+            SubtitleParser.Factory.UNSUPPORTED,
+            MatroskaExtractor.FLAG_DISABLE_SEEK_FOR_CUES
+        )
+
+        val state = AssSsaMatroskaExtractor.matroskaStateForTesting(
+            sourceExtractor,
+            seekForCuesEnabledFieldAvailable = false,
+            dolbyVisionSampleTransformerFieldAvailable = false
+        )
+
+        assertEquals(MatroskaExtractor.FLAG_EMIT_RAW_SUBTITLE_DATA, state.flags)
+        assertFalse(state.flags and MatroskaExtractor.FLAG_DISABLE_SEEK_FOR_CUES != 0)
+        assertEquals(null, state.dolbyVisionSampleTransformer)
+        AssSsaMatroskaExtractor(sink = RecordingAssSampleSink(), matroskaState = state)
+    }
+
     private class RecordingAssSampleSink : AssSsaSampleSink {
         val headers = mutableListOf<Header>()
         val samples = mutableListOf<Sample>()
@@ -133,6 +185,9 @@ class AssSsaTrackOutputTest {
     private data class Header(val trackId: Int, val headerData: ByteArray, val format: Format)
     private data class Sample(val trackId: Int, val timeUs: Long, val data: ByteArray)
     private data class FontAttachment(val name: String, val data: ByteArray)
+
+    private class RecordingDolbyVisionSampleTransformer :
+        MatroskaExtractor.DolbyVisionSampleTransformer
 
     private class RecordingTrackOutput : TrackOutput {
         private val forwardedSamples = ByteArrayOutputStream()

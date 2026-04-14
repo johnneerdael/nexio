@@ -44,7 +44,7 @@ internal class AssSsaExtractorsFactory(
     private fun Array<Extractor>.withAssSsaMatroskaExtractor(): Array<Extractor> {
         forEachIndexed { index, extractor ->
             if (extractor is MatroskaExtractor && extractor !is AssSsaMatroskaExtractor) {
-                this[index] = AssSsaMatroskaExtractor(sink)
+                this[index] = AssSsaMatroskaExtractor.from(extractor, sink)
             }
         }
         return this
