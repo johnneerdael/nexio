@@ -329,10 +329,6 @@
   <string name="trakt_missing_credentials">TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET manquants dans local.properties.</string>
   <string name="trakt_continue_watching_window">Période "Reprendre le visionnage"</string>
   <string name="trakt_continue_watching_subtitle">Historique Trakt pris en compte pour "Reprendre le visionnage"</string>
-  <string name="trakt_unaired_next_up">Épisodes suivants non diffusés</string>
-  <string name="trakt_unaired_next_up_subtitle">Afficher les épisodes à venir avant leur diffusion</string>
-  <string name="trakt_unaired_shown">Affichés</string>
-  <string name="trakt_unaired_hidden">Masqués</string>
   <string name="trakt_cached_label">En cache</string>
   <string name="trakt_stat_movies">Films</string>
   <string name="trakt_stat_shows">Séries</string>
@@ -346,8 +342,6 @@
   <string name="trakt_back">Retour</string>
   <string name="trakt_cw_window_title">Période "Reprendre le visionnage"</string>
   <string name="trakt_cw_window_subtitle">Choisis la période d\'activité Trakt à afficher dans "Reprendre le visionnage".</string>
-  <string name="trakt_unaired_dialog_title">Épisodes suivants non diffusés</string>
-  <string name="trakt_unaired_dialog_subtitle">Choisis si "Reprendre le visionnage" doit inclure les épisodes à venir avant leur diffusion.</string>
   <string name="trakt_show_unaired">Afficher les épisodes non diffusés</string>
   <string name="trakt_hide_unaired">Masquer les épisodes non diffusés</string>
   <string name="trakt_all_history">Tout l\'historique</string>
@@ -569,7 +563,6 @@
   <string name="tmdb_collections_subtitle">Collections de films TMDB par ordre de sortie</string>
   <string name="tmdb_api_key_title">Clé API</string>
   <string name="trakt_auth_status_subtitle">État actuel de la connexion Trakt</string>
-  <string name="trakt_unaired_now_hidden">Les épisodes non diffusés sont maintenant masqués</string>
   <string name="settings_animeskip_subtitle">Horodatages de saut intro/outro anime</string>
   <string name="animeskip_dialog_placeholder">Entre le Client ID</string>
   <string name="poster_ratings_api_key_title">Clé API</string>
@@ -651,7 +644,6 @@
   <string name="trakt_waiting_approval">En attente d\'approbation…</string>
   <string name="trakt_move_down">Descendre</string>
   <string name="audio_dv_experimental_title">DV7 - Conversion DV8.1</string>
-  <string name="trakt_unaired_now_shown">Les épisodes non diffusés sont maintenant affichés</string>
   <string name="animeskip_client_id_subtitle">Requis pour récupérer les horodatages depuis anime-skip.com</string>
   <string name="animeskip_dialog_title">Client ID Anime Skip</string>
   <string name="mdblist_top_lists_subtitle">Recherche des top-listes publiques et active-les comme rangées personnalisées</string>

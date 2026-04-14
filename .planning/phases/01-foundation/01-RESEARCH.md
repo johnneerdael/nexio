@@ -460,17 +460,19 @@ The recommended strategy is silent fallback to `listOf(defaultPrimaryProfile())`
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Is `Gson` provided via Hilt in an existing DI module?**
    - What we know: Gson 2.10.1 is declared in `libs.versions.toml` and `app/build.gradle.kts`. It is used in ~10+ files in the main source (verified by grep).
    - What's unclear: Whether any existing `@Module` contains `@Provides @Singleton fun provideGson(): Gson` or whether each usage site creates `Gson()` directly.
    - Recommendation: Before writing `ProfileDataStore`, check `core/di/NetworkModule.kt` (most likely location). If absent, either add `@Provides` to `ProfileModule` or inject `Gson` via a lazy `Gson()` constructor call inside `ProfileDataStore` — both are acceptable.
+   - **RESOLVED:** grep for `@Provides.*Gson` in `core/di/` returns zero matches — no existing Hilt binding. Added `@Provides @Singleton fun provideGson(): Gson = Gson()` to ProfileModule in Plan 01-02.
 
 2. **Should `ProfileDataStore` inject `Gson` or construct it directly?**
    - What we know: NuvioTV's equivalent injects `Moshi`. The Nexio pattern is to inject shared infrastructure.
    - What's unclear: Whether a Gson Hilt binding exists (see Q1).
    - Recommendation: Prefer injection for testability. If no Hilt binding exists, add one to `ProfileModule` with `@Provides @Singleton fun provideGson(): Gson = Gson()`.
+   - **RESOLVED:** Inject Gson via `@Provides @Singleton` in ProfileModule. ProfileDataStore receives Gson via constructor injection for testability.
 
 ---
 

@@ -354,6 +354,31 @@ class MetaDetailsNavigationSupportTest {
     }
 
     @Test
+    fun nextToWatchTargetBeatsStoredFocusUntilInitialSeasonScrollIsHandled() {
+        val meta = buildSeriesMeta(
+            *episodesForSeasons(1..3, episodeCount = 10).toTypedArray()
+        )
+        val nextToWatch = buildSeriesNextToWatchCandidate(
+            episodes = meta.videos,
+            progressMap = mapOf(
+                3 to 9 to completedProgress("show:3:9", 3, 9, 2_000L)
+            ),
+            metaId = meta.id
+        )
+
+        val resolved = resolveSeasonEntryEpisodeId(
+            meta = meta,
+            selectedSeason = 3,
+            nextToWatch = nextToWatch,
+            lastFocusedEpisodeIdBySeason = mapOf(3 to "show:3:8"),
+            manualSeasonOverride = false,
+            preferStoredEpisodeFocus = false
+        )
+
+        assertEquals("show:3:10", resolved)
+    }
+
+    @Test
     fun specialsAreUsedOnlyWhenNoRegularSeasonEpisodesExist() {
         val meta = buildSeriesMeta(
             episode(0, 1, id = "show-s0e1"),

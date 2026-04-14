@@ -701,7 +701,6 @@ class AccountSettingsSyncService @Inject constructor(
         playerSettingsDataStore.setEnableBufferLogs(settings.playback.bufferNetwork.enableBufferLogs)
 
         traktSettingsDataStore.setContinueWatchingDaysCap(settings.trakt.continueWatchingDaysCap)
-        traktSettingsDataStore.setShowUnairedNextUp(settings.trakt.showUnairedNextUp)
         traktSettingsDataStore.setCatalogPreferences(
             enabledCatalogs = settings.trakt.catalogEnabledSet.toSet(),
             catalogOrder = settings.trakt.catalogOrder,

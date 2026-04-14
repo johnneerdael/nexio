@@ -253,7 +253,7 @@ private fun HeroTitleContent(
     portraitMode: Boolean
 ) {
     if (preview == null) return
-    val descriptionMaxLines = if (portraitMode) 4 else 5
+    val descriptionMaxLines = heroDescriptionMaxLines(portraitMode)
     val descriptionScale = if (portraitMode) 0.90f else 1f
     val titleScale = if (portraitMode) 0.92f else 1f
     val metaScale = 1f
@@ -434,6 +434,8 @@ private fun HeroTitleContent(
         }
     }
 }
+
+internal fun heroDescriptionMaxLines(portraitMode: Boolean): Int = 4
 
 @Composable
 private fun HeroMetaDivider(scale: Float) {

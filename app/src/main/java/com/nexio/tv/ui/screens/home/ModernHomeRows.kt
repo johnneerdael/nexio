@@ -238,6 +238,8 @@ private fun ModernCatalogRowItem(
 @Composable
 internal fun ModernRowSection(
     row: HeroCarouselRow,
+    isActiveRow: Boolean,
+    isVerticalRowsScrolling: Boolean,
     rowTitleBottom: Dp,
     defaultBringIntoViewSpec: BringIntoViewSpec,
     initialScrollIndex: Int,
@@ -392,7 +394,17 @@ internal fun ModernRowSection(
         val context = LocalContext.current
         val imageLoader = context.imageLoader
 
-        LaunchedEffect(row.key, row.items.size, modernCatalogCardWidth, modernCatalogCardHeight, continueWatchingCardWidth, continueWatchingCardHeight) {
+        LaunchedEffect(
+            row.key,
+            isActiveRow,
+            isVerticalRowsScrolling,
+            row.items.size,
+            modernCatalogCardWidth,
+            modernCatalogCardHeight,
+            continueWatchingCardWidth,
+            continueWatchingCardHeight
+        ) {
+            if (!shouldPrefetchModernRow(isActiveRow, isVerticalRowsScrolling)) return@LaunchedEffect
             val catalogWidthPx = with(density) { modernCatalogCardWidth.roundToPx() }
             val catalogHeightPx = with(density) { modernCatalogCardHeight.roundToPx() }
             val cwWidthPx = with(density) { continueWatchingCardWidth.roundToPx() }
@@ -470,12 +482,7 @@ internal fun ModernRowSection(
                 itemsIndexed(
                     items = row.items,
                     key = { _, item -> item.key },
-                    contentType = { _, item ->
-                        when (item.payload) {
-                            is ModernPayload.ContinueWatching -> "modern_cw_card"
-                            is ModernPayload.Catalog -> "modern_catalog_card"
-                        }
-                    }
+                    contentType = { _, item -> modernRowItemContentType(item) }
                 ) { index, item ->
                     val requester = uiCaches.requesterFor(row.key, item.key)
                     val isContinueWatchingRow = row.key == "continue_watching"
@@ -613,10 +620,22 @@ private fun ModernCarouselCard(
         rememberUpdatedState(cardWidth)
     }
     val animatedCardWidth by animatedCardWidthState
+    val frozenBackdropUrl = remember(item.key) {
+        mutableStateOf(item.heroPreview.frozenBackdropUrl ?: item.heroPreview.backdrop)
+    }
+    if (frozenBackdropUrl.value.isNullOrBlank() && !item.heroPreview.backdrop.isNullOrBlank()) {
+        frozenBackdropUrl.value = item.heroPreview.backdrop
+    }
+    val frozenLogoUrl = remember(item.key) {
+        mutableStateOf(item.heroPreview.frozenLogoUrl ?: item.heroPreview.logo)
+    }
+    if (frozenLogoUrl.value.isNullOrBlank() && !item.heroPreview.logo.isNullOrBlank()) {
+        frozenLogoUrl.value = item.heroPreview.logo
+    }
     val imageUrl = if (focusedPosterBackdropExpandEnabled && isBackdropExpanded) {
         item.heroPreview.backdrop ?: item.imageUrl ?: item.heroPreview.poster
     } else {
-        item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
+        frozenBackdropUrl.value ?: item.imageUrl ?: item.heroPreview.poster ?: item.heroPreview.backdrop
     }
     // Keep decode target stable across expand/collapse to avoid recreating image requests/painters
     // purely due to animated width changes.
@@ -648,8 +667,9 @@ private fun ModernCarouselCard(
     val maxLogoWidthPx = remember(maxRequestCardWidth, density) {
         with(density) { (maxRequestCardWidth * 0.62f).roundToPx() }
     }
-    val logoModel = remember(context, item.heroPreview.logo, maxLogoWidthPx, logoHeightPx) {
-        item.heroPreview.logo?.let {
+    val effectiveLogoUrl = frozenLogoUrl.value
+    val logoModel = remember(context, effectiveLogoUrl, maxLogoWidthPx, logoHeightPx) {
+        effectiveLogoUrl?.let {
             ImageRequest.Builder(context)
                 .data(it)
                 .crossfade(false)
@@ -658,13 +678,13 @@ private fun ModernCarouselCard(
                 .build()
         }
     }
-    var landscapeLogoLoadFailed by remember(item.heroPreview.logo) { mutableStateOf(false) }
+    var landscapeLogoLoadFailed by remember(effectiveLogoUrl) { mutableStateOf(false) }
     var trailerFirstFrameRendered by remember(trailerPreviewUrl) { mutableStateOf(false) }
     var lastExternalTrailerLaunchKey by remember { mutableStateOf<String?>(null) }
     val hasImage = !imageUrl.isNullOrBlank()
     val hasLandscapeLogo =
         (useLandscapePosters || isBackdropExpanded) &&
-            !item.heroPreview.logo.isNullOrBlank() &&
+            !effectiveLogoUrl.isNullOrBlank() &&
             !landscapeLogoLoadFailed
     var isFocused by remember { mutableStateOf(false) }
     var longPressTriggered by remember { mutableStateOf(false) }
