@@ -38,14 +38,18 @@ created: 2026-04-14
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 10-01-01 | 01 | 0 | CACHE-02 | T-10-01 | `/updates` pagination, update/delete/merge invalidation, and cursor advancement happen without exposing credentials | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbUpdateProcessorTest"` | No - W0 | pending |
-| 10-01-02 | 01 | 0 | CACHE-02 | T-10-02 | WorkManager update checks are unique, network constrained, and cannot retry-loop on invalid credentials | unit/Robolectric | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbUpdateSchedulingTest"` | No - W0 | pending |
-| 10-02-01 | 02 | 0 | CACHE-03 | T-10-03 | Reference data is schema-guarded, update-aware, and stale-serveable without raw secret leakage | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbReferenceDataServiceTest"` | No - W0 | pending |
-| 10-02-02 | 02 | 0 | CACHE-03 | T-10-03 | TVDB cache/reference namespaces ignore old schema payloads and preserve write batching | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.data.local.MetadataDiskCacheStoreTest" --tests "com.nexio.tv.data.local.MetadataDiskCacheStoreWriteBatchingTest"` | Partial | pending |
-| 10-03-01 | 03 | 0 | UX-03 | T-10-04 | TVDB outage serves last-known-good data before explicit fallback and never blanks safe cached TV detail or Continue Watching metadata | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbGracefulFallbackTest"` | No - W0 | pending |
-| 10-03-02 | 03 | 0 | UX-03 | T-10-05 | Invalid credentials block new TVDB network calls, keep cached data, and surface invalid status without repeated unauthorized retries | unit/ViewModel | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbCredentialHealthTest" --tests "com.nexio.tv.ui.screens.settings.TvdbSettingsViewModelTest"` | No - W0 | pending |
-| 10-04-01 | 04 | 0 | UX-03 | T-10-06 | Diagnostics represent provider choice, fallback reason, missing `airsTime`, date-only gating, poster-ratings override, skipped TMDB fetches, update status, stale cache, and invalid credentials | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbDiagnosticsTest"` | No - W0 | pending |
-| 10-04-02 | 04 | 0 | UX-03 | T-10-06 | Documentation contains TVDB setup, provider precedence, poster-ratings precedence, exact timing, date-only fallback, stale-cache behavior, and diagnostics guidance | static/docs | `rg -n "TVDB|poster-ratings|Continue Watching|date-only|stale cache|diagnostics" docs app/src/main/res` | Partial | pending |
+| 10-00-01 | 00 | 0 | UX-03,CACHE-02,CACHE-03 | T-10-00 | Phase 6-9 source contracts are bound before Phase 10 implementation creates or edits app code | file gate | `test -f app/src/main/java/com/nexio/tv/data/local/TvdbSettingsDataStore.kt && test -f app/src/main/java/com/nexio/tv/data/remote/api/TvdbApi.kt && test -f app/src/main/java/com/nexio/tv/core/tvdb/TvMetadataRouter.kt` | Existing after Phase 6-9 | pending |
+| 10-00-02 | 00 | 0 | UX-03,CACHE-02,CACHE-03 | T-10-05 | Shared diagnostics contract redacts secrets and provides structured log fields for all producers | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbReliabilityDiagnosticsTest"` | No - W0 | pending |
+| 10-01-01 | 01 | 1 | CACHE-02 | T-10-01 | `/updates` DTOs preserve delete/merge fields including `mergeToId` and `mergeToEntityType` | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbUpdateProcessorTest"` | No - W0 | pending |
+| 10-01-02 | 01 | 1 | CACHE-02 | T-10-01,T-10-05 | `/updates` processing invalidates cache, persists merge aliases, emits update diagnostics/logs, and advances cursor only after success | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbUpdateProcessorTest"` | No - W0 | pending |
+| 10-02-01 | 02 | 2 | CACHE-02,UX-03 | T-10-02 | WorkManager update checks are unique, network constrained, and cannot retry-loop on invalid credentials | unit/Robolectric | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbUpdateSchedulingTest"` | No - W0 | pending |
+| 10-02-02 | 02 | 2 | CACHE-02,UX-03 | T-10-02,T-10-05 | Startup/worker coordinator and credential health gate emit sanitized diagnostics/logs while blocking invalid credentials | unit/Robolectric | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbUpdateSchedulingTest"` | No - W0 | pending |
+| 10-03-01 | 03 | 3 | CACHE-03,UX-03 | T-10-03 | Reference endpoint contracts and cache namespace tests cover schema guard, stale labels, and batching | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbReferenceDataServiceTest" --tests "com.nexio.tv.data.local.MetadataDiskCacheStoreTest" --tests "com.nexio.tv.data.local.MetadataDiskCacheStoreWriteBatchingTest"` | Partial | pending |
+| 10-03-02 | 03 | 3 | CACHE-03,UX-03 | T-10-03,T-10-05 | Reference service warms on startup after credential gating, refreshes from update events, and emits sanitized diagnostics/logs | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbReferenceDataServiceTest" --tests "com.nexio.tv.data.local.MetadataDiskCacheStoreTest" --tests "com.nexio.tv.data.local.MetadataDiskCacheStoreWriteBatchingTest"` | Partial | pending |
+| 10-04-01 | 04 | 4 | UX-03 | T-10-04 | Tests prove TVDB outage, invalid credentials, field-level fallback, and merge alias read-path behavior | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbGracefulFallbackTest" --tests "com.nexio.tv.core.tvdb.TvdbCredentialHealthTest"` | No - W0 | pending |
+| 10-04-02 | 04 | 4 | UX-03 | T-10-04,T-10-05 | TVDB metadata reads serve last-known-good data, resolve merge aliases, and emit provider/fallback diagnostics/logs without secrets | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbGracefulFallbackTest" --tests "com.nexio.tv.core.tvdb.TvdbCredentialHealthTest" --tests "com.nexio.tv.ui.screens.home.HomeViewModelContinueWatchingTest"` | No - W0 | pending |
+| 10-05-01 | 05 | 5 | UX-03,CACHE-02,CACHE-03 | T-10-05,T-10-06 | Diagnostics DataStore implements the shared recorder, sanitizes persistence/logging, and surfaces status/detail in settings | unit/ViewModel | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvdbDiagnosticsTest" --tests "com.nexio.tv.ui.screens.settings.TvdbSettingsViewModelTest"` | No - W0 | pending |
+| 10-06-01 | 06 | 6 | UX-03,CACHE-02,CACHE-03 | T-10-07 | Documentation contains TVDB setup, provider precedence, update/reference caching, exact timing, date-only fallback, stale-cache behavior, and diagnostics guidance | static/docs | `rg -n "TVDB|TMDB remains movie|poster-ratings|Continue Watching|airsTime|date-only|/updates|reference data|stale-cache|last-known-good|Debug settings|diagnostics" docs/nexio-power-user-setup-guide.md docs/nexio-features-list.md` | Partial | pending |
 
 *Status: pending, green, red, flaky*
 
@@ -54,6 +58,7 @@ created: 2026-04-14
 ## Wave 0 Requirements
 
 - [ ] `app/src/test/java/com/nexio/tv/core/tvdb/TvdbUpdateProcessorTest.kt` - covers CACHE-02 `/updates` pagination, update/delete/merge invalidation, and cursor ordering.
+- [ ] `app/src/test/java/com/nexio/tv/core/tvdb/TvdbReliabilityDiagnosticsTest.kt` - covers shared reason codes, recorder contract expectations, sanitization, and structured log fields.
 - [ ] `app/src/test/java/com/nexio/tv/core/tvdb/TvdbUpdateSchedulingTest.kt` - covers WorkManager unique periodic scheduling, network constraints, and app-start catch-up coordinator wiring if WorkManager is added.
 - [ ] `app/src/test/java/com/nexio/tv/core/tvdb/TvdbReferenceDataServiceTest.kt` - covers CACHE-03 warming, stale-on-failure, schema guard, and update-triggered refresh.
 - [ ] `app/src/test/java/com/nexio/tv/core/tvdb/TvdbGracefulFallbackTest.kt` - covers UX-03 last-known-good cache and explicit fallback behavior.
@@ -77,12 +82,14 @@ created: 2026-04-14
 
 | Threat Ref | Threat | Mitigation Expected In Plans |
 |------------|--------|------------------------------|
+| T-10-00 | Phase 10 implementation runs against guessed or absent Phase 6-9 TVDB classes | Wave 0 binding gate stops execution until exact TVDB source files and required symbols exist |
 | T-10-01 | Update cursor advances before invalidation succeeds, permanently skipping changed records | Processor advances cursor only after all pages and cache mutations complete |
 | T-10-02 | WorkManager or startup catch-up causes a TVDB auth/network retry storm | Credential-health gate blocks new calls on invalid credentials and worker reports a handled blocked state |
 | T-10-03 | Malformed reference/update payload poisons cache or leaks raw IDs into user-visible UI | Validate entity types, IDs, timestamps, merge targets, labels, URLs, and schema versions before writes |
 | T-10-04 | Outage or invalid credentials blanks TV detail or Continue Watching despite usable cached data | Serve last-known-good TVDB data first; explicit fallback only when cache cannot satisfy the surface |
 | T-10-05 | Diagnostics or logs expose TVDB API key, PIN, bearer token, or auth headers | Diagnostic payloads use reason codes and non-secret status only |
 | T-10-06 | Diagnostics are too vague to prove provider choice, fallback, date-only gating, poster override, or skipped TMDB TV fetches | Typed diagnostic reasons cover every reason required by context D-11 |
+| T-10-07 | Docs cause incorrect provider setup or troubleshooting behavior | Docs state provider precedence, stale-cache behavior, update/reference caching, and diagnostics location exactly |
 
 ---
 
