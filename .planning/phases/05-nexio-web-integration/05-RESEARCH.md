@@ -149,12 +149,12 @@ nexio-web/
 ├── server/api/integrations/
 │   └── profiles/
 │       ├── trakt/
-│       │   ├── device-code.post.ts     # start Trakt device flow for a profile_id
-│       │   ├── device-token.post.ts    # poll / complete Trakt device flow
+│       │   ├── authorize.get.ts        # start Trakt browser OAuth redirect for a profile_id
+│       │   ├── callback.get.ts         # exchange browser OAuth code and store profile tokens
 │       │   └── disconnect.post.ts      # revoke + delete tokens for a profile_id
 │       └── simkl/
-│           ├── device-code.post.ts
-│           ├── device-token.post.ts
+│           ├── authorize.get.ts
+│           ├── callback.get.ts
 │           └── disconnect.post.ts
 ├── components/portal/
 │   ├── ProfileDashboard.vue      # grid of ProfileCard components
@@ -162,7 +162,7 @@ nexio-web/
 │   ├── ProfileDetailShell.vue    # tab shell (Auth / Catalogs / Formatter)
 │   ├── ProfileEditorSection.vue  # inline name edit + photo upload within detail header
 │   ├── ProfilePhotoUpload.vue    # avatar click-to-upload control
-│   ├── ProfileAuthTab.vue        # per-profile Trakt/Simkl link/unlink
+│   ├── AuthPanel.vue             # existing component extended with profile mode for link/unlink
 │   └── DeleteProfileModal.vue    # teleported delete confirmation modal
 └── composables/
     └── useProfileStore.ts        # profile CRUD state + per-profile auth/catalog/formatter ops
@@ -198,18 +198,17 @@ export default defineEventHandler(async (event) => {
 })
 ```
 
-### Pattern 2: Per-Profile Trakt/Simkl Device Flow (Web)
+### Pattern 2: Per-Profile Trakt/Simkl Browser OAuth Redirect (Web)
 
-The existing device-flow infra in `server/api/integrations/trakt/` handles account-level Trakt auth. For per-profile auth, new routes under `server/api/integrations/profiles/trakt/` accept an additional `profile_id` in the request body and store the resulting tokens scoped to that profile in Supabase (new table: `profile_auth_tokens`).
+Locked decision D-10 controls the web path: per-profile auth in nexio-web uses browser OAuth redirect, not a new web device-code flow. New routes under `server/api/integrations/profiles/{provider}/` carry `profile_id` in signed state, exchange the callback code, and store resulting tokens scoped to that profile in Supabase (`profile_auth_tokens`).
 
 ```typescript
-// Source: extends nexio-web/server/api/integrations/trakt/device-token.post.ts pattern [VERIFIED]
-// New: server/api/integrations/profiles/trakt/device-token.post.ts
+// New: server/api/integrations/profiles/trakt/callback.get.ts
 export default defineEventHandler(async (event) => {
-  const body = await readJsonBody<{ device_code: string; profile_id: number }>(event)
   const token = bearerToken(event)
   await supabaseUser(event)
-  // ... poll Trakt API, on success call supabaseFetch to store tokens
+  // validate state -> recover profile_id -> exchange code
+  // on success call supabaseFetch service_set_profile_auth_token
   // scoped to profile_id in new profile_auth_tokens table
 })
 ```
@@ -436,22 +435,23 @@ export default defineEventHandler(async (event) => {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Phase 4 RPC availability**
    - What we know: Phase 4 defines per-profile settings blobs via new Supabase RPCs (v8 contract). Phase 5 depends on them to load per-profile catalog/formatter settings in the web portal.
-   - What's unclear: The exact RPC names and payload shape from Phase 4 are not yet defined (Phase 4 is still pending).
-   - Recommendation: Phase 5 plans must include a Wave 0 step to verify Phase 4 RPCs are in place. If Phase 4 is not complete, catalog and formatter tabs in the profile detail shell cannot be wired to real data.
+   - Resolution: Phase 4 Plan 02 and Summary resolve the RPC names as `sync_push_profile_settings_blob` and `sync_pull_profile_settings_blob`. The Android service calls them with `p_profile_id`, `p_settings_json`, and `p_platform` for push, and `p_profile_id`, `p_platform` for pull. Phase 5 Plan 04 must use these exact names and must not fall back to empty settings.
 
 2. **profile_auth_tokens table design**
    - What we know: Per-profile Trakt/Simkl tokens need a separate table from the existing `account_secrets` table. The new table needs `(user_id, profile_id, token_type, token_value, updated_at)`.
-   - What's unclear: Whether the existing `account_secrets` table can be extended with a nullable `profile_id` column (simpler) or whether a truly separate table is required.
-   - Recommendation: A nullable `profile_id` column on `account_secrets` with a partial index on `(user_id, profile_id, secret_type)` is simpler than a new table and reuses existing secret storage patterns. Use this unless Phase 4 already decided differently.
+   - Resolution: Use the dedicated `profile_auth_tokens` table planned in 05-01. This honors the Phase 5 plan boundary and avoids overloading the existing account-scoped `account_secrets` table. Store `token_payload` as JSONB and have Android decode it as JSON (`JsonObject` / `Map<String, JsonElement>`), not `Map<String, String>`, because OAuth payloads include numeric fields such as `created_at` and `expires_in`.
 
 3. **Trakt/Simkl per-profile device flow vs redirect flow**
    - What we know: The TV app uses device code flow (code + poll). The web portal also currently uses device code flow for account-level Trakt/Simkl.
-   - What's unclear: For web-based per-profile linking, should the flow be the same device-code flow (show code to user, poll) or a standard OAuth redirect (browser redirect back to `/account?view=profiles&profile_id=2`)?
-   - Recommendation: Keep device code flow for consistency with existing portal UX. Redirect flow requires careful handling of state restoration after the OAuth callback, which is more complex.
+   - Resolution: Locked decision D-10 controls: web handles OAuth redirect in the browser and stores tokens in Supabase scoped to profile ID. Phase 5 Plan 03 must implement redirect/callback routes for per-profile web linking, not new web device-code flows.
+
+4. **Simkl revoke endpoint**
+   - What we know: Local inspection shows `SimklAuthService.revokeAndLogout()` only clears local auth and `SimklApi.kt` has no revoke endpoint method. Trakt has `@POST("oauth/revoke") suspend fun revokeToken(...)`.
+   - Resolution: D-12 still requires full revoke for Simkl. Phase 5 Plan 03 must include a blocking verification/decision task before implementing Simkl disconnect. If executor cannot confirm an official Simkl revoke endpoint from the provider API, execution must stop for a decision instead of silently deleting only Supabase tokens.
 
 ---
 

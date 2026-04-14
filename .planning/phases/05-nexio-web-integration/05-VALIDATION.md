@@ -1,8 +1,8 @@
 ---
 phase: 5
 slug: nexio-web-integration
-status: draft
-nyquist_compliant: false
+status: planned
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-04-14
 ---
@@ -40,11 +40,11 @@ Note: nexio-web has no test framework detected. Web-side verification is manual 
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 05-01-01 | 01 | 1 | WEB-01 | T-05-01 | Profile CRUD RPCs filter by auth.uid(), profile_index != 1 for delete | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.sync.ProfileSyncServiceTest"` | ❌ W0 | ⬜ pending |
-| 05-02-01 | 02 | 1 | WEB-02 | T-05-02 | Per-profile auth tokens scoped by user_id + profile_id | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.sync.ProfileAuthSyncTest"` | ❌ W0 | ⬜ pending |
-| 05-03-01 | 03 | 2 | WEB-03 | — | N/A | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.sync.ProfileCatalogSyncTest"` | ❌ W0 | ⬜ pending |
-| 05-04-01 | 04 | 2 | WEB-04 | — | N/A | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.sync.ProfileFormatterSyncTest"` | ❌ W0 | ⬜ pending |
-| 05-05-01 | 05 | 3 | WEB-05 | T-05-03 | MIME type check + sharp validation before storage; public bucket only for avatar images | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.profile.ProfileAvatarTest"` | ❌ W0 | ⬜ pending |
+| 05-00-01 | 00 | 0 | WEB-01 | T-05-01 | Profile CRUD RPCs filter by auth.uid(), profile_index != 1 for delete | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.sync.ProfileSyncServiceTest"` | ❌ planned in 05-00 | ⬜ pending |
+| 05-00-02 | 00 | 0 | WEB-02 | T-05-02 | Per-profile auth tokens scoped by user_id + profile_id | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.sync.ProfileAuthSyncTest"` | ❌ planned in 05-00 | ⬜ pending |
+| 05-00-03 | 00 | 0 | WEB-03 | — | N/A | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.sync.ProfileCatalogSyncTest"` | ❌ planned in 05-00 | ⬜ pending |
+| 05-00-04 | 00 | 0 | WEB-04 | — | N/A | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.sync.ProfileFormatterSyncTest"` | ❌ planned in 05-00 | ⬜ pending |
+| 05-00-05 | 00 | 0 | WEB-05 | T-05-03 | MIME type check + sharp validation before storage; public bucket only for avatar images | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.profile.ProfileAvatarTest"` | ❌ planned in 05-00 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -52,11 +52,13 @@ Note: nexio-web has no test framework detected. Web-side verification is manual 
 
 ## Wave 0 Requirements
 
-- [ ] `app/src/test/java/com/nexio/tv/sync/ProfileSyncServiceTest.kt` — stubs for WEB-01
-- [ ] `app/src/test/java/com/nexio/tv/sync/ProfileAuthSyncTest.kt` — stubs for WEB-02
-- [ ] `app/src/test/java/com/nexio/tv/sync/ProfileCatalogSyncTest.kt` — stubs for WEB-03
-- [ ] `app/src/test/java/com/nexio/tv/sync/ProfileFormatterSyncTest.kt` — stubs for WEB-04
-- [ ] `app/src/test/java/com/nexio/tv/profile/ProfileAvatarTest.kt` — stubs for WEB-05
+Planned in `.planning/phases/05-nexio-web-integration/05-00-PLAN.md`.
+
+- [ ] `app/src/test/java/com/nexio/tv/sync/ProfileSyncServiceTest.kt` — stubs for WEB-01 (created by 05-00 Task 1)
+- [ ] `app/src/test/java/com/nexio/tv/sync/ProfileAuthSyncTest.kt` — stubs for WEB-02 (created by 05-00 Task 1)
+- [ ] `app/src/test/java/com/nexio/tv/sync/ProfileCatalogSyncTest.kt` — stubs for WEB-03 (created by 05-00 Task 2)
+- [ ] `app/src/test/java/com/nexio/tv/sync/ProfileFormatterSyncTest.kt` — stubs for WEB-04 (created by 05-00 Task 2)
+- [ ] `app/src/test/java/com/nexio/tv/profile/ProfileAvatarTest.kt` — stubs for WEB-05 (created by 05-00 Task 3)
 
 ---
 
@@ -74,9 +76,9 @@ Note: nexio-web has no test framework detected. Web-side verification is manual 
 
 - [ ] All tasks have `<automated>` verify or Wave 0 dependencies
 - [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
+- [x] Wave 0 covers all MISSING references via 05-00-PLAN.md
 - [ ] No watch-mode flags
 - [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** planned; execution remains pending until 05-00 completes

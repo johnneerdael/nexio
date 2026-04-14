@@ -178,9 +178,9 @@ Avatar photo upload control, used within ProfileDetailShell header.
 - Accepted: `image/jpeg`, `image/png`, `image/webp`. Max display: 256×256px (server-side resize per D-15).
 - Error inline: `text-xs text-danger mt-1` below the avatar area
 
-### ProfileAuthTab (per-profile Auth sub-panel)
+### AuthPanel Profile Mode (per-profile Auth sub-panel)
 
-Reuses `SettingsWorkspace` pattern. Shows Trakt + Simkl link/unlink for the selected profile.
+Extends the existing `AuthPanel.vue` component. Shows Trakt + Simkl link/unlink for the selected profile without creating a separate auth tab component.
 
 - Section header: same eyebrow/title pattern as other panels
 - Profile context indicator chip: `"Managing: {profile name}"` in `text-xs font-bold uppercase tracking-[0.18em] text-secondary bg-secondary/10 border border-secondary/20 px-3 py-1 rounded-full` — rendered above the link/unlink controls
