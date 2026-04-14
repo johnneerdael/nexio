@@ -234,8 +234,9 @@
           "useRealParser": true
         }
       ],
-      "expectedWinnerStreamKey": "framestor",
+      "expectedWinnerStreamKey": "triton_theatrical",
       "acceptableWinnerKeys": [
+        "triton_theatrical",
         "framestor",
         "legion"
       ],

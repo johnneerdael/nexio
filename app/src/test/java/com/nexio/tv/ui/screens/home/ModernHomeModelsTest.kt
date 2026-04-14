@@ -1,6 +1,8 @@
 package com.nexio.tv.ui.screens.home
 
+import android.view.KeyEvent
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
@@ -134,6 +136,56 @@ class ModernHomeModelsTest {
     }
 
     @Test
+    fun `buildCatalogItem carries frozen artwork from previous cached item`() {
+        val row = CatalogRow(
+            addonId = "addon",
+            addonName = "Addon",
+            addonBaseUrl = "https://addon.example",
+            catalogId = "catalog",
+            catalogName = "Catalog",
+            type = ContentType.MOVIE,
+            items = emptyList()
+        )
+        val original = MetaPreview(
+            id = "tt123",
+            type = ContentType.MOVIE,
+            name = "Original",
+            poster = "poster",
+            posterShape = PosterShape.POSTER,
+            background = "original-backdrop",
+            logo = "original-logo",
+            description = null,
+            releaseInfo = "2025",
+            runtime = null,
+            imdbRating = null,
+            genres = emptyList()
+        )
+        val cached = buildCatalogItem(
+            item = original,
+            row = row,
+            useLandscapePosters = true,
+            occurrence = 0
+        )
+        val enriched = original.copy(
+            background = "enriched-backdrop",
+            logo = "enriched-logo"
+        )
+
+        val rebuilt = buildCatalogItem(
+            item = enriched,
+            row = row,
+            useLandscapePosters = true,
+            occurrence = 0,
+            previousCachedItem = cached
+        )
+
+        assertEquals("original-backdrop", rebuilt.heroPreview.frozenBackdropUrl)
+        assertEquals("original-logo", rebuilt.heroPreview.frozenLogoUrl)
+        assertEquals("enriched-backdrop", rebuilt.heroPreview.backdrop)
+        assertEquals("enriched-logo", rebuilt.heroPreview.logo)
+    }
+
+    @Test
     fun `applyTomatoesToContinueWatchingItem updates persisted display metadata`() {
         val item = ContinueWatchingItem.InProgress(
             progress = WatchProgress(
@@ -203,6 +255,43 @@ class ModernHomeModelsTest {
         assertEquals("Paradise", selection?.trailerTitle)
         assertEquals(builtItem.subtitle, selection?.trailerReleaseInfo)
         assertNull(selection?.fallbackTrailerYtId)
+    }
+
+    @Test
+    fun `modern row prefetch only runs for the active row while vertical scrolling is idle`() {
+        assertEquals(true, shouldPrefetchModernRow(isActiveRow = true, isVerticalRowsScrolling = false))
+        assertEquals(false, shouldPrefetchModernRow(isActiveRow = false, isVerticalRowsScrolling = false))
+        assertEquals(false, shouldPrefetchModernRow(isActiveRow = true, isVerticalRowsScrolling = true))
+    }
+
+    @Test
+    fun `modern home repeat focus handling only converts dpad repeat keys`() {
+        assertEquals(
+            ModernHomeRepeatFocusDirection.Down,
+            modernHomeRepeatFocusDirectionForKeyCode(KeyEvent.KEYCODE_DPAD_DOWN)
+        )
+        assertEquals(
+            ModernHomeRepeatFocusDirection.Up,
+            modernHomeRepeatFocusDirectionForKeyCode(KeyEvent.KEYCODE_DPAD_UP)
+        )
+        assertEquals(
+            ModernHomeRepeatFocusDirection.Left,
+            modernHomeRepeatFocusDirectionForKeyCode(KeyEvent.KEYCODE_DPAD_LEFT)
+        )
+        assertEquals(
+            ModernHomeRepeatFocusDirection.Right,
+            modernHomeRepeatFocusDirectionForKeyCode(KeyEvent.KEYCODE_DPAD_RIGHT)
+        )
+        assertNull(modernHomeRepeatFocusDirectionForKeyCode(KeyEvent.KEYCODE_DPAD_CENTER))
+        assertNull(modernHomeRepeatFocusDirectionForKeyCode(KeyEvent.KEYCODE_ENTER))
+    }
+
+    @Test
+    fun `modern home repeat focus handling uses slower vertical throttle`() {
+        assertEquals(112L, modernHomeRepeatThrottleMs(ModernHomeRepeatFocusDirection.Down))
+        assertEquals(112L, modernHomeRepeatThrottleMs(ModernHomeRepeatFocusDirection.Up))
+        assertEquals(80L, modernHomeRepeatThrottleMs(ModernHomeRepeatFocusDirection.Left))
+        assertEquals(80L, modernHomeRepeatThrottleMs(ModernHomeRepeatFocusDirection.Right))
     }
 
     private fun buildModernCarouselItem(tomatoesText: String?): ModernCarouselItem {

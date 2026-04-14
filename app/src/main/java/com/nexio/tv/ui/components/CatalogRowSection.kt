@@ -52,6 +52,8 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.util.formatAddonTypeLabel
 
+internal fun catalogRowItemContentType(item: MetaPreview): String = item.apiType
+
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun CatalogRowSection(
@@ -211,7 +213,7 @@ fun CatalogRowSection(
                 key = { index, item ->
                     rowItemFocusKey(index, item)
                 },
-                contentType = { _, _ -> "content_card" }
+                contentType = { _, item -> catalogRowItemContentType(item) }
             ) { index, item ->
                 ContentCard(
                     item = item,

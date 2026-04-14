@@ -41,7 +41,9 @@ internal data class HeroPreview(
     val genres: List<String>,
     val poster: String?,
     val backdrop: String?,
-    val imageUrl: String?
+    val imageUrl: String?,
+    val frozenBackdropUrl: String? = null,
+    val frozenLogoUrl: String? = null
 )
 
 @Immutable
@@ -145,6 +147,20 @@ internal data class ModernCatalogRowBuildCacheEntry(
     val showCatalogTypeSuffix: Boolean,
     val mappedRow: HeroCarouselRow
 )
+
+internal fun modernHomeRowContentType(row: HeroCarouselRow): String = row.apiType ?: "modern_home_row"
+
+internal fun modernRowItemContentType(item: ModernCarouselItem): String {
+    return when (val payload = item.payload) {
+        is ModernPayload.ContinueWatching -> "modern_cw_card"
+        is ModernPayload.Catalog -> payload.itemType
+    }
+}
+
+internal fun shouldPrefetchModernRow(
+    isActiveRow: Boolean,
+    isVerticalRowsScrolling: Boolean
+): Boolean = isActiveRow && !isVerticalRowsScrolling
 
 @Stable
 internal class ModernHomeUiCaches {
@@ -485,9 +501,14 @@ internal fun buildCatalogItem(
     item: MetaPreview,
     row: CatalogRow,
     useLandscapePosters: Boolean,
-    occurrence: Int
+    occurrence: Int,
+    previousCachedItem: ModernCarouselItem? = null
 ): ModernCarouselItem {
     val displayMetadata = item.toHomeDisplayMetadata()
+    val frozenBackdrop = previousCachedItem?.heroPreview?.frozenBackdropUrl?.takeIf { it.isNotBlank() }
+        ?: firstNonBlank(item.background, displayMetadata.backdrop)
+    val frozenLogo = previousCachedItem?.heroPreview?.frozenLogoUrl?.takeIf { it.isNotBlank() }
+        ?: firstNonBlank(item.logo, displayMetadata.logo)
     val heroPreview = HeroPreview(
         title = displayMetadata.title ?: item.name,
         logo = displayMetadata.logo ?: item.logo,
@@ -503,7 +524,9 @@ internal fun buildCatalogItem(
             firstNonBlank(displayMetadata.backdrop, displayMetadata.poster, item.background, item.poster)
         } else {
             firstNonBlank(displayMetadata.poster, displayMetadata.backdrop, item.poster, item.background)
-        }
+        },
+        frozenBackdropUrl = frozenBackdrop,
+        frozenLogoUrl = frozenLogo
     )
 
     return ModernCarouselItem(
