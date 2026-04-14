@@ -151,19 +151,6 @@
   <string name="sub_outline">Contorno</string>
   <string name="sub_outline_sub">Añade contorno alrededor del texto del subtítulo para una mejor visibilidad</string>
   <string name="sub_outline_color">Color del contorno</string>
-  <string name="sub_advanced_section">Renderizado avanzado de subtítulos</string>
-  <string name="sub_libass">Usar libass para subtítulos ASS/SSA</string>
-  <string name="sub_libass_sub">Experimental: Renderizado ASS/SSA avanzado (estilos, posicionamiento, animaciones)</string>
-  <string name="sub_libass_mode">Modo de renderizado Libass</string>
-  <string name="sub_mode_overlay_gl">Superposición OpenGL (Recomendado)</string>
-  <string name="sub_mode_overlay_gl_sub">Mejor calidad con soporte HDR. Renderiza los subtítulos en un hilo separado.</string>
-  <string name="sub_mode_overlay_canvas">Superposición Canvas</string>
-  <string name="sub_mode_effects_gl">Efectos OpenGL</string>
-  <string name="sub_mode_effects_gl_sub">Soporte de animación usando efectos Media3. Más rápido que Canvas.</string>
-  <string name="sub_mode_effects_canvas">Efectos Canvas</string>
-  <string name="sub_mode_effects_canvas_sub">Soporte de animación usando efectos Media3 con renderizado Canvas.</string>
-  <string name="sub_mode_standard">Pistas estándar</string>
-  <string name="sub_mode_standard_sub">Renderizado de subtítulos básico sin soporte de animación. Es el más compatible.</string>
   <string name="sub_org_none">Ninguno (orden predeterminado)</string>
   <string name="sub_org_by_lang">Por idioma</string>
   <string name="sub_org_by_addon">Por complemento</string>
@@ -735,7 +722,6 @@
   <string name="audio_fire_os_compatibility_fallback_sub">Permite respaldos de compatibilidad con Fire TV, degradando del núcleo DTS antiguo y recuperación de passthrough. Desactiva esto junto al empaquetador IEC para una paridad estricta al estilo Kodi.</string>
   <string name="audio_fire_os_supervise_audio_delay_title">Fire OS - Supervisar retardo de audio</string>
   <string name="audio_fire_os_supervise_audio_delay_sub">Supervisión del retardo de arranque IEC al estilo Kodi. Actívalo solo en firmware Fire OS afectado cuando el passthrough inicia con segundos de desfase.</string>
-  <string name="sub_mode_overlay_canvas_sub">Soporte HDR con renderizado de canvas. Puede bloquear el hilo de la interfaz de usuario.</string>
   <string name="autoplay_prefer_binge_group">Preferir el grupo Binge (siguiente episodio)</string>
   <string name="autoplay_prefer_binge_group_sub">Intenta usar el mismo perfil de origen (mismo complemento/grupo de calidad) antes de las reglas normales de reproducción automática.</string>
   <string name="layout_hide_unreleased">Ocultar contenido inédito</string>

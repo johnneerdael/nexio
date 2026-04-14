@@ -18,6 +18,7 @@ import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.StreamRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
+import com.nexio.tv.ui.screens.player.ass.AssSsaRenderOverlayView
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -106,6 +107,10 @@ class PlayerViewModel @Inject constructor(
 
     fun attachMpvView(view: NexioMpvSurfaceView?) {
         controller.attachMpvView(view)
+    }
+
+    internal fun setAssSsaRenderOverlayViewProvider(provider: (() -> AssSsaRenderOverlayView?)?) {
+        controller.assSsaOverlayViewProvider = provider
     }
 
     fun startInitialPlaybackIfNeeded() {
