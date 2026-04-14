@@ -466,7 +466,7 @@ private fun ProfileHeaderRow(
             name = profile.name,
             colorHex = profile.avatarColorHex,
             size = 40.dp,
-            avatarImageUrl = null
+            avatarImageUrl = profile.avatarUrl
         )
         Column {
             androidx.tv.material3.Text(

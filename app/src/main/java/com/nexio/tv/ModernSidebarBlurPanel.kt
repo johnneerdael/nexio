@@ -373,7 +373,8 @@ private fun ProfileSwitcherSection(
             ProfileAvatarCircle(
                 name = activeProfile.name,
                 colorHex = activeProfile.avatarColorHex,
-                size = 40.dp
+                size = 40.dp,
+                avatarImageUrl = activeProfile.avatarUrl
             )
             Text(
                 text = activeProfile.name,
@@ -454,7 +455,8 @@ private fun ProfileSwitcherRow(
         ProfileAvatarCircle(
             name = profile.name,
             colorHex = profile.avatarColorHex,
-            size = 32.dp
+            size = 32.dp,
+            avatarImageUrl = profile.avatarUrl
         )
         Text(
             text = profile.name,
