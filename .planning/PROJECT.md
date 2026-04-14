@@ -24,6 +24,7 @@ Reliable, high-quality streaming playback with smart source selection and seamle
 - Settings cascade: shared vs per-profile classification
 - Per-profile sync infrastructure to Supabase
 - Profile cleanup on deletion
+- nexio-web: profile CRUD from master account, per-profile management (Trakt/Simkl auth, catalog ordering, formatter config) for non-default profiles
 
 ## Requirements
 
@@ -54,6 +55,8 @@ Reliable, high-quality streaming playback with smart source selection and seamle
 - [ ] Settings cascade (shared addons/debrid vs per-profile)
 - [ ] Per-profile sync to Supabase
 - [ ] Profile deletion with full cleanup
+- [ ] nexio-web profile CRUD from master account
+- [ ] nexio-web per-profile management for non-default profiles (Trakt/Simkl auth, catalog ordering, formatter config)
 
 ### Out of Scope
 
@@ -79,6 +82,12 @@ Addons, TMDB, MDBList, IMDB Ratings, OMDB, Auto Translate, Top-Posters, RPDB, Re
 ### Per-Profile Settings
 
 Trakt account, Simkl account, language, theme, player preferences, catalog order/visibility, and all other non-shared settings.
+
+### nexio-web Profile Management
+
+- Master account can CRUD all profiles from nexio-web
+- Non-default profiles can manage via nexio-web: Trakt/Simkl auth, catalog ordering, formatter config
+- Other settings for non-default profiles are only available on-device (not exposed in nexio-web)
 
 ## Constraints
 
