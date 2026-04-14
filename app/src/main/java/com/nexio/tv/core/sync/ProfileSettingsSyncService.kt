@@ -70,7 +70,7 @@ class ProfileSettingsSyncService @Inject constructor(
         "trakt_settings",
         "simkl_settings",
         "player_settings",
-        "layout_preferences",
+        "layout_settings",
         "theme_settings"
     )
 
