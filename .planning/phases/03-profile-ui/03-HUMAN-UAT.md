@@ -3,12 +3,16 @@ status: partial
 phase: 03-profile-ui
 source: [03-VERIFICATION.md]
 started: 2026-04-14T13:30:00Z
-updated: 2026-04-14T13:30:00Z
+updated: 2026-04-14T13:18:22Z
 ---
 
 ## Current Test
 
-[awaiting human testing]
+number: 1
+name: D-pad avatar navigation
+expected: |
+  Left/right D-pad navigates between profile avatars, focused avatar shows 1.15x scale with FocusRing colored border, DPAD_CENTER selects profile
+awaiting: user response
 
 ## Tests
 
