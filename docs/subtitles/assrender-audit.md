@@ -2,7 +2,7 @@
 
 ## Goal
 
-Replace the optional `io.github.peerless2012:ass-media` path with a local, always-on ASS/SSA rendering pipeline that preserves Nexio's custom `SubtitleOffsetRenderersFactory`, subtitle delay, and AI subtitle translation hooks.
+Replace the legacy external libass integration path with a local, always-on ASS/SSA rendering pipeline that preserves Nexio's custom `SubtitleOffsetRenderersFactory`, subtitle delay, and AI subtitle translation hooks.
 
 ## Sources Audited
 
@@ -32,7 +32,7 @@ Reference checkout: `~/Scripts/assrender`. Paths below are relative to that chec
 | Time renderer | Port into Nexio's existing renderer factory. |
 | Native direct libass bridge | Port. |
 | FFmpeg stream-opening pipeline | Exclude. Media3 remains the extractor and data-source owner. |
-| External `ass-media` path | Remove. |
+| External legacy libass path | Remove. |
 
 ## Aegisub Coverage Validation
 
