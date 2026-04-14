@@ -224,7 +224,7 @@ private fun ProfileCard(
                     name = profile.name,
                     colorHex = profile.avatarColorHex,
                     size = 96.dp,
-                    avatarImageUrl = null
+                    avatarImageUrl = profile.avatarUrl
                 )
             }
 
