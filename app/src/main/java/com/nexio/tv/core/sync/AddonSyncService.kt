@@ -5,6 +5,8 @@ import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.data.local.AddonPreferences
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.data.remote.supabase.AccountSnapshotRpcResponse
+import com.nexio.tv.data.remote.supabase.AccountAddonPayload
+import com.nexio.tv.data.remote.supabase.AccountAddonSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountSyncMutationResult
 import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.Dispatchers
@@ -124,9 +126,15 @@ class AddonSyncService @Inject constructor(
             Result.success(
                 snapshot.addons
                     .sortedBy { it.sortOrder }
-                    .map { addon ->
+                    .mapNotNull { addon ->
+                        val resolvedUrl = resolveRemoteAddonUrl(addon)
+                            .onFailure { error ->
+                                Log.w(TAG, "getRemoteAddonConfigs: failed to resolve addon url=${addon.url}", error)
+                            }
+                            .getOrNull()
+                            ?: return@mapNotNull null
                         AddonPreferences.AddonInstallConfig(
-                            url = addon.url,
+                            url = resolvedUrl,
                             parserPreset = runCatching {
                                 enumValueOf<AddonParserPreset>(addon.parserPreset.trim().uppercase())
                             }.getOrDefault(AddonParserPreset.GENERIC)
@@ -136,6 +144,32 @@ class AddonSyncService @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get remote addon configs", e)
             Result.failure(e)
+        }
+    }
+
+    private suspend fun resolveRemoteAddonUrl(addon: AccountAddonPayload): Result<String> {
+        return runCatching {
+            val secretPayload = addon.secretRef
+                ?.takeIf { it.isNotBlank() }
+                ?.let { secretRef ->
+                    withJwtRefreshRetry {
+                        postgrest.rpc(
+                            "sync_resolve_account_secret",
+                            buildJsonObject {
+                                put("p_secret_type", "addon_credential")
+                                put("p_secret_ref", secretRef)
+                                put("p_source", "app")
+                            }
+                        ).decodeAs<AccountAddonSecretPayload>()
+                    }
+                }
+
+            buildResolvedAddonUrl(
+                baseUrl = addon.url,
+                manifestUrl = addon.manifestUrl,
+                publicQueryParams = addon.publicQueryParams,
+                secretPayload = secretPayload
+            ).let(::normalizeAddonInstallUrl)
         }
     }
 }
