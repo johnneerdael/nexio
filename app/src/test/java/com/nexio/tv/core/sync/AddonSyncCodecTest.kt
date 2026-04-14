@@ -35,4 +35,17 @@ class AddonSyncCodecTest {
 
         assertEquals("https://addon.example.com/config/manifest.json?token=abc", requestUrl)
     }
+
+    @Test
+    fun `top streaming uuid manifest path remains public addon path`() {
+        val parsed = parseAddonInstallUrl(
+            "https://top-streaming.stream/f5ab503d-0ac4-4540-84de-5fb0437727dc/manifest.json"
+        )
+
+        assertEquals("https://top-streaming.stream/f5ab503d-0ac4-4540-84de-5fb0437727dc", parsed.publicBaseUrl)
+        assertEquals("https://top-streaming.stream/f5ab503d-0ac4-4540-84de-5fb0437727dc/manifest.json", parsed.manifestUrl)
+        assertEquals("manifest", parsed.installKind)
+        assertEquals(null, parsed.secretRef)
+        assertEquals(null, parsed.secretPayload)
+    }
 }

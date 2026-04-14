@@ -22,6 +22,15 @@ private val sensitiveQueryKeys = setOf(
     "username"
 )
 
+private val publicConfiguredPathHosts = setOf(
+    "top-streaming.stream"
+)
+
+private val uuidSegmentPattern = Regex(
+    "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    RegexOption.IGNORE_CASE
+)
+
 data class ParsedAddonSyncEntry(
     val publicBaseUrl: String,
     val manifestUrl: String,
@@ -116,7 +125,12 @@ fun parseAddonInstallUrl(rawUrl: String): ParsedAddonSyncEntry {
         pathSegments.isNotEmpty() -> pathSegments.last()
         else -> null
     }
-    val hasPathSecret = pathSecretSegment?.let(::looksSensitivePathSegment) == true
+    val hasPublicConfiguredPath = pathSecretSegment?.let { segment ->
+        parsed.host.lowercase() in publicConfiguredPathHosts && isUuidLikeSegment(segment)
+    } == true
+    val hasPathSecret = pathSecretSegment?.let { segment ->
+        !hasPublicConfiguredPath && looksSensitivePathSegment(segment)
+    } == true
     val publicPathSegments = if (hasPathSecret) {
         if (hasManifestPath) {
             pathSegments.dropLast(2) + "manifest.json"
@@ -218,6 +232,10 @@ private fun looksSensitivePathSegment(segment: String): Boolean {
     val value = segment.trim()
     if (value.length < 24) return false
     return value.all { it.isLetterOrDigit() || it in "._~+=-" }
+}
+
+private fun isUuidLikeSegment(segment: String): Boolean {
+    return uuidSegmentPattern.matches(segment.trim())
 }
 
 private fun portSuffix(url: URL): String {
