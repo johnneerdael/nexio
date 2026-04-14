@@ -9,6 +9,7 @@ import com.nexio.tv.data.local.TraktCatalogPreferences
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.TraktDiscoveryService
 import com.nexio.tv.data.repository.TraktPopularListOption
@@ -18,11 +19,14 @@ import com.nexio.tv.data.repository.TraktTokenPollResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -65,10 +69,15 @@ class TraktViewModel @Inject constructor(
     private val traktScrobbleService: TraktScrobbleService,
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier,
+    private val profileManager: ProfileManager,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TraktUiState())
     val uiState: StateFlow<TraktUiState> = _uiState.asStateFlow()
+
+    val isPrimaryProfile: StateFlow<Boolean> = profileManager.activeProfileId
+        .map { it == 1 }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
     private var pollJob: Job? = null
     private var lastMode: TraktConnectionMode? = null

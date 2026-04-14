@@ -7,15 +7,19 @@ import com.nexio.tv.data.local.SimklAuthState
 import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
 import com.nexio.tv.data.local.SimklSettingsDataStore
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.repository.SimklAuthService
 import com.nexio.tv.data.repository.SimklTokenPollResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -47,10 +51,15 @@ class SimklViewModel @Inject constructor(
     private val simklAuthService: SimklAuthService,
     private val simklAuthDataStore: SimklAuthDataStore,
     private val simklSettingsDataStore: SimklSettingsDataStore,
-    private val catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier
+    private val catalogPriorityHydrationNotifier: com.nexio.tv.core.sync.CatalogPriorityHydrationNotifier,
+    private val profileManager: ProfileManager
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SimklUiState())
     val uiState: StateFlow<SimklUiState> = _uiState.asStateFlow()
+
+    val isPrimaryProfile: StateFlow<Boolean> = profileManager.activeProfileId
+        .map { it == 1 }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
     private var pollJob: Job? = null
 

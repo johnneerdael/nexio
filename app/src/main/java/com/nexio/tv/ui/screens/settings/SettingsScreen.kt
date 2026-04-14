@@ -48,12 +48,30 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import com.nexio.tv.core.profile.ProfileManager
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import javax.inject.Inject
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.R
 import com.nexio.tv.ui.theme.NexioColors
 import kotlinx.coroutines.delay
+
+@HiltViewModel
+internal class SettingsProfileViewModel @Inject constructor(
+    private val profileManager: ProfileManager
+) : ViewModel() {
+    val isPrimaryProfile: StateFlow<Boolean> = profileManager.activeProfileId
+        .map { it == 1 }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+}
 
 internal enum class SettingsCategory {
     ACCOUNT,
@@ -166,6 +184,9 @@ fun SettingsScreen(
     onNavigateToAuthQrSignIn: () -> Unit = {},
     onNavigateToYouTubeTrailerLogin: () -> Unit = {}
 ) {
+    val settingsProfileViewModel: SettingsProfileViewModel = hiltViewModel()
+    val isPrimaryProfile by settingsProfileViewModel.isPrimaryProfile.collectAsStateWithLifecycle()
+
     val allSectionSpecs = rememberSettingsSectionSpecs()
     val visibleSections = remember(allSectionSpecs) {
         allSectionSpecs.filter { section ->
@@ -377,6 +398,7 @@ fun SettingsScreen(
                             selectedSection = integrationSection,
                             onSelectSection = { integrationSection = it },
                             onNavigateToYouTubeTrailerLogin = onNavigateToYouTubeTrailerLogin,
+                            isPrimaryProfile = isPrimaryProfile,
                             initialFocusRequester = if (allowDetailAutofocus) {
                                 contentFocusRequesters[SettingsCategory.INTEGRATION]
                             } else {
@@ -445,6 +467,7 @@ private fun IntegrationSettingsContent(
     selectedSection: IntegrationSettingsSection,
     onSelectSection: (IntegrationSettingsSection) -> Unit,
     onNavigateToYouTubeTrailerLogin: () -> Unit,
+    isPrimaryProfile: Boolean,
     initialFocusRequester: FocusRequester?,
     hubFocusRequester: FocusRequester,
     debridFocusRequester: FocusRequester,
@@ -463,6 +486,22 @@ private fun IntegrationSettingsContent(
     BackHandler(enabled = selectedSection != IntegrationSettingsSection.Hub) {
         onSelectSection(IntegrationSettingsSection.Hub)
     }
+
+    val sharedSections = remember {
+        setOf(
+            IntegrationSettingsSection.Debrid, IntegrationSettingsSection.TheIntroDb,
+            IntegrationSettingsSection.Tmdb, IntegrationSettingsSection.Omdb,
+            IntegrationSettingsSection.Imdb, IntegrationSettingsSection.MdbList,
+            IntegrationSettingsSection.AnimeSkip, IntegrationSettingsSection.SubtitleTranslation,
+            IntegrationSettingsSection.PosterRatings
+        )
+    }
+    LaunchedEffect(isPrimaryProfile, selectedSection) {
+        if (!isPrimaryProfile && selectedSection in sharedSections) {
+            onSelectSection(IntegrationSettingsSection.Hub)
+        }
+    }
+
     val hubEntryFocusRequester = initialFocusRequester ?: hubFocusRequester
 
     LaunchedEffect(selectedSection, autoFocusEnabled) {
@@ -503,19 +542,22 @@ private fun IntegrationSettingsContent(
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        item(key = "integration_hub_debrid") {
-                            SettingsActionRow(
-                                title = stringResource(R.string.debrid_title),
-                                subtitle = stringResource(R.string.debrid_subtitle),
-                                onClick = { onSelectSection(IntegrationSettingsSection.Debrid) },
-                                modifier = Modifier.focusRequester(hubEntryFocusRequester)
-                            )
+                        if (isPrimaryProfile) {
+                            item(key = "integration_hub_debrid") {
+                                SettingsActionRow(
+                                    title = stringResource(R.string.debrid_title),
+                                    subtitle = stringResource(R.string.debrid_subtitle),
+                                    onClick = { onSelectSection(IntegrationSettingsSection.Debrid) },
+                                    modifier = Modifier.focusRequester(hubEntryFocusRequester)
+                                )
+                            }
                         }
                         item(key = "integration_hub_trakt") {
                             SettingsActionRow(
                                 title = "Trakt",
                                 subtitle = stringResource(R.string.settings_trakt_subtitle),
-                                onClick = { onSelectSection(IntegrationSettingsSection.Trakt) }
+                                onClick = { onSelectSection(IntegrationSettingsSection.Trakt) },
+                                modifier = if (!isPrimaryProfile) Modifier.focusRequester(hubEntryFocusRequester) else Modifier
                             )
                         }
                         item(key = "integration_hub_simkl") {
@@ -525,68 +567,70 @@ private fun IntegrationSettingsContent(
                                 onClick = { onSelectSection(IntegrationSettingsSection.Simkl) }
                             )
                         }
-                        item(key = "integration_hub_theintrodb") {
-                            SettingsActionRow(
-                                title = stringResource(R.string.theid_title),
-                                subtitle = stringResource(R.string.settings_theintrodb_subtitle),
-                                onClick = { onSelectSection(IntegrationSettingsSection.TheIntroDb) }
-                            )
-                        }
-                        item(key = "integration_hub_tmdb") {
-                            SettingsActionRow(
-                                title = "TMDB",
-                                subtitle = stringResource(R.string.settings_tmdb_subtitle),
-                                onClick = { onSelectSection(IntegrationSettingsSection.Tmdb) }
-                            )
-                        }
-                        item(key = "integration_hub_omdb") {
-                            SettingsActionRow(
-                                title = "OMDB",
-                                subtitle = stringResource(R.string.settings_omdb_subtitle),
-                                onClick = { onSelectSection(IntegrationSettingsSection.Omdb) }
-                            )
-                        }
-                        item(key = "integration_hub_imdb") {
-                            SettingsActionRow(
-                                title = "IMDb Ratings API",
-                                subtitle = stringResource(R.string.settings_imdb_subtitle),
-                                onClick = { onSelectSection(IntegrationSettingsSection.Imdb) }
-                            )
-                        }
-                        item(key = "integration_hub_mdblist") {
-                            SettingsActionRow(
-                                title = "MDBList",
-                                subtitle = stringResource(R.string.settings_mdblist_subtitle),
-                                onClick = { onSelectSection(IntegrationSettingsSection.MdbList) }
-                            )
-                        }
-                        item(key = "integration_hub_animeskip") {
-                            SettingsActionRow(
-                                title = "Anime-Skip",
-                                subtitle = stringResource(R.string.settings_animeskip_subtitle),
-                                onClick = { onSelectSection(IntegrationSettingsSection.AnimeSkip) }
-                            )
-                        }
-                        item(key = "integration_hub_subtitle_translation") {
-                            SettingsActionRow(
-                                title = stringResource(R.string.subtitle_translation_title),
-                                subtitle = stringResource(R.string.settings_subtitle_translation_subtitle),
-                                onClick = { onSelectSection(IntegrationSettingsSection.SubtitleTranslation) }
-                            )
-                        }
-                        item(key = "integration_hub_youtube_trailer_login") {
-                            SettingsActionRow(
-                                title = stringResource(R.string.youtube_trailer_login_title),
-                                subtitle = stringResource(R.string.youtube_trailer_login_hub_subtitle),
-                                onClick = onNavigateToYouTubeTrailerLogin
-                            )
-                        }
-                        item(key = "integration_hub_poster_ratings") {
-                            SettingsActionRow(
-                                title = stringResource(R.string.poster_ratings_title),
-                                subtitle = stringResource(R.string.poster_ratings_subtitle),
-                                onClick = { onSelectSection(IntegrationSettingsSection.PosterRatings) }
-                            )
+                        if (isPrimaryProfile) {
+                            item(key = "integration_hub_theintrodb") {
+                                SettingsActionRow(
+                                    title = stringResource(R.string.theid_title),
+                                    subtitle = stringResource(R.string.settings_theintrodb_subtitle),
+                                    onClick = { onSelectSection(IntegrationSettingsSection.TheIntroDb) }
+                                )
+                            }
+                            item(key = "integration_hub_tmdb") {
+                                SettingsActionRow(
+                                    title = "TMDB",
+                                    subtitle = stringResource(R.string.settings_tmdb_subtitle),
+                                    onClick = { onSelectSection(IntegrationSettingsSection.Tmdb) }
+                                )
+                            }
+                            item(key = "integration_hub_omdb") {
+                                SettingsActionRow(
+                                    title = "OMDB",
+                                    subtitle = stringResource(R.string.settings_omdb_subtitle),
+                                    onClick = { onSelectSection(IntegrationSettingsSection.Omdb) }
+                                )
+                            }
+                            item(key = "integration_hub_imdb") {
+                                SettingsActionRow(
+                                    title = "IMDb Ratings API",
+                                    subtitle = stringResource(R.string.settings_imdb_subtitle),
+                                    onClick = { onSelectSection(IntegrationSettingsSection.Imdb) }
+                                )
+                            }
+                            item(key = "integration_hub_mdblist") {
+                                SettingsActionRow(
+                                    title = "MDBList",
+                                    subtitle = stringResource(R.string.settings_mdblist_subtitle),
+                                    onClick = { onSelectSection(IntegrationSettingsSection.MdbList) }
+                                )
+                            }
+                            item(key = "integration_hub_animeskip") {
+                                SettingsActionRow(
+                                    title = "Anime-Skip",
+                                    subtitle = stringResource(R.string.settings_animeskip_subtitle),
+                                    onClick = { onSelectSection(IntegrationSettingsSection.AnimeSkip) }
+                                )
+                            }
+                            item(key = "integration_hub_subtitle_translation") {
+                                SettingsActionRow(
+                                    title = stringResource(R.string.subtitle_translation_title),
+                                    subtitle = stringResource(R.string.settings_subtitle_translation_subtitle),
+                                    onClick = { onSelectSection(IntegrationSettingsSection.SubtitleTranslation) }
+                                )
+                            }
+                            item(key = "integration_hub_youtube_trailer_login") {
+                                SettingsActionRow(
+                                    title = stringResource(R.string.youtube_trailer_login_title),
+                                    subtitle = stringResource(R.string.youtube_trailer_login_hub_subtitle),
+                                    onClick = onNavigateToYouTubeTrailerLogin
+                                )
+                            }
+                            item(key = "integration_hub_poster_ratings") {
+                                SettingsActionRow(
+                                    title = stringResource(R.string.poster_ratings_title),
+                                    subtitle = stringResource(R.string.poster_ratings_subtitle),
+                                    onClick = { onSelectSection(IntegrationSettingsSection.PosterRatings) }
+                                )
+                            }
                         }
                     }
                 }
