@@ -15,14 +15,11 @@ import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.onStart
 import kotlin.math.roundToInt
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -448,10 +445,10 @@ class PlayerSettingsDataStore @Inject constructor(
 
     private fun <T> profileFlow(extract: (Preferences) -> T): Flow<T> =
         profileManager.activeProfileId.flatMapLatest { pid ->
-            store(pid).data.map { prefs -> extract(prefs) }
+            store(pid).data
+                .onStart { store(pid).edit { applyAllPlayerMigrations(it) } }
+                .map { prefs -> extract(prefs) }
         }
-
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // Player preference key
     private val playerPreferenceKey = stringPreferencesKey("player_preference")
@@ -595,131 +592,127 @@ class PlayerSettingsDataStore @Inject constructor(
     private val migrationStreamSelectionDefaultsEnabledKey =
         migrationStreamSelectionDefaultsV2EnabledKey
 
-    init {
-        ioScope.launch {
-            store().edit { prefs ->
-                val loadControlMigrated = prefs[migrationLoadControlDefaultsAlignedDoneKey] ?: false
-                if (!loadControlMigrated) {
-                    val currentMin = prefs[minBufferMsKey]
-                    val currentMax = prefs[maxBufferMsKey]
+    private fun applyAllPlayerMigrations(prefs: MutablePreferences) {
+        val loadControlMigrated = prefs[migrationLoadControlDefaultsAlignedDoneKey] ?: false
+        if (!loadControlMigrated) {
+            val currentMin = prefs[minBufferMsKey]
+            val currentMax = prefs[maxBufferMsKey]
 
-                    val legacyDefaultsDetected = (currentMin == null && currentMax == null) ||
-                        (currentMin == 15_000 && currentMax == 25_000)
+            val legacyDefaultsDetected = (currentMin == null && currentMax == null) ||
+                (currentMin == 15_000 && currentMax == 25_000)
 
-                    if (legacyDefaultsDetected) {
-                        prefs[minBufferMsKey] = BufferSettings.DEFAULT_MIN_BUFFER_MS
-                        prefs[maxBufferMsKey] = BufferSettings.DEFAULT_MAX_BUFFER_MS
-                    }
+            if (legacyDefaultsDetected) {
+                prefs[minBufferMsKey] = BufferSettings.DEFAULT_MIN_BUFFER_MS
+                prefs[maxBufferMsKey] = BufferSettings.DEFAULT_MAX_BUFFER_MS
+            }
 
-                    prefs[migrationLoadControlDefaultsAlignedDoneKey] = true
+            prefs[migrationLoadControlDefaultsAlignedDoneKey] = true
+        }
+
+        val loadControlRetuned = prefs[migrationLoadControlDefaultsRetunedDoneKey] ?: false
+        if (!loadControlRetuned) {
+            val currentMin = prefs[minBufferMsKey]
+            val currentMax = prefs[maxBufferMsKey]
+            val currentPlayback = prefs[bufferForPlaybackMsKey]
+            val currentPlaybackAfterRebuffer = prefs[bufferForPlaybackAfterRebufferMsKey]
+            val currentTargetBuffer = prefs[targetBufferSizeMbKey]
+
+            val previousDefaultsDetected =
+                currentMin == 50_000 &&
+                    currentMax == 50_000 &&
+                    currentPlayback == 2_500 &&
+                    currentPlaybackAfterRebuffer == 5_000 &&
+                    currentTargetBuffer == 0
+
+            val olderDefaultsDetected =
+                currentMin == 15_000 &&
+                    currentMax == 25_000
+
+            if (previousDefaultsDetected || olderDefaultsDetected) {
+                prefs[minBufferMsKey] = BufferSettings.DEFAULT_MIN_BUFFER_MS
+                prefs[maxBufferMsKey] = BufferSettings.DEFAULT_MAX_BUFFER_MS
+                prefs[bufferForPlaybackMsKey] = BufferSettings.DEFAULT_BUFFER_FOR_PLAYBACK_MS
+                prefs[bufferForPlaybackAfterRebufferMsKey] =
+                    BufferSettings.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+                prefs[targetBufferSizeMbKey] = BufferSettings.DEFAULT_TARGET_BUFFER_SIZE_MB
+            }
+
+            prefs[migrationLoadControlDefaultsRetunedDoneKey] = true
+        }
+
+        val minBufferRetuned = prefs[migrationLoadControlMinBufferRetunedDoneKey] ?: false
+        if (!minBufferRetuned) {
+            val currentMin = prefs[minBufferMsKey]
+            val currentMax = prefs[maxBufferMsKey]
+            val currentPlayback = prefs[bufferForPlaybackMsKey]
+            val currentPlaybackAfterRebuffer = prefs[bufferForPlaybackAfterRebufferMsKey]
+            val currentTargetBuffer = prefs[targetBufferSizeMbKey]
+            val currentBackBuffer = prefs[backBufferDurationMsKey]
+            val currentRetainBackBuffer = prefs[retainBackBufferFromKeyframeKey]
+
+            val previousRetunedDefaultsDetected =
+                currentMin == 50_000 &&
+                    currentMax == 50_000 &&
+                    currentPlayback == BufferSettings.DEFAULT_BUFFER_FOR_PLAYBACK_MS &&
+                    currentPlaybackAfterRebuffer ==
+                    BufferSettings.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS &&
+                    currentTargetBuffer == BufferSettings.DEFAULT_TARGET_BUFFER_SIZE_MB &&
+                    (currentBackBuffer == null ||
+                        currentBackBuffer == BufferSettings.DEFAULT_BACK_BUFFER_DURATION_MS) &&
+                    (currentRetainBackBuffer == null || !currentRetainBackBuffer)
+
+            if (previousRetunedDefaultsDetected) {
+                prefs[minBufferMsKey] = BufferSettings.DEFAULT_MIN_BUFFER_MS
+            }
+
+            prefs[migrationLoadControlMinBufferRetunedDoneKey] = true
+        }
+
+        applyPlayerSettingsMigrations(prefs)
+
+        val min = prefs[minBufferMsKey]
+        val max = prefs[maxBufferMsKey]
+        if (min != null && max != null && max < min) {
+            prefs[maxBufferMsKey] = min
+        }
+
+        val preferredAudioLanguage = prefs[preferredAudioLanguageKey]
+        if (preferredAudioLanguage != null) {
+            val normalizedPreferredAudioLanguage =
+                normalizeSelectableLanguageCode(preferredAudioLanguage)
+            if (normalizedPreferredAudioLanguage != preferredAudioLanguage) {
+                prefs[preferredAudioLanguageKey] = normalizedPreferredAudioLanguage
+            }
+        }
+
+        val secondaryPreferredAudioLanguage = prefs[secondaryPreferredAudioLanguageKey]
+        if (secondaryPreferredAudioLanguage != null) {
+            val normalizedSecondaryPreferredAudioLanguage =
+                normalizeSecondaryAudioLanguageCode(secondaryPreferredAudioLanguage)
+            if (normalizedSecondaryPreferredAudioLanguage != secondaryPreferredAudioLanguage) {
+                if (normalizedSecondaryPreferredAudioLanguage != null) {
+                    prefs[secondaryPreferredAudioLanguageKey] = normalizedSecondaryPreferredAudioLanguage
+                } else {
+                    prefs.remove(secondaryPreferredAudioLanguageKey)
                 }
+            }
+        }
 
-                val loadControlRetuned = prefs[migrationLoadControlDefaultsRetunedDoneKey] ?: false
-                if (!loadControlRetuned) {
-                    val currentMin = prefs[minBufferMsKey]
-                    val currentMax = prefs[maxBufferMsKey]
-                    val currentPlayback = prefs[bufferForPlaybackMsKey]
-                    val currentPlaybackAfterRebuffer = prefs[bufferForPlaybackAfterRebufferMsKey]
-                    val currentTargetBuffer = prefs[targetBufferSizeMbKey]
+        val preferredSubtitleLanguage = prefs[subtitlePreferredLanguageKey]
+        if (preferredSubtitleLanguage != null) {
+            val normalizedPreferredSubtitleLanguage =
+                normalizeSelectableLanguageCode(preferredSubtitleLanguage)
+            if (normalizedPreferredSubtitleLanguage != preferredSubtitleLanguage) {
+                prefs[subtitlePreferredLanguageKey] = normalizedPreferredSubtitleLanguage
+            }
+        }
 
-                    val previousDefaultsDetected =
-                        currentMin == 50_000 &&
-                            currentMax == 50_000 &&
-                            currentPlayback == 2_500 &&
-                            currentPlaybackAfterRebuffer == 5_000 &&
-                            currentTargetBuffer == 0
-
-                    val olderDefaultsDetected =
-                        currentMin == 15_000 &&
-                            currentMax == 25_000
-
-                    if (previousDefaultsDetected || olderDefaultsDetected) {
-                        prefs[minBufferMsKey] = BufferSettings.DEFAULT_MIN_BUFFER_MS
-                        prefs[maxBufferMsKey] = BufferSettings.DEFAULT_MAX_BUFFER_MS
-                        prefs[bufferForPlaybackMsKey] = BufferSettings.DEFAULT_BUFFER_FOR_PLAYBACK_MS
-                        prefs[bufferForPlaybackAfterRebufferMsKey] =
-                            BufferSettings.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
-                        prefs[targetBufferSizeMbKey] = BufferSettings.DEFAULT_TARGET_BUFFER_SIZE_MB
-                    }
-
-                    prefs[migrationLoadControlDefaultsRetunedDoneKey] = true
-                }
-
-                val minBufferRetuned = prefs[migrationLoadControlMinBufferRetunedDoneKey] ?: false
-                if (!minBufferRetuned) {
-                    val currentMin = prefs[minBufferMsKey]
-                    val currentMax = prefs[maxBufferMsKey]
-                    val currentPlayback = prefs[bufferForPlaybackMsKey]
-                    val currentPlaybackAfterRebuffer = prefs[bufferForPlaybackAfterRebufferMsKey]
-                    val currentTargetBuffer = prefs[targetBufferSizeMbKey]
-                    val currentBackBuffer = prefs[backBufferDurationMsKey]
-                    val currentRetainBackBuffer = prefs[retainBackBufferFromKeyframeKey]
-
-                    val previousRetunedDefaultsDetected =
-                        currentMin == 50_000 &&
-                            currentMax == 50_000 &&
-                            currentPlayback == BufferSettings.DEFAULT_BUFFER_FOR_PLAYBACK_MS &&
-                            currentPlaybackAfterRebuffer ==
-                            BufferSettings.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS &&
-                            currentTargetBuffer == BufferSettings.DEFAULT_TARGET_BUFFER_SIZE_MB &&
-                            (currentBackBuffer == null ||
-                                currentBackBuffer == BufferSettings.DEFAULT_BACK_BUFFER_DURATION_MS) &&
-                            (currentRetainBackBuffer == null || !currentRetainBackBuffer)
-
-                    if (previousRetunedDefaultsDetected) {
-                        prefs[minBufferMsKey] = BufferSettings.DEFAULT_MIN_BUFFER_MS
-                    }
-
-                    prefs[migrationLoadControlMinBufferRetunedDoneKey] = true
-                }
-
-                applyPlayerSettingsMigrations(prefs)
-
-                val min = prefs[minBufferMsKey]
-                val max = prefs[maxBufferMsKey]
-                if (min != null && max != null && max < min) {
-                    prefs[maxBufferMsKey] = min
-                }
-
-                val preferredAudioLanguage = prefs[preferredAudioLanguageKey]
-                if (preferredAudioLanguage != null) {
-                    val normalizedPreferredAudioLanguage =
-                        normalizeSelectableLanguageCode(preferredAudioLanguage)
-                    if (normalizedPreferredAudioLanguage != preferredAudioLanguage) {
-                        prefs[preferredAudioLanguageKey] = normalizedPreferredAudioLanguage
-                    }
-                }
-
-                val secondaryPreferredAudioLanguage = prefs[secondaryPreferredAudioLanguageKey]
-                if (secondaryPreferredAudioLanguage != null) {
-                    val normalizedSecondaryPreferredAudioLanguage =
-                        normalizeSecondaryAudioLanguageCode(secondaryPreferredAudioLanguage)
-                    if (normalizedSecondaryPreferredAudioLanguage != secondaryPreferredAudioLanguage) {
-                        if (normalizedSecondaryPreferredAudioLanguage != null) {
-                            prefs[secondaryPreferredAudioLanguageKey] = normalizedSecondaryPreferredAudioLanguage
-                        } else {
-                            prefs.remove(secondaryPreferredAudioLanguageKey)
-                        }
-                    }
-                }
-
-                val preferredSubtitleLanguage = prefs[subtitlePreferredLanguageKey]
-                if (preferredSubtitleLanguage != null) {
-                    val normalizedPreferredSubtitleLanguage =
-                        normalizeSelectableLanguageCode(preferredSubtitleLanguage)
-                    if (normalizedPreferredSubtitleLanguage != preferredSubtitleLanguage) {
-                        prefs[subtitlePreferredLanguageKey] = normalizedPreferredSubtitleLanguage
-                    }
-                }
-
-                val secondarySubtitleLanguage = prefs[subtitleSecondaryLanguageKey]
-                if (secondarySubtitleLanguage != null) {
-                    val normalizedSecondarySubtitleLanguage =
-                        normalizeSelectableLanguageCode(secondarySubtitleLanguage)
-                    if (normalizedSecondarySubtitleLanguage != secondarySubtitleLanguage) {
-                        prefs[subtitleSecondaryLanguageKey] = normalizedSecondarySubtitleLanguage
-                    }
-                }
+        val secondarySubtitleLanguage = prefs[subtitleSecondaryLanguageKey]
+        if (secondarySubtitleLanguage != null) {
+            val normalizedSecondarySubtitleLanguage =
+                normalizeSelectableLanguageCode(secondarySubtitleLanguage)
+            if (normalizedSecondarySubtitleLanguage != secondarySubtitleLanguage) {
+                prefs[subtitleSecondaryLanguageKey] = normalizedSecondarySubtitleLanguage
             }
         }
     }
