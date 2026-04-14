@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -45,6 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -55,14 +57,15 @@ import com.nexio.tv.ui.theme.NexioColors
 @Composable
 fun ProfileSelectionScreen(
     onProfileSelected: () -> Unit,
-    onPinRequired: (UserProfile) -> Unit = {},
     viewModel: ProfileSelectionViewModel = hiltViewModel()
 ) {
     val profiles by viewModel.profiles.collectAsState()
     val activeProfileId by viewModel.activeProfileId.collectAsState()
     val profilePinEnabled by viewModel.profilePinEnabled.collectAsState()
+    val pinState by viewModel.pinState.collectAsStateWithLifecycle()
 
     var focusedIndex by remember { mutableIntStateOf(0) }
+    var activePinOverlayProfile by remember { mutableStateOf<UserProfile?>(null) }
 
     val initialFocusIndex = remember(profiles, activeProfileId) {
         val idx = profiles.indexOfFirst { it.id == activeProfileId }
@@ -75,6 +78,17 @@ fun ProfileSelectionScreen(
         repeat(2) { withFrameNanos { } }
         val targetIndex = profiles.indexOfFirst { it.id == activeProfileId }.takeIf { it >= 0 } ?: 0
         runCatching { focusRequesters[targetIndex].requestFocus() }
+    }
+
+    // Detect successful PIN verification: active profile switched to the overlay profile
+    val currentActiveId by viewModel.activeProfileId.collectAsStateWithLifecycle()
+    LaunchedEffect(currentActiveId) {
+        val overlayProfile = activePinOverlayProfile
+        if (overlayProfile != null && currentActiveId == overlayProfile.id) {
+            activePinOverlayProfile = null
+            viewModel.resetPinState()
+            onProfileSelected()
+        }
     }
 
     Box(
@@ -102,7 +116,7 @@ fun ProfileSelectionScreen(
                         val profile = profiles.getOrNull(focusedIndex)
                         if (profile != null) {
                             if (profilePinEnabled[profile.id] == true) {
-                                onPinRequired(profile)
+                                activePinOverlayProfile = profile
                             } else {
                                 viewModel.selectProfile(profile.id)
                                 onProfileSelected()
@@ -123,7 +137,7 @@ fun ProfileSelectionScreen(
                         focusRequester = focusRequesters[index],
                         onClick = {
                             if (isPinLocked) {
-                                onPinRequired(profile)
+                                activePinOverlayProfile = profile
                             } else {
                                 viewModel.selectProfile(profile.id)
                                 onProfileSelected()
@@ -140,6 +154,23 @@ fun ProfileSelectionScreen(
                     )
                 }
             }
+        }
+
+        // PIN overlay: shown when a PIN-locked profile is selected
+        activePinOverlayProfile?.let { profile ->
+            ProfilePinOverlay(
+                profile = profile,
+                onPinSubmit = { pin -> viewModel.verifyPin(profile.id, pin) },
+                onDismiss = {
+                    activePinOverlayProfile = null
+                    viewModel.resetPinState()
+                },
+                isVerifying = pinState.isVerifying,
+                isError = pinState.isError,
+                errorMessage = pinState.errorMessage,
+                retryAfterSeconds = pinState.retryAfterSeconds,
+                onErrorConsumed = { viewModel.consumePinError() }
+            )
         }
     }
 }
