@@ -61,6 +61,12 @@ Plans:
 **Goal**: Continue Watching shows TVDB-backed new episodes at their computed device-local airing instant instead of at the start of the release date
 **Depends on**: Phase 7
 **Requirements**: AIR-01, AIR-02, AIR-03, AIR-04, AIR-05, AIR-06
+**Plans:** 4 plans
+Plans:
+- [ ] 08-01-PLAN.md — Create exact TVDB availability contracts, parsing policy, and central gate priority
+- [ ] 08-02-PLAN.md — Enrich tracking next-up rows with TVDB exact timing and fallback diagnostics
+- [ ] 08-03-PLAN.md — Persist withheld rows and apply exact gating across Continue Watching surfaces
+- [ ] 08-04-PLAN.md — Add durable Android alarm scheduling, refresh, and retry behavior
 **Success Criteria** (what must be TRUE):
   1. For TVDB records with episode aired date plus series `airsTime`, Nexio computes an exact availability instant using the correct source-timezone policy
   2. Continue Watching withholds future TV episodes until the computed instant in the Android TV device timezone
@@ -72,6 +78,13 @@ Plans:
 **Goal**: Nexio captures the TV-specific value that makes TVDB more useful than TMDB for series metadata beyond basic enrichment and air timing
 **Depends on**: Phase 7
 **Requirements**: META-03, META-05, UX-02
+**Plans:** 5 plans
+Plans:
+- [ ] 09-00-PLAN.md — Create Wave 0 validation scaffolds and block unless Phase 7 TVDB provider outputs exist
+- [ ] 09-01-PLAN.md — Preserve TVDB default season type and season-order context while keeping canonical Trakt progress keys stable
+- [ ] 09-02-PLAN.md — Map TVDB cast, companies, networks, genres, and content ratings into existing metadata surfaces
+- [ ] 09-03-PLAN.md — Route TV trailers through TVDB-first discovery before Streailer, fallback IDs, and explicit TMDB fallback
+- [ ] 09-04-PLAN.md — Lock no-toggle provider UX, diagnostics, and Phase 9 validation gates
 **Success Criteria** (what must be TRUE):
   1. TVDB default season type is preserved in Nexio's season/episode model without assuming TMDB-style aired ordering
   2. Trakt progress matching remains stable when TVDB season ordering data is present
