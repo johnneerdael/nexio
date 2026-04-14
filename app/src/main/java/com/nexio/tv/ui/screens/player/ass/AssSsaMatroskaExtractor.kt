@@ -12,6 +12,7 @@ import java.lang.reflect.Field
 
 internal class AssSsaMatroskaExtractor(
     private val sink: AssSsaSampleSink,
+    private val matroskaState: MatroskaState = MatroskaState(),
     private val extractorOutputField: Field? = defaultExtractorOutputField
 ) : MatroskaExtractor(
     if (extractorOutputField != null) {
@@ -19,7 +20,8 @@ internal class AssSsaMatroskaExtractor(
     } else {
         DefaultSubtitleParserFactory()
     },
-    if (extractorOutputField != null) FLAG_EMIT_RAW_SUBTITLE_DATA else 0
+    if (extractorOutputField != null) matroskaState.flags else matroskaState.nativeSubtitleFlags,
+    matroskaState.dolbyVisionSampleTransformer
 ) {
     private var currentAttachmentName: String? = null
     private var currentAttachmentMimeType: String? = null
@@ -137,10 +139,96 @@ internal class AssSsaMatroskaExtractor(
             "application/x-font-ttf",
         )
 
-        private val defaultExtractorOutputField = runCatching {
-            MatroskaExtractor::class.java.getDeclaredField("extractorOutput").apply {
-                isAccessible = true
+        private val reflectionFallbackLoggedFields = mutableSetOf<String>()
+
+        private val defaultExtractorOutputField = accessibleMatroskaField("extractorOutput")
+        private val seekForCuesEnabledField = accessibleMatroskaField("seekForCuesEnabled")
+        private val dolbyVisionSampleTransformerField = accessibleMatroskaField(
+            "dolbyVisionSampleTransformer"
+        )
+
+        internal fun from(
+            source: MatroskaExtractor,
+            sink: AssSsaSampleSink
+        ): AssSsaMatroskaExtractor {
+            return AssSsaMatroskaExtractor(
+                sink = sink,
+                matroskaState = readMatroskaState(source)
+            )
+        }
+
+        internal fun matroskaStateForTesting(
+            source: MatroskaExtractor,
+            seekForCuesEnabledFieldAvailable: Boolean = true,
+            dolbyVisionSampleTransformerFieldAvailable: Boolean = true
+        ): MatroskaState {
+            return readMatroskaState(
+                source = source,
+                seekForCuesEnabledField = seekForCuesEnabledField.takeIf {
+                    seekForCuesEnabledFieldAvailable
+                },
+                dolbyVisionSampleTransformerField = dolbyVisionSampleTransformerField.takeIf {
+                    dolbyVisionSampleTransformerFieldAvailable
+                }
+            )
+        }
+
+        private fun readMatroskaState(
+            source: MatroskaExtractor,
+            seekForCuesEnabledField: Field? = this.seekForCuesEnabledField,
+            dolbyVisionSampleTransformerField: Field? = this.dolbyVisionSampleTransformerField
+        ): MatroskaState {
+            var flags = FLAG_EMIT_RAW_SUBTITLE_DATA
+            val seekForCuesEnabled = seekForCuesEnabledField?.let { field ->
+                runCatching { field.getBoolean(source) }
+                    .onFailure { logReflectionFallbackOnce("seekForCuesEnabled") }
+                    .getOrNull()
             }
-        }.getOrNull()
+            if (seekForCuesEnabled == false) {
+                flags = flags or FLAG_DISABLE_SEEK_FOR_CUES
+            } else if (seekForCuesEnabledField == null) {
+                logReflectionFallbackOnce("seekForCuesEnabled")
+            }
+
+            val dolbyVisionSampleTransformer = dolbyVisionSampleTransformerField?.let { field ->
+                runCatching {
+                    field.get(source) as? DolbyVisionSampleTransformer
+                }.onFailure {
+                    logReflectionFallbackOnce("dolbyVisionSampleTransformer")
+                }.getOrNull()
+            } ?: run {
+                if (dolbyVisionSampleTransformerField == null) {
+                    logReflectionFallbackOnce("dolbyVisionSampleTransformer")
+                }
+                null
+            }
+
+            return MatroskaState(flags, dolbyVisionSampleTransformer)
+        }
+
+        private fun accessibleMatroskaField(name: String): Field? {
+            return runCatching {
+                MatroskaExtractor::class.java.getDeclaredField(name).apply {
+                    isAccessible = true
+                }
+            }.onFailure {
+                logReflectionFallbackOnce(name)
+            }.getOrNull()
+        }
+
+        private fun logReflectionFallbackOnce(fieldName: String) {
+            if (!reflectionFallbackLoggedFields.add(fieldName)) return
+            runCatching {
+                Log.w(TAG, "MatroskaExtractor $fieldName field unavailable; using fallback state")
+            }
+        }
     }
+}
+
+internal data class MatroskaState(
+    val flags: Int = MatroskaExtractor.FLAG_EMIT_RAW_SUBTITLE_DATA,
+    val dolbyVisionSampleTransformer: MatroskaExtractor.DolbyVisionSampleTransformer? = null
+) {
+    val nativeSubtitleFlags: Int
+        get() = flags and MatroskaExtractor.FLAG_EMIT_RAW_SUBTITLE_DATA.inv()
 }
