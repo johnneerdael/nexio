@@ -111,7 +111,7 @@ fun ProfileSelectionScreen(
                 horizontalArrangement = Arrangement.spacedBy(24.dp),
                 modifier = Modifier.onPreviewKeyEvent { keyEvent ->
                     if (keyEvent.type == KeyEventType.KeyDown &&
-                        (keyEvent.key == Key.DirectionCenter || keyEvent.key == Key.Enter)
+                        (keyEvent.key == Key.DirectionCenter || keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)
                     ) {
                         val profile = profiles.getOrNull(focusedIndex)
                         if (profile != null) {
