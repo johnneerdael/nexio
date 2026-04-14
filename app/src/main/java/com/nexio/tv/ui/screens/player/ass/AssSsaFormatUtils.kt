@@ -5,6 +5,7 @@ import androidx.media3.common.MimeTypes
 import java.util.Locale
 
 internal fun Format.isAssSsaFormat(): Boolean {
+    if (sampleMimeType == MimeTypes.TEXT_VTT) return false
     if (sampleMimeType == MimeTypes.TEXT_SSA || sampleMimeType == "text/x-ass") return true
 
     val hasAssCodec = codecs
