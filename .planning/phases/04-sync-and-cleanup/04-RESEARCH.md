@@ -1,46 +1,52 @@
 # Phase 4: Sync and Cleanup - Research
 
 **Researched:** 2026-04-14
-**Domain:** Supabase sync (profile metadata + per-profile settings blob), SharedPreferences per-profile scoping, profile deletion cleanup
+**Domain:** Supabase sync (profile metadata + per-profile settings v8 blob), SharedPreferences per-profile scoping, profile deletion cleanup
 **Confidence:** HIGH
 
 ## Summary
 
-Phase 4 adds three capabilities to Nexio: (1) syncing profile metadata to Supabase so profiles survive device changes, (2) syncing per-profile settings as independent JSON blobs so cross-profile overwrites are impossible, and (3) ensuring profile deletion leaves zero orphaned data locally or remotely. All three capabilities have proven reference implementations in NuvioTV that can be ported with minimal adaptation.
+Phase 4 adds three capabilities to Nexio: (1) syncing profile metadata to Supabase so profiles survive device changes, (2) syncing per-profile settings as independent JSON blobs keyed by profileId — completely separate from the v7 shared contract — so cross-profile overwrites are impossible, and (3) ensuring profile deletion leaves zero orphaned data locally or remotely. All three capabilities have proven reference implementations in NuvioTV that can be ported with minimal adaptation.
 
-The NuvioTV `ProfileSyncService` and `ProfileSettingsSyncService` are the canonical sources. The profile metadata sync is a straightforward push/pull of the full profile list via `sync_push_profiles` / `sync_pull_profiles` RPCs. The per-profile settings sync serializes raw DataStore Preferences into a typed JSON blob (`{type, value}` encoding), pushes/pulls via `sync_push_profile_settings_blob` / `sync_pull_profile_settings_blob` RPCs, and uses a debounced `flatMapLatest` observer to auto-push on local changes. Both services use the established `withJwtRefreshRetry` pattern and kotlinx.serialization JSON builders.
+The key architectural decision from CONTEXT.md is a **clean v8 contract break**: per-profile settings move entirely out of v7 into their own blob RPCs, shared settings remain in v7, and no backwards-compatibility shims are written. The NuvioTV ProfileSyncService and ProfileSettingsSyncService are the canonical sources for implementation patterns. Both use the established `withJwtRefreshRetry` pattern and kotlinx.serialization JSON builders that are already present in the codebase.
 
-The SharedPreferences migration is the most mechanically intensive part: 10 SharedPreferences-backed stores need per-profile naming (7 snapshot stores + TraktMutationOutboxStore + SimklProgressSyncStateStore + SyntheticHomeCatalogStore). Each store currently uses a hardcoded `PREFS_NAME` constant; per-profile naming follows the DataStore convention (bare name for profile 1, `{name}_p{id}` for profiles 2-4). Profile deletion must clean up all these files plus invoke remote deletion RPCs and best-effort OAuth token revocation.
+The SharedPreferences migration covers 7 stores becoming per-profile (the snapshot stores tied to per-profile auth/library data) while 5 stores remain shared (catalog metadata caches). Profile deletion is best-effort remote cleanup with immediate local deletion: no OAuth revocation calls — just clear local tokens — and remote Supabase cleanup retries on next app start if the initial attempt fails.
 
-**Primary recommendation:** Port NuvioTV's ProfileSyncService and ProfileSettingsSyncService as closely as possible, adapt the syncedFeatures list to Nexio's per-profile DataStore feature names, make all 10 SharedPreferences stores profile-aware via a `profileSuffix(profileId)` helper, and extend `ProfileManager.deleteProfileDataAsync()` to cover SP files + remote cleanup + token revocation.
+**Primary recommendation:** Port NuvioTV's ProfileSyncService and ProfileSettingsSyncService directly. Adapt syncedFeatures to Nexio's per-profile DataStore feature names. Make 7 SharedPreferences snapshot stores profile-aware via a `profilePrefsName()` helper injecting ProfileManager. Extend `ProfileManager.deleteProfileDataAsync()` to cover SP files + best-effort remote cleanup.
 
 <user_constraints>
 ## User Constraints (from CONTEXT.md)
 
 ### Locked Decisions
-- **D-01:** All 7 SharedPreferences snapshot stores become per-profile with profile-suffixed filenames: TraktLibrarySnapshotStore, ContinueWatchingSnapshotStore, SimklLibrarySnapshotStore, SimklDiscoverySnapshotStore, TraktDiscoverySnapshotStore, MDBListDiscoverySnapshotStore, HomeCatalogSnapshotStore. Profile 1 keeps bare names for zero-migration.
-- **D-02:** Additional SharedPreferences stores classified per-profile where tied to auth/profile state: SimklProgressSyncStateStore, TraktMutationOutboxStore, SyntheticHomeCatalogStore become per-profile. MetadataDiskCacheStore and CatalogDiskCacheStore stay shared (content metadata doesn't change per profile).
-- **D-03:** Port NuvioTV's ProfileSettingsSyncService blob pattern. New service serializes all 8 per-profile DataStores into one JSON blob per profile. Push/pull via dedicated Supabase RPCs (sync_push_profile_settings / sync_pull_profile_settings). Runs alongside existing v7 shared sync.
-- **D-04:** Existing v7 shared sync contract stays untouched. Per-profile settings that were previously in v7 (Trakt catalog prefs, Simkl catalog prefs, player formatter, tracking provider) get removed from v7 and move to per-profile blob only. Clean separation.
-- **D-05:** Profile metadata sync uses dedicated RPCs: sync_push_profiles / sync_pull_profiles, ported from NuvioTV's ProfileSyncService. Metadata (name, avatar, PIN state) synced as full profile list.
-- **D-06:** Supabase RPCs and table schema need to be created as part of this phase. Backend SQL functions are in-scope.
-- **D-07:** Per-profile settings push uses debounced-on-change pattern (~1.5s debounce), ported from NuvioTV. Observe per-profile DataStore changes via flatMapLatest, auto-push blob after debounce.
-- **D-08:** Per-profile settings pull on app startup (after auth) and on profile switch. Ensures fresh data from cross-device changes.
-- **D-09:** Profile metadata push immediately on any create/edit/delete operation. No debounce needed -- metadata changes are infrequent and small.
-- **D-10:** SharedPreferences snapshot files use per-profile naming scheme (e.g. `trakt_library_snapshot_p2`). On deletion, delete the matching SP file by suffix. Profile 1 keeps bare names for zero-migration. Consistent with DataStore naming convention.
-- **D-11:** Profile deletion calls a sync_delete_profile Supabase RPC that removes the profile row and its settings blob server-side. No cloud orphans.
-- **D-12:** Profile deletion revokes Trakt and Simkl OAuth tokens remotely before discarding local tokens. Prevents orphaned authorized apps in the user's Trakt/Simkl account.
-- **D-13:** Remote cleanup (token revocation, Supabase deletion) is best-effort. Attempt revocation and remote delete, but always complete local deletion regardless of network failures. Log failures for potential retry on next sync. Never block the user from deleting a profile.
+
+**Sync Trigger & Conflict Strategy**
+- **D-01:** Sync is event-driven with debounce — push on profile edit, settings change, and profile switch. Use NuvioTV 2s flatMapLatest debounce pattern. Pull on app start only.
+- **D-02:** Conflict resolution is last-write-wins using server-side `updated_at` timestamp. No merge logic — latest push overwrites.
+- **D-03:** Upgrade to a v8 sync contract that is profile-aware from the ground up. Per-profile settings get their own blob RPCs keyed by profileId. Shared settings remain in the v7 contract. Clean break from v7 — no backwards-compat shims.
+
+**Deletion Flow & Error Handling**
+- **D-04:** Profile deletion uses best-effort remote cleanup. Local data (DataStore files, SharedPreferences files) is deleted immediately. Remote cleanup (Supabase row deletion, remote blob deletion) retries on next app start if it fails. Profile disappears from UI right away.
+- **D-05:** No Trakt revoke API call on deletion — just clear local tokens for both Trakt and Simkl. Simpler and Trakt tokens expire in 90 days anyway.
+- **D-06:** Deletion requires a confirmation dialog showing the profile name: "Delete profile '{name}'? This removes all settings and sync data." Uses NexioDialog with "Keep Profile" (auto-focused) and "Delete Profile" buttons per UI-SPEC.
+
+**Snapshot Store Classification**
+- **D-07:** 7 SharedPreferences stores become per-profile: TraktLibrarySnapshotStore, ContinueWatchingSnapshotStore, SimklLibrarySnapshotStore, SimklDiscoverySnapshotStore, SimklProgressSyncStateStore, TraktMutationOutboxStore, TraktDiscoverySnapshotStore.
+- **D-08:** 5 SharedPreferences stores remain shared: HomeCatalogSnapshotStore, MetadataDiskCacheStore, CatalogDiskCacheStore, MDBListDiscoverySnapshotStore, SyntheticHomeCatalogStore.
+- **D-09:** Per-profile SharedPreferences stores use the same `_p{id}` suffix convention as ProfileDataStoreFactory — bare name for Profile 1, `_p2`/`_p3`/`_p4` for others.
+
+**Sync Status UI Feedback**
+- **D-10:** Background sync is completely silent — no toasts, no indicators during normal use. Status only visible when user taps "Sync Now" in Settings.
+- **D-11:** A "Sync Now" button exists in the Profiles area of Settings. Shows brief feedback ("Synced" or "Failed") after completion. D-pad focusable.
+- **D-12:** Startup pull is fully silent — no loading indication, no splash hold. If remote data arrives after UI renders, settings update silently in background.
 
 ### Claude's Discretion
-- Order of snapshot store migrations (can batch or sequence)
-- Exact JSON blob schema for per-profile settings (serialize DataStore preferences as key-value pairs vs structured sections)
-- Supabase SQL function signatures and table schema design
-- Pull-before-push gate logic for per-profile settings (analogous to existing AccountConfigStartupPushGate)
-- Error retry strategy for failed remote cleanup on deletion
+- Supabase RPC naming and table schema design for profile metadata and settings blobs
+- Debounce implementation details (coroutine scope, cancellation handling)
+- Retry mechanism for failed remote cleanup on next app start
+- v8 contract internal structure and migration path from v7
 
 ### Deferred Ideas (OUT OF SCOPE)
-None -- discussion stayed within phase scope
+None — discussion stayed within phase scope.
 </user_constraints>
 
 <phase_requirements>
@@ -49,9 +55,9 @@ None -- discussion stayed within phase scope
 | ID | Description | Research Support |
 |----|-------------|------------------|
 | SYNC-01 | Profile metadata (name, avatar, PIN state) syncs to Supabase | ProfileSyncService port pattern (D-05, D-09); SupabaseProfile model needs avatarId + pinEnabled fields; push/pull RPCs documented |
-| SYNC-02 | Per-profile settings sync via independent blob push/pull (not v7 contract) | ProfileSettingsSyncService port pattern (D-03, D-07, D-08); syncedFeatures list mapped to Nexio; v7 contract removal paths identified (D-04) |
-| SYNC-03 | Profile deletion removes all DataStore files, SharedPreferences, and Supabase remote data | Deletion flow architecture documented; 10 SP stores + DataStore files + remote RPC + token revocation (D-10 through D-13) |
-| SYNC-04 | Snapshot stores classified and scoped per-profile where applicable | Full classification complete: 10 stores per-profile, 2 stores shared (D-01, D-02); migration pattern documented |
+| SYNC-02 | Per-profile settings sync via independent blob push/pull (not v7 contract) | v8 contract design (D-03); ProfileSettingsSyncService port pattern (D-01, D-07, D-08); syncedFeatures list mapped to Nexio; v7 removal paths identified |
+| SYNC-03 | Profile deletion removes all DataStore files, SharedPreferences, and Supabase remote data | Deletion flow documented (D-04, D-05, D-06); 7 SP stores + DataStore files + best-effort remote RPC + token clear |
+| SYNC-04 | Snapshot stores classified and scoped per-profile where applicable | Full classification: 7 stores per-profile (D-07), 5 stores shared (D-08); migration pattern documented (D-09) |
 </phase_requirements>
 
 ## Standard Stack
@@ -61,10 +67,10 @@ None -- discussion stayed within phase scope
 |---------|---------|--------------|
 | kotlinx.serialization | JSON encoding for Supabase RPC params and blob serialization | Already used throughout sync layer (buildJsonObject, put, JsonObject, JsonPrimitive) [VERIFIED: codebase grep] |
 | Gson | SharedPreferences snapshot store serialization | All 7 snapshot stores use Gson internally; no migration needed [VERIFIED: codebase grep] |
-| Supabase Postgrest | RPC calls to Supabase backend | Already used via `postgrest.rpc()` pattern in SyncRepositoryImpl and AccountSettingsSyncService [VERIFIED: codebase grep] |
+| Supabase Postgrest | RPC calls to Supabase backend | Already used via `postgrest.rpc()` pattern in AccountSettingsSyncService [VERIFIED: codebase grep] |
 | Hilt/Dagger | Dependency injection for new sync services | All existing services use `@Inject constructor` + `@Singleton` [VERIFIED: codebase grep] |
-| Kotlin Coroutines + Flow | Reactive observation, debounce, flatMapLatest | Exact patterns from NuvioTV ProfileSettingsSyncService [VERIFIED: NuvioTV source] |
-| DataStore Preferences | Per-profile settings storage via ProfileDataStoreFactory | Phase 2 already migrated 4 stores; Phase 4 sync reads these [VERIFIED: codebase grep] |
+| Kotlin Coroutines + Flow | Reactive observation, debounce, flatMapLatest | Exact patterns from existing AccountSettingsSyncService and NuvioTV ProfileSettingsSyncService [VERIFIED: codebase grep] |
+| DataStore Preferences | Per-profile settings storage via ProfileDataStoreFactory | Phase 2 already migrated per-profile stores; Phase 4 sync reads these [VERIFIED: codebase grep] |
 
 ### No New Libraries Required
 This phase requires zero new dependencies. All functionality uses existing libraries. [VERIFIED: codebase analysis]
@@ -74,57 +80,54 @@ This phase requires zero new dependencies. All functionality uses existing libra
 ### Recommended Project Structure
 ```
 com.nexio.tv.core.sync/
-  ProfileSyncService.kt          # NEW: Profile metadata push/pull
-  ProfileSettingsSyncService.kt   # NEW: Per-profile settings blob sync
-  StartupSyncService.kt          # MODIFY: Add per-profile settings pull trigger
-  AccountSettingsSyncService.kt   # MODIFY: Remove per-profile paths from v7
+  ProfileSyncService.kt             # NEW: Profile metadata push/pull
+  ProfileSettingsSyncService.kt     # NEW: Per-profile settings blob sync (v8)
+  StartupSyncService.kt             # MODIFY: Add per-profile pull trigger on startup
+  AccountSettingsSyncService.kt     # MODIFY: Remove per-profile paths from v7 observer
 
 com.nexio.tv.data.local/
-  TraktLibrarySnapshotStore.kt    # MODIFY: Per-profile PREFS_NAME
-  ContinueWatchingSnapshotStore.kt # MODIFY: Per-profile PREFS_NAME
-  SimklLibrarySnapshotStore.kt    # MODIFY: Per-profile PREFS_NAME
-  SimklDiscoverySnapshotStore.kt  # MODIFY: Per-profile PREFS_NAME
-  TraktDiscoverySnapshotStore.kt  # MODIFY: Per-profile PREFS_NAME
-  MDBListDiscoverySnapshotStore.kt # MODIFY: Per-profile PREFS_NAME
-  HomeCatalogSnapshotStore.kt     # MODIFY: Per-profile PREFS_NAME
-  SimklProgressSyncStateStore.kt  # MODIFY: Per-profile PREFS_NAME
-  SyntheticHomeCatalogStore.kt    # MODIFY: Per-profile PREFS_NAME
+  TraktLibrarySnapshotStore.kt      # MODIFY: Per-profile PREFS_NAME via ProfileManager
+  ContinueWatchingSnapshotStore.kt  # MODIFY: Per-profile PREFS_NAME via ProfileManager
+  SimklLibrarySnapshotStore.kt      # MODIFY: Per-profile PREFS_NAME via ProfileManager
+  SimklDiscoverySnapshotStore.kt    # MODIFY: Per-profile PREFS_NAME via ProfileManager
+  SimklProgressSyncStateStore.kt    # MODIFY: Per-profile PREFS_NAME via ProfileManager
+  TraktDiscoverySnapshotStore.kt    # MODIFY: Per-profile PREFS_NAME via ProfileManager
+  # HomeCatalogSnapshotStore, MetadataDiskCacheStore, CatalogDiskCacheStore,
+  # MDBListDiscoverySnapshotStore, SyntheticHomeCatalogStore — NO CHANGE (shared)
 
 com.nexio.tv.data.trakt.outbox/
-  TraktMutationOutboxStore.kt     # MODIFY: Per-profile PREFS_NAME
+  TraktMutationOutboxStore.kt       # MODIFY: Per-profile PREFS_NAME via ProfileManager
 
 com.nexio.tv.core.profile/
-  ProfileManager.kt               # MODIFY: Extend deleteProfileDataAsync()
+  ProfileManager.kt                 # MODIFY: Extend deleteProfileDataAsync() for SP files + remote
 
 com.nexio.tv.data.remote.supabase/
-  SupabaseModels.kt               # MODIFY: Add SupabaseProfileSettingsBlob, update SupabaseProfile
+  SupabaseModels.kt                 # MODIFY: Update SupabaseProfile (avatarId, pinEnabled)
+  AccountSyncModels.kt              # MODIFY: Add v8 blob models (ProfileSettingsBlobResponse)
 ```
 
 ### Pattern 1: SharedPreferences Per-Profile Naming
-**What:** Each SP store receives the active profile ID and computes its PREFS_NAME dynamically.
-**When to use:** For all 10 stores classified as per-profile (D-01, D-02).
-**Key insight:** Profile 1 uses bare name for zero-migration. Profiles 2-4 use `{baseName}_p{id}`.
+**What:** Each of the 7 per-profile SP stores receives the active profile ID and computes its PREFS_NAME dynamically, following the `_p{id}` suffix convention from D-09.
+**When to use:** For exactly the 7 stores listed in D-07. The 5 stores in D-08 keep their existing hardcoded PREFS_NAME unchanged.
+**Key insight:** Profile 1 uses the bare name for zero-migration. Profiles 2–4 use `{baseName}_p{id}`.
 
 ```kotlin
 // Source: [VERIFIED: existing ProfileDataStoreFactory.get() pattern]
-// Helper function (or inline logic in each store)
-private fun profilePrefsName(baseName: String, profileId: Int): String =
+// Standalone top-level helper (can live in a shared file or each store)
+fun profilePrefsName(baseName: String, profileId: Int): String =
     if (profileId == 1) baseName else "${baseName}_p${profileId}"
 ```
 
-**Store injection change:** Each SP store currently has `@Singleton` scope and `@Inject constructor(@ApplicationContext context: Context, ...)`. The stores need access to the active profile ID. Two approaches:
+**Store injection change:** Each of the 7 SP stores currently has `@Singleton` scope and reads a hardcoded `PREFS_NAME` constant. They need access to the active profile ID. The recommended approach:
 
-- **Option A (recommended):** Inject `ProfileManager` and read `activeProfileId.value` in each read/write/clear call. The stores remain singletons but their internal PREFS_NAME is dynamic.
-- **Option B:** Make stores profile-scoped with a factory. This is heavier and unnecessary since SP stores are simple wrappers.
+Inject `ProfileManager` into each store and read `profileManager.activeProfileId.value` in each `read()`, `write()`, and `clear()` call. The stores remain singletons but resolve the correct SP file at call time. This matches how all per-profile DataStores already work in the codebase. [ASSUMED: Option A — inject ProfileManager. Option B would be a factory pattern, which is heavier and unnecessary since these stores have simple read/write/clear APIs.]
 
-Option A is recommended because it matches how the stores are already used -- callers invoke `store.read()`, `store.write(snapshot)`, `store.clear()` without profile context. The store internally resolves the correct SP file. [ASSUMED]
-
-### Pattern 2: ProfileSyncService (Metadata Sync)
-**What:** Port of NuvioTV's ProfileSyncService. Pushes full profile list to Supabase on create/edit/delete. Pulls on startup.
-**Source:** `~/Scripts/NuvioTV/app/src/main/java/com/nuvio/tv/core/sync/ProfileSyncService.kt` [VERIFIED: file read]
+### Pattern 2: ProfileSyncService (Metadata Sync — SYNC-01)
+**What:** Port of NuvioTV's ProfileSyncService. Pushes full profile list to Supabase on create/edit/delete (D-09: immediate push, no debounce). Pulls on startup.
 
 Key structure:
 ```kotlin
+// Source: [VERIFIED: NuvioTV ProfileSyncService.kt — full file read]
 @Singleton
 class ProfileSyncService @Inject constructor(
     private val authManager: AuthManager,
@@ -132,32 +135,29 @@ class ProfileSyncService @Inject constructor(
     private val profileDataStore: ProfileDataStore,
     private val profileManager: ProfileManager
 ) {
-    // withJwtRefreshRetry pattern (same as existing services)
-    
+    // Uses withJwtRefreshRetry pattern (same as AccountSettingsSyncService)
+
     suspend fun pushToRemote(): Result<Unit>
     // Builds p_profiles JsonArray from profileManager.profiles.value
     // Calls postgrest.rpc("sync_push_profiles", params)
-    
+
     suspend fun pullFromRemote(): Result<List<UserProfile>>
     // Calls postgrest.rpc("sync_pull_profiles")
     // Decodes SupabaseProfile list, maps to UserProfile
     // Calls profileDataStore.replaceAllProfiles(profiles)
-    
-    suspend fun deleteProfileData(profileId: Int): Result<Unit>
-    // Calls postgrest.rpc("sync_delete_profile_data", params)
 }
 ```
 
 **Adaptation needed for Nexio:**
-- NuvioTV SupabaseProfile has `avatarId` field; Nexio's SupabaseProfile is missing `avatarId` and `pinEnabled` -- need to add these [VERIFIED: codebase grep]
-- PIN-related RPCs (set_profile_pin, clear_profile_pin, verify_profile_pin, sync_pull_profile_locks) may already be partially implemented for Phase 3 UI; coordinate with those
+- Nexio's `SupabaseProfile` is missing `avatarId` and `pinEnabled` fields that exist in UserProfile [VERIFIED: SupabaseModels.kt line 125-135 — fields absent]. These must be added before push/pull can carry full metadata.
+- PIN-related RPCs (set_profile_pin, clear_profile_pin, verify_profile_pin) may be partially implemented by Phase 3. Coordinate to avoid duplicate table creation — use `CREATE TABLE IF NOT EXISTS` and `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
 
-### Pattern 3: ProfileSettingsSyncService (Blob Sync)
-**What:** Port of NuvioTV's ProfileSettingsSyncService. Serializes per-profile DataStore preferences into typed JSON blob, pushes/pulls via dedicated RPCs.
-**Source:** `~/Scripts/NuvioTV/app/src/main/java/com/nuvio/tv/core/sync/ProfileSettingsSyncService.kt` [VERIFIED: file read]
+### Pattern 3: ProfileSettingsSyncService (v8 Blob Sync — SYNC-02)
+**What:** New service implementing the v8 per-profile settings contract (D-03). Serializes per-profile DataStore Preferences into a typed JSON blob per profileId, pushes/pulls via dedicated RPCs. Runs alongside the existing AccountSettingsSyncService (v7 shared sync), which continues to handle shared settings.
 
 Key structure:
 ```kotlin
+// Source: [VERIFIED: NuvioTV ProfileSettingsSyncService.kt — full file read, 393 lines]
 @Singleton
 class ProfileSettingsSyncService @Inject constructor(
     private val authManager: AuthManager,
@@ -165,93 +165,121 @@ class ProfileSettingsSyncService @Inject constructor(
     private val profileManager: ProfileManager,
     private val profileDataStoreFactory: ProfileDataStoreFactory
 ) {
-    private val syncedFeatures = listOf(/* feature DataStore names */)
-    
-    // Observer: flatMapLatest on activeProfileId -> combine all feature flows
-    //   -> drop(1) -> distinctUntilChanged -> debounce(1500ms) -> push
-    
-    // Push: exportSettingsBlob(profileId) -> postgrest.rpc("sync_push_profile_settings_blob")
-    // Pull: postgrest.rpc("sync_pull_profile_settings_blob") -> importSettingsBlob(profileId)
-    
-    // Signature comparison to skip no-op pulls
-    // skipNextPushSignature to prevent echo after pull
-    // syncMutex to serialize push/pull
-    // applyingRemoteBlob flag to suppress observer during import
+    private val syncedFeatures = listOf(/* see below */)
+
+    // Observer: flatMapLatest on activeProfileId
+    //   -> combine all feature store flows
+    //   -> drop(1) -> distinctUntilChanged
+    //   -> debounce(2000ms) per D-01
+    //   -> push blob for activeProfileId
+
+    suspend fun pushBlobForProfile(profileId: Int): Result<Unit>
+    // exportSettingsBlob(profileId) -> postgrest.rpc("sync_push_profile_settings_blob", ...)
+
+    suspend fun pullBlobForProfile(profileId: Int): Result<Unit>
+    // postgrest.rpc("sync_pull_profile_settings_blob", ...) -> importSettingsBlob(profileId)
+
+    // applyingRemoteBlob: Boolean flag to suppress observer during importSettingsBlob
+    // skipNextPushSignature: String? to prevent echo push after pull
+    // syncMutex: Mutex to serialize push/pull operations
 }
 ```
 
-**Nexio syncedFeatures list (mapped from per-profile DataStores):**
+**Nexio syncedFeatures list — settings DataStores only (auth DataStores excluded):**
 
-Currently migrated to ProfileDataStoreFactory (Phase 2):
-- `"trakt_auth_store"` (TraktAuthDataStore.FEATURE) [VERIFIED: codebase grep]
-- `"simkl_auth_store"` (SimklAuthDataStore.FEATURE) [VERIFIED: codebase grep]
-- `"trakt_settings"` (TraktSettingsDataStore.FEATURE) [VERIFIED: codebase grep]
-- `"simkl_settings"` (SimklSettingsDataStore.FEATURE) [VERIFIED: codebase grep]
+Auth DataStores (TraktAuthDataStore `"trakt_auth_store"`, SimklAuthDataStore `"simkl_auth_store"`) are NOT in the blob. Auth tokens sync via the existing secrets mechanism in v7. Including them in the blob would create duplicate sync paths. [VERIFIED: NuvioTV source confirms auth stores excluded from syncedFeatures]
 
-Not yet migrated (still singleton delegates -- Phase 2 may complete these before Phase 4):
-- `"player_settings"` (PlayerSettingsDataStore) [VERIFIED: codebase grep]
-- `"layout_preferences"` (LayoutPreferenceDataStore) [VERIFIED: codebase grep]
-- `"theme_settings"` (ThemeDataStore) [VERIFIED: codebase grep]
-- `"search_history"` (SearchHistoryDataStore) [VERIFIED: codebase grep]
-
-**Critical dependency:** The ProfileSettingsSyncService reads DataStores via `profileDataStoreFactory.get(profileId, feature)`. Only 4 of 8 per-profile DataStores are currently using the factory. If Phase 2 has not completed migrating the remaining 4 by the time Phase 4 starts, the syncedFeatures list must be limited to only the factory-backed stores, or Phase 2 must complete first.
-
-**Note on auth stores in blob:** NuvioTV's syncedFeatures does NOT include auth stores (trakt_auth_store, simkl_auth_store) in the blob because auth tokens are synced via the separate secrets mechanism in v7. Nexio should follow the same pattern -- the `syncedFeatures` list should contain only settings DataStores, not auth DataStores. [VERIFIED: NuvioTV source - syncedFeatures contains theme_settings, layout_settings, player_settings, trailer_settings, tmdb_settings, mdblist_settings, animeskip_settings, track_preference]
-
-**Recommended Nexio syncedFeatures (settings only, excluding auth):**
+Recommended syncedFeatures for Nexio:
 ```kotlin
 private val syncedFeatures = listOf(
-    "trakt_settings",
-    "simkl_settings",
-    "player_settings",
-    "layout_preferences",
-    "theme_settings"
+    "trakt_settings",       // TraktSettingsDataStore.FEATURE [VERIFIED: uses factory]
+    "simkl_settings",       // SimklSettingsDataStore.FEATURE [VERIFIED: uses factory]
+    "player_settings",      // PlayerSettingsDataStore [VERIFIED: uses factory]
+    "layout_preferences",   // LayoutPreferenceDataStore [VERIFIED: uses factory]
+    "theme_settings"        // ThemeDataStore [VERIFIED: uses factory]
     // search_history excluded: local-only, not synced cross-device
 )
 ```
 
-### Pattern 4: V7 Contract Cleanup
-**What:** Remove per-profile settings from v7 shared sync to prevent double-syncing (D-04).
-**Where:** `AccountConfigSyncContract.kt` and `AccountSettingsSyncService.kt`
+**Critical dependency on Phase 2:** All 5 features above must be backed by `ProfileDataStoreFactory.get(profileId, featureName)` before Phase 4 can implement the blob sync. The codebase already shows `flatMapLatest` usage in TraktSettingsDataStore, SimklSettingsDataStore, PlayerSettingsDataStore, LayoutPreferenceDataStore, and ThemeDataStore [VERIFIED: grep results], confirming factory migration. If any remain on singleton delegates when Phase 4 starts, those features must be excluded from syncedFeatures until migration completes.
 
-Settings to remove from v7:
-- `traktCatalogPreferences` flow from `observeAccountConfigSyncChangedPaths()` [VERIFIED: line 154]
-- `simklCatalogPreferences` flow from `observeAccountConfigSyncChangedPaths()` [VERIFIED: line 155]
-- `playerSettings` -> `"playback.streamSelection.trackingProvider"` and `"formatter"` paths [VERIFIED: lines 157-160]
-- Corresponding reads in `buildAccountConfigSyncPayload()` for `trackingProvider` and `formatter` [VERIFIED: lines 203-241]
-- Corresponding writes in `applyAccountConfigSyncSettings()` for traktSettings catalog prefs, simklSettings catalog prefs, playerSettings tracking provider, and playerSettings formatter [VERIFIED: lines 400-423]
+### Pattern 4: V7 Contract Cleanup (SYNC-02)
+**What:** Remove per-profile settings from AccountSettingsSyncService's v7 observer and payload builder to prevent double-syncing. Per D-03 this is a clean break — no shims.
 
-**Critical risk:** These settings were previously synced for single-profile users. After removal from v7, they ONLY sync via the per-profile blob. The pull-before-push gate must ensure the per-profile blob pull completes before any v7 push happens, to prevent data loss on first sync after upgrade.
+Settings to remove from v7 `observeAccountConfigSyncChangedPaths()`:
+- `traktCatalogPreferences` flow [VERIFIED: AccountSettingsSyncService.kt line 270]
+- `simklCatalogPreferences` flow [VERIFIED: AccountSettingsSyncService.kt line 271]
+- `playerSettings` flow for `trackingProvider` and `formatter` paths [VERIFIED: AccountSettingsSyncService.kt lines 272-273]
 
-### Pattern 5: Profile Deletion Cleanup
-**What:** Extended deletion flow that covers all data scopes.
-**Sequence:** (based on D-10 through D-13)
+Settings to remove from v7 `buildLocalPayload()`:
+- `traktSettingsDataStore.catalogPreferences` reads
+- `simklSettingsDataStore.catalogPreferences` reads
+- Player `trackingProvider` and formatter fields from AccountConfigSyncPayload
 
+Settings to remove from v7 `applyAccountConfigSyncSettings()`:
+- Trakt catalog prefs writes (`traktSettingsDataStore.setCatalogPreferences(...)`)
+- Simkl catalog prefs writes (`simklSettingsDataStore.setCatalogPreferences(...)`)
+- Player tracking provider write
+- Formatter writes
+
+**Critical migration risk:** These settings were previously synced for single-profile users. After removal from v7, they only sync via the per-profile blob. On first launch after upgrade, the per-profile blob pull must complete before any v7 push executes, or the removed fields could revert. The existing `AccountConfigStartupPushGate` pattern handles v7 push gating; an analogous gate is needed for the v8 blob service. [VERIFIED: AccountConfigStartupPushGate pattern in AccountSettingsSyncService.kt]
+
+### Pattern 5: Profile Deletion Cleanup (SYNC-03)
+**What:** Extended deletion flow covering all data scopes per D-04 and D-05.
+
+**Deletion sequence:**
 ```
-1. Revoke Trakt OAuth token (best-effort, from profile's TraktAuthDataStore)
-2. Revoke Simkl OAuth token (best-effort, from profile's SimklAuthDataStore)
-3. Call sync_delete_profile_data RPC (best-effort, removes remote profile + settings blob)
-4. Push updated profile list to remote (sync_push_profiles without the deleted profile)
-5. Delete DataStore files (existing: factory.clearProfile + file deletion)
-6. Delete SharedPreferences files (NEW: iterate all 10 per-profile SP names)
-7. Remove profile from local ProfileDataStore
+1. Show NexioDialog confirmation (D-06): "Delete profile '{name}'?..."
+   - "Keep Profile" auto-focused, "Delete Profile" destructive
+2. On confirm:
+   a. Best-effort remote: POST sync_delete_profile Supabase RPC
+      - If fails: log and schedule retry flag for next app start
+      - Never block on this step
+   b. Clear local Trakt tokens for the profile (read from factory.get(profileId, "trakt_auth_store"), call traktAuthDataStore.clearAuth() scoped to that profileId)
+   c. Clear local Simkl tokens for the profile (same pattern)
+      NOTE: No revocation API call per D-05
+   d. ProfileDataStoreFactory.clearProfile(profileId) — existing
+   e. Delete DataStore .preferences_pb files — existing logic in ProfileManager.deleteProfileDataAsync()
+   f. Delete per-profile SharedPreferences files (NEW — 7 files)
+   g. ProfileDataStore.deleteProfile(id) — existing
+3. Profile removed from UI immediately (steps 2d-2g are synchronous local ops)
 ```
 
-Steps 1-4 are best-effort (catch exceptions, log, continue). Steps 5-7 always execute.
+**SP file deletion — 7 files for profileId != 1:**
+```kotlin
+// Source: [Pattern derived from ProfileManager.deleteProfileDataAsync() + Android SP conventions]
+private fun deleteSharedPreferencesForProfile(profileId: Int) {
+    if (profileId == 1) return
+    val suffix = "_p${profileId}"
+    val spStoreBaseNames = listOf(
+        "trakt_library_snapshot",
+        "continue_watching_snapshot",
+        "simkl_library_snapshot",
+        "simkl_discovery_snapshot_v2",   // Note: v2 suffix is part of the base name
+        "simkl_progress_sync_state",
+        "trakt_mutation_outbox",
+        "trakt_discovery_snapshot"
+    )
+    spStoreBaseNames.forEach { baseName ->
+        val prefsName = "${baseName}${suffix}"
+        // Clear in-memory cache BEFORE deleting file (avoids Android SP cache staleness)
+        context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+            .edit().clear().commit()
+        val file = File(context.applicationInfo.dataDir, "shared_prefs/${prefsName}.xml")
+        if (file.exists()) file.delete()
+    }
+}
+```
 
-**Token revocation specifics:**
-- Trakt: `TraktAuthService.revokeAndLogout()` calls `traktApi.revokeToken(TraktRevokeRequestDto(...))` then `traktAuthDataStore.clearAuth()` [VERIFIED: TraktAuthService.kt lines 234-250]
-- Simkl: `SimklAuthService.revokeAndLogout()` only calls `simklAuthDataStore.clearAuth()` -- Simkl has no revocation API [VERIFIED: SimklAuthService.kt lines 96-98]
+**Retry on next app start:** Store a Set<Int> of profileIds with pending remote cleanup in a lightweight SharedPreferences entry (e.g., `"pending_remote_cleanup"` in a shared prefs). On StartupSyncService run, check this set, attempt the RPC for each, remove on success. [ASSUMED: implementation approach is Claude's discretion per CONTEXT.md]
 
-**Important:** For profile deletion, we need to revoke the **specific profile's** tokens, not the active profile's. This means reading tokens from the target profile's DataStore (via `profileDataStoreFactory.get(profileId, "trakt_auth_store")`) rather than calling `revokeAndLogout()` which operates on the active profile. A dedicated `revokeTokenForProfile(profileId: Int)` method is needed.
-
-### Pattern 6: Supabase RPC and Table Schema
-**What:** Backend SQL functions and tables needed for profile sync (D-06).
+### Pattern 6: Supabase RPC and Table Schema (Claude's Discretion)
+**What:** Backend SQL functions and tables needed for profile sync.
 
 **Tables needed:**
 
 ```sql
--- profiles table (may already exist from Phase 3 PIN work)
+-- profiles table (may already exist from Phase 3 PIN work — use IF NOT EXISTS)
 CREATE TABLE IF NOT EXISTS profiles (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -268,7 +296,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     UNIQUE(user_id, profile_index)
 );
 
--- profile_settings table
+-- profile_settings table (v8 blob store, one row per user+profile+platform)
 CREATE TABLE IF NOT EXISTS profile_settings (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -284,76 +312,80 @@ CREATE TABLE IF NOT EXISTS profile_settings (
 
 | RPC Name | Parameters | Behavior |
 |----------|-----------|----------|
-| `sync_push_profiles` | `p_profiles: jsonb[]` | Upsert all profiles for calling user; delete any not in the array |
-| `sync_pull_profiles` | (none) | Return all profiles for calling user |
-| `sync_push_profile_settings_blob` | `p_profile_id: int, p_settings_json: jsonb, p_platform: text` | Upsert settings blob for profile+platform |
-| `sync_pull_profile_settings_blob` | `p_profile_id: int, p_platform: text` | Return settings blob for profile+platform |
-| `sync_delete_profile_data` | `p_profile_id: int` | Delete profile row + settings blob for the given profile |
+| `sync_push_profiles` | `p_profiles jsonb` | Upsert all profiles for calling user; delete any not in the array |
+| `sync_pull_profiles` | (none) | Return all profiles for calling user ordered by profile_index |
+| `sync_push_profile_settings_blob` | `p_profile_id int, p_settings_json jsonb, p_platform text` | Upsert settings blob for profile+platform; update updated_at |
+| `sync_pull_profile_settings_blob` | `p_profile_id int, p_platform text` | Return settings blob row for profile+platform |
+| `sync_delete_profile` | `p_profile_id int` | Delete profile row + settings blob for the given profile_id |
 
 [ASSUMED: SQL schema design is Claude's discretion per CONTEXT.md. Patterns follow NuvioTV conventions.]
 
 ### Anti-Patterns to Avoid
-- **Syncing auth tokens in the settings blob:** Auth tokens have their own secrets sync mechanism in v7. Including them in the blob would create duplicate sync paths and potential conflicts.
-- **Blocking deletion on network failures:** D-13 explicitly states remote cleanup is best-effort. Never let a network error prevent local profile deletion.
-- **Mutating profile 1 SP filenames:** Profile 1 MUST keep bare names. Any code that constructs a per-profile filename for profile 1 should return the original name unchanged.
-- **Syncing search history:** Search history is local-only. NuvioTV does not sync it. Including it in the blob would create cross-device privacy concerns.
+- **Syncing auth tokens in the settings blob:** Auth tokens have their own secrets sync mechanism in v7. Including them in the blob creates duplicate sync paths and potential conflicts.
+- **Blocking deletion on network failures:** D-04 is explicit: remote cleanup is best-effort. Never let a network error prevent local profile deletion from completing.
+- **Mutating profile 1 SP filenames:** Profile 1 MUST keep bare names. `profilePrefsName(baseName, 1)` must return `baseName` unchanged.
+- **Calling Trakt/Simkl revocation on deletion:** D-05 explicitly prohibits this. Clear local tokens only.
+- **Applying per-profile naming to shared stores:** HomeCatalogSnapshotStore, MetadataDiskCacheStore, CatalogDiskCacheStore, MDBListDiscoverySnapshotStore, SyntheticHomeCatalogStore must NOT receive ProfileManager injection — they stay singleton with hardcoded PREFS_NAMEs.
+- **Showing any UI during background sync:** D-10 requires fully silent background sync. No toasts, no indicators outside the explicit "Sync Now" button in settings.
 
 ## Don't Hand-Roll
 
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
-| JSON blob serialization | Custom serializer for DataStore Preferences | NuvioTV's `encodePreferenceValue` / `applyEncodedPreference` pattern | Handles all 7 Preference types (String, Boolean, Int, Long, Float, Double, StringSet) with type tags; proven in production |
+| JSON blob serialization | Custom serializer for DataStore Preferences | NuvioTV's `encodePreferenceValue` / `applyEncodedPreference` pattern | Handles all 7 Preference types (String, Boolean, Int, Long, Float, Double, StringSet) with type tags; production-proven |
 | Settings change detection | Custom diff logic | NuvioTV's signature-based comparison (`buildSettingsSignature`) | Efficiently detects changes without full blob comparison; prevents echo pushes after pull |
 | Push/pull concurrency | Custom locking | `kotlinx.coroutines.sync.Mutex` with `syncMutex.withLock` | Already proven in NuvioTV ProfileSettingsSyncService |
-| JWT refresh | Custom retry logic | Existing `withJwtRefreshRetry` pattern | Already used in AccountSettingsSyncService and SyncRepositoryImpl |
+| JWT refresh | Custom retry logic | Existing `withJwtRefreshRetry` pattern | Already used in AccountSettingsSyncService [VERIFIED: lines 311-318] |
+| Debounce | Custom timer or delay loop | `flatMapLatest` + `debounce(2000)` operator chain | flatMapLatest auto-cancels on profile switch, debounce coalesces rapid changes; NuvioTV pattern [VERIFIED: NuvioTV source] |
 
-**Key insight:** NuvioTV's ProfileSettingsSyncService is 393 lines of proven production code. Porting it directly is lower-risk than reimplementing the same logic.
+**Key insight:** NuvioTV's ProfileSettingsSyncService is 393 lines of proven production code. Porting it directly is lower-risk than reimplementing the same logic from scratch.
 
 ## Common Pitfalls
 
 ### Pitfall 1: Echo Push After Pull
-**What goes wrong:** Pull applies remote settings -> local DataStore flows emit changes -> observer triggers a push of the same data back to remote.
-**Why it happens:** The observer watches DataStore flows; it cannot distinguish local user edits from remote blob imports.
-**How to avoid:** Use the `applyingRemoteBlob` flag to suppress the observer during `importSettingsBlob()`, plus `skipNextPushSignature` to skip the next push if its signature matches what was just pulled. Both mechanisms are in NuvioTV's implementation. [VERIFIED: NuvioTV ProfileSettingsSyncService lines 69-70, 159, 268-271]
-**Warning signs:** Infinite sync loop on pull, rapid push/pull cycling in logs.
+**What goes wrong:** Pull applies remote settings -> local DataStore flows emit -> observer triggers a push of the same data back to remote, creating a sync loop.
+**Why it happens:** The observer watches DataStore flows and cannot distinguish local user edits from remote blob imports.
+**How to avoid:** Use the `applyingRemoteBlob` flag to suppress the observer during `importSettingsBlob()`, plus `skipNextPushSignature` to skip the next push if its signature matches what was just pulled. Both mechanisms are present in NuvioTV's implementation. [VERIFIED: NuvioTV ProfileSettingsSyncService lines 69-70, 159, 268-271]
+**Warning signs:** Infinite sync loop on pull; rapid push/pull cycling visible in Logcat.
 
-### Pitfall 2: Data Loss During V7-to-Blob Migration
-**What goes wrong:** First app launch after upgrade: v7 push fires before per-profile blob pull completes, overwriting per-profile settings with stale shared data.
-**Why it happens:** The existing `AccountConfigStartupPushGate` only gates v7 pushes. A separate gate is needed for per-profile blob sync.
-**How to avoid:** The per-profile blob pull must complete before v7 settings removal takes effect. On upgrade, the first launch should: (1) pull per-profile blob, (2) if blob is empty, export current local per-profile settings as initial blob and push, (3) then remove per-profile paths from v7 push/pull.
-**Warning signs:** After upgrade, per-profile settings (catalog order, formatter, tracking provider) revert to defaults on second device.
+### Pitfall 2: Orphaned SharedPreferences Files on Deletion
+**What goes wrong:** Profile deleted but SP files remain on disk; if the same profile ID is recycled, old snapshot data reappears.
+**Why it happens:** Current `ProfileManager.deleteProfileDataAsync()` only scans for `.preferences_pb` files (DataStore format). SharedPreferences files live in `shared_prefs/` with `.xml` extension and are not covered.
+**How to avoid:** Extend deletion to call `getSharedPreferences(prefsName).edit().clear().commit()` then delete the `.xml` file for each of the 7 per-profile SP store names. Clear before delete to flush Android's in-memory SP cache. [VERIFIED: Android SharedPreferences caches instances in static map — clearing in-memory state before file deletion is required]
+**Warning signs:** After delete + recreate of same profile ID, old Trakt library data appears immediately without a sync.
 
-### Pitfall 3: Orphaned SharedPreferences Files on Deletion
-**What goes wrong:** Profile deleted but SP files remain on disk because the deletion code only handles DataStore files.
-**Why it happens:** Current `ProfileManager.deleteProfileDataAsync()` only looks for files ending with `_p${profileId}.preferences_pb` (DataStore format). SharedPreferences files are stored in `shared_prefs/` directory with `.xml` extension.
-**How to avoid:** Extend deletion to also scan `context.applicationInfo.dataDir + "/shared_prefs/"` for files matching `*_p${profileId}.xml`. [ASSUMED: Standard Android SharedPreferences file location]
-**Warning signs:** After deleting and re-creating a profile with the same ID, old snapshot data appears.
+### Pitfall 3: Race Between Profile Switch and Debounced Push
+**What goes wrong:** User switches profile during a 2s debounce window; push fires with new profileId but data blob is from old profile.
+**Why it happens:** A timing gap between debounce completion and flatMapLatest cancellation.
+**How to avoid:** `flatMapLatest` wraps the ENTIRE inner flow including the `debounce()` call. When `activeProfileId` changes, the entire inner coroutine — including any pending debounce — is cancelled and a new one starts for the new profile. Verify the flatMapLatest wraps `combine(allFeatureFlows).debounce(2000).collect { push(newProfileId) }` as a single chain. [VERIFIED: NuvioTV source confirms correct scoping]
+**Warning signs:** Log showing push for profileId=2 while active profile is 1.
 
-### Pitfall 4: Revoking Wrong Profile's Token
-**What goes wrong:** Profile deletion revokes the active profile's Trakt/Simkl token instead of the deleted profile's token.
-**Why it happens:** `TraktAuthService.revokeAndLogout()` and `SimklAuthService.revokeAndLogout()` operate on the current active profile's DataStore. If the user is on profile 1 and deletes profile 3, calling these methods would revoke profile 1's tokens.
-**How to avoid:** Read the target profile's access token directly from `profileDataStoreFactory.get(profileId, "trakt_auth_store")` and call the revocation API with that specific token. Do NOT use the existing `revokeAndLogout()` methods for deletion.
-**Warning signs:** Active profile loses auth after deleting a different profile.
+### Pitfall 4: Reading Stale SharedPreferences After Profile Switch
+**What goes wrong:** After switching from profile 2 to profile 1, a snapshot store still returns profile 2's data.
+**Why it happens:** SP stores currently resolve their PREFS_NAME at construction time. After migration, they must resolve at call time.
+**How to avoid:** `prefsName()` must call `profileManager.activeProfileId.value` on every `read()`, `write()`, and `clear()` invocation — not cached in a field. [VERIFIED: This matches how ProfileDataStoreFactory.get() resolves per-profile DataStores at call time]
+**Warning signs:** Library list from profile 2 shows up for profile 1 immediately after switch.
 
-### Pitfall 5: SharedPreferences Singleton Caching
-**What goes wrong:** After deleting a profile's SP file and recreating the same profile ID, `context.getSharedPreferences(name)` returns cached in-memory data from the deleted file.
-**Why it happens:** Android caches SharedPreferences instances in a static map keyed by filename. Deleting the XML file does not invalidate the in-memory cache.
-**How to avoid:** Call `sharedPrefs.edit().clear().commit()` BEFORE deleting the file, to clear the in-memory cache. Then delete the file. [VERIFIED: this is a known Android behavior]
-**Warning signs:** Ghost data persists after profile deletion until app restart.
+### Pitfall 5: V7 Removal Causing Settings Loss on Upgrade
+**What goes wrong:** App upgrades: v7 sync fires before per-profile blob pull completes, overwriting removed fields (traktCatalogPreferences, simklCatalogPreferences, trackingProvider) with default values.
+**Why it happens:** The existing `AccountConfigStartupPushGate` only gates v7 pushes for the shared contract. There is no gate preventing v7 push before the v8 blob pull completes on first run.
+**How to avoid:** The v8 ProfileSettingsSyncService must complete its initial pull for the active profile before AccountSettingsSyncService is allowed to push. Create a `ProfileSettingsStartupPullGate` analogous to `AccountConfigStartupPushGate`, or sequence the startup pull order so profile settings pull always runs first. [ASSUMED: gate implementation is Claude's discretion]
+**Warning signs:** After upgrading, catalog order and formatter settings revert to defaults on second device.
 
-### Pitfall 6: Race Between Profile Switch and Settings Push
-**What goes wrong:** User switches profile during a debounced push window. The push fires with the new profile ID but the signature was computed from the old profile's data.
-**Why it happens:** `flatMapLatest` cancels the old profile's flow, but a pending debounce coroutine might survive briefly.
-**How to avoid:** `flatMapLatest` automatically handles this -- when `activeProfileId` changes, the entire inner flow (including pending debounce) is cancelled and restarted for the new profile. Verify `flatMapLatest` wraps the entire chain including `debounce`. [VERIFIED: NuvioTV source lines 251-276 confirms correct scoping]
+### Pitfall 6: Retry Accumulation for Remote Cleanup
+**What goes wrong:** App is offline repeatedly; pending cleanup set grows unbounded.
+**Why it happens:** Each failed deletion adds an entry; if the set is never pruned, deleted profile IDs pile up indefinitely.
+**How to avoid:** Cap the retry set at 4 entries (max profiles). On successful remote delete, remove the ID. Treat the set as a simple `Set<Int>` persisted as a comma-separated string in a shared prefs key. [ASSUMED]
+**Warning signs:** Unexpected RPC calls on app start for profile IDs that no longer exist locally.
 
 ## Code Examples
 
 ### SharedPreferences Per-Profile Naming Helper
 ```kotlin
-// Source: [Pattern derived from ProfileDataStoreFactory.get()]
+// Source: [Pattern derived from ProfileDataStoreFactory.get() — VERIFIED]
 /**
  * Returns a profile-scoped SharedPreferences name.
- * Profile 1 keeps the bare baseName for zero-migration.
+ * Profile 1 keeps the bare baseName for zero-migration (D-09).
  */
 fun profilePrefsName(baseName: String, profileId: Int): String =
     if (profileId == 1) baseName else "${baseName}_p${profileId}"
@@ -361,8 +393,9 @@ fun profilePrefsName(baseName: String, profileId: Int): String =
 
 ### Snapshot Store Migration Template
 ```kotlin
-// Source: [Pattern derived from existing TraktLibrarySnapshotStore + ProfileDataStoreFactory]
-// Before (singleton, hardcoded name):
+// Source: [Pattern derived from existing TraktLibrarySnapshotStore + ProfileDataStoreFactory — VERIFIED]
+
+// BEFORE (singleton, hardcoded name):
 @Singleton
 class TraktLibrarySnapshotStore @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -377,54 +410,31 @@ class TraktLibrarySnapshotStore @Inject constructor(
     }
 }
 
-// After (profile-aware):
+// AFTER (profile-aware, resolved at call time):
 @Singleton
 class TraktLibrarySnapshotStore @Inject constructor(
     @ApplicationContext private val context: Context,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
-    private val profileManager: ProfileManager
+    private val profileManager: ProfileManager          // NEW
 ) {
     companion object {
         internal const val BASE_PREFS_NAME = "trakt_library_snapshot"
     }
-    private fun prefsName(): String =
+
+    private fun prefsName(): String =                   // NEW — called at each read/write/clear
         profilePrefsName(BASE_PREFS_NAME, profileManager.activeProfileId.value)
 
     fun read(): Snapshot? {
-        val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
-        // ... (rest unchanged)
+        val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE) // changed
+        // ... rest unchanged
     }
-}
-```
-
-### Profile Deletion SharedPreferences Cleanup
-```kotlin
-// Source: [Pattern derived from ProfileManager.deleteProfileDataAsync() + Android SP conventions]
-private fun deleteSharedPreferencesForProfile(profileId: Int) {
-    if (profileId == 1) return  // Never delete profile 1 files
-
-    val suffix = "_p${profileId}"
-    val spStoreBaseNames = listOf(
-        "trakt_library_snapshot",
-        "continue_watching_snapshot",
-        "simkl_library_snapshot",
-        "simkl_discovery_snapshot_v2",
-        "trakt_discovery_snapshot",
-        "mdblist_discovery_snapshot",
-        "home_catalog_snapshot",
-        "simkl_progress_sync_state",
-        "trakt_mutation_outbox",
-        "synthetic_home_catalogs"
-    )
-
-    spStoreBaseNames.forEach { baseName ->
-        val prefsName = "${baseName}${suffix}"
-        // Clear in-memory cache first
-        context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-            .edit().clear().commit()
-        // Delete the XML file
-        val file = File(context.applicationInfo.dataDir, "shared_prefs/${prefsName}.xml")
-        if (file.exists()) file.delete()
+    fun write(snapshot: Snapshot) {
+        val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE) // changed
+        // ... rest unchanged
+    }
+    fun clear() {
+        val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE) // changed
+        // ... rest unchanged
     }
 }
 ```
@@ -435,13 +445,13 @@ private fun deleteSharedPreferencesForProfile(profileId: Int) {
 // Encodes DataStore preference values with type information for safe deserialization
 private fun encodePreferenceValue(rawValue: Any?): JsonObject? {
     return when (rawValue) {
-        is String -> buildJsonObject { put("type", "string"); put("value", rawValue) }
-        is Boolean -> buildJsonObject { put("type", "boolean"); put("value", rawValue) }
-        is Int -> buildJsonObject { put("type", "int"); put("value", rawValue) }
-        is Long -> buildJsonObject { put("type", "long"); put("value", rawValue) }
-        is Float -> buildJsonObject { put("type", "float"); put("value", rawValue) }
-        is Double -> buildJsonObject { put("type", "double"); put("value", rawValue) }
-        is Set<*> -> {
+        is String  -> buildJsonObject { put("type", "string");     put("value", rawValue) }
+        is Boolean -> buildJsonObject { put("type", "boolean");    put("value", rawValue) }
+        is Int     -> buildJsonObject { put("type", "int");        put("value", rawValue) }
+        is Long    -> buildJsonObject { put("type", "long");       put("value", rawValue) }
+        is Float   -> buildJsonObject { put("type", "float");      put("value", rawValue) }
+        is Double  -> buildJsonObject { put("type", "double");     put("value", rawValue) }
+        is Set<*>  -> {
             if (!rawValue.all { it is String }) return null
             buildJsonObject {
                 put("type", "string_set")
@@ -453,70 +463,111 @@ private fun encodePreferenceValue(rawValue: Any?): JsonObject? {
 }
 ```
 
+### SupabaseProfile Model Update Needed
+```kotlin
+// Source: [VERIFIED: SupabaseModels.kt lines 125-135 — current model missing these fields]
+// Fields to ADD to SupabaseProfile:
+@SerialName("avatar_id") val avatarId: String? = null,
+@SerialName("pin_enabled") val pinEnabled: Boolean = false,
+```
+
 ## State of the Art
 
 | Old Approach | Current Approach | When Changed | Impact |
 |--------------|------------------|--------------|--------|
-| All settings in v7 shared sync | Per-profile settings in independent blob + shared settings remain in v7 | Phase 4 (this phase) | Prevents cross-profile overwrites |
-| SP stores hardcoded to single file | SP stores profile-aware with `_p{id}` suffix | Phase 4 (this phase) | Enables per-profile snapshot isolation |
-| Deletion: DataStore files only | Deletion: DataStore + SP files + remote data + token revocation | Phase 4 (this phase) | No orphaned data anywhere |
+| All settings in v7 shared sync (single profile) | Per-profile settings in v8 independent blob + shared settings remain in v7 | Phase 4 (this phase) | Prevents cross-profile overwrites; SYNC-02 |
+| SP stores hardcoded to single file (bare name) | 7 SP stores profile-aware with `_p{id}` suffix | Phase 4 (this phase) | Enables per-profile snapshot isolation; SYNC-04 |
+| Deletion: DataStore files only | Deletion: DataStore + 7 SP files + best-effort remote cleanup | Phase 4 (this phase) | No orphaned data; SYNC-03 |
+| Remote token revocation on profile delete | Local token clear only (no revocation API call) | Phase 4 decision (D-05) | Simpler; Trakt tokens expire in 90 days |
 
 ## Assumptions Log
 
 | # | Claim | Section | Risk if Wrong |
 |---|-------|---------|---------------|
-| A1 | Option A (inject ProfileManager into SP stores) is the best approach for per-profile SP naming | Architecture Patterns - Pattern 1 | Medium -- could require factory pattern instead if stores need to read non-active profiles |
-| A2 | SharedPreferences files are stored at `{dataDir}/shared_prefs/{name}.xml` | Common Pitfalls - Pitfall 3 | Low -- this is standard Android behavior but could vary on custom ROMs |
-| A3 | Supabase SQL schema design follows NuvioTV conventions with profiles and profile_settings tables | Architecture Patterns - Pattern 6 | Low -- schema is Claude's discretion per CONTEXT.md |
-| A4 | search_history should be excluded from syncedFeatures (local-only) | Architecture Patterns - Pattern 3 | Low -- NuvioTV excludes it; user would need to explicitly request cross-device search history sync |
-| A5 | Phase 2 will complete remaining 4 DataStore migrations (PlayerSettings, LayoutPreference, Theme, SearchHistory) before Phase 4 starts | Architecture Patterns - Pattern 3 | HIGH -- if not complete, syncedFeatures must be reduced or Phase 2 must be finished first |
+| A1 | Inject ProfileManager into SP stores (Option A) rather than a factory | Architecture Patterns - Pattern 1 | Medium — if stores need to read non-active profiles (e.g., during deletion), a profileId parameter may be needed |
+| A2 | SharedPreferences files are stored at `{dataDir}/shared_prefs/{name}.xml` | Common Pitfalls - Pitfall 2 | Low — standard Android behavior; could vary on custom ROMs |
+| A3 | Supabase SQL schema follows NuvioTV conventions with profiles and profile_settings tables | Architecture Patterns - Pattern 6 | Low — schema is Claude's discretion per CONTEXT.md |
+| A4 | search_history excluded from syncedFeatures (local-only, not synced cross-device) | Architecture Patterns - Pattern 3 | Low — NuvioTV excludes it; consistent with privacy expectations |
+| A5 | All 5 per-profile DataStores (trakt_settings, simkl_settings, player_settings, layout_preferences, theme_settings) use ProfileDataStoreFactory before Phase 4 starts | Architecture Patterns - Pattern 3 | HIGH — flatMapLatest usage verified in codebase for all 5, but if any still use singleton delegates, syncedFeatures must be scoped accordingly |
+| A6 | Retry mechanism for remote cleanup uses a lightweight shared prefs set persisted across app starts | Architecture Patterns - Pattern 5 | Low — other implementations possible; Claude's discretion |
 
 ## Open Questions
 
-1. **Phase 2 DataStore Migration Completeness**
-   - What we know: Phase 2 has migrated 4/8 per-profile DataStores to ProfileDataStoreFactory (TraktAuth, SimklAuth, TraktSettings, SimklSettings). The remaining 4 (PlayerSettings, LayoutPreference, Theme, SearchHistory) still use singleton delegates.
-   - What's unclear: Will Phase 2 complete all 8 migrations before Phase 4 starts?
-   - Recommendation: Phase 4 plans should assume Phase 2 is complete (per roadmap dependency). If not, the syncedFeatures list must be scoped to only factory-backed stores. Planner should add an explicit prerequisite check.
+1. **Profiles Table Overlap with Phase 3 (PIN)**
+   - What we know: Phase 3 implements PIN-related RPCs (set_profile_pin, verify_profile_pin). These may already create the `profiles` table in Supabase.
+   - What's unclear: Does Phase 3 fully create the `profiles` table including `avatar_id` and `pin_enabled`, or does Phase 4 need to add those columns?
+   - Recommendation: Phase 4 SQL should be fully idempotent using `CREATE TABLE IF NOT EXISTS` and `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. Planner should add a note to coordinate with Phase 3 SQL migrations.
 
-2. **Profiles Table Overlap with Phase 3 (PIN)**
-   - What we know: Phase 3 implements PIN-related RPCs (set_profile_pin, clear_profile_pin, verify_profile_pin). These likely create the profiles table.
-   - What's unclear: Does Phase 3 create the profiles table or does Phase 4 need to?
-   - Recommendation: Phase 4 SQL should use `CREATE TABLE IF NOT EXISTS` and `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` to be idempotent. If Phase 3 already created the table, Phase 4 just adds the profile_settings table and any missing columns.
+2. **SimklDiscoverySnapshotStore Legacy Name**
+   - What we know: `SimklDiscoverySnapshotStore` has both `PREFS_NAME = "simkl_discovery_snapshot_v2"` and `LEGACY_PREFS_NAME = "simkl_discovery_snapshot"` (read-only migration path). [VERIFIED: codebase grep]
+   - What's unclear: Should per-profile naming apply to the legacy name during deletion?
+   - Recommendation: Only apply per-profile naming to `PREFS_NAME` (`"simkl_discovery_snapshot_v2"`). The legacy name only exists for Profile 1 (pre-multi-profile users) and is read-only for migration — no deletion needed.
 
-3. **SimklDiscoverySnapshotStore Legacy Migration**
-   - What we know: SimklDiscoverySnapshotStore has both `PREFS_NAME = "simkl_discovery_snapshot_v2"` and `LEGACY_PREFS_NAME = "simkl_discovery_snapshot"`. The legacy cleanup reads the old file.
-   - What's unclear: Should per-profile naming apply to the legacy name too?
-   - Recommendation: Only apply per-profile naming to the current `PREFS_NAME` (v2). The legacy name is read-only for migration and only exists for profile 1 (pre-multi-profile users).
+3. **AccountConfigStartupPushGate Sequencing for v8**
+   - What we know: v7 pushes are gated by `AccountConfigStartupPushGate` until remote pull succeeds. Removing per-profile paths from v7 requires the v8 blob pull to run first, or upgrade users lose settings.
+   - What's unclear: Should one gate block both services, or should they each have independent gates?
+   - Recommendation: Independent gates per service. The v8 ProfileSettingsSyncService should gate its own pushes with its own pull-completion tracker, analogous to the existing v7 gate. Both gates must complete before any push from either service fires.
 
 ## Project Constraints (from CLAUDE.md)
 
-- **Small, targeted changes:** Prefer small changes over broad refactors. Each SP store migration can be a discrete commit.
-- **Preserve existing architecture:** SP stores keep their existing API (read/write/clear). Only internal PREFS_NAME computation changes.
-- **No new libraries:** All functionality uses existing dependencies.
-- **Keep domain code free of Android framework dependencies:** Sync services live in `core.sync` (framework-adjacent), not in domain layer.
-- **Build command:** `./gradlew assembleArm64Debug` for development builds.
-- **Test command:** `./gradlew testArm64DebugUnitTest` for unit tests.
+- **Small, targeted changes:** Prefer small changes over broad refactors. Each SP store migration is a discrete commit. [CITED: CLAUDE.md]
+- **Preserve existing architecture:** SP stores keep their existing public API (read/write/clear). Only internal PREFS_NAME computation changes. [CITED: CLAUDE.md]
+- **No new libraries:** All functionality uses existing dependencies. [CITED: CLAUDE.md]
+- **Keep domain code free of Android framework dependencies:** New sync services live in `core.sync` (framework-adjacent), not domain layer. [CITED: CLAUDE.md]
+- **Build command for development:** `./gradlew assembleArm64Debug` [CITED: CLAUDE.md]
+- **Test command:** `./gradlew testArm64DebugUnitTest` [CITED: CLAUDE.md]
+
+## Environment Availability
+
+Step 2.6: SKIPPED (no external tool dependencies — this phase is code/config changes plus Supabase SQL migrations; Supabase access is via the existing SDK already configured in the project)
+
+## Validation Architecture
+
+`workflow.nyquist_validation` not set in config.json — treated as enabled.
+
+### Test Framework
+| Property | Value |
+|----------|-------|
+| Framework | JUnit4 + Kotlin coroutines test (already in project) |
+| Config file | `./gradlew testArm64DebugUnitTest` |
+| Quick run command | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.sync.*"` |
+| Full suite command | `./gradlew testArm64DebugUnitTest` |
+
+### Phase Requirements → Test Map
+| Req ID | Behavior | Test Type | Automated Command | File Exists? |
+|--------|----------|-----------|-------------------|-------------|
+| SYNC-01 | ProfileSyncService push encodes all UserProfile fields correctly | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.sync.ProfileSyncServiceTest"` | ❌ Wave 0 |
+| SYNC-01 | ProfileSyncService pull replaces profile list atomically | unit | same | ❌ Wave 0 |
+| SYNC-02 | profilePrefsName() returns bare name for profile 1, suffixed name for profiles 2-4 | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.data.local.ProfilePrefsNameTest"` | ❌ Wave 0 |
+| SYNC-02 | ProfileSettingsSyncService blob encodes all 7 Preference types correctly | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.sync.ProfileSettingsSyncServiceTest"` | ❌ Wave 0 |
+| SYNC-03 | deleteSharedPreferencesForProfile() clears and deletes all 7 SP files | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.profile.ProfileManagerTest"` | ❌ Wave 0 |
+| SYNC-03 | Profile deletion with remote failure still completes local deletion | unit | same | ❌ Wave 0 |
+| SYNC-04 | TraktLibrarySnapshotStore reads from profile-suffixed SP name when profile != 1 | unit | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.data.local.TraktLibrarySnapshotStoreTest"` | ❌ Wave 0 |
+
+### Wave 0 Gaps
+- [ ] `tests/ProfileSyncServiceTest.kt` — covers SYNC-01
+- [ ] `tests/ProfileSettingsSyncServiceTest.kt` — covers SYNC-02
+- [ ] `tests/ProfilePrefsNameTest.kt` — covers SYNC-02 naming helper
+- [ ] `tests/ProfileManagerTest.kt` (extend existing if present) — covers SYNC-03 deletion
+- [ ] `tests/TraktLibrarySnapshotStoreTest.kt` — covers SYNC-04 per-profile reads
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- NuvioTV ProfileSyncService.kt -- full file read, 186 lines, profile metadata push/pull pattern
-- NuvioTV ProfileSettingsSyncService.kt -- full file read, 393 lines, settings blob sync with debounce/flatMapLatest
-- NuvioTV SupabaseModels.kt -- SupabaseProfile, SupabaseProfileSettingsBlob, SupabaseProfileLockState models
-- Nexio AccountSettingsSyncService.kt -- 400+ lines read, v7 sync contract, push/pull/observe patterns
-- Nexio AccountConfigSyncContract.kt -- full file read, v7 contract functions, per-profile paths identified
-- Nexio ProfileManager.kt -- full file read, deleteProfileDataAsync(), createProfile(), existing deletion flow
-- Nexio ProfileDataStoreFactory.kt -- full file read, get(), clearProfile(), per-profile naming convention
-- Nexio StartupSyncService.kt -- full file read, startup pull flow, push gate pattern
-- Nexio TraktAuthService.kt -- revokeAndLogout() pattern (lines 234-250)
-- Nexio SimklAuthService.kt -- revokeAndLogout() pattern (lines 96-98)
-- Nexio SyncRepositoryImpl.kt -- full file read, RPC call pattern
-- All 10 SP stores -- PREFS_NAME constants and read/write/clear patterns verified
+- NuvioTV ProfileSyncService.kt — full file read, 186 lines, profile metadata push/pull pattern [VERIFIED: NuvioTV source]
+- NuvioTV ProfileSettingsSyncService.kt — full file read, 393 lines, settings blob sync with debounce/flatMapLatest [VERIFIED: NuvioTV source]
+- Nexio AccountSettingsSyncService.kt — 400+ lines read, v7 sync contract, push/pull/observe patterns, withJwtRefreshRetry [VERIFIED: file read]
+- Nexio ProfileManager.kt — full file read, deleteProfileDataAsync(), createProfile() [VERIFIED: file read]
+- Nexio ProfileDataStoreFactory.kt — full file read, get(), clearProfile(), per-profile naming convention [VERIFIED: file read]
+- Nexio StartupSyncService.kt — full file read, startup pull flow, push gate pattern [VERIFIED: file read]
+- Nexio AccountSyncModels.kt — full file read, v7 contract data classes, existing schema [VERIFIED: file read]
+- Nexio SupabaseModels.kt — full file read, SupabaseProfile model (missing avatarId, pinEnabled confirmed) [VERIFIED: file read]
+- All 7 per-profile SP stores — PREFS_NAME constants and read/write/clear patterns [VERIFIED: grep + file reads]
+- All 5 shared SP stores — confirmed hardcoded PREFS_NAME, no ProfileManager injection [VERIFIED: grep]
 
 ### Secondary (MEDIUM confidence)
-- Nexio UserProfile model -- fields verified (id, name, avatarColorHex, usesPrimaryAddons, avatarId, pinEnabled)
-- Nexio SupabaseProfile model -- fields verified (missing avatarId and pinEnabled vs NuvioTV)
-- Phase 2 CONTEXT.md -- DataStore classification and migration decisions
+- Nexio UserProfile model — fields verified (id, name, avatarColorHex, usesPrimaryAddons, avatarId, pinEnabled)
+- Phase 4 CONTEXT.md — all locked decisions (D-01 through D-12) and discretion areas
 
 ### Tertiary (LOW confidence)
 - None
@@ -524,11 +575,11 @@ private fun encodePreferenceValue(rawValue: Any?): JsonObject? {
 ## Metadata
 
 **Confidence breakdown:**
-- Standard stack: HIGH -- all libraries already in project, no new deps
-- Architecture: HIGH -- porting proven NuvioTV patterns with source code available
-- Pitfalls: HIGH -- identified from actual code analysis, not hypothetical
-- SQL schema: MEDIUM -- follows NuvioTV conventions but exact schema is Claude's discretion
-- Phase 2 dependency: MEDIUM -- 4/8 DataStore migrations verified complete, remaining 4 assumed
+- Standard stack: HIGH — all libraries already in project, no new dependencies
+- Architecture (SP naming, deletion): HIGH — derived from verified codebase patterns
+- Architecture (v8 blob sync): HIGH — porting proven NuvioTV patterns with source available
+- SQL schema: MEDIUM — follows NuvioTV conventions but exact schema is Claude's discretion
+- Phase 2 DataStore dependency: MEDIUM — flatMapLatest usage verified for all 5 features, but factory backing assumed complete
 
 **Research date:** 2026-04-14
-**Valid until:** 2026-05-14 (30 days -- stable domain, no external dependency changes expected)
+**Valid until:** 2026-05-14 (30 days — stable domain, no external dependency changes expected)
