@@ -76,6 +76,7 @@ import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.TorBoxSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktSettingsPayload
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.repository.EasyDebridService
 import com.nexio.tv.data.repository.PremiumizeService
 import com.nexio.tv.data.repository.TorBoxService
@@ -182,6 +183,7 @@ class AccountSettingsSyncService @Inject constructor(
     private val simklSettingsDataStore: SimklSettingsDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
+    private val profileManager: ProfileManager,
     @ApplicationContext private val context: Context
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -189,6 +191,10 @@ class AccountSettingsSyncService @Inject constructor(
 
     @Volatile
     private var isApplyingRemote = false
+
+    @Volatile
+    private var recentlySwitchedProfile = false
+
     private val startupPushGate = AccountConfigStartupPushGate()
     private val pendingChangedPaths = linkedSetOf<String>()
     private var pendingChangedPathsGeneration: Long = 0L
@@ -198,6 +204,17 @@ class AccountSettingsSyncService @Inject constructor(
 
     init {
         observeLocalChanges()
+        observeProfileSwitches()
+    }
+
+    private fun observeProfileSwitches() {
+        scope.launch {
+            profileManager.activeProfileId.drop(1).collect {
+                recentlySwitchedProfile = true
+                delay(2000)
+                recentlySwitchedProfile = false
+            }
+        }
     }
 
     private fun observeLocalChanges() {
@@ -241,7 +258,7 @@ class AccountSettingsSyncService @Inject constructor(
                 simklAuthState = simklAuthDataStore.state.drop(1).map { Unit },
                 playerSettings = playerSettingsDataStore.playerSettings.drop(1).map { Unit }
             ).collect { changedPath ->
-                if (isApplyingRemote) return@collect
+                if (isApplyingRemote || recentlySwitchedProfile) return@collect
                 synchronized(pendingChangedPaths) {
                     pendingChangedPaths.add(changedPath)
                     pendingChangedPathsGeneration += 1L
@@ -252,7 +269,7 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private fun schedulePush() {
-        if (isApplyingRemote) return
+        if (isApplyingRemote || recentlySwitchedProfile) return
         val userId = authManager.currentSessionUserId ?: return
         if (!startupPushGate.canPush(userId)) {
             Log.d(TAG, "Skipping account settings push before startup remote pull completes")

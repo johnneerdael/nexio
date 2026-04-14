@@ -11,6 +11,8 @@ import com.nexio.tv.data.local.ProfileDataStoreImpl
 import com.nexio.tv.domain.model.UserProfile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -232,5 +234,25 @@ class ProfileManagerTest {
     fun `isPrimaryProfileActive returns true when profile 1 is active`() = runTest {
         val manager = makeManager()
         assertTrue(manager.isPrimaryProfileActive)
+    }
+
+    @Test
+    fun `profileSwitched emits on setActiveProfile`() = runTest {
+        val manager = makeManager()
+        manager.createProfile("Alice", "#E53935")
+        val profilesAfterCreate = manager.profiles.first { it.size == 2 }
+        val aliceId = profilesAfterCreate.first { it.name == "Alice" }.id
+
+        val emissions = mutableListOf<Unit>()
+        val collectJob = launch(backgroundScope.coroutineContext) {
+            manager.profileSwitched.toList(emissions)
+        }
+
+        manager.setActiveProfile(aliceId)
+        // Yield to allow the emission to be collected
+        manager.activeProfileId.first { it == aliceId }
+
+        collectJob.cancel()
+        assertTrue("Expected at least one profileSwitched emission", emissions.isNotEmpty())
     }
 }

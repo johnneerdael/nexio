@@ -9,8 +9,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import java.io.File
@@ -39,6 +42,9 @@ class ProfileManager(
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     )
 
+    private val _profileSwitched = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val profileSwitched: SharedFlow<Unit> = _profileSwitched.asSharedFlow()
+
     val activeProfileId: StateFlow<Int> = dataStore.activeProfileId
         .stateIn(scope, SharingStarted.Eagerly, 1)
 
@@ -59,6 +65,7 @@ class ProfileManager(
         val current = dataStore.profilesList.first()
         if (current.any { it.id == id }) {
             dataStore.setActiveProfile(id)
+            _profileSwitched.emit(Unit)
         }
     }
 
