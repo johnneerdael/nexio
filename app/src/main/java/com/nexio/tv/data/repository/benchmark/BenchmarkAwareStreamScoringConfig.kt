@@ -1,6 +1,9 @@
 package com.nexio.tv.data.repository.benchmark
 
 import com.google.gson.Gson
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 
 enum class ShadowResolutionTier {
     UHD_2160,
@@ -114,7 +117,31 @@ data class BenchmarkAwareStreamScoringConfig(
 
     companion object {
         fun fromJson(json: String, gson: Gson = Gson()): BenchmarkAwareStreamScoringConfig {
-            return gson.fromJson(json, BenchmarkAwareStreamScoringConfig::class.java)
+            val parsed = gson.fromJson(json, BenchmarkAwareStreamScoringConfig::class.java)
+            val root = runCatching { JsonParser.parseString(json).asJsonObject }.getOrNull()
+            val legacySourceRewards = root
+                ?.getAsJsonObjectOrNull("contentRewards")
+                ?.getAsJsonObjectOrNull("source")
+                ?.toReleaseTypeRewards()
+                .orEmpty()
+            val parsedReleaseRewards = runCatching { parsed.contentRewards.releaseType }
+                .getOrNull()
+                .orEmpty()
+            val default = default()
+            val normalizedContentRewards = parsed.contentRewards.copy(
+                releaseType = default.contentRewards.releaseType.orEmpty() +
+                    legacySourceRewards +
+                    parsedReleaseRewards,
+                resolution = default.contentRewards.resolution.orEmpty() +
+                    parsed.contentRewards.resolution.orEmpty(),
+                codec = default.contentRewards.codec + parsed.contentRewards.codec,
+                hdr = default.contentRewards.hdr + parsed.contentRewards.hdr,
+                audio = default.contentRewards.audio + parsed.contentRewards.audio
+            )
+            return parsed.copy(
+                burstMargins = default.burstMargins + parsed.burstMargins,
+                contentRewards = normalizedContentRewards
+            )
         }
 
         fun default(): BenchmarkAwareStreamScoringConfig {
@@ -214,4 +241,26 @@ data class BenchmarkAwareStreamScoringConfig(
             )
         }
     }
+}
+
+private fun JsonObject.getAsJsonObjectOrNull(memberName: String): JsonObject? {
+    val element = get(memberName) ?: return null
+    return element.takeIf { it.isJsonObject }?.asJsonObject
+}
+
+private fun JsonObject.toReleaseTypeRewards(): Map<ShadowReleaseType, Int> {
+    return entrySet().mapNotNull { (key, value) ->
+        val type = runCatching { ShadowReleaseType.valueOf(key) }.getOrNull() ?: return@mapNotNull null
+        val reward = value.strictIntOrNull() ?: return@mapNotNull null
+        type to reward
+    }.toMap()
+}
+
+private fun JsonElement.strictIntOrNull(): Int? {
+    return runCatching {
+        if (!isJsonPrimitive) return null
+        val primitive = asJsonPrimitive
+        if (!primitive.isNumber) return null
+        primitive.asInt
+    }.getOrNull()
 }

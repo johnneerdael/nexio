@@ -186,15 +186,16 @@
           ]
         }
       ],
-      "expectedWinnerStreamKey": "remux_stream",
+      "expectedWinnerStreamKey": "webdl_stream",
       "acceptableWinnerKeys": [
+        "webdl_stream",
         "remux_stream"
       ],
       "preferredPairs": [
         {
-          "preferredStreamKey": "remux_stream",
-          "otherStreamKey": "webdl_stream",
-          "reason": "premium source with healthy bitrate should win"
+          "preferredStreamKey": "webdl_stream",
+          "otherStreamKey": "remux_stream",
+          "reason": "supported Atmos WEB-DL with ample transport headroom should beat unsupported TrueHD remux"
         }
       ]
     }
