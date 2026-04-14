@@ -192,8 +192,12 @@ class AccountSettingsSyncService @Inject constructor(
     @Volatile
     private var isApplyingRemote = false
 
-    @Volatile
-    private var recentlySwitchedProfile = false
+    // Generation counter: incremented on every profile switch, cleared after the
+    // post-switch pull succeeds. Replaces the fixed 2-second boolean window, which
+    // had a TOCTOU gap between the check and push launch, and could expire before
+    // initial DataStore emissions arrived under storage pressure.
+    @Volatile private var suppressPushForSwitchGeneration: Long = 0L
+    private var currentSwitchGeneration: Long = 0L
 
     private val startupPushGate = AccountConfigStartupPushGate()
     private val pendingChangedPaths = linkedSetOf<String>()
@@ -210,11 +214,18 @@ class AccountSettingsSyncService @Inject constructor(
     private fun observeProfileSwitches() {
         scope.launch {
             profileManager.activeProfileId.drop(1).collect {
-                recentlySwitchedProfile = true
-                delay(2000)
-                recentlySwitchedProfile = false
+                val gen = ++currentSwitchGeneration
+                suppressPushForSwitchGeneration = gen
+                pushJob?.cancel()
+                pushJob = null
+                // Suppression is cleared by clearSuppression(gen) after the post-switch
+                // pull succeeds in pullFromRemoteAndApply(), not by a fixed timeout.
             }
         }
+    }
+
+    private fun clearSuppression(gen: Long) {
+        if (suppressPushForSwitchGeneration == gen) suppressPushForSwitchGeneration = 0L
     }
 
     private fun observeLocalChanges() {
@@ -258,7 +269,7 @@ class AccountSettingsSyncService @Inject constructor(
                 simklAuthState = simklAuthDataStore.state.drop(1).map { Unit },
                 playerSettings = playerSettingsDataStore.playerSettings.drop(1).map { Unit }
             ).collect { changedPath ->
-                if (isApplyingRemote || recentlySwitchedProfile) return@collect
+                if (isApplyingRemote || suppressPushForSwitchGeneration != 0L) return@collect
                 synchronized(pendingChangedPaths) {
                     pendingChangedPaths.add(changedPath)
                     pendingChangedPathsGeneration += 1L
@@ -269,7 +280,7 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private fun schedulePush() {
-        if (isApplyingRemote || recentlySwitchedProfile) return
+        if (isApplyingRemote || suppressPushForSwitchGeneration != 0L) return
         val userId = authManager.currentSessionUserId ?: return
         if (!startupPushGate.canPush(userId)) {
             Log.d(TAG, "Skipping account settings push before startup remote pull completes")
@@ -397,6 +408,7 @@ class AccountSettingsSyncService @Inject constructor(
     ): Result<List<AddonPreferences.AddonInstallConfig>> = withContext(Dispatchers.IO) {
         try {
             val pullStartedGeneration = synchronized(pendingChangedPaths) { pendingChangedPathsGeneration }
+            val switchGenAtPullStart = suppressPushForSwitchGeneration
             val snapshot = withJwtRefreshRetry {
                 postgrest.rpc(
                     "sync_pull_account_snapshot",
@@ -423,6 +435,7 @@ class AccountSettingsSyncService @Inject constructor(
                 )
                 applyRemoteSecrets(snapshot.settings)
                 lastAppliedRemoteRevision = snapshot.settingsRevision
+                clearSuppression(switchGenAtPullStart)
                 if (clearPendingChanges) {
                     synchronized(pendingChangedPaths) {
                         if (pendingChangedPathsGeneration == pullStartedGeneration) {
