@@ -15,18 +15,22 @@ CREATE TABLE IF NOT EXISTS public.profile_auth_tokens (
 
 ALTER TABLE public.profile_auth_tokens ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can read own profile tokens" ON public.profile_auth_tokens;
 CREATE POLICY "Users can read own profile tokens"
   ON public.profile_auth_tokens FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own profile tokens" ON public.profile_auth_tokens;
 CREATE POLICY "Users can insert own profile tokens"
   ON public.profile_auth_tokens FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own profile tokens" ON public.profile_auth_tokens;
 CREATE POLICY "Users can update own profile tokens"
   ON public.profile_auth_tokens FOR UPDATE
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own profile tokens" ON public.profile_auth_tokens;
 CREATE POLICY "Users can delete own profile tokens"
   ON public.profile_auth_tokens FOR DELETE
   USING (auth.uid() = user_id);
