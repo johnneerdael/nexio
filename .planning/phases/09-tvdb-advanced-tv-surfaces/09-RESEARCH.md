@@ -426,19 +426,22 @@ fun `tvdb active title trailer uses tvdb before streailer fallback ids and tmdb`
 |---|-------|---------|---------------|
 | A1 | Example class and function names such as `TvdbAdvancedEnrichment`, `TvdbSeasonOrderContext`, `TvdbTrailerResolver`, and `applyTvdbDefaultOrder` are placeholders. | Architecture Patterns, Code Examples | Low. Phase 9 planning can substitute the exact Phase 6/7 names once those phases are implemented. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **What exact Phase 7 provider abstraction will exist?** [VERIFIED: current worktree lacks TVDB implementation]
+   - RESOLVED: Phase 9 will not guess or recreate Phase 7 provider classes. Plan 09-00 gates execution on the Phase 7 source files, and Phase 9 tasks read the actual `TvMetadataModels`, `TvdbMetadataService`, `TvMetadataRouter`, diagnostics, and settings files before editing. If those files are absent, Phase 9 stops before implementation. [VERIFIED: .planning/phases/09-tvdb-advanced-tv-surfaces/09-00-PLAN.md] [VERIFIED: .planning/ROADMAP.md]
    - What we know: Phase 7 is supposed to introduce or extend TVDB provider routing. [VERIFIED: .planning/phases/07-tvdb-provider-replacement/07-CONTEXT.md]
    - What's unclear: The current worktree contains no TVDB production classes beyond poster URL parsing. [VERIFIED: rg Tvdb app/src/main/java]
    - Recommendation: Make Phase 9 Plan Wave 0 read Phase 7 implementation and bind tasks to its actual class names before editing. [VERIFIED: .planning/ROADMAP.md]
 
 2. **Should TVDB company `primaryCompanyType` be resolved through `/companies/types` in Phase 9?** [VERIFIED: tvdb.yml]
+   - RESOLVED: Do not call `/companies/types` in Phase 9. Map `originalNetwork` and `latestNetwork` directly to `MetaCompanyKind.NETWORK`, map `companies` conservatively to `MetaCompanyKind.COMPANY`, dedupe by ID/name where available, and leave heavy reference-data caching/type lookup to Phase 10. [VERIFIED: .planning/phases/09-tvdb-advanced-tv-surfaces/09-CONTEXT.md] [VERIFIED: .planning/ROADMAP.md]
    - What we know: `Company` has `primaryCompanyType`, and `/companies/types` returns type names. [VERIFIED: tvdb.yml]
    - What's unclear: Phase 10 owns stable reference-data heavy caching, so a Phase 9 online type lookup may exceed scope. [VERIFIED: .planning/phases/09-tvdb-advanced-tv-surfaces/09-CONTEXT.md]
    - Recommendation: Prefer direct `originalNetwork` / `latestNetwork` for networks and conservative `companies` mapping for production companies in Phase 9; log ambiguous company type IDs for Phase 10. [VERIFIED: tvdb.yml] [VERIFIED: .planning/phases/09-tvdb-advanced-tv-surfaces/09-CONTEXT.md]
 
 3. **How much direct TVDB trailer URL playback exists beyond YouTube?** [VERIFIED: app/src/main/java/com/nexio/tv/data/trailer/InAppYouTubeExtractor.kt]
+   - RESOLVED: Treat a TVDB trailer as usable only when it is a direct playable media URL, a resolvable YouTube/Vimeo-style URL supported by the current trailer pipeline, or a supported external URL represented by existing `TrailerResolutionResult.External`. Unsupported or unsafe URLs must emit an unusable-URL diagnostic and continue the configured fallback chain. [VERIFIED: app/src/main/java/com/nexio/tv/data/trailer/TrailerService.kt] [VERIFIED: app/src/main/java/com/nexio/tv/data/trailer/TrailerPlaybackSource.kt] [VERIFIED: .planning/phases/09-tvdb-advanced-tv-surfaces/09-CONTEXT.md]
    - What we know: Current extraction path is YouTube-focused, while `TrailerResolutionResult.External` can carry an external URL. [VERIFIED: app/src/main/java/com/nexio/tv/data/trailer/InAppYouTubeExtractor.kt] [VERIFIED: app/src/main/java/com/nexio/tv/data/trailer/TrailerPlaybackSource.kt]
    - What's unclear: Whether TVDB commonly returns Vimeo or other URLs that should be treated as external rather than playable. [VERIFIED: tvdb.yml]
    - Recommendation: Define URL usability in tests and diagnostics: direct playable media or resolvable YouTube is playable; otherwise expose supported external URL or continue fallback chain. [VERIFIED: .planning/phases/09-tvdb-advanced-tv-surfaces/09-CONTEXT.md]
