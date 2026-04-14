@@ -193,9 +193,9 @@ class CatalogOrderViewModel @Inject constructor(
         mdbListPrefs: MDBListCatalogPreferences
     ): List<CatalogOrderItem> {
         val defaultEntries = buildDefaultCatalogEntries(addons, disabledKeys)
-            .plus(buildActiveTraktCatalogEntries(traktSnapshot, traktPrefs))
-            .plus(buildActiveSimklCatalogEntries(simklPrefs))
-            .plus(buildActiveMdbListCatalogEntries(mdbListSnapshot, mdbListPrefs))
+            .plus(buildActiveTraktCatalogEntries(traktSnapshot, traktPrefs, disabledKeys))
+            .plus(buildActiveSimklCatalogEntries(simklPrefs, disabledKeys))
+            .plus(buildActiveMdbListCatalogEntries(mdbListSnapshot, mdbListPrefs, disabledKeys))
         val availableMap = defaultEntries.associateBy { it.key }
         val defaultOrderKeys = defaultEntries.map { it.key }
         val savedValid = savedOrderKeys
@@ -273,7 +273,8 @@ class CatalogOrderViewModel @Inject constructor(
 
     private fun buildActiveTraktCatalogEntries(
         snapshot: TraktDiscoverySnapshot,
-        prefs: TraktCatalogPreferences
+        prefs: TraktCatalogPreferences,
+        disabledKeys: Set<String>
     ): List<CatalogOrderEntry> {
         val entries = mutableListOf<CatalogOrderEntry>()
 
@@ -281,12 +282,12 @@ class CatalogOrderViewModel @Inject constructor(
             if (catalogId !in prefs.enabledCatalogs) return
             entries += CatalogOrderEntry(
                 key = catalogId,
-                disableKey = "",
+                disableKey = catalogId,
                 catalogName = catalogName,
                 addonName = "Trakt",
                 typeLabel = typeLabel,
-                isToggleable = false,
-                isDisabled = false
+                isToggleable = true,
+                isDisabled = catalogId in disabledKeys
             )
         }
 
@@ -304,12 +305,12 @@ class CatalogOrderViewModel @Inject constructor(
             .forEach { list ->
             entries += CatalogOrderEntry(
                 key = list.key,
-                disableKey = "",
+                disableKey = list.key,
                 catalogName = list.title,
                 addonName = "Trakt",
                 typeLabel = "custom list",
-                isToggleable = false,
-                isDisabled = false
+                isToggleable = true,
+                isDisabled = list.key in disabledKeys
             )
         }
         return entries
@@ -317,7 +318,8 @@ class CatalogOrderViewModel @Inject constructor(
 
     private fun buildActiveMdbListCatalogEntries(
         snapshot: MDBListDiscoverySnapshot,
-        prefs: MDBListCatalogPreferences
+        prefs: MDBListCatalogPreferences,
+        disabledKeys: Set<String>
     ): List<CatalogOrderEntry> {
         val availableKeys = buildSet {
             addAll(
@@ -344,18 +346,19 @@ class CatalogOrderViewModel @Inject constructor(
             val option = listsByKey[key] ?: return@mapNotNull null
             CatalogOrderEntry(
                 key = option.key,
-                disableKey = "",
+                disableKey = option.key,
                 catalogName = option.title,
                 addonName = "MDBList",
                 typeLabel = if (option.isPersonal) "personal list" else "top list",
-                isToggleable = false,
-                isDisabled = false
+                isToggleable = true,
+                isDisabled = option.key in disabledKeys
             )
         }
     }
 
     private fun buildActiveSimklCatalogEntries(
-        prefs: SimklCatalogPreferences
+        prefs: SimklCatalogPreferences,
+        disabledKeys: Set<String>
     ): List<CatalogOrderEntry> {
         fun labelFor(catalogId: String): Pair<String, String> = when (catalogId) {
             SimklCatalogIds.TV_TRENDING_TODAY -> "SIMKL Trending TV (Today)" to "series"
@@ -378,12 +381,12 @@ class CatalogOrderViewModel @Inject constructor(
             val (catalogName, typeLabel) = labelFor(catalogId)
             CatalogOrderEntry(
                 key = catalogId,
-                disableKey = "",
+                disableKey = catalogId,
                 catalogName = catalogName,
                 addonName = "SIMKL",
                 typeLabel = typeLabel,
-                isToggleable = false,
-                isDisabled = false
+                isToggleable = true,
+                isDisabled = catalogId in disabledKeys
             )
         }
     }
