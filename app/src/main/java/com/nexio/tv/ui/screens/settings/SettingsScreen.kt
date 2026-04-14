@@ -474,20 +474,6 @@ private fun ProfileHeaderRow(
                 style = androidx.tv.material3.MaterialTheme.typography.titleMedium,
                 color = NexioColors.TextPrimary
             )
-            if (profile.isPrimary) {
-                androidx.tv.material3.Text(
-                    text = "Default",
-                    style = androidx.tv.material3.MaterialTheme.typography.bodyMedium,
-                    color = NexioColors.FocusRing,
-                    modifier = Modifier
-                        .padding(top = 2.dp)
-                        .background(
-                            color = NexioColors.FocusRing.copy(alpha = 0.2f),
-                            shape = RoundedCornerShape(4.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                )
-            }
         }
     }
 }
