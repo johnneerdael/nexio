@@ -691,7 +691,6 @@ class AccountSettingsSyncService @Inject constructor(
         playerSettingsDataStore.setSubtitleBackgroundColor(settings.playback.subtitles.backgroundColor)
         playerSettingsDataStore.setSubtitleOutlineEnabled(settings.playback.subtitles.outlineEnabled)
         playerSettingsDataStore.setSubtitleOutlineColor(settings.playback.subtitles.outlineColor)
-        playerSettingsDataStore.setUseLibass(settings.playback.subtitles.useLibass)
         playerSettingsDataStore.setBufferMinBufferMs(settings.playback.bufferNetwork.minBufferMs)
         playerSettingsDataStore.setBufferMaxBufferMs(settings.playback.bufferNetwork.maxBufferMs)
         playerSettingsDataStore.setBufferForPlaybackMs(settings.playback.bufferNetwork.bufferForPlaybackMs)

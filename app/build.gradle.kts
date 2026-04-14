@@ -386,8 +386,6 @@ dependencies {
         implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
     }
 
-    // libass-android for ASS/SSA subtitle support (from Maven Central)
-    implementation("io.github.peerless2012:ass-media:0.4.0-beta01")
     // NextLib is only used for media probing (AFR), not for playback decode/rendering.
     implementation("io.github.anilbeesetti:nextlib-mediainfo:1.9.1-0.11.0")
     implementation("io.github.abdallahmehiz:mpv-android-lib:0.1.12")

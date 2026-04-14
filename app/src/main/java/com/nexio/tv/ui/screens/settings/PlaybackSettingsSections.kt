@@ -171,8 +171,6 @@ internal fun PlaybackSettingsSections(
     onSetSubtitleVerticalOffset: (Int) -> Unit,
     onSetSubtitleBold: (Boolean) -> Unit,
     onSetSubtitleOutlineEnabled: (Boolean) -> Unit,
-    onSetUseLibass: (Boolean) -> Unit,
-    onSetLibassRenderType: (com.nexio.tv.data.local.LibassRenderType) -> Unit,
     onSetUseParallelConnections: (Boolean) -> Unit,
     onSetVodCacheSizeMode: (VodCacheSizeMode) -> Unit,
     onSetVodCacheSizeMb: (Int) -> Unit,
@@ -512,8 +510,6 @@ internal fun PlaybackSettingsSections(
                 onSetSubtitleVerticalOffset = onSetSubtitleVerticalOffset,
                 onSetSubtitleBold = onSetSubtitleBold,
                 onSetSubtitleOutlineEnabled = onSetSubtitleOutlineEnabled,
-                onSetUseLibass = onSetUseLibass,
-                onSetLibassRenderType = onSetLibassRenderType,
                 onItemFocused = { focusedSection = PlaybackSection.SUBTITLES },
                 enabled = !generalUi.isExternalPlayer
             )
