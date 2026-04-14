@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
+import android.view.KeyEvent
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -254,6 +255,43 @@ class ModernHomeModelsTest {
         assertEquals("Paradise", selection?.trailerTitle)
         assertEquals(builtItem.subtitle, selection?.trailerReleaseInfo)
         assertNull(selection?.fallbackTrailerYtId)
+    }
+
+    @Test
+    fun `modern row prefetch only runs for the active row while vertical scrolling is idle`() {
+        assertEquals(true, shouldPrefetchModernRow(isActiveRow = true, isVerticalRowsScrolling = false))
+        assertEquals(false, shouldPrefetchModernRow(isActiveRow = false, isVerticalRowsScrolling = false))
+        assertEquals(false, shouldPrefetchModernRow(isActiveRow = true, isVerticalRowsScrolling = true))
+    }
+
+    @Test
+    fun `modern home repeat focus handling only converts dpad repeat keys`() {
+        assertEquals(
+            ModernHomeRepeatFocusDirection.Down,
+            modernHomeRepeatFocusDirectionForKeyCode(KeyEvent.KEYCODE_DPAD_DOWN)
+        )
+        assertEquals(
+            ModernHomeRepeatFocusDirection.Up,
+            modernHomeRepeatFocusDirectionForKeyCode(KeyEvent.KEYCODE_DPAD_UP)
+        )
+        assertEquals(
+            ModernHomeRepeatFocusDirection.Left,
+            modernHomeRepeatFocusDirectionForKeyCode(KeyEvent.KEYCODE_DPAD_LEFT)
+        )
+        assertEquals(
+            ModernHomeRepeatFocusDirection.Right,
+            modernHomeRepeatFocusDirectionForKeyCode(KeyEvent.KEYCODE_DPAD_RIGHT)
+        )
+        assertNull(modernHomeRepeatFocusDirectionForKeyCode(KeyEvent.KEYCODE_DPAD_CENTER))
+        assertNull(modernHomeRepeatFocusDirectionForKeyCode(KeyEvent.KEYCODE_ENTER))
+    }
+
+    @Test
+    fun `modern home repeat focus handling uses slower vertical throttle`() {
+        assertEquals(112L, modernHomeRepeatThrottleMs(ModernHomeRepeatFocusDirection.Down))
+        assertEquals(112L, modernHomeRepeatThrottleMs(ModernHomeRepeatFocusDirection.Up))
+        assertEquals(80L, modernHomeRepeatThrottleMs(ModernHomeRepeatFocusDirection.Left))
+        assertEquals(80L, modernHomeRepeatThrottleMs(ModernHomeRepeatFocusDirection.Right))
     }
 
     private fun buildModernCarouselItem(tomatoesText: String?): ModernCarouselItem {

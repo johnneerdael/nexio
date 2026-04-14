@@ -238,6 +238,8 @@ private fun ModernCatalogRowItem(
 @Composable
 internal fun ModernRowSection(
     row: HeroCarouselRow,
+    isActiveRow: Boolean,
+    isVerticalRowsScrolling: Boolean,
     rowTitleBottom: Dp,
     defaultBringIntoViewSpec: BringIntoViewSpec,
     initialScrollIndex: Int,
@@ -392,7 +394,17 @@ internal fun ModernRowSection(
         val context = LocalContext.current
         val imageLoader = context.imageLoader
 
-        LaunchedEffect(row.key, row.items.size, modernCatalogCardWidth, modernCatalogCardHeight, continueWatchingCardWidth, continueWatchingCardHeight) {
+        LaunchedEffect(
+            row.key,
+            isActiveRow,
+            isVerticalRowsScrolling,
+            row.items.size,
+            modernCatalogCardWidth,
+            modernCatalogCardHeight,
+            continueWatchingCardWidth,
+            continueWatchingCardHeight
+        ) {
+            if (!shouldPrefetchModernRow(isActiveRow, isVerticalRowsScrolling)) return@LaunchedEffect
             val catalogWidthPx = with(density) { modernCatalogCardWidth.roundToPx() }
             val catalogHeightPx = with(density) { modernCatalogCardHeight.roundToPx() }
             val cwWidthPx = with(density) { continueWatchingCardWidth.roundToPx() }
