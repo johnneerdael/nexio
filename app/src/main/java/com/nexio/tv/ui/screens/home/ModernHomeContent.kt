@@ -346,7 +346,7 @@ internal fun ModernHomeContent(
     )
     val shouldActivateFocusedPosterFlow = effectiveExpandEnabled
     val visibleCatalogRows = remember(contentState.catalogRows) {
-        contentState.catalogRows.filter { it.items.isNotEmpty() }
+        modernVisibleCatalogRows(contentState.catalogRows)
     }
     val strContinueWatching = stringResource(R.string.continue_watching)
     val strAirsDate = stringResource(R.string.cw_airs_date)

@@ -1440,6 +1440,27 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         val syntheticRowsByKey = linkedMapOf<String, List<CatalogRow>>().apply {
             syntheticGroups.forEach { group -> put(group.orderKey, group.rows) }
         }
+        val existingRowsByOrderKey = linkedMapOf<String, CatalogRow>().apply {
+            putAll(rawRowsByKey)
+            syntheticGroups.forEach { group ->
+                group.rows.firstOrNull()?.let { row -> put(group.orderKey, row) }
+            }
+        }
+        val pendingRowsByKey = buildConfiguredHomeCatalogDescriptors(
+            addons = addonsCache,
+            disabledHomeCatalogKeys = disabledHomeCatalogKeys,
+            traktPrefs = traktPrefs,
+            traktSnapshot = effectiveTraktSnapshot,
+            hasTraktUpNextItems = currentState.traktUpNextItems.isNotEmpty(),
+            simklPrefs = simklPrefs,
+            mdbPrefs = mdbListPrefs,
+            mdbSnapshot = effectiveMDBListSnapshot,
+            existingRowsByOrderKey = existingRowsByOrderKey
+        )
+            .filterNot { descriptor ->
+                descriptor.orderKey in rawRowsByKey || descriptor.orderKey in syntheticRowsByKey
+            }
+            .associate { descriptor -> descriptor.orderKey to descriptor.toLoadingCatalogRow() }
         val rowOrderKeyByGlobalKey = linkedMapOf<String, String>().apply {
             rawRowsByKey.keys.forEach { globalKey -> put(globalKey, globalKey) }
             syntheticGroups.forEach { group ->
@@ -1447,11 +1468,15 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
                     put(homeCatalogGlobalKey(row), group.orderKey)
                 }
             }
+            pendingRowsByKey.forEach { (orderKey, row) ->
+                put(homeCatalogGlobalKey(row), orderKey)
+            }
         }
 
         val defaultOrderKeys = buildList {
             addAll(syntheticGroups.map { it.orderKey })
             addAll(rawRowsByKey.keys)
+            addAll(pendingRowsByKey.keys)
         }.distinct()
 
         val savedOrderKeys = homeCatalogOrderKeys
@@ -1467,7 +1492,9 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             "Catalog order reconciliation saved=${savedOrderKeys.size} default=${defaultOrderKeys.size} effective=${effectiveOrderKeys.size}"
         val combinedRows = buildList {
             effectiveOrderKeys.forEach { key ->
-                syntheticRowsByKey[key]?.let { addAll(it) } ?: rawRowsByKey[key]?.let { add(it) }
+                syntheticRowsByKey[key]?.let { addAll(it) }
+                    ?: rawRowsByKey[key]?.let { add(it) }
+                    ?: pendingRowsByKey[key]?.let { add(it) }
             }
         }
         val liveOrderedRows = combinedRows
@@ -1589,6 +1616,10 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val fullRowsFiltered = updateResult.fullRows
     val orderedGroupKeys = updateResult.orderedGroupKeys
     val nextTruncatedRowCache = updateResult.truncatedCache
+    val persistableDisplayRows = persistableHomeCatalogRows(displayRows)
+    val persistableFullRows = persistableHomeCatalogRows(fullRowsFiltered)
+    val hasTransientLoadingRows = persistableDisplayRows.size != displayRows.size ||
+        persistableFullRows.size != fullRowsFiltered.size
     val candidateSnapshotComplete =
         publishableExpectedOrderKeys.isNotEmpty() &&
             isConfiguredHomeSnapshotComplete(
@@ -1599,8 +1630,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     truncatedRowCache.clear()
     truncatedRowCache.putAll(nextTruncatedRowCache)
 
-    val hasCurrentRenderedContent = currentState.catalogRows.any { it.items.isNotEmpty() } ||
-        currentState.heroItems.isNotEmpty()
+    val hasCurrentRenderedContent = hasRenderableHomeContent(currentState)
     val shouldKeepVisibleContent =
         hasCurrentRenderedContent &&
             displayRows.isEmpty() &&
@@ -1616,10 +1646,10 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     if (
         diskFirstHomeStartupEnabled &&
         expectedConfiguredOrderKeys.isNotEmpty() &&
-        !candidateSnapshotComplete
+        !candidateSnapshotComplete &&
+        !hasTransientLoadingRows
     ) {
-        val hasVisibleContent = _uiState.value.catalogRows.any { it.items.isNotEmpty() } ||
-            _uiState.value.heroItems.isNotEmpty()
+        val hasVisibleContent = hasRenderableHomeContent(_uiState.value)
         if (!hasVisibleContent) {
             _uiState.update { it.copy(isLoading = true, error = null) }
         }
@@ -1638,14 +1668,16 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     }
 
     if (displayRows.isNotEmpty() || baseHeroItems.isNotEmpty() || fullRowsFiltered.isNotEmpty()) {
-        hasPersistedCatalogSnapshot = persistAndApplyHomeSnapshotPipeline(
-            com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot(
-                catalogRows = displayRows,
-                fullCatalogRows = fullRowsFiltered,
-                heroItems = baseHeroItems,
-                orderedGroupKeys = orderedGroupKeys
-            )
+        val transientSnapshot = com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot(
+            catalogRows = displayRows,
+            fullCatalogRows = fullRowsFiltered,
+            heroItems = baseHeroItems,
+            orderedGroupKeys = orderedGroupKeys
         )
+        applyHomeSnapshotToUiPipeline(transientSnapshot)
+        if (!hasTransientLoadingRows) {
+            hasPersistedCatalogSnapshot = persistAndApplyHomeSnapshotPipeline(transientSnapshot)
+        }
         pendingRestoredCatalogSnapshot = null
     }
 

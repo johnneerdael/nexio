@@ -10,6 +10,8 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
@@ -43,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.graphicsLayer
@@ -60,6 +63,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -84,6 +89,7 @@ import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.components.ContinueWatchingCard
 import com.nexio.tv.ui.components.MonochromePosterPlaceholder
 import com.nexio.tv.ui.components.TrailerPlayer
+import com.nexio.tv.ui.components.rememberShimmerBrush
 import com.nexio.tv.ui.theme.NexioColors
 import kotlin.math.abs
 import kotlinx.coroutines.delay
@@ -479,11 +485,24 @@ internal fun ModernRowSection(
                 contentPadding = PaddingValues(horizontal = rowStartPadding),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                itemsIndexed(
-                    items = row.items,
-                    key = { _, item -> item.key },
-                    contentType = { _, item -> modernRowItemContentType(item) }
-                ) { index, item ->
+                if (row.isLoading && row.items.isEmpty()) {
+                    items(
+                        count = modernLoadingPlaceholderCount(),
+                        key = { index -> "${row.key}_loading_$index" },
+                        contentType = { "modern_loading_placeholder" }
+                    ) {
+                        ModernCatalogLoadingPlaceholder(
+                            cardWidth = modernCatalogCardWidth,
+                            cardHeight = modernCatalogCardHeight,
+                            cornerRadius = posterCardCornerRadius
+                        )
+                    }
+                } else {
+                    itemsIndexed(
+                        items = row.items,
+                        key = { _, item -> item.key },
+                        contentType = { _, item -> modernRowItemContentType(item) }
+                    ) { index, item ->
                     val requester = uiCaches.requesterFor(row.key, item.key)
                     val isContinueWatchingRow = row.key == "continue_watching"
                     val onFocused = remember(row.key, index, isContinueWatchingRow) {
@@ -567,12 +586,35 @@ internal fun ModernRowSection(
                             )
                         }
                     }
+                    }
                 }
             }
         }
     }
 }
 
+@Composable
+private fun ModernCatalogLoadingPlaceholder(
+    cardWidth: Dp,
+    cardHeight: Dp,
+    cornerRadius: Dp
+) {
+    val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
+    val shimmerBrush = rememberShimmerBrush()
+    Box(
+        modifier = Modifier
+            .width(cardWidth)
+            .height(cardHeight)
+            .clip(shape)
+            .background(shimmerBrush)
+            .border(
+                border = BorderStroke(1.dp, NexioColors.SurfaceVariant.copy(alpha = 0.45f)),
+                shape = shape
+            )
+            .clearAndSetSemantics { }
+            .testTag(MODERN_LOADING_PLACEHOLDER_TEST_TAG)
+    )
+}
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable

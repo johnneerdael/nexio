@@ -9,10 +9,12 @@ import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.MDBListListOption
 import com.nexio.tv.data.repository.MDBListCustomCatalog
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
+import com.nexio.tv.data.repository.TraktPopularListOption
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
 import com.nexio.tv.domain.model.CatalogDescriptor
+import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
@@ -114,6 +116,72 @@ class HomeCatalogStartupReadinessTest {
         )
 
         assertEquals(emptyList<String>(), expected)
+    }
+
+    @Test
+    fun `configured home descriptors use meaningful titles before hydration`() {
+        val descriptors = buildConfiguredHomeCatalogDescriptors(
+            addons = listOf(addonWithCatalog("cinemeta", "movie", "popular", catalogName = "Popular Movies")),
+            disabledHomeCatalogKeys = emptySet(),
+            traktPrefs = TraktCatalogPreferences(
+                enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES),
+                catalogOrder = TraktCatalogIds.BUILT_IN_ORDER,
+                selectedPopularListKeys = setOf("popular:trakt-list")
+            ),
+            traktSnapshot = TraktDiscoverySnapshot(
+                popularLists = listOf(
+                    traktPopularListOption("popular:trakt-list", "Trakt Staff Picks")
+                )
+            ),
+            simklPrefs = SimklCatalogPreferences(
+                enabledCatalogs = setOf(SimklCatalogIds.TV_TRENDING_TODAY),
+                catalogOrder = listOf(SimklCatalogIds.TV_TRENDING_TODAY)
+            ),
+            mdbPrefs = MDBListCatalogPreferences(
+                selectedTopListKeys = setOf("top:top-rated"),
+                catalogOrder = listOf("top:top-rated")
+            ),
+            mdbSnapshot = MDBListDiscoverySnapshot(
+                topLists = listOf(listOption("top:top-rated", isPersonal = false, title = "MDB Top Rated"))
+            )
+        )
+
+        assertEquals(
+            listOf(
+                "Trakt Trending Movies",
+                "Trakt Staff Picks",
+                "SIMKL Trending TV (Today)",
+                "MDB Top Rated",
+                "Popular Movies"
+            ),
+            descriptors.map { it.catalogName }
+        )
+    }
+
+    @Test
+    fun `loading only rows are excluded from persistable home snapshots`() {
+        val hydrated = CatalogRow(
+            addonId = "cinemeta",
+            addonName = "Cinemeta",
+            addonBaseUrl = "https://example.com/cinemeta",
+            catalogId = "popular",
+            catalogName = "Popular Movies",
+            type = ContentType.MOVIE,
+            items = listOf(samplePreview("tt1234567", ContentType.MOVIE, "Hydrated Movie"))
+        )
+        val loading = CatalogRow(
+            addonId = "simkl",
+            addonName = "SIMKL",
+            addonBaseUrl = "https://data.simkl.in",
+            catalogId = SimklCatalogIds.TV_TRENDING_TODAY,
+            catalogName = "SIMKL Trending TV (Today)",
+            type = ContentType.SERIES,
+            items = emptyList(),
+            isLoading = true
+        )
+
+        assertEquals(listOf(hydrated), persistableHomeCatalogRows(listOf(hydrated, loading)))
+        assertEquals(emptyList<CatalogRow>(), persistableHomeCatalogRows(listOf(loading)))
     }
 
     @Test
@@ -819,14 +887,29 @@ class HomeCatalogStartupReadinessTest {
         )
     }
 
-    private fun listOption(key: String, isPersonal: Boolean): MDBListListOption {
+    private fun listOption(
+        key: String,
+        isPersonal: Boolean,
+        title: String = key
+    ): MDBListListOption {
         return MDBListListOption(
             key = key,
             owner = "owner",
             listId = key.substringAfter(':'),
-            title = key,
+            title = title,
             itemCount = 10,
             isPersonal = isPersonal
+        )
+    }
+
+    private fun traktPopularListOption(key: String, title: String): TraktPopularListOption {
+        return TraktPopularListOption(
+            key = key,
+            userId = "user",
+            listId = key.substringAfter(':'),
+            catalogIdBase = "trakt_list_${key.substringAfter(':')}",
+            title = title,
+            itemCount = 10
         )
     }
 
