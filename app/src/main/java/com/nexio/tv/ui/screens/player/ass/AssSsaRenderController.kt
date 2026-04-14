@@ -183,6 +183,22 @@ internal class AssSsaRenderController(
         }
     }
 
+    fun resetForNewStream() {
+        synchronized(stateLock) {
+            if (released) return
+            stopRenderLoop()
+            destroyNativeHandle()
+            tracks.clear()
+            eventChunks.clear()
+            rawSamples.clear()
+            fontAttachments.clear()
+            selectedTrackId = null
+            loadedTrackId = null
+            currentTimeUs = 0L
+        }
+        clearOverlay()
+    }
+
     fun release() {
         synchronized(stateLock) {
             if (released) return

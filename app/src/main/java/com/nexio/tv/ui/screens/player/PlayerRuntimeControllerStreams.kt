@@ -379,6 +379,9 @@ internal fun PlayerRuntimeController.switchToSourceStream(stream: Stream) {
 
     currentStreamUrl = url
     resetAssSsaPipelineDecisionForStream(url)
+    if (activePlayerUsesAssSsaRenderer) {
+        assSsaRenderController?.resetForNewStream()
+    }
     currentHeaders = newHeaders
     currentStreamServiceKey = normalizedBenchmarkServiceKey(stream.wrappedProviderId)
     currentStreamBingeGroup = StreamBingeGroupResolver.resolve(stream)
@@ -706,6 +709,9 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(stream: Stream, force
 
     currentStreamUrl = url
     resetAssSsaPipelineDecisionForStream(url)
+    if (activePlayerUsesAssSsaRenderer) {
+        assSsaRenderController?.resetForNewStream()
+    }
     currentHeaders = newHeaders
     currentStreamServiceKey = normalizedBenchmarkServiceKey(stream.wrappedProviderId)
     currentStreamBingeGroup = StreamBingeGroupResolver.resolve(stream)

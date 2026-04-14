@@ -226,6 +226,47 @@ class AssSsaRenderControllerTest {
         assertFalse(overlay.hasRenderedBitmapForTesting())
     }
 
+    @Test
+    fun resetForNewStreamClearsPriorStreamSubtitleState() {
+        val native = FakeAssSsaNativeApi()
+        val overlay = newOverlay()
+        val controller = AssSsaRenderController(
+            context = ApplicationProvider.getApplicationContext(),
+            overlayView = overlay,
+            subtitleDelayUsProvider = { 0L },
+            native = native
+        )
+        val oldFormat = Format.Builder().setLanguage("en").build()
+
+        controller.setVideoSize(640, 360)
+        controller.onTrackHeader(trackId = 21, headerData = "[Script Info]".toByteArray(), oldFormat)
+        controller.onFontAttachment("old-font.ttf", byteArrayOf(1, 2, 3))
+        controller.onSubtitleSample(
+            trackId = 21,
+            timeUs = 1_000_000L,
+            data = "Dialogue: 0:00:00.00,0:00:01.00,1,0,Default,,0,0,0,,Old".toByteArray()
+        )
+        controller.renderCurrentFrameForTesting()
+        assertTrue(controller.eventChunksForTesting().isNotEmpty())
+        assertTrue(overlay.hasRenderedBitmapForTesting())
+
+        controller.resetForNewStream()
+        native.clearRecordedCalls()
+
+        assertTrue(controller.eventChunksForTesting().isEmpty())
+        assertEquals(null, controller.findTrackIdByFormatForTesting(oldFormat))
+        assertFalse(overlay.hasRenderedBitmapForTesting())
+
+        val newFormat = Format.Builder().setLanguage("ja").build()
+        controller.onTrackHeader(trackId = 22, headerData = "[Script Info]".toByteArray(), newFormat)
+        controller.selectTrackByFormat(newFormat)
+        controller.renderCurrentFrameForTesting()
+
+        assertTrue(native.chunks.isEmpty())
+        assertTrue(native.addFontCalls.isEmpty())
+        assertEquals(1, native.loadHeaderCalls.size)
+    }
+
     private fun newController(
         native: FakeAssSsaNativeApi,
         subtitleDelayUs: Long = 0L
