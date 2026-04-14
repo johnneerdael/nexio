@@ -583,8 +583,7 @@ internal fun mergeFocusedItemEnrichment(
         if (tmdbSettings.useArtwork) {
             merged = merged.copy(
                 background = tmdbEnrichment.backdrop ?: merged.background,
-                logo = tmdbEnrichment.logo ?: merged.logo,
-                poster = tmdbEnrichment.poster ?: merged.poster
+                logo = tmdbEnrichment.logo ?: merged.logo
             )
         }
         if (tmdbSettings.useBasicInfo) {
@@ -654,8 +653,7 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
                     if (settings.useArtwork) {
                         enriched = enriched.copy(
                             background = enrichment.backdrop ?: enriched.background,
-                            logo = enrichment.logo ?: enriched.logo,
-                            poster = enrichment.poster ?: enriched.poster
+                            logo = enrichment.logo ?: enriched.logo
                         )
                     }
 

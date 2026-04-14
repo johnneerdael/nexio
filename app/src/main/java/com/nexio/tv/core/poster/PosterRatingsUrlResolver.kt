@@ -69,7 +69,6 @@ class PosterRatingsUrlResolver @Inject constructor(
         contentType: ContentType,
         activeProvider: ActiveProvider?
     ): String? {
-        if (originalPosterUrl.isNullOrBlank()) return originalPosterUrl
         val provider = activeProvider ?: return originalPosterUrl
         val id = parseContentId(contentId, contentType) ?: return originalPosterUrl
 
@@ -81,7 +80,7 @@ class PosterRatingsUrlResolver @Inject constructor(
             PosterRatingsProvider.TOP_POSTERS -> buildTopPostersUrl(
                 apiKey = provider.apiKey,
                 id = id,
-                fallbackUrl = originalPosterUrl
+                fallbackUrl = originalPosterUrl?.takeIf { it.isNotBlank() }
             )
             PosterRatingsProvider.NONE -> originalPosterUrl
         }
@@ -96,7 +95,7 @@ class PosterRatingsUrlResolver @Inject constructor(
     private fun buildTopPostersUrl(
         apiKey: String,
         id: ProviderId,
-        fallbackUrl: String
+        fallbackUrl: String?
     ): String {
         val path = when (id.type) {
             IdType.IMDB -> "imdb/poster/${id.value}.jpg"
@@ -108,8 +107,12 @@ class PosterRatingsUrlResolver @Inject constructor(
             IdType.ANILIST -> "anilist/poster/${id.value}.jpg"
             IdType.ANIDB -> "anidb/poster/${id.value}.jpg"
         }
-        val encodedFallback = Uri.encode(fallbackUrl)
-        return "https://api.top-streaming.stream/$apiKey/$path?fallback_url=$encodedFallback"
+        val baseUrl = "https://api.top-streaming.stream/$apiKey/$path"
+        return if (fallbackUrl == null) {
+            baseUrl
+        } else {
+            "$baseUrl?fallback_url=${Uri.encode(fallbackUrl)}"
+        }
     }
 
     private fun parseContentId(contentId: String, contentType: ContentType): ProviderId? {
