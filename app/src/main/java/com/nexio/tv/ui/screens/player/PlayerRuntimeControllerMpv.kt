@@ -82,9 +82,13 @@ internal fun PlayerRuntimeController.initializeMpvPlayer(
         scheduleHideControls()
         emitScrobbleStart()
     }.onFailure { error ->
+        val message = error.message ?: "Failed to initialize libmpv playback"
+        if (maybeAutoSwitchInternalPlayerOnStartupError(message)) {
+            return@onFailure
+        }
         _uiState.update {
             it.copy(
-                error = error.message ?: "Failed to initialize libmpv playback",
+                error = message,
                 showLoadingOverlay = false,
                 isBuffering = false
             )

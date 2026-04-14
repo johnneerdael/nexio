@@ -215,6 +215,7 @@ class PlayerRuntimeController(
     internal var postFirstFrameBufferingWatchdogJob: Job? = null
     internal var hideControlsJob: Job? = null
     internal var hideSeekOverlayJob: Job? = null
+    internal var hidePlayerEngineSwitchInfoJob: Job? = null
     internal var watchProgressSaveJob: Job? = null
     internal var scrobbleHeartbeatJob: Job? = null
     internal var seekProgressSyncJob: Job? = null
