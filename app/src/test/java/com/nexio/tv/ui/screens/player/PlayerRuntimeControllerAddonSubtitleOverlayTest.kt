@@ -18,6 +18,13 @@ class PlayerRuntimeControllerAddonSubtitleOverlayTest {
     }
 
     @Test
+    fun `ai translation accepts ass and ssa but overlay still rejects them`() {
+        assertTrue(subtitleSupportsAiTranslationForTest("https://example.test/subtitle.ass"))
+        assertTrue(subtitleSupportsAiTranslationForTest("https://example.test/subtitle.ssa"))
+        assertFalse(addonSubtitleSupportsOverlay(MimeTypes.TEXT_SSA))
+    }
+
+    @Test
     fun `effective overlay position matches subtitle delay sign`() {
         assertEquals(
             900L,

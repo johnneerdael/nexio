@@ -14,7 +14,8 @@ Nexio keeps the subtitle experience simple first, then adds provider-backed tran
 
 - `Auto-Translate` appears in the subtitle dialog after Subtitle Translation is enabled and the provider key is present.
 - Nexio sends the selected text subtitle to the selected provider, then plays back the translated result as a normal subtitle track or overlay.
-- Text-based subtitle formats such as SRT and VTT are the best fit.
+- Text-based subtitle formats such as SRT, VTT, ASS, and SSA are supported.
+- ASS/SSA translation preserves styling and drawing markup, but only visible dialogue text is sent to the provider.
 - Bitmap or image-based built-in subtitles are not supported for translation.
 - Translated subtitles are cached locally, so the same source and target language do not need to be translated again right away.
 
@@ -39,7 +40,7 @@ If Auto-Translate fails, keep watching with the original subtitle track and try 
 ## If this is not working
 
 - Confirm Subtitle Translation is enabled, the provider API key is present, and the selected provider/model/endpoint are valid before you open the subtitle dialog.
-- Use a text subtitle track such as SRT or VTT. Bitmap subtitle tracks cannot be translated.
+- Use a text subtitle track such as SRT, VTT, ASS, or SSA. Bitmap subtitle tracks cannot be translated.
 - If translation is missing only on one title, try a cleaner subtitle source first.
 - If the feature should be available but never appears, move to [Troubleshooting](/troubleshooting/).
 
