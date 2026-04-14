@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.player
 
 import android.net.Uri
+import android.content.res.Resources
 import android.util.Log
 import com.nexio.tv.core.player.OpenSubtitlesHasher
 import androidx.media3.common.C
@@ -255,8 +256,30 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                 schedulePauseOverlay()
             }
             streamReuseLastLinkEnabled = settings.streamReuseLastLinkEnabled
+            currentInternalPlayerEngine = settings.internalPlayerEngine
+            autoSwitchInternalPlayerOnErrorEnabled = settings.autoSwitchInternalPlayerOnError
+            val previousMpvHardwareDecodeMode = mpvHardwareDecodeModeSetting
+            mpvHardwareDecodeModeSetting = settings.mpvHardwareDecodeMode
+            if (isUsingMpvEngine() && previousMpvHardwareDecodeMode != mpvHardwareDecodeModeSetting) {
+                mpvView?.applyHardwareDecodeMode(mpvHardwareDecodeModeSetting)
+            }
             lastPreferredAudioLanguage = settings.preferredAudioLanguage
             lastSecondaryPreferredAudioLanguage = settings.secondaryPreferredAudioLanguage
+            val localeList = Resources.getSystem().configuration.locales
+            val deviceLanguages = List(localeList.size()) { localeList[it].isO3Language }
+            val resolvedAudioLanguages = resolvePreferredAudioLanguages(
+                preferredAudioLanguage = settings.preferredAudioLanguage,
+                secondaryPreferredAudioLanguage = settings.secondaryPreferredAudioLanguage,
+                deviceLanguages = deviceLanguages,
+                originalLanguage = originalLanguage
+            )
+            if (resolvedAudioLanguages != mpvPreferredAudioLanguages) {
+                mpvPreferredAudioLanguages = resolvedAudioLanguages
+                if (isUsingMpvEngine()) {
+                    mpvView?.applyAudioLanguagePreferences(resolvedAudioLanguages)
+                    updateMpvAvailableTracks()
+                }
+            }
             streamAutoPlayModeSetting = settings.streamAutoPlayMode
             streamAutoPlayNextEpisodeEnabledSetting = settings.streamAutoPlayNextEpisodeEnabled
             nextEpisodeThresholdModeSetting = settings.nextEpisodeThresholdMode
