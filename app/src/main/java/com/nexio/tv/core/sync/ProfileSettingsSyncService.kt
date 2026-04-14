@@ -1,6 +1,7 @@
 package com.nexio.tv.core.sync
 
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -196,7 +197,8 @@ class ProfileSettingsSyncService @Inject constructor(
         }
     }
 
-    private fun encodePreferenceValue(rawValue: Any?): JsonObject? {
+    @VisibleForTesting
+    internal fun encodePreferenceValue(rawValue: Any?): JsonObject? {
         return when (rawValue) {
             is String -> buildJsonObject { put("type", "string"); put("value", rawValue) }
             is Boolean -> buildJsonObject { put("type", "boolean"); put("value", rawValue) }
@@ -240,7 +242,8 @@ class ProfileSettingsSyncService @Inject constructor(
         }
     }
 
-    private fun buildSettingsSignature(blob: JsonObject): String {
+    @VisibleForTesting
+    internal fun buildSettingsSignature(blob: JsonObject): String {
         return blob.toString().hashCode().toString()
     }
 }
