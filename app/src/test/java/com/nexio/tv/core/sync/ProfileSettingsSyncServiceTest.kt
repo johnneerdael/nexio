@@ -157,11 +157,16 @@ class ProfileSettingsSyncServiceTest {
                 "trakt_settings",
                 "simkl_settings",
                 "player_settings",
-                "layout_preferences",
+                "layout_settings",
                 "theme_settings"
             ),
             syncedFeatures
         )
+    }
+
+    @Test
+    fun `syncedFeatures does not include layout preferences`() {
+        assertTrue("layout_preferences should not sync in settings blob", "layout_preferences" !in service().syncedFeatures)
     }
 
     @Test
@@ -277,6 +282,41 @@ class ProfileSettingsSyncServiceTest {
         )
 
         assertTrue(store.data.first().asMap().isEmpty())
+    }
+
+    @Test
+    fun `importSettingsBlob writes layout settings to real LayoutPreferenceDataStore feature`() = runTest {
+        val settingsSyncService = realDataStoreService()
+        val realLayoutStore = realProfileDataStoreFactory.get(2, "layout_settings")
+        val unusedLayoutStore = realProfileDataStoreFactory.get(2, "layout_preferences")
+        val homeCatalogOrderKeysKey = stringPreferencesKey("home_catalog_order_keys")
+
+        realLayoutStore.edit { preferences -> preferences.clear() }
+        unusedLayoutStore.edit { preferences -> preferences.clear() }
+
+        settingsSyncService.importSettingsBlob(
+            profileId = 2,
+            blob = buildJsonObject {
+                put(
+                    "layout_settings",
+                    buildJsonObject {
+                        put(
+                            "home_catalog_order_keys",
+                            buildJsonObject {
+                                put("type", "string")
+                                put("value", "[\"featured\",\"movies\"]")
+                            }
+                        )
+                    }
+                )
+            }
+        )
+
+        assertEquals(
+            "[\"featured\",\"movies\"]",
+            realLayoutStore.data.first()[homeCatalogOrderKeysKey]
+        )
+        assertTrue(unusedLayoutStore.data.first().asMap().isEmpty())
     }
 
     @Test
