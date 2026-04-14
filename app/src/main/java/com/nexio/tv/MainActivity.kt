@@ -935,6 +935,14 @@ class MainActivity : ComponentActivity() {
                                 onExitApp = {
                                     finishAffinity()
                                     finishAndRemoveTask()
+                                },
+                                profiles = profiles,
+                                activeProfileId = profileManager.activeProfileId.collectAsState().value,
+                                onSwitchProfile = { profileId ->
+                                    hasSelectedProfileThisSession = false
+                                    lifecycleScope.launch {
+                                        profileManager.setActiveProfile(profileId)
+                                    }
                                 }
                             )
                         } else {
@@ -1851,7 +1859,10 @@ private fun ModernSidebarScaffold(
     onHomeTrailerPlaybackActiveChanged: (Boolean) -> Unit,
     onHomeTrailerFullscreenActiveChanged: (Boolean) -> Unit,
     onDetailTrailerPlaybackActiveChanged: (Boolean) -> Unit,
-    onExitApp: () -> Unit
+    onExitApp: () -> Unit,
+    profiles: List<com.nexio.tv.domain.model.UserProfile> = emptyList(),
+    activeProfileId: Int = 1,
+    onSwitchProfile: (Int) -> Unit = {}
 ) {
     var homeTrailerFullscreenActive by remember { mutableStateOf(false) }
     val showSidebar = currentRoute in rootRoutes && !homeTrailerFullscreenActive
@@ -2195,7 +2206,10 @@ private fun ModernSidebarScaffold(
                             isSidebarExpanded = false
                             sidebarCollapsePending = false
                             pendingContentFocusTransfer = true
-                        }
+                        },
+                        profiles = profiles,
+                        activeProfileId = activeProfileId,
+                        onSwitchProfile = onSwitchProfile
                     )
                 }
             }

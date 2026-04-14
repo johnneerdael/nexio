@@ -1,11 +1,17 @@
 package com.nexio.tv
 
 import com.nexio.tv.DrawerItem
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -22,12 +28,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Alignment.Companion.CenterVertically
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -49,9 +58,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
+import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeChild
+import com.nexio.tv.domain.model.UserProfile
+import com.nexio.tv.ui.components.ProfileAvatarCircle
 import com.nexio.tv.ui.theme.NexioColors
 import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
@@ -73,7 +85,10 @@ internal fun ModernSidebarBlurPanel(
     panelShape: RoundedCornerShape,
     drawerItemFocusRequesters: Map<String, FocusRequester>,
     onDrawerItemFocused: (Int) -> Unit,
-    onDrawerItemClick: (String) -> Unit
+    onDrawerItemClick: (String) -> Unit,
+    profiles: List<UserProfile> = emptyList(),
+    activeProfileId: Int = 1,
+    onSwitchProfile: (Int) -> Unit = {}
 ) {
     val delayedBlurProgress =
         ((sidebarExpandProgress - 0.34f) / 0.66f).coerceIn(0f, 1f)
@@ -150,6 +165,25 @@ internal fun ModernSidebarBlurPanel(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            if (profiles.size > 1) {
+                var profileSectionExpanded by remember { mutableStateOf(false) }
+                val profileSwitcherFocusRequester = remember { FocusRequester() }
+
+                ProfileSwitcherSection(
+                    profiles = profiles,
+                    activeProfileId = activeProfileId,
+                    isExpanded = profileSectionExpanded,
+                    onExpandToggle = { profileSectionExpanded = !profileSectionExpanded },
+                    onSwitchProfile = { id ->
+                        profileSectionExpanded = false
+                        onSwitchProfile(id)
+                    },
+                    sidebarLabelAlpha = sidebarLabelAlpha,
+                    focusRequester = profileSwitcherFocusRequester
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+
             Column(
                 modifier = Modifier.offset(y = (-12).dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -277,6 +311,158 @@ private fun SidebarNavigationItem(
             overflow = TextOverflow.Ellipsis
         )
         Spacer(modifier = Modifier.width(iconContainerSize + contentGap))
+    }
+}
+
+@Composable
+private fun ProfileSwitcherSection(
+    profiles: List<UserProfile>,
+    activeProfileId: Int,
+    isExpanded: Boolean,
+    onExpandToggle: () -> Unit,
+    onSwitchProfile: (Int) -> Unit,
+    sidebarLabelAlpha: Float,
+    focusRequester: FocusRequester,
+    modifier: Modifier = Modifier
+) {
+    val activeProfile = profiles.find { it.id == activeProfileId } ?: profiles.firstOrNull() ?: return
+    val otherProfiles = profiles.filter { it.id != activeProfileId }
+
+    var isFocused by remember { mutableStateOf(false) }
+    val borderColor by animateColorAsState(
+        targetValue = if (isFocused) NexioColors.FocusRing else Color.Transparent,
+        animationSpec = tween(180),
+        label = "profileRowBorder"
+    )
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = tween(200),
+        label = "expandArrow"
+    )
+
+    BackHandler(enabled = isExpanded) {
+        onExpandToggle()
+    }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(NexioColors.BackgroundCard)
+                .border(2.dp, borderColor, RoundedCornerShape(14.dp))
+                .focusRequester(focusRequester)
+                .onFocusChanged { isFocused = it.isFocused }
+                .focusable()
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown &&
+                        (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)
+                    ) {
+                        onExpandToggle()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                .clickable { onExpandToggle() }
+                .padding(horizontal = 12.dp),
+            verticalAlignment = CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            ProfileAvatarCircle(
+                name = activeProfile.name,
+                colorHex = activeProfile.avatarColorHex,
+                size = 40.dp
+            )
+            Text(
+                text = activeProfile.name,
+                style = MaterialTheme.typography.titleMedium,
+                color = NexioColors.TextPrimary,
+                modifier = Modifier
+                    .weight(1f)
+                    .graphicsLayer { alpha = sidebarLabelAlpha },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowDown,
+                contentDescription = "Switch profile",
+                tint = NexioColors.TextSecondary,
+                modifier = Modifier.graphicsLayer {
+                    rotationZ = arrowRotation
+                    alpha = sidebarLabelAlpha
+                }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = expandVertically(animationSpec = tween(200)),
+            exit = shrinkVertically(animationSpec = tween(180))
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                otherProfiles.forEach { profile ->
+                    ProfileSwitcherRow(
+                        profile = profile,
+                        onSelect = { onSwitchProfile(profile.id) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileSwitcherRow(
+    profile: UserProfile,
+    onSelect: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val borderColor by animateColorAsState(
+        targetValue = if (isFocused) NexioColors.FocusRing else Color.Transparent,
+        animationSpec = tween(180),
+        label = "profileSwitcherRowBorder"
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .border(2.dp, borderColor, RoundedCornerShape(14.dp))
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown &&
+                    (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)
+                ) {
+                    onSelect()
+                    true
+                } else {
+                    false
+                }
+            }
+            .clickable { onSelect() }
+            .padding(horizontal = 12.dp),
+        verticalAlignment = CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        ProfileAvatarCircle(
+            name = profile.name,
+            colorHex = profile.avatarColorHex,
+            size = 32.dp
+        )
+        Text(
+            text = profile.name,
+            style = MaterialTheme.typography.titleMedium,
+            color = if (isFocused) NexioColors.TextPrimary else NexioColors.TextSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
