@@ -3,6 +3,7 @@
 #include <android/bitmap.h>
 #include <android/log.h>
 #include <string.h>
+#include <limits.h>
 
 #include "ass_direct.h"
 
@@ -97,6 +98,33 @@ Java_com_nexio_tv_ui_screens_player_ass_AssSsaNativeBridge_nativeRender(
     AssDirectContext *ctx = (AssDirectContext *)(intptr_t)handle;
     if (!ctx || !bitmap) return JNI_FALSE;
 
+    AndroidBitmapInfo info;
+    int info_ret = AndroidBitmap_getInfo(env, bitmap, &info);
+    if (info_ret != ANDROID_BITMAP_RESULT_SUCCESS) {
+        LOGE("Failed to read bitmap info: %d", info_ret);
+        return JNI_FALSE;
+    }
+
+    int width = ass_direct_get_width(ctx);
+    int height = ass_direct_get_height(ctx);
+    if (width <= 0 || height <= 0) {
+        LOGE("Invalid native ASS render context dimensions: %dx%d", width, height);
+        return JNI_FALSE;
+    }
+    if (info.format != ANDROID_BITMAP_FORMAT_RGBA_8888) {
+        LOGE("Unsupported bitmap format: %u", info.format);
+        return JNI_FALSE;
+    }
+    if (info.width != (uint32_t)width || info.height != (uint32_t)height) {
+        LOGE("Bitmap size mismatch: bitmap=%ux%u context=%dx%d",
+             info.width, info.height, width, height);
+        return JNI_FALSE;
+    }
+    if (info.stride > INT_MAX || info.stride < (uint32_t)(width * 4)) {
+        LOGE("Invalid bitmap stride: %u for width=%d", info.stride, width);
+        return JNI_FALSE;
+    }
+
     void *pixels = NULL;
     int ret = AndroidBitmap_lockPixels(env, bitmap, &pixels);
     if (ret != ANDROID_BITMAP_RESULT_SUCCESS) {
@@ -104,7 +132,7 @@ Java_com_nexio_tv_ui_screens_player_ass_AssSsaNativeBridge_nativeRender(
         return JNI_FALSE;
     }
 
-    int has_content = ass_direct_render(ctx, time_ms, (uint8_t *)pixels);
+    int has_content = ass_direct_render(ctx, time_ms, (uint8_t *)pixels, (int)info.stride);
 
     AndroidBitmap_unlockPixels(env, bitmap);
     return has_content ? JNI_TRUE : JNI_FALSE;
