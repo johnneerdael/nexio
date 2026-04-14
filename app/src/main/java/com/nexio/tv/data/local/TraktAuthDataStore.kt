@@ -125,8 +125,8 @@ class TraktAuthDataStore @Inject constructor(
         }
     }
 
-    suspend fun clearDeviceFlow() {
-        store().edit { preferences ->
+    suspend fun clearDeviceFlow(profileId: Int = profileManager.activeProfileId.value) {
+        store(profileId).edit { preferences ->
             preferences.remove(deviceCodeKey)
             preferences.remove(userCodeKey)
             preferences.remove(verificationUrlKey)
@@ -135,8 +135,8 @@ class TraktAuthDataStore @Inject constructor(
         }
     }
 
-    suspend fun clearAuth() {
-        store().edit { preferences ->
+    suspend fun clearAuth(profileId: Int = profileManager.activeProfileId.value) {
+        store(profileId).edit { preferences ->
             preferences.remove(accessTokenKey)
             preferences.remove(refreshTokenKey)
             preferences.remove(tokenTypeKey)
