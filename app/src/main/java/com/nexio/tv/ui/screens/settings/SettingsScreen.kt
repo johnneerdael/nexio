@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.nexio.tv.ui.components.ProfileAvatarCircle
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -56,9 +58,11 @@ import com.nexio.tv.core.profile.ProfileManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
+import com.nexio.tv.domain.model.UserProfile
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.R
 import com.nexio.tv.ui.theme.NexioColors
@@ -71,6 +75,13 @@ internal class SettingsProfileViewModel @Inject constructor(
     val isPrimaryProfile: StateFlow<Boolean> = profileManager.activeProfileId
         .map { it == 1 }
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val activeProfile: StateFlow<UserProfile?> = combine(
+        profileManager.profiles,
+        profileManager.activeProfileId
+    ) { profiles, activeId ->
+        profiles.find { it.id == activeId }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 }
 
 internal enum class SettingsCategory {
@@ -186,6 +197,7 @@ fun SettingsScreen(
 ) {
     val settingsProfileViewModel: SettingsProfileViewModel = hiltViewModel()
     val isPrimaryProfile by settingsProfileViewModel.isPrimaryProfile.collectAsStateWithLifecycle()
+    val activeProfile by settingsProfileViewModel.activeProfile.collectAsStateWithLifecycle()
 
     val allSectionSpecs = rememberSettingsSectionSpecs()
     val visibleSections = remember(allSectionSpecs) {
@@ -276,10 +288,16 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
         ) {
-            Row(
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Profile header — always visible, even for single-profile users (D-16)
+                activeProfile?.let { profile ->
+                    ProfileHeaderRow(profile = profile)
+                }
+
+                Row(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
                 var railHadFocus by remember { mutableStateOf(false) }
 
                 LazyColumn(
@@ -432,6 +450,49 @@ fun SettingsScreen(
                         SettingsCategory.CATALOGS -> Unit
                     }
                 }
+            }
+            } // end Column wrapper
+        }
+    }
+}
+
+@Composable
+private fun ProfileHeaderRow(
+    profile: UserProfile,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp, vertical = 16.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        ProfileAvatarCircle(
+            name = profile.name,
+            colorHex = profile.avatarColorHex,
+            size = 40.dp,
+            avatarImageUrl = null
+        )
+        Column {
+            androidx.tv.material3.Text(
+                text = profile.name,
+                style = androidx.tv.material3.MaterialTheme.typography.titleMedium,
+                color = NexioColors.TextPrimary
+            )
+            if (profile.isPrimary) {
+                androidx.tv.material3.Text(
+                    text = "Default",
+                    style = androidx.tv.material3.MaterialTheme.typography.bodyMedium,
+                    color = NexioColors.FocusRing,
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .background(
+                            color = NexioColors.FocusRing.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                )
             }
         }
     }
