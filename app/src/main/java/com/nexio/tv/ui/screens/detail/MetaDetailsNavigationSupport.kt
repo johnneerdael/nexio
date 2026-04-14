@@ -138,9 +138,12 @@ internal fun resolveSeasonEntryEpisodeId(
     selectedSeason: Int,
     nextToWatch: SeriesNextToWatchCandidate,
     lastFocusedEpisodeIdBySeason: Map<Int, String>,
-    manualSeasonOverride: Boolean
+    manualSeasonOverride: Boolean,
+    preferStoredEpisodeFocus: Boolean = true
 ): String? {
-    lastFocusedEpisodeIdBySeason[selectedSeason]?.let { return it }
+    if (preferStoredEpisodeFocus) {
+        lastFocusedEpisodeIdBySeason[selectedSeason]?.let { return it }
+    }
 
     val seasonEpisodes = meta.videos
         .asSequence()
