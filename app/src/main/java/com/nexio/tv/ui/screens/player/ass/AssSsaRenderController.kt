@@ -1,0 +1,393 @@
+package com.nexio.tv.ui.screens.player.ass
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.os.Handler
+import android.os.Looper
+import androidx.media3.common.Format
+import androidx.media3.exoplayer.ExoPlayer
+import java.util.Locale
+
+internal interface AssSsaNativeApi {
+    val nativeAvailable: Boolean
+    fun configureFontconfig(context: Context): Boolean
+    fun init(width: Int, height: Int, fontScale: Float): Long
+    fun loadHeader(handle: Long, headerData: ByteArray): Int
+    fun addFont(handle: Long, name: String?, fontData: ByteArray)
+    fun processChunk(handle: Long, data: ByteArray, startMs: Long, durationMs: Long)
+    fun processData(handle: Long, data: ByteArray)
+    fun render(handle: Long, timeMs: Long, bitmap: Bitmap): Boolean
+    fun flush(handle: Long)
+    fun destroy(handle: Long)
+}
+
+internal object JniAssSsaNativeApi : AssSsaNativeApi {
+    override val nativeAvailable: Boolean
+        get() = AssSsaNativeBridge.nativeAvailable
+
+    override fun configureFontconfig(context: Context): Boolean {
+        return AssSsaNativeBridge.configureFontconfig(context)
+    }
+
+    override fun init(width: Int, height: Int, fontScale: Float): Long {
+        return AssSsaNativeBridge.nativeInit(width, height, fontScale)
+    }
+
+    override fun loadHeader(handle: Long, headerData: ByteArray): Int {
+        return AssSsaNativeBridge.nativeLoadHeader(handle, headerData)
+    }
+
+    override fun addFont(handle: Long, name: String?, fontData: ByteArray) {
+        AssSsaNativeBridge.nativeAddFont(handle, name, fontData)
+    }
+
+    override fun processChunk(handle: Long, data: ByteArray, startMs: Long, durationMs: Long) {
+        AssSsaNativeBridge.nativeProcessChunk(handle, data, startMs, durationMs)
+    }
+
+    override fun processData(handle: Long, data: ByteArray) {
+        AssSsaNativeBridge.nativeProcessData(handle, data)
+    }
+
+    override fun render(handle: Long, timeMs: Long, bitmap: Bitmap): Boolean {
+        return AssSsaNativeBridge.nativeRender(handle, timeMs, bitmap)
+    }
+
+    override fun flush(handle: Long) {
+        AssSsaNativeBridge.nativeFlush(handle)
+    }
+
+    override fun destroy(handle: Long) {
+        AssSsaNativeBridge.nativeDestroy(handle)
+    }
+}
+
+internal data class AssSsaEventChunk(
+    val trackId: Int,
+    val startMs: Long,
+    val durationMs: Long,
+    val chunkData: ByteArray
+)
+
+internal class AssSsaRenderController(
+    private val context: Context,
+    private val overlayView: AssSsaRenderOverlayView,
+    private val subtitleDelayUsProvider: () -> Long,
+    private val native: AssSsaNativeApi = JniAssSsaNativeApi
+) : AssSsaSampleSink {
+    @Volatile var currentTimeUs: Long = 0L
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val tracks = linkedMapOf<Int, TrackState>()
+    private val eventChunks = mutableListOf<AssSsaEventChunk>()
+    private val rawSamples = mutableListOf<RawSample>()
+    private val fontAttachments = mutableListOf<FontAttachment>()
+    private var player: ExoPlayer? = null
+    private var selectedTrackId: Int? = null
+    private var loadedTrackId: Int? = null
+    private var handle = 0L
+    private var renderBitmap: Bitmap? = null
+    private var renderWidth = 0
+    private var renderHeight = 0
+    private var handleWidth = 0
+    private var handleHeight = 0
+    private var fontconfigConfigured = false
+    private var released = false
+
+    private val renderRunnable = object : Runnable {
+        override fun run() {
+            if (released || player == null) return
+            renderCurrentFrame()
+            overlayView.postOnAnimation(this)
+        }
+    }
+
+    fun setPlayer(player: ExoPlayer?) {
+        this.player = player
+        mainHandler.removeCallbacks(renderRunnable)
+        if (player != null && !released) {
+            overlayView.postOnAnimation(renderRunnable)
+        }
+    }
+
+    fun setVideoSize(width: Int, height: Int) {
+        if (width <= 0 || height <= 0) return
+        if (renderWidth == width && renderHeight == height) return
+
+        renderWidth = width
+        renderHeight = height
+        renderBitmap?.recycle()
+        renderBitmap = null
+        destroyNativeHandle()
+        ensureNativeInitialized(replayEvents = true)
+    }
+
+    fun onSeekStarted() {
+        clearOverlay()
+        val activeHandle = handle
+        if (activeHandle == 0L) return
+
+        native.flush(activeHandle)
+        loadedTrackId = null
+        loadSelectedTrackHeader(activeHandle)
+        replayActiveTrackEvents(activeHandle)
+        replayActiveRawSamples(activeHandle)
+    }
+
+    fun selectTrackByFormat(format: Format) {
+        val trackId = findTrackIdByFormat(format) ?: return
+        if (selectedTrackId == trackId) return
+
+        selectedTrackId = trackId
+        loadedTrackId = null
+        clearOverlay()
+        val activeHandle = handle
+        if (activeHandle != 0L) {
+            native.flush(activeHandle)
+            loadSelectedTrackHeader(activeHandle)
+            replayActiveTrackEvents(activeHandle)
+            replayActiveRawSamples(activeHandle)
+        } else {
+            ensureNativeInitialized(replayEvents = true)
+        }
+    }
+
+    fun clearOverlay() {
+        overlayView.clearOverlay()
+    }
+
+    fun release() {
+        if (released) return
+        released = true
+        mainHandler.removeCallbacks(renderRunnable)
+        player = null
+        destroyNativeHandle()
+        renderBitmap?.recycle()
+        renderBitmap = null
+        tracks.clear()
+        eventChunks.clear()
+        rawSamples.clear()
+        fontAttachments.clear()
+        selectedTrackId = null
+        loadedTrackId = null
+        clearOverlay()
+    }
+
+    override fun onTrackHeader(trackId: Int, headerData: ByteArray, format: Format) {
+        if (released) return
+        tracks[trackId] = TrackState(trackId, headerData, format)
+        if (selectedTrackId == null && tracks.size == 1) {
+            selectedTrackId = trackId
+        }
+        if (selectedTrackId == trackId && handle != 0L) {
+            loadedTrackId = null
+            loadSelectedTrackHeader(handle)
+        }
+    }
+
+    override fun onSubtitleSample(trackId: Int, timeUs: Long, data: ByteArray) {
+        if (released) return
+        val chunk = data.decodeToString()
+            .lineSequence()
+            .mapNotNull { line -> line.toAssSsaEventChunk(trackId, timeUs) }
+            .firstOrNull()
+
+        if (chunk != null) {
+            eventChunks += chunk
+            if (trackId == selectedTrackId && ensureNativeInitialized(replayEvents = false)) {
+                native.processChunk(handle, chunk.chunkData, chunk.startMs, chunk.durationMs)
+            }
+            return
+        }
+
+        val rawSample = RawSample(trackId, data)
+        rawSamples += rawSample
+        if (trackId == selectedTrackId && ensureNativeInitialized(replayEvents = false)) {
+            native.processData(handle, rawSample.data)
+        }
+    }
+
+    override fun onFontAttachment(name: String, data: ByteArray) {
+        if (released) return
+        val attachment = FontAttachment(name, data)
+        fontAttachments += attachment
+        if (handle != 0L) {
+            native.addFont(handle, attachment.name, attachment.data)
+        }
+    }
+
+    internal fun renderCurrentFrameForTesting() {
+        renderCurrentFrame()
+    }
+
+    internal fun eventChunksForTesting(): List<AssSsaEventChunk> = eventChunks.toList()
+
+    internal fun findTrackIdByFormatForTesting(format: Format): Int? {
+        return findTrackIdByFormat(format)
+    }
+
+    internal fun renderCurrentFrame() {
+        if (!ensureNativeInitialized(replayEvents = true)) {
+            clearOverlay()
+            return
+        }
+
+        val bitmap = renderBitmapForCurrentSize()
+        val adjustedPositionMs = (
+            (player?.currentPosition ?: (currentTimeUs / 1000L)) -
+                (subtitleDelayUsProvider() / 1000L)
+            ).coerceAtLeast(0L)
+        if (native.render(handle, adjustedPositionMs, bitmap)) {
+            overlayView.setRenderedBitmap(bitmap)
+        } else {
+            clearOverlay()
+        }
+    }
+
+    private fun ensureNativeInitialized(replayEvents: Boolean): Boolean {
+        if (released || renderWidth <= 0 || renderHeight <= 0 || !native.nativeAvailable) {
+            return false
+        }
+
+        if (handle != 0L && handleWidth == renderWidth && handleHeight == renderHeight) {
+            loadSelectedTrackHeader(handle)
+            return true
+        }
+
+        destroyNativeHandle()
+        if (!fontconfigConfigured) {
+            native.configureFontconfig(context.applicationContext)
+            fontconfigConfigured = true
+        }
+
+        val nextHandle = native.init(renderWidth, renderHeight, DEFAULT_FONT_SCALE)
+        if (nextHandle == 0L) return false
+
+        handle = nextHandle
+        handleWidth = renderWidth
+        handleHeight = renderHeight
+        fontAttachments.forEach { attachment ->
+            native.addFont(nextHandle, attachment.name, attachment.data)
+        }
+        loadSelectedTrackHeader(nextHandle)
+        if (replayEvents) {
+            replayActiveTrackEvents(nextHandle)
+            replayActiveRawSamples(nextHandle)
+        }
+        return true
+    }
+
+    private fun loadSelectedTrackHeader(activeHandle: Long) {
+        val trackId = selectedTrackId ?: return
+        if (loadedTrackId == trackId) return
+        val track = tracks[trackId] ?: return
+        native.loadHeader(activeHandle, track.headerData)
+        loadedTrackId = trackId
+    }
+
+    private fun replayActiveTrackEvents(activeHandle: Long) {
+        val trackId = selectedTrackId ?: return
+        eventChunks.asSequence()
+            .filter { it.trackId == trackId }
+            .forEach { event ->
+                native.processChunk(activeHandle, event.chunkData, event.startMs, event.durationMs)
+            }
+    }
+
+    private fun replayActiveRawSamples(activeHandle: Long) {
+        val trackId = selectedTrackId ?: return
+        rawSamples.asSequence()
+            .filter { it.trackId == trackId }
+            .forEach { sample -> native.processData(activeHandle, sample.data) }
+    }
+
+    private fun findTrackIdByFormat(format: Format): Int? {
+        val language = format.language.normalizedLanguage()
+        if (language != null) {
+            tracks.values.firstOrNull { it.format.language.normalizedLanguage() == language }?.let {
+                return it.trackId
+            }
+        }
+
+        val id = format.id
+        if (!id.isNullOrBlank()) {
+            tracks.values.firstOrNull { it.format.id == id }?.let { return it.trackId }
+        }
+
+        return tracks.values.singleOrNull()?.trackId
+    }
+
+    private fun renderBitmapForCurrentSize(): Bitmap {
+        val existing = renderBitmap
+        if (existing != null && existing.width == renderWidth && existing.height == renderHeight) {
+            return existing
+        }
+        return Bitmap.createBitmap(renderWidth, renderHeight, Bitmap.Config.ARGB_8888).also {
+            renderBitmap?.recycle()
+            renderBitmap = it
+        }
+    }
+
+    private fun destroyNativeHandle() {
+        val activeHandle = handle
+        if (activeHandle != 0L) {
+            native.destroy(activeHandle)
+        }
+        handle = 0L
+        handleWidth = 0
+        handleHeight = 0
+        loadedTrackId = null
+    }
+
+    private data class TrackState(
+        val trackId: Int,
+        val headerData: ByteArray,
+        val format: Format
+    )
+
+    private data class FontAttachment(val name: String, val data: ByteArray)
+    private data class RawSample(val trackId: Int, val data: ByteArray)
+
+    companion object {
+        private const val DEFAULT_FONT_SCALE = 1f
+    }
+}
+
+private fun String.toAssSsaEventChunk(trackId: Int, timeUs: Long): AssSsaEventChunk? {
+    val trimmed = trimStart()
+    if (!trimmed.startsWith("Dialogue:", ignoreCase = true)) return null
+
+    val content = trimmed.substringAfter(":").trimStart()
+    val parts = content.split(",", limit = 11)
+    if (parts.size < 11) return null
+
+    val durationMs = parseAssTimeMs(parts[1].trim()) ?: return null
+    val startMs = timeUs / 1000L
+    val chunkData = (
+        "${parts[2].trim()},${parts[3].trim()},${parts[4].trim()}," +
+            "${parts[5].trim()},${parts[6].trim()},${parts[7].trim()}," +
+            "${parts[8].trim()},${parts[9].trim()},${parts[10]}"
+        ).toByteArray()
+    return AssSsaEventChunk(trackId, startMs, durationMs, chunkData)
+}
+
+private fun parseAssTimeMs(value: String): Long? {
+    val timeParts = value.split(":")
+    if (timeParts.size != 3) return null
+    val hours = timeParts[0].toLongOrNull() ?: return null
+    val minutes = timeParts[1].toLongOrNull() ?: return null
+    val secondsParts = timeParts[2].split(".", limit = 2)
+    val seconds = secondsParts[0].toLongOrNull() ?: return null
+    val millis = secondsParts.getOrNull(1)
+        ?.padEnd(3, '0')
+        ?.take(3)
+        ?.toLongOrNull()
+        ?: 0L
+
+    return hours * 3_600_000L + minutes * 60_000L + seconds * 1000L + millis
+}
+
+private fun String?.normalizedLanguage(): String? {
+    val value = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return value.lowercase(Locale.US)
+}
