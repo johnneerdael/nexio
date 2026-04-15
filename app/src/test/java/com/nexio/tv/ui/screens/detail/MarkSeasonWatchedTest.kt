@@ -2,6 +2,12 @@ package com.nexio.tv.ui.screens.detail
 
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.core.tvdb.TvEpisodeMetadata
+import com.nexio.tv.core.tvdb.TvMetadataDecision
+import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
+import com.nexio.tv.core.tvdb.TvMetadataRouter
+import com.nexio.tv.core.tvdb.TvProvider
+import com.nexio.tv.core.tvdb.TvSeasonEpisode
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.remote.api.TmdbEpisode
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -56,6 +62,69 @@ class MarkSeasonWatchedTest {
     }
 
     // ── Test 1: usesAuthoritativeEpisodeList ──────────────────────────────────
+
+    @Test
+    fun `uses TVDB season episodes when TVDB succeeds`() =
+        runTest(dispatcher) {
+            val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+            val tmdbService = mockk<TmdbService>(relaxed = true)
+            val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
+            val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
+            val pastDate = "2020-01-01"
+            val futureDate = "2099-12-31"
+
+            coEvery { tmdbService.ensureTmdbId(any(), any()) } coAnswers {
+                val markSeasonCall = Throwable().stackTrace.any { frame ->
+                    frame.className.endsWith("MetaDetailsViewModel") && frame.methodName == "markSeasonWatched"
+                }
+                check(!markSeasonCall) { "TVDB season success must not resolve TMDB IDs" }
+                null
+            }
+            coEvery {
+                tvMetadataRouter.fetchSeasonEpisodes(
+                    contentId = "tt9999999",
+                    fallbackContentId = "tt9999999",
+                    seasonNumber = 1,
+                    language = null
+                )
+            } returns TvMetadataDecision(
+                provider = TvProvider.TVDB,
+                reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                value = listOf(
+                    tvSeasonEpisode(1, airDate = pastDate),
+                    tvSeasonEpisode(2, airDate = futureDate),
+                    tvSeasonEpisode(3, airDate = null)
+                )
+            )
+            coEvery { watchProgressRepository.markAsCompletedBatch(any(), any(), any()) } returns Unit
+
+            val batchSlot = slot<List<SeasonEpisodeMark>>()
+            coEvery { watchProgressRepository.markAsCompletedBatch(any(), eq(1), capture(batchSlot)) } returns Unit
+
+            val meta = buildSeriesMeta(id = "tt9999999", videos = emptyList())
+            val viewModel = buildViewModel(
+                meta = meta,
+                tmdbService = tmdbService,
+                tmdbMetadataService = tmdbMetadataService,
+                tvMetadataRouter = tvMetadataRouter,
+                watchProgressRepository = watchProgressRepository
+            )
+            advanceUntilIdle()
+
+            viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonWatched(1))
+            advanceUntilIdle()
+
+            assertEquals(listOf(1, 3), batchSlot.captured.map { it.episodeNumber })
+            coVerify(exactly = 1) {
+                tvMetadataRouter.fetchSeasonEpisodes(
+                    contentId = "tt9999999",
+                    fallbackContentId = "tt9999999",
+                    seasonNumber = 1,
+                    language = null
+                )
+            }
+            coVerify(exactly = 0) { tmdbMetadataService.fetchSeasonEpisodes(any(), any(), any()) }
+        }
 
     @Test
     fun `usesAuthoritativeEpisodeList - fetchSeasonEpisodes called with TMDB id from ensureTmdbId`() =
@@ -739,6 +808,20 @@ class MarkSeasonWatchedTest {
         airDate = airDate
     )
 
+    private fun tvSeasonEpisode(
+        episodeNumber: Int,
+        airDate: String? = null
+    ): TvSeasonEpisode = TvSeasonEpisode(
+        episodeNumber = episodeNumber,
+        airDate = airDate,
+        metadata = TvEpisodeMetadata(
+            providerEpisodeId = "tvdb:$episodeNumber",
+            seasonNumber = 1,
+            episodeNumber = episodeNumber,
+            airDate = airDate
+        )
+    )
+
     private fun seasonEpisodeMark(
         episodeNumber: Int,
         airDate: String? = null
@@ -792,6 +875,7 @@ class MarkSeasonWatchedTest {
         meta: Meta = buildSeriesMeta(),
         tmdbService: TmdbService = defaultTmdbService(),
         tmdbMetadataService: TmdbMetadataService = mockk(relaxed = true),
+        tvMetadataRouter: TvMetadataRouter = defaultTvMetadataRouter(tmdbService, tmdbMetadataService),
         watchProgressRepository: WatchProgressRepository = mockk(relaxed = true)
     ): MetaDetailsViewModel {
         val wrappedWatchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
@@ -808,8 +892,45 @@ class MarkSeasonWatchedTest {
             meta = meta,
             tmdbService = tmdbService,
             tmdbMetadataService = tmdbMetadataService,
+            tvMetadataRouter = tvMetadataRouter,
             watchProgressRepository = wrappedWatchProgressRepository,
             libraryRepository = defaultLibraryRepository()
         )
+    }
+
+    private fun defaultTvMetadataRouter(
+        tmdbService: TmdbService,
+        tmdbMetadataService: TmdbMetadataService
+    ): TvMetadataRouter {
+        val router = mockk<TvMetadataRouter>(relaxed = true)
+        coEvery { router.fetchSeasonEpisodes(any(), any(), any(), any()) } coAnswers {
+            val contentId = firstArg<String>()
+            val fallbackContentId = secondArg<String?>()
+            val seasonNumber = thirdArg<Int>()
+            val tmdbId = tmdbService.ensureTmdbId(contentId, ContentType.SERIES.toApiString())
+                ?: fallbackContentId?.let { tmdbService.ensureTmdbId(it, ContentType.SERIES.toApiString()) }
+            val episodes = tmdbId
+                ?.toIntOrNull()
+                ?.let { tvId -> tmdbMetadataService.fetchSeasonEpisodes(tvId, seasonNumber, null) }
+                .orEmpty()
+            TvMetadataDecision(
+                provider = TvProvider.TMDB,
+                reason = TvMetadataDecisionReason.TVDB_FALLBACK_TMDB,
+                value = episodes.map { episode ->
+                    TvSeasonEpisode(
+                        episodeNumber = episode.episodeNumber,
+                        airDate = episode.airDate,
+                        metadata = TvEpisodeMetadata(
+                            providerEpisodeId = episode.id?.let { "tmdb:$it" },
+                            seasonNumber = seasonNumber,
+                            episodeNumber = episode.episodeNumber,
+                            title = episode.name,
+                            airDate = episode.airDate
+                        )
+                    )
+                }
+            )
+        }
+        return router
     }
 }
