@@ -17,6 +17,8 @@ class ProfileSettingsScopeContractTest {
     private val profileModeRouter = File("app/src/main/java/com/nexio/tv/core/profile/ProfileModeRouter.kt")
     private val trackingProviderStateService = File("app/src/main/java/com/nexio/tv/data/repository/TrackingProviderStateService.kt")
     private val homeCatalogPipeline = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt")
+    private val metadataDiskCacheStore = File("app/src/main/java/com/nexio/tv/data/local/MetadataDiskCacheStore.kt")
+    private val artworkImageCacheKeys = File("app/src/main/java/com/nexio/tv/core/image/ArtworkImageCacheKeys.kt")
 
     private fun doc(): String {
         assertTrue(
@@ -52,6 +54,7 @@ class ProfileSettingsScopeContractTest {
             "`profile-remote`",
             "`profile-local`",
             "`profile-derived-cache`",
+            "`shared-language-cache`",
             "`global-device`"
         ).forEach { expected ->
             assertTrue("scope doc should mention $expected", text.contains(expected))
@@ -192,10 +195,15 @@ class ProfileSettingsScopeContractTest {
             "SimklDiscoverySnapshotStore",
             "SimklProgressSyncStateStore",
             "TraktMutationOutboxStore",
-            "MetadataDiskCacheStore",
             "CatalogDiskCacheStore"
         ).forEach { store ->
             assertEquals("$store should be profile-derived-cache", "`profile-derived-cache`", rows[store]?.get(2))
+        }
+
+        listOf(
+            "MetadataDiskCacheStore"
+        ).forEach { store ->
+            assertEquals("$store should be shared-language-cache", "`shared-language-cache`", rows[store]?.get(2))
         }
 
         listOf(
@@ -221,7 +229,11 @@ class ProfileSettingsScopeContractTest {
     @Test
     fun `profile local and derived cache classes do not have supabase owners`() {
         inventoryRows().values
-            .filter { cells -> cells[2] == "`profile-local`" || cells[2] == "`profile-derived-cache`" }
+            .filter {
+                cells -> cells[2] == "`profile-local`" ||
+                    cells[2] == "`profile-derived-cache`" ||
+                    cells[2] == "`shared-language-cache`"
+            }
             .forEach { cells ->
                 assertEquals("${cells[1]} should have no Supabase owner", "none", cells[5])
             }
@@ -254,6 +266,11 @@ class ProfileSettingsScopeContractTest {
                     assertEquals("$store should be derived cache", "`derived-cache`", persistenceScope)
                     assertEquals("$store should not have a Supabase owner", "none", cells[5])
                 }
+                "`shared-language-cache`" -> {
+                    assertEquals("$store should have device identity scope", "`device`", identityScope)
+                    assertEquals("$store should be derived cache", "`derived-cache`", persistenceScope)
+                    assertEquals("$store should not have a Supabase owner", "none", cells[5])
+                }
                 "`global-device`" -> {
                     assertEquals("$store should have device identity scope", "`device`", identityScope)
                     assertTrue(
@@ -271,7 +288,7 @@ class ProfileSettingsScopeContractTest {
         val text = doc()
 
         assertTrue(text.contains("`ProfileSettingsSyncService.syncedFeatures` may include only `profile-remote` stores."))
-        assertTrue(text.contains("No `profile-local`, `profile-derived-cache`, or `global-device` value may be serialized to `profile_settings`."))
+        assertTrue(text.contains("No `profile-local`, `profile-derived-cache`, `shared-language-cache`, or `global-device` value may be serialized to `profile_settings`."))
     }
 
     @Test
@@ -355,5 +372,18 @@ class ProfileSettingsScopeContractTest {
         assertTrue(source.contains("ProfileModeRoute.DefaultLegacyRoute -> authStateForRoutedProfile(profileModeRouter.defaultLegacyProfileId())"))
         assertTrue(source.contains("profileBoundary.authRoute(route, TrackingProvider.TRAKT).profileId"))
         assertTrue(source.contains("profileBoundary.authRoute(route, TrackingProvider.SIMKL).profileId"))
+    }
+
+    @Test
+    fun `shared metadata and artwork cache keys stay profile independent`() {
+        val metadataSource = metadataDiskCacheStore.readText()
+        val artworkSource = artworkImageCacheKeys.readText()
+
+        assertTrue(metadataSource.contains("return \"${'$'}META_PREFIX${'$'}itemKey::${'$'}languageTag::${'$'}providerToken\""))
+        assertTrue(metadataSource.contains("return \"${'$'}TMDB_PREFIX${'$'}tmdbKey::${'$'}languageTag::${'$'}providerToken\""))
+        assertTrue(metadataSource.contains("return \"${'$'}TVDB_PREFIX${'$'}seriesId::${'$'}{recordKind.trim().lowercase()}::${'$'}languageTag::${'$'}providerToken\""))
+        assertTrue(artworkSource.contains("\"${'$'}{itemId}_${'$'}{provider}_${'$'}{type}\""))
+        assertTrue(!artworkSource.contains("languageTag"))
+        assertTrue(!artworkSource.contains("profileId"))
     }
 }

@@ -25,6 +25,7 @@ Allowed combined ownership classes:
 | `profile-remote` | `profile` | `remote-synced` | Unique per profile and synced through `profile_settings` for profiles 2-4. Profile 1 uses the legacy account/default path. |
 | `profile-local` | `profile` | `local-only` | Unique per profile on one Android device and never written to Supabase. |
 | `profile-derived-cache` | `profile` | `derived-cache` | Rebuildable data derived from profile state, auth state, catalog settings, language, or metadata. Must not be source-of-truth. |
+| `shared-language-cache` | `device` | `derived-cache` | Shared across profiles on one device, keyed by language/provider/item so multiple profile languages can coexist. Must not contain profile auth, progress, catalog visibility, or list membership. |
 | `global-device` | `device` | `local-only` or `derived-cache` | True device-wide operational facts only. User-facing preferences do not belong here. |
 
 ## Lifecycle Invariants
@@ -37,6 +38,7 @@ Allowed combined ownership classes:
 - Profiles 2-4 hydrate profile-owned synced preferences through `profile_settings` blobs.
 - Profile-local settings never sync through Supabase.
 - Profile-derived caches must be safe to delete and rebuild.
+- Shared metadata/artwork caches may hydrate any profile, including profile 1/default, but must not carry profile-owned state.
 - Profile deletion must clear profile-scoped local stores and profile-scoped caches for that profile only.
 
 ## Source Of Truth Matrix
@@ -69,7 +71,8 @@ Allowed combined ownership classes:
 | SIMKL discovery snapshot | `profile-derived-cache` | Profile 1 cache key | Profile-suffixed cache key | none | `SimklDiscoverySnapshotStore` | none | Cleared for deleted secondary profile |
 | SIMKL progress sync state | `profile-derived-cache` | Profile 1 cache key | Profile-suffixed cache key | none | `SimklProgressSyncStateStore` | none | Cleared for deleted secondary profile |
 | Trakt mutation outbox | `profile-derived-cache` | Profile 1 cache key | Profile-suffixed cache key | none | `TraktMutationOutboxStore` | none | Cleared for deleted secondary profile |
-| Metadata disk cache | `profile-derived-cache` | Profile/language-sensitive cache entries | Profile/language-sensitive cache entries | none | `MetadataDiskCacheStore` | none | Cache entries must include profile/language sensitivity where needed |
+| Metadata disk cache | `shared-language-cache` | Shared language-keyed metadata entries | Shared language-keyed metadata entries | none | `MetadataDiskCacheStore` | none | Keys use `meta::<itemKey>::<languageTag>::<providerToken>`; no profile id. |
+| Artwork image cache | `global-device` | Shared device image entries | Shared device image entries | none | `ArtworkImageCacheKeys` / image loader disk cache | none | Keys include item/provider/artwork type only; no profile id and no language. |
 | Catalog disk cache | `profile-derived-cache` | Profile-sensitive cache entries | Profile-sensitive cache entries | none | `CatalogDiskCacheStore` | none | Cache entries must include profile sensitivity where needed |
 | TVDB identity cache | `global-device` | Device cache | Device cache | none | `TvdbIdentityCacheStore` | none | Cache policy, not profile source-of-truth |
 | Addon manifest cache | `global-device` | Device cache | Device cache | none | `AddonRepositoryImpl` manifest cache | none | Cache policy, not profile source-of-truth |
@@ -102,7 +105,7 @@ Every store in this table must appear exactly once. Additions to `app/src/main/j
 | `LibraryPreferences` | `profile-local` | `profile` | `local-only` | none | Library display/state preference must not bleed across profiles. |
 | `MDBListDiscoverySnapshotStore` | `profile-derived-cache` | `profile` | `derived-cache` | none | Discovery list cache depends on account availability and profile visibility. |
 | `MDBListSettingsDataStore` | `account-remote` | `account` | `remote-synced` | `account_settings_public.integrations.mdblist`, `account_settings_public.catalogs.mdblist` | MDBList availability/list source is account-owned; profile visibility is handled through profile catalog settings. |
-| `MetadataDiskCacheStore` | `profile-derived-cache` | `profile` | `derived-cache` | none | Metadata cache must account for language/profile-sensitive metadata. |
+| `MetadataDiskCacheStore` | `shared-language-cache` | `device` | `derived-cache` | none | Shared text metadata cache keyed by item, language, and provider token; profile id must not be part of the key. |
 | `OmdbSettingsDataStore` | `account-remote` | `account` | `remote-synced` | `account_settings_public.integrations.omdb`, `account_secrets` | Provider credential/config is account-owned. |
 | `PlayerSettingsDataStore` | `profile-remote` | `profile` | `remote-synced` | `account_settings_public` for profile 1; `profile_settings.player_settings` for profiles 2-4 | User-facing playback, formatter, audio, subtitle, and stream-selection settings. |
 | `PosterRatingsSettingsDataStore` | `account-remote` | `account` | `remote-synced` | `account_settings_public.integrations.posterRatings`, `account_secrets` | Provider credential/config is account-owned. |
@@ -144,6 +147,7 @@ Every store in this table must appear exactly once. Additions to `app/src/main/j
 - User-facing preference + should roam across devices: `profile-remote`.
 - User-facing preference + device-specific or privacy-sensitive local behavior: `profile-local`.
 - Derived data from profile settings, auth, language, or catalog inventory: `profile-derived-cache`.
+- Shared text metadata keyed by item/language/provider and reusable by all profiles: `shared-language-cache`.
 - Provider availability, account API key, addon install, or account service credentials: `account-remote`.
 - Device capability, app bootstrapping, or non-user preference operational state: `global-device`.
 
@@ -153,4 +157,4 @@ Every store in this table must appear exactly once. Additions to `app/src/main/j
 - `AccountSettingsSyncService` may write profile-owned UX values only for profile 1.
 - `nexio-web` profile 1 surfaces must not call profile settings APIs for profile-owned UX values.
 - `nexio-web` profile 2-4 surfaces must not mutate account settings for profile-owned UX values.
-- No `profile-local`, `profile-derived-cache`, or `global-device` value may be serialized to `profile_settings`.
+- No `profile-local`, `profile-derived-cache`, `shared-language-cache`, or `global-device` value may be serialized to `profile_settings`.
