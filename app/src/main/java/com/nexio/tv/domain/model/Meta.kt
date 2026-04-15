@@ -30,6 +30,7 @@ data class Meta(
     val language: String?,
     val links: List<MetaLink>,
     val trailerYtIds: List<String> = emptyList(),
+    val tvdbSeasonOrderContext: TvdbSeasonOrderContext? = null,
     val posterProviderTag: String? = null
 ) {
     val apiType: String
@@ -59,6 +60,33 @@ enum class MetaCompanyKind {
 }
 
 @Immutable
+data class TvdbSeasonTypeSummary(
+    val id: Int?,
+    val name: String?,
+    val type: String?
+)
+
+@Immutable
+data class TvdbSeasonOrderContext(
+    val defaultSeasonTypeId: Int?,
+    val defaultSeasonTypeName: String?,
+    val defaultSeasonTypeSlug: String?,
+    val availableSeasonTypes: List<TvdbSeasonTypeSummary> = emptyList(),
+    val alternateOrderPreservedButNotApplied: Boolean = false
+)
+
+@Immutable
+data class TvdbEpisodeOrder(
+    val defaultSeason: Int?,
+    val defaultEpisode: Int?,
+    val absoluteNumber: Int?,
+    val airsAfterSeason: Int?,
+    val airsBeforeSeason: Int?,
+    val airsBeforeEpisode: Int?,
+    val alternateOrderPreservedButNotApplied: Boolean = false
+)
+
+@Immutable
 enum class OrganizationDiscoverType {
     MOVIE_COMPANY,
     TV_COMPANY,
@@ -75,7 +103,8 @@ data class Video(
     val season: Int?,
     val episode: Int?,
     val overview: String?,
-    val runtime: Int? = null // episode runtime in minutes
+    val runtime: Int? = null, // episode runtime in minutes
+    val tvdbEpisodeOrder: TvdbEpisodeOrder? = null
 )
 
 @Immutable
