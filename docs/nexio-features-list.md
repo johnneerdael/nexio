@@ -157,8 +157,37 @@ NEXIO also includes:
 
 NEXIO does not stop at raw addon metadata.
 
+### TVDB as the TV metadata authority
+When TVDB is configured, it becomes the authoritative source for TV metadata. NEXIO uses TVDB for:
+
+- TV detail pages and series information
+- episode metadata including title, overview, image, runtime, aired date, and absolute numbering
+- TV artwork, trailers, related content, and credits/cast
+- networks, genres, and content ratings
+- series air-time data for exact Continue Watching availability
+- remote-ID matching for cross-provider identity without redundant TMDB lookups
+
+TVDB replaces TMDB for TV metadata when configured. TMDB remains the movie metadata source and serves as an explicit TV fallback when TVDB is not configured or cannot satisfy a request. Normal success paths do not perform duplicate TMDB TV metadata fetches when TVDB is active.
+
+### Provider precedence
+NEXIO follows a clear metadata provider order:
+
+1. **Poster-ratings** (TOPPosters or RPDB) override TVDB and TMDB poster imagery for supported titles
+2. **TVDB** is the TV metadata authority when configured
+3. **TMDB** remains movie metadata and explicit TV fallback
+
+This means poster-ratings integrations always take priority for poster artwork, TVDB handles TV when available, and TMDB is always there for movies and as a safety net.
+
+### TVDB reliability and caching
+NEXIO keeps TVDB metadata fresh and reliable through several layers:
+
+- **Update-aware cache invalidation:** TVDB `/updates` signals drive cache freshness. Changed records are detected in the background and only affected metadata is invalidated, without blocking normal browsing.
+- **Stable reference data caching:** Reference data such as artwork types, genres, languages, statuses, content ratings, season types, source types, entity types, and company types is cached heavily and warmed when TVDB credentials first validate.
+- **Stale-cache fallback:** During TVDB outages, TV detail and Continue Watching serve last-known-good cached TVDB data. Explicit fallback is used only when cached data cannot safely satisfy the surface.
+- **Invalid credential handling:** If credentials become invalid, cached data remains safe, new TVDB network calls stop until credentials are fixed, and the invalid status is surfaced in settings.
+
 ### TMDB enrichment
-TMDB support can enrich the experience with:
+TMDB remains the movie metadata source and provides TV fallback when TVDB is not configured. TMDB support enriches the experience with:
 
 - artwork
 - summaries and core info
@@ -402,8 +431,12 @@ That includes:
 - debrid benchmark result inspection
 - autoplay shadow decision logging
 - transport validation tooling in debug workflows
+- TVDB provider, cache, and fallback diagnostics across three layers:
+  - **TVDB settings** for user-facing reliability status such as invalid credentials, stale cache served, and update refresh failures
+  - **Debug settings** for detailed diagnostics including provider choice, fallback reasons, missing `airsTime`, date-only gating, poster-ratings overrides, skipped TMDB TV fetches, update refresh status, stale cache served, and credential status
+  - **Structured logs** for developer-level provider and cache event traces
 
-Some of these are clearly enthusiast or debug-facing, but they reinforce the same point: NEXIO is engineered for people who actually care how playback behaves.
+Some of these are clearly enthusiast or debug-facing, but they reinforce the same point: NEXIO is engineered for people who actually care how playback and metadata behave.
 
 ---
 
@@ -417,7 +450,9 @@ Its real feature set combines:
 - account-scoped integrations and sync
 - advanced debrid workflows
 - real Trakt depth
-- meaningful metadata enrichment
+- TVDB-backed TV metadata with update-aware caching and stale-cache fallback
+- clear provider precedence across TVDB, TMDB, and poster-ratings
+- meaningful metadata enrichment for both TV and movies
 - premium trailer and home-screen behavior
 - enthusiast-grade audio and Dolby Vision handling
 - a portal that acts as a real control plane

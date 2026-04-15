@@ -2,11 +2,12 @@
 
 This guide is the fastest way to turn a fresh NEXIO install into a smooth, lean-back setup with better metadata, better posters, better trailer playback, and benchmark-aware autoplay.
 
-If you only do **three** things, do these first:
+If you only do **four** things, do these first:
 
 1. Connect **one debrid provider**
-2. Add your **TMDB** API key
-3. Sign in to **Trakt**
+2. Add your **TVDB** API key for TV metadata
+3. Add your **TMDB** API key for movie metadata and TV fallback
+4. Sign in to **Trakt**
 
 Everything else builds on top of that.
 
@@ -36,7 +37,8 @@ If users are unaware of this first-run behavior, they can easily mistake normal 
 NEXIO is built to shine when you combine:
 
 - a connected debrid provider for high-quality cached playback
-- **TMDB** for metadata enrichment and trailers
+- **TVDB** for TV metadata when you want richer, TV-specific enrichment
+- **TMDB** for movie metadata, trailers, and TV fallback when TVDB is not configured
 - **Trakt** for Continue Watching, watch progress, scrobbles, personal lists, and Trakt-powered rails
 
 Strongly recommended extras:
@@ -53,7 +55,8 @@ Strongly recommended extras:
 Prepare these accounts or keys:
 
 - one debrid provider: **Real-Debrid**, **Premiumize**, **TorBox**, or **EasyDebrid**
-- a **TMDB** API key
+- a **TVDB** API key (recommended for TV metadata)
+- a **TMDB** API key (required for movies, also serves as TV fallback)
 - a **Trakt** account
 - optional: **MDBList** API key
 - optional: **TOPPosters** or **RPDB** API key
@@ -61,6 +64,7 @@ Prepare these accounts or keys:
 
 Helpful official links:
 
+- **TVDB**: https://thetvdb.com/dashboard
 - **TMDB**: https://developer.themoviedb.org/docs/getting-started
 - **MDBList API**: https://docs.mdblist.com/docs/api
 - **TOPPosters**: https://api.top-streaming.stream/
@@ -248,7 +252,65 @@ It does **not** upload your debrid secrets through this toggle.
 
 ---
 
-## 6. Set up TMDB before you worry about cosmetic extras
+## 6. Set up TVDB for TV metadata
+
+Menu path:
+
+- **Settings → Integration → TVDB**
+
+Turn on:
+
+- **Enable TVDB**
+
+Then add your key in:
+
+- **API Key**
+
+### What TVDB does for NEXIO
+
+When TVDB is configured, it becomes the authoritative TV metadata source. NEXIO uses TVDB for TV detail pages, episode metadata, artwork, trailers, related content, credits and cast, networks, genres, and content ratings.
+
+TMDB remains the movie metadata source regardless of TVDB configuration. When TVDB is not configured, TMDB continues to serve TV metadata as an explicit fallback so existing setups keep working.
+
+### Provider precedence
+
+The provider order for metadata is:
+
+1. **Poster-ratings** (TOPPosters or RPDB) override TVDB and TMDB poster imagery for supported titles
+2. **TVDB** is the TV metadata authority when configured
+3. **TMDB** remains movie metadata and explicit TV fallback when TVDB is not configured or cannot satisfy a request
+
+This means poster-ratings integrations always win for poster artwork when they support the title, TVDB handles TV when it can, and TMDB remains available for movies and as a safety net for TV.
+
+### Continue Watching air-time behavior
+
+When TVDB provides both an episode aired date and a series `airsTime`, NEXIO computes an exact availability instant for Continue Watching next-up episodes. The instant is converted to your Android TV device's local timezone before visibility decisions are made.
+
+This means new episodes appear in Continue Watching at their actual airing time, not just at the start of the aired date. Future episodes are withheld until the computed availability instant and automatically re-evaluated when that time arrives.
+
+When `airsTime` is missing from TVDB metadata, NEXIO falls back to date-only gating. In that case, the episode becomes visible at the start of the aired date in your device timezone. Diagnostics explain when precise timing was unavailable so you know whether a date-only decision was made.
+
+### How TVDB caching works
+
+NEXIO keeps your TVDB metadata fresh without aggressive refetching:
+
+- **Update-aware cache invalidation:** TVDB `/updates` signals drive cache freshness in the background. NEXIO polls for changed records periodically and at app startup, then invalidates only the affected metadata. Normal browsing and metadata reads are never blocked by update checks.
+- **Stable reference-data caching:** Reference data such as artwork types, genres, languages, statuses, content ratings, season types, source types, entity types, and company types is cached heavily. This data rarely changes and is warmed when TVDB credentials first validate. Refresh failures serve last-known-good cached labels instead of showing blank metadata or raw IDs.
+- **Stale-cache fallback during outages:** If TVDB is temporarily unavailable, TV detail and Continue Watching serve last-known-good TVDB data when present. NEXIO uses explicit fallback only when cached TVDB data cannot safely satisfy the surface, and records the reason. Your cached metadata stays safe even during TVDB outages.
+- **Invalid credential handling:** If TVDB credentials become invalid after previously working, NEXIO keeps cached TVDB data as last-known-good, stops making new TVDB network calls until you fix the credentials, and surfaces the invalid status in settings. Do not clear your cache when you see a credential error. Fix the credentials and NEXIO will resume normal behavior.
+
+### Where to find diagnostics
+
+TVDB diagnostics are available in two places:
+
+- **TVDB settings** shows a user-facing reliability status when there are issues such as invalid credentials, stale cache being served, or update refresh failures
+- **Debug settings** shows detailed provider, cache, and fallback diagnostics including provider choice, fallback reasons, missing `airsTime`, date-only gating, poster-ratings overrides, skipped TMDB TV fetches, update refresh status, stale cache served, and credential status
+
+If something looks wrong with your TV metadata, check TVDB settings first for a quick status, then Debug settings for the full picture.
+
+---
+
+## 7. Set up TMDB for movie metadata and TV fallback
 
 Menu path:
 
@@ -276,13 +338,11 @@ Recommended TMDB toggles to keep enabled:
 
 ### Best practice
 
-If you only add **one** metadata key in NEXIO, make it **TMDB**.
-
-TMDB is the core metadata upgrade in the current app. It improves the quality of artwork and detail enrichment, and NEXIO also relies on it for trailer sourcing.
+TMDB remains required for movie metadata and trailer sourcing. When TVDB is configured, TMDB also serves as the explicit TV fallback when TVDB cannot satisfy a request. If you only configure one metadata provider, make it TMDB. If you watch TV series regularly, add TVDB as well for richer TV-specific metadata and exact Continue Watching air-time behavior.
 
 ---
 
-## 7. Sign in to YouTube Trailer Login for the best trailer experience
+## 8. Sign in to YouTube Trailer Login for the best trailer experience
 
 Menu path:
 
@@ -300,7 +360,7 @@ If trailers matter to you, this is worth doing.
 
 ---
 
-## 8. Sign in to Trakt if you want NEXIO to feel "alive"
+## 9. Sign in to Trakt if you want NEXIO to feel "alive"
 
 Menu path:
 
@@ -342,7 +402,7 @@ If you skip Trakt, NEXIO still works, but the experience is noticeably less pers
 
 ---
 
-## 9. Add MDBList for richer ratings, not core metadata
+## 10. Add MDBList for richer ratings, not core metadata
 
 Menu path:
 
@@ -372,7 +432,7 @@ Use **MDBList** when you want richer external ratings and optional MDBList rails
 
 ---
 
-## 10. Choose your poster provider
+## 11. Choose your poster provider
 
 Menu path:
 
@@ -398,7 +458,7 @@ If you do not care about rated posters, you can skip this step entirely.
 
 ---
 
-## 11. Tidy up Player & Stream Selection
+## 12. Tidy up Player & Stream Selection
 
 Menu path:
 
@@ -423,7 +483,7 @@ If you **do** use **Deterministic Autoplay**:
 
 ---
 
-## 12. Leave DV7 conversion enabled unless you have a reason not to
+## 13. Leave DV7 conversion enabled unless you have a reason not to
 
 Menu path:
 
@@ -445,7 +505,7 @@ Only treat **DV7 - Preserve Mapping** as an advanced experiment.
 
 ---
 
-## 13. Enable Auto Frame Rate for serious movie playback
+## 14. Enable Auto Frame Rate for serious movie playback
 
 Menu path:
 
@@ -469,7 +529,7 @@ For power users, this is strongly recommended.
 
 ---
 
-## 14. Enable Trailer Screensaver if you want a more premium idle experience
+## 15. Enable Trailer Screensaver if you want a more premium idle experience
 
 Menu path:
 
@@ -493,7 +553,7 @@ This is not essential for playback quality, but it makes NEXIO feel much more po
 
 ---
 
-## 15. Optional: keep the Universal formatter selected in the portal
+## 16. Optional: keep the Universal formatter selected in the portal
 
 If you use the NEXIO account portal, open:
 
@@ -523,7 +583,8 @@ Use this as your "done right" checklist:
 - [ ] Ran the full **Benchmark**
 - [ ] Enabled **Service Wrap**
 - [ ] Enabled **Deterministic Autoplay**
-- [ ] Added a **TMDB** API key
+- [ ] Added a **TVDB** API key for TV metadata
+- [ ] Added a **TMDB** API key for movies and TV fallback
 - [ ] Signed in to **YouTube Trailer Login**
 - [ ] Signed in to **Trakt**
 - [ ] Added **MDBList** if you want richer ratings
@@ -543,7 +604,8 @@ For most power users, this is the sweet spot:
 - **Benchmark** run
 - **Service Wrap** on
 - **Deterministic Autoplay** on
-- **TMDB** on
+- **TVDB** on for TV metadata
+- **TMDB** on for movies and TV fallback
 - **YouTube Trailer Login** signed in
 - **Trakt** signed in
 - **Filter Wrong Episodes** on
@@ -551,4 +613,4 @@ For most power users, this is the sweet spot:
 - **DV7 - DV8.1 Conversion** on
 - **Auto Frame Rate** on
 
-That combination gives you the best shot at fast startup, clean metadata, reliable trailers, and the most hands-off playback experience NEXIO currently offers.
+That combination gives you the best shot at fast startup, clean metadata, exact Continue Watching air-time behavior, reliable trailers, and the most hands-off playback experience NEXIO currently offers.
