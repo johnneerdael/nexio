@@ -474,7 +474,7 @@ class ProfileSettingsScopeContractTest {
 
         assertTrue(sessionSource.contains("data class TrackingAuthSession"))
         assertTrue(sessionSource.contains("val profileId: Int"))
-        assertTrue(traktSource.contains("private fun currentAuthSession(): TrackingAuthSession"))
+        assertTrue(traktSource.contains("fun currentAuthSession(): TrackingAuthSession"))
         assertTrue(traktSource.contains("getCurrentAuthState(session: TrackingAuthSession)"))
         assertTrue(traktSource.contains("fetchUserSettings(session: TrackingAuthSession)"))
         assertTrue(traktSource.contains("executeAuthorizedRequest("))
@@ -588,5 +588,22 @@ class ProfileSettingsScopeContractTest {
         assertTrue(scrobbleSource.contains("TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)"))
         assertTrue(historySource.contains("TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)"))
         assertTrue(!scrobbleSource.contains("traktAuthService.executeAuthorizedWriteRequest { authHeader ->"))
+    }
+
+    @Test
+    fun `new trakt mutations are stamped with captured profile id`() {
+        val scrobbleServiceSource = File("app/src/main/java/com/nexio/tv/data/repository/TraktScrobbleService.kt").readText()
+        val watchProgressSource = File("app/src/main/java/com/nexio/tv/data/repository/WatchProgressRepositoryImpl.kt").readText()
+        val scrobbleAdapterSource = File("app/src/main/java/com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt").readText()
+        val historyAdapterSource = File("app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt").readText()
+        val seasonAdapterSource = File("app/src/main/java/com/nexio/tv/data/repository/trakt/TraktSeasonMarkMutationAdapter.kt").readText()
+
+        assertTrue(scrobbleServiceSource.contains("val session = traktAuthService.currentAuthSession()"))
+        assertTrue(scrobbleAdapterSource.contains("profileId: Int = 1"))
+        assertTrue(scrobbleAdapterSource.contains("profileId = profileId"))
+        assertTrue(historyAdapterSource.contains("profileId: Int = 1"))
+        assertTrue(historyAdapterSource.contains("profileId = profileId"))
+        assertTrue(seasonAdapterSource.contains("profileId: Int = 1"))
+        assertTrue(watchProgressSource.contains("traktAuthService.currentTraktProfileId()"))
     }
 }

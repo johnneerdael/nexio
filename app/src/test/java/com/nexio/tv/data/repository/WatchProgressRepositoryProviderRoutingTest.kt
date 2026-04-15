@@ -108,6 +108,9 @@ class WatchProgressRepositoryProviderRoutingTest {
             traktMutationOutboxCoordinator = outbox,
             metaRepository = mockk<MetaRepository>(relaxed = true),
             seasonMarkBatcher = mockk<SeasonMarkBatcher>(relaxed = true),
+            traktAuthService = mockk(relaxed = true) {
+                every { currentTraktProfileId() } returns 1
+            },
             snapshotServiceProvider = Provider {
                 mockk<ContinueWatchingSnapshotService>(relaxed = true)
             }

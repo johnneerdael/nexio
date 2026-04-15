@@ -399,7 +399,7 @@ class TraktAuthService @Inject constructor(
         return null
     }
 
-    private fun currentAuthSession(): TrackingAuthSession {
+    fun currentAuthSession(): TrackingAuthSession {
         return TrackingAuthSession(
             provider = TrackingProvider.TRAKT,
             profileId = currentRoutedProfileId()

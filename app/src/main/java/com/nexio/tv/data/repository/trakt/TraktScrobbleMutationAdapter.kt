@@ -140,7 +140,8 @@ class TraktScrobbleMutationAdapter @Inject constructor(
             action: String,
             progressPercent: Float,
             rollbackState: TraktWatchingNowStateController.Snapshot,
-            optimisticVersion: Long
+            optimisticVersion: Long,
+            profileId: Int = 1
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 populateItem(item)
@@ -148,6 +149,7 @@ class TraktScrobbleMutationAdapter @Inject constructor(
                 addProperty(PAYLOAD_PROGRESS, progressPercent.coerceIn(0f, 100f))
             }
             return TraktMutationEnvelope(
+                profileId = profileId,
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_SCROBBLE,
                 priority = TraktMutationPriorityBucket.SCROBBLE,
@@ -161,13 +163,15 @@ class TraktScrobbleMutationAdapter @Inject constructor(
             item: TraktScrobbleItem,
             message: String?,
             rollbackState: TraktWatchingNowStateController.Snapshot,
-            optimisticVersion: Long
+            optimisticVersion: Long,
+            profileId: Int = 1
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 populateItem(item)
                 message?.let { addProperty(PAYLOAD_MESSAGE, it) }
             }
             return TraktMutationEnvelope(
+                profileId = profileId,
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_CHECKIN,
                 priority = TraktMutationPriorityBucket.SCROBBLE,
