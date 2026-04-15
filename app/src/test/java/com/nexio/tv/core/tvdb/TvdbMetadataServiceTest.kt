@@ -121,7 +121,7 @@ class TvdbMetadataServiceTest {
             tvdbId = 121361,
             remoteIds = mapOf(TvdbRemoteIdSource.IMDB to setOf("tt0944947"))
         )
-        val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore, TvdbSeasonOrderMapper(), TvdbAdvancedMetadataMapper())
+        val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore, TvdbSeasonOrderMapper(), TvdbAdvancedMetadataMapper(), mockk(relaxed = true) { coEvery { resolveAlias(any(), any()) } returns null }, mockk(relaxed = true) { coEvery { canCallTvdb() } returns true }, mockk(relaxUnitFun = true))
 
         coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
         coEvery { posterResolver.getActiveProvider() } returns activeProvider
@@ -202,7 +202,7 @@ class TvdbMetadataServiceTest {
         val authService = mockk<TvdbAuthService>()
         val posterResolver = mockk<PosterRatingsUrlResolver>()
         val cacheStore = mockk<MetadataDiskCacheStore>()
-        val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore, TvdbSeasonOrderMapper(), TvdbAdvancedMetadataMapper())
+        val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore, TvdbSeasonOrderMapper(), TvdbAdvancedMetadataMapper(), mockk(relaxed = true) { coEvery { resolveAlias(any(), any()) } returns null }, mockk(relaxed = true) { coEvery { canCallTvdb() } returns true }, mockk(relaxUnitFun = true))
         val cached = listOf(
             TvEpisodeMetadata(
                 providerEpisodeId = "tvdb:1001",
@@ -230,7 +230,7 @@ class TvdbMetadataServiceTest {
         val authService = mockk<TvdbAuthService>()
         val posterResolver = mockk<PosterRatingsUrlResolver>()
         val cacheStore = mockk<MetadataDiskCacheStore>()
-        val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore, TvdbSeasonOrderMapper(), TvdbAdvancedMetadataMapper())
+        val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore, TvdbSeasonOrderMapper(), TvdbAdvancedMetadataMapper(), mockk(relaxed = true) { coEvery { resolveAlias(any(), any()) } returns null }, mockk(relaxed = true) { coEvery { canCallTvdb() } returns true }, mockk(relaxUnitFun = true))
 
         every { cacheStore.readTvdbSeasonEpisodes(121361, "default", 1, "en-US") } returns null
         every { cacheStore.writeTvdbSeasonEpisodes(any(), any(), any(), any(), any()) } just Runs
@@ -251,7 +251,7 @@ class TvdbMetadataServiceTest {
         val authService = mockk<TvdbAuthService>()
         val posterResolver = mockk<PosterRatingsUrlResolver>()
         val cacheStore = mockk<MetadataDiskCacheStore>()
-        val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore, TvdbSeasonOrderMapper(), TvdbAdvancedMetadataMapper())
+        val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore, TvdbSeasonOrderMapper(), TvdbAdvancedMetadataMapper(), mockk(relaxed = true) { coEvery { resolveAlias(any(), any()) } returns null }, mockk(relaxed = true) { coEvery { canCallTvdb() } returns true }, mockk(relaxUnitFun = true))
 
         every { cacheStore.readTvdbSeasonEpisodes(121361, "default", 1, "en-US") } returns null
         every { cacheStore.writeTvdbSeasonEpisodes(any(), any(), any(), any(), any()) } just Runs
@@ -275,7 +275,7 @@ class TvdbMetadataServiceTest {
         val authService = mockk<TvdbAuthService>()
         val posterResolver = mockk<PosterRatingsUrlResolver>()
         val cacheStore = mockk<MetadataDiskCacheStore>()
-        val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore, TvdbSeasonOrderMapper(), TvdbAdvancedMetadataMapper())
+        val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore, TvdbSeasonOrderMapper(), TvdbAdvancedMetadataMapper(), mockk(relaxed = true) { coEvery { resolveAlias(any(), any()) } returns null }, mockk(relaxed = true) { coEvery { canCallTvdb() } returns true }, mockk(relaxUnitFun = true))
 
         every { cacheStore.readTvdbSeasonEpisodes(121361, "default", 1, "en-US") } returns null
         every { cacheStore.writeTvdbSeasonEpisodes(121361, "default", 1, "en-US", emptyList()) } just Runs
@@ -303,7 +303,13 @@ class TvdbMetadataServiceTest {
         every { cacheStore.writeTvdbSeasonEpisodes(any(), any(), any(), any(), any()) } just Runs
         every { posterResolver.resolvePosterUrl(any(), any(), any(), null) } answers { firstArg() }
 
-        return TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore, TvdbSeasonOrderMapper(), TvdbAdvancedMetadataMapper())
+        val mergeAliasStore = mockk<com.nexio.tv.data.local.TvdbMergeAliasStore>(relaxed = true)
+        coEvery { mergeAliasStore.resolveAlias(any(), any()) } returns null
+        val credentialHealth = mockk<TvdbCredentialHealth>(relaxed = true)
+        coEvery { credentialHealth.canCallTvdb() } returns true
+        val diagnosticsRecorder = mockk<TvdbDiagnosticsRecorder>(relaxUnitFun = true)
+
+        return TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore, TvdbSeasonOrderMapper(), TvdbAdvancedMetadataMapper(), mergeAliasStore, credentialHealth, diagnosticsRecorder)
     }
 
     private fun fullSeriesRecord(): TvdbSeriesExtendedRecord = TvdbSeriesExtendedRecord(

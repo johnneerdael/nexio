@@ -47,7 +47,8 @@ class TvdbGracefulFallbackTest {
         return mockk(relaxed = true) {
             every { this@mockk.settings } returns flowOf(
                 com.nexio.tv.domain.model.TmdbSettings(
-                    isActive = active,
+                    enabled = active,
+                    apiKey = if (active) "test-tmdb-key" else "",
                     useBasicInfo = true,
                     useArtwork = true,
                     useDetails = true
@@ -77,7 +78,8 @@ class TvdbGracefulFallbackTest {
 
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val cachedData = cachedEnrichment("Last Known Good Title")
-        // Cache read returns valid data
+        // First cache read returns null (cache miss, forces API call),
+        // second read returns stale data (D-07 stale re-check after API failure)
         every {
             metadataDiskCacheStore.readTvdbEnrichment(
                 seriesId = any(),
@@ -85,7 +87,7 @@ class TvdbGracefulFallbackTest {
                 languageTag = any(),
                 providerToken = any()
             )
-        } returns cachedData
+        } returns null andThen cachedData
 
         val tvdbApi = mockk<TvdbApi>()
         // API throws (outage simulation)

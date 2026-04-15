@@ -15,6 +15,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Duration
+import javax.inject.Provider
 
 /**
  * Contract tests for TVDB update scheduling:
@@ -31,7 +32,8 @@ class TvdbUpdateSchedulingTest {
             processor = mockk(),
             credentialHealth = mockk(),
             updateStateStore = mockk(),
-            diagnosticsRecorder = mockk()
+            diagnosticsRecorder = mockk(),
+            referenceDataServiceProvider = Provider { mockk(relaxUnitFun = true) }
         )
 
         coordinator.schedulePeriodicUpdates(workManager)
@@ -66,7 +68,8 @@ class TvdbUpdateSchedulingTest {
             processor = processor,
             credentialHealth = credentialHealth,
             updateStateStore = mockk(),
-            diagnosticsRecorder = diagnosticsRecorder
+            diagnosticsRecorder = diagnosticsRecorder,
+            referenceDataServiceProvider = Provider { mockk(relaxUnitFun = true) }
         )
 
         coEvery { credentialHealth.canCallTvdb() } returns false
@@ -98,7 +101,8 @@ class TvdbUpdateSchedulingTest {
             processor = processor,
             credentialHealth = credentialHealth,
             updateStateStore = mockk(),
-            diagnosticsRecorder = diagnosticsRecorder
+            diagnosticsRecorder = diagnosticsRecorder,
+            referenceDataServiceProvider = Provider { mockk(relaxUnitFun = true) }
         )
 
         coEvery { credentialHealth.canCallTvdb() } returns false
