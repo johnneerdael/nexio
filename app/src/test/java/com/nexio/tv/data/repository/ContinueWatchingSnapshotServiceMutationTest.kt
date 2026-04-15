@@ -115,6 +115,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         contentId: String,
         firstAiredMs: Long,
         tvdbAvailabilityInstantMs: Long? = null,
+        firstAired: String? = null,
         episode: Int = 1
     ): TrackingNextUpEntry = TrackingNextUpEntry(
         contentId = contentId,
@@ -123,7 +124,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         episode = episode,
         episodeTitle = "Episode $episode",
         videoId = "$contentId:1:$episode",
-        firstAired = null,
+        firstAired = firstAired,
         firstAiredMs = firstAiredMs,
         activityAtMs = firstAiredMs,
         tvdbAvailabilityInstantMs = tvdbAvailabilityInstantMs
@@ -131,6 +132,9 @@ class ContinueWatchingSnapshotServiceMutationTest {
 
     private fun buildServiceWithAirScheduler(
         airScheduler: ContinueWatchingAirScheduler,
+        snapshotStore: ContinueWatchingSnapshotStore = mockk(relaxed = true) {
+            every { read() } returns null
+        },
         trackingProgressService: TrackingProgressService = mockk(relaxed = true) {
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
             every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
@@ -162,9 +166,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 }
                 MetaRepository::class.java -> mockk<MetaRepository>(relaxed = true)
                 MetadataDiskCacheStore::class.java -> mockk<MetadataDiskCacheStore>(relaxed = true)
-                ContinueWatchingSnapshotStore::class.java -> mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
-                    every { read() } returns null
-                }
+                ContinueWatchingSnapshotStore::class.java -> snapshotStore
                 ContinueWatchingAirScheduler::class.java -> airScheduler
                 else -> null
             }
@@ -616,6 +618,112 @@ class ContinueWatchingSnapshotServiceMutationTest {
             firstAiredMs = nowMs - 1_000L,
             tvdbAvailabilityInstantMs = nowMs - 1_000L,
             episode = 4
+        )
+
+        rawSnapshotFlow(service).value = ContinueWatchingSnapshot(
+            scheduledReemit = listOf(overdue),
+            updatedAtMs = nowMs - 60_000L
+        )
+
+        service.rescheduleAirTimeAlarmFromSnapshot()
+
+        awaitCondition { refreshCount == 1 }
+        assertTrue(rawSnapshotFlow(service).value.nextUpItems.isEmpty())
+        assertEquals(listOf(overdue), rawSnapshotFlow(service).value.scheduledReemit)
+    }
+
+    @Test
+    fun `reloadPersistedSnapshotForActiveProfile refreshes overdue exact scheduled reemit from persisted load`() = runTest {
+        val scheduler = RecordingAirScheduler()
+        var refreshCount = 0
+        val nowMs = System.currentTimeMillis()
+        val overdue = nextUp(
+            contentId = "show-overdue-persisted-exact",
+            firstAiredMs = nowMs - 1_000L,
+            tvdbAvailabilityInstantMs = nowMs - 1_000L,
+            episode = 5
+        )
+        val persisted = ContinueWatchingSnapshot(
+            scheduledReemit = listOf(overdue),
+            updatedAtMs = nowMs - 60_000L
+        )
+        val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
+            every { read() } returns persisted
+        }
+        val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeRemoteSnapshotLoaded() } returns flowOf(false)
+            every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+            every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+            coEvery { refreshNow() } answers { refreshCount++ }
+        }
+        val service = buildServiceWithAirScheduler(
+            airScheduler = scheduler,
+            snapshotStore = snapshotStore,
+            trackingProgressService = trackingProgressService
+        )
+
+        service.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
+
+        awaitCondition { refreshCount >= 1 }
+        assertTrue(rawSnapshotFlow(service).value.nextUpItems.isEmpty())
+        assertEquals(listOf(overdue), rawSnapshotFlow(service).value.scheduledReemit)
+    }
+
+    @Test
+    fun `rescheduleAirTimeAlarmFromSnapshot refreshes overdue provider-ms scheduled reemit without exact instant`() = runTest {
+        val scheduler = RecordingAirScheduler()
+        var refreshCount = 0
+        val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeRemoteSnapshotLoaded() } returns flowOf(false)
+            every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+            every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+            coEvery { refreshNow() } answers { refreshCount++ }
+        }
+        val service = buildServiceWithAirScheduler(
+            airScheduler = scheduler,
+            trackingProgressService = trackingProgressService
+        )
+        val nowMs = System.currentTimeMillis()
+        val overdue = nextUp(
+            contentId = "show-overdue-provider-ms",
+            firstAiredMs = nowMs - 1_000L,
+            tvdbAvailabilityInstantMs = null,
+            episode = 6
+        )
+
+        rawSnapshotFlow(service).value = ContinueWatchingSnapshot(
+            scheduledReemit = listOf(overdue),
+            updatedAtMs = nowMs - 60_000L
+        )
+
+        service.rescheduleAirTimeAlarmFromSnapshot()
+
+        awaitCondition { refreshCount == 1 }
+        assertTrue(rawSnapshotFlow(service).value.nextUpItems.isEmpty())
+        assertEquals(listOf(overdue), rawSnapshotFlow(service).value.scheduledReemit)
+    }
+
+    @Test
+    fun `rescheduleAirTimeAlarmFromSnapshot refreshes overdue date-only scheduled reemit without exact instant`() = runTest {
+        val scheduler = RecordingAirScheduler()
+        var refreshCount = 0
+        val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeRemoteSnapshotLoaded() } returns flowOf(false)
+            every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+            every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+            coEvery { refreshNow() } answers { refreshCount++ }
+        }
+        val service = buildServiceWithAirScheduler(
+            airScheduler = scheduler,
+            trackingProgressService = trackingProgressService
+        )
+        val nowMs = System.currentTimeMillis()
+        val overdue = nextUp(
+            contentId = "show-overdue-date-only",
+            firstAiredMs = 0L,
+            tvdbAvailabilityInstantMs = null,
+            firstAired = "1970-01-01",
+            episode = 7
         )
 
         rawSnapshotFlow(service).value = ContinueWatchingSnapshot(
