@@ -1,6 +1,5 @@
 package com.nexio.tv.ui.screens.settings
 
-import com.nexio.tv.core.tvdb.TvdbAuthResult
 import com.nexio.tv.core.tvdb.TvdbAuthService
 import com.nexio.tv.core.tvdb.TvdbValidationStatus
 import com.nexio.tv.data.local.TvdbSettings
@@ -9,6 +8,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -58,70 +59,119 @@ class TvdbSettingsViewModelTest {
     }
 
     @Test
-    fun `invalid credentials set INVALID status with last failure and do not enable provider use`() = runTest(dispatcher) {
+    fun `saveCredentials validates through auth service and closes dialog only on success`() = runTest(dispatcher) {
         val settingsFlow = MutableStateFlow(TvdbSettings(enabled = false, apiKey = ""))
         val dataStore = mockk<TvdbSettingsDataStore>(relaxed = true)
         val authService = mockk<TvdbAuthService>()
+        val validation = CompletableDeferred<Boolean>()
+        var successCount = 0
         every { dataStore.settings } returns settingsFlow
-        coEvery {
-            authService.loginAndCacheToken("tvdb-key", "subscriber-pin")
-        } returns TvdbAuthResult.InvalidCredentials("Invalid credentials")
+        coEvery { authService.validateCredentials("tvdb-key", "subscriber-pin") } coAnswers {
+            validation.await()
+        }
 
         val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = authService)
         advanceUntilIdle()
 
-        viewModel.validateAndSaveCredentials(
+        viewModel.saveCredentials(
             apiKey = " tvdb-key ",
-            pin = " subscriber-pin "
+            subscriberPin = " subscriber-pin ",
+            onSuccess = { successCount++ }
         )
+        runCurrent()
+
+        assertEquals(TvdbValidationStatus.VALIDATING, viewModel.uiState.value.validationStatus)
+
+        validation.complete(true)
         advanceUntilIdle()
 
-        assertEquals(TvdbValidationStatus.INVALID, viewModel.uiState.value.validationStatus)
-        assertEquals("Invalid credentials", viewModel.uiState.value.lastFailure)
-        assertFalse(viewModel.uiState.value.isProviderActive)
-        coVerify(exactly = 1) {
-            dataStore.saveValidationFailure(
-                status = TvdbValidationStatus.INVALID,
-                lastFailure = "Invalid credentials"
-            )
-        }
-        coVerify(exactly = 0) { dataStore.setEnabled(true) }
+        assertEquals(1, successCount)
+        assertEquals(TvdbValidationStatus.VALID, viewModel.uiState.value.validationStatus)
+        assertEquals("••••••-key", viewModel.uiState.value.credentialDisplayValue)
+        coVerify(exactly = 1) { authService.validateCredentials("tvdb-key", "subscriber-pin") }
     }
 
     @Test
-    fun `successful validation sets VALID masks API key outside dialog never exposes PIN and shows Fallback active copy`() =
-        runTest(dispatcher) {
-            val settingsFlow = MutableStateFlow(TvdbSettings(enabled = false, apiKey = ""))
-            val dataStore = mockk<TvdbSettingsDataStore>(relaxed = true)
-            val authService = mockk<TvdbAuthService>()
-            every { dataStore.settings } returns settingsFlow
-            coEvery {
-                authService.loginAndCacheToken("tvdb-key", "subscriber-pin")
-            } returns TvdbAuthResult.Valid(
-                authorizationHeader = "Bearer tvdb-token",
-                expiresAtEpochMillis = 1_702_592_000_000L
+    fun `invalid credentials set INVALID status keep dialog open and keep provider inactive`() = runTest(dispatcher) {
+        val settingsFlow = MutableStateFlow(TvdbSettings(enabled = true, apiKey = "old-key"))
+        val dataStore = mockk<TvdbSettingsDataStore>(relaxed = true)
+        val authService = mockk<TvdbAuthService>()
+        var successCount = 0
+        every { dataStore.settings } returns settingsFlow
+        coEvery { authService.validateCredentials("tvdb-key", "subscriber-pin") } returns false
+
+        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = authService)
+        advanceUntilIdle()
+
+        viewModel.saveCredentials(
+            apiKey = " tvdb-key ",
+            subscriberPin = " subscriber-pin ",
+            onSuccess = { successCount++ }
+        )
+        advanceUntilIdle()
+
+        assertEquals(0, successCount)
+        assertEquals(TvdbValidationStatus.INVALID, viewModel.uiState.value.validationStatus)
+        assertEquals("Invalid TVDB credentials", viewModel.uiState.value.lastFailure)
+        assertFalse(viewModel.uiState.value.isProviderActive)
+        assertEquals(TvdbValidationError.InvalidCredentials, viewModel.validationError.first())
+        coVerify(exactly = 1) { dataStore.setEnabled(false) }
+    }
+
+    @Test
+    fun `clearCredentials clears local credentials and cached token state`() = runTest(dispatcher) {
+        val settingsFlow = MutableStateFlow(
+            TvdbSettings(
+                enabled = true,
+                apiKey = "tvdb-key-1234",
+                subscriberPin = "subscriber-pin",
+                validationStatus = TvdbValidationStatus.VALID
             )
+        )
+        val dataStore = mockk<TvdbSettingsDataStore>(relaxed = true)
+        val authService = mockk<TvdbAuthService>()
+        every { dataStore.settings } returns settingsFlow
 
-            val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = authService)
-            advanceUntilIdle()
+        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = authService)
+        advanceUntilIdle()
 
-            viewModel.validateAndSaveCredentials(
-                apiKey = " tvdb-key ",
-                pin = " subscriber-pin "
+        viewModel.clearCredentials()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { dataStore.clearCredentials() }
+    }
+
+    @Test
+    fun `credential display masks API key and never includes PIN`() = runTest(dispatcher) {
+        val settingsFlow = MutableStateFlow(
+            TvdbSettings(
+                apiKey = "tvdb-api-key-1234",
+                subscriberPin = "subscriber-pin",
+                validationStatus = TvdbValidationStatus.VALID
             )
-            advanceUntilIdle()
+        )
+        val dataStore = mockk<TvdbSettingsDataStore>(relaxed = true)
+        val authService = mockk<TvdbAuthService>()
+        every { dataStore.settings } returns settingsFlow
 
-            assertEquals(TvdbValidationStatus.VALID, viewModel.uiState.value.validationStatus)
-            assertTrue(viewModel.uiState.value.maskedApiKey.endsWith("key"))
-            assertFalse(viewModel.uiState.value.maskedApiKey.contains("tvdb-key"))
-            assertFalse(viewModel.uiState.value.pinDisplayText.contains("subscriber-pin"))
-            assertTrue(viewModel.uiState.value.providerPrecedenceCopy.contains("Fallback active"))
-            coVerify(exactly = 1) {
-                dataStore.saveCredentials(
-                    apiKey = "tvdb-key",
-                    pin = "subscriber-pin",
-                    validationStatus = TvdbValidationStatus.VALID
-                )
-            }
-        }
+        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = authService)
+        advanceUntilIdle()
+
+        assertEquals("••••••1234", viewModel.uiState.value.credentialDisplayValue)
+        assertFalse(viewModel.uiState.value.credentialDisplayValue.contains("tvdb-api-key"))
+        assertFalse(viewModel.uiState.value.credentialDisplayValue.contains("subscriber-pin"))
+    }
+
+    @Test
+    fun `credential display uses Not set when API key is blank`() = runTest(dispatcher) {
+        val settingsFlow = MutableStateFlow(TvdbSettings(apiKey = "", subscriberPin = "subscriber-pin"))
+        val dataStore = mockk<TvdbSettingsDataStore>(relaxed = true)
+        val authService = mockk<TvdbAuthService>()
+        every { dataStore.settings } returns settingsFlow
+
+        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = authService)
+        advanceUntilIdle()
+
+        assertEquals("Not set", viewModel.uiState.value.credentialDisplayValue)
+    }
 }
