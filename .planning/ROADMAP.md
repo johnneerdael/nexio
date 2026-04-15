@@ -12,7 +12,7 @@ v1.1 TVDB First-Class TV Metadata makes TheTVDB the authoritative TV metadata pr
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 6: TVDB Foundation and Identity** - TVDB settings, API validation, auth token handling, remote-ID matching, fallback diagnostics, and first-pass metadata caching
+- [x] **Phase 6: TVDB Foundation and Identity** - TVDB settings, API validation, auth token handling, remote-ID matching, fallback diagnostics, and first-pass metadata caching (completed 2026-04-15)
 - [ ] **Phase 7: TVDB Provider Replacement** - Replace TMDB TV metadata paths with TVDB-backed TV detail, episode, artwork, poster precedence, and settings-facing provider rules
 - [ ] **Phase 8: Exact Continue Watching Air Timing** - Compute device-local TVDB airing instants, gate future next-up rows, and re-emit when episodes become available
 - [ ] **Phase 9: TVDB Advanced TV Surfaces** - Preserve TVDB season ordering and replace remaining TMDB TV surfaces such as trailers, cast, companies, networks, genres, and content ratings
@@ -122,7 +122,7 @@ Note: Phase 9 can begin after Phase 7 while Phase 8 is being validated, but Phas
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. TVDB Foundation and Identity | 0/? | Planned | - |
+| 6. TVDB Foundation and Identity | 5/5 | Complete | 2026-04-15 |
 | 7. TVDB Provider Replacement | 0/? | Planned | - |
 | 8. Exact Continue Watching Air Timing | 0/? | Planned | - |
 | 9. TVDB Advanced TV Surfaces | 0/? | Planned | - |
@@ -132,11 +132,11 @@ Note: Phase 9 can begin after Phase 7 while Phase 8 is being validated, but Phas
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PREF-01 | Phase 6 | Pending |
-| PREF-04 | Phase 6 | Pending |
-| PREF-05 | Phase 6 | Pending |
-| PREF-06 | Phase 6 | Pending |
-| CACHE-01 | Phase 6 | Pending |
+| PREF-01 | Phase 6 | Verified |
+| PREF-04 | Phase 6 | Verified |
+| PREF-05 | Phase 6 | Verified with debt |
+| PREF-06 | Phase 6 | Verified |
+| CACHE-01 | Phase 6 | Verified |
 | PREF-02 | Phase 7 | Pending |
 | PREF-03 | Phase 7 | Pending |
 | PREF-07 | Phase 7 | Pending |
