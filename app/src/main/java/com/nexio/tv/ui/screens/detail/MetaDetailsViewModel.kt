@@ -1342,16 +1342,27 @@ class MetaDetailsViewModel @Inject constructor(
                 director = if (tmdbEnrichment.director.isNotEmpty()) tmdbEnrichment.director else updated.director,
                 writer = if (tmdbEnrichment.writer.isNotEmpty()) tmdbEnrichment.writer else updated.writer
             )
+        } else if (tvEnrichment != null && settings.useCredits) {
+            if (tvEnrichment.castMembers.isNotEmpty()) {
+                updated = updated.copy(
+                    castMembers = tvEnrichment.castMembers,
+                    cast = tvEnrichment.castMembers.map { it.name }
+                )
+            }
         }
 
         // Group: Productions
         if (tmdbEnrichment != null && settings.useProductions && tmdbEnrichment.productionCompanies.isNotEmpty()) {
             updated = updated.copy(productionCompanies = tmdbEnrichment.productionCompanies)
+        } else if (tvEnrichment != null && settings.useProductions && tvEnrichment.productionCompanies.isNotEmpty()) {
+            updated = updated.copy(productionCompanies = tvEnrichment.productionCompanies)
         }
 
         // Group: Networks
         if (tmdbEnrichment != null && settings.useNetworks && tmdbEnrichment.networks.isNotEmpty()) {
             updated = updated.copy(networks = tmdbEnrichment.networks)
+        } else if (tvEnrichment != null && settings.useNetworks && tvEnrichment.networks.isNotEmpty()) {
+            updated = updated.copy(networks = tvEnrichment.networks)
         }
 
         // Group: TVDB season-order context
