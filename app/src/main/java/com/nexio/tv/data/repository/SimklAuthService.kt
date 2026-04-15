@@ -2,10 +2,15 @@ package com.nexio.tv.data.repository
 
 import android.util.Log
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.core.profile.ProfileBoundary
+import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.profile.ProfileModeRoute
+import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklAuthState
 import com.nexio.tv.data.remote.api.SimklApi
 import com.nexio.tv.data.remote.SimklRequestGate
+import com.nexio.tv.domain.model.TrackingProvider
 import kotlinx.coroutines.flow.first
 import retrofit2.Response
 import java.io.IOException
@@ -23,11 +28,15 @@ sealed interface SimklTokenPollResult {
 class SimklAuthService @Inject constructor(
     private val simklApi: SimklApi,
     private val simklAuthDataStore: SimklAuthDataStore,
-    private val requestGate: SimklRequestGate
+    private val requestGate: SimklRequestGate,
+    private val profileManager: ProfileManager,
+    private val profileModeRouter: ProfileModeRouter,
+    private val profileBoundary: ProfileBoundary
 ) {
     fun hasRequiredCredentials(): Boolean = BuildConfig.SIMKL_CLIENT_ID.isNotBlank()
 
-    suspend fun getCurrentAuthState(): SimklAuthState = simklAuthDataStore.state.first()
+    suspend fun getCurrentAuthState(): SimklAuthState =
+        simklAuthDataStore.stateForProfile(currentRoutedProfileId()).first()
 
     suspend fun startPinAuth(): Result<Unit> {
         if (!hasRequiredCredentials()) {
@@ -40,7 +49,7 @@ class SimklAuthService @Inject constructor(
         }
         val body = response.body()
         if (response.isSuccessful && body?.deviceCode != null && body.userCode != null) {
-            simklAuthDataStore.saveDeviceFlow(body)
+            simklAuthDataStore.saveDeviceFlow(body, profileId = currentRoutedProfileId())
             return Result.success(Unit)
         }
         return Result.failure(IllegalStateException("Failed to start SIMKL auth (${response.code()})"))
@@ -49,6 +58,7 @@ class SimklAuthService @Inject constructor(
     suspend fun pollPin(): SimklTokenPollResult {
         if (!hasRequiredCredentials()) return SimklTokenPollResult.Failed("Missing SIMKL_CLIENT_ID")
         val state = getCurrentAuthState()
+        val profileId = currentRoutedProfileId()
         val userCode = state.userCode
         if (userCode.isNullOrBlank()) return SimklTokenPollResult.Failed("No active SIMKL PIN code")
 
@@ -62,8 +72,8 @@ class SimklAuthService @Inject constructor(
             return SimklTokenPollResult.Failed("PIN polling failed (${response.code()})")
         }
         if (body.result.equals("OK", ignoreCase = true) && !body.accessToken.isNullOrBlank()) {
-            simklAuthDataStore.saveAccessToken(body.accessToken)
-            simklAuthDataStore.clearDeviceFlow()
+            simklAuthDataStore.saveAccessToken(body.accessToken, profileId = profileId)
+            simklAuthDataStore.clearDeviceFlow(profileId)
             val username = fetchUserSettings()
             return SimklTokenPollResult.Approved(username)
         }
@@ -71,7 +81,7 @@ class SimklAuthService @Inject constructor(
             "authorization pending" -> SimklTokenPollResult.Pending
             "slow down" -> {
                 val nextInterval = ((state.pollInterval ?: 5) + 5).coerceAtMost(60)
-                simklAuthDataStore.updatePollInterval(nextInterval)
+                simklAuthDataStore.updatePollInterval(nextInterval, profileId = profileId)
                 SimklTokenPollResult.SlowDown(nextInterval)
             }
             else -> SimklTokenPollResult.Failed(body.message ?: "Authorization failed")
@@ -88,13 +98,14 @@ class SimklAuthService @Inject constructor(
         simklAuthDataStore.saveUser(
             username = username,
             accountId = body?.account?.id,
-            accountType = body?.account?.type
+            accountType = body?.account?.type,
+            profileId = currentRoutedProfileId()
         )
         return username
     }
 
     suspend fun revokeAndLogout() {
-        simklAuthDataStore.clearAuth()
+        simklAuthDataStore.clearAuth(currentRoutedProfileId())
     }
 
     suspend fun <T> executeAuthorizedRequest(
@@ -112,4 +123,14 @@ class SimklAuthService @Inject constructor(
     suspend fun <T> executeAuthorizedWriteRequest(
         call: suspend (authorizationHeader: String) -> Response<T>
     ): Response<T>? = executeAuthorizedRequest(call)
+
+    private fun currentRoutedProfileId(): Int {
+        return when (val route = profileModeRouter.routeFor(profileManager.activeProfileId.value)) {
+            ProfileModeRoute.DefaultLegacyRoute -> profileModeRouter.defaultLegacyProfileId()
+            is ProfileModeRoute.SecondaryProfileRoute -> {
+                profileBoundary.authRoute(route, TrackingProvider.SIMKL).profileId
+            }
+            is ProfileModeRoute.InvalidProfileRoute -> error("Invalid active profile id ${route.profileId}")
+        }
+    }
 }

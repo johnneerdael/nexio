@@ -117,9 +117,12 @@ class TraktAuthDataStore @Inject constructor(
         }
     }
 
-    suspend fun saveDeviceFlow(data: TraktDeviceCodeResponseDto) {
+    suspend fun saveDeviceFlow(
+        data: TraktDeviceCodeResponseDto,
+        profileId: Int = profileManager.activeProfileId.value
+    ) {
         val now = System.currentTimeMillis()
-        store().edit { preferences ->
+        store(profileId).edit { preferences ->
             preferences[deviceCodeKey] = data.deviceCode
             preferences[userCodeKey] = data.userCode
             preferences[verificationUrlKey] = data.verificationUrl
@@ -128,8 +131,11 @@ class TraktAuthDataStore @Inject constructor(
         }
     }
 
-    suspend fun updatePollInterval(seconds: Int) {
-        store().edit { preferences ->
+    suspend fun updatePollInterval(
+        seconds: Int,
+        profileId: Int = profileManager.activeProfileId.value
+    ) {
+        store(profileId).edit { preferences ->
             preferences[pollIntervalKey] = seconds
         }
     }

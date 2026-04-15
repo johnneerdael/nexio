@@ -2,6 +2,10 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.logging.sanitizeRequestTargetForLogs
+import com.nexio.tv.core.profile.ProfileBoundary
+import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.profile.ProfileModeRoute
+import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.remote.api.TraktApi
@@ -12,6 +16,7 @@ import com.nexio.tv.data.remote.dto.trakt.TraktRefreshTokenRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktRevokeRequestDto
 import com.nexio.tv.data.remote.TraktRequestGate
 import android.util.Log
+import com.nexio.tv.domain.model.TrackingProvider
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -36,7 +41,10 @@ sealed interface TraktTokenPollResult {
 class TraktAuthService @Inject constructor(
     private val traktApi: TraktApi,
     private val traktAuthDataStore: TraktAuthDataStore,
-    private val requestGate: TraktRequestGate
+    private val requestGate: TraktRequestGate,
+    private val profileManager: ProfileManager,
+    private val profileModeRouter: ProfileModeRouter,
+    private val profileBoundary: ProfileBoundary
 ) {
     private val refreshLeewaySeconds = 60L
     private val tokenRefreshMutex = Mutex()
@@ -94,7 +102,8 @@ class TraktAuthService @Inject constructor(
         return BuildConfig.TRAKT_CLIENT_ID.isNotBlank() && BuildConfig.TRAKT_CLIENT_SECRET.isNotBlank()
     }
 
-    suspend fun getCurrentAuthState(): TraktAuthState = traktAuthDataStore.state.first()
+    suspend fun getCurrentAuthState(): TraktAuthState =
+        traktAuthDataStore.stateForProfile(currentRoutedProfileId()).first()
 
     suspend fun startDeviceAuth(): Result<TraktDeviceCodeResponseDto> {
         if (!hasRequiredCredentials()) {
@@ -111,7 +120,7 @@ class TraktAuthService @Inject constructor(
 
         val body = response.body()
         if (response.isSuccessful && body != null) {
-            traktAuthDataStore.saveDeviceFlow(body)
+            traktAuthDataStore.saveDeviceFlow(body, profileId = currentRoutedProfileId())
             return Result.success(body)
         }
 
@@ -134,6 +143,7 @@ class TraktAuthService @Inject constructor(
         }
 
         val state = getCurrentAuthState()
+        val profileId = currentRoutedProfileId()
         val deviceCode = state.deviceCode
         if (deviceCode.isNullOrBlank()) {
             return TraktTokenPollResult.Failed("No active Trakt device code")
@@ -153,8 +163,8 @@ class TraktAuthService @Inject constructor(
 
         val tokenBody = response.body()
         if (response.isSuccessful && tokenBody != null) {
-            traktAuthDataStore.saveToken(tokenBody)
-            traktAuthDataStore.clearDeviceFlow()
+            traktAuthDataStore.saveToken(tokenBody, profileId = profileId)
+            traktAuthDataStore.clearDeviceFlow(profileId)
             val user = fetchUserSettings()
             return TraktTokenPollResult.Approved(user)
         }
@@ -162,24 +172,24 @@ class TraktAuthService @Inject constructor(
         return when (response.code()) {
             400 -> TraktTokenPollResult.Pending
             409 -> {
-                traktAuthDataStore.clearDeviceFlow()
+                traktAuthDataStore.clearDeviceFlow(profileId)
                 TraktTokenPollResult.AlreadyUsed
             }
             404 -> {
-                traktAuthDataStore.clearDeviceFlow()
+                traktAuthDataStore.clearDeviceFlow(profileId)
                 TraktTokenPollResult.Failed("Invalid device code")
             }
             410 -> {
-                traktAuthDataStore.clearDeviceFlow()
+                traktAuthDataStore.clearDeviceFlow(profileId)
                 TraktTokenPollResult.Expired
             }
             418 -> {
-                traktAuthDataStore.clearDeviceFlow()
+                traktAuthDataStore.clearDeviceFlow(profileId)
                 TraktTokenPollResult.Denied
             }
             429 -> {
                 val nextInterval = ((state.pollInterval ?: 5) + 5).coerceAtMost(60)
-                traktAuthDataStore.updatePollInterval(nextInterval)
+                traktAuthDataStore.updatePollInterval(nextInterval, profileId = profileId)
                 TraktTokenPollResult.SlowDown(nextInterval)
             }
             else -> TraktTokenPollResult.Failed("Token polling failed (${response.code()})")
@@ -190,6 +200,7 @@ class TraktAuthService @Inject constructor(
         if (!hasRequiredCredentials()) return false
 
         return tokenRefreshMutex.withLock {
+            val profileId = currentRoutedProfileId()
             val state = getCurrentAuthState()
             val refreshToken = state.refreshToken ?: return@withLock false
             if (!force && !isTokenExpiredOrExpiring(state)) {
@@ -219,13 +230,13 @@ class TraktAuthService @Inject constructor(
                     logWarn {
                         "Token refresh returned ${response.code()}, clearing auth state"
                     }
-                    traktAuthDataStore.clearAuth()
+                    traktAuthDataStore.clearAuth(profileId)
                     tripCircuit("Token refresh returned ${response.code()}")
                 }
                 return@withLock false
             }
 
-            traktAuthDataStore.saveToken(tokenBody)
+            traktAuthDataStore.saveToken(tokenBody, profileId = profileId)
             trace("refreshTokenIfNeeded: success")
             true
         }
@@ -262,7 +273,7 @@ class TraktAuthService @Inject constructor(
 
         val username = response.body()?.user?.username
         val slug = response.body()?.user?.ids?.slug
-        traktAuthDataStore.saveUser(username = username, userSlug = slug)
+        traktAuthDataStore.saveUser(username = username, userSlug = slug, profileId = currentRoutedProfileId())
         return username
     }
 
@@ -357,6 +368,16 @@ class TraktAuthService @Inject constructor(
             return getCurrentAuthState().accessToken
         }
         return null
+    }
+
+    private fun currentRoutedProfileId(): Int {
+        return when (val route = profileModeRouter.routeFor(profileManager.activeProfileId.value)) {
+            ProfileModeRoute.DefaultLegacyRoute -> profileModeRouter.defaultLegacyProfileId()
+            is ProfileModeRoute.SecondaryProfileRoute -> {
+                profileBoundary.authRoute(route, TrackingProvider.TRAKT).profileId
+            }
+            is ProfileModeRoute.InvalidProfileRoute -> error("Invalid active profile id ${route.profileId}")
+        }
     }
 
     private fun isTokenExpiredOrExpiring(state: TraktAuthState): Boolean {
