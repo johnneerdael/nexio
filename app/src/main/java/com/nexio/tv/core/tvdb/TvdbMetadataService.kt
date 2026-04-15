@@ -172,6 +172,8 @@ class TvdbMetadataService @Inject constructor(
         val description = overview.trimmed()
         val title = name.trimmed()
         val countries = listOfNotNull(country.trimmed(), originalCountry.trimmed()).distinct()
+        val originalNetworkName = originalNetwork?.name.trimmed()
+        val latestNetworkName = latestNetwork?.name.trimmed()
 
         if (
             title == null && description == null && genres.isEmpty() && poster == null &&
@@ -199,6 +201,9 @@ class TvdbMetadataService @Inject constructor(
             airsTime = airsTime.trimmed(),
             averageRuntimeMinutes = averageRuntime,
             originalCountry = originalCountry.trimmed(),
+            originalNetwork = originalNetworkName,
+            latestNetwork = latestNetworkName,
+            platformName = originalNetworkName ?: latestNetworkName,
             originalLanguage = originalLanguage.trimmed(),
             status = status?.name.trimmed(),
             aliases = aliases.mapNotNull { it.name.trimmed() },
