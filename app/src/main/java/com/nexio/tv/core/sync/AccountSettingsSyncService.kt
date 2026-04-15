@@ -31,6 +31,7 @@ import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TorBoxSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
+import com.nexio.tv.data.local.TvdbSettingsDataStore
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDeviceCodeResponseDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridDeviceCredentialsResponseDto
 import com.nexio.tv.data.remote.dto.debrid.RealDebridTokenResponseDto
@@ -48,6 +49,7 @@ import com.nexio.tv.data.remote.supabase.AccountSecretApiKeyPayload
 import com.nexio.tv.data.remote.supabase.AccountSnapshotRpcResponse
 import com.nexio.tv.data.remote.supabase.AccountTraktAccessSecretPayload
 import com.nexio.tv.data.remote.supabase.AccountTraktRefreshSecretPayload
+import com.nexio.tv.data.remote.supabase.AccountTvdbCredentialSecretPayload
 import com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings
 import com.nexio.tv.data.remote.supabase.AppearanceSettings
 import com.nexio.tv.data.remote.supabase.AudioSettings
@@ -76,6 +78,7 @@ import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.TorBoxSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktSettingsPayload
+import com.nexio.tv.data.remote.supabase.TvdbSyncSettings
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.repository.EasyDebridService
 import com.nexio.tv.data.repository.PremiumizeService
@@ -85,6 +88,7 @@ import com.nexio.tv.domain.model.AppFont
 import com.nexio.tv.domain.model.AppTheme
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.TrackingProvider
+import com.nexio.tv.domain.model.TvdbValidationStatus
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.CoroutineScope
@@ -109,6 +113,8 @@ import javax.inject.Singleton
 private const val TAG = "AccountSettingsSync"
 private const val TMDB_SECRET_TYPE = "tmdb_api_key"
 private const val TMDB_SECRET_REF = "integration:tmdb"
+private const val TVDB_SECRET_TYPE = "tvdb_api_key"
+private const val TVDB_SECRET_REF = "integration:tvdb"
 private const val MDBLIST_SECRET_TYPE = "mdblist_api_key"
 private const val MDBLIST_SECRET_REF = "integration:mdblist"
 private const val OMDB_SECRET_TYPE = "omdb_api_key"
@@ -164,6 +170,7 @@ class AccountSettingsSyncService @Inject constructor(
     private val themeDataStore: ThemeDataStore,
     private val layoutPreferenceDataStore: LayoutPreferenceDataStore,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
+    private val tvdbSettingsDataStore: TvdbSettingsDataStore,
     private val mdbListSettingsDataStore: MDBListSettingsDataStore,
     private val omdbSettingsDataStore: OmdbSettingsDataStore,
     private val theIntroDbSettingsDataStore: TheIntroDbSettingsDataStore,
@@ -239,6 +246,7 @@ class AccountSettingsSyncService @Inject constructor(
                 homeCatalogOrderKeys = layoutPreferenceDataStore.homeCatalogOrderKeys.drop(1).map { Unit },
                 disabledHomeCatalogKeys = layoutPreferenceDataStore.disabledHomeCatalogKeys.drop(1).map { Unit },
                 tmdbSettings = tmdbSettingsDataStore.settings.drop(1).map { Unit },
+                tvdbSettings = tvdbSettingsDataStore.settings.drop(1).map { Unit },
                 mdbListSettings = mdbListSettingsDataStore.settings.drop(1).map { Unit },
                 mdbListCatalogPreferences = mdbListSettingsDataStore.catalogPreferences.drop(1).map { Unit },
                 omdbSettings = omdbSettingsDataStore.settings.drop(1).map { Unit },
@@ -383,6 +391,7 @@ class AccountSettingsSyncService @Inject constructor(
 
             val subtitleTranslationSettings = subtitleTranslationSettingsDataStore.settings.first()
             syncApiKeySecretToRemote(TMDB_SECRET_TYPE, TMDB_SECRET_REF, tmdbSettingsDataStore.settings.first().apiKey)
+            syncTvdbCredentialSecretToRemote()
             syncApiKeySecretToRemote(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF, mdbListSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(OMDB_SECRET_TYPE, OMDB_SECRET_REF, omdbSettingsDataStore.settings.first().apiKey)
             syncApiKeySecretToRemote(IMDB_SECRET_TYPE, IMDB_SECRET_REF, imdbSettingsDataStore.settings.first().apiKey)
@@ -461,6 +470,7 @@ class AccountSettingsSyncService @Inject constructor(
 
     private suspend fun buildLocalPayload(): AccountConfigSyncPayload {
         val tmdb = tmdbSettingsDataStore.settings.first()
+        val tvdb = tvdbSettingsDataStore.settings.first()
         val mdbList = mdbListSettingsDataStore.settings.first()
         val mdbListPrefs = mdbListSettingsDataStore.catalogPreferences.first()
         val isPrimaryProfile = profileManager.isPrimaryProfileActive
@@ -523,6 +533,12 @@ class AccountSettingsSyncService @Inject constructor(
                     useEpisodes = tmdb.useEpisodes,
                     useMoreLikeThis = tmdb.useMoreLikeThis,
                     useCollections = tmdb.useCollections
+                ),
+                tvdb = TvdbSyncSettings(
+                    enabled = tvdb.enabled,
+                    configured = tvdb.configured,
+                    validationStatus = tvdb.validationStatus.name,
+                    lastFailure = tvdb.lastFailure
                 ),
                 mdblist = MDBListSyncSettings(
                     enabled = mdbList.enabled,
@@ -652,6 +668,8 @@ class AccountSettingsSyncService @Inject constructor(
         tmdbSettingsDataStore.setUseEpisodes(settings.integrations.tmdb.useEpisodes)
         tmdbSettingsDataStore.setUseMoreLikeThis(settings.integrations.tmdb.useMoreLikeThis)
         tmdbSettingsDataStore.setUseCollections(settings.integrations.tmdb.useCollections)
+
+        applyTvdbPublicSyncSettings(settings.integrations.tvdb)
 
         mdbListSettingsDataStore.setEnabled(settings.integrations.mdblist.enabled)
         mdbListSettingsDataStore.setShowTrakt(settings.integrations.mdblist.showTrakt)
@@ -868,6 +886,49 @@ class AccountSettingsSyncService @Inject constructor(
         }
     }
 
+    private suspend fun syncTvdbCredentialSecretToRemote() {
+        val tvdb = tvdbSettingsDataStore.settings.first()
+        val tvdbApiKey = tvdb.apiKey.trim()
+        val tvdbPin = tvdb.subscriberPin.trim()
+
+        if (tvdbApiKey.isBlank()) {
+            withJwtRefreshRetry {
+                postgrest.rpc(
+                    "sync_delete_account_secret",
+                    buildJsonObject {
+                        put("p_secret_type", TVDB_SECRET_TYPE)
+                        put("p_secret_ref", TVDB_SECRET_REF)
+                        put("p_source", "app")
+                    }
+                )
+            }
+            return
+        }
+
+        withJwtRefreshRetry {
+            postgrest.rpc(
+                "sync_set_account_secret",
+                buildJsonObject {
+                    put("p_secret_type", TVDB_SECRET_TYPE)
+                    put("p_secret_ref", TVDB_SECRET_REF)
+                    put(
+                        "p_secret_payload",
+                        Json.encodeToJsonElement(
+                            AccountTvdbCredentialSecretPayload.serializer(),
+                            AccountTvdbCredentialSecretPayload(
+                                apiKey = tvdbApiKey,
+                                pin = tvdbPin.takeIf { it.isNotBlank() }
+                            )
+                        )
+                    )
+                    put("p_masked_preview", "Stored ••••${tvdbApiKey.takeLast(4)}")
+                    put("p_status", "configured")
+                    put("p_source", "app")
+                }
+            )
+        }
+    }
+
     private suspend fun syncRealDebridSecretsToRemote() {
         val state = realDebridAuthDataStore.state.first()
         val accessToken = state.accessToken?.trim().orEmpty()
@@ -1061,6 +1122,9 @@ class AccountSettingsSyncService @Inject constructor(
         // response from the server — otherwise we'd wipe valid local credentials on
         // every flaky upgrade-time sync.
         resolveApiKeySecretOrNull(TMDB_SECRET_TYPE, TMDB_SECRET_REF)?.let { tmdbSettingsDataStore.setApiKey(it) }
+        resolveTvdbCredentialSecretOrNull()?.let { tvdb ->
+            tvdbSettingsDataStore.setCredentials(tvdb.apiKey, tvdb.pin.orEmpty())
+        }
         resolveApiKeySecretOrNull(MDBLIST_SECRET_TYPE, MDBLIST_SECRET_REF)?.let { mdbListSettingsDataStore.setApiKey(it) }
         resolveApiKeySecretOrNull(OMDB_SECRET_TYPE, OMDB_SECRET_REF)?.let { omdbSettingsDataStore.setApiKey(it) }
         resolveApiKeySecretOrNull(IMDB_SECRET_TYPE, IMDB_SECRET_REF)?.let { imdbSettingsDataStore.setApiKey(it) }
@@ -1092,6 +1156,27 @@ class AccountSettingsSyncService @Inject constructor(
 
     private suspend fun resolveApiKeySecret(secretType: String, secretRef: String): String {
         return resolveApiKeySecretOrNull(secretType, secretRef).orEmpty()
+    }
+
+    private suspend fun resolveTvdbCredentialSecretOrNull(): AccountTvdbCredentialSecretPayload? {
+        val result = runCatching {
+            withJwtRefreshRetry {
+                postgrest.rpc(
+                    "sync_resolve_account_secret",
+                    buildJsonObject {
+                        put("p_secret_type", TVDB_SECRET_TYPE)
+                        put("p_secret_ref", TVDB_SECRET_REF)
+                        put("p_source", "app")
+                    }
+                ).decodeAs<AccountTvdbCredentialSecretPayload>()
+            }
+        }
+        if (result.isFailure) return null
+        val payload = result.getOrNull() ?: return AccountTvdbCredentialSecretPayload()
+        return AccountTvdbCredentialSecretPayload(
+            apiKey = payload.apiKey.trim(),
+            pin = payload.pin?.trim()?.takeIf { it.isNotBlank() }
+        )
     }
 
     /**
@@ -1365,6 +1450,15 @@ class AccountSettingsSyncService @Inject constructor(
                 secretPayload = secretPayload
             ).let(::normalizeAddonInstallUrl)
         }
+    }
+
+    private suspend fun applyTvdbPublicSyncSettings(settings: TvdbSyncSettings) {
+        tvdbSettingsDataStore.setEnabled(settings.enabled)
+        tvdbSettingsDataStore.saveValidationFailure(
+            status = runCatching { TvdbValidationStatus.valueOf(settings.validationStatus) }
+                .getOrDefault(TvdbValidationStatus.NOT_CONFIGURED),
+            lastFailure = settings.lastFailure
+        )
     }
 
     private inline fun <reified T : Enum<T>> enumValueOrDefault(value: String, default: T): T {
