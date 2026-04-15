@@ -1,0 +1,144 @@
+package com.nexio.tv.data.local
+
+import android.content.Context
+import com.google.gson.Gson
+import com.google.gson.JsonObject
+import com.nexio.tv.core.tvdb.TvEpisodeMetadata
+import com.nexio.tv.core.tvdb.TvMetadataEnrichment
+import com.nexio.tv.testutil.InMemorySharedPreferences
+import io.mockk.every
+import io.mockk.mockk
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class MetadataDiskCacheStoreTvdbTest {
+
+    @Test
+    fun `read and write TVDB enrichment uses tvdb namespace and schema`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+        val enrichment = TvMetadataEnrichment(
+            seriesTvdbId = 121361,
+            localizedTitle = "Game of Thrones",
+            description = "Nine noble families fight for control.",
+            genres = listOf("Drama"),
+            poster = "https://art.example/poster.jpg",
+            airsDays = mapOf("sunday" to true),
+            airsTime = "21:00",
+            averageRuntimeMinutes = 57,
+            originalCountry = "usa",
+            originalLanguage = "eng",
+            status = "Ended",
+            aliases = listOf("GoT"),
+            contentRatings = listOf("TV-MA"),
+            remoteIds = mapOf("imdb" to setOf("tt0944947"))
+        )
+
+        store.writeTvdbEnrichment(
+            seriesId = 121361,
+            recordKind = " Extended ",
+            languageTag = "en-US",
+            providerToken = "topposters-tvdb",
+            enrichment = enrichment
+        )
+
+        val key = prefs.all.keys.single { it.startsWith("tvdb::") }
+        val root = Gson().fromJson(prefs.all[key] as String, JsonObject::class.java)
+
+        assertEquals("tvdb::121361::extended::en-US::topposters-tvdb", key)
+        assertTrue(root.has("tvdbSchemaVersion"))
+        assertFalse(root.has("tmdbSchemaVersion"))
+        assertEquals(
+            enrichment,
+            store.readTvdbEnrichment(
+                seriesId = 121361,
+                recordKind = "extended",
+                languageTag = "en-US",
+                providerToken = "topposters-tvdb"
+            )
+        )
+        assertNull(
+            store.readTvdbEnrichment(
+                seriesId = 121361,
+                recordKind = "extended",
+                languageTag = "nl-NL",
+                providerToken = "topposters-tvdb"
+            )
+        )
+    }
+
+    @Test
+    fun `read and write TVDB season episodes uses tvdb episode namespace and schema`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+        val episodes = listOf(
+            TvEpisodeMetadata(
+                providerEpisodeId = "tvdb:1001",
+                seasonNumber = 1,
+                episodeNumber = 1,
+                title = "Winter Is Coming",
+                overview = "The first episode.",
+                thumbnail = "https://art.example/episode.jpg",
+                airDate = "2011-04-17",
+                runtimeMinutes = 62,
+                absoluteNumber = 1,
+                finaleType = null
+            ),
+            TvEpisodeMetadata(
+                providerEpisodeId = "tvdb:1002",
+                seasonNumber = 1,
+                episodeNumber = 2,
+                title = "The Kingsroad",
+                overview = "The second episode.",
+                thumbnail = null,
+                airDate = "2011-04-24",
+                runtimeMinutes = 56,
+                airsBeforeSeason = 2,
+                airsBeforeEpisode = 1,
+                linkedMovieTvdbId = 500,
+                finaleType = "midseason"
+            )
+        )
+
+        store.writeTvdbSeasonEpisodes(
+            seriesId = 121361,
+            seasonType = " Default ",
+            seasonNumber = 1,
+            languageTag = "en-US",
+            episodes = episodes
+        )
+
+        val key = prefs.all.keys.single { it.startsWith("tvdb_episode::") }
+        val root = Gson().fromJson(prefs.all[key] as String, JsonObject::class.java)
+
+        assertEquals("tvdb_episode::121361::default::1::en-US", key)
+        assertTrue(root.has("tvdbEpisodeSchemaVersion"))
+        assertFalse(root.has("tmdbSchemaVersion"))
+        assertEquals(
+            episodes,
+            store.readTvdbSeasonEpisodes(
+                seriesId = 121361,
+                seasonType = "default",
+                seasonNumber = 1,
+                languageTag = "en-US"
+            )
+        )
+        assertNull(
+            store.readTvdbSeasonEpisodes(
+                seriesId = 121361,
+                seasonType = "absolute",
+                seasonNumber = 1,
+                languageTag = "en-US"
+            )
+        )
+    }
+
+    private fun mockContext(prefs: InMemorySharedPreferences): Context {
+        return mockk {
+            every { getSharedPreferences("metadata_disk_cache_v1", Context.MODE_PRIVATE) } returns prefs
+        }
+    }
+}
