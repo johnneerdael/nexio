@@ -213,4 +213,67 @@ class TvdbProviderRoutingTest {
         coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
         coVerify(exactly = 0) { tmdbMetadataService.fetchEnrichment(any(), any(), any()) }
     }
+
+    @Test
+    fun `tvdb identity missing emits tvdb_fallback_tmdb diagnostic`() = runTest {
+        val tvdbSettingsDataStore = mockk<TvdbSettingsDataStore>()
+        val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
+        val tvdbIdentityService = mockk<TvdbIdentityService>()
+        val tvdbMetadataService = mockk<TvdbMetadataService>()
+        val tmdbService = mockk<TmdbService>()
+        val tmdbMetadataService = mockk<TmdbMetadataService>()
+
+        every { tvdbSettingsDataStore.settings } returns flowOf(
+            TvdbSettings(enabled = true, apiKey = "fake-key", validationStatus = TvdbValidationStatus.VALID)
+        )
+        every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings())
+
+        // TVDB identity resolution fails
+        coEvery { tvdbIdentityService.resolveSeriesByRemoteId(any(), any()) } returns null
+
+        val router = TvMetadataRouter(
+            tvdbSettingsDataStore = tvdbSettingsDataStore,
+            tmdbSettingsDataStore = tmdbSettingsDataStore,
+            tvdbIdentityService = tvdbIdentityService,
+            tvdbMetadataService = tvdbMetadataService,
+            tmdbService = tmdbService,
+            tmdbMetadataService = tmdbMetadataService
+        )
+
+        val decision = router.fetchEnrichment(
+            TvMetadataRequest(contentId = "tt0000000", contentType = ContentType.SERIES)
+        )
+
+        // Provider falls back to TMDB
+        assertEquals(TvProvider.TMDB, decision.provider)
+
+        // Diagnostics include TVDB_FALLBACK_TMDB with correct event name
+        val fallbackDiagnostic = decision.diagnostics.find {
+            it.reason == TvMetadataDecisionReason.TVDB_FALLBACK_TMDB
+        }
+        assertNotNull(
+            "Diagnostics must include TVDB_FALLBACK_TMDB when TVDB identity is missing",
+            fallbackDiagnostic
+        )
+        assertEquals(
+            "tvdb_fallback_tmdb",
+            TvMetadataDecisionReason.TVDB_FALLBACK_TMDB.eventName
+        )
+    }
+
+    @Test
+    fun `diagnostic event names match expected strings`() {
+        // Verify all Phase 9 diagnostic event name strings are correctly defined
+        assertEquals("tvdb_season_type_present", TvMetadataDecisionReason.TVDB_SEASON_TYPE_PRESENT.eventName)
+        assertEquals("tvdb_canonical_trakt_numbering_used", TvMetadataDecisionReason.TVDB_CANONICAL_TRAKT_NUMBERING_USED.eventName)
+        assertEquals("tvdb_alternate_order_preserved", TvMetadataDecisionReason.TVDB_ALTERNATE_ORDER_PRESERVED.eventName)
+        assertEquals("tvdb_advanced_surface_success", TvMetadataDecisionReason.TVDB_ADVANCED_SURFACE_SUCCESS.eventName)
+        assertEquals("tvdb_advanced_surface_missing", TvMetadataDecisionReason.TVDB_ADVANCED_SURFACE_MISSING.eventName)
+        assertEquals("tmdb_tv_skipped", TvMetadataDecisionReason.TMDB_TV_SKIPPED.eventName)
+        assertEquals("tvdb_fallback_tmdb", TvMetadataDecisionReason.TVDB_FALLBACK_TMDB.eventName)
+        assertEquals("tvdb_trailer_success", TvMetadataDecisionReason.TVDB_TRAILER_SUCCESS.eventName)
+        assertEquals("tvdb_trailer_missing", TvMetadataDecisionReason.TVDB_TRAILER_MISSING.eventName)
+        assertEquals("tvdb_trailer_unusable_url", TvMetadataDecisionReason.TVDB_TRAILER_UNUSABLE_URL.eventName)
+        assertEquals("tmdb_trailer_fallback", TvMetadataDecisionReason.TMDB_TRAILER_FALLBACK.eventName)
+    }
 }

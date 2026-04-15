@@ -338,7 +338,8 @@ class TrailerServiceTvdbTest {
             tvdbTrailerResolver = tvdbTrailerResolver
         )
 
-        // Should not throw -- unusable TVDB URL is diagnosed and fallback continues
+        // Should not throw -- unusable TVDB URL triggers tvdb_trailer_unusable_url diagnostic
+        // and fallback continues toward Streailer/fallback IDs/tmdb_trailer_fallback path
         val result = service.resolveTrailer(
             title = "Test Show",
             year = "2025",
@@ -350,5 +351,27 @@ class TrailerServiceTvdbTest {
         // Verify TVDB resolver was attempted (and returned Unusable)
         coVerify(exactly = 1) { tvdbTrailerResolver.resolveTitleTrailer(any(), any(), any(), any()) }
         // Result may be null (no TMDB key configured) but the important thing is no crash
+        // The fallback chain proceeds without exception
+    }
+
+    @Test
+    fun `trailer diagnostic event names match expected strings`() {
+        // Verify trailer-specific diagnostic event name strings from D-15
+        assertEquals(
+            "tvdb_trailer_success",
+            com.nexio.tv.core.tvdb.TvMetadataDecisionReason.TVDB_TRAILER_SUCCESS.eventName
+        )
+        assertEquals(
+            "tvdb_trailer_missing",
+            com.nexio.tv.core.tvdb.TvMetadataDecisionReason.TVDB_TRAILER_MISSING.eventName
+        )
+        assertEquals(
+            "tvdb_trailer_unusable_url",
+            com.nexio.tv.core.tvdb.TvMetadataDecisionReason.TVDB_TRAILER_UNUSABLE_URL.eventName
+        )
+        assertEquals(
+            "tmdb_trailer_fallback",
+            com.nexio.tv.core.tvdb.TvMetadataDecisionReason.TMDB_TRAILER_FALLBACK.eventName
+        )
     }
 }
