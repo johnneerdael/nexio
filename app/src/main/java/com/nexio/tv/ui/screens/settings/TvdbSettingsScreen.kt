@@ -149,7 +149,7 @@ fun TvdbSettingsContent(
             title = stringResource(R.string.tvdb_provider_precedence_title)
         ) {
             Text(
-                text = stringResource(R.string.tvdb_provider_precedence_body),
+                text = stringResource(R.string.provider_precedence_summary),
                 style = MaterialTheme.typography.bodyMedium,
                 color = NexioColors.TextSecondary
             )
