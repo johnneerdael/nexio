@@ -16,6 +16,7 @@ import com.nexio.tv.core.stream.StreamPresentationEngine
 import com.nexio.tv.core.stream.StreamRequestContext
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.player.DolbyVisionAutoPlayGate
+import com.nexio.tv.core.player.DolbyVisionAutoPlayDecisionReason
 import com.nexio.tv.core.player.DolbyVisionAutoPlayGateResult
 import com.nexio.tv.core.player.supportsDolbyVisionDisplay
 import com.nexio.tv.core.player.StreamAutoPlaySelector
@@ -81,6 +82,7 @@ private const val AUTOPLAY_PREFLIGHT_TIMEOUT_MS = 1_500
 private const val AUTOPLAY_MIN_CANDIDATE_POOL = 5
 private const val AUTOPLAY_MIN_QUALITY_SCORE = 10
 private const val AUTOPLAY_EARLY_FINISH_FALLBACK_MS = 15_000L
+private const val MAX_FALLBACK_CANDIDATES = 5
 @HiltViewModel
 class StreamScreenViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -1011,7 +1013,7 @@ class StreamScreenViewModel @Inject constructor(
         return playbackInfo
     }
 
-    suspend fun resolveAutoPlayPlaybackInfo(playbackInfo: StreamPlaybackInfo): StreamPlaybackInfo {
+    suspend fun resolveAutoPlayPlaybackInfo(playbackInfo: StreamPlaybackInfo): StreamPlaybackInfo? {
         Log.i(
             TAG,
             "AUTOPLAY_HERO_GATED_RESOLUTION_START stream=${playbackInfo.streamKey ?: "unknown"} " +
@@ -1023,6 +1025,30 @@ class StreamScreenViewModel @Inject constructor(
             autoPlay = true,
             displaySupportsDolbyVision = supportsDolbyVisionDisplay(context)
         )
+        Log.i(
+            TAG,
+            "AUTOPLAY_DV_PROBE stream=${playbackInfo.streamKey ?: "unknown"} " +
+                "selected=${result.playbackInfo.streamKey ?: "unknown"} " +
+                "fallback=${result.fallbackApplied} reason=${result.reason} " +
+                "profile=${result.probeResult?.profileLabel ?: "none"} " +
+                "videoCodec=${result.probeResult?.videoCodec ?: "unknown"} " +
+                "audioCodec=${result.probeResult?.audioCodec ?: "unknown"} " +
+                "hdrType=${result.probeResult?.hdrType ?: "unknown"}"
+        )
+        if (result.reason == DolbyVisionAutoPlayDecisionReason.NO_FALLBACK_AVAILABLE) {
+            Log.w(
+                TAG,
+                "AUTOPLAY_DV_BLOCKED stream=${playbackInfo.streamKey ?: "unknown"} " +
+                    "reason=no_eligible_non_dv5_stream"
+            )
+            updateUiStateIfChanged {
+                it.copy(
+                    deterministicAutoplayFailureMessage = "No eligible streams found, attempt manual stream selection",
+                    showDirectAutoPlayOverlay = false
+                )
+            }
+            return null
+        }
         result.playbackInfo.url?.let { resolvedUrl ->
             streamLinkCacheDataStore.save(
                 contentKey = streamCacheKey,
@@ -1035,16 +1061,6 @@ class StreamScreenViewModel @Inject constructor(
                 videoSize = result.playbackInfo.videoSize
             )
         }
-        Log.i(
-            TAG,
-            "AUTOPLAY_DV_PROBE stream=${playbackInfo.streamKey ?: "unknown"} " +
-                "selected=${result.playbackInfo.streamKey ?: "unknown"} " +
-                "fallback=${result.fallbackApplied} reason=${result.reason} " +
-                "profile=${result.probeResult?.profileLabel ?: "none"} " +
-                "videoCodec=${result.probeResult?.videoCodec ?: "unknown"} " +
-                "audioCodec=${result.probeResult?.audioCodec ?: "unknown"} " +
-                "hdrType=${result.probeResult?.hdrType ?: "unknown"}"
-        )
         Log.i(
             TAG,
             "AUTOPLAY_HERO_GATED_RESOLUTION_READY selected=${result.playbackInfo.streamKey ?: "unknown"} " +
@@ -1093,18 +1109,16 @@ class StreamScreenViewModel @Inject constructor(
             item.stream.wrappedOriginalStreamKey == selectedKey ||
                 item.parsed.exactDuplicateKey == selectedKey
         } ?: return null
-        val fallbackItem = event.selectedNonDolbyVisionFallback
-            ?.streamKey
-            ?.let { fallbackKey ->
-                candidateItems.firstOrNull { item ->
-                    item.stream.wrappedOriginalStreamKey == fallbackKey ||
-                        item.parsed.exactDuplicateKey == fallbackKey
-                }
+        val fallbackCandidateItems = event.winners.mapNotNull { decision ->
+            candidateItems.firstOrNull { item ->
+                item.stream.wrappedOriginalStreamKey == decision.streamKey ||
+                    item.parsed.exactDuplicateKey == decision.streamKey
             }
+        }
 
         return buildStreamPlaybackInfo(
             item = selectedItem,
-            nonDolbyVisionFallback = fallbackItem
+            fallbackCandidates = fallbackCandidateItems
         )
     }
 
@@ -1191,15 +1205,16 @@ class StreamScreenViewModel @Inject constructor(
 
         return buildStreamPlaybackInfo(
             item = selectedCandidate.selectedItem,
-            nonDolbyVisionFallback = selectedCandidate.nonDolbyVisionFallbackItem
+            fallbackCandidates = selectedCandidate.fallbackCandidateItems
         )
     }
 
     private fun buildStreamPlaybackInfo(
         item: StreamCardModel,
-        nonDolbyVisionFallback: StreamCardModel? = null
+        fallbackCandidates: List<StreamCardModel> = emptyList()
     ): StreamPlaybackInfo {
         val stream = item.stream
+        val selectedKey = stream.wrappedOriginalStreamKey ?: item.parsed.exactDuplicateKey
         val playbackInfo = StreamPlaybackInfo(
             url = stream.getStreamUrl(),
             title = _uiState.value.title,
@@ -1228,30 +1243,36 @@ class StreamScreenViewModel @Inject constructor(
             filename = stream.behaviorHints?.filename,
             videoHash = stream.behaviorHints?.videoHash,
             videoSize = stream.behaviorHints?.videoSize,
-            streamKey = stream.wrappedOriginalStreamKey ?: item.parsed.exactDuplicateKey,
+            streamKey = selectedKey,
             isWebDl = item.parsed.quality.equals("WEB-DL", ignoreCase = true),
             isDolbyVisionCandidate = item.parsed.visualTags.any { tag ->
                 val normalized = tag.lowercase()
                 normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
             },
-            autoPlayNonDolbyVisionFallback = nonDolbyVisionFallback?.let { fallback ->
-                AutoPlayStreamAlternative(
-                    streamKey = fallback.stream.wrappedOriginalStreamKey ?: fallback.parsed.exactDuplicateKey,
-                    url = fallback.stream.getStreamUrl(),
-                    streamName = (fallback.stream.name ?: "").ifEmpty {
-                        fallback.stream.addonName
-                    },
-                    headers = fallback.stream.behaviorHints?.proxyHeaders?.request,
-                    filename = fallback.stream.behaviorHints?.filename,
-                    videoHash = fallback.stream.behaviorHints?.videoHash,
-                    videoSize = fallback.stream.behaviorHints?.videoSize,
-                    isWebDl = fallback.parsed.quality.equals("WEB-DL", ignoreCase = true),
-                    isDolbyVisionCandidate = fallback.parsed.visualTags.any { tag ->
-                        val normalized = tag.lowercase()
-                        normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
-                    }
-                )
-            }
+            autoPlayFallbackCandidates = fallbackCandidates
+                .filter { candidate ->
+                    val candidateKey = candidate.stream.wrappedOriginalStreamKey ?: candidate.parsed.exactDuplicateKey
+                    candidateKey != selectedKey
+                }
+                .take(MAX_FALLBACK_CANDIDATES)
+                .map { candidate ->
+                    AutoPlayStreamAlternative(
+                        streamKey = candidate.stream.wrappedOriginalStreamKey ?: candidate.parsed.exactDuplicateKey,
+                        url = candidate.stream.getStreamUrl(),
+                        streamName = (candidate.stream.name ?: "").ifEmpty {
+                            candidate.stream.addonName
+                        },
+                        headers = candidate.stream.behaviorHints?.proxyHeaders?.request,
+                        filename = candidate.stream.behaviorHints?.filename,
+                        videoHash = candidate.stream.behaviorHints?.videoHash,
+                        videoSize = candidate.stream.behaviorHints?.videoSize,
+                        isWebDl = candidate.parsed.quality.equals("WEB-DL", ignoreCase = true),
+                        isDolbyVisionCandidate = candidate.parsed.visualTags.any { tag ->
+                            val normalized = tag.lowercase()
+                            normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
+                        }
+                    )
+                }
         )
 
         val url = playbackInfo.url
@@ -1559,7 +1580,7 @@ internal fun buildShadowAutoPlayDecisionEvent(
 
 internal data class DeterministicAutoplayCandidateSelection(
     val selectedItem: StreamCardModel,
-    val nonDolbyVisionFallbackItem: StreamCardModel?
+    val fallbackCandidateItems: List<StreamCardModel>
 )
 
 internal suspend fun selectDeterministicAutoplayCandidate(
@@ -1578,15 +1599,12 @@ internal suspend fun selectDeterministicAutoplayCandidate(
 
     for (candidate in candidates) {
         if (!isPlayable(candidate)) continue
-        val fallback = event.selectedNonDolbyVisionFallback
-            ?.takeIf { candidate.matchesShadowStreamKey(event.selected?.streamKey) }
-            ?.streamKey
-            ?.let { fallbackKey ->
-                eligibleStreams.firstOrNull { item -> item.matchesShadowStreamKey(fallbackKey) }
-            }
+        val fallbackItems = event.winners.mapNotNull { decision ->
+            eligibleStreams.firstOrNull { item -> item.matchesShadowStreamKey(decision.streamKey) }
+        }
         return DeterministicAutoplayCandidateSelection(
             selectedItem = candidate,
-            nonDolbyVisionFallbackItem = fallback
+            fallbackCandidateItems = fallbackItems
         )
     }
 
@@ -1892,7 +1910,7 @@ data class StreamPlaybackInfo(
     val streamKey: String? = null,
     val isWebDl: Boolean = false,
     val isDolbyVisionCandidate: Boolean = false,
-    val autoPlayNonDolbyVisionFallback: AutoPlayStreamAlternative? = null
+    val autoPlayFallbackCandidates: List<AutoPlayStreamAlternative> = emptyList()
 )
 
 data class AutoPlayStreamAlternative(

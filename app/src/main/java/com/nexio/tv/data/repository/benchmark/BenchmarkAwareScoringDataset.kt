@@ -67,7 +67,8 @@ data class BenchmarkAwareScoringScenario(
 
     fun resolveAutoPlayWinnerStreamKey(
         selected: ShadowStreamDecision?,
-        selectedNonDolbyVisionFallback: ShadowStreamDecision?
+        selectedNonDolbyVisionFallback: ShadowStreamDecision?,
+        winners: List<ShadowStreamDecision> = emptyList()
     ): String? {
         val expectation = autoplayExpectation ?: return selected?.streamKey
         val cards = toStreamCards()
@@ -75,10 +76,11 @@ data class BenchmarkAwareScoringScenario(
             val baseKey = streamKey.substringBefore('|')
             cards.firstOrNull { it.stream.wrappedOriginalStreamKey == streamKey || it.stream.wrappedOriginalStreamKey == baseKey || it.parsed.exactDuplicateKey == streamKey || it.parsed.exactDuplicateKey == baseKey }
         } ?: return null
-        val fallbackItem = selectedNonDolbyVisionFallback?.streamKey?.let { streamKey ->
-            val baseKey = streamKey.substringBefore('|')
-            cards.firstOrNull { it.stream.wrappedOriginalStreamKey == streamKey || it.stream.wrappedOriginalStreamKey == baseKey || it.parsed.exactDuplicateKey == streamKey || it.parsed.exactDuplicateKey == baseKey }
+        val fallbackCandidateItems = winners.mapNotNull { decision ->
+            val baseKey = decision.streamKey.substringBefore('|')
+            cards.firstOrNull { it.stream.wrappedOriginalStreamKey == decision.streamKey || it.stream.wrappedOriginalStreamKey == baseKey || it.parsed.exactDuplicateKey == decision.streamKey || it.parsed.exactDuplicateKey == baseKey }
         }
+        val urlToStreamKey = cards.associate { it.stream.getStreamUrl() to it.stream.wrappedOriginalStreamKey }
         val gate = DolbyVisionAutoPlayGate(
             probe = object : DolbyVisionProfileProbe {
                 override suspend fun probe(
@@ -87,7 +89,8 @@ data class BenchmarkAwareScoringScenario(
                     headers: Map<String, String>?,
                     filename: String?
                 ): DolbyVisionProfileProbeResult {
-                    return expectation.probeByStreamKey[selectedItem.stream.wrappedOriginalStreamKey]
+                    val streamKey = urlToStreamKey[url] ?: selectedItem.stream.wrappedOriginalStreamKey
+                    return expectation.probeByStreamKey[streamKey]
                         ?.toProbeResult()
                         ?: DolbyVisionProfileProbeResult.unknown()
                 }
@@ -96,7 +99,7 @@ data class BenchmarkAwareScoringScenario(
         val resolved = kotlinx.coroutines.runBlocking {
             gate.resolve(
                 context = ContextWrapper(null),
-                playbackInfo = selectedItem.toPlaybackInfo(request, fallbackItem),
+                playbackInfo = selectedItem.toPlaybackInfo(request, fallbackCandidateItems),
                 autoPlay = true,
                 displaySupportsDolbyVision = expectation.displaySupportsDolbyVision
             )
@@ -274,8 +277,9 @@ data class BenchmarkAwareScoringScenarioStream(
 
 private fun StreamCardModel.toPlaybackInfo(
     request: BenchmarkAwareScoringScenarioRequest,
-    fallback: StreamCardModel?
+    fallbackCandidates: List<StreamCardModel>
 ): StreamPlaybackInfo {
+    val selectedKey = stream.wrappedOriginalStreamKey
     val isDolbyVision = parsed.visualTags.any { tag ->
         val normalized = tag.lowercase()
         normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
@@ -307,24 +311,26 @@ private fun StreamCardModel.toPlaybackInfo(
         filename = stream.behaviorHints?.filename,
         videoHash = stream.behaviorHints?.videoHash,
         videoSize = stream.behaviorHints?.videoSize,
-        streamKey = stream.wrappedOriginalStreamKey,
+        streamKey = selectedKey,
         isWebDl = parsed.quality.equals("WEB-DL", ignoreCase = true),
         isDolbyVisionCandidate = isDolbyVision,
-        autoPlayNonDolbyVisionFallback = fallback?.let {
-            AutoPlayStreamAlternative(
-                streamKey = it.stream.wrappedOriginalStreamKey,
-                url = it.stream.getStreamUrl(),
-                streamName = it.stream.name ?: it.stream.addonName,
-                headers = it.stream.behaviorHints?.proxyHeaders?.request,
-                filename = it.stream.behaviorHints?.filename,
-                videoHash = it.stream.behaviorHints?.videoHash,
-                videoSize = it.stream.behaviorHints?.videoSize,
-                isWebDl = it.parsed.quality.equals("WEB-DL", ignoreCase = true),
-                isDolbyVisionCandidate = it.parsed.visualTags.any { tag ->
-                    val normalized = tag.lowercase()
-                    normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
-                }
-            )
-        }
+        autoPlayFallbackCandidates = fallbackCandidates
+            .filter { it.stream.wrappedOriginalStreamKey != selectedKey }
+            .map { candidate ->
+                AutoPlayStreamAlternative(
+                    streamKey = candidate.stream.wrappedOriginalStreamKey,
+                    url = candidate.stream.getStreamUrl(),
+                    streamName = candidate.stream.name ?: candidate.stream.addonName,
+                    headers = candidate.stream.behaviorHints?.proxyHeaders?.request,
+                    filename = candidate.stream.behaviorHints?.filename,
+                    videoHash = candidate.stream.behaviorHints?.videoHash,
+                    videoSize = candidate.stream.behaviorHints?.videoSize,
+                    isWebDl = candidate.parsed.quality.equals("WEB-DL", ignoreCase = true),
+                    isDolbyVisionCandidate = candidate.parsed.visualTags.any { tag ->
+                        val normalized = tag.lowercase()
+                        normalized == "dv" || normalized.contains("dolby vision") || normalized.contains("dovi")
+                    }
+                )
+            }
     )
 }

@@ -75,7 +75,8 @@ class BenchmarkAwareScoringEvaluator {
             )
             val selectedKey = scenario.resolveAutoPlayWinnerStreamKey(
                 selected = event.selected,
-                selectedNonDolbyVisionFallback = event.selectedNonDolbyVisionFallback
+                selectedNonDolbyVisionFallback = event.selectedNonDolbyVisionFallback,
+                winners = event.winners
             )
             val expectedWinnerStreamKey = scenario.expectedResolvedWinnerStreamKey()
             val acceptableWinnerKeys = scenario.acceptableResolvedWinnerKeys().ifEmpty {

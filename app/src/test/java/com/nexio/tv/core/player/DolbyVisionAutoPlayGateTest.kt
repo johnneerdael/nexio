@@ -205,8 +205,8 @@ class DolbyVisionAutoPlayGateTest {
             Log.i(
                 "DvAutoPlayGate",
                 match { message ->
-                    message.contains("FALLBACK_SELECTED") &&
-                        message.contains("stream=fallback_hdr10") &&
+                    message.contains("FALLBACK_CANDIDATES") &&
+                        message.contains("count=1") &&
                         message.contains("ts=")
                 }
             )
@@ -367,7 +367,7 @@ class DolbyVisionAutoPlayGateTest {
             streamKey = "primary",
             isWebDl = isWebDl,
             isDolbyVisionCandidate = isDolbyVisionCandidate,
-            autoPlayNonDolbyVisionFallback = fallback
+            autoPlayFallbackCandidates = if (fallback != null) listOf(fallback) else emptyList()
         )
     }
 

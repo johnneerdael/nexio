@@ -177,7 +177,8 @@ class DolbyVisionAutoPlayGate(
 
         val url = playbackInfo.url
         if (url.isNullOrBlank()) {
-            return fallbackOrPrimary(
+            return findViableFallback(
+                context = context,
                 playbackInfo = playbackInfo,
                 reason = DolbyVisionAutoPlayDecisionReason.PROBE_FAILED,
                 probeResult = DolbyVisionProfileProbeResult.failed("missing_url")
@@ -221,7 +222,8 @@ class DolbyVisionAutoPlayGate(
                 event = "DV_PROFILE_TIMEOUT",
                 details = "stream=${playbackInfo.streamKey ?: "unknown"} timeoutMs=$probeTimeoutMs"
             )
-            return fallbackOrPrimary(
+            return findViableFallback(
+                context = context,
                 playbackInfo = playbackInfo,
                 reason = DolbyVisionAutoPlayDecisionReason.PROBE_TIMEOUT,
                 probeResult = DolbyVisionProfileProbeResult.failed("probe_timeout")
@@ -238,7 +240,8 @@ class DolbyVisionAutoPlayGate(
             )
             DolbyVisionProfileProbeStatus.DETECTED -> {
                 if (probeResult.profileNumber == 5) {
-                    fallbackOrPrimary(
+                    findViableFallback(
+                        context = context,
                         playbackInfo = playbackInfo,
                         reason = DolbyVisionAutoPlayDecisionReason.UNSUPPORTED_PROFILE_5,
                         probeResult = probeResult
@@ -252,12 +255,14 @@ class DolbyVisionAutoPlayGate(
                     )
                 }
             }
-            DolbyVisionProfileProbeStatus.UNKNOWN -> fallbackOrPrimary(
+            DolbyVisionProfileProbeStatus.UNKNOWN -> findViableFallback(
+                context = context,
                 playbackInfo = playbackInfo,
                 reason = DolbyVisionAutoPlayDecisionReason.PROBE_UNKNOWN,
                 probeResult = probeResult
             )
-            DolbyVisionProfileProbeStatus.FAILED -> fallbackOrPrimary(
+            DolbyVisionProfileProbeStatus.FAILED -> findViableFallback(
+                context = context,
                 playbackInfo = playbackInfo,
                 reason = DolbyVisionAutoPlayDecisionReason.PROBE_FAILED,
                 probeResult = probeResult
@@ -265,13 +270,14 @@ class DolbyVisionAutoPlayGate(
         }
     }
 
-    private fun fallbackOrPrimary(
+    private suspend fun findViableFallback(
+        context: Context,
         playbackInfo: StreamPlaybackInfo,
         reason: DolbyVisionAutoPlayDecisionReason,
         probeResult: DolbyVisionProfileProbeResult
     ): DolbyVisionAutoPlayGateResult {
-        val fallback = playbackInfo.autoPlayNonDolbyVisionFallback
-        if (fallback == null) {
+        val candidates = playbackInfo.autoPlayFallbackCandidates
+        if (candidates.isEmpty()) {
             return finalizeResult(
                 playbackInfo = playbackInfo,
                 fallbackApplied = false,
@@ -279,10 +285,108 @@ class DolbyVisionAutoPlayGate(
                 probeResult = probeResult
             )
         }
+
+        logEvent(
+            event = "FALLBACK_SEARCH_STARTED",
+            details = "candidateCount=${candidates.size} reason=$reason"
+        )
+
+        for ((index, candidate) in candidates.withIndex()) {
+            val candidateKey = candidate.streamKey ?: "unknown"
+
+            if (!candidate.isDolbyVisionCandidate) {
+                logEvent(
+                    event = "FALLBACK_CANDIDATE_ACCEPTED",
+                    details = "index=$index stream=$candidateKey reason=not_dv"
+                )
+                return finalizeResult(
+                    playbackInfo = candidate.applyTo(playbackInfo),
+                    fallbackApplied = true,
+                    reason = reason,
+                    probeResult = probeResult
+                )
+            }
+
+            val candidateUrl = candidate.url
+            if (candidateUrl.isNullOrBlank()) {
+                logEvent(
+                    event = "FALLBACK_CANDIDATE_SKIPPED",
+                    details = "index=$index stream=$candidateKey reason=missing_url"
+                )
+                continue
+            }
+
+            logEvent(
+                event = "FALLBACK_CANDIDATE_PROBE",
+                details = "index=$index stream=$candidateKey"
+            )
+            val candidateProbe = withTimeoutOrNull(probeTimeoutMs) {
+                probe.probe(
+                    context = context,
+                    url = candidateUrl,
+                    headers = candidate.headers,
+                    filename = candidate.filename
+                )
+            }
+
+            if (candidateProbe == null) {
+                logEvent(
+                    event = "FALLBACK_CANDIDATE_SKIPPED",
+                    details = "index=$index stream=$candidateKey reason=probe_timeout"
+                )
+                continue
+            }
+
+            when (candidateProbe.status) {
+                DolbyVisionProfileProbeStatus.DETECTED -> {
+                    if (candidateProbe.profileNumber == 5) {
+                        logEvent(
+                            event = "FALLBACK_CANDIDATE_SKIPPED",
+                            details = "index=$index stream=$candidateKey reason=dv_profile_5"
+                        )
+                        continue
+                    }
+                    logEvent(
+                        event = "FALLBACK_CANDIDATE_ACCEPTED",
+                        details = "index=$index stream=$candidateKey profile=${candidateProbe.profileLabel}"
+                    )
+                    return finalizeResult(
+                        playbackInfo = candidate.applyTo(playbackInfo),
+                        fallbackApplied = true,
+                        reason = reason,
+                        probeResult = candidateProbe
+                    )
+                }
+                DolbyVisionProfileProbeStatus.NOT_DOLBY_VISION -> {
+                    logEvent(
+                        event = "FALLBACK_CANDIDATE_ACCEPTED",
+                        details = "index=$index stream=$candidateKey reason=probe_not_dv"
+                    )
+                    return finalizeResult(
+                        playbackInfo = candidate.applyTo(playbackInfo),
+                        fallbackApplied = true,
+                        reason = reason,
+                        probeResult = candidateProbe
+                    )
+                }
+                else -> {
+                    logEvent(
+                        event = "FALLBACK_CANDIDATE_SKIPPED",
+                        details = "index=$index stream=$candidateKey reason=${candidateProbe.status}"
+                    )
+                    continue
+                }
+            }
+        }
+
+        logEvent(
+            event = "FALLBACK_SEARCH_EXHAUSTED",
+            details = "candidatesChecked=${candidates.size}"
+        )
         return finalizeResult(
-            playbackInfo = fallback.applyTo(playbackInfo),
-            fallbackApplied = true,
-            reason = reason,
+            playbackInfo = playbackInfo,
+            fallbackApplied = false,
+            reason = DolbyVisionAutoPlayDecisionReason.NO_FALLBACK_AVAILABLE,
             probeResult = probeResult
         )
     }
@@ -326,17 +430,10 @@ class DolbyVisionAutoPlayGate(
                 append(playbackInfo.isDolbyVisionCandidate)
             }
         )
-        playbackInfo.autoPlayNonDolbyVisionFallback?.let { fallback ->
+        if (playbackInfo.autoPlayFallbackCandidates.isNotEmpty()) {
             logEvent(
-                event = "FALLBACK_SELECTED",
-                details = buildString {
-                    append("stream=")
-                    append(fallback.streamKey ?: "unknown")
-                    append(" webdl=")
-                    append(fallback.isWebDl)
-                    append(" dv=")
-                    append(fallback.isDolbyVisionCandidate)
-                }
+                event = "FALLBACK_CANDIDATES",
+                details = "count=${playbackInfo.autoPlayFallbackCandidates.size}"
             )
         }
     }
@@ -799,7 +896,7 @@ private fun AutoPlayStreamAlternative.applyTo(base: StreamPlaybackInfo): StreamP
         streamKey = streamKey,
         isWebDl = isWebDl,
         isDolbyVisionCandidate = isDolbyVisionCandidate,
-        autoPlayNonDolbyVisionFallback = null
+        autoPlayFallbackCandidates = emptyList()
     )
 }
 
