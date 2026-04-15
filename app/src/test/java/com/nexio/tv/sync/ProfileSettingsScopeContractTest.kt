@@ -21,6 +21,9 @@ class ProfileSettingsScopeContractTest {
     private val homeCatalogPipeline = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt")
     private val homeContinueWatching = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelContinueWatching.kt")
     private val homeProfileSession = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeProfileSession.kt")
+    private val traktDiscoveryService = File("app/src/main/java/com/nexio/tv/data/repository/TraktDiscoveryService.kt")
+    private val simklDiscoveryService = File("app/src/main/java/com/nexio/tv/data/repository/SimklDiscoveryService.kt")
+    private val mdbListDiscoveryService = File("app/src/main/java/com/nexio/tv/data/repository/MDBListDiscoveryService.kt")
     private val metadataDiskCacheStore = File("app/src/main/java/com/nexio/tv/data/local/MetadataDiskCacheStore.kt")
     private val artworkImageCacheKeys = File("app/src/main/java/com/nexio/tv/core/image/ArtworkImageCacheKeys.kt")
     private val secondaryProfileSettingsMigration = File("supabase/migrations/20260415000100_enforce_secondary_profile_settings.sql")
@@ -452,5 +455,25 @@ class ProfileSettingsScopeContractTest {
         assertTrue(migrationSource.contains("sync_push_profile_settings_blob"))
         assertTrue(migrationSource.contains("p_profile_id < 2 OR p_profile_id > 4"))
         assertTrue(migrationSource.contains("profile_id must be between 2 and 4 for profile settings"))
+    }
+
+    @Test
+    fun `discovery services keep profile scoped in memory state`() {
+        val traktSource = traktDiscoveryService.readText()
+        val simklSource = simklDiscoveryService.readText()
+        val mdbSource = mdbListDiscoveryService.readText()
+        val homePipelineSource = homeCatalogPipeline.readText()
+
+        assertTrue(traktSource.contains("profileSnapshots"))
+        assertTrue(traktSource.contains("snapshotForProfile(profileId)"))
+        assertTrue(traktSource.contains("snapshotStore.write(snapshotToPersist, profileId = profileId)"))
+        assertTrue(simklSource.contains("profileSnapshots"))
+        assertTrue(simklSource.contains("snapshotForProfile(profileId)"))
+        assertTrue(simklSource.contains("snapshotStore.write(snapshotToPersist, profileId = profileId)"))
+        assertTrue(mdbSource.contains("profileSnapshots"))
+        assertTrue(mdbSource.contains("snapshotForProfile(profileId)"))
+        assertTrue(mdbSource.contains("snapshotStore.write(snapshotState, profileId = profileId)"))
+        assertTrue(homePipelineSource.contains("val capturedGeneration = homeProfileGeneration"))
+        assertTrue(homePipelineSource.contains("Skipping stale discovery snapshot"))
     }
 }

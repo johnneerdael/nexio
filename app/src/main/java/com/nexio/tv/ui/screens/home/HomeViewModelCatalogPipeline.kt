@@ -214,9 +214,9 @@ internal suspend fun HomeViewModel.loadActiveProfileDiskBackedHomeState(
     val diskState = withContext(Dispatchers.IO) {
         val providerState = trackingProviderStateService.currentState()
         val syntheticSnapshot = syntheticHomeCatalogStore.read(profileId = profileId)
-        val traktSnapshot = traktDiscoverySnapshotStore.read()
-        val simklSnapshot = simklDiscoverySnapshotStore.read()
-        val mdbSnapshot = mdbListDiscoverySnapshotStore.read()
+        val traktSnapshot = traktDiscoverySnapshotStore.read(profileId = profileId)
+        val simklSnapshot = simklDiscoverySnapshotStore.read(profileId = profileId)
+        val mdbSnapshot = mdbListDiscoverySnapshotStore.read(profileId = profileId)
         val posterProviderToken = homeCatalogSnapshotStore.currentPosterProviderToken()
         val homeSnapshot = homeCatalogSnapshotStore.read(posterProviderToken, profileId = profileId)
         DiskBackedHomeState(
@@ -284,9 +284,11 @@ private data class DiskBackedHomeState(
 
 internal fun HomeViewModel.restorePersistedDiscoverySnapshotsPipeline() {
     viewModelScope.launch(Dispatchers.IO) {
-        val traktSnapshot = traktDiscoverySnapshotStore.read()
-        val simklSnapshot = simklDiscoverySnapshotStore.read()
-        val mdbSnapshot = mdbListDiscoverySnapshotStore.read()
+        val profileId = profileManager.activeProfileId.value
+        val capturedGeneration = homeProfileGeneration
+        val traktSnapshot = traktDiscoverySnapshotStore.read(profileId = profileId)
+        val simklSnapshot = simklDiscoverySnapshotStore.read(profileId = profileId)
+        val mdbSnapshot = mdbListDiscoverySnapshotStore.read(profileId = profileId)
         val providerState = trackingProviderStateService.currentState()
         Log.d(
             HomeViewModel.TAG,
@@ -316,6 +318,10 @@ internal fun HomeViewModel.restorePersistedDiscoverySnapshotsPipeline() {
                 }
         )
         withContext(Dispatchers.Main.immediate) {
+            if (!isCurrentHomeProfileGeneration(capturedGeneration)) {
+                Log.d(HomeViewModel.TAG, "Skipping stale discovery snapshot generation=$capturedGeneration")
+                return@withContext
+            }
             activeProfileTraktAuthenticated = providerState.traktAuthenticated
             activeProfileSimklAuthenticated = providerState.simklAuthenticated
             if (traktSnapshot != null) {
@@ -353,9 +359,14 @@ internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
     viewModelScope.launch {
         val autoRefreshOnStart = !shouldDeferStartupNetworkWork()
         traktDiscoveryService.observeSnapshot(autoRefreshOnStart = autoRefreshOnStart).collectLatest { snapshot ->
+            val capturedGeneration = homeProfileGeneration
             if (!activeProfileTraktAuthenticated) {
                 val providerState = withContext(Dispatchers.IO) {
                     trackingProviderStateService.currentState()
+                }
+                if (!isCurrentHomeProfileGeneration(capturedGeneration)) {
+                    Log.d(HomeViewModel.TAG, "Skipping stale discovery snapshot generation=$capturedGeneration")
+                    return@collectLatest
                 }
                 activeProfileTraktAuthenticated = providerState.traktAuthenticated
                 activeProfileSimklAuthenticated = providerState.simklAuthenticated
@@ -368,6 +379,10 @@ internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
                 snapshot,
                 syntheticTomatoesOverridesByItemId
             )
+            if (!isCurrentHomeProfileGeneration(capturedGeneration)) {
+                Log.d(HomeViewModel.TAG, "Skipping stale discovery snapshot generation=$capturedGeneration")
+                return@collectLatest
+            }
             if (traktDiscoveryObserved && hydratedSnapshot == traktDiscoverySnapshot) return@collectLatest
             traktDiscoveryObserved = true
             traktDiscoverySnapshot = hydratedSnapshot
@@ -407,6 +422,11 @@ internal fun HomeViewModel.observeSimklDiscoveryPipeline() {
     viewModelScope.launch {
         val autoRefreshOnStart = !shouldDeferStartupNetworkWork()
         simklDiscoveryService.observeSnapshot(autoRefreshOnStart = autoRefreshOnStart).collectLatest { snapshot ->
+            val capturedGeneration = homeProfileGeneration
+            if (!isCurrentHomeProfileGeneration(capturedGeneration)) {
+                Log.d(HomeViewModel.TAG, "Skipping stale discovery snapshot generation=$capturedGeneration")
+                return@collectLatest
+            }
             if (simklDiscoveryObserved && snapshot == simklDiscoverySnapshot) return@collectLatest
             simklDiscoveryObserved = true
             simklDiscoverySnapshot = snapshot
@@ -453,10 +473,15 @@ internal fun HomeViewModel.observeMDBListDiscoveryPipeline() {
     viewModelScope.launch {
         val autoRefreshOnStart = !shouldDeferStartupNetworkWork()
         mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = autoRefreshOnStart).collectLatest { snapshot ->
+            val capturedGeneration = homeProfileGeneration
             val hydratedSnapshot = applyTomatoesOverridesToMDBListSnapshot(
                 snapshot,
                 syntheticTomatoesOverridesByItemId
             )
+            if (!isCurrentHomeProfileGeneration(capturedGeneration)) {
+                Log.d(HomeViewModel.TAG, "Skipping stale discovery snapshot generation=$capturedGeneration")
+                return@collectLatest
+            }
             if (mdbListDiscoveryObserved && hydratedSnapshot == mdbListDiscoverySnapshot) return@collectLatest
             mdbListDiscoveryObserved = true
             mdbListDiscoverySnapshot = hydratedSnapshot

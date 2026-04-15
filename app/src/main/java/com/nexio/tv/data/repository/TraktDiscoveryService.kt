@@ -4,6 +4,7 @@ import android.os.SystemClock
 import android.util.Log
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktCatalogIds
@@ -32,8 +33,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -122,13 +125,14 @@ class TraktDiscoveryService @Inject constructor(
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     private val snapshotStore: TraktDiscoverySnapshotStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
-    private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator
+    private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator,
+    private val profileManager: ProfileManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val rawSnapshotState = MutableStateFlow(TraktDiscoverySnapshot())
-    private val snapshotState = MutableStateFlow(TraktDiscoverySnapshot())
+    private val rawProfileSnapshots = MutableStateFlow<Map<Int, TraktDiscoverySnapshot>>(emptyMap())
+    private val profileSnapshots = MutableStateFlow<Map<Int, TraktDiscoverySnapshot>>(emptyMap())
     private val refreshMutex = Mutex()
-    private var lastRefreshMs = 0L
+    private val lastRefreshByProfile = mutableMapOf<Int, Long>()
     private var lastActivitiesFingerprint: String? = null
 
     private val minRefreshIntervalMs = 30_000L
@@ -144,12 +148,27 @@ class TraktDiscoveryService @Inject constructor(
     @Volatile
     private var startupGateInitialized: Boolean = false
 
+    private fun snapshotForProfile(profileId: Int): TraktDiscoverySnapshot =
+        profileSnapshots.value[profileId] ?: TraktDiscoverySnapshot()
+
+    private fun rawSnapshotForProfile(profileId: Int): TraktDiscoverySnapshot =
+        rawProfileSnapshots.value[profileId] ?: TraktDiscoverySnapshot()
+
+    private fun setProfileSnapshot(profileId: Int, snapshot: TraktDiscoverySnapshot) {
+        profileSnapshots.value = profileSnapshots.value + (profileId to snapshot)
+    }
+
+    private fun setRawProfileSnapshot(profileId: Int, snapshot: TraktDiscoverySnapshot) {
+        rawProfileSnapshots.value = rawProfileSnapshots.value + (profileId to snapshot)
+    }
+
     init {
         scope.launch {
-            snapshotStore.read()?.let { persisted ->
-                rawSnapshotState.value = persisted
-                snapshotState.value = persisted
-                lastRefreshMs = persisted.updatedAtMs
+            val profileId = profileManager.activeProfileId.value
+            snapshotStore.read(profileId = profileId)?.let { persisted ->
+                setRawProfileSnapshot(profileId, persisted)
+                setProfileSnapshot(profileId, persisted)
+                lastRefreshByProfile[profileId] = persisted.updatedAtMs
             }
         }
         scope.launch {
@@ -162,11 +181,13 @@ class TraktDiscoveryService @Inject constructor(
         }
         scope.launch {
             combine(
-                rawSnapshotState,
+                rawProfileSnapshots,
                 traktSettingsDataStore.dismissedRecommendationKeys
-            ) { snapshot, dismissedKeys ->
+            ) { snapshots, dismissedKeys ->
+                val profileId = profileManager.activeProfileId.value
+                val snapshot = snapshots[profileId] ?: TraktDiscoverySnapshot()
                 if (dismissedKeys.isEmpty()) {
-                    snapshot
+                    profileId to snapshot
                 } else {
                     val filteredMovieItems = snapshot.recommendationMovieItems.filterNot { item ->
                         recommendationStatusKey(item.id, item.apiType) in dismissedKeys
@@ -177,36 +198,45 @@ class TraktDiscoveryService @Inject constructor(
                     val activeKeys = (filteredMovieItems + filteredShowItems)
                         .map { recommendationStatusKey(it.id, it.apiType) }
                         .toSet()
-                    snapshot.copy(
+                    profileId to snapshot.copy(
                         recommendationMovieItems = filteredMovieItems,
                         recommendationShowItems = filteredShowItems,
                         recommendationRefsByStatusKey = snapshot.recommendationRefsByStatusKey
                             .filterKeys { it in activeKeys }
                     )
                 }
-            }.collect { filtered ->
-                if (filtered != snapshotState.value) {
-                    snapshotState.value = filtered
+            }.collect { (profileId, filtered) ->
+                if (filtered != snapshotForProfile(profileId)) {
+                    setProfileSnapshot(profileId, filtered)
                 }
             }
         }
     }
 
     fun observeSnapshot(autoRefreshOnStart: Boolean = true): Flow<TraktDiscoverySnapshot> {
-        return snapshotState.onStart {
-            if (autoRefreshOnStart) {
-                scope.launch {
-                    ensureStartupGateInitialized()
-                    if (isStartupRefreshGated()) {
-                        Log.d("TraktDiscovery", "Auto-refresh deferred by startup gate")
-                        return@launch
+        return profileManager.activeProfileId.flatMapLatest { profileId ->
+            profileSnapshots
+                .map { snapshots -> snapshots[profileId] ?: TraktDiscoverySnapshot() }
+                .onStart {
+                    snapshotStore.read(profileId = profileId)?.let { persisted ->
+                        setRawProfileSnapshot(profileId, persisted)
+                        setProfileSnapshot(profileId, persisted)
+                        lastRefreshByProfile[profileId] = persisted.updatedAtMs
                     }
-                    runCatching { ensureFresh(force = false) }
-                        .onFailure { error ->
-                            Log.w("TraktDiscovery", "Failed to refresh Trakt discovery snapshot", error)
+                    if (autoRefreshOnStart) {
+                        scope.launch {
+                            ensureStartupGateInitialized()
+                            if (isStartupRefreshGated()) {
+                                Log.d("TraktDiscovery", "Auto-refresh deferred by startup gate")
+                                return@launch
+                            }
+                            runCatching { ensureFresh(force = false, profileId = profileId) }
+                                .onFailure { error ->
+                                    Log.w("TraktDiscovery", "Failed to refresh Trakt discovery snapshot", error)
+                                }
                         }
+                    }
                 }
-            }
         }
     }
 
@@ -216,30 +246,36 @@ class TraktDiscoveryService @Inject constructor(
         ensureFresh(force = true)
     }
 
-    suspend fun ensureFresh(force: Boolean) = withContext(Dispatchers.IO) {
+    suspend fun ensureFresh(
+        force: Boolean,
+        profileId: Int = profileManager.activeProfileId.value
+    ) = withContext(Dispatchers.IO) {
         ensureStartupGateInitialized()
         if (isStartupRefreshGated()) {
             Log.d("TraktDiscovery", "ensureFresh deferred by startup gate")
             return@withContext
         }
         if (!traktAuthService.getCurrentAuthState().isAuthenticated) {
-            rawSnapshotState.value = TraktDiscoverySnapshot()
-            snapshotStore.clear()
+            setRawProfileSnapshot(profileId, TraktDiscoverySnapshot())
+            setProfileSnapshot(profileId, TraktDiscoverySnapshot())
+            snapshotStore.clear(profileId = profileId)
             return@withContext
         }
         activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
 
         val now = System.currentTimeMillis()
-        if (now - lastRefreshMs < minRefreshIntervalMs && rawSnapshotState.value.updatedAtMs > 0L) {
+        val lastRefreshMs = lastRefreshByProfile[profileId] ?: 0L
+        if (now - lastRefreshMs < minRefreshIntervalMs && rawSnapshotForProfile(profileId).updatedAtMs > 0L) {
             return@withContext
         }
 
         refreshMutex.withLock {
             val lockedNow = System.currentTimeMillis()
-            if (lockedNow - lastRefreshMs < minRefreshIntervalMs && rawSnapshotState.value.updatedAtMs > 0L) {
+            val lockedLastRefreshMs = lastRefreshByProfile[profileId] ?: 0L
+            val snapshot = rawSnapshotForProfile(profileId)
+            if (lockedNow - lockedLastRefreshMs < minRefreshIntervalMs && snapshot.updatedAtMs > 0L) {
                 return@withLock
             }
-            val snapshot = rawSnapshotState.value
             val snapshotAgeMs = if (snapshot.updatedAtMs > 0L) {
                 (lockedNow - snapshot.updatedAtMs).coerceAtLeast(0L)
             } else {
@@ -248,7 +284,7 @@ class TraktDiscoveryService @Inject constructor(
             val fallbackRefreshDue = snapshotAgeMs >= fallbackRefreshIntervalMs
 
             if (!force && !hasActivitiesChanged() && !fallbackRefreshDue) {
-                lastRefreshMs = lockedNow
+                lastRefreshByProfile[profileId] = lockedNow
                 return@withLock
             }
 
@@ -330,9 +366,10 @@ class TraktDiscoveryService @Inject constructor(
             } else {
                 refreshedSnapshot
             }
-            rawSnapshotState.value = snapshotToPersist
-            snapshotStore.write(snapshotToPersist)
-            lastRefreshMs = System.currentTimeMillis()
+            setRawProfileSnapshot(profileId, snapshotToPersist)
+            setProfileSnapshot(profileId, snapshotToPersist)
+            snapshotStore.write(snapshotToPersist, profileId = profileId)
+            lastRefreshByProfile[profileId] = System.currentTimeMillis()
         }
     }
 
