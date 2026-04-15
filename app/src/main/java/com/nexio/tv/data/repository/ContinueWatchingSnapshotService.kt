@@ -153,6 +153,10 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
     }
 
+    suspend fun reloadPersistedSnapshotForActiveProfile(clearWhenMissing: Boolean = true) {
+        loadPersistedSnapshotForActiveProfile(clearWhenMissing = clearWhenMissing)
+    }
+
     private suspend fun loadPersistedSnapshotForActiveProfile(clearWhenMissing: Boolean) {
         val persisted = snapshotStore.read()
         if (persisted == null) {

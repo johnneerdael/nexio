@@ -416,6 +416,7 @@ class HomeViewModel @Inject constructor(
                 suppressProfileSwitchRefreshUntilMs = SystemClock.elapsedRealtime() + 5_000L
                 resetProfileScopedHomeState("profile_switch:$profileId")
                 try {
+                    continueWatchingSnapshotService.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
                     loadActiveProfileDiskBackedHomeState("profile_switch:$profileId")
                 } finally {
                     profileSwitchDiskHydrationActive = false
