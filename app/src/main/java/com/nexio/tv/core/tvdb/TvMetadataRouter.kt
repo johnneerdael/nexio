@@ -4,6 +4,7 @@ import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbEpisodeEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TvdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbEpisode
 import com.nexio.tv.domain.model.ContentType
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.first
 @Singleton
 class TvMetadataRouter @Inject constructor(
     private val tvdbSettingsDataStore: TvdbSettingsDataStore,
+    private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val tvdbIdentityService: TvdbIdentityService,
     private val tvdbMetadataService: TvdbMetadataService,
     private val tmdbService: TmdbService,
@@ -156,6 +158,15 @@ class TvMetadataRouter @Inject constructor(
         diagnostics: List<TvMetadataDiagnosticEvent>,
         reason: TvMetadataDecisionReason
     ): TvMetadataDecision<TvMetadataEnrichment> {
+        if (!canUseTmdbFallback()) {
+            return TvMetadataDecision(
+                provider = TvProvider.TMDB,
+                reason = reason,
+                value = null,
+                diagnostics = diagnostics
+            )
+        }
+
         val tmdbId = resolveTmdbId(request) ?: return TvMetadataDecision(
             provider = TvProvider.TMDB,
             reason = reason,
@@ -176,6 +187,15 @@ class TvMetadataRouter @Inject constructor(
         diagnostics: List<TvMetadataDiagnosticEvent>,
         reason: TvMetadataDecisionReason
     ): TvMetadataDecision<Map<Pair<Int, Int>, TvEpisodeMetadata>> {
+        if (!canUseTmdbFallback()) {
+            return TvMetadataDecision(
+                provider = TvProvider.TMDB,
+                reason = reason,
+                value = emptyMap(),
+                diagnostics = diagnostics
+            )
+        }
+
         val tmdbId = resolveTmdbId(request) ?: return TvMetadataDecision(
             provider = TvProvider.TMDB,
             reason = reason,
@@ -197,6 +217,15 @@ class TvMetadataRouter @Inject constructor(
         diagnostics: List<TvMetadataDiagnosticEvent>,
         reason: TvMetadataDecisionReason
     ): TvMetadataDecision<List<TvSeasonEpisode>> {
+        if (!canUseTmdbFallback()) {
+            return TvMetadataDecision(
+                provider = TvProvider.TMDB,
+                reason = reason,
+                value = emptyList(),
+                diagnostics = diagnostics
+            )
+        }
+
         val tmdbId = resolveTmdbId(request)?.toIntOrNull() ?: return TvMetadataDecision(
             provider = TvProvider.TMDB,
             reason = reason,
@@ -210,6 +239,10 @@ class TvMetadataRouter @Inject constructor(
             value = tmdb.map { episode -> episode.toTvSeasonEpisode(seasonNumber) },
             diagnostics = diagnostics
         )
+    }
+
+    private suspend fun canUseTmdbFallback(): Boolean {
+        return tmdbSettingsDataStore.settings.first().isActive
     }
 
     private suspend fun resolveTmdbId(request: TvMetadataRequest): String? {
