@@ -92,6 +92,20 @@ class DiskSpoolStorageResolverTest {
     }
 
     @Test
+    fun `external directory ignores null app cache candidates`() {
+        val primary = temp.newFolder("primary")
+        val usb = temp.newFolder("usb")
+
+        val result = DiskSpoolStorageResolver.externalSpoolDirectoryFromCandidates(
+            externalCacheDirs = arrayOf(primary, null, usb),
+            stateOf = { Environment.MEDIA_MOUNTED },
+            removableOf = { file -> file == usb }
+        )
+
+        assertEquals(File(usb, "player_disk_spool"), result)
+    }
+
+    @Test
     fun `external request returns null when external storage is unavailable`() {
         val cacheDir = temp.newFolder("cache")
 

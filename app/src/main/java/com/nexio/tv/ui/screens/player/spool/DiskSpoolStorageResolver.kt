@@ -52,7 +52,7 @@ internal object DiskSpoolStorageResolver {
 
     internal fun resolveSpoolDirectory(
         cacheDir: File,
-        externalCacheDirs: Array<File>,
+        externalCacheDirs: Array<File?>,
         location: DiskSpoolStorageLocation,
         stateOf: (File) -> String,
         removableOf: (File) -> Boolean
@@ -68,11 +68,12 @@ internal object DiskSpoolStorageResolver {
     }
 
     internal fun externalSpoolDirectoryFromCandidates(
-        externalCacheDirs: Array<File>,
+        externalCacheDirs: Array<File?>,
         stateOf: (File) -> String,
         removableOf: (File) -> Boolean
     ): File? {
         val mountedCandidates = externalCacheDirs
+            .filterNotNull()
             .filter { file -> stateOf(file) == Environment.MEDIA_MOUNTED }
         val selectedDirectory = mountedCandidates.firstOrNull { file -> removableOf(file) }
             ?: mountedCandidates.drop(1).firstOrNull()
