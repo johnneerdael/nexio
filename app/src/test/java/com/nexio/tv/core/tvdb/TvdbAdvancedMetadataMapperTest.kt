@@ -1,251 +1,282 @@
 package com.nexio.tv.core.tvdb
 
+import com.nexio.tv.data.remote.api.TvdbCharacterRecord
+import com.nexio.tv.data.remote.api.TvdbCompanyExtendedRecord
+import com.nexio.tv.data.remote.api.TvdbCompanyRecord
+import com.nexio.tv.data.remote.api.TvdbContentRating
+import com.nexio.tv.data.remote.api.TvdbGenreRecord
+import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaCompanyKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Wave 0 validation scaffold for META-05: TVDB advanced metadata mapping.
+ * Tests for META-05: TVDB advanced metadata mapping.
  *
- * These tests define the contract for mapping TVDB characters, companies, networks,
- * genres, and content ratings into existing Meta surfaces.
- *
- * All tests are expected to fail until the TvdbAdvancedMetadataMapper is implemented
- * in Plan 09-02.
+ * Validates mapping of TVDB characters, companies, networks, genres, and content
+ * ratings into existing Meta surfaces via [TvdbAdvancedMetadataMapper].
  */
 class TvdbAdvancedMetadataMapperTest {
 
-    // --- Fixture data ---
-
-    /** Simulates a TVDB character record from SeriesExtendedRecord.characters */
-    private data class TvdbCharacterFixture(
-        val personName: String?,
-        val name: String?,         // character name
-        val personImgURL: String?,
-        val type: Int?             // 3 = Actor
-    )
-
-    /** Simulates a TVDB company record from SeriesExtendedRecord.companies */
-    private data class TvdbCompanyFixture(
-        val name: String?,
-        val companyType: TvdbCompanyTypeFixture?
-    )
-
-    private data class TvdbCompanyTypeFixture(
-        val companyTypeId: Int,    // 1 = Network, 2 = Studio, 3 = Production
-        val companyTypeName: String
-    )
-
-    /** Simulates a TVDB content rating record */
-    private data class TvdbContentRatingFixture(
-        val name: String?,
-        val country: String?,
-        val contentType: String? = null
-    )
-
-    // --- Tests ---
+    private val mapper = TvdbAdvancedMetadataMapper()
 
     @Test
     fun `maps characters companies networks genres and content ratings`() {
-        // Given: TVDB series extended data with characters, companies, networks, genres, and ratings.
-        val characters = listOf(
-            TvdbCharacterFixture(
-                personName = "Anna Torv",
-                name = "Olivia Dunham",
-                personImgURL = "https://artworks.thetvdb.com/fake/anna_torv.jpg",
-                type = 3
+        val series = TvdbSeriesExtendedRecord(
+            id = 73255,
+            name = "Fringe",
+            characters = listOf(
+                TvdbCharacterRecord(
+                    personName = "Anna Torv",
+                    name = "Olivia Dunham",
+                    personImgURL = "https://artworks.thetvdb.com/fake/anna_torv.jpg",
+                    type = 3,
+                    sort = 1
+                ),
+                TvdbCharacterRecord(
+                    personName = "Joshua Jackson",
+                    name = "Peter Bishop",
+                    personImgURL = "https://artworks.thetvdb.com/fake/joshua_jackson.jpg",
+                    type = 3,
+                    sort = 2
+                )
             ),
-            TvdbCharacterFixture(
-                personName = "Joshua Jackson",
-                name = "Peter Bishop",
-                personImgURL = "https://artworks.thetvdb.com/fake/joshua_jackson.jpg",
-                type = 3
+            companies = listOf(
+                TvdbCompanyExtendedRecord(
+                    name = "Bad Robot Productions",
+                    primaryCompanyType = 3
+                )
+            ),
+            originalNetwork = TvdbCompanyRecord(name = "FOX"),
+            latestNetwork = TvdbCompanyRecord(name = "FOX"),
+            genres = listOf(
+                TvdbGenreRecord(name = "Science Fiction"),
+                TvdbGenreRecord(name = "Drama"),
+                TvdbGenreRecord(name = "Mystery")
+            ),
+            contentRatings = listOf(
+                TvdbContentRating(name = "TV-14", country = "usa"),
+                TvdbContentRating(name = "12", country = "gbr")
             )
         )
 
-        val companies = listOf(
-            TvdbCompanyFixture(
-                name = "Bad Robot Productions",
-                companyType = TvdbCompanyTypeFixture(3, "Production Company")
-            )
-        )
+        val result = mapper.mapAdvancedMetadata(series, listOf("usa"))
 
-        val networks = listOf(
-            TvdbCompanyFixture(
-                name = "FOX",
-                companyType = TvdbCompanyTypeFixture(1, "Network")
-            )
-        )
-
-        val genres = listOf("Science Fiction", "Drama", "Mystery")
-
-        val contentRatings = listOf(
-            TvdbContentRatingFixture(name = "TV-14", country = "usa"),
-            TvdbContentRatingFixture(name = "12", country = "gbr")
-        )
-
-        // When: The TvdbAdvancedMetadataMapper maps these into Meta-compatible structures.
-        // Phase 9 Plan 02 will implement the actual mapper. For now, assert the expected outputs.
-
-        // Then: Characters map to MetaCastMember with correct field mapping.
-        val expectedCast = listOf(
+        // Characters map to MetaCastMember
+        assertEquals(2, result.castMembers.size)
+        assertEquals(
             MetaCastMember(
                 name = "Anna Torv",
                 character = "Olivia Dunham",
-                photo = "https://artworks.thetvdb.com/fake/anna_torv.jpg"
+                photo = "https://artworks.thetvdb.com/fake/anna_torv.jpg",
+                tmdbId = null
             ),
+            result.castMembers[0]
+        )
+        assertEquals(
             MetaCastMember(
                 name = "Joshua Jackson",
                 character = "Peter Bishop",
-                photo = "https://artworks.thetvdb.com/fake/joshua_jackson.jpg"
-            )
+                photo = "https://artworks.thetvdb.com/fake/joshua_jackson.jpg",
+                tmdbId = null
+            ),
+            result.castMembers[1]
         )
 
-        // This will fail until the mapper is implemented - scaffolding the contract.
-        // val mapper = TvdbAdvancedMetadataMapper()
-        // val result = mapper.mapSeriesExtended(characters, companies, networks, genres, contentRatings, "usa")
-        // assertEquals(expectedCast, result.castMembers)
+        // Networks from originalNetwork/latestNetwork, distinct
+        assertEquals(1, result.networks.size)
+        assertEquals(MetaCompany(name = "FOX", kind = MetaCompanyKind.NETWORK), result.networks[0])
 
-        // Verify the expected cast member structure is valid.
-        assertEquals("Anna Torv", expectedCast[0].name)
-        assertEquals("Olivia Dunham", expectedCast[0].character)
-        assertEquals("https://artworks.thetvdb.com/fake/anna_torv.jpg", expectedCast[0].photo)
+        // Production companies exclude network names
+        assertEquals(1, result.productionCompanies.size)
+        assertEquals(MetaCompany(name = "Bad Robot Productions", kind = MetaCompanyKind.COMPANY), result.productionCompanies[0])
 
-        // And: originalNetwork maps to MetaCompanyKind.NETWORK.
-        val expectedNetwork = MetaCompany(
-            name = "FOX",
-            kind = MetaCompanyKind.NETWORK
-        )
-        assertEquals(MetaCompanyKind.NETWORK, expectedNetwork.kind)
+        // Genres nonblank, distinct preserving order
+        assertEquals(listOf("Science Fiction", "Drama", "Mystery"), result.genres)
 
-        // And: production companies map to MetaCompanyKind.COMPANY.
-        val expectedCompany = MetaCompany(
-            name = "Bad Robot Productions",
-            kind = MetaCompanyKind.COMPANY
-        )
-        assertEquals(MetaCompanyKind.COMPANY, expectedCompany.kind)
-
-        // And: genres are nonblank strings.
-        assertTrue("Genres must be nonblank", genres.all { it.isNotBlank() })
-        assertEquals(3, genres.size)
-
-        // And: content rating selects preferred country (usa).
-        val preferredRating = contentRatings.firstOrNull { it.country == "usa" }
-        assertEquals("TV-14", preferredRating?.name)
-
-        // Scaffold assertion: the mapper class must exist after Plan 09-02.
-        try {
-            Class.forName("com.nexio.tv.core.tvdb.TvdbAdvancedMetadataMapper")
-        } catch (e: ClassNotFoundException) {
-            throw AssertionError(
-                "TvdbAdvancedMetadataMapper class must exist after Plan 09-02 implementation", e
-            )
-        }
+        // Content rating prefers usa
+        assertEquals("TV-14", result.ageRating)
     }
 
     @Test
     fun `blank nullable advanced metadata is omitted safely`() {
-        // Given: TVDB data with blank/null fields that must not produce broken metadata.
-        val characters = listOf(
-            TvdbCharacterFixture(
-                personName = null,
-                name = "   ",       // blank character name
-                personImgURL = null,
-                type = 3
+        val series = TvdbSeriesExtendedRecord(
+            id = 99999,
+            name = "Blank Show",
+            characters = listOf(
+                TvdbCharacterRecord(personName = null, name = "   ", personImgURL = null, type = 3),
+                TvdbCharacterRecord(personName = "", name = null, personImgURL = "", type = null),
+                TvdbCharacterRecord(personName = "  ", name = "Role", personImgURL = "http://img", type = 3)
             ),
-            TvdbCharacterFixture(
-                personName = "",
-                name = null,
-                personImgURL = "",
-                type = null
+            companies = listOf(
+                TvdbCompanyExtendedRecord(name = null, primaryCompanyType = null),
+                TvdbCompanyExtendedRecord(name = "  ", primaryCompanyType = 1)
+            ),
+            originalNetwork = null,
+            latestNetwork = TvdbCompanyRecord(name = "  "),
+            genres = listOf(
+                TvdbGenreRecord(name = ""),
+                TvdbGenreRecord(name = "  "),
+                TvdbGenreRecord(name = "Drama")
+            ),
+            contentRatings = listOf(
+                TvdbContentRating(name = null, country = "usa"),
+                TvdbContentRating(name = "", country = "gbr")
             )
         )
 
-        val companies = listOf(
-            TvdbCompanyFixture(name = null, companyType = null),
-            TvdbCompanyFixture(name = "  ", companyType = TvdbCompanyTypeFixture(1, "Network"))
-        )
+        val result = mapper.mapAdvancedMetadata(series, listOf("usa"))
 
-        val genres = listOf("", "  ", "Drama")
-        val contentRatings = listOf(
-            TvdbContentRatingFixture(name = null, country = "usa"),
-            TvdbContentRatingFixture(name = "", country = "gbr")
-        )
+        // Characters with blank/null personName are omitted
+        assertEquals(0, result.castMembers.size)
 
-        // When: The mapper processes blank/null data.
-        // Then: Characters with no usable personName are omitted.
-        val usableCharacters = characters.filter {
-            !it.personName.isNullOrBlank()
-        }
-        assertEquals(
-            "Characters with blank/null personName must be omitted",
-            0, usableCharacters.size
-        )
+        // Companies with blank/null name are omitted
+        assertEquals(0, result.productionCompanies.size)
 
-        // And: Companies with blank/null name are omitted.
-        val usableCompanies = companies.filter {
-            !it.name.isNullOrBlank()
-        }
-        assertEquals(
-            "Companies with blank/null name must be omitted",
-            0, usableCompanies.size
-        )
+        // Networks with blank name are omitted
+        assertEquals(0, result.networks.size)
 
-        // And: Blank genres are filtered out.
-        val usableGenres = genres.filter { it.isNotBlank() }
-        assertEquals(listOf("Drama"), usableGenres)
+        // Blank genres are filtered out
+        assertEquals(listOf("Drama"), result.genres)
 
-        // And: Content ratings with blank/null name are omitted.
-        val usableRatings = contentRatings.filter { !it.name.isNullOrBlank() }
-        assertEquals(0, usableRatings.size)
-
-        // Scaffold: The actual mapper must handle all these gracefully.
-        try {
-            Class.forName("com.nexio.tv.core.tvdb.TvdbAdvancedMetadataMapper")
-        } catch (e: ClassNotFoundException) {
-            throw AssertionError(
-                "TvdbAdvancedMetadataMapper class must exist after Plan 09-02 implementation", e
-            )
-        }
+        // Content ratings with blank/null name produce null age rating
+        assertNull(result.ageRating)
     }
 
     @Test
     fun `content rating prefers locale country before first available rating`() {
-        // Given: Multiple content ratings from different countries.
-        val contentRatings = listOf(
-            TvdbContentRatingFixture(name = "12", country = "gbr"),
-            TvdbContentRatingFixture(name = "TV-14", country = "usa"),
-            TvdbContentRatingFixture(name = "FSK 12", country = "deu"),
-            TvdbContentRatingFixture(name = "12A", country = "aus")
-        )
-        val userCountry = "usa"
-
-        // When: The mapper selects the content rating.
-        // Then: The preferred country rating is selected first.
-        val preferred = contentRatings.firstOrNull { it.country == userCountry }
-        assertNotNull("Must find a rating for the user's country", preferred)
-        assertEquals("TV-14", preferred?.name)
-
-        // If the user's country is not available, fall back to the first available rating.
-        val fallbackCountry = "jpn"
-        val fallbackPreferred = contentRatings.firstOrNull { it.country == fallbackCountry }
-        val fallbackResult = fallbackPreferred?.name ?: contentRatings.firstOrNull { !it.name.isNullOrBlank() }?.name
-        assertEquals(
-            "Fallback must use first available rating when locale country is not found",
-            "12", fallbackResult
-        )
-
-        // Scaffold: The actual mapper must implement this preference logic.
-        try {
-            Class.forName("com.nexio.tv.core.tvdb.TvdbAdvancedMetadataMapper")
-        } catch (e: ClassNotFoundException) {
-            throw AssertionError(
-                "TvdbAdvancedMetadataMapper class must exist after Plan 09-02 implementation", e
+        val series = TvdbSeriesExtendedRecord(
+            id = 88888,
+            name = "Rating Show",
+            contentRatings = listOf(
+                TvdbContentRating(name = "12", country = "gbr"),
+                TvdbContentRating(name = "TV-14", country = "usa"),
+                TvdbContentRating(name = "FSK 12", country = "deu"),
+                TvdbContentRating(name = "12A", country = "aus")
             )
-        }
+        )
+
+        // Preferred country found
+        val result = mapper.mapAdvancedMetadata(series, listOf("usa"))
+        assertEquals("TV-14", result.ageRating)
+
+        // Preferred country not found, falls back to US
+        val resultJpn = mapper.mapAdvancedMetadata(series, listOf("jpn"))
+        assertEquals("TV-14", resultJpn.ageRating)
+
+        // No US match, non-US preferred found
+        val seriesNoUs = TvdbSeriesExtendedRecord(
+            id = 88889,
+            name = "No US Rating",
+            contentRatings = listOf(
+                TvdbContentRating(name = "12", country = "gbr"),
+                TvdbContentRating(name = "FSK 12", country = "deu")
+            )
+        )
+        val resultGbr = mapper.mapAdvancedMetadata(seriesNoUs, listOf("gbr"))
+        assertEquals("12", resultGbr.ageRating)
+
+        // No preferred, no US - falls back to first nonblank
+        val resultNone = mapper.mapAdvancedMetadata(seriesNoUs, listOf("jpn"))
+        assertEquals("12", resultNone.ageRating)
+    }
+
+    @Test
+    fun `characters sorted by sort ascending with null sort last`() {
+        val series = TvdbSeriesExtendedRecord(
+            id = 77777,
+            name = "Sort Show",
+            characters = listOf(
+                TvdbCharacterRecord(personName = "Actor C", name = "Role C", sort = null),
+                TvdbCharacterRecord(personName = "Actor A", name = "Role A", sort = 1),
+                TvdbCharacterRecord(personName = "Actor B", name = "Role B", sort = 3)
+            )
+        )
+
+        val result = mapper.mapAdvancedMetadata(series, emptyList())
+
+        assertEquals(3, result.castMembers.size)
+        assertEquals("Actor A", result.castMembers[0].name)
+        assertEquals("Actor B", result.castMembers[1].name)
+        assertEquals("Actor C", result.castMembers[2].name) // null sort last
+    }
+
+    @Test
+    fun `companies exclude names already in networks case insensitive`() {
+        val series = TvdbSeriesExtendedRecord(
+            id = 66666,
+            name = "Overlap Show",
+            originalNetwork = TvdbCompanyRecord(name = "HBO"),
+            latestNetwork = TvdbCompanyRecord(name = "hbo"), // duplicate by case
+            companies = listOf(
+                TvdbCompanyExtendedRecord(name = "HBO", primaryCompanyType = 1), // duplicate of network
+                TvdbCompanyExtendedRecord(name = "Warner Bros", primaryCompanyType = 3)
+            )
+        )
+
+        val result = mapper.mapAdvancedMetadata(series, emptyList())
+
+        // Only one network (HBO) despite case variant
+        assertEquals(1, result.networks.size)
+        assertEquals("HBO", result.networks[0].name)
+        assertEquals(MetaCompanyKind.NETWORK, result.networks[0].kind)
+
+        // Only Warner Bros - HBO excluded as network duplicate
+        assertEquals(1, result.productionCompanies.size)
+        assertEquals("Warner Bros", result.productionCompanies[0].name)
+        assertEquals(MetaCompanyKind.COMPANY, result.productionCompanies[0].kind)
+    }
+
+    @Test
+    fun `genres deduplicated preserving tvdb order`() {
+        val series = TvdbSeriesExtendedRecord(
+            id = 55555,
+            name = "Dupe Genre Show",
+            genres = listOf(
+                TvdbGenreRecord(name = "Drama"),
+                TvdbGenreRecord(name = "Action"),
+                TvdbGenreRecord(name = "drama"), // case-insensitive duplicate
+                TvdbGenreRecord(name = "Action") // exact duplicate
+            )
+        )
+
+        val result = mapper.mapAdvancedMetadata(series, emptyList())
+
+        // "Drama" and "Action" only, preserving first occurrence
+        assertEquals(listOf("Drama", "Action"), result.genres)
+    }
+
+    @Test
+    fun `tmdbId remains null for tvdb characters`() {
+        val series = TvdbSeriesExtendedRecord(
+            id = 44444,
+            name = "tmdbId Test",
+            characters = listOf(
+                TvdbCharacterRecord(personName = "John Doe", name = "Hero", sort = 1)
+            )
+        )
+
+        val result = mapper.mapAdvancedMetadata(series, emptyList())
+
+        assertNotNull(result.castMembers.firstOrNull())
+        assertNull(result.castMembers[0].tmdbId)
+    }
+
+    @Test
+    fun `empty series produces empty advanced metadata`() {
+        val series = TvdbSeriesExtendedRecord(id = 33333, name = "Empty")
+
+        val result = mapper.mapAdvancedMetadata(series, emptyList())
+
+        assertTrue(result.castMembers.isEmpty())
+        assertTrue(result.productionCompanies.isEmpty())
+        assertTrue(result.networks.isEmpty())
+        assertTrue(result.genres.isEmpty())
+        assertNull(result.ageRating)
     }
 }

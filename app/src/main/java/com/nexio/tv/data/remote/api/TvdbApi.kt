@@ -152,7 +152,9 @@ data class TvdbSeriesExtendedRecord(
     @Json(name = "status") val status: TvdbStatusRecord? = null,
     @Json(name = "translations") val translations: TvdbTranslations? = null,
     @Json(name = "defaultSeasonType") val defaultSeasonType: Int? = null,
-    @Json(name = "seasonTypes") val seasonTypes: List<TvdbSeasonTypeRecord> = emptyList()
+    @Json(name = "seasonTypes") val seasonTypes: List<TvdbSeasonTypeRecord> = emptyList(),
+    @Json(name = "characters") val characters: List<TvdbCharacterRecord> = emptyList(),
+    @Json(name = "companies") val companies: List<TvdbCompanyExtendedRecord> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
@@ -253,4 +255,30 @@ data class TvdbSeasonTypeRecord(
     @Json(name = "name") val name: String? = null,
     @Json(name = "type") val type: String? = null,
     @Json(name = "alternateName") val alternateName: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbCharacterRecord(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "personName") val personName: String? = null,
+    @Json(name = "personImgURL") val personImgURL: String? = null,
+    @Json(name = "peopleId") val peopleId: Int? = null,
+    @Json(name = "peopleType") val peopleType: String? = null,
+    @Json(name = "sort") val sort: Int? = null,
+    @Json(name = "type") val type: Int? = null,
+    @Json(name = "url") val url: String? = null,
+    @Json(name = "nameTranslations") val nameTranslations: List<String> = emptyList(),
+    @Json(name = "isFeatured") val isFeatured: Boolean? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbCompanyExtendedRecord(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "slug") val slug: String? = null,
+    @Json(name = "country") val country: String? = null,
+    @Json(name = "primaryCompanyType") val primaryCompanyType: Int? = null,
+    @Json(name = "activeDate") val activeDate: String? = null,
+    @Json(name = "inactiveDate") val inactiveDate: String? = null
 )

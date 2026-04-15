@@ -1,6 +1,8 @@
 package com.nexio.tv.core.tvdb
 
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.MetaCastMember
+import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.TvdbEpisodeOrder
 import com.nexio.tv.domain.model.TvdbSeasonOrderContext
 
@@ -45,7 +47,10 @@ data class TvMetadataEnrichment(
     val aliases: List<String> = emptyList(),
     val contentRatings: List<String> = emptyList(),
     val remoteIds: Map<String, Set<String>> = emptyMap(),
-    val seasonOrderContext: TvdbSeasonOrderContext? = null
+    val seasonOrderContext: TvdbSeasonOrderContext? = null,
+    val castMembers: List<MetaCastMember> = emptyList(),
+    val productionCompanies: List<MetaCompany> = emptyList(),
+    val networks: List<MetaCompany> = emptyList()
 )
 
 data class TvEpisodeMetadata(
