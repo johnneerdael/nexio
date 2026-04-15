@@ -80,4 +80,10 @@ internal object DiskSpoolStorageResolver {
 
         return selectedDirectory?.resolve(DISK_SPOOL_DIR)
     }
+
+    internal fun usableSpaceForSpoolDirectory(spoolDirectory: File): Long {
+        val existingPath = generateSequence(spoolDirectory) { file -> file.parentFile }
+            .firstOrNull { file -> file.exists() }
+        return (existingPath ?: spoolDirectory).usableSpace
+    }
 }
