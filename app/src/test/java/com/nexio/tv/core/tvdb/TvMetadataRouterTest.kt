@@ -341,7 +341,9 @@ class TvMetadataRouterTest {
             tvdbIdentityService = tvdbIdentityService,
             tvdbMetadataService = tvdbMetadataService,
             tmdbService = tmdbService,
-            tmdbMetadataService = tmdbMetadataService
+            tmdbMetadataService = tmdbMetadataService,
+            credentialHealth = mockk(relaxed = true) { coEvery { canCallTvdb() } returns true },
+            diagnosticsRecorder = mockk(relaxUnitFun = true)
         )
     }
 

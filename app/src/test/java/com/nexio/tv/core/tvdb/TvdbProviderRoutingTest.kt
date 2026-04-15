@@ -84,7 +84,9 @@ class TvdbProviderRoutingTest {
             tvdbIdentityService = tvdbIdentityService,
             tvdbMetadataService = tvdbMetadataService,
             tmdbService = tmdbService,
-            tmdbMetadataService = tmdbMetadataService
+            tmdbMetadataService = tmdbMetadataService,
+            credentialHealth = mockk(relaxed = true) { coEvery { canCallTvdb() } returns true },
+            diagnosticsRecorder = mockk(relaxUnitFun = true)
         )
 
         val request = TvMetadataRequest(
@@ -148,7 +150,9 @@ class TvdbProviderRoutingTest {
             tvdbIdentityService = tvdbIdentityService,
             tvdbMetadataService = tvdbMetadataService,
             tmdbService = tmdbService,
-            tmdbMetadataService = tmdbMetadataService
+            tmdbMetadataService = tmdbMetadataService,
+            credentialHealth = mockk(relaxed = true) { coEvery { canCallTvdb() } returns true },
+            diagnosticsRecorder = mockk(relaxUnitFun = true)
         )
 
         val decision = router.fetchEnrichment(
@@ -194,7 +198,9 @@ class TvdbProviderRoutingTest {
             tvdbIdentityService = tvdbIdentityService,
             tvdbMetadataService = tvdbMetadataService,
             tmdbService = tmdbService,
-            tmdbMetadataService = tmdbMetadataService
+            tmdbMetadataService = tmdbMetadataService,
+            credentialHealth = mockk(relaxed = true) { coEvery { canCallTvdb() } returns true },
+            diagnosticsRecorder = mockk(relaxUnitFun = true)
         )
 
         val decision = router.fetchEnrichment(
@@ -237,7 +243,9 @@ class TvdbProviderRoutingTest {
             tvdbIdentityService = tvdbIdentityService,
             tvdbMetadataService = tvdbMetadataService,
             tmdbService = tmdbService,
-            tmdbMetadataService = tmdbMetadataService
+            tmdbMetadataService = tmdbMetadataService,
+            credentialHealth = mockk(relaxed = true) { coEvery { canCallTvdb() } returns true },
+            diagnosticsRecorder = mockk(relaxUnitFun = true)
         )
 
         val decision = router.fetchEnrichment(

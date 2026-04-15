@@ -1036,7 +1036,9 @@ class MetaDetailsSeasonMediaViewModelTest {
             tvdbIdentityService = mockk<TvdbIdentityService>(relaxed = true),
             tvdbMetadataService = mockk<TvdbMetadataService>(relaxed = true),
             tmdbService = resolvedTmdbService,
-            tmdbMetadataService = resolvedTmdbMetadataService
+            tmdbMetadataService = resolvedTmdbMetadataService,
+            credentialHealth = mockk(relaxed = true) { coEvery { canCallTvdb() } returns true },
+            diagnosticsRecorder = mockk(relaxUnitFun = true)
         )
         val episodeRatingsSelectionRepository = mockk<EpisodeRatingsSelectionRepository>(relaxed = true)
         val mdbListRepository = mockk<MDBListRepository>(relaxed = true)

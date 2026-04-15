@@ -1,5 +1,6 @@
 package com.nexio.tv.core.tvdb
 
+import android.util.Log
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbEpisodeEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
@@ -12,6 +13,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
 
+private const val ROUTER_TAG = "TvMetadataRouter"
+
 @Singleton
 class TvMetadataRouter @Inject constructor(
     private val tvdbSettingsDataStore: TvdbSettingsDataStore,
@@ -19,7 +22,9 @@ class TvMetadataRouter @Inject constructor(
     private val tvdbIdentityService: TvdbIdentityService,
     private val tvdbMetadataService: TvdbMetadataService,
     private val tmdbService: TmdbService,
-    private val tmdbMetadataService: TmdbMetadataService
+    private val tmdbMetadataService: TmdbMetadataService,
+    private val credentialHealth: TvdbCredentialHealth,
+    private val diagnosticsRecorder: TvdbDiagnosticsRecorder
 ) {
     suspend fun fetchEnrichment(
         request: TvMetadataRequest
@@ -36,6 +41,11 @@ class TvMetadataRouter @Inject constructor(
             )
         }
 
+        // D-08: Check credential health before new TVDB network calls
+        if (!credentialHealth.canCallTvdb()) {
+            return handleInvalidCredentialEnrichment(request)
+        }
+
         val identity = resolveTvdbIdentity(request.contentId, request.contentType)
         if (identity == null) {
             return fetchTmdbEnrichment(
@@ -48,14 +58,33 @@ class TvMetadataRouter @Inject constructor(
         val enrichment = tvdbMetadataService.fetchSeriesEnrichment(identity, request.language)
         if (enrichment != null) {
             val advancedDiagnostics = advancedSurfaceDiagnostics(enrichment, request.contentId)
+            // D-09: Record field-level fallback reasons
+            val fieldLevelDiagnostics = fieldLevelFallbackDiagnostics(enrichment, request.contentId)
+            // Record TVDB_PROVIDER_CHOSEN and field-level diagnostics
+            recordReliabilityDiagnostic(
+                TvdbReliabilityReason.TVDB_PROVIDER_CHOSEN,
+                "tv_metadata_router",
+                message = "TVDB enrichment served for ${request.contentId}"
+            )
+            recordReliabilityDiagnostic(
+                TvdbReliabilityReason.TMDB_TV_FETCH_SKIPPED,
+                "tv_metadata_router",
+                message = "TVDB success, TMDB TV metadata not fetched for ${request.contentId}"
+            )
             return TvMetadataDecision(
                 provider = TvProvider.TVDB,
                 reason = TvMetadataDecisionReason.TVDB_SUCCESS,
                 value = enrichment,
-                diagnostics = successDiagnostics(request.contentId) + advancedDiagnostics
+                diagnostics = successDiagnostics(request.contentId) + advancedDiagnostics + fieldLevelDiagnostics
             )
         }
 
+        // D-07: TVDB record missing or fetch failed -> explicit TMDB fallback
+        recordReliabilityDiagnostic(
+            TvdbReliabilityReason.EXPLICIT_FALLBACK,
+            "tv_metadata_router",
+            message = "TVDB record unavailable, explicit TMDB fallback for ${request.contentId}"
+        )
         return fetchTmdbEnrichment(
             request = request,
             diagnostics = recordMissingDiagnostics(request.contentId),
@@ -76,6 +105,11 @@ class TvMetadataRouter @Inject constructor(
                 diagnostics = inactiveDiagnostics(request.contentId),
                 reason = TvMetadataDecisionReason.TVDB_INACTIVE
             )
+        }
+
+        // D-08: Credential health gate
+        if (!credentialHealth.canCallTvdb()) {
+            return handleInvalidCredentialEpisodeEnrichment(request)
         }
 
         val identity = resolveTvdbIdentity(request.contentId, request.contentType)
@@ -124,6 +158,11 @@ class TvMetadataRouter @Inject constructor(
                 diagnostics = inactiveDiagnostics(contentId),
                 reason = TvMetadataDecisionReason.TVDB_INACTIVE
             )
+        }
+
+        // D-08: Credential health gate
+        if (!credentialHealth.canCallTvdb()) {
+            // TvdbMetadataService handles stale-cache serving with credential gating
         }
 
         val identity = resolveTvdbIdentity(contentId, ContentType.SERIES)
@@ -332,13 +371,15 @@ class TvMetadataRouter @Inject constructor(
         reason: TvMetadataDecisionReason,
         contentId: String,
         provider: TvProvider? = null,
-        fallbackProvider: TvProvider? = null
+        fallbackProvider: TvProvider? = null,
+        detail: String? = null
     ): TvMetadataDiagnosticEvent {
         return TvMetadataDiagnosticEvent(
             reason = reason,
             contentId = contentId,
             provider = provider,
-            fallbackProvider = fallbackProvider
+            fallbackProvider = fallbackProvider,
+            detail = detail
         )
     }
 
@@ -387,6 +428,150 @@ class TvMetadataRouter @Inject constructor(
             airDate = metadata.airDate,
             metadata = metadata
         )
+    }
+
+    /**
+     * D-08: Handle enrichment request when credentials are invalid.
+     * Serve cached TVDB data with STALE_CACHE_SERVED + INVALID_CREDENTIALS,
+     * or fall back to explicit TMDB fallback.
+     */
+    private suspend fun handleInvalidCredentialEnrichment(
+        request: TvMetadataRequest
+    ): TvMetadataDecision<TvMetadataEnrichment> {
+        recordReliabilityDiagnostic(
+            TvdbReliabilityReason.INVALID_CREDENTIALS,
+            "tv_metadata_router",
+            message = "Credentials invalid for ${request.contentId}"
+        )
+
+        // Try to get cached TVDB data via the service (which handles stale cache)
+        val identity = resolveTvdbIdentity(request.contentId, request.contentType)
+        if (identity != null) {
+            val cached = tvdbMetadataService.fetchSeriesEnrichment(identity, request.language)
+            if (cached != null) {
+                recordReliabilityDiagnostic(
+                    TvdbReliabilityReason.STALE_CACHE_SERVED,
+                    "tv_metadata_router",
+                    message = "Serving cached TVDB data while credentials invalid for ${request.contentId}"
+                )
+                return TvMetadataDecision(
+                    provider = TvProvider.TVDB,
+                    reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                    value = cached,
+                    diagnostics = listOf(
+                        diagnostic(TvMetadataDecisionReason.TVDB_SUCCESS, request.contentId, provider = TvProvider.TVDB)
+                    )
+                )
+            }
+        }
+
+        // No cached data available, explicit TMDB fallback
+        recordReliabilityDiagnostic(
+            TvdbReliabilityReason.EXPLICIT_FALLBACK,
+            "tv_metadata_router",
+            message = "No cached TVDB data, explicit TMDB fallback for ${request.contentId}"
+        )
+        return fetchTmdbEnrichment(
+            request = request,
+            diagnostics = listOf(
+                diagnostic(TvMetadataDecisionReason.TVDB_RECORD_MISSING, request.contentId, fallbackProvider = TvProvider.TMDB),
+                diagnostic(TvMetadataDecisionReason.TVDB_FALLBACK_TMDB, request.contentId, fallbackProvider = TvProvider.TMDB)
+            ),
+            reason = TvMetadataDecisionReason.TVDB_RECORD_MISSING
+        )
+    }
+
+    /**
+     * D-08: Handle episode enrichment request when credentials are invalid.
+     */
+    private suspend fun handleInvalidCredentialEpisodeEnrichment(
+        request: TvMetadataRequest
+    ): TvMetadataDecision<Map<Pair<Int, Int>, TvEpisodeMetadata>> {
+        recordReliabilityDiagnostic(
+            TvdbReliabilityReason.INVALID_CREDENTIALS,
+            "tv_metadata_router",
+            message = "Credentials invalid for episode enrichment ${request.contentId}"
+        )
+
+        // Try cached episode data
+        val identity = resolveTvdbIdentity(request.contentId, request.contentType)
+        if (identity != null) {
+            val episodes = tvdbMetadataService.fetchEpisodeEnrichment(identity, request.seasonNumbers, request.language)
+            if (episodes.isNotEmpty()) {
+                return TvMetadataDecision(
+                    provider = TvProvider.TVDB,
+                    reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+                    value = episodes,
+                    diagnostics = successDiagnostics(request.contentId)
+                )
+            }
+        }
+
+        return fetchTmdbEpisodeEnrichment(
+            request = request,
+            diagnostics = recordMissingDiagnostics(request.contentId),
+            reason = TvMetadataDecisionReason.TVDB_RECORD_MISSING
+        )
+    }
+
+    /**
+     * D-09: Generate field-level fallback diagnostics for TVDB enrichment.
+     * Records MISSING_AIRS_TIME, DATE_ONLY_GATING, POSTER_RATINGS_OVERRIDE
+     * while keeping TVDB as the record provider.
+     */
+    private suspend fun fieldLevelFallbackDiagnostics(
+        enrichment: TvMetadataEnrichment,
+        contentId: String
+    ): List<TvMetadataDiagnosticEvent> {
+        val diagnostics = mutableListOf<TvMetadataDiagnosticEvent>()
+
+        // D-09: Missing airsTime field-level diagnostic
+        if (enrichment.airsTime == null) {
+            if (enrichment.airsDays.isNotEmpty()) {
+                // Has airsDays but no airsTime -> date-only gating
+                recordReliabilityDiagnostic(
+                    TvdbReliabilityReason.DATE_ONLY_GATING,
+                    "tv_metadata_router",
+                    tvdbId = enrichment.seriesTvdbId,
+                    message = "TVDB has airsDays but no airsTime for $contentId"
+                )
+                diagnostics.add(
+                    diagnostic(TvMetadataDecisionReason.TVDB_SUCCESS, contentId, provider = TvProvider.TVDB,
+                        detail = "date_only_gating")
+                )
+            }
+            // Always record missing_airs_time when airsTime is null
+            recordReliabilityDiagnostic(
+                TvdbReliabilityReason.MISSING_AIRS_TIME,
+                "tv_metadata_router",
+                tvdbId = enrichment.seriesTvdbId,
+                message = "TVDB missing airsTime for $contentId"
+            )
+        }
+
+        return diagnostics
+    }
+
+    /**
+     * Records a reliability diagnostic and emits structured log fields.
+     * Does not include Authorization headers, API keys, PINs, bearer tokens,
+     * raw response bodies, or full request URLs.
+     */
+    private suspend fun recordReliabilityDiagnostic(
+        reason: TvdbReliabilityReason,
+        surface: String,
+        tvdbId: Int? = null,
+        message: String? = null
+    ) {
+        val diagnostic = TvdbReliabilityDiagnostic(
+            reason = reason,
+            surface = surface,
+            tvdbId = tvdbId,
+            message = message
+        )
+        runCatching { diagnosticsRecorder.record(diagnostic) }
+        val fields = diagnostic.structuredLogFields()
+        Log.d(ROUTER_TAG, fields.entries.joinToString(", ") { "${it.key}=${it.value}" })
     }
 
     private fun ContentType.isTv(): Boolean = this == ContentType.SERIES || this == ContentType.TV

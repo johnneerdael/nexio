@@ -2,6 +2,7 @@ package com.nexio.tv.core.tvdb
 
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
+import com.nexio.tv.data.local.TvdbMergeAlias
 import com.nexio.tv.data.local.TvdbMergeAliasStore
 import com.nexio.tv.data.local.TvdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TvdbApi
@@ -52,7 +53,8 @@ class TvdbCredentialHealthTest {
         return mockk(relaxed = true) {
             every { this@mockk.settings } returns flowOf(
                 com.nexio.tv.domain.model.TmdbSettings(
-                    isActive = active,
+                    enabled = active,
+                    apiKey = if (active) "test-tmdb-key" else "",
                     useBasicInfo = true,
                     useArtwork = true,
                     useDetails = true
