@@ -111,6 +111,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "AccountSettingsSync"
+private const val PRIMARY_PROFILE_ID = 1
 private const val TMDB_SECRET_TYPE = "tmdb_api_key"
 private const val TMDB_SECRET_REF = "integration:tmdb"
 private const val TVDB_SECRET_TYPE = "tvdb_api_key"
@@ -275,12 +276,12 @@ class AccountSettingsSyncService @Inject constructor(
                 easyDebridSettings = easyDebridSettingsDataStore.settings.drop(1).map { Unit },
                 easyDebridAccountState = easyDebridService.observeAccountState().drop(1).map { Unit },
                 realDebridState = realDebridAuthDataStore.state.drop(1).map { Unit },
-                traktAuthState = traktAuthDataStore.state.drop(1).map { Unit },
+                traktAuthState = traktAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).drop(1).map { Unit },
                 // Default profile keeps these in the account contract; secondary
                 // profiles sync them through ProfileSettingsSyncService blobs.
                 traktCatalogPreferences = traktSettingsDataStore.catalogPreferences.drop(1).map { Unit },
                 simklCatalogPreferences = simklSettingsDataStore.catalogPreferences.drop(1).map { Unit },
-                simklAuthState = simklAuthDataStore.state.drop(1).map { Unit },
+                simklAuthState = simklAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).drop(1).map { Unit },
                 playerSettings = playerSettingsDataStore.playerSettings.drop(1).map { Unit }
             ).collect { changedPath ->
                 if (!profileManager.isPrimaryProfileActive && isPrimaryProfileAccountPath(changedPath)) {
@@ -316,6 +317,8 @@ class AccountSettingsSyncService @Inject constructor(
             path.startsWith("catalogs.home") ||
             path.startsWith("catalogs.trakt") ||
             path.startsWith("catalogs.simkl") ||
+            path == "integrations.traktAuth" ||
+            path == "integrations.simklAuth" ||
             path.startsWith("playback.streamSelection")
     }
 
@@ -492,8 +495,8 @@ class AccountSettingsSyncService @Inject constructor(
         val easyDebrid = easyDebridSettingsDataStore.settings.first()
         val easyDebridAccount = easyDebridService.observeAccountState().first()
         val realDebrid = realDebridAuthDataStore.state.first()
-        val traktAuth = traktAuthDataStore.state.first()
-        val simklAuth = simklAuthDataStore.state.first()
+        val traktAuth = traktAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).first()
+        val simklAuth = simklAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).first()
 
         return buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(
@@ -1008,7 +1011,7 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private suspend fun syncTraktSecretsToRemote() {
-        val traktState = traktAuthDataStore.state.first()
+        val traktState = traktAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).first()
         val accessToken = traktState.accessToken?.trim().orEmpty()
         val refreshToken = traktState.refreshToken?.trim().orEmpty()
 
@@ -1078,7 +1081,7 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private suspend fun syncSimklSecretsToRemote() {
-        val simklState = simklAuthDataStore.state.first()
+        val simklState = simklAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).first()
         val accessToken = simklState.accessToken?.trim().orEmpty()
 
         if (accessToken.isBlank()) {
@@ -1244,7 +1247,7 @@ class AccountSettingsSyncService @Inject constructor(
             // not connected (and not in a pending device-flow). Mirrors RD's logic.
             val remote = settings.integrations.traktAuth
             if (!remote.connected && !remote.pending) {
-                traktAuthDataStore.clearAuth()
+                traktAuthDataStore.clearAuth(PRIMARY_PROFILE_ID)
             }
             return
         }
@@ -1259,7 +1262,7 @@ class AccountSettingsSyncService @Inject constructor(
         // remote refresh token → invalid_grant → clearAuth(). That's the
         // upgrade-time logout. Instead, keep local and shove it back upstream
         // so both sides converge.
-        val localState = traktAuthDataStore.state.first()
+        val localState = traktAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).first()
         val localCreatedAt = localState.createdAt ?: 0L
         val remoteCreatedAt = accessPayload?.createdAt ?: 0L
         val localHasTokens = !localState.accessToken.isNullOrBlank() &&
@@ -1274,10 +1277,11 @@ class AccountSettingsSyncService @Inject constructor(
                 .onFailure { e -> Log.w(TAG, "Failed to push local Trakt tokens after stale-remote detection", e) }
             traktAuthDataStore.saveUser(
                 username = settings.integrations.traktAuth.username.takeIf { it.isNotBlank() },
-                userSlug = settings.integrations.traktAuth.userSlug.takeIf { it.isNotBlank() }
+                userSlug = settings.integrations.traktAuth.userSlug.takeIf { it.isNotBlank() },
+                profileId = PRIMARY_PROFILE_ID
             )
             if (!settings.integrations.traktAuth.pending) {
-                traktAuthDataStore.clearDeviceFlow()
+                traktAuthDataStore.clearDeviceFlow(PRIMARY_PROFILE_ID)
             }
             return
         }
@@ -1289,14 +1293,16 @@ class AccountSettingsSyncService @Inject constructor(
                 expiresIn = accessPayload?.expiresIn ?: 0,
                 refreshToken = refreshToken,
                 createdAt = accessPayload?.createdAt ?: 0L
-            )
+            ),
+            profileId = PRIMARY_PROFILE_ID
         )
         traktAuthDataStore.saveUser(
             username = settings.integrations.traktAuth.username.takeIf { it.isNotBlank() },
-            userSlug = settings.integrations.traktAuth.userSlug.takeIf { it.isNotBlank() }
+            userSlug = settings.integrations.traktAuth.userSlug.takeIf { it.isNotBlank() },
+            profileId = PRIMARY_PROFILE_ID
         )
         if (!settings.integrations.traktAuth.pending) {
-            traktAuthDataStore.clearDeviceFlow()
+            traktAuthDataStore.clearDeviceFlow(PRIMARY_PROFILE_ID)
         }
     }
 
@@ -1322,19 +1328,20 @@ class AccountSettingsSyncService @Inject constructor(
         if (accessToken.isBlank()) {
             val remote = settings.integrations.simklAuth
             if (!remote.connected && !remote.pending) {
-                simklAuthDataStore.clearAuth()
+                simklAuthDataStore.clearAuth(PRIMARY_PROFILE_ID)
             }
             return
         }
 
-        simklAuthDataStore.saveAccessToken(accessToken)
+        simklAuthDataStore.saveAccessToken(accessToken, profileId = PRIMARY_PROFILE_ID)
         simklAuthDataStore.saveUser(
             username = settings.integrations.simklAuth.username.takeIf { it.isNotBlank() },
             accountId = settings.integrations.simklAuth.accountId,
-            accountType = settings.integrations.simklAuth.accountType.takeIf { it.isNotBlank() }
+            accountType = settings.integrations.simklAuth.accountType.takeIf { it.isNotBlank() },
+            profileId = PRIMARY_PROFILE_ID
         )
         if (!settings.integrations.simklAuth.pending) {
-            simklAuthDataStore.clearDeviceFlow()
+            simklAuthDataStore.clearDeviceFlow(PRIMARY_PROFILE_ID)
         }
     }
 

@@ -12,6 +12,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
@@ -491,11 +492,17 @@ internal fun ModernRowSection(
                         count = modernLoadingPlaceholderCount(),
                         key = { index -> "${row.key}_loading_$index" },
                         contentType = { "modern_loading_placeholder" }
-                    ) {
+                    ) { index ->
+                        val requester = uiCaches.requesterFor(row.key, "loading_$index")
+                        val onFocused = remember(row.key, index) {
+                            { onRowItemFocused(row.key, index, false) }
+                        }
                         ModernCatalogLoadingPlaceholder(
                             cardWidth = modernCatalogCardWidth,
                             cardHeight = modernCatalogCardHeight,
-                            cornerRadius = posterCardCornerRadius
+                            cornerRadius = posterCardCornerRadius,
+                            focusRequester = requester,
+                            onFocused = onFocused
                         )
                     }
                 } else {
@@ -598,7 +605,9 @@ internal fun ModernRowSection(
 private fun ModernCatalogLoadingPlaceholder(
     cardWidth: Dp,
     cardHeight: Dp,
-    cornerRadius: Dp
+    cornerRadius: Dp,
+    focusRequester: FocusRequester,
+    onFocused: () -> Unit
 ) {
     val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
     val shimmerBrush = rememberShimmerBrush()
@@ -614,6 +623,9 @@ private fun ModernCatalogLoadingPlaceholder(
             )
             .clearAndSetSemantics { }
             .testTag(MODERN_LOADING_PLACEHOLDER_TEST_TAG)
+            .focusRequester(focusRequester)
+            .onFocusChanged { if (it.isFocused) onFocused() }
+            .focusable()
     )
 }
 

@@ -10,6 +10,8 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class ProfileSettingsScopeContractTest {
     private val scopeDoc = File("docs/architecture/profile-settings-scope.md")
+    private val accountSettingsSyncService = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt")
+    private val homeCatalogPipeline = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt")
 
     private fun doc(): String {
         assertTrue(
@@ -265,5 +267,35 @@ class ProfileSettingsScopeContractTest {
 
         assertTrue(text.contains("`ProfileSettingsSyncService.syncedFeatures` may include only `profile-remote` stores."))
         assertTrue(text.contains("No `profile-local`, `profile-derived-cache`, or `global-device` value may be serialized to `profile_settings`."))
+    }
+
+    @Test
+    fun `account snapshot sync only reads and writes primary profile tracking auth`() {
+        val source = accountSettingsSyncService.readText()
+
+        assertTrue(source.contains("private const val PRIMARY_PROFILE_ID = 1"))
+        assertTrue(source.contains("traktAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).drop(1).map { Unit }"))
+        assertTrue(source.contains("simklAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).drop(1).map { Unit }"))
+        assertTrue(source.contains("traktAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).first()"))
+        assertTrue(source.contains("simklAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).first()"))
+        assertTrue(source.contains("traktAuthDataStore.clearAuth(PRIMARY_PROFILE_ID)"))
+        assertTrue(source.contains("simklAuthDataStore.clearAuth(PRIMARY_PROFILE_ID)"))
+        assertTrue(source.contains("profileId = PRIMARY_PROFILE_ID"))
+        assertTrue(source.contains("path == \"integrations.traktAuth\""))
+        assertTrue(source.contains("path == \"integrations.simklAuth\""))
+    }
+
+    @Test
+    fun `trakt up next descriptors require active profile trakt auth`() {
+        val source = homeCatalogPipeline.readText()
+
+        assertTrue(source.contains("hasTraktUpNextItems = activeProfileTraktAuthenticated && currentState.traktUpNextItems.isNotEmpty()"))
+        assertTrue(source.contains("persistedTraktSyntheticGroups = if (providerState.traktAuthenticated) snapshot.traktGroups else emptyList()"))
+        assertTrue(source.contains("activeProfileTraktAuthenticated = providerState.traktAuthenticated"))
+        assertTrue(source.contains("trackingProviderStateService.currentState()"))
+        assertTrue(
+            "Trakt Up Next must not be described from stale UI state after profile auth is cleared",
+            !source.contains("hasTraktUpNextItems = currentState.traktUpNextItems.isNotEmpty()")
+        )
     }
 }
