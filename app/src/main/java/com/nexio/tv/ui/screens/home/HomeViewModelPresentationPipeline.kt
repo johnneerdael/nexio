@@ -223,7 +223,8 @@ internal fun HomeViewModel.refreshTrailerMetadataAvailabilityPipeline(rows: List
         viewModelScope.launch {
             try {
                 trailerMetadataAvailabilitySemaphore.withPermit {
-                    val tmdbId = withContext(Dispatchers.IO) {
+                    val isTvContent = item.apiType.trim().lowercase() in setOf("tv", "series", "show", "tvshow")
+                    val tmdbId = if (isTvContent) null else withContext(Dispatchers.IO) {
                         runCatching { tmdbService.ensureTmdbId(item.id, item.apiType) }
                             .getOrNull()
                     }
@@ -277,7 +278,8 @@ internal fun HomeViewModel.requestTrailerPreviewPipeline(
     val requestVersion = trailerPreviewRequestVersion
 
     viewModelScope.launch {
-        val tmdbId = runCatching { tmdbService.ensureTmdbId(itemId, apiType) }.getOrNull()
+        val isTvContent = apiType.trim().lowercase() in setOf("tv", "series", "show", "tvshow")
+        val tmdbId = if (isTvContent) null else runCatching { tmdbService.ensureTmdbId(itemId, apiType) }.getOrNull()
         if (forceRefresh) {
             trailerService.invalidateLookupCache(
                 title = title,

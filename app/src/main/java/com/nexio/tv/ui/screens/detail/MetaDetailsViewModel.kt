@@ -1520,12 +1520,13 @@ class MetaDetailsViewModel @Inject constructor(
 
     private fun preloadTitleTrailerAvailability(meta: Meta) {
         viewModelScope.launch {
-            val tmdbId = runCatching {
+            val isTvContent = parseApiTypeToContentType(meta.apiType) == ContentType.SERIES
+            val tmdbId = if (isTvContent) null else runCatching {
                 tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
             }.getOrNull()
             debugLog(
                 TAG,
-                "preloadTitleTrailerAvailability start itemId=${meta.id} type=${meta.apiType} tmdbId=$tmdbId fallbackYtIds=${meta.trailerYtIds.count { it.isNotBlank() }}"
+                "preloadTitleTrailerAvailability start itemId=${meta.id} type=${meta.apiType} tmdbId=$tmdbId isTvContent=$isTvContent fallbackYtIds=${meta.trailerYtIds.count { it.isNotBlank() }}"
             )
             val available = trailerService.getTitleMediaAvailability(
                 tmdbId = tmdbId,
@@ -1571,9 +1572,7 @@ class MetaDetailsViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val tmdbId = runCatching {
-                    tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
-                }.getOrNull()
+                val tmdbId = null // TV content: let TrailerService try TVDB first
                 val seasonAvailability = trailerService.getSeasonMediaAvailability(
                     tmdbId = tmdbId,
                     type = meta.apiType,
@@ -1609,9 +1608,7 @@ class MetaDetailsViewModel @Inject constructor(
             return cached
         }
 
-        val tmdbId = runCatching {
-            tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
-        }.getOrNull()
+        val tmdbId = null // TV content: let TrailerService try TVDB first
         val seasonAvailability = trailerService.getSeasonMediaAvailability(
             tmdbId = tmdbId,
             type = meta.apiType,
@@ -2232,7 +2229,8 @@ class MetaDetailsViewModel @Inject constructor(
                 ?.takeIf { it.isNotBlank() }
                 ?.let { Regex("""\b(19|20)\d{2}\b""").find(it)?.value }
 
-            val tmdbId = runCatching {
+            val isTvContent = parseApiTypeToContentType(meta.apiType) == ContentType.SERIES
+            val tmdbId = if (isTvContent) null else runCatching {
                 tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
             }.getOrNull()
 
@@ -2327,9 +2325,7 @@ class MetaDetailsViewModel @Inject constructor(
             val year = meta.releaseInfo
                 ?.takeIf { it.isNotBlank() }
                 ?.let { Regex("""\b(19|20)\d{2}\b""").find(it)?.value }
-            val tmdbId = runCatching {
-                tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
-            }.getOrNull()
+            val tmdbId = null // TV content: let TrailerService try TVDB first
             val recapSource = trailerService.getSeasonRecapPlaybackSource(
                 title = meta.name,
                 year = year,
@@ -2407,9 +2403,7 @@ class MetaDetailsViewModel @Inject constructor(
             val year = meta.releaseInfo
                 ?.takeIf { it.isNotBlank() }
                 ?.let { Regex("""\b(19|20)\d{2}\b""").find(it)?.value }
-            val tmdbId = runCatching {
-                tmdbService.ensureTmdbId(meta.id, meta.apiType) ?: tmdbService.ensureTmdbId(itemId, itemType)
-            }.getOrNull()
+            val tmdbId = null // TV content: let TrailerService try TVDB first
             val seasonTrailerSource = trailerService.getSeasonTrailerPlaybackSource(
                 title = meta.name,
                 year = year,
