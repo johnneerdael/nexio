@@ -86,8 +86,6 @@ class TvdbSettingsDataStore @Inject constructor(
     ) {
         val trimmedApiKey = apiKey.trim()
         val trimmedPin = pin.trim()
-        val current = settings.first()
-        val credentialsChanged = current.apiKey != trimmedApiKey || current.subscriberPin != trimmedPin
 
         store().edit { prefs ->
             prefs[apiKeyKey] = trimmedApiKey
@@ -95,10 +93,6 @@ class TvdbSettingsDataStore @Inject constructor(
             prefs[validationStatusKey] = validationStatus.name
             prefs.remove(lastFailureKey)
             prefs[lastValidatedAtEpochMsKey] = System.currentTimeMillis()
-        }
-
-        if (credentialsChanged) {
-            tokenStore.clear()
         }
     }
 
