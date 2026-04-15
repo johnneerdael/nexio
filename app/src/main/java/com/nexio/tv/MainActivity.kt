@@ -75,7 +75,6 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusProperties
@@ -1783,13 +1782,9 @@ private fun LegacySidebarScaffold(
                         keyEvent.type == KeyEventType.KeyDown &&
                         keyEvent.key == Key.DirectionLeft
                     ) {
-                        if (focusManager.moveFocus(FocusDirection.Left)) {
-                            true
-                        } else {
-                            pendingSidebarFocusRequest = true
-                            drawerState.setValue(DrawerValue.Open)
-                            true
-                        }
+                        pendingSidebarFocusRequest = true
+                        drawerState.setValue(DrawerValue.Open)
+                        true
                     } else {
                         false
                     }
@@ -2292,14 +2287,10 @@ private fun ModernSidebarScaffold(
                             }
                         }
                         if (keyEvent.key == Key.DirectionLeft) {
-                            if (focusManager.moveFocus(FocusDirection.Left)) {
-                                true
-                            } else {
-                                isSidebarExpanded = true
-                                sidebarCollapsePending = false
-                                pendingSidebarFocusRequest = true
-                                true
-                            }
+                            isSidebarExpanded = true
+                            sidebarCollapsePending = false
+                            pendingSidebarFocusRequest = true
+                            true
                         } else {
                             false
                         }

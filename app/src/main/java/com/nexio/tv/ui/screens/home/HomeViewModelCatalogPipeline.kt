@@ -126,14 +126,16 @@ internal fun HomeViewModel.restorePersistedSyntheticCatalogRowsPipeline() {
             Log.d(HomeViewModel.TAG, "Restored synthetic snapshot null")
             return@launch
         }
+        val providerState = trackingProviderStateService.currentState()
         Log.d(
             HomeViewModel.TAG,
             "Restored synthetic snapshot traktGroups=${snapshot.traktGroups.size} traktRows=${snapshot.traktGroups.sumOf { it.rows.size }} " +
                 "simklGroups=${snapshot.simklGroups.size} simklRows=${snapshot.simklGroups.sumOf { it.rows.size }} " +
-                "mdbGroups=${snapshot.mdbListGroups.size} mdbRows=${snapshot.mdbListGroups.sumOf { it.rows.size }}"
+                "mdbGroups=${snapshot.mdbListGroups.size} mdbRows=${snapshot.mdbListGroups.sumOf { it.rows.size }} " +
+                "traktAuthenticated=${providerState.traktAuthenticated}"
         )
         withContext(Dispatchers.Main.immediate) {
-            persistedTraktSyntheticGroups = snapshot.traktGroups
+            persistedTraktSyntheticGroups = if (providerState.traktAuthenticated) snapshot.traktGroups else emptyList()
             persistedSimklSyntheticGroups = snapshot.simklGroups
             persistedMDBListSyntheticGroups = snapshot.mdbListGroups
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("restore_synthetic_snapshot")
@@ -268,6 +270,7 @@ internal fun HomeViewModel.restorePersistedDiscoverySnapshotsPipeline() {
         val traktSnapshot = traktDiscoverySnapshotStore.read()
         val simklSnapshot = simklDiscoverySnapshotStore.read()
         val mdbSnapshot = mdbListDiscoverySnapshotStore.read()
+        val providerState = trackingProviderStateService.currentState()
         Log.d(
             HomeViewModel.TAG,
             "Restored discovery snapshots trakt=" +
@@ -296,6 +299,8 @@ internal fun HomeViewModel.restorePersistedDiscoverySnapshotsPipeline() {
                 }
         )
         withContext(Dispatchers.Main.immediate) {
+            activeProfileTraktAuthenticated = providerState.traktAuthenticated
+            activeProfileSimklAuthenticated = providerState.simklAuthenticated
             if (traktSnapshot != null) {
                 val hydratedTraktSnapshot = applyTomatoesOverridesToTraktSnapshot(
                     traktSnapshot,
@@ -332,8 +337,15 @@ internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
         val autoRefreshOnStart = !shouldDeferStartupNetworkWork()
         traktDiscoveryService.observeSnapshot(autoRefreshOnStart = autoRefreshOnStart).collectLatest { snapshot ->
             if (!activeProfileTraktAuthenticated) {
-                clearTraktHomeState("observe_trakt_discovery_unauthenticated")
-                return@collectLatest
+                val providerState = withContext(Dispatchers.IO) {
+                    trackingProviderStateService.currentState()
+                }
+                activeProfileTraktAuthenticated = providerState.traktAuthenticated
+                activeProfileSimklAuthenticated = providerState.simklAuthenticated
+                if (!providerState.traktAuthenticated) {
+                    clearTraktHomeState("observe_trakt_discovery_unauthenticated")
+                    return@collectLatest
+                }
             }
             val hydratedSnapshot = applyTomatoesOverridesToTraktSnapshot(
                 snapshot,
@@ -922,11 +934,13 @@ private fun mdbSnapshotItemKeys(
 }
 
 internal suspend fun HomeViewModel.reloadPersistedSyntheticCatalogRowsPipeline() {
-    val snapshot = withContext(Dispatchers.IO) {
-        syntheticHomeCatalogStore.read() ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot()
+    val (snapshot, providerState) = withContext(Dispatchers.IO) {
+        val restoredSnapshot = syntheticHomeCatalogStore.read()
+            ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot()
+        restoredSnapshot to trackingProviderStateService.currentState()
     }
     withContext(Dispatchers.Main.immediate) {
-        persistedTraktSyntheticGroups = snapshot.traktGroups
+        persistedTraktSyntheticGroups = if (providerState.traktAuthenticated) snapshot.traktGroups else emptyList()
         persistedSimklSyntheticGroups = snapshot.simklGroups
         persistedMDBListSyntheticGroups = snapshot.mdbListGroups
     }
@@ -1614,7 +1628,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             disabledHomeCatalogKeys = disabledHomeCatalogKeys,
             traktPrefs = traktPrefs,
             traktSnapshot = effectiveTraktSnapshot,
-            hasTraktUpNextItems = currentState.traktUpNextItems.isNotEmpty(),
+            hasTraktUpNextItems = activeProfileTraktAuthenticated && currentState.traktUpNextItems.isNotEmpty(),
             simklPrefs = simklPrefs,
             mdbPrefs = mdbListPrefs,
             mdbSnapshot = effectiveMDBListSnapshot,

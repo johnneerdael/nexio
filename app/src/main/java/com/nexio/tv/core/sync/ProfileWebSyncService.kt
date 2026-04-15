@@ -60,17 +60,29 @@ class ProfileWebSyncService @Inject constructor(
 
     private suspend fun applyTraktTokens(profileIndex: Int, remoteTokens: List<ProfileAuthToken>) {
         val traktTokens = remoteTokens.filter { it.tokenType.startsWith("trakt_") }
-        if (traktTokens.isEmpty()) return
-
         val localState = traktAuthDataStore.stateForProfile(profileIndex).first()
         val localLinkedAt = normalizeEpochMillis(localState.createdAt)
+        if (traktTokens.isEmpty()) {
+            if (localState.isAuthenticated) {
+                Log.d(PROFILE_WEB_SYNC_TAG, "Clearing stale local Trakt auth for profile $profileIndex; remote has no Trakt tokens")
+                traktAuthDataStore.clearAuth(profileIndex)
+            }
+            return
+        }
         if (hasNewerRemoteUnlink(traktTokens, localLinkedAt)) {
             traktAuthDataStore.clearAuth(profileIndex)
             return
         }
 
-        val accessRow = newestLinkedToken(traktTokens, "trakt_access_token") ?: return
-        val refreshRow = newestLinkedToken(traktTokens, "trakt_refresh_token") ?: return
+        val accessRow = newestLinkedToken(traktTokens, "trakt_access_token")
+        val refreshRow = newestLinkedToken(traktTokens, "trakt_refresh_token")
+        if (accessRow == null || refreshRow == null) {
+            if (localState.isAuthenticated && traktTokens.none { it.linked && it.revokedAt == null }) {
+                Log.d(PROFILE_WEB_SYNC_TAG, "Clearing stale local Trakt auth for profile $profileIndex; remote has no linked Trakt pair")
+                traktAuthDataStore.clearAuth(profileIndex)
+            }
+            return
+        }
         val remoteUpdatedAt = maxUpdatedAt(accessRow, refreshRow)
         if (!remoteIsNewer(remoteUpdatedAt, localLinkedAt)) return
 
@@ -108,15 +120,26 @@ class ProfileWebSyncService @Inject constructor(
 
     private suspend fun applySimklTokens(profileIndex: Int, remoteTokens: List<ProfileAuthToken>) {
         val simklTokens = remoteTokens.filter { it.tokenType == "simkl_access_token" }
-        if (simklTokens.isEmpty()) return
-
         val localState = simklAuthDataStore.stateForProfile(profileIndex).first()
+        if (simklTokens.isEmpty()) {
+            if (localState.isAuthenticated) {
+                Log.d(PROFILE_WEB_SYNC_TAG, "Clearing stale local SIMKL auth for profile $profileIndex; remote has no SIMKL tokens")
+                simklAuthDataStore.clearAuth(profileIndex)
+            }
+            return
+        }
         if (hasNewerRemoteUnlink(simklTokens, localLinkedAt = null)) {
             simklAuthDataStore.clearAuth(profileIndex)
             return
         }
 
-        val accessRow = newestLinkedToken(simklTokens, "simkl_access_token") ?: return
+        val accessRow = newestLinkedToken(simklTokens, "simkl_access_token") ?: run {
+            if (localState.isAuthenticated && simklTokens.none { it.linked && it.revokedAt == null }) {
+                Log.d(PROFILE_WEB_SYNC_TAG, "Clearing stale local SIMKL auth for profile $profileIndex; remote has no linked SIMKL token")
+                simklAuthDataStore.clearAuth(profileIndex)
+            }
+            return
+        }
         val accessToken = accessRow.tokenPayload.stringValue(
             "accessToken",
             "access_token",
