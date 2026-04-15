@@ -1,5 +1,7 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.tvdb.TvdbAirAvailabilityDiagnosticReason
+import com.nexio.tv.core.tvdb.TvdbAirAvailabilityPrecision
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.data.repository.trakt.TraktEpisodeRef
 import com.nexio.tv.domain.model.TrackingProvider
@@ -29,7 +31,13 @@ data class TrackingNextUpEntry(
     val backdrop: String? = null,
     val logo: String? = null,
     val traktShowId: Int? = null,
-    val traktEpisodeId: Int? = null
+    val traktEpisodeId: Int? = null,
+    val tvdbAvailabilityInstantMs: Long? = null,
+    val tvdbAvailabilityPrecision: TvdbAirAvailabilityPrecision = TvdbAirAvailabilityPrecision.UNKNOWN,
+    val tvdbAvailabilitySourceZoneId: String? = null,
+    val tvdbAvailabilitySourcePolicy: String? = null,
+    val tvdbAvailabilityDiagnosticReason: TvdbAirAvailabilityDiagnosticReason? = null,
+    val tvdbAvailabilityDeviceLocalDateTime: String? = null
 )
 
 interface TrackingProgressService {
