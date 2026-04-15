@@ -1906,32 +1906,49 @@ class MetaDetailsViewModel @Inject constructor(
             try {
                 val nowMs = System.currentTimeMillis()
                 val tmdbContentType = resolveTmdbContentType(meta)
-                val tmdbIdStr = tmdbService.ensureTmdbId(meta.id, tmdbContentType.toApiString())
-                val tvId = tmdbIdStr?.toIntOrNull()
-                    ?: parseContentIds(meta.id).tmdb
-                    ?: run {
-                        showMessage(
-                            message = context.getString(R.string.detail_marked_episodes_watched, 0),
-                            isError = true
-                        )
-                        return@launch
-                    }
-                // Passing null language: TmdbMetadataService.fetchSeasonEpisodes falls back to
-                // currentTmdbLanguageTag() internally, and MetaDetailsViewModel has no locale
-                // source of its own to override that.
-                val tmdbEpisodes = tmdbMetadataService.fetchSeasonEpisodes(tvId, season, null)
-                    .filter { ep -> AirDateGate.isAired(0L, ep.airDate, nowMs) }
-                if (tmdbEpisodes.isEmpty()) {
+                val isTvContent = tmdbContentType == ContentType.SERIES || tmdbContentType == ContentType.TV
+                val seasonEpisodes = if (isTvContent) {
+                    tvMetadataRouter.fetchSeasonEpisodes(
+                        contentId = meta.id,
+                        fallbackContentId = itemId,
+                        seasonNumber = season,
+                        language = null
+                    ).value.orEmpty()
+                        .filter { episode -> AirDateGate.isAired(0L, episode.airDate, nowMs) }
+                        .map { episode ->
+                            com.nexio.tv.domain.model.SeasonEpisodeMark(
+                                episodeNumber = episode.episodeNumber,
+                                airDate = episode.airDate
+                            )
+                        }
+                } else {
+                    val tmdbIdStr = tmdbService.ensureTmdbId(meta.id, tmdbContentType.toApiString())
+                    val tvId = tmdbIdStr?.toIntOrNull()
+                        ?: parseContentIds(meta.id).tmdb
+                        ?: run {
+                            showMessage(
+                                message = context.getString(R.string.detail_marked_episodes_watched, 0),
+                                isError = true
+                            )
+                            return@launch
+                        }
+                    // Passing null language: TmdbMetadataService.fetchSeasonEpisodes falls back to
+                    // currentTmdbLanguageTag() internally, and MetaDetailsViewModel has no locale
+                    // source of its own to override that.
+                    tmdbMetadataService.fetchSeasonEpisodes(tvId, season, null)
+                        .filter { ep -> AirDateGate.isAired(0L, ep.airDate, nowMs) }
+                        .map { ep ->
+                            com.nexio.tv.domain.model.SeasonEpisodeMark(
+                                episodeNumber = ep.episodeNumber,
+                                airDate = ep.airDate
+                            )
+                        }
+                }
+                if (seasonEpisodes.isEmpty()) {
                     showMessage(context.getString(R.string.detail_all_episodes_watched))
                     return@launch
                 }
-                val episodes = tmdbEpisodes.map { ep ->
-                    com.nexio.tv.domain.model.SeasonEpisodeMark(
-                        episodeNumber = ep.episodeNumber,
-                        airDate = ep.airDate
-                    )
-                }
-                val episodeKeys = episodes.mapNotNull { mark ->
+                val episodeKeys = seasonEpisodes.mapNotNull { mark ->
                     val episodeNumber = mark.episodeNumber ?: return@mapNotNull null
                     season to episodeNumber
                 }.toSet()
@@ -1950,8 +1967,8 @@ class MetaDetailsViewModel @Inject constructor(
                     it.copy(episodeWatchedPendingKeys = it.episodeWatchedPendingKeys + pendingKeys)
                 }
                 applyEpisodeWatchOverride(episodeKeys, watched = true)
-                watchProgressRepository.markAsCompletedBatch(meta, season, episodes)
-                showMessage(context.getString(R.string.detail_marked_episodes_watched, episodes.size))
+                watchProgressRepository.markAsCompletedBatch(meta, season, seasonEpisodes)
+                showMessage(context.getString(R.string.detail_marked_episodes_watched, seasonEpisodes.size))
             } catch (e: Exception) {
                 val episodeKeys = _uiState.value.episodeWatchOverrides
                     .filterKeys { it.first == season }
