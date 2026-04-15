@@ -44,6 +44,7 @@ class MetadataDiskCacheStoreTvdbTest {
             providerToken = "topposters-tvdb",
             enrichment = enrichment
         )
+        store.flushPendingWritesForTest()
 
         val key = prefs.all.keys.single { it.startsWith("tvdb::") }
         val root = Gson().fromJson(prefs.all[key] as String, JsonObject::class.java)
@@ -110,6 +111,7 @@ class MetadataDiskCacheStoreTvdbTest {
             languageTag = "en-US",
             episodes = episodes
         )
+        store.flushPendingWritesForTest()
 
         val key = prefs.all.keys.single { it.startsWith("tvdb_episode::") }
         val root = Gson().fromJson(prefs.all[key] as String, JsonObject::class.java)
