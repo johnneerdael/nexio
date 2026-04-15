@@ -154,6 +154,7 @@
     <string name="settings_integrations_section">Integrations</string>
     <string name="settings_integrations_section_subtitle">Configure external metadata and poster integrations</string>
     <string name="settings_tmdb_subtitle">Metadata enrichment controls</string>
+    <string name="settings_tvdb_subtitle">TV metadata identity and fallback settings</string>
     <string name="settings_theintrodb_subtitle">Playback intro, recap, credits, and preview controls</string>
     <string name="settings_omdb_subtitle">Configure OMDB on app or web with two-way sync</string>
     <string name="settings_imdb_subtitle">Primary episode ratings via your custom IMDb API</string>
@@ -821,6 +822,38 @@
     <string name="tmdb_reviews_subtitle">TMDB reviews on the detail page</string>
     <string name="tmdb_collections_title">Collections</string>
     <string name="tmdb_collections_subtitle">TMDB movie collections in release order</string>
+
+    <string name="tvdb_hub_title">TVDB</string>
+    <string name="tvdb_title">TVDB Metadata</string>
+    <string name="tvdb_subtitle">Configure TVDB for TV metadata, identity matching, and fallback visibility.</string>
+    <string name="tvdb_enable_title">Enable TVDB</string>
+    <string name="tvdb_enable_subtitle">Use TVDB for TV metadata when valid credentials are configured.</string>
+    <string name="tvdb_credentials_title">TVDB credentials</string>
+    <string name="tvdb_credentials_subtitle">API key required. Subscriber PIN optional.</string>
+    <string name="tvdb_status_title">TVDB status</string>
+    <string name="tvdb_status_subtitle_not_configured">Add credentials before enabling TVDB.</string>
+    <string name="tvdb_status_subtitle_validating">Checking TVDB credentials...</string>
+    <string name="tvdb_status_subtitle_valid">TVDB is ready for TV metadata and identity matching.</string>
+    <string name="tvdb_status_subtitle_invalid">Check the API key or PIN, then save again.</string>
+    <string name="tvdb_status_subtitle_fallback_active">Falling back because TVDB is currently unusable.</string>
+    <string name="tvdb_status_not_configured">Not configured</string>
+    <string name="tvdb_status_validating">Validating</string>
+    <string name="tvdb_status_valid">Valid</string>
+    <string name="tvdb_status_invalid">Invalid</string>
+    <string name="tvdb_status_fallback_active">Fallback active</string>
+    <string name="tvdb_last_failure_prefix">Last failure:</string>
+    <string name="tvdb_provider_precedence_title">Provider precedence</string>
+    <string name="tvdb_provider_precedence_body">TVDB is used for TV metadata when configured. TMDB remains available for movies and TV fallback when TVDB is not configured. Poster-ratings integrations remain authoritative for supported poster images.</string>
+    <string name="tvdb_dialog_title">TVDB credentials</string>
+    <string name="tvdb_dialog_subtitle">Enter your TVDB API key. Add the subscriber PIN only if your TVDB account requires one.</string>
+    <string name="tvdb_api_key_placeholder">Enter TVDB API key</string>
+    <string name="tvdb_pin_placeholder">Optional subscriber PIN</string>
+    <string name="tvdb_dialog_close_action">Close credentials</string>
+    <string name="tvdb_dialog_clear_action">Clear TVDB credentials</string>
+    <string name="tvdb_dialog_save_action">Save credentials</string>
+    <string name="tvdb_dialog_saving">Saving credentials...</string>
+    <string name="tvdb_missing_api_key">TVDB API key is required</string>
+    <string name="tvdb_invalid_credentials">Invalid TVDB credentials</string>
 
 
     <!-- TraktScreen -->
