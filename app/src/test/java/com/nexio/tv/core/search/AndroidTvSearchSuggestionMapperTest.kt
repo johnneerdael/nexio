@@ -8,13 +8,13 @@ class AndroidTvSearchSuggestionMapperTest {
 
     @Test
     fun `movie suggestion includes deterministic year and minute runtime`() {
-        val suggestion = AndroidTvSearchSuggestionMapper.toSuggestion(
+        val suggestion = requireNotNull(AndroidTvSearchSuggestionMapper.toSuggestion(
             result = result(
                 releaseInfo = "1999",
                 runtime = "136 min"
             ),
             rowId = 7
-        )
+        ))
 
         assertEquals(7L, suggestion.rowId)
         assertEquals("The Matrix", suggestion.title)
@@ -28,7 +28,7 @@ class AndroidTvSearchSuggestionMapperTest {
 
     @Test
     fun `series suggestion preserves type and omits ambiguous duration`() {
-        val suggestion = AndroidTvSearchSuggestionMapper.toSuggestion(
+        val suggestion = requireNotNull(AndroidTvSearchSuggestionMapper.toSuggestion(
             result = result(
                 contentType = "series",
                 title = "Friends",
@@ -36,7 +36,7 @@ class AndroidTvSearchSuggestionMapperTest {
                 runtime = "10 seasons"
             ),
             rowId = 1
-        )
+        ))
 
         assertEquals("Series", suggestion.subtitle)
         assertEquals("series", suggestion.contentType)
@@ -46,13 +46,13 @@ class AndroidTvSearchSuggestionMapperTest {
 
     @Test
     fun `mapper omits unclear year and runtime values`() {
-        val suggestion = AndroidTvSearchSuggestionMapper.toSuggestion(
+        val suggestion = requireNotNull(AndroidTvSearchSuggestionMapper.toSuggestion(
             result = result(
                 releaseInfo = "coming soon",
                 runtime = "feature length"
             ),
             rowId = 1
-        )
+        ))
 
         assertNull(suggestion.productionYear)
         assertNull(suggestion.durationMs)

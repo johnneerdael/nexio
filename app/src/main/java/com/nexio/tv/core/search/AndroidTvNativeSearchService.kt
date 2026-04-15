@@ -26,15 +26,18 @@ private const val DEFAULT_NATIVE_SEARCH_LIMIT = 20
 class AndroidTvNativeSearchService(
     private val addonRepository: AddonRepository,
     private val catalogRepository: CatalogRepository,
+    private val localSearchCorpus: AndroidTvLocalSearchCorpus? = null,
     private val timeoutMs: Long = DEFAULT_NATIVE_SEARCH_TIMEOUT_MS
 ) {
     @Inject
     constructor(
         addonRepository: AddonRepository,
-        catalogRepository: CatalogRepository
+        catalogRepository: CatalogRepository,
+        localSearchCorpus: AndroidTvLocalSearchCorpus
     ) : this(
         addonRepository = addonRepository,
         catalogRepository = catalogRepository,
+        localSearchCorpus = localSearchCorpus,
         timeoutMs = DEFAULT_NATIVE_SEARCH_TIMEOUT_MS
     )
 
@@ -47,15 +50,33 @@ class AndroidTvNativeSearchService(
 
         return withTimeoutOrNull(timeoutMs) {
             runCatching {
-                searchCinemeta(normalizedQuery, limit.coerceAtLeast(1))
+                searchLocalThenCinemeta(normalizedQuery, limit.coerceAtLeast(1))
             }.getOrElse { emptyList() }
         }.orEmpty()
+    }
+
+    private suspend fun searchLocalThenCinemeta(
+        query: String,
+        limit: Int
+    ): List<AndroidTvNativeSearchResult> {
+        val localScored = score(query, localSearchCorpus?.candidates().orEmpty(), limit)
+        if (localScored.any(AndroidTvSearchCandidateScorer::isStrongLocal)) {
+            return localScored.toResults()
+        }
+
+        val liveCandidates = searchCinemetaCandidates(query)
+        return score(query, localScored.map { it.candidate } + liveCandidates, limit)
+            .toResults()
     }
 
     private suspend fun searchCinemeta(
         query: String,
         limit: Int
-    ): List<AndroidTvNativeSearchResult> {
+    ): List<AndroidTvNativeSearchResult> = score(query, searchCinemetaCandidates(query), limit).toResults()
+
+    private suspend fun searchCinemetaCandidates(
+        query: String
+    ): List<AndroidTvSearchCandidate> {
         val source = resolveCinemetaSource() ?: return emptyList()
         val targets = source.searchTargets()
         if (targets.isEmpty()) return emptyList()
@@ -69,9 +90,8 @@ class AndroidTvNativeSearchService(
         }
 
         return rows
-            .flatMap { row -> row.items.map { item -> item.toNativeSearchResult(row.addonBaseUrl) } }
-            .distinctBy { result -> "${result.contentType}:${result.id}" }
-            .take(limit)
+            .flatMap { row -> row.items.mapNotNull { item -> item.toSearchCandidate(row.addonBaseUrl) } }
+            .distinctBy { result -> result.identityKey }
     }
 
     private suspend fun resolveCinemetaSource(): CinemetaSource? {
@@ -126,17 +146,59 @@ class AndroidTvNativeSearchService(
         }
     }
 
-    private fun MetaPreview.toNativeSearchResult(addonBaseUrl: String?): AndroidTvNativeSearchResult {
-        return AndroidTvNativeSearchResult(
+    private fun score(
+        query: String,
+        candidates: List<AndroidTvSearchCandidate>,
+        limit: Int
+    ): List<AndroidTvSearchScoredCandidate> {
+        return AndroidTvSearchCandidateScorer.score(query, candidates, limit)
+    }
+
+    private fun List<AndroidTvSearchScoredCandidate>.toResults(): List<AndroidTvNativeSearchResult> {
+        return map { scored ->
+            scored.candidate.toNativeSearchResult(
+                score = scored.score,
+                explanation = scored.explanation
+            )
+        }
+    }
+
+    private fun MetaPreview.toSearchCandidate(addonBaseUrl: String?): AndroidTvSearchCandidate? {
+        val id = id.trim()
+        val title = name.trim()
+        val contentType = apiType.trim()
+        if (id.isEmpty() || title.isEmpty() || contentType.isEmpty()) return null
+        return AndroidTvSearchCandidate(
             id = id,
-            contentType = apiType,
-            title = name,
+            contentType = contentType,
+            title = title,
             poster = poster,
             background = background,
             description = description,
             releaseInfo = releaseInfo,
             runtime = runtime,
-            addonBaseUrl = addonBaseUrl
+            addonBaseUrl = addonBaseUrl,
+            source = AndroidTvSearchCandidateSource.LIVE_CINEMETA
+        )
+    }
+
+    private fun AndroidTvSearchCandidate.toNativeSearchResult(
+        score: Int,
+        explanation: String
+    ): AndroidTvNativeSearchResult {
+        return AndroidTvNativeSearchResult(
+            id = id,
+            contentType = contentType,
+            title = title,
+            poster = poster,
+            background = background,
+            description = description,
+            releaseInfo = releaseInfo,
+            runtime = runtime,
+            addonBaseUrl = addonBaseUrl,
+            source = source,
+            score = score,
+            matchExplanation = explanation
         )
     }
 }

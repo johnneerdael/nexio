@@ -42,7 +42,7 @@ object AndroidTvSearchSuggestionMapper {
         }
     }
 
-    private fun parseProductionYear(releaseInfo: String?): Int? {
+    fun parseProductionYear(releaseInfo: String?): Int? {
         val value = releaseInfo?.trim().orEmpty()
         return yearPattern.find(value)
             ?.groupValues
@@ -50,7 +50,7 @@ object AndroidTvSearchSuggestionMapper {
             ?.toIntOrNull()
     }
 
-    private fun parseDurationMs(runtime: String?): Long? {
+    fun parseDurationMs(runtime: String?): Long? {
         val value = runtime?.trim().orEmpty()
         val minutes = minuteRuntimePattern.find(value)
             ?.groupValues

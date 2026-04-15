@@ -30,12 +30,30 @@ Use this checklist after implementing or changing Nexio's Android TV native sear
 - Confirm Nexio opens the show detail page.
 - Confirm Nexio does not infer or open an episode.
 
+## Local Cache Search
+
+- Open Nexio and let modern Home/catalog rows finish loading.
+- Pick one movie currently visible on Home with a known year and runtime.
+- Return to Android TV system search and search that exact title.
+- Confirm Nexio can return the title even if network is disabled after Home has loaded.
+- Confirm the result still opens the Nexio detail page.
+- Repeat with one TV show visible on Home. Confirm Nexio opens show detail and does not infer an episode.
+
+## Runtime Hydration
+
+- Pick a Home/catalog title that initially lacks runtime in its visible metadata.
+- Let Home refresh/deferred hydration complete.
+- Search the title from Android TV system search.
+- Confirm Nexio still returns the title and, where the platform exposes details, the candidate behaves as a stronger entity-card match after runtime metadata is cached.
+- If the title still does not appear as an app option on the Google entity card, capture whether title, year, or duration is missing from the Nexio provider candidate.
+
 ## Failure Behavior
 
 - Disable network connectivity or block Cinemeta access.
 - Search for a known title from Android TV search.
 - Confirm Android TV search remains responsive.
-- Confirm Nexio returns no suggestions rather than crashing or surfacing an app error.
+- Confirm locally cached titles can still appear without a network request.
+- Confirm non-cached titles return no suggestions rather than crashing or surfacing an app error.
 - Re-enable network connectivity and confirm search suggestions recover.
 
 ## Regression Checks
@@ -50,4 +68,6 @@ Use this checklist after implementing or changing Nexio's Android TV native sear
 - Device or emulator image/version.
 - Whether Android TV required enabling Nexio as a searchable source.
 - Whether results appeared as suggestions, a Nexio row, or an entity-card action.
+- Whether the result source was local cache or live Cinemeta, if diagnostics expose this.
+- Whether title/year/duration were available for the candidate.
 - Any launcher-specific delays, missing artwork, or result ordering differences.
