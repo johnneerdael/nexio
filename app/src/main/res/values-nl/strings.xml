@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+  <string name="android_tv_search_hint">Films en series zoeken</string>
+  <string name="android_tv_search_description">Films en series</string>
   <string name="action_close">Sluiten</string>
   <string name="mdblist_catalogs_title">Catalogi</string>
   <string name="animeskip_subtitle">Stel je Anime Skip Client-ID in om anime intro\'s/outro\'s over te slaan</string>

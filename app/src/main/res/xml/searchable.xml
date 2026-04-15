@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<searchable xmlns:android="http://schemas.android.com/apk/res/android"
+    android:label="@string/app_name"
+    android:hint="@string/android_tv_search_hint"
+    android:searchSettingsDescription="@string/android_tv_search_description"
+    android:searchSuggestAuthority="@string/android_tv_search_authority"
+    android:searchSuggestIntentAction="android.intent.action.VIEW"
+    android:searchSuggestIntentData="nexio://detail"
+    android:searchSuggestSelection=" ?"
+    android:searchSuggestThreshold="2"
+    android:includeInGlobalSearch="true" />

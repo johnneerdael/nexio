@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+  <string name="android_tv_search_hint">搜索电影和剧集</string>
+  <string name="android_tv_search_description">电影和剧集</string>
   <string name="action_close">关闭</string>
   <string name="mdblist_catalogs_title">目录</string>
   <string name="animeskip_subtitle">配置 Anime Skip 客户端 ID 以跳过动漫片头/片尾</string>
