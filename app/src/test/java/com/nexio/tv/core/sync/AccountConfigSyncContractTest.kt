@@ -30,6 +30,7 @@ import com.nexio.tv.data.remote.supabase.SubtitleTranslationSyncSettings
 import com.nexio.tv.data.remote.supabase.TheIntroDbSyncSettings
 import com.nexio.tv.data.remote.supabase.TmdbSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
+import com.nexio.tv.data.remote.supabase.TvdbSyncSettings
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.ImdbSettings
 import com.nexio.tv.domain.model.SubtitleTranslationProvider
@@ -217,6 +218,46 @@ class AccountConfigSyncContractTest {
         )
 
         assertTrue(geminiPayload.integrations.gemini.enabled)
+    }
+
+    @Test
+    fun `tvdb public sync serializes enabled configured validation status and last failure without apiKey pin or token`() {
+        val payload = buildAccountConfigSyncPayload(
+            integrations = IntegrationSettings(
+                tvdb = TvdbSyncSettings(
+                    enabled = true,
+                    configured = true,
+                    validationStatus = "INVALID",
+                    lastFailure = "Invalid credentials"
+                )
+            ),
+            heroCatalogKeys = emptyList(),
+            homeCatalogOrderKeys = emptyList(),
+            disabledHomeCatalogKeys = emptyList(),
+            traktCatalogEnabledSet = emptyList(),
+            traktCatalogOrder = emptyList(),
+            traktSelectedPopularListKeys = emptyList(),
+            simklCatalogEnabledSet = emptyList(),
+            simklCatalogOrder = emptyList(),
+            mdbListHiddenPersonalListKeys = emptyList(),
+            mdbListSelectedTopListKeys = emptyList(),
+            mdbListCatalogOrder = emptyList(),
+            trackingProvider = TrackingProvider.TRAKT,
+            formatter = FormatterSyncSettings()
+        )
+
+        val json = Json.encodeToJsonElement(AccountConfigSyncPayload.serializer(), payload) as JsonObject
+        val tvdb = json["integrations"]!!.jsonObject["tvdb"]!!.jsonObject
+
+        assertEquals("true", tvdb["enabled"].toString())
+        assertEquals("true", tvdb["configured"].toString())
+        assertEquals("\"INVALID\"", tvdb["validationStatus"].toString())
+        assertEquals("\"Invalid credentials\"", tvdb["lastFailure"].toString())
+        assertFalse(tvdb.containsKey("apiKey"))
+        assertFalse(tvdb.containsKey("pin"))
+        assertFalse(tvdb.containsKey("token"))
+        assertEquals("tvdb_api_key", TVDB_ACCOUNT_SECRET_TYPE)
+        assertEquals("integration:tvdb", TVDB_ACCOUNT_SECRET_REF)
     }
 
     @Test
