@@ -12,7 +12,6 @@ import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.just
 import io.mockk.mockk
-import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -248,10 +247,9 @@ class TvdbUpdateProcessorTest {
 
         assertTrue(result.success)
         // Should record an UNKNOWN_UPDATE_EVENT diagnostic for the malformed event
-        val diagnosticSlot = slot<TvdbReliabilityDiagnostic>()
-        coVerify(atLeast = 1) { diagnosticsRecorder.record(capture(diagnosticSlot)) }
-        val unknownDiagnostics = diagnosticSlot.captured
-        // At least one diagnostic should be for UNKNOWN_UPDATE_EVENT
+        coVerify(atLeast = 1) {
+            diagnosticsRecorder.record(match { it.reason == TvdbReliabilityReason.UNKNOWN_UPDATE_EVENT })
+        }
         // The processor should still process the valid event
         coVerify { invalidator.invalidateChanged(validEvent) }
         coVerify { stateStore.storeSuccessfulCursor(1700000600L) }
