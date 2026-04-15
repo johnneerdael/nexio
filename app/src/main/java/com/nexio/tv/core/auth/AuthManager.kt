@@ -58,19 +58,16 @@ class AuthManager @Inject constructor(
                     is SessionStatus.Authenticated -> {
                         val user = auth.currentUserOrNull()
                         if (user != null) {
-                            _sessionUserId.value = user.id
-                            if (cachedEffectiveUserSourceUserId != user.id) {
-                                cachedEffectiveUserId = null
-                                cachedEffectiveUserSourceUserId = null
-                            }
-                            if (user.email.isNullOrBlank()) {
-                                _authState.value = AuthState.SignedOut
-                            } else {
-                                _authState.value = AuthState.FullAccount(userId = user.id, email = user.email!!)
-                            }
+                            publishAuthenticatedUser(user.id, user.email)
                         }
                     }
                     is SessionStatus.NotAuthenticated -> {
+                        auth.awaitInitialization()
+                        val restoredUser = auth.currentUserOrNull()
+                        if (restoredUser != null) {
+                            publishAuthenticatedUser(restoredUser.id, restoredUser.email)
+                            return@collect
+                        }
                         val session = auth.currentSessionOrNull()
                         val hasRefreshToken = session?.refreshToken?.isNotBlank() == true
                         if (hasRefreshToken) {
@@ -129,6 +126,19 @@ class AuthManager @Inject constructor(
             is AuthState.FullAccount -> state.userId
             else -> null
         }
+
+    private fun publishAuthenticatedUser(userId: String, email: String?) {
+        _sessionUserId.value = userId
+        if (cachedEffectiveUserSourceUserId != userId) {
+            cachedEffectiveUserId = null
+            cachedEffectiveUserSourceUserId = null
+        }
+        _authState.value = if (email.isNullOrBlank()) {
+            AuthState.SignedOut
+        } else {
+            AuthState.FullAccount(userId = userId, email = email)
+        }
+    }
 
     /**
      * Returns the effective user ID for data operations.
@@ -210,6 +220,7 @@ class AuthManager @Inject constructor(
      * keeping app-level auth state exposed as SignedOut until a full account exists.
      */
     suspend fun ensureQrSessionAuthenticated(): Result<Unit> {
+        auth.awaitInitialization()
         val user = auth.currentUserOrNull()
         val hasToken = auth.currentAccessTokenOrNull() != null
 
