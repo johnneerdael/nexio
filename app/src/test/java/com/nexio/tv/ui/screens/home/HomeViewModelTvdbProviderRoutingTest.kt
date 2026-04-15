@@ -11,6 +11,8 @@ import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.MetaRepository
@@ -24,6 +26,77 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class HomeViewModelTvdbProviderRoutingTest {
+
+    @Test
+    fun `hero enrichment tvdb success does not call tmdb`() = runTest {
+        val viewModel = mockk<HomeViewModel>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        every { viewModel.tvMetadataRouter } returns tvMetadataRouter
+        every { viewModel.tmdbService } returns tmdbService
+        every { viewModel.tmdbMetadataService } returns tmdbMetadataService
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = tvdbEnrichment()
+        )
+
+        val result = viewModel.enrichHeroItemsPipeline(
+            items = listOf(seriesPreview()),
+            settings = TmdbSettings(enabled = true, apiKey = "tmdb-key")
+        )
+
+        assertEquals("TVDB title", result.single().name)
+        assertEquals("TVDB description", result.single().description)
+        assertEquals("tvdb-backdrop", result.single().background)
+        assertEquals("tvdb-logo", result.single().logo)
+        assertEquals(listOf("Drama"), result.single().genres)
+        assertEquals("2011", result.single().releaseInfo)
+        assertEquals(8.9f, result.single().imdbRating)
+        coVerify(exactly = 1) {
+            tvMetadataRouter.fetchEnrichment(
+                TvMetadataRequest(
+                    contentId = "tt0944947",
+                    fallbackContentId = null,
+                    contentType = ContentType.SERIES
+                )
+            )
+        }
+        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
+        coVerify(exactly = 0) { tmdbMetadataService.fetchEnrichment(any(), any(), any()) }
+    }
+
+    @Test
+    fun `focused enrichment tvdb success does not call tmdb`() = runTest {
+        val viewModel = mockk<HomeViewModel>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        every { viewModel.tvMetadataRouter } returns tvMetadataRouter
+        every { viewModel.tmdbService } returns tmdbService
+        every { viewModel.tmdbMetadataService } returns tmdbMetadataService
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = tvdbEnrichment()
+        )
+
+        val enrichment = viewModel.fetchProviderEnrichmentForPreview(seriesPreview())
+
+        assertEquals("TVDB title", enrichment?.localizedTitle)
+        coVerify(exactly = 1) {
+            tvMetadataRouter.fetchEnrichment(
+                TvMetadataRequest(
+                    contentId = "tt0944947",
+                    fallbackContentId = null,
+                    contentType = ContentType.SERIES
+                )
+            )
+        }
+        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
+        coVerify(exactly = 0) { tmdbMetadataService.fetchEnrichment(any(), any(), any()) }
+    }
 
     @Test
     fun `continue watching tvdb success does not call tmdb`() = runTest {
@@ -140,5 +213,35 @@ class HomeViewModelTvdbProviderRoutingTest {
         coVerify(exactly = 1) { tvMetadataRouter.fetchEpisodeEnrichment(any()) }
         coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
         coVerify(exactly = 0) { tmdbMetadataService.fetchEpisodeEnrichment(any(), any()) }
+    }
+
+    private fun seriesPreview(): MetaPreview {
+        return MetaPreview(
+            id = "tt0944947",
+            type = ContentType.SERIES,
+            name = "Game of Thrones",
+            poster = "fallback-poster",
+            posterShape = PosterShape.POSTER,
+            background = "fallback-backdrop",
+            logo = "fallback-logo",
+            description = "Fallback description",
+            releaseInfo = "2010",
+            imdbRating = 7.0f,
+            genres = listOf("Fantasy")
+        )
+    }
+
+    private fun tvdbEnrichment(): TvMetadataEnrichment {
+        return TvMetadataEnrichment(
+            seriesTvdbId = 121361,
+            localizedTitle = "TVDB title",
+            description = "TVDB description",
+            genres = listOf("Drama"),
+            backdrop = "tvdb-backdrop",
+            logo = "tvdb-logo",
+            releaseInfo = "2011",
+            rating = 8.9,
+            language = "en"
+        )
     }
 }
