@@ -69,12 +69,12 @@ class LibraryRepositoryImpl @Inject constructor(
             simklLibraryService.observeAllItems(),
             debridLibraryService.observeItems().onStart { emit(emptyList()) }
         ) { mode, traktItems, simklItems, debridItems ->
-            when (mode) {
-                LibrarySourceMode.TRAKT -> traktItems + debridItems
-                LibrarySourceMode.SIMKL -> simklItems + debridItems
-                LibrarySourceMode.DEBRID -> debridItems
-                LibrarySourceMode.LOCAL -> emptyList()
-            }
+            mergeLibraryItemsForMode(
+                mode = mode,
+                traktItems = traktItems,
+                simklItems = simklItems,
+                debridItems = debridItems
+            )
         }.distinctUntilChanged()
 
     override val listTabs: Flow<List<LibraryListTab>> =
@@ -84,12 +84,12 @@ class LibraryRepositoryImpl @Inject constructor(
             simklLibraryService.observeListTabs(),
             debridLibraryService.observeListTabs().onStart { emit(emptyList()) }
         ) { mode, traktTabs, simklTabs, debridTabs ->
-            when (mode) {
-                LibrarySourceMode.TRAKT -> traktTabs + debridTabs
-                LibrarySourceMode.SIMKL -> simklTabs + debridTabs
-                LibrarySourceMode.DEBRID -> debridTabs
-                LibrarySourceMode.LOCAL -> emptyList()
-            }
+            mergeLibraryTabsForMode(
+                mode = mode,
+                traktTabs = traktTabs,
+                simklTabs = simklTabs,
+                debridTabs = debridTabs
+            )
         }.distinctUntilChanged()
 
     override fun isInLibrary(itemId: String, itemType: String): Flow<Boolean> {
@@ -234,5 +234,33 @@ class LibraryRepositoryImpl @Inject constructor(
         if (!trackingProviderStateService.currentState().traktAuthenticated) {
             throw IllegalStateException("Trakt authentication required")
         }
+    }
+}
+
+internal fun mergeLibraryItemsForMode(
+    mode: LibrarySourceMode,
+    traktItems: List<LibraryEntry>,
+    simklItems: List<LibraryEntry>,
+    debridItems: List<LibraryEntry>
+): List<LibraryEntry> {
+    return when (mode) {
+        LibrarySourceMode.TRAKT -> traktItems + debridItems
+        LibrarySourceMode.SIMKL -> simklItems + debridItems
+        LibrarySourceMode.DEBRID,
+        LibrarySourceMode.LOCAL -> debridItems
+    }
+}
+
+internal fun mergeLibraryTabsForMode(
+    mode: LibrarySourceMode,
+    traktTabs: List<LibraryListTab>,
+    simklTabs: List<LibraryListTab>,
+    debridTabs: List<LibraryListTab>
+): List<LibraryListTab> {
+    return when (mode) {
+        LibrarySourceMode.TRAKT -> traktTabs + debridTabs
+        LibrarySourceMode.SIMKL -> simklTabs + debridTabs
+        LibrarySourceMode.DEBRID,
+        LibrarySourceMode.LOCAL -> debridTabs
     }
 }

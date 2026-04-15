@@ -100,6 +100,7 @@ class LibraryViewModel @Inject constructor(
     init {
         observeLayoutPreferences()
         observeLibraryData()
+        observeDebridBootstrap()
         observeTraktBootstrap()
     }
 
@@ -475,6 +476,16 @@ class LibraryViewModel @Inject constructor(
         val items: List<LibraryEntry>,
         val listTabs: List<LibraryListTab>
     )
+
+    private fun observeDebridBootstrap() {
+        viewModelScope.launch {
+            runCatching {
+                libraryRepository.refreshDebridNow()
+            }.onFailure { error ->
+                setError(error.message ?: providerSyncFailureMessage(LibrarySourceMode.DEBRID))
+            }
+        }
+    }
 
     private fun observeTraktBootstrap() {
         viewModelScope.launch {
