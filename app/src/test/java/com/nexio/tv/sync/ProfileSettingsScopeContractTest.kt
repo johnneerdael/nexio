@@ -564,4 +564,16 @@ class ProfileSettingsScopeContractTest {
         assertTrue(source.contains("if (!providerState.traktAuthenticated) return false"))
         assertTrue(source.contains("if (!providerState.simklAuthenticated) return false"))
     }
+
+    @Test
+    fun `trakt mutation envelopes carry origin profile`() {
+        val modelSource = File("app/src/main/java/com/nexio/tv/data/trakt/outbox/TraktMutationOutboxModels.kt").readText()
+        val storeSource = File("app/src/main/java/com/nexio/tv/data/trakt/outbox/TraktMutationOutboxStore.kt").readText()
+        val policySource = File("app/src/main/java/com/nexio/tv/data/trakt/outbox/TraktMutationOutboxPolicy.kt").readText()
+
+        assertTrue(modelSource.contains("val profileId: Int = 1"))
+        assertTrue(storeSource.contains("obj.intOrNull(\"profileId\") ?: 1"))
+        assertTrue(storeSource.contains("addProperty(\"profileId\", envelope.profileId)"))
+        assertTrue(policySource.contains("existing.profileId == incoming.profileId"))
+    }
 }

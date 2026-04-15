@@ -24,6 +24,7 @@ enum class TraktMutationLifecycleState {
 
 data class TraktMutationEnvelope(
     val id: String = UUID.randomUUID().toString(),
+    val profileId: Int = 1,
     val adapterKey: String,
     val mutationKind: String,
     val priority: TraktMutationPriorityBucket,

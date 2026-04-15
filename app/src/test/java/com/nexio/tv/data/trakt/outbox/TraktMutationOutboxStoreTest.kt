@@ -84,6 +84,55 @@ class TraktMutationOutboxStoreTest {
     }
 
     @Test
+    fun `write and read round trips mutation profile id`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        val store = TraktMutationOutboxStore(context = mockContext(prefs))
+        val snapshot = TraktMutationOutboxSnapshot(
+            items = listOf(sampleEnvelope(id = "queued-profile-2", profileId = 2)),
+            updatedAtMs = 1_000L
+        )
+
+        store.write(snapshot)
+
+        assertEquals(2, store.read().items.single().profileId)
+    }
+
+    @Test
+    fun `legacy persisted mutation defaults to profile one`() = runTest {
+        val prefs = InMemorySharedPreferences()
+        prefs.edit().putString(
+            "snapshot",
+            """
+            {
+              "schemaVersion": 1,
+              "snapshot": {
+                "items": [
+                  {
+                    "id": "legacy-queued",
+                    "adapterKey": "scrobble",
+                    "mutationKind": "scrobble.state",
+                    "priority": "SCROBBLE",
+                    "payload": {},
+                    "metadata": {},
+                    "state": "QUEUED",
+                    "createdAtMs": 1,
+                    "updatedAtMs": 1,
+                    "nextAttemptAtMs": 1,
+                    "attemptCount": 0
+                  }
+                ],
+                "nextWritableAtMs": 0,
+                "updatedAtMs": 1
+              }
+            }
+            """.trimIndent()
+        ).commit()
+        val store = TraktMutationOutboxStore(context = mockContext(prefs))
+
+        assertEquals(1, store.read().items.single().profileId)
+    }
+
+    @Test
     fun `read restores persisted item as envelope instead of raw map`() = runTest {
         val prefs = InMemorySharedPreferences()
         prefs.edit().putString(
@@ -190,9 +239,13 @@ class TraktMutationOutboxStoreTest {
         }
     }
 
-    private fun sampleEnvelope(id: String): TraktMutationEnvelope {
+    private fun sampleEnvelope(
+        id: String,
+        profileId: Int = 1
+    ): TraktMutationEnvelope {
         return TraktMutationEnvelope(
             id = id,
+            profileId = profileId,
             adapterKey = "progress",
             mutationKind = "history_add",
             priority = TraktMutationPriorityBucket.WATCHED,
