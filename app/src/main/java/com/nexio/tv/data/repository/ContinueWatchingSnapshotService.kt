@@ -439,7 +439,12 @@ class ContinueWatchingSnapshotService @Inject constructor(
             nowMs = nowMs
         ).mainFeedItems
         val nextUpItems = nextUpMainCandidates.filter { entry ->
-            AirDateGate.isAired(firstAiredMs = entry.firstAiredMs, tmdbAirDate = entry.firstAired, nowMs = nowMs)
+            AirDateGate.isAired(
+                availabilityInstantMs = entry.tvdbAvailabilityInstantMs,
+                firstAiredMs = entry.firstAiredMs,
+                tmdbAirDate = entry.firstAired,
+                nowMs = nowMs
+            )
         }
         val normalizedTraktUpNextItems = traktUpNextEntries
             .asSequence()
@@ -454,7 +459,12 @@ class ContinueWatchingSnapshotService @Inject constructor(
             nowMs = nowMs
         ).syntheticRailItems
         val traktUpNextItems = syntheticRailCandidates.filter { entry ->
-            AirDateGate.isAired(firstAiredMs = entry.firstAiredMs, tmdbAirDate = entry.firstAired, nowMs = nowMs)
+            AirDateGate.isAired(
+                availabilityInstantMs = entry.tvdbAvailabilityInstantMs,
+                firstAiredMs = entry.firstAiredMs,
+                tmdbAirDate = entry.firstAired,
+                nowMs = nowMs
+            )
         }
 
         // Resume items carry no air-date data; running them through AirDateGate keeps all
@@ -467,10 +477,20 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
         val scheduledReemit = buildList {
             addAll(nextUpMainCandidates.filter { entry ->
-                !AirDateGate.isAired(firstAiredMs = entry.firstAiredMs, tmdbAirDate = entry.firstAired, nowMs = nowMs)
+                !AirDateGate.isAired(
+                    availabilityInstantMs = entry.tvdbAvailabilityInstantMs,
+                    firstAiredMs = entry.firstAiredMs,
+                    tmdbAirDate = entry.firstAired,
+                    nowMs = nowMs
+                )
             })
             addAll(syntheticRailCandidates.filter { entry ->
-                !AirDateGate.isAired(firstAiredMs = entry.firstAiredMs, tmdbAirDate = entry.firstAired, nowMs = nowMs)
+                !AirDateGate.isAired(
+                    availabilityInstantMs = entry.tvdbAvailabilityInstantMs,
+                    firstAiredMs = entry.firstAiredMs,
+                    tmdbAirDate = entry.firstAired,
+                    nowMs = nowMs
+                )
             })
         }
 
@@ -594,6 +614,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val soonestMs = AirDateGate.soonestPendingMs(
             entries = scheduledReemit,
             firstAiredMsSelector = { it.firstAiredMs },
+            availabilityInstantMsSelector = { it.tvdbAvailabilityInstantMs },
             tmdbAirDateSelector = { it.firstAired },
             nowMs = nowMs
         )
@@ -753,7 +774,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
         return ContinueWatchingNextUpRef(
             contentId = entry.contentId,
             activityAtMs = entry.activityAtMs,
-            firstAiredMs = entry.firstAiredMs
+            firstAiredMs = entry.firstAiredMs,
+            availabilityInstantMs = entry.tvdbAvailabilityInstantMs
         )
     }
 }

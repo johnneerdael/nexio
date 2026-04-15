@@ -9,7 +9,8 @@ internal data class ContinueWatchingResumeRef(
 internal data class ContinueWatchingNextUpRef(
     val contentId: String,
     val activityAtMs: Long,
-    val firstAiredMs: Long
+    val firstAiredMs: Long,
+    val availabilityInstantMs: Long? = null
 )
 
 internal data class ContinueWatchingNextUpSelection<T>(
@@ -40,7 +41,12 @@ internal fun <T> splitNextUpCandidatesForContinueWatching(
     val mainFeedItems = nextUpItems.filter { candidate ->
         val ref = nextUpRef(candidate)
         ref.contentId.trim() !in pausedShowIds &&
-            AirDateGate.isAired(firstAiredMs = ref.firstAiredMs, tmdbAirDate = null, nowMs = nowMs)
+            AirDateGate.isAired(
+                availabilityInstantMs = ref.availabilityInstantMs,
+                firstAiredMs = ref.firstAiredMs,
+                tmdbAirDate = null,
+                nowMs = nowMs
+            )
     }
 
     return ContinueWatchingNextUpSelection(

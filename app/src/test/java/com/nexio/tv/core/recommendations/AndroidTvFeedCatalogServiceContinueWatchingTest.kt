@@ -2,7 +2,6 @@ package com.nexio.tv.core.recommendations
 
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.TrackingNextUpEntry
-import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.WatchProgress
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -39,7 +38,7 @@ class AndroidTvFeedCatalogServiceContinueWatchingTest {
             availabilityInstantMs = 20_000L
         )
 
-        val items = buildContinueWatchingItemsForAndroidTvFeedReflective(
+        val items = buildContinueWatchingItemsForAndroidTvFeed(
             ContinueWatchingSnapshot(
                 resumeItems = listOf(visibleResume),
                 nextUpItems = listOf(visibleNextUp),
@@ -72,16 +71,5 @@ class AndroidTvFeedCatalogServiceContinueWatchingTest {
             activityAtMs = activityAtMs,
             tvdbAvailabilityInstantMs = availabilityInstantMs
         )
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    private fun buildContinueWatchingItemsForAndroidTvFeedReflective(
-        snapshot: ContinueWatchingSnapshot
-    ): List<MetaPreview> {
-        val method = Class
-            .forName("com.nexio.tv.core.recommendations.AndroidTvFeedCatalogServiceKt")
-            .declaredMethods
-            .single { method -> method.name == "buildContinueWatchingItemsForAndroidTvFeed" }
-        return method.invoke(null, snapshot) as List<MetaPreview>
     }
 }
