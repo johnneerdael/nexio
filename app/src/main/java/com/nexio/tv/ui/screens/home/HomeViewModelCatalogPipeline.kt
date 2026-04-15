@@ -141,6 +141,128 @@ internal fun HomeViewModel.restorePersistedSyntheticCatalogRowsPipeline() {
     }
 }
 
+internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
+    Log.d(HomeViewModel.TAG, "Resetting profile-scoped home state reason=$reason")
+    cancelInFlightCatalogLoads()
+    catalogUpdateJob?.cancel()
+    continueWatchingEnrichmentJob?.cancel()
+    catalogsMap.clear()
+    catalogOrder.clear()
+    truncatedRowCache.clear()
+    persistedTraktSyntheticGroups = emptyList()
+    persistedSimklSyntheticGroups = emptyList()
+    persistedMDBListSyntheticGroups = emptyList()
+    traktDiscoverySnapshot = com.nexio.tv.data.repository.TraktDiscoverySnapshot()
+    persistedTraktDiscoverySnapshot = com.nexio.tv.data.repository.TraktDiscoverySnapshot()
+    simklDiscoverySnapshot = com.nexio.tv.data.repository.SimklDiscoverySnapshot()
+    persistedSimklDiscoverySnapshot = com.nexio.tv.data.repository.SimklDiscoverySnapshot()
+    mdbListDiscoverySnapshot = com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
+    persistedMDBListDiscoverySnapshot = com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
+    inMemoryHomeSnapshot = null
+    pendingRestoredCatalogSnapshot = null
+    pendingHomeSnapshotPersist = null
+    homeSnapshotPersistJob?.cancel()
+    restoredCatalogSnapshotActive = false
+    hasPersistedCatalogSnapshot = false
+    hasRenderedFirstCatalog = false
+    catalogsLoadInProgress = false
+    startupRefreshPending = true
+    lastCatalogComputationSignature = null
+    lastCatalogOrderDiagnosticsSignature = null
+    _fullCatalogRows.value = emptyList()
+    _uiState.update { state ->
+        state.copy(
+            catalogRows = emptyList(),
+            heroItems = emptyList(),
+            heroCatalogKeys = emptyList(),
+            continueWatchingItems = emptyList(),
+            traktUpNextItems = emptyList(),
+            traktRecommendationRefs = emptyMap(),
+            gridItems = emptyList(),
+            isLoading = true,
+            error = null
+        )
+    }
+}
+
+internal fun HomeViewModel.clearTraktHomeState(reason: String) {
+    Log.d(HomeViewModel.TAG, "Clearing Trakt home state reason=$reason")
+    traktDiscoverySnapshot = com.nexio.tv.data.repository.TraktDiscoverySnapshot()
+    persistedTraktDiscoverySnapshot = com.nexio.tv.data.repository.TraktDiscoverySnapshot()
+    persistedTraktSyntheticGroups = emptyList()
+    lastCatalogComputationSignature = null
+    _uiState.update { state ->
+        state.copy(
+            traktUpNextItems = emptyList(),
+            traktRecommendationRefs = emptyMap()
+        )
+    }
+}
+
+internal suspend fun HomeViewModel.loadActiveProfileDiskBackedHomeState(reason: String) {
+    val diskState = withContext(Dispatchers.IO) {
+        val providerState = trackingProviderStateService.currentState()
+        val syntheticSnapshot = syntheticHomeCatalogStore.read()
+        val traktSnapshot = traktDiscoverySnapshotStore.read()
+        val simklSnapshot = simklDiscoverySnapshotStore.read()
+        val mdbSnapshot = mdbListDiscoverySnapshotStore.read()
+        val posterProviderToken = homeCatalogSnapshotStore.currentPosterProviderToken()
+        val homeSnapshot = homeCatalogSnapshotStore.read(posterProviderToken)
+        DiskBackedHomeState(
+            traktAuthenticated = providerState.traktAuthenticated,
+            simklAuthenticated = providerState.simklAuthenticated,
+            syntheticSnapshot = syntheticSnapshot,
+            traktSnapshot = traktSnapshot,
+            simklSnapshot = simklSnapshot,
+            mdbSnapshot = mdbSnapshot,
+            homeSnapshot = homeSnapshot
+        )
+    }
+
+    withContext(Dispatchers.Main.immediate) {
+        activeProfileTraktAuthenticated = diskState.traktAuthenticated
+        activeProfileSimklAuthenticated = diskState.simklAuthenticated
+        diskState.syntheticSnapshot?.let { snapshot ->
+            persistedTraktSyntheticGroups = if (diskState.traktAuthenticated) snapshot.traktGroups else emptyList()
+            persistedSimklSyntheticGroups = snapshot.simklGroups
+            persistedMDBListSyntheticGroups = snapshot.mdbListGroups
+        }
+        diskState.traktSnapshot?.takeIf { diskState.traktAuthenticated }?.let { snapshot ->
+            val hydrated = applyTomatoesOverridesToTraktSnapshot(snapshot, syntheticTomatoesOverridesByItemId)
+            persistedTraktDiscoverySnapshot = hydrated
+            traktDiscoverySnapshot = hydrated
+        }
+        diskState.simklSnapshot?.let { snapshot ->
+            persistedSimklDiscoverySnapshot = snapshot
+            simklDiscoverySnapshot = snapshot
+        }
+        diskState.mdbSnapshot?.let { snapshot ->
+            val hydrated = applyTomatoesOverridesToMDBListSnapshot(snapshot, syntheticTomatoesOverridesByItemId)
+            persistedMDBListDiscoverySnapshot = hydrated
+            mdbListDiscoverySnapshot = hydrated
+        }
+        if (diskState.homeSnapshot != null) {
+            applyPersistedHomeSnapshotIfEligiblePipeline(
+                snapshot = diskState.homeSnapshot,
+                requireSourceCachesReady = false
+            )
+        } else {
+            scheduleUpdateCatalogRows()
+        }
+        Log.d(HomeViewModel.TAG, "Loaded active profile disk-backed home state reason=$reason")
+    }
+}
+
+private data class DiskBackedHomeState(
+    val traktAuthenticated: Boolean,
+    val simklAuthenticated: Boolean,
+    val syntheticSnapshot: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot?,
+    val traktSnapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot?,
+    val simklSnapshot: com.nexio.tv.data.repository.SimklDiscoverySnapshot?,
+    val mdbSnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot?,
+    val homeSnapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot?
+)
+
 internal fun HomeViewModel.restorePersistedDiscoverySnapshotsPipeline() {
     viewModelScope.launch(Dispatchers.IO) {
         val traktSnapshot = traktDiscoverySnapshotStore.read()
@@ -209,6 +331,10 @@ internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
     viewModelScope.launch {
         val autoRefreshOnStart = !shouldDeferStartupNetworkWork()
         traktDiscoveryService.observeSnapshot(autoRefreshOnStart = autoRefreshOnStart).collectLatest { snapshot ->
+            if (!activeProfileTraktAuthenticated) {
+                clearTraktHomeState("observe_trakt_discovery_unauthenticated")
+                return@collectLatest
+            }
             val hydratedSnapshot = applyTomatoesOverridesToTraktSnapshot(
                 snapshot,
                 syntheticTomatoesOverridesByItemId
@@ -232,7 +358,7 @@ internal fun HomeViewModel.observeTraktCatalogPreferencesPipeline() {
             if (prefs == traktCatalogPreferences) return@collectLatest
             traktCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_trakt_prefs")
-            if (shouldRefreshTraktDiscoveryForState(prefs, traktDiscoverySnapshot)) {
+            if (activeProfileTraktAuthenticated && shouldRefreshTraktDiscoveryForState(prefs, traktDiscoverySnapshot)) {
                 if (shouldDeferStartupNetworkWork()) {
                     startupRefreshPending = true
                     logStartupPerf("catalog_refresh_deferred", "reason=trakt_pref_change")
@@ -459,7 +585,8 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
     )
 
     val refreshedCatalogCount = AtomicInteger(0)
-    val refreshTraktDiscovery = shouldAttemptSerializedTraktDiscoveryRefresh(traktCatalogPreferences)
+    val refreshTraktDiscovery = activeProfileTraktAuthenticated &&
+        shouldAttemptSerializedTraktDiscoveryRefresh(traktCatalogPreferences)
     val refreshSimklDiscovery = shouldRefreshSimklDiscoveryForState(simklCatalogPreferences, beforeSimklSnapshot)
     val refreshMdbDiscovery = shouldRefreshMDBListDiscoveryForState(mdbListCatalogPreferences, beforeMdbSnapshot)
     supervisorScope {
@@ -477,15 +604,21 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
                             Log.w(HomeViewModel.TAG, "Failed synthetic Trakt refresh in serialized startup pipeline", t)
                         }
                     }
-                    val afterTraktSnapshot = applyTomatoesOverridesToTraktSnapshot(
-                        traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first(),
-                        syntheticTomatoesOverridesByItemId
-                    )
+                    val afterTraktSnapshot = if (activeProfileTraktAuthenticated) {
+                        applyTomatoesOverridesToTraktSnapshot(
+                            traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first(),
+                            syntheticTomatoesOverridesByItemId
+                        )
+                    } else {
+                        com.nexio.tv.data.repository.TraktDiscoverySnapshot()
+                    }
                     val traktBeforeKeys = traktSnapshotItemKeys(beforeTraktSnapshot)
                     val traktAfterKeys = traktSnapshotItemKeys(afterTraktSnapshot)
                     withContext(Dispatchers.Main.immediate) {
-                        traktDiscoverySnapshot = afterTraktSnapshot
-                        persistedTraktDiscoverySnapshot = afterTraktSnapshot
+                        if (activeProfileTraktAuthenticated) {
+                            traktDiscoverySnapshot = afterTraktSnapshot
+                            persistedTraktDiscoverySnapshot = afterTraktSnapshot
+                        }
                     }
                     logStartupPerf(
                         "synthetic_refresh_provider_ready",
@@ -493,7 +626,9 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
                     )
                     Log.d(HomeViewModel.TAG, "Post-startup refresh step end source=trakt_discovery")
                     logStartupPerf("synthetic_refresh_step_start", "source=trakt")
-                    renewTraktSyntheticSnapshotPipeline(afterTraktSnapshot)
+                    if (activeProfileTraktAuthenticated) {
+                        renewTraktSyntheticSnapshotPipeline(afterTraktSnapshot)
+                    }
                     logStartupPerf("synthetic_refresh_step_end", "source=trakt rows=${persistedTraktSyntheticGroups.sumOf { it.rows.size }}")
                     withContext(Dispatchers.Main.immediate) {
                         scheduleUpdateCatalogRows()
@@ -652,7 +787,11 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
         refreshJobs.joinAll()
     }
 
-    val afterTraktSnapshot = traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
+    val afterTraktSnapshot = if (activeProfileTraktAuthenticated) {
+        traktDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
+    } else {
+        com.nexio.tv.data.repository.TraktDiscoverySnapshot()
+    }
     val afterSimklSnapshot = simklDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
     val afterMdbSnapshot = mdbListDiscoveryService.observeSnapshot(autoRefreshOnStart = false).first()
     val hydratedAfterTraktSnapshot = applyTomatoesOverridesToTraktSnapshot(
@@ -669,8 +808,10 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
     val simklAfterKeys = simklSnapshotItemKeys(afterSimklSnapshot)
     val mdbBeforeKeys = mdbSnapshotItemKeys(beforeMdbSnapshot)
     val mdbAfterKeys = mdbSnapshotItemKeys(hydratedAfterMdbSnapshot)
-    traktDiscoverySnapshot = hydratedAfterTraktSnapshot
-    persistedTraktDiscoverySnapshot = hydratedAfterTraktSnapshot
+    if (activeProfileTraktAuthenticated) {
+        traktDiscoverySnapshot = hydratedAfterTraktSnapshot
+        persistedTraktDiscoverySnapshot = hydratedAfterTraktSnapshot
+    }
     simklDiscoverySnapshot = afterSimklSnapshot
     persistedSimklDiscoverySnapshot = afterSimklSnapshot
     mdbListDiscoverySnapshot = hydratedAfterMdbSnapshot
@@ -794,6 +935,20 @@ internal suspend fun HomeViewModel.reloadPersistedSyntheticCatalogRowsPipeline()
 internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
     snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot
 ) {
+    if (!activeProfileTraktAuthenticated) {
+        clearTraktHomeState("renew_trakt_synthetic_unauthenticated")
+        syntheticCatalogStoreMutex.withLock {
+            withContext(Dispatchers.IO) {
+                val existingSnapshot = syntheticHomeCatalogStore.read()
+                    ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot(
+                        simklGroups = persistedSimklSyntheticGroups,
+                        mdbListGroups = persistedMDBListSyntheticGroups
+                    )
+                syntheticHomeCatalogStore.write(existingSnapshot.copy(traktGroups = emptyList()))
+            }
+        }
+        return
+    }
     val traktUpNextItems = _uiState.value.traktUpNextItems
         .take(20)
         .map(::nextUpToMetaPreview)
@@ -996,10 +1151,13 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     forceReload: Boolean = false
 ) {
     fun hasSyntheticHomeSourcesConfigured(): Boolean {
-        if (persistedTraktSyntheticGroups.isNotEmpty() || persistedSimklSyntheticGroups.isNotEmpty() || persistedMDBListSyntheticGroups.isNotEmpty()) {
+        if ((activeProfileTraktAuthenticated && persistedTraktSyntheticGroups.isNotEmpty()) ||
+            persistedSimklSyntheticGroups.isNotEmpty() ||
+            persistedMDBListSyntheticGroups.isNotEmpty()
+        ) {
             return true
         }
-        if (traktCatalogPreferences.enabledCatalogs.isNotEmpty()) {
+        if (activeProfileTraktAuthenticated && traktCatalogPreferences.enabledCatalogs.isNotEmpty()) {
             return true
         }
         if (simklCatalogPreferences.enabledCatalogs.isNotEmpty()) {
@@ -1320,8 +1478,12 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val currentGridItems = currentState.gridItems
     val continueWatchingItems = currentState.continueWatchingItems
     val heroSectionEnabled = currentState.heroSectionEnabled
-    val traktSnapshot = traktDiscoverySnapshot
-    val traktPrefs = traktCatalogPreferences
+    val traktSnapshot = if (activeProfileTraktAuthenticated) {
+        traktDiscoverySnapshot
+    } else {
+        com.nexio.tv.data.repository.TraktDiscoverySnapshot()
+    }
+    val traktPrefs = traktCatalogPreferences.onlyWhenAuthenticated(activeProfileTraktAuthenticated)
     val simklSnapshot = simklDiscoverySnapshot
     val simklPrefs = simklCatalogPreferences
     val mdbListSnapshot = mdbListDiscoverySnapshot
@@ -1342,7 +1504,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     ) {
         traktSnapshot
     } else {
-        persistedTraktDiscoverySnapshot
+        if (activeProfileTraktAuthenticated) persistedTraktDiscoverySnapshot else com.nexio.tv.data.repository.TraktDiscoverySnapshot()
     }
     val effectiveSimklSnapshot = if (
         simklSnapshot.updatedAtMs > 0L ||
@@ -1377,7 +1539,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         availableAddonOrderKeys = catalogSnapshot.keys,
         traktPrefs = traktPrefs,
         traktSnapshot = effectiveTraktSnapshot,
-        hasTraktUpNextItems = currentState.traktUpNextItems.isNotEmpty(),
+        hasTraktUpNextItems = activeProfileTraktAuthenticated && currentState.traktUpNextItems.isNotEmpty(),
         simklPrefs = simklPrefs,
         simklSnapshot = effectiveSimklSnapshot,
         mdbPrefs = mdbListPrefs,
@@ -1402,7 +1564,7 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             continueWatchingItems = continueWatchingItems,
             traktSnapshot = effectiveTraktSnapshot,
             traktPrefs = traktPrefs,
-            persistedTraktSyntheticGroups = persistedTraktSyntheticGroups,
+            persistedTraktSyntheticGroups = if (activeProfileTraktAuthenticated) persistedTraktSyntheticGroups else emptyList(),
             simklSnapshot = effectiveSimklSnapshot,
             simklPrefs = simklPrefs,
             persistedSimklSyntheticGroups = persistedSimklSyntheticGroups,
@@ -1422,7 +1584,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     lastCatalogComputationSignature = computationSignature
 
     val updateResult = withContext(Dispatchers.Default) {
-        val syntheticTraktGroups = persistedTraktSyntheticGroups.toSyntheticCatalogOrderGroups()
+        val syntheticTraktGroups = (if (activeProfileTraktAuthenticated) persistedTraktSyntheticGroups else emptyList())
+            .toSyntheticCatalogOrderGroups()
             .filterNot { isSyntheticHomeCatalogDisabled(it.orderKey, disabledHomeCatalogKeys) }
         val syntheticSimklGroups = persistedSimklSyntheticGroups.toSyntheticCatalogOrderGroups()
             .filterNot { isSyntheticHomeCatalogDisabled(it.orderKey, disabledHomeCatalogKeys) }
@@ -1832,11 +1995,17 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
     requireSourceCachesReady: Boolean
 ): Boolean {
     val simklExpectedOrderKeys = buildExpectedConfiguredSimklOrderKeys(simklCatalogPreferences)
+    val effectiveTraktPrefs = traktCatalogPreferences.onlyWhenAuthenticated(activeProfileTraktAuthenticated)
+    val effectiveTraktSnapshot = if (activeProfileTraktAuthenticated) {
+        traktDiscoverySnapshot
+    } else {
+        com.nexio.tv.data.repository.TraktDiscoverySnapshot()
+    }
     val addonExpectedOrderKeys = buildExpectedConfiguredAddonOrderKeys(
         addons = addonsCache,
         disabledHomeCatalogKeys = disabledHomeCatalogKeys
     )
-    val traktExpectedOrderKeys = buildExpectedConfiguredTraktOrderKeys(traktCatalogPreferences)
+    val traktExpectedOrderKeys = buildExpectedConfiguredTraktOrderKeys(effectiveTraktPrefs)
     val mdbExpectedOrderKeys = buildExpectedConfiguredMDBListOrderKeys(
         mdbListCatalogPreferences,
         mdbListDiscoverySnapshot
@@ -1847,9 +2016,9 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
         addons = addonsCache,
         disabledHomeCatalogKeys = disabledHomeCatalogKeys,
         availableAddonOrderKeys = catalogsMap.keys,
-        traktPrefs = traktCatalogPreferences,
-        traktSnapshot = traktDiscoverySnapshot,
-        hasTraktUpNextItems = _uiState.value.traktUpNextItems.isNotEmpty(),
+        traktPrefs = effectiveTraktPrefs,
+        traktSnapshot = effectiveTraktSnapshot,
+        hasTraktUpNextItems = activeProfileTraktAuthenticated && _uiState.value.traktUpNextItems.isNotEmpty(),
         simklPrefs = simklCatalogPreferences,
         simklSnapshot = simklDiscoverySnapshot,
         mdbPrefs = mdbListCatalogPreferences,
@@ -1859,8 +2028,8 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
         addonExpectedOrderKeys = addonExpectedOrderKeys,
         availableAddonOrderKeys = catalogsMap.keys,
         traktExpectedOrderKeys = traktExpectedOrderKeys,
-        traktPrefs = traktCatalogPreferences,
-        traktSnapshot = traktDiscoverySnapshot,
+        traktPrefs = effectiveTraktPrefs,
+        traktSnapshot = effectiveTraktSnapshot,
         simklExpectedOrderKeys = simklExpectedOrderKeys,
         simklPrefs = simklCatalogPreferences,
         simklSnapshot = simklDiscoverySnapshot,
