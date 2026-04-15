@@ -207,7 +207,8 @@ class TrailerServiceTvdbTest {
         streamRepository: StreamRepository = mockk(relaxed = true),
         trailerAvailabilityService: TrailerAvailabilityService = mockk<TrailerAvailabilityService>().also {
             coEvery { it.isSignedIn() } returns false
-        }
+        },
+        tvdbTrailerResolver: TvdbTrailerResolver? = null
     ): TrailerService {
         return TrailerService(
             trailerApi = trailerApi,
@@ -219,7 +220,8 @@ class TrailerServiceTvdbTest {
             addonRepository = addonRepository,
             streamRepository = streamRepository,
             trailerAvailabilityService = trailerAvailabilityService,
-            clock = Clock.fixed(Instant.parse("2026-04-01T00:00:00Z"), ZoneOffset.UTC)
+            clock = Clock.fixed(Instant.parse("2026-04-01T00:00:00Z"), ZoneOffset.UTC),
+            tvdbTrailerResolver = tvdbTrailerResolver
         )
     }
 
@@ -237,10 +239,18 @@ class TrailerServiceTvdbTest {
         )
         coEvery { inAppYouTubeExtractor.extractPlaybackSource(tvdbTrailerYouTubeUrl) } returns playbackSource
 
+        val tvdbTrailerResolver = mockk<TvdbTrailerResolver>()
+        coEvery { tvdbTrailerResolver.resolveTitleTrailer(any(), any(), any(), any()) } returns
+            TvdbTrailerLookupResult.ResolvedYouTube(
+                youtubeUrl = tvdbTrailerYouTubeUrl,
+                videoId = "FakeTrailer1"
+            )
+
         val service = createTrailerService(
             tmdbApi = tmdbApi,
             inAppYouTubeExtractor = inAppYouTubeExtractor,
-            trailerAvailabilityService = trailerAvailabilityService
+            trailerAvailabilityService = trailerAvailabilityService,
+            tvdbTrailerResolver = tvdbTrailerResolver
         )
 
         val result = service.resolveTrailer(
@@ -265,12 +275,20 @@ class TrailerServiceTvdbTest {
         val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
         coEvery { trailerAvailabilityService.isSignedIn() } returns false
 
-        val service = createTrailerService(
+        val tvdbResolvedResolver = mockk<TvdbTrailerResolver>()
+        coEvery { tvdbResolvedResolver.resolveTitleTrailer(any(), any(), any(), any()) } returns
+            TvdbTrailerLookupResult.Resolved(
+                TrailerResolutionResult.Playback(TrailerPlaybackSource(videoUrl = "https://cdn.example/tvdb.mp4"))
+            )
+
+        // When TVDB resolves successfully, TMDB TV videos must not be called
+        val serviceWithTvdb = createTrailerService(
             tmdbApi = tmdbApi,
-            trailerAvailabilityService = trailerAvailabilityService
+            trailerAvailabilityService = trailerAvailabilityService,
+            tvdbTrailerResolver = tvdbResolvedResolver
         )
 
-        val result = service.resolveTrailer(
+        serviceWithTvdb.resolveTrailer(
             title = "Fringe",
             year = "2008",
             tmdbId = "14565",
@@ -278,7 +296,30 @@ class TrailerServiceTvdbTest {
             contentId = "tt1119644"
         )
 
-        coVerify(atMost = 1) { tmdbApi.getTvVideos(any(), any(), any()) }
+        coVerify(exactly = 0) { tmdbApi.getTvVideos(any(), any(), any()) }
+
+        // When TVDB is missing, TMDB fallback is allowed
+        val tmdbApi2 = mockk<TmdbApi>(relaxed = true)
+        val tvdbMissingResolver = mockk<TvdbTrailerResolver>()
+        coEvery { tvdbMissingResolver.resolveTitleTrailer(any(), any(), any(), any()) } returns
+            TvdbTrailerLookupResult.Missing
+
+        val serviceWithoutTvdb = createTrailerService(
+            tmdbApi = tmdbApi2,
+            trailerAvailabilityService = trailerAvailabilityService,
+            tvdbTrailerResolver = tvdbMissingResolver
+        )
+
+        serviceWithoutTvdb.resolveTrailer(
+            title = "Fringe",
+            year = "2008",
+            tmdbId = "14565",
+            type = "series",
+            contentId = "tt1119644"
+        )
+
+        // TMDB fallback is permitted (may or may not be called depending on API key availability)
+        // The key assertion is that TVDB success above prevented TMDB calls
     }
 
     @Test
@@ -287,11 +328,17 @@ class TrailerServiceTvdbTest {
         val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
         coEvery { trailerAvailabilityService.isSignedIn() } returns false
 
+        val tvdbTrailerResolver = mockk<TvdbTrailerResolver>()
+        coEvery { tvdbTrailerResolver.resolveTitleTrailer(any(), any(), any(), any()) } returns
+            TvdbTrailerLookupResult.Unusable("unsupported_scheme")
+
         val service = createTrailerService(
             tmdbApi = tmdbApi,
-            trailerAvailabilityService = trailerAvailabilityService
+            trailerAvailabilityService = trailerAvailabilityService,
+            tvdbTrailerResolver = tvdbTrailerResolver
         )
 
+        // Should not throw -- unusable TVDB URL is diagnosed and fallback continues
         val result = service.resolveTrailer(
             title = "Test Show",
             year = "2025",
@@ -300,6 +347,8 @@ class TrailerServiceTvdbTest {
             contentId = "tt9999999"
         )
 
-        coVerify(atMost = 1) { tmdbApi.getTvVideos(any(), any(), any()) }
+        // Verify TVDB resolver was attempted (and returned Unusable)
+        coVerify(exactly = 1) { tvdbTrailerResolver.resolveTitleTrailer(any(), any(), any(), any()) }
+        // Result may be null (no TMDB key configured) but the important thing is no crash
     }
 }
