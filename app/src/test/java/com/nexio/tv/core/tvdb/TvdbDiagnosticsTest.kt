@@ -2,6 +2,8 @@ package com.nexio.tv.core.tvdb
 
 import com.nexio.tv.data.local.TvdbDiagnosticsSnapshot
 import com.nexio.tv.data.local.TvdbSettingsDataStore
+import com.nexio.tv.data.local.debugDetailLines
+import com.nexio.tv.data.local.settingsStatusLine
 import com.nexio.tv.domain.model.TvdbSettings
 import com.nexio.tv.domain.model.TvdbValidationStatus
 import io.mockk.coEvery

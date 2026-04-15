@@ -42,6 +42,40 @@ data class TvdbDiagnosticsSnapshot(
 )
 
 /**
+ * Returns a user-facing status line from the snapshot for TVDB settings.
+ *
+ * Priority order: invalid credentials > stale cache > update refresh failed >
+ * reference refresh failed. Returns null when no user-facing issue is present.
+ * Debug-only fields (provider choice, poster override, date-only gating,
+ * missing airsTime, skipped TMDB TV) are not surfaced here.
+ */
+fun TvdbDiagnosticsSnapshot.settingsStatusLine(): String? = when {
+    lastInvalidCredentialStatus != null -> "TVDB credentials need attention"
+    lastStaleCacheStatus != null -> "TVDB served cached data while refresh is unavailable"
+    lastUpdateRefreshStatus?.contains("failed") == true -> "TVDB cache refresh failed"
+    lastReferenceRefreshStatus?.contains("failed") == true -> "TVDB reference refresh failed"
+    else -> null
+}
+
+/**
+ * Returns a list of non-null debug detail lines from every snapshot field.
+ *
+ * Each line is a label-value pair for detailed Debug settings display.
+ * Does not expose secrets since the snapshot is already sanitized by the recorder.
+ */
+fun TvdbDiagnosticsSnapshot.debugDetailLines(): List<String> = buildList {
+    lastProviderDecision?.let { add("Provider: $it") }
+    lastFallbackReason?.let { add("Fallback: $it") }
+    lastUpdateRefreshStatus?.let { add("Update refresh: $it") }
+    lastReferenceRefreshStatus?.let { add("Reference refresh: $it") }
+    lastAirtimeReason?.let { add("Airtime: $it") }
+    lastPosterReason?.let { add("Poster: $it") }
+    lastTmdbSkipReason?.let { add("TMDB skip: $it") }
+    lastInvalidCredentialStatus?.let { add("Credentials: $it") }
+    lastStaleCacheStatus?.let { add("Stale cache: $it") }
+}
+
+/**
  * Concrete [TvdbDiagnosticsRecorder] backed by Preferences DataStore.
  *
  * Stores a bounded current snapshot of the most recent diagnostic event

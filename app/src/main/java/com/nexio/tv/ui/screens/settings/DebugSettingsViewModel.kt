@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
+import com.nexio.tv.data.local.TvdbDiagnosticsDataStore
+import com.nexio.tv.data.local.TvdbDiagnosticsSnapshot
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +21,7 @@ class DebugSettingsViewModel @Inject constructor(
     private val dataStore: DebugSettingsDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val authManager: AuthManager,
+    private val tvdbDiagnosticsDataStore: TvdbDiagnosticsDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DebugSettingsUiState())
@@ -46,6 +49,11 @@ class DebugSettingsViewModel @Inject constructor(
                             settings.experimentalDv5HardwareToneMapCpuFallbackEnabled
                     )
                 }
+            }
+        }
+        viewModelScope.launch {
+            tvdbDiagnosticsDataStore.snapshot.collectLatest { snapshot ->
+                _uiState.update { it.copy(tvdbDiagnostics = snapshot) }
             }
         }
     }
@@ -106,7 +114,8 @@ data class DebugSettingsUiState(
     val dv5HardwareToneMapToSdrEnabled: Boolean = false,
     val dv5HardwareToneMapCpuFallbackEnabled: Boolean = false,
     val signInLoading: Boolean = false,
-    val signInResult: String? = null
+    val signInResult: String? = null,
+    val tvdbDiagnostics: TvdbDiagnosticsSnapshot = TvdbDiagnosticsSnapshot()
 )
 
 sealed class DebugSettingsEvent {

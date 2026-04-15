@@ -30,6 +30,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Border
 import com.nexio.tv.R
+import com.nexio.tv.data.local.debugDetailLines
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -150,6 +151,44 @@ fun DebugSettingsContent(
                         )
                     }
                 )
+            }
+
+            // ── TVDB Diagnostics ──
+            item(key = "debug_tvdb_diagnostics_header") {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.debug_tvdb_diagnostics_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = NexioColors.TextTertiary,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
+
+            item(key = "debug_tvdb_diagnostics") {
+                val diagnosticLines = uiState.tvdbDiagnostics.debugDetailLines()
+                if (diagnosticLines.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.debug_tvdb_diagnostics_empty),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NexioColors.TextTertiary,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        diagnosticLines.forEach { line ->
+                            Text(
+                                text = line,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = NexioColors.TextSecondary
+                            )
+                        }
+                    }
+                }
             }
 
             // ── Manual Sign In ──
