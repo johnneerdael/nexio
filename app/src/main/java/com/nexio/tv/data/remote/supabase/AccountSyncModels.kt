@@ -64,6 +64,12 @@ data class AccountAddonSecretPayload(
 )
 
 @Serializable
+data class AccountTvdbCredentialSecretPayload(
+    val apiKey: String = "",
+    val pin: String? = null
+)
+
+@Serializable
 data class AccountConfigSyncPayload(
     @EncodeDefault
     val schemaVersion: Int = 7,
@@ -180,6 +186,8 @@ data class IntegrationSettings(
     val debrid: DebridSyncSettings = DebridSyncSettings(),
     val theIntroDb: TheIntroDbSyncSettings = TheIntroDbSyncSettings(),
     val tmdb: TmdbSyncSettings = TmdbSyncSettings(),
+    @EncodeDefault
+    val tvdb: TvdbSyncSettings = TvdbSyncSettings(),
     val omdb: OmdbSyncSettings = OmdbSyncSettings(),
     @EncodeDefault
     val imdb: ImdbSyncSettings = ImdbSyncSettings(),
@@ -256,6 +264,14 @@ data class TmdbSyncSettings(
     val useEpisodes: Boolean = true,
     val useMoreLikeThis: Boolean = true,
     val useCollections: Boolean = true
+)
+
+@Serializable
+data class TvdbSyncSettings(
+    val enabled: Boolean = false,
+    val configured: Boolean = false,
+    val validationStatus: String = "NOT_CONFIGURED",
+    val lastFailure: String = ""
 )
 
 @Serializable
