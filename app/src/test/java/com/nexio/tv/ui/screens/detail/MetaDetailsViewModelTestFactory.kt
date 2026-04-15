@@ -5,7 +5,10 @@ import androidx.lifecycle.SavedStateHandle
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.core.tvdb.TvMetadataDecision
+import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataRouter
+import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.PlayerSettings
@@ -43,7 +46,7 @@ fun buildMetaDetailsViewModel(
     metaRepository: MetaRepository = defaultMetaRepository(meta),
     tmdbService: TmdbService = defaultTmdbService(),
     tmdbMetadataService: TmdbMetadataService = mockk(relaxed = true),
-    tvMetadataRouter: TvMetadataRouter = mockk(relaxed = true),
+    tvMetadataRouter: TvMetadataRouter = defaultTvMetadataRouter(),
     tmdbSettings: TmdbSettings = TmdbSettings(),
     watchProgressRepository: WatchProgressRepository = defaultWatchProgressRepository(),
     libraryRepository: LibraryRepository = defaultLibraryRepository()
@@ -124,6 +127,26 @@ fun defaultTmdbService(): TmdbService {
     coEvery { service.ensureTmdbId(any(), any()) } returns null
     coEvery { service.tmdbToImdb(any(), any()) } returns null
     return service
+}
+
+fun defaultTvMetadataRouter(): TvMetadataRouter {
+    val router = mockk<TvMetadataRouter>()
+    coEvery { router.fetchEnrichment(any()) } returns TvMetadataDecision(
+        provider = TvProvider.TMDB,
+        reason = TvMetadataDecisionReason.TVDB_INACTIVE,
+        value = null
+    )
+    coEvery { router.fetchEpisodeEnrichment(any()) } returns TvMetadataDecision(
+        provider = TvProvider.TMDB,
+        reason = TvMetadataDecisionReason.TVDB_INACTIVE,
+        value = emptyMap()
+    )
+    coEvery { router.fetchSeasonEpisodes(any(), any(), any(), any()) } returns TvMetadataDecision(
+        provider = TvProvider.TMDB,
+        reason = TvMetadataDecisionReason.TVDB_INACTIVE,
+        value = emptyList()
+    )
+    return router
 }
 
 fun defaultWatchProgressRepository(): WatchProgressRepository {

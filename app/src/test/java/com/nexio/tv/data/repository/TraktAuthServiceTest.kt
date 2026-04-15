@@ -1,14 +1,15 @@
 package com.nexio.tv.data.repository
 
 import com.nexio.tv.data.local.TraktAuthDataStore
-import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.remote.api.TraktApi
+import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
+import com.nexio.tv.testutil.profileDataStoreFactoryForTest
+import com.nexio.tv.testutil.testProfileManager
 import io.mockk.coEvery
-import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -21,15 +22,17 @@ class TraktAuthServiceTest {
     @Test
     fun `refresh token 400 clears auth state`() = runTest {
         val traktApi = mockk<TraktApi>()
-        val traktAuthDataStore = mockk<TraktAuthDataStore>(relaxed = true)
-        every {
-            traktAuthDataStore.state
-        } returns flowOf(
-            TraktAuthState(
+        val traktAuthDataStore = TraktAuthDataStore(
+            factory = profileDataStoreFactoryForTest(),
+            profileManager = testProfileManager()
+        )
+        traktAuthDataStore.saveToken(
+            TraktTokenResponseDto(
                 accessToken = "access",
+                tokenType = "Bearer",
+                expiresIn = 1,
                 refreshToken = "refresh",
-                createdAt = 0L,
-                expiresIn = 1
+                createdAt = 0L
             )
         )
         coEvery {
@@ -51,6 +54,6 @@ class TraktAuthServiceTest {
         val refreshed = service.refreshTokenIfNeeded(force = true)
 
         assertFalse(refreshed)
-        coVerify(exactly = 1) { traktAuthDataStore.clearAuth() }
+        assertFalse(traktAuthDataStore.state.first().isAuthenticated)
     }
 }

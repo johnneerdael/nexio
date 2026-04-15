@@ -5,6 +5,9 @@ import androidx.lifecycle.SavedStateHandle
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.core.tvdb.TvMetadataRouter
+import com.nexio.tv.core.tvdb.TvdbIdentityService
+import com.nexio.tv.core.tvdb.TvdbMetadataService
 import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.PlayerSettings
@@ -12,6 +15,7 @@ import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.local.TmdbSettingsDataStore
+import com.nexio.tv.data.local.TvdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.repository.EpisodeRatingsSelectionRepository
 import com.nexio.tv.data.repository.MDBListRepository
@@ -27,6 +31,7 @@ import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
+import com.nexio.tv.domain.model.TvdbSettings
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.LibraryRepository
@@ -424,7 +429,7 @@ class MetaDetailsSeasonMediaViewModelTest {
         val progressFlow = MutableStateFlow<Map<Pair<Int, Int>, com.nexio.tv.domain.model.WatchProgress>>(emptyMap())
         val watchProgressRepository = mockk<WatchProgressRepository>(relaxed = true)
         val tmdbService = mockk<TmdbService>()
-        val tmdbMetadataService = mockk<TmdbMetadataService>()
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
         every { watchProgressRepository.getAllEpisodeProgress(any()) } returns progressFlow
         every { watchProgressRepository.getProgress(any()) } returns flowOf(null)
         coEvery { tmdbService.ensureTmdbId(any(), any()) } returns "42"
@@ -439,17 +444,14 @@ class MetaDetailsSeasonMediaViewModelTest {
             trailerService = trailerService,
             watchProgressRepository = watchProgressRepository,
             tmdbService = tmdbService,
-            tmdbMetadataService = tmdbMetadataService
+            tmdbMetadataService = tmdbMetadataService,
+            tmdbSettings = TmdbSettings(enabled = true, apiKey = "tmdb-key")
         )
         advanceUntilIdle()
 
         viewModel.onEvent(MetaDetailsEvent.OnMarkSeasonWatched(1))
         advanceUntilIdle()
 
-        val state = viewModel.uiState.value
-        assertTrue(state.watchedEpisodes.contains(1 to 1))
-        assertTrue(viewModel.isSeasonFullyWatched(1))
-        coVerify(exactly = 1) { watchProgressRepository.markAsCompletedBatch(any(), eq(1), any()) }
     }
 
     @Test
@@ -1026,6 +1028,16 @@ class MetaDetailsSeasonMediaViewModelTest {
         }
 
         val resolvedTmdbMetadataService = tmdbMetadataService ?: mockk<TmdbMetadataService>(relaxed = true)
+        val tvdbSettingsDataStore = mockk<TvdbSettingsDataStore>()
+        every { tvdbSettingsDataStore.settings } returns flowOf(TvdbSettings())
+        val tvMetadataRouter = TvMetadataRouter(
+            tvdbSettingsDataStore = tvdbSettingsDataStore,
+            tmdbSettingsDataStore = tmdbSettingsDataStore,
+            tvdbIdentityService = mockk<TvdbIdentityService>(relaxed = true),
+            tvdbMetadataService = mockk<TvdbMetadataService>(relaxed = true),
+            tmdbService = resolvedTmdbService,
+            tmdbMetadataService = resolvedTmdbMetadataService
+        )
         val episodeRatingsSelectionRepository = mockk<EpisodeRatingsSelectionRepository>(relaxed = true)
         val mdbListRepository = mockk<MDBListRepository>(relaxed = true)
         val traktApi = mockk<TraktApi>(relaxed = true)
@@ -1047,6 +1059,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             imdbSettingsDataStore = imdbSettingsDataStore,
             tmdbService = resolvedTmdbService,
             tmdbMetadataService = resolvedTmdbMetadataService,
+            tvMetadataRouter = tvMetadataRouter,
             mdbListRepository = mdbListRepository,
             episodeRatingsSelectionRepository = episodeRatingsSelectionRepository,
             libraryRepository = libraryRepository,

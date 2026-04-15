@@ -17,6 +17,7 @@ import com.nexio.tv.data.repository.TraktProgressService
 import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.TraktScrobbleService
 import com.nexio.tv.domain.model.MDBListSettings
+import com.nexio.tv.testutil.testProfileManager
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -86,6 +87,7 @@ class CatalogSelectionPersistenceTest {
             traktScrobbleService = traktScrobbleService,
             traktSettingsDataStore = traktSettingsDataStore,
             catalogPriorityHydrationNotifier = mockk(relaxed = true),
+            profileManager = testProfileManager(),
             context = context
         )
 

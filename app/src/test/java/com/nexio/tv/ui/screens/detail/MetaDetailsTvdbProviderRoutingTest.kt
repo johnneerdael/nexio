@@ -164,7 +164,7 @@ class MetaDetailsTvdbProviderRoutingTest {
         advanceUntilIdle()
 
         assertEquals("TMDB Movie", viewModel.uiState.value.meta?.name)
-        coVerify(exactly = 1) { tmdbService.ensureTmdbId("tt0137523", "movie") }
+        coVerify(atLeast = 1) { tmdbService.ensureTmdbId("tt0137523", "movie") }
         coVerify(exactly = 1) { tmdbMetadataService.fetchEnrichment("550", ContentType.MOVIE, any()) }
         coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
     }

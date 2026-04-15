@@ -1,7 +1,6 @@
 package com.nexio.tv.data.local
 
-import android.content.Context
-import androidx.test.core.app.ApplicationProvider
+import com.nexio.tv.testutil.playerSettingsDataStoreForTest
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import kotlinx.coroutines.flow.first
@@ -27,7 +26,7 @@ class PlayerSettingsDataStoreSpoolModeTest {
 
     @Test
     fun `setting spool mode persists`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         dataStore.setProgressivePlaybackDiskMode(ProgressivePlaybackDiskMode.SPOOL)
 
@@ -39,7 +38,7 @@ class PlayerSettingsDataStoreSpoolModeTest {
 
     @Test
     fun `setting disk spool storage location persists`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         dataStore.setDiskSpoolStorageLocation(DiskSpoolStorageLocation.EXTERNAL)
 
@@ -51,7 +50,7 @@ class PlayerSettingsDataStoreSpoolModeTest {
 
     @Test
     fun `setting disk spool size and startup buffer persists with bounds`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         dataStore.setDiskSpoolSizeMb(2_048)
         dataStore.setDiskSpoolStartupBufferMb(384)
@@ -63,7 +62,7 @@ class PlayerSettingsDataStoreSpoolModeTest {
 
     @Test
     fun `disk spool startup buffer is clamped to spool size`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         dataStore.setDiskSpoolSizeMb(512)
         dataStore.setDiskSpoolStartupBufferMb(2_048)
@@ -75,7 +74,7 @@ class PlayerSettingsDataStoreSpoolModeTest {
 
     @Test
     fun `changing disk spool storage location clears diagnostic result`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         dataStore.setDiskSpoolStorageLocation(DiskSpoolStorageLocation.BUILTIN)
         dataStore.setSpoolStorageProbeResult(probeResult())
@@ -86,7 +85,7 @@ class PlayerSettingsDataStoreSpoolModeTest {
 
     @Test
     fun `enabling disk spool turns vod cache off`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         dataStore.setVodCacheSizeMode(VodCacheSizeMode.ON)
         dataStore.setProgressivePlaybackDiskMode(ProgressivePlaybackDiskMode.SPOOL)
@@ -98,7 +97,7 @@ class PlayerSettingsDataStoreSpoolModeTest {
 
     @Test
     fun `enabling vod cache turns disk spool off`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         dataStore.setProgressivePlaybackDiskMode(ProgressivePlaybackDiskMode.SPOOL)
         dataStore.setVodCacheSizeMode(VodCacheSizeMode.ON)
@@ -110,7 +109,7 @@ class PlayerSettingsDataStoreSpoolModeTest {
 
     @Test
     fun `setting spool mode does not clear autoplay max bitrate`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         dataStore.setAutoplayMaxBitrate(42.0)
         dataStore.setProgressivePlaybackDiskMode(ProgressivePlaybackDiskMode.SPOOL)
@@ -120,7 +119,7 @@ class PlayerSettingsDataStoreSpoolModeTest {
 
     @Test
     fun `persisted spool storage probe result json round trips`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
         val result = probeResult()
 
         dataStore.setSpoolStorageProbeResult(result)
@@ -130,7 +129,7 @@ class PlayerSettingsDataStoreSpoolModeTest {
 
     @Test
     fun `persisted spool storage probe result json is exposed on player settings`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
         val result = probeResult()
 
         dataStore.setSpoolStorageProbeResult(result)
@@ -145,7 +144,7 @@ class PlayerSettingsDataStoreSpoolModeTest {
 
     @Test
     fun `setting spool storage probe result null clears persisted result`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         dataStore.setSpoolStorageProbeResult(probeResult())
         dataStore.setSpoolStorageProbeResult(null)
@@ -156,7 +155,7 @@ class PlayerSettingsDataStoreSpoolModeTest {
 
     @Test
     fun `malformed persisted spool storage probe result json is treated as null`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         dataStore.setSpoolStorageProbeResultJsonForTesting("{not json}")
 

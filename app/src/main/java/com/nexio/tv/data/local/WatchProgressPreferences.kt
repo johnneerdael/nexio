@@ -1,38 +1,36 @@
 package com.nexio.tv.data.local
 
-import android.content.Context
-import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import android.util.Log
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.domain.model.WatchProgress
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.watchProgressDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "watch_progress_preferences"
-)
-
 @Singleton
+@OptIn(ExperimentalCoroutinesApi::class)
 class WatchProgressPreferences @Inject constructor(
-    @ApplicationContext private val context: Context
+    private val factory: ProfileDataStoreFactory,
+    private val profileManager: ProfileManager
 ) {
     companion object {
         private const val TAG = "WatchProgressPrefs"
+        private const val FEATURE = "watch_progress_preferences"
     }
 
-    private val dataStore = context.watchProgressDataStore
-    private fun store() = dataStore
+    private fun store(profileId: Int = profileManager.activeProfileId.value) =
+        factory.get(profileId, FEATURE)
 
     private val gson = Gson()
     private val watchProgressKey = stringPreferencesKey("watch_progress_map")
@@ -49,34 +47,38 @@ class WatchProgressPreferences @Inject constructor(
      * For series, only returns the series-level entry (not individual episode entries)
      * to avoid duplicates in continue watching.
      */
-    val allProgress: Flow<List<WatchProgress>> = dataStore.data.map { preferences ->
-        val json = preferences[watchProgressKey] ?: "{}"
-        val allItems = parseProgressMap(json)
+    val allProgress: Flow<List<WatchProgress>> = profileManager.activeProfileId.flatMapLatest { profileId ->
+        store(profileId).data.map { preferences ->
+            val json = preferences[watchProgressKey] ?: "{}"
+            val allItems = parseProgressMap(json)
 
-        val contentLevelEntries = allItems.entries
-            .filter { (key, progress) -> key == progress.contentId }
-            .associate { it.value.contentId to it.value }
-            .toMutableMap()
+            val contentLevelEntries = allItems.entries
+                .filter { (key, progress) -> key == progress.contentId }
+                .associate { it.value.contentId to it.value }
+                .toMutableMap()
 
-        val latestEpisodeFallbacks = allItems.values
-            .groupBy { it.contentId }
-            .mapValues { (_, items) -> items.maxByOrNull { it.lastWatched } }
+            val latestEpisodeFallbacks = allItems.values
+                .groupBy { it.contentId }
+                .mapValues { (_, items) -> items.maxByOrNull { it.lastWatched } }
 
-        latestEpisodeFallbacks.forEach { (contentId, latest) ->
-            if (contentLevelEntries[contentId] == null && latest != null) {
-                contentLevelEntries[contentId] = latest
+            latestEpisodeFallbacks.forEach { (contentId, latest) ->
+                if (contentLevelEntries[contentId] == null && latest != null) {
+                    contentLevelEntries[contentId] = latest
+                }
             }
-        }
 
-        contentLevelEntries.values
-            .sortedByDescending { it.lastWatched }
+            contentLevelEntries.values
+                .sortedByDescending { it.lastWatched }
+        }
     }
 
-    val allRawProgress: Flow<List<WatchProgress>> = dataStore.data.map { preferences ->
-        val json = preferences[watchProgressKey] ?: "{}"
-        parseProgressMap(json)
-            .values
-            .sortedByDescending { it.lastWatched }
+    val allRawProgress: Flow<List<WatchProgress>> = profileManager.activeProfileId.flatMapLatest { profileId ->
+        store(profileId).data.map { preferences ->
+            val json = preferences[watchProgressKey] ?: "{}"
+            parseProgressMap(json)
+                .values
+                .sortedByDescending { it.lastWatched }
+        }
     }
 
     /**

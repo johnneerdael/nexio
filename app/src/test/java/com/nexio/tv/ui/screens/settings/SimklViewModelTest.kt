@@ -5,6 +5,7 @@ import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklAuthState
 import com.nexio.tv.data.local.SimklSettingsDataStore
 import com.nexio.tv.data.repository.SimklAuthService
+import com.nexio.tv.testutil.testProfileManager
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -56,7 +57,7 @@ class SimklViewModelTest {
         every { dataStore.state } returns authState
         every { settingsDataStore.catalogPreferences } returns MutableStateFlow(com.nexio.tv.data.local.SimklCatalogPreferences())
 
-        val viewModel = SimklViewModel(service, dataStore, settingsDataStore, mockk(relaxed = true))
+        val viewModel = SimklViewModel(service, dataStore, settingsDataStore, mockk(relaxed = true), testProfileManager())
         advanceUntilIdle()
 
         assertEquals(SimklConnectionMode.CONNECTED, viewModel.uiState.value.mode)
@@ -74,7 +75,7 @@ class SimklViewModelTest {
         every { dataStore.state } returns authState
         every { settingsDataStore.catalogPreferences } returns MutableStateFlow(com.nexio.tv.data.local.SimklCatalogPreferences())
 
-        val viewModel = SimklViewModel(service, dataStore, settingsDataStore, mockk(relaxed = true))
+        val viewModel = SimklViewModel(service, dataStore, settingsDataStore, mockk(relaxed = true), testProfileManager())
         viewModel.onConnectClick()
         advanceUntilIdle()
 
@@ -94,7 +95,7 @@ class SimklViewModelTest {
         every { settingsDataStore.catalogPreferences } returns MutableStateFlow(com.nexio.tv.data.local.SimklCatalogPreferences())
         coEvery { service.revokeAndLogout() } returns Unit
 
-        val viewModel = SimklViewModel(service, dataStore, settingsDataStore, mockk(relaxed = true))
+        val viewModel = SimklViewModel(service, dataStore, settingsDataStore, mockk(relaxed = true), testProfileManager())
         viewModel.onDisconnectClick()
         advanceUntilIdle()
 
@@ -112,7 +113,7 @@ class SimklViewModelTest {
         every { dataStore.state } returns authState
         every { settingsDataStore.catalogPreferences } returns MutableStateFlow(com.nexio.tv.data.local.SimklCatalogPreferences())
 
-        val viewModel = SimklViewModel(service, dataStore, settingsDataStore, notifier)
+        val viewModel = SimklViewModel(service, dataStore, settingsDataStore, notifier, testProfileManager())
 
         val events = mutableListOf<Long>()
         val job = launch { notifier.events.collect { events.add(it) } }
@@ -135,7 +136,7 @@ class SimklViewModelTest {
         every { dataStore.state } returns authState
         every { settingsDataStore.catalogPreferences } returns MutableStateFlow(com.nexio.tv.data.local.SimklCatalogPreferences())
 
-        val viewModel = SimklViewModel(service, dataStore, settingsDataStore, notifier)
+        val viewModel = SimklViewModel(service, dataStore, settingsDataStore, notifier, testProfileManager())
 
         val events = mutableListOf<Long>()
         val job = launch { notifier.events.collect { events.add(it) } }

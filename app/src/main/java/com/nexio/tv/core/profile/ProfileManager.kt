@@ -72,8 +72,12 @@ class ProfileManager(
     init {
         scope.launch {
             dataStore.activeProfileId.collect { id ->
+                val previousId = _activeProfileId.value
                 _activeProfileId.value = id
                 AppLocaleResolver.setActiveProfileId(context, id)
+                if (previousId != id) {
+                    _profileSwitched.emit(id)
+                }
             }
         }
     }

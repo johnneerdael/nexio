@@ -14,10 +14,10 @@ import io.github.jan.supabase.postgrest.Postgrest
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
@@ -372,16 +372,11 @@ class ProfileManagerTest {
         val profilesAfterCreate = manager.profiles.first { it.size == 2 }
         val aliceId = profilesAfterCreate.first { it.name == "Alice" }.id
 
-        val emissions = mutableListOf<Int>()
-        val collectJob = launch(backgroundScope.coroutineContext) {
-            manager.profileSwitched.toList(emissions)
-        }
+        val emitted = async { manager.profileSwitched.first() }
+        runCurrent()
 
         manager.setActiveProfile(aliceId)
-        // Yield to allow the emission to be collected
-        manager.activeProfileId.first { it == aliceId }
 
-        collectJob.cancel()
-        assertTrue("Expected at least one profileSwitched emission", emissions.contains(aliceId))
+        assertEquals(aliceId, emitted.await())
     }
 }

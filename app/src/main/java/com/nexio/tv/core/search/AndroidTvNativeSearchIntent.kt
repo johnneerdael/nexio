@@ -10,9 +10,7 @@ object AndroidTvNativeSearchIntent {
     const val PARAM_ADDON_BASE_URL = "addonBaseUrl"
 
     fun buildDetailUri(suggestion: AndroidTvSearchSuggestion): Uri {
-        val builder = Uri.Builder()
-            .scheme(SCHEME)
-            .authority(HOST_DETAIL)
+        val builder = Uri.parse("$SCHEME://$HOST_DETAIL").buildUpon()
             .appendQueryParameter(PARAM_ITEM_ID, suggestion.itemId)
             .appendQueryParameter(PARAM_CONTENT_TYPE, suggestion.contentType)
 

@@ -18,11 +18,14 @@ import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
+import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.repository.CatalogRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -126,6 +129,8 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
         tmdbService: TmdbService,
         tmdbMetadataService: TmdbMetadataService
     ): HomeCatalogRefreshCoordinator {
+        val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
+        every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings(enabled = true, apiKey = "tmdb-key"))
         return HomeCatalogRefreshCoordinator(
             catalogRepository = mockk<CatalogRepository>(relaxed = true),
             metaRepository = mockk<MetaRepository>(relaxed = true),
@@ -134,7 +139,7 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
             tmdbService = tmdbService,
             tmdbMetadataService = tmdbMetadataService,
             tvMetadataRouter = tvMetadataRouter,
-            tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>(relaxed = true),
+            tmdbSettingsDataStore = tmdbSettingsDataStore,
             posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true),
             appContext = mockk<Context>(relaxed = true)
         )

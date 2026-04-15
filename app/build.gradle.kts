@@ -170,6 +170,7 @@ android {
         unitTests.all {
             it.maxHeapSize = "2g"
             it.forkEvery = 50  // restart JVM every 50 tests to avoid state buildup
+            it.workingDir = rootProject.projectDir
         }
     }
 

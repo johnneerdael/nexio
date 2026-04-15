@@ -1,11 +1,10 @@
 package com.nexio.tv.data.local
 
-import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.test.core.app.ApplicationProvider
+import com.nexio.tv.testutil.playerSettingsDataStoreForTest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -20,7 +19,7 @@ class PlayerSettingsDataStoreTest {
 
     @Test
     fun `internal player engine defaults to exoplayer and persists libmpv selection`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         assertEquals(InternalPlayerEngine.EXOPLAYER, dataStore.playerSettings.first().internalPlayerEngine)
 
@@ -31,7 +30,7 @@ class PlayerSettingsDataStoreTest {
 
     @Test
     fun `auto switch internal player setting persists`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         assertEquals(false, dataStore.playerSettings.first().autoSwitchInternalPlayerOnError)
 
@@ -42,7 +41,7 @@ class PlayerSettingsDataStoreTest {
 
     @Test
     fun `mpv hardware decode mode defaults to auto safe and persists direct selection`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         assertEquals(MpvHardwareDecodeMode.AUTO_SAFE, dataStore.playerSettings.first().mpvHardwareDecodeMode)
 
@@ -53,7 +52,7 @@ class PlayerSettingsDataStoreTest {
 
     @Test
     fun `autoplay bandwidth mode defaults to manual with 40 mbps manual cap`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         val settings = dataStore.playerSettings.first()
 
@@ -104,7 +103,9 @@ class PlayerSettingsDataStoreTest {
 
     @Test
     fun `manual bitrate limit is coerced to supported range`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
+
+        dataStore.playerSettings.first()
 
         dataStore.setManualBitrateLimitMbps(2.0)
         assertEquals(5.0, dataStore.playerSettings.first().manualBitrateLimitMbps, 0.0)
@@ -118,7 +119,7 @@ class PlayerSettingsDataStoreTest {
 
     @Test
     fun `autoplay bandwidth mode persists manual selection`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         dataStore.setAutoplayBandwidthMode(AutoplayBandwidthMode.MANUAL)
 
@@ -128,7 +129,7 @@ class PlayerSettingsDataStoreTest {
 
     @Test
     fun `changing transport settings clears persisted autoplay max bitrate`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         dataStore.setUseParallelConnections(false)
         dataStore.setAutoplayMaxBitrate(42.0)
@@ -147,7 +148,7 @@ class PlayerSettingsDataStoreTest {
 
     @Test
     fun `vod cache warm ahead defaults to enabled`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         val settings = dataStore.playerSettings.first()
 
@@ -156,7 +157,7 @@ class PlayerSettingsDataStoreTest {
 
     @Test
     fun `vod cache warm ahead persists disabled selection`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         dataStore.setVodCacheWarmAheadEnabled(false)
         assertEquals(false, dataStore.playerSettings.first().vodCacheWarmAheadEnabled)
@@ -167,7 +168,7 @@ class PlayerSettingsDataStoreTest {
 
     @Test
     fun `changing vod cache warm ahead clears persisted autoplay max bitrate`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
+        val dataStore = playerSettingsDataStoreForTest()
 
         dataStore.setAutoplayMaxBitrate(42.0)
         assertEquals(42.0, dataStore.playerSettings.first().autoplayMaxBitrateMbps ?: -1.0, 0.0)

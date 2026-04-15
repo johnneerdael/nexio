@@ -1,20 +1,15 @@
 package com.nexio.tv.data.local
 
-import com.nexio.tv.core.profile.FakeProfileManager
+import com.nexio.tv.testutil.searchHistoryDataStoreForTest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Rule
 import org.junit.Test
-import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class SearchHistoryDataStoreTest {
-    @get:Rule
-    val tempFolder = TemporaryFolder()
-
     @Test
     fun `next search history trims blanks deduplicates case-insensitively and keeps newest first`() {
         val updated = nextSearchHistory(
@@ -52,9 +47,7 @@ class SearchHistoryDataStoreTest {
 
     @Test
     fun `store persists recent searches`() = runTest {
-        val factory = FakeProfileDataStoreFactory(tempFolder.newFolder())
-        val profileManager = FakeProfileManager()
-        val dataStore = SearchHistoryDataStore(factory, profileManager)
+        val dataStore = searchHistoryDataStoreForTest()
 
         dataStore.clearRecentSearches()
         dataStore.saveRecentSearch("Severance")
