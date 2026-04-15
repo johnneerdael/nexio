@@ -84,6 +84,7 @@ private enum class IntegrationSettingsSection {
     Simkl,
     TheIntroDb,
     Tmdb,
+    Tvdb,
     Omdb,
     Imdb,
     MdbList,
@@ -219,6 +220,7 @@ fun SettingsScreen(
     val integrationSimklFocusRequester = remember { FocusRequester() }
     val integrationTheIntroDbFocusRequester = remember { FocusRequester() }
     val integrationTmdbFocusRequester = remember { FocusRequester() }
+    val integrationTvdbFocusRequester = remember { FocusRequester() }
     val integrationOmdbFocusRequester = remember { FocusRequester() }
     val integrationImdbFocusRequester = remember { FocusRequester() }
     val integrationMdbListFocusRequester = remember { FocusRequester() }
@@ -412,6 +414,7 @@ fun SettingsScreen(
                             simklFocusRequester = integrationSimklFocusRequester,
                             theIntroDbFocusRequester = integrationTheIntroDbFocusRequester,
                             tmdbFocusRequester = integrationTmdbFocusRequester,
+                            tvdbFocusRequester = integrationTvdbFocusRequester,
                             omdbFocusRequester = integrationOmdbFocusRequester,
                             imdbFocusRequester = integrationImdbFocusRequester,
                             mdbListFocusRequester = integrationMdbListFocusRequester,
@@ -643,6 +646,7 @@ private fun IntegrationSettingsContent(
     simklFocusRequester: FocusRequester,
     theIntroDbFocusRequester: FocusRequester,
     tmdbFocusRequester: FocusRequester,
+    tvdbFocusRequester: FocusRequester,
     omdbFocusRequester: FocusRequester,
     imdbFocusRequester: FocusRequester,
     mdbListFocusRequester: FocusRequester,
@@ -658,7 +662,8 @@ private fun IntegrationSettingsContent(
     val sharedSections = remember {
         setOf(
             IntegrationSettingsSection.Debrid, IntegrationSettingsSection.TheIntroDb,
-            IntegrationSettingsSection.Tmdb, IntegrationSettingsSection.Omdb,
+            IntegrationSettingsSection.Tmdb, IntegrationSettingsSection.Tvdb,
+            IntegrationSettingsSection.Omdb,
             IntegrationSettingsSection.Imdb, IntegrationSettingsSection.MdbList,
             IntegrationSettingsSection.AnimeSkip, IntegrationSettingsSection.SubtitleTranslation,
             IntegrationSettingsSection.PosterRatings
@@ -681,6 +686,7 @@ private fun IntegrationSettingsContent(
             IntegrationSettingsSection.Simkl -> simklFocusRequester
             IntegrationSettingsSection.TheIntroDb -> theIntroDbFocusRequester
             IntegrationSettingsSection.Tmdb -> tmdbFocusRequester
+            IntegrationSettingsSection.Tvdb -> tvdbFocusRequester
             IntegrationSettingsSection.Omdb -> omdbFocusRequester
             IntegrationSettingsSection.Imdb -> imdbFocusRequester
             IntegrationSettingsSection.MdbList -> mdbListFocusRequester
@@ -748,6 +754,13 @@ private fun IntegrationSettingsContent(
                                     title = "TMDB",
                                     subtitle = stringResource(R.string.settings_tmdb_subtitle),
                                     onClick = { onSelectSection(IntegrationSettingsSection.Tmdb) }
+                                )
+                            }
+                            item(key = "integration_hub_tvdb") {
+                                SettingsActionRow(
+                                    title = stringResource(R.string.tvdb_hub_title),
+                                    subtitle = stringResource(R.string.settings_tvdb_subtitle),
+                                    onClick = { onSelectSection(IntegrationSettingsSection.Tvdb) }
                                 )
                             }
                             item(key = "integration_hub_omdb") {
@@ -832,6 +845,12 @@ private fun IntegrationSettingsContent(
         IntegrationSettingsSection.Tmdb -> {
             TmdbSettingsContent(
                 initialFocusRequester = tmdbFocusRequester
+            )
+        }
+
+        IntegrationSettingsSection.Tvdb -> {
+            TvdbSettingsContent(
+                initialFocusRequester = tvdbFocusRequester
             )
         }
 
