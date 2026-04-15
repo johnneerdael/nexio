@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: TVDB Provider Replacement** - Replace TMDB TV metadata paths with TVDB-backed TV detail, episode, artwork, poster precedence, and settings-facing provider rules (completed 2026-04-15)
 - [x] **Phase 8: Exact Continue Watching Air Timing** - Compute device-local TVDB airing instants, gate future next-up rows, and re-emit when episodes become available (completed 2026-04-15)
 - [ ] **Phase 9: TVDB Advanced TV Surfaces** - Preserve TVDB season ordering and replace remaining TMDB TV surfaces such as trailers, cast, companies, networks, genres, and content ratings
-- [ ] **Phase 10: TVDB Reliability, Updates, and Diagnostics** - Update-aware cache invalidation, heavily cached reference data, graceful failure behavior, diagnostics, and documentation
+- [x] **Phase 10: TVDB Reliability, Updates, and Diagnostics** - Update-aware cache invalidation, heavily cached reference data, graceful failure behavior, diagnostics, and documentation (completed 2026-04-15)
 
 ## Phase Details
 
@@ -97,7 +97,7 @@ Plans:
 **Goal**: TVDB metadata stays reliable over time through update-aware caching, heavily cached reference data, graceful failure behavior, and clear diagnostics
 **Depends on**: Phase 8 and Phase 9
 **Requirements**: UX-03, CACHE-02, CACHE-03
-**Plans:** 6/7 plans executed
+**Plans:** 7/7 plans complete
 Plans:
 - [x] 10-00-PLAN.md — Bind Phase 6-9 TVDB source contracts and create sanitized reliability diagnostics
 - [x] 10-01-PLAN.md — Process TVDB `/updates` and invalidate TVDB cache namespaces safely
@@ -105,7 +105,7 @@ Plans:
 - [x] 10-03-PLAN.md — Cache stable TVDB reference data heavily with stale-on-failure behavior
 - [x] 10-04-PLAN.md — Preserve last-known-good TVDB metadata through outages and invalid credentials
 - [x] 10-05-PLAN.md — Surface TVDB diagnostics in settings/debug UI with shared recorder logging
-- [ ] 10-06-PLAN.md — Update user-facing TVDB setup and behavior docs
+- [x] 10-06-PLAN.md — Update user-facing TVDB setup and behavior docs
 **Success Criteria** (what must be TRUE):
   1. TVDB metadata cache invalidation uses TVDB update signals or record timestamps so stale metadata can refresh without aggressive refetching
   2. Stable TVDB reference data such as artwork types, genres, languages, statuses, and content ratings is cached heavily
@@ -126,7 +126,7 @@ Note: Phase 9 can begin after Phase 7 while Phase 8 is being validated, but Phas
 | 7. TVDB Provider Replacement | 8/8 | Complete | 2026-04-15 |
 | 8. Exact Continue Watching Air Timing | 6/6 | Complete | 2026-04-15 |
 | 9. TVDB Advanced TV Surfaces | 0/? | Planned | - |
-| 10. TVDB Reliability, Updates, and Diagnostics | 6/7 | In Progress|  |
+| 10. TVDB Reliability, Updates, and Diagnostics | 7/7 | Complete   | 2026-04-15 |
 
 ## Requirement Coverage
 
