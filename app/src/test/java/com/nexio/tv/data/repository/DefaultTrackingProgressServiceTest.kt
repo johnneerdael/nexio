@@ -2,6 +2,8 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.first
@@ -152,6 +154,36 @@ class DefaultTrackingProgressServiceTest {
         val observed = service.observeMovieWatched("tt1375666").firstValue()
 
         assertEquals(true, observed)
+    }
+
+    @Test
+    fun `refreshNow uses current route scoped provider state`() = runTest {
+        val traktService = mockk<TraktProgressService>(relaxed = true)
+        val simklService = mockk<SimklProgressService>(relaxed = true)
+        val trackingProviderStateService = mockk<TrackingProviderStateService> {
+            every { state } returns flowOf(
+                EffectiveTrackingProviderState(
+                    effectiveProvider = TrackingProvider.TRAKT,
+                    traktAuthenticated = true,
+                    simklAuthenticated = false
+                )
+            )
+            coEvery { currentState() } returns EffectiveTrackingProviderState(
+                effectiveProvider = TrackingProvider.SIMKL,
+                traktAuthenticated = false,
+                simklAuthenticated = true
+            )
+        }
+        val service = DefaultTrackingProgressService(
+            traktProgressService = traktService,
+            simklProgressService = simklService,
+            trackingProviderStateService = trackingProviderStateService
+        )
+
+        service.refreshNow()
+
+        coVerify(exactly = 1) { simklService.refreshNow() }
+        coVerify(exactly = 0) { traktService.refreshNow() }
     }
 
     private suspend fun <T> kotlinx.coroutines.flow.Flow<T>.firstValue(): T = first()

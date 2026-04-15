@@ -277,6 +277,52 @@ class LibraryRepositoryImplTest {
     }
 
     @Test
+    fun `toggleDefault uses one route scoped provider state snapshot`() = runTest {
+        val simklState = EffectiveTrackingProviderState(
+            effectiveProvider = TrackingProvider.SIMKL,
+            traktAuthenticated = false,
+            simklAuthenticated = true
+        )
+        val traktState = EffectiveTrackingProviderState(
+            effectiveProvider = TrackingProvider.TRAKT,
+            traktAuthenticated = true,
+            simklAuthenticated = false
+        )
+        val trackingProviderStateService = mockk<TrackingProviderStateService>()
+        val traktLibraryService = mockk<TraktLibraryService>(relaxed = true)
+        val simklLibraryService = mockk<SimklLibraryService>(relaxed = true)
+        val debridLibraryService = mockk<DebridLibraryService>(relaxed = true)
+
+        every { trackingProviderStateService.state } returns flowOf(simklState)
+        coEvery { trackingProviderStateService.currentState() } returnsMany listOf(simklState, traktState)
+        every { traktLibraryService.observeHasCache() } returns flowOf(false)
+        every { simklLibraryService.observeHasCache() } returns flowOf(true)
+        every { debridLibraryService.observeIsConnected() } returns flowOf(false)
+        every { traktLibraryService.observeIsRefreshing() } returns flowOf(false)
+        every { simklLibraryService.observeIsRefreshing() } returns flowOf(false)
+        every { debridLibraryService.observeIsRefreshing() } returns flowOf(false)
+        every { traktLibraryService.observeAllItems() } returns flowOf(emptyList())
+        every { simklLibraryService.observeAllItems() } returns flowOf(emptyList())
+        every { debridLibraryService.observeItems() } returns flowOf(emptyList())
+        every { traktLibraryService.observeListTabs() } returns flowOf(emptyList())
+        every { simklLibraryService.observeListTabs() } returns flowOf(emptyList())
+        every { debridLibraryService.observeListTabs() } returns flowOf(emptyList())
+
+        val repository = LibraryRepositoryImpl(
+            trackingProviderStateService = trackingProviderStateService,
+            traktLibraryService = traktLibraryService,
+            simklLibraryService = simklLibraryService,
+            debridLibraryService = debridLibraryService
+        )
+
+        repository.toggleDefault(sampleInput())
+
+        coVerify(exactly = 1) { trackingProviderStateService.currentState() }
+        coVerify(exactly = 1) { simklLibraryService.toggleWatchlist(any()) }
+        coVerify(exactly = 0) { traktLibraryService.toggleWatchlist(any()) }
+    }
+
+    @Test
     fun `applyMembershipChanges routes to simkl service when simkl provider is active`() = runTest {
         val providerState = EffectiveTrackingProviderState(
             effectiveProvider = TrackingProvider.SIMKL,
