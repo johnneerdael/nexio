@@ -32,6 +32,30 @@ internal object AirDateGate {
         return true
     }
 
+    fun pendingTriggerMs(
+        firstAiredMs: Long,
+        availabilityInstantMs: Long?,
+        tmdbAirDate: String?
+    ): Long? {
+        if (availabilityInstantMs != null && availabilityInstantMs > 0L) return availabilityInstantMs
+        if (firstAiredMs > 0L) return firstAiredMs
+        return parseDateToEpochMs(tmdbAirDate?.trim().orEmpty())
+    }
+
+    fun <T> hasDuePending(
+        entries: List<T>,
+        firstAiredMsSelector: (T) -> Long,
+        availabilityInstantMsSelector: (T) -> Long? = { null },
+        tmdbAirDateSelector: (T) -> String? = { null },
+        nowMs: Long
+    ): Boolean = entries.any { entry ->
+        pendingTriggerMs(
+            firstAiredMs = firstAiredMsSelector(entry),
+            availabilityInstantMs = availabilityInstantMsSelector(entry),
+            tmdbAirDate = tmdbAirDateSelector(entry)
+        )?.let { it <= nowMs } == true
+    }
+
     /**
      * Returns the smallest future air-date ms among [entries] whose [isAired] is false,
      * using [firstAiredMsSelector] to extract the air-date ms from each entry.
@@ -47,13 +71,11 @@ internal object AirDateGate {
         return entries
             .asSequence()
             .mapNotNull { entry ->
-                val availabilityMs = availabilityInstantMsSelector(entry)
-                if (availabilityMs != null && availabilityMs > 0L) {
-                    availabilityMs
-                } else {
-                    val ms = firstAiredMsSelector(entry)
-                    if (ms > 0L) ms else parseDateToEpochMs(tmdbAirDateSelector(entry)?.trim() ?: "")
-                }
+                pendingTriggerMs(
+                    firstAiredMs = firstAiredMsSelector(entry),
+                    availabilityInstantMs = availabilityInstantMsSelector(entry),
+                    tmdbAirDate = tmdbAirDateSelector(entry)
+                )
             }
             .filter { it > nowMs }
             .minOrNull()
