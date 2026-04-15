@@ -1,6 +1,6 @@
 ---
 phase: 08-exact-continue-watching-air-timing
-reviewed: 2026-04-15T14:09:46Z
+reviewed: 2026-04-15T14:46:07Z
 depth: standard
 files_reviewed: 26
 files_reviewed_list:
@@ -32,92 +32,34 @@ files_reviewed_list:
   - app/src/test/java/com/nexio/tv/data/repository/TvdbContinueWatchingTimingEnricherTest.kt
 findings:
   critical: 0
-  warning: 3
+  warning: 1
   info: 0
-  total: 3
+  total: 1
 status: issues_found
 ---
 
 # Phase 8: Code Review Report
 
-**Reviewed:** 2026-04-15T14:09:46Z
+**Reviewed:** 2026-04-15T14:46:07Z
 **Depth:** standard
 **Files Reviewed:** 26
 **Status:** issues_found
 
 ## Summary
 
-Re-reviewed the Phase 08 continue-watching air timing changes after 08-05. The persisted `scheduledReemit` field is now written and read, and the explicit `rescheduleAirTimeAlarmFromSnapshot()` path does force a refresh for one seeded overdue exact-TVDB case. However, the overdue persisted re-emit gap is not fully closed in production restore paths: startup restore still routes overdue rows through the future-only scheduler, and boot reschedule can run before the async persisted snapshot load completes. No critical security issues were found.
+Re-reviewed the Phase 08 continue-watching air timing changes after the 08-06 gap closure. The previous Phase 8 blockers are closed:
+
+- Former WR-01 is closed. Persisted snapshot restore now routes `scheduledReemit` through the due-aware `handleScheduledReemit(...)` path, so overdue persisted rows force refresh instead of falling through the future-only scheduler.
+- Former WR-02 is closed. `AirDateGate.pendingTriggerMs(...)` and `hasDuePending(...)` now share the trigger extraction used by future scheduling, covering exact TVDB instants, provider `firstAiredMs`, and date-string fallback rows.
+
+No remaining Phase 8-blocking issues were found at standard depth. One non-blocking diagnostic/privacy warning remains.
 
 ## Warnings
-
-### WR-01: Persisted Overdue Reemit Rows Can Still Stay Hidden After Restore
-
-**File:** `app/src/main/java/com/nexio/tv/data/repository/ContinueWatchingSnapshotService.kt:185`
-**Issue:** `loadPersistedSnapshotForActiveProfile()` restores `rawSnapshotState` and then calls `scheduleReemitIfNeeded(normalized.scheduledReemit, System.currentTimeMillis())`. That helper only returns future targets because `AirDateGate.soonestPendingMs()` filters `it > nowMs`. If the app process starts after a persisted row's re-emit time has already passed, this restore path cancels scheduling and never forces `ensureFresh(force = true)`, so the row remains only in `scheduledReemit` and stays hidden until another unrelated refresh occurs. The new regression test covers `rescheduleAirTimeAlarmFromSnapshot()` with raw state pre-seeded, but it does not cover the actual persisted-load path or the boot race where the receiver calls `rescheduleAirTimeAlarmFromSnapshot()` before the service init coroutine finishes loading the snapshot.
-**Fix:** Centralize restore handling so every path that loads or reschedules persisted `scheduledReemit` first checks for due entries and forces a refresh before falling back to future alarm scheduling. Add a test that writes an overdue `scheduledReemit` to `ContinueWatchingSnapshotStore`, constructs the service, waits for restore, and verifies `refreshNow()` is invoked.
-
-```kotlin
-private fun handlePersistedScheduledReemit(entries: List<TrackingNextUpEntry>, nowMs: Long) {
-    if (AirDateGate.hasDuePending(entries, nowMs)) {
-        reemitJob?.cancel()
-        reemitJob = null
-        currentTimerTargetMs = null
-        airScheduler.cancel()
-        launchAirTimeRefreshWithRetry()
-        return
-    }
-
-    scheduleReemitIfNeeded(entries, nowMs)
-}
-
-private suspend fun loadPersistedSnapshotForActiveProfile(clearWhenMissing: Boolean) {
-    val persisted = snapshotStore.read()
-    // existing null handling...
-    val normalized = sanitizeSnapshot(persisted)
-    rawSnapshotState.value = normalized
-    snapshotState.value = normalized
-    lastRefreshRequestMs = normalized.updatedAtMs
-    handlePersistedScheduledReemit(normalized.scheduledReemit, System.currentTimeMillis())
-}
-```
-
-### WR-02: Overdue Date-Only Reemit Rows Are Ignored By Boot Reschedule
-
-**File:** `app/src/main/java/com/nexio/tv/data/repository/ContinueWatchingSnapshotService.kt:170`
-**Issue:** The 08-05 overdue check only treats rows as due when `tvdbAvailabilityInstantMs` is present and `<= nowMs`. Phase 08 still adds rows to `scheduledReemit` when they are withheld by provider `firstAiredMs` or `firstAired` date fallback, and those rows have `tvdbAvailabilityInstantMs == null`. After boot or exact-alarm permission changes, an overdue date-only row falls through to `scheduleReemitIfNeeded()`, which returns no future target and cancels without refreshing. That leaves date-only withheld entries stuck in the persisted schedule.
-**Fix:** Expose a shared trigger extractor from `AirDateGate` and use it for both due detection and future scheduling so exact, provider-ms, and date-string fallback rows behave consistently.
-
-```kotlin
-internal fun pendingTriggerMs(
-    firstAiredMs: Long,
-    availabilityInstantMs: Long?,
-    tmdbAirDate: String?
-): Long? {
-    if (availabilityInstantMs != null && availabilityInstantMs > 0L) return availabilityInstantMs
-    if (firstAiredMs > 0L) return firstAiredMs
-    return parseDateToEpochMs(tmdbAirDate?.trim().orEmpty())
-}
-
-internal fun <T> hasDuePending(
-    entries: List<T>,
-    firstAiredMsSelector: (T) -> Long,
-    availabilityInstantMsSelector: (T) -> Long?,
-    tmdbAirDateSelector: (T) -> String?,
-    nowMs: Long
-): Boolean = entries.any { entry ->
-    pendingTriggerMs(
-        firstAiredMsSelector(entry),
-        availabilityInstantMsSelector(entry),
-        tmdbAirDateSelector(entry)
-    )?.let { it <= nowMs } == true
-}
-```
 
 ### WR-03: Timing Enrichment Failure Logs A False Diagnostic Reason And Raw Content ID
 
 **File:** `app/src/main/java/com/nexio/tv/data/repository/TvdbContinueWatchingTimingEnricher.kt:60`
-**Issue:** The `onFailure` branch logs `reason=missing_timezone_policy` for every exception, including auth, network, routing, and parsing failures. It also includes the raw `contentId`, which can expose watched-item identifiers in device logs. This is not a scheduling blocker, but it makes Phase 08 diagnostics misleading and unnecessarily increases privacy exposure.
+**Issue:** The `onFailure` branch still logs `reason=missing_timezone_policy` for every exception, including auth, network, routing, and parsing failures. It also includes the raw `contentId`, which can expose watched-item identifiers in device logs. This is not a Phase 8 scheduling blocker, but it keeps diagnostics misleading and unnecessarily increases privacy exposure.
 **Fix:** Log a failure-specific reason without raw item IDs, and persist the failure diagnostic on the returned entry so snapshot diagnostics reflect what actually happened.
 
 ```kotlin
@@ -136,6 +78,6 @@ internal fun <T> hasDuePending(
 
 ---
 
-_Reviewed: 2026-04-15T14:09:46Z_
+_Reviewed: 2026-04-15T14:46:07Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
