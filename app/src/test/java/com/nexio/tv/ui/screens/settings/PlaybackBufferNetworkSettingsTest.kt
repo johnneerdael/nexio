@@ -9,18 +9,26 @@ import org.junit.Test
 
 class PlaybackBufferNetworkSettingsTest {
     @Test
-    fun diskSpoolSizeMax_reservesHeadroomFromAvailableStorage() {
+    fun diskSpoolPolicy_usesSeventyFivePercentOfAvailableStorage() {
         assertEquals(
             1_536,
-            resolveDiskSpoolSizeMaxMb(2_048L * 1024L * 1024L)
+            resolveDiskSpoolPolicy(2_048L * 1024L * 1024L)
         )
     }
 
     @Test
-    fun diskSpoolSizeMax_keepsSliderRangeValidWhenStorageIsBelowMinimum() {
+    fun diskSpoolPolicy_isUnsupportedBelowMinimumFreeStorage() {
         assertEquals(
-            256,
-            resolveDiskSpoolSizeMaxMb(128L * 1024L * 1024L)
+            null,
+            resolveDiskSpoolPolicy(767L * 1024L * 1024L)
+        )
+    }
+
+    @Test
+    fun diskSpoolPolicy_capsAtTwoGbWhenStorageIsLargeEnough() {
+        assertEquals(
+            2_048,
+            resolveDiskSpoolPolicy(4_096L * 1024L * 1024L)
         )
     }
 

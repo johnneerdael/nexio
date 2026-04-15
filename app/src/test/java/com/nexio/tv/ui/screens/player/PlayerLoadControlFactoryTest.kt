@@ -24,34 +24,31 @@ class PlayerLoadControlFactoryTest {
     }
 
     @Test
-    fun targetBufferBytes_clampsOversizedConfiguredTargetToMemoryBudget() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
+    fun targetBufferBytes_clampsOversizedConfiguredTargetToPlaybackCeiling() {
         val settings = PlayerSettings(
             bufferSettings = BufferSettings(targetBufferSizeMb = 512)
         )
-        val budget = MemoryBudget(context)
 
-        val targetBytes = PlayerLoadControlFactory.resolveTargetBufferBytes(context, settings)
-        val expectedTargetBytes = budget.effectiveSampleQueueBytes
-            .coerceIn(
-                MemoryBudget.MIN_SAMPLE_QUEUE_BYTES,
-                MemoryBudget.MAX_SAMPLE_QUEUE_BYTES
-            )
+        val targetBytes = PlayerLoadControlFactory.resolveTargetBufferBytes(
+            settings = settings,
+            effectiveSampleQueueBytes = 350L * 1024L * 1024L
+        )
 
-        assertEquals(expectedTargetBytes, targetBytes.toLong())
+        assertEquals(96L * 1024L * 1024L, targetBytes.toLong())
     }
 
     @Test
-    fun targetBufferBytes_usesMemoryBudgetWhenSettingIsAuto() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
+    fun targetBufferBytes_usesPlaybackCeilingWhenSettingIsAuto() {
         val settings = PlayerSettings(
             bufferSettings = BufferSettings(targetBufferSizeMb = 0)
         )
-        val budget = MemoryBudget(context)
 
-        val targetBytes = PlayerLoadControlFactory.resolveTargetBufferBytes(context, settings)
+        val targetBytes = PlayerLoadControlFactory.resolveTargetBufferBytes(
+            settings = settings,
+            effectiveSampleQueueBytes = 350L * 1024L * 1024L
+        )
 
-        assertEquals(budget.effectiveSampleQueueBytes, targetBytes.toLong())
+        assertEquals(96L * 1024L * 1024L, targetBytes.toLong())
     }
 
     @Test

@@ -1043,7 +1043,7 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
-    fun progressivePlayback_usesConfiguredDiskSpoolCapacityAndStartupBuffer() {
+    fun progressivePlayback_usesAutomaticDiskSpoolCapacityAndFixedStartupBuffer() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val capturedSpoolFiles = mutableListOf<File>()
         val capturedStartupBuffers = mutableListOf<Int>()
@@ -1052,8 +1052,6 @@ class PlayerMediaSourceFactoryTest {
             playbackOkHttpClient = noNetworkOkHttpClient()
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
-            diskSpoolSizeMb = 2_048
-            diskSpoolStartupBufferMb = 384
             diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
             diskSpoolWriterExecutorForTesting = Executor { }
             diskSpoolSessionObserverForTesting = { file, _ -> capturedSpoolFiles += file }
@@ -1068,7 +1066,7 @@ class PlayerMediaSourceFactoryTest {
         )
 
         assertEquals(2_048L * 1024L * 1024L, capturedSpoolFiles.single().length())
-        assertEquals(listOf(384), capturedStartupBuffers)
+        assertEquals(listOf(100), capturedStartupBuffers)
         factory.shutdown()
     }
 
@@ -1106,8 +1104,6 @@ class PlayerMediaSourceFactoryTest {
             playbackOkHttpClient = OkHttpClient()
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
-            diskSpoolSizeMb = 256
-            diskSpoolStartupBufferMb = 1
             diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
         }
 
@@ -1119,31 +1115,6 @@ class PlayerMediaSourceFactoryTest {
             factory.shutdown()
             server.shutdown()
         }
-    }
-
-    @Test
-    fun progressivePlayback_passesHeapCappedRamReadAheadBufferToDiskSpoolDataSource() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val capturedReadAheadBytes = mutableListOf<Long>()
-        val factory = PlayerMediaSourceFactory(
-            context = context,
-            playbackOkHttpClient = noNetworkOkHttpClient()
-        ).apply {
-            progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
-            diskSpoolRamReadBufferMb = 128
-            diskSpoolHeapLimitBytesForTesting = 256L * 1024L * 1024L
-            diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
-            diskSpoolWriterExecutorForTesting = Executor { }
-            diskSpoolReadAheadObserverForTesting = { bytes -> capturedReadAheadBytes += bytes }
-        }
-
-        factory.progressiveUpstreamFactoryForTesting(
-            url = "https://real-debrid.com/path/video.mkv",
-            headers = emptyMap()
-        )
-
-        assertEquals(listOf(64L * 1024L * 1024L), capturedReadAheadBytes)
-        factory.shutdown()
     }
 
     private fun noNetworkOkHttpClient(): OkHttpClient {

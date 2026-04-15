@@ -51,18 +51,5 @@ internal class MemoryBudget(context: Context) {
         const val FILL_WORKER_READ_BUFFER_BYTES = 512 * 1024
         const val MIN_SAMPLE_QUEUE_BYTES = 32L * 1024L * 1024L
         const val MAX_SAMPLE_QUEUE_BYTES = 350L * 1024L * 1024L
-
-        fun effectiveDiskSpoolReadAheadBytes(
-            requestedMb: Int,
-            heapLimitBytes: Long
-        ): Long {
-            if (requestedMb <= 0 || heapLimitBytes <= 0L) return 0L
-            val requestedBytes = requestedMb.toLong() * 1024L * 1024L
-            val rawHeapCapBytes = heapLimitBytes / 4L
-            val minimumUsefulBytes = 16L * 1024L * 1024L
-            if (rawHeapCapBytes < minimumUsefulBytes) return 0L
-            val heapCapBytes = rawHeapCapBytes.coerceAtMost(128L * 1024L * 1024L)
-            return requestedBytes.coerceAtMost(heapCapBytes)
-        }
     }
 }

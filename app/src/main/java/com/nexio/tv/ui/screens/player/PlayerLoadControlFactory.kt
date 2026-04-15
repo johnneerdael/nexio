@@ -36,7 +36,7 @@ internal object PlayerLoadControlFactory {
     ): Int {
         val safeBudgetBytes = effectiveSampleQueueBytes
             .coerceAtLeast(1L)
-            .coerceAtMost(MemoryBudget.MAX_SAMPLE_QUEUE_BYTES)
+            .coerceAtMost(MAX_PLAYBACK_TARGET_BUFFER_BYTES)
         val configuredTargetBytes = settings.bufferSettings.targetBufferSizeMb
             .takeIf { it > 0 }
             ?.toLong()
@@ -46,4 +46,6 @@ internal object PlayerLoadControlFactory {
             ?: safeBudgetBytes
         return targetBytes.toInt()
     }
+
+    private const val MAX_PLAYBACK_TARGET_BUFFER_BYTES = 96L * 1024L * 1024L
 }
