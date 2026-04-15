@@ -27,7 +27,8 @@ class TvdbMetadataService @Inject constructor(
     private val tvdbApi: TvdbApi,
     private val authService: TvdbAuthService,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
-    private val metadataDiskCacheStore: MetadataDiskCacheStore
+    private val metadataDiskCacheStore: MetadataDiskCacheStore,
+    private val seasonOrderMapper: TvdbSeasonOrderMapper
 ) {
     suspend fun fetchSeriesEnrichment(
         identity: TvdbSeriesIdentity,
@@ -61,7 +62,11 @@ class TvdbMetadataService @Inject constructor(
             ?.data
             ?: return@withContext null
 
-        val enrichment = record.toEnrichment(identity, activeProvider) ?: return@withContext null
+        val seasonOrderContext = seasonOrderMapper.buildSeriesOrderContext(record)
+        if (seasonOrderContext != null) {
+            Log.d(TAG, "tvdb_season_type_present contentId=tvdb:${identity.tvdbId} defaultType=${seasonOrderContext.defaultSeasonTypeId}")
+        }
+        val enrichment = record.toEnrichment(identity, activeProvider, seasonOrderContext) ?: return@withContext null
         metadataDiskCacheStore.writeTvdbEnrichment(
             seriesId = identity.tvdbId,
             recordKind = SERIES_EXTENDED_RECORD_KIND,
@@ -156,7 +161,8 @@ class TvdbMetadataService @Inject constructor(
 
     private fun TvdbSeriesExtendedRecord.toEnrichment(
         identity: TvdbSeriesIdentity,
-        activeProvider: PosterRatingsUrlResolver.ActiveProvider?
+        activeProvider: PosterRatingsUrlResolver.ActiveProvider?,
+        seasonOrderContext: com.nexio.tv.domain.model.TvdbSeasonOrderContext? = null
     ): TvMetadataEnrichment? {
         val artwork = selectArtwork(artworks)
         val tvdbPoster = artwork.poster ?: image.trimmed()
@@ -208,12 +214,13 @@ class TvdbMetadataService @Inject constructor(
             status = status?.name.trimmed(),
             aliases = aliases.mapNotNull { it.name.trimmed() },
             contentRatings = contentRatings,
-            remoteIds = remoteIds
+            remoteIds = remoteIds,
+            seasonOrderContext = seasonOrderContext
         )
     }
 
     private fun TvdbEpisodeRecord.toEpisodeMetadata(): TvEpisodeMetadata {
-        return TvEpisodeMetadata(
+        val base = TvEpisodeMetadata(
             providerEpisodeId = id?.let { "tvdb:$it" },
             seasonNumber = seasonNumber,
             episodeNumber = number,
@@ -229,6 +236,7 @@ class TvdbMetadataService @Inject constructor(
             linkedMovieTvdbId = linkedMovie,
             finaleType = finaleType.trimmed()
         )
+        return base.copy(tvdbEpisodeOrder = seasonOrderMapper.mapEpisodeOrder(base))
     }
 
     private fun TvEpisodeMetadata.toSeasonEpisode(): TvSeasonEpisode {
