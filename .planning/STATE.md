@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 09-02-PLAN.md
-last_updated: "2026-04-15T16:14:17.825Z"
+stopped_at: Completed 09-03-PLAN.md
+last_updated: "2026-04-15T16:20:06.194Z"
 last_activity: 2026-04-15
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 32
-  completed_plans: 22
-  percent: 69
+  completed_plans: 23
+  percent: 72
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 ## Current Position
 
 Phase: 09
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-04-15
 
@@ -57,6 +57,7 @@ Progress: [██████░░░░] 63%
 *Updated after each plan completion*
 | Phase 09 P01 | 7min | 3 tasks | 10 files |
 | Phase 09 P02 | 5min | 2 tasks | 8 files |
+| Phase 09 P03 | 3min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,7 @@ Recent decisions affecting current work:
 - [Phase 09]: TvdbSeasonOrderMapper.applyEpisodeOrder only writes tvdbEpisodeOrder field, enforcing Trakt stability
 - [Phase 09]: TVDB advanced metadata mapper maps characters, companies, networks, genres, content ratings into existing domain surfaces without new UI
 - [Phase 09]: Advanced surface diagnostics (success/missing) emitted in TvMetadataRouter for router-level observability
+- [Phase 09]: TVDB credits applied via else-if branch after TMDB credits block; cast only, no synthesized director/writer from companies
 
 ### Pending Todos
 
@@ -86,6 +88,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-15T16:14:17.823Z
-Stopped at: Completed 09-02-PLAN.md
+Last session: 2026-04-15T16:20:06.191Z
+Stopped at: Completed 09-03-PLAN.md
 Resume file: None
