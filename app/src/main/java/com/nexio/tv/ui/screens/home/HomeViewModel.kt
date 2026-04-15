@@ -11,6 +11,7 @@ import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
+import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.HomeCatalogSnapshotStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
@@ -90,6 +91,7 @@ class HomeViewModel @Inject constructor(
     internal val mdbListRepository: MDBListRepository,
     internal val tmdbService: TmdbService,
     internal val tmdbMetadataService: TmdbMetadataService,
+    internal val tvMetadataRouter: TvMetadataRouter,
     internal val trailerService: TrailerService,
     internal val trailerSettingsDataStore: TrailerSettingsDataStore,
     internal val youTubeTrailerAuthDataStore: YouTubeTrailerAuthDataStore,
