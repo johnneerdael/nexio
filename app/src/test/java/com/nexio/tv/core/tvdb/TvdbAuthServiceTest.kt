@@ -1,13 +1,19 @@
 package com.nexio.tv.core.tvdb
 
+import com.nexio.tv.data.local.TvdbSettings
+import com.nexio.tv.data.local.TvdbSettingsDataStore
+import com.nexio.tv.data.local.TvdbTokenState
 import com.nexio.tv.data.remote.api.TvdbApi
 import com.nexio.tv.data.remote.api.TvdbLoginRequest
 import com.nexio.tv.data.remote.api.TvdbLoginResponse
+import java.io.IOException
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.every
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -93,6 +99,87 @@ class TvdbAuthServiceTest {
 
         assertEquals(TvdbValidationStatus.INVALID, result.status)
         coVerify(exactly = 0) { tokenStore.saveToken(any(), any()) }
+    }
+
+    @Test
+    fun `HTTP 500 login records fallback active and preserves cached token state`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val settingsDataStore = mockk<TvdbSettingsDataStore>(relaxed = true)
+        val tokenStore = mockk<TvdbTokenStore>(relaxed = true)
+        val service = TvdbAuthService(
+            tvdbApi = tvdbApi,
+            settingsDataStore = settingsDataStore,
+            tokenStore = tokenStore,
+            nowMillis = { 1_700_000_000_000L }
+        )
+        val errorBody = """{"status":"failure"}"""
+            .toResponseBody("application/json".toMediaType())
+
+        coEvery { tvdbApi.login(any()) } returns Response.error(500, errorBody)
+
+        val result = service.validateCredentialsResult(apiKey = "tvdb-key", subscriberPin = "subscriber-pin")
+
+        assertTrue(result is TvdbAuthResult.AuthUnavailable)
+        assertEquals(TvdbValidationStatus.FALLBACK_ACTIVE, result.status)
+        coVerify(exactly = 0) { tokenStore.clear() }
+        coVerify(exactly = 1) {
+            settingsDataStore.saveValidationFailure(
+                status = TvdbValidationStatus.FALLBACK_ACTIVE,
+                lastFailure = "TVDB login failed with HTTP 500"
+            )
+        }
+        coVerify(exactly = 0) {
+            settingsDataStore.saveValidationFailure(
+                status = TvdbValidationStatus.INVALID,
+                lastFailure = any()
+            )
+        }
+    }
+
+    @Test
+    fun `IOException during token refresh records fallback active and preserves cached token state`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val settingsDataStore = mockk<TvdbSettingsDataStore>(relaxed = true)
+        val tokenStore = mockk<TvdbTokenStore>(relaxed = true)
+        val service = TvdbAuthService(
+            tvdbApi = tvdbApi,
+            settingsDataStore = settingsDataStore,
+            tokenStore = tokenStore,
+            nowMillis = { 1_700_000_000_000L }
+        )
+        every { settingsDataStore.settings } returns flowOf(
+            TvdbSettings(
+                enabled = true,
+                apiKey = "tvdb-key",
+                subscriberPin = "subscriber-pin",
+                validationStatus = TvdbValidationStatus.VALID
+            )
+        )
+        every { tokenStore.tokenState } returns flowOf(
+            TvdbTokenState(
+                token = "cached-token",
+                expiresAtEpochMs = 1_700_000_000_001L,
+                credentialFingerprint = "tvdb-key:subscriber-pin".hashCode().toString()
+            )
+        )
+        coEvery { tvdbApi.login(any()) } throws IOException("offline")
+
+        val result = service.bearerToken()
+
+        assertEquals(null, result)
+        coVerify(exactly = 0) { tokenStore.clear() }
+        coVerify(exactly = 1) {
+            settingsDataStore.saveValidationFailure(
+                status = TvdbValidationStatus.FALLBACK_ACTIVE,
+                lastFailure = "TVDB login failed: IOException"
+            )
+        }
+        coVerify(exactly = 0) {
+            settingsDataStore.saveValidationFailure(
+                status = TvdbValidationStatus.INVALID,
+                lastFailure = any()
+            )
+        }
     }
 
     private fun loginResponse(token: String): TvdbLoginResponse = TvdbLoginResponse(
