@@ -119,7 +119,7 @@ class TvdbMetadataService @Inject constructor(
         }
 
         val authorization = authService.bearerToken() ?: return@withContext emptyList()
-        val records = runCatching {
+        val response = runCatching {
             tvdbApi.getSeriesEpisodes(
                 authorization = authorization,
                 id = identity.tvdbId,
@@ -129,11 +129,14 @@ class TvdbMetadataService @Inject constructor(
             )
         }.onFailure { error ->
             Log.w(TAG, "TVDB season metadata request failed reason=${error.javaClass.simpleName}")
-        }.getOrNull()
-            ?.takeIf { response -> response.isSuccessful }
-            ?.body()
-            ?.data
-            .orEmpty()
+        }.getOrNull() ?: return@withContext emptyList()
+
+        if (!response.isSuccessful) {
+            Log.w(TAG, "TVDB season metadata request failed status=${response.code()}")
+            return@withContext emptyList()
+        }
+
+        val records = response.body()?.data.orEmpty()
 
         val mapped = records
             .map { record -> record.toEpisodeMetadata() }
