@@ -47,11 +47,12 @@ class TvMetadataRouter @Inject constructor(
 
         val enrichment = tvdbMetadataService.fetchSeriesEnrichment(identity, request.language)
         if (enrichment != null) {
+            val advancedDiagnostics = advancedSurfaceDiagnostics(enrichment, request.contentId)
             return TvMetadataDecision(
                 provider = TvProvider.TVDB,
                 reason = TvMetadataDecisionReason.TVDB_SUCCESS,
                 value = enrichment,
-                diagnostics = successDiagnostics(request.contentId)
+                diagnostics = successDiagnostics(request.contentId) + advancedDiagnostics
             )
         }
 
@@ -296,6 +297,23 @@ class TvMetadataRouter @Inject constructor(
             diagnostic(TvMetadataDecisionReason.TVDB_RECORD_MISSING, contentId, fallbackProvider = TvProvider.TMDB),
             diagnostic(TvMetadataDecisionReason.TVDB_FALLBACK_TMDB, contentId, fallbackProvider = TvProvider.TMDB)
         )
+    }
+
+    private fun advancedSurfaceDiagnostics(
+        enrichment: TvMetadataEnrichment,
+        contentId: String
+    ): List<TvMetadataDiagnosticEvent> {
+        val hasAdvanced = enrichment.castMembers.isNotEmpty() ||
+            enrichment.productionCompanies.isNotEmpty() ||
+            enrichment.networks.isNotEmpty() ||
+            enrichment.genres.isNotEmpty() ||
+            enrichment.ageRating != null
+        val reason = if (hasAdvanced) {
+            TvMetadataDecisionReason.TVDB_ADVANCED_SURFACE_SUCCESS
+        } else {
+            TvMetadataDecisionReason.TVDB_ADVANCED_SURFACE_MISSING
+        }
+        return listOf(diagnostic(reason, contentId, provider = TvProvider.TVDB))
     }
 
     private fun successDiagnostics(contentId: String): List<TvMetadataDiagnosticEvent> {

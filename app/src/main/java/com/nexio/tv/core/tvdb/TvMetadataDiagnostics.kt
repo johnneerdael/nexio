@@ -15,7 +15,9 @@ enum class TvMetadataDecisionReason(val eventName: String) {
     POSTER_RATINGS_OVERRIDE("poster_ratings_override"),
     TVDB_SEASON_TYPE_PRESENT("tvdb_season_type_present"),
     TVDB_CANONICAL_TRAKT_NUMBERING_USED("tvdb_canonical_trakt_numbering_used"),
-    TVDB_ALTERNATE_ORDER_PRESERVED("tvdb_alternate_order_preserved")
+    TVDB_ALTERNATE_ORDER_PRESERVED("tvdb_alternate_order_preserved"),
+    TVDB_ADVANCED_SURFACE_SUCCESS("tvdb_advanced_surface_success"),
+    TVDB_ADVANCED_SURFACE_MISSING("tvdb_advanced_surface_missing")
 }
 
 data class TvMetadataDiagnosticEvent(

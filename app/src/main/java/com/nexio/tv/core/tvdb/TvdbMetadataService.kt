@@ -28,7 +28,8 @@ class TvdbMetadataService @Inject constructor(
     private val authService: TvdbAuthService,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
-    private val seasonOrderMapper: TvdbSeasonOrderMapper
+    private val seasonOrderMapper: TvdbSeasonOrderMapper,
+    private val advancedMetadataMapper: TvdbAdvancedMetadataMapper
 ) {
     suspend fun fetchSeriesEnrichment(
         identity: TvdbSeriesIdentity,
@@ -66,7 +67,22 @@ class TvdbMetadataService @Inject constructor(
         if (seasonOrderContext != null) {
             Log.d(TAG, "tvdb_season_type_present contentId=tvdb:${identity.tvdbId} defaultType=${seasonOrderContext.defaultSeasonTypeId}")
         }
-        val enrichment = record.toEnrichment(identity, activeProvider, seasonOrderContext) ?: return@withContext null
+        val preferredCountryCodes = listOfNotNull(
+            record.originalCountry?.trim()?.takeIf { it.isNotBlank() },
+            record.country?.trim()?.takeIf { it.isNotBlank() }
+        ).distinct()
+        val advancedMetadata = advancedMetadataMapper.mapAdvancedMetadata(record, preferredCountryCodes)
+        val hasAdvancedSurface = advancedMetadata.castMembers.isNotEmpty() ||
+            advancedMetadata.productionCompanies.isNotEmpty() ||
+            advancedMetadata.networks.isNotEmpty() ||
+            advancedMetadata.genres.isNotEmpty() ||
+            advancedMetadata.ageRating != null
+        if (hasAdvancedSurface) {
+            Log.d(TAG, "tvdb_advanced_surface_success contentId=tvdb:${identity.tvdbId}")
+        } else {
+            Log.d(TAG, "tvdb_advanced_surface_missing contentId=tvdb:${identity.tvdbId}")
+        }
+        val enrichment = record.toEnrichment(identity, activeProvider, seasonOrderContext, advancedMetadata) ?: return@withContext null
         metadataDiskCacheStore.writeTvdbEnrichment(
             seriesId = identity.tvdbId,
             recordKind = SERIES_EXTENDED_RECORD_KIND,
@@ -162,7 +178,8 @@ class TvdbMetadataService @Inject constructor(
     private fun TvdbSeriesExtendedRecord.toEnrichment(
         identity: TvdbSeriesIdentity,
         activeProvider: PosterRatingsUrlResolver.ActiveProvider?,
-        seasonOrderContext: com.nexio.tv.domain.model.TvdbSeasonOrderContext? = null
+        seasonOrderContext: com.nexio.tv.domain.model.TvdbSeasonOrderContext? = null,
+        advancedMetadata: TvdbAdvancedMetadata? = null
     ): TvMetadataEnrichment? {
         val artwork = selectArtwork(artworks)
         val tvdbPoster = artwork.poster ?: image.trimmed()
@@ -193,14 +210,14 @@ class TvdbMetadataService @Inject constructor(
             seriesTvdbId = identity.tvdbId,
             localizedTitle = title,
             description = description,
-            genres = genres,
+            genres = advancedMetadata?.genres?.takeIf { it.isNotEmpty() } ?: genres,
             backdrop = artwork.backdrop,
             logo = artwork.logo,
             poster = poster,
             releaseInfo = firstAired.trimmed(),
             rating = score,
             runtimeMinutes = averageRuntime,
-            ageRating = contentRatings.firstOrNull(),
+            ageRating = advancedMetadata?.ageRating ?: contentRatings.firstOrNull(),
             countries = countries.takeIf { it.isNotEmpty() },
             language = originalLanguage.trimmed(),
             airsDays = airsDays.toMap(),
@@ -215,7 +232,10 @@ class TvdbMetadataService @Inject constructor(
             aliases = aliases.mapNotNull { it.name.trimmed() },
             contentRatings = contentRatings,
             remoteIds = remoteIds,
-            seasonOrderContext = seasonOrderContext
+            seasonOrderContext = seasonOrderContext,
+            castMembers = advancedMetadata?.castMembers.orEmpty(),
+            productionCompanies = advancedMetadata?.productionCompanies.orEmpty(),
+            networks = advancedMetadata?.networks.orEmpty()
         )
     }
 
