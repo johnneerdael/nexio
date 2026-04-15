@@ -479,10 +479,29 @@ internal fun ModernRowSection(
             }
         }
 
+        var lastFocusedItemIndex by remember { mutableStateOf(0) }
+
         CompositionLocalProvider(LocalBringIntoViewSpec provides horizontalBringIntoViewSpec) {
             LazyRow(
                 state = rowListState,
                 modifier = Modifier
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft) {
+                            val currentIndex = lastFocusedItemIndex
+                            if (currentIndex > 0) {
+                                val prevItem = row.items.getOrNull(currentIndex - 1)
+                                if (prevItem != null) {
+                                    runCatching {
+                                        uiCaches.requesterFor(row.key, prevItem.key).requestFocus()
+                                    }
+                                    return@onPreviewKeyEvent true
+                                }
+                            }
+                            false
+                        } else {
+                            false
+                        }
+                    }
                     .focusGroup(),
                 contentPadding = PaddingValues(horizontal = rowStartPadding),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -495,7 +514,10 @@ internal fun ModernRowSection(
                     ) { index ->
                         val requester = uiCaches.requesterFor(row.key, "loading_$index")
                         val onFocused = remember(row.key, index) {
-                            { onRowItemFocused(row.key, index, false) }
+                            {
+                                lastFocusedItemIndex = index
+                                onRowItemFocused(row.key, index, false)
+                            }
                         }
                         ModernCatalogLoadingPlaceholder(
                             cardWidth = modernCatalogCardWidth,
@@ -514,7 +536,10 @@ internal fun ModernRowSection(
                     val requester = uiCaches.requesterFor(row.key, item.key)
                     val isContinueWatchingRow = row.key == "continue_watching"
                     val onFocused = remember(row.key, index, isContinueWatchingRow) {
-                        { onRowItemFocused(row.key, index, isContinueWatchingRow) }
+                        {
+                            lastFocusedItemIndex = index
+                            onRowItemFocused(row.key, index, isContinueWatchingRow)
+                        }
                     }
 
                     when (val payload = item.payload) {

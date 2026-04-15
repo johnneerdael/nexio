@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -38,7 +39,7 @@ class TvdbSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             dataStore.settings.collectLatest { settings ->
                 val shouldForceDisable = settings.enabled &&
-                    (!settings.configured || settings.validationStatus == TvdbValidationStatus.INVALID)
+                    settings.validationStatus == TvdbValidationStatus.INVALID
 
                 if (shouldForceDisable) {
                     dataStore.setEnabled(false)
@@ -77,6 +78,59 @@ class TvdbSettingsViewModel @Inject constructor(
 
                     state.validationStatus == TvdbValidationStatus.VALID -> {
                         dataStore.setEnabled(true)
+                    }
+
+                    state.apiKey.isNotBlank() -> {
+                        // Key present but not yet validated on this device — validate now
+                        val currentSettings = dataStore.settings.first()
+                        val pin = currentSettings.subscriberPin
+                        _uiState.update { it.copy(validationStatus = TvdbValidationStatus.VALIDATING) }
+                        when (val result = authService.validateCredentialsResult(
+                            state.apiKey, pin
+                        )) {
+                            is TvdbAuthResult.Valid -> {
+                                dataStore.saveCredentials(
+                                    apiKey = state.apiKey,
+                                    pin = pin,
+                                    validationStatus = TvdbValidationStatus.VALID
+                                )
+                                dataStore.setEnabled(true)
+                                _uiState.update {
+                                    it.copy(
+                                        validationStatus = TvdbValidationStatus.VALID,
+                                        lastFailure = ""
+                                    )
+                                }
+                            }
+                            is TvdbAuthResult.InvalidCredentials -> {
+                                dataStore.saveValidationFailure(
+                                    status = TvdbValidationStatus.INVALID,
+                                    lastFailure = result.lastFailure
+                                )
+                                dataStore.setEnabled(false)
+                                _uiState.update {
+                                    it.copy(
+                                        enabled = false,
+                                        validationStatus = TvdbValidationStatus.INVALID,
+                                        lastFailure = result.lastFailure
+                                    )
+                                }
+                                _validationError.tryEmit(TvdbValidationError.InvalidCredentials)
+                            }
+                            is TvdbAuthResult.AuthUnavailable -> {
+                                dataStore.saveValidationFailure(
+                                    status = TvdbValidationStatus.FALLBACK_ACTIVE,
+                                    lastFailure = result.lastFailure
+                                )
+                                dataStore.setEnabled(true)
+                                _uiState.update {
+                                    it.copy(
+                                        validationStatus = TvdbValidationStatus.FALLBACK_ACTIVE,
+                                        lastFailure = result.lastFailure
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     else -> {
@@ -132,6 +186,11 @@ class TvdbSettingsViewModel @Inject constructor(
 
             when (val result = authService.validateCredentialsResult(trimmedApiKey, trimmedPin)) {
                 is TvdbAuthResult.Valid -> {
+                    dataStore.saveCredentials(
+                        apiKey = trimmedApiKey,
+                        pin = trimmedPin,
+                        validationStatus = TvdbValidationStatus.VALID
+                    )
                     _uiState.update {
                         it.copy(
                             apiKey = trimmedApiKey,

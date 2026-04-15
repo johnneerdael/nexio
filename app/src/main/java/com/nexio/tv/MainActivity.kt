@@ -75,7 +75,6 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusProperties
@@ -2288,12 +2287,9 @@ private fun ModernSidebarScaffold(
                             }
                         }
                         if (keyEvent.key == Key.DirectionLeft) {
-                            val moved = focusManager.moveFocus(FocusDirection.Left)
-                            if (!moved) {
-                                isSidebarExpanded = true
-                                sidebarCollapsePending = false
-                                pendingSidebarFocusRequest = true
-                            }
+                            isSidebarExpanded = true
+                            sidebarCollapsePending = false
+                            pendingSidebarFocusRequest = true
                             true
                         } else {
                             false
