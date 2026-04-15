@@ -386,4 +386,21 @@ class ProfileSettingsScopeContractTest {
         assertTrue(!artworkSource.contains("languageTag"))
         assertTrue(!artworkSource.contains("profileId"))
     }
+
+    @Test
+    fun `home refreshes are generation gated across profile switches`() {
+        val homeViewModelSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModel.kt").readText()
+        val homePipelineSource = homeCatalogPipeline.readText()
+
+        assertTrue(homeViewModelSource.contains("internal var homeProfileGeneration"))
+        assertTrue(homeViewModelSource.contains("advanceHomeProfileGeneration()"))
+        assertTrue(homeViewModelSource.contains("isCurrentHomeProfileGeneration(generation)"))
+        assertTrue(homeViewModelSource.contains("val capturedGeneration = homeProfileGeneration"))
+        assertTrue(homePipelineSource.contains("deferredStartupRefreshJob?.cancel()"))
+        assertTrue(homePipelineSource.contains("loadActiveProfileDiskBackedHomeState("))
+        assertTrue(homePipelineSource.contains("expectedGeneration: Long? = null"))
+        assertTrue(homePipelineSource.contains("Skipping stale disk-backed home state"))
+        assertTrue(homePipelineSource.contains("runSerializedPostStartupRefreshPipeline(expectedGeneration: Long)"))
+        assertTrue(homePipelineSource.contains("Skipping stale serialized home refresh"))
+    }
 }

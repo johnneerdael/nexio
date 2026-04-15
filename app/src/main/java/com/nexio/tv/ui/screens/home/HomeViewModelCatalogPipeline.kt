@@ -146,6 +146,9 @@ internal fun HomeViewModel.restorePersistedSyntheticCatalogRowsPipeline() {
 internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     Log.d(HomeViewModel.TAG, "Resetting profile-scoped home state reason=$reason")
     cancelInFlightCatalogLoads()
+    deferredStartupRefreshJob?.cancel()
+    deferredStartupRefreshJob = null
+    pendingSerializedHomeRefreshReason = null
     catalogUpdateJob?.cancel()
     continueWatchingEnrichmentJob?.cancel()
     catalogsMap.clear()
@@ -201,7 +204,10 @@ internal fun HomeViewModel.clearTraktHomeState(reason: String) {
     }
 }
 
-internal suspend fun HomeViewModel.loadActiveProfileDiskBackedHomeState(reason: String) {
+internal suspend fun HomeViewModel.loadActiveProfileDiskBackedHomeState(
+    reason: String,
+    expectedGeneration: Long? = null
+) {
     val diskState = withContext(Dispatchers.IO) {
         val providerState = trackingProviderStateService.currentState()
         val syntheticSnapshot = syntheticHomeCatalogStore.read()
@@ -220,8 +226,16 @@ internal suspend fun HomeViewModel.loadActiveProfileDiskBackedHomeState(reason: 
             homeSnapshot = homeSnapshot
         )
     }
+    if (expectedGeneration != null && !isCurrentHomeProfileGeneration(expectedGeneration)) {
+        Log.d(HomeViewModel.TAG, "Skipping stale disk-backed home state reason=$reason generation=$expectedGeneration")
+        return
+    }
 
     withContext(Dispatchers.Main.immediate) {
+        if (expectedGeneration != null && !isCurrentHomeProfileGeneration(expectedGeneration)) {
+            Log.d(HomeViewModel.TAG, "Skipping stale disk-backed home state on main reason=$reason generation=$expectedGeneration")
+            return@withContext
+        }
         activeProfileTraktAuthenticated = diskState.traktAuthenticated
         activeProfileSimklAuthenticated = diskState.simklAuthenticated
         diskState.syntheticSnapshot?.let { snapshot ->
@@ -580,7 +594,11 @@ internal fun HomeViewModel.observeInstalledAddonsPipeline() {
     }
 }
 
-internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
+internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expectedGeneration: Long) {
+    if (!isCurrentHomeProfileGeneration(expectedGeneration)) {
+        Log.d(HomeViewModel.TAG, "Skipping stale serialized home refresh generation=$expectedGeneration")
+        return
+    }
     Log.d(
         HomeViewModel.TAG,
         "Post-startup refresh pipeline begin addons=${addonsCache.size} persistedTraktGroups=${persistedTraktSyntheticGroups.size} " +
@@ -627,6 +645,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
                     val traktBeforeKeys = traktSnapshotItemKeys(beforeTraktSnapshot)
                     val traktAfterKeys = traktSnapshotItemKeys(afterTraktSnapshot)
                     withContext(Dispatchers.Main.immediate) {
+                        if (!isCurrentHomeProfileGeneration(expectedGeneration)) return@withContext
                         if (activeProfileTraktAuthenticated) {
                             traktDiscoverySnapshot = afterTraktSnapshot
                             persistedTraktDiscoverySnapshot = afterTraktSnapshot
@@ -638,11 +657,12 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
                     )
                     Log.d(HomeViewModel.TAG, "Post-startup refresh step end source=trakt_discovery")
                     logStartupPerf("synthetic_refresh_step_start", "source=trakt")
-                    if (activeProfileTraktAuthenticated) {
+                    if (isCurrentHomeProfileGeneration(expectedGeneration) && activeProfileTraktAuthenticated) {
                         renewTraktSyntheticSnapshotPipeline(afterTraktSnapshot)
                     }
                     logStartupPerf("synthetic_refresh_step_end", "source=trakt rows=${persistedTraktSyntheticGroups.sumOf { it.rows.size }}")
                     withContext(Dispatchers.Main.immediate) {
+                        if (!isCurrentHomeProfileGeneration(expectedGeneration)) return@withContext
                         scheduleUpdateCatalogRows()
                     }
                 } catch (e: kotlinx.coroutines.CancellationException) {
@@ -670,6 +690,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
                     val simklBeforeKeys = simklSnapshotItemKeys(beforeSimklSnapshot)
                     val simklAfterKeys = simklSnapshotItemKeys(afterSimklSnapshot)
                     withContext(Dispatchers.Main.immediate) {
+                        if (!isCurrentHomeProfileGeneration(expectedGeneration)) return@withContext
                         simklDiscoverySnapshot = afterSimklSnapshot
                         persistedSimklDiscoverySnapshot = afterSimklSnapshot
                     }
@@ -679,9 +700,12 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
                     )
                     Log.d(HomeViewModel.TAG, "Post-startup refresh step end source=simkl_discovery")
                     logStartupPerf("synthetic_refresh_step_start", "source=simkl")
-                    renewSimklSyntheticSnapshotPipeline(afterSimklSnapshot)
+                    if (isCurrentHomeProfileGeneration(expectedGeneration)) {
+                        renewSimklSyntheticSnapshotPipeline(afterSimklSnapshot)
+                    }
                     logStartupPerf("synthetic_refresh_step_end", "source=simkl rows=${persistedSimklSyntheticGroups.sumOf { it.rows.size }}")
                     withContext(Dispatchers.Main.immediate) {
+                        if (!isCurrentHomeProfileGeneration(expectedGeneration)) return@withContext
                         scheduleUpdateCatalogRows()
                     }
                 } catch (e: kotlinx.coroutines.CancellationException) {
@@ -712,6 +736,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
                     val mdbBeforeKeys = mdbSnapshotItemKeys(beforeMdbSnapshot)
                     val mdbAfterKeys = mdbSnapshotItemKeys(afterMdbSnapshot)
                     withContext(Dispatchers.Main.immediate) {
+                        if (!isCurrentHomeProfileGeneration(expectedGeneration)) return@withContext
                         mdbListDiscoverySnapshot = afterMdbSnapshot
                         persistedMDBListDiscoverySnapshot = afterMdbSnapshot
                     }
@@ -721,7 +746,9 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
                     )
                     Log.d(HomeViewModel.TAG, "Post-startup refresh step end source=mdblist_discovery")
                     logStartupPerf("synthetic_refresh_step_start", "source=mdblist")
-                    renewMDBListSyntheticSnapshotPipeline(afterMdbSnapshot)
+                    if (isCurrentHomeProfileGeneration(expectedGeneration)) {
+                        renewMDBListSyntheticSnapshotPipeline(afterMdbSnapshot)
+                    }
                     logStartupPerf("synthetic_refresh_step_end", "source=mdblist rows=${persistedMDBListSyntheticGroups.sumOf { it.rows.size }}")
                     withContext(Dispatchers.Main.immediate) {
                         scheduleUpdateCatalogRows()
@@ -769,6 +796,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
                             },
                             onCatalogReady = { catalogKey, row, diff ->
                                 withContext(Dispatchers.Main.immediate) {
+                                    if (!isCurrentHomeProfileGeneration(expectedGeneration)) return@withContext
                                     catalogsMap[catalogKey] = row
                                     if (diff.addedOrChanged.isNotEmpty()) {
                                         logStartupPerf(
@@ -787,6 +815,7 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
                     }
                     Log.d(HomeViewModel.TAG, "Post-startup refresh addon catalogs refreshed=${refreshedCatalogCount.get()}")
                     withContext(Dispatchers.Main.immediate) {
+                        if (!isCurrentHomeProfileGeneration(expectedGeneration)) return@withContext
                         scheduleUpdateCatalogRows()
                     }
                 } catch (e: kotlinx.coroutines.CancellationException) {
@@ -797,6 +826,10 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline() {
             }
         )
         refreshJobs.joinAll()
+    }
+    if (!isCurrentHomeProfileGeneration(expectedGeneration)) {
+        Log.d(HomeViewModel.TAG, "Skipping stale serialized home refresh settlement generation=$expectedGeneration")
+        return
     }
 
     val afterTraktSnapshot = if (activeProfileTraktAuthenticated) {

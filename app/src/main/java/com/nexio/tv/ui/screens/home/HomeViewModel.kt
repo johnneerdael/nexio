@@ -268,6 +268,8 @@ class HomeViewModel @Inject constructor(
     internal var profileSwitchDiskHydrationActive: Boolean = false
     @Volatile
     internal var suppressProfileSwitchRefreshUntilMs: Long = 0L
+    @Volatile
+    internal var homeProfileGeneration: Long = 0L
 
     val trailerPreviewUrls: Map<String, String>
         get() = trailerPreviewUrlsState
@@ -412,16 +414,19 @@ class HomeViewModel @Inject constructor(
     private fun observeProfileSwitches() {
         viewModelScope.launch {
             profileManager.profileSwitched.collectLatest { profileId ->
+                val generation = advanceHomeProfileGeneration()
                 profileSwitchDiskHydrationActive = true
                 suppressProfileSwitchRefreshUntilMs = SystemClock.elapsedRealtime() + 5_000L
                 resetProfileScopedHomeState("profile_switch:$profileId")
                 try {
                     continueWatchingSnapshotService.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
-                    loadActiveProfileDiskBackedHomeState("profile_switch:$profileId")
+                    loadActiveProfileDiskBackedHomeState("profile_switch:$profileId", expectedGeneration = generation)
                 } finally {
-                    profileSwitchDiskHydrationActive = false
-                    pendingSerializedHomeRefreshReason = null
-                    startupRefreshPending = false
+                    if (isCurrentHomeProfileGeneration(generation)) {
+                        profileSwitchDiskHydrationActive = false
+                        pendingSerializedHomeRefreshReason = null
+                        startupRefreshPending = false
+                    }
                 }
             }
         }
@@ -604,21 +609,37 @@ class HomeViewModel @Inject constructor(
             pendingSerializedHomeRefreshReason = reason
             return
         }
+        val capturedGeneration = homeProfileGeneration
         deferredStartupRefreshJob = viewModelScope.launch {
             var nextReason: String? = reason
-            while (nextReason != null) {
+            while (nextReason != null && isCurrentHomeProfileGeneration(capturedGeneration)) {
                 val currentReason = nextReason
                 pendingSerializedHomeRefreshReason = null
                 startupRefreshPending = true
                 Log.d(TAG, "Serialized home refresh start reason=$currentReason")
                 logStartupPerf("catalog_refresh_start", "reason=$currentReason")
-                runSerializedPostStartupRefresh()
+                runSerializedPostStartupRefresh(expectedGeneration = capturedGeneration)
                 logStartupPerf("catalog_refresh_end", "reason=$currentReason")
                 Log.d(TAG, "Serialized home refresh end reason=$currentReason")
-                nextReason = pendingSerializedHomeRefreshReason
+                nextReason = if (isCurrentHomeProfileGeneration(capturedGeneration)) {
+                    pendingSerializedHomeRefreshReason
+                } else {
+                    null
+                }
             }
-            runDeferredFocusedItemEnrichmentIfReady()
+            if (isCurrentHomeProfileGeneration(capturedGeneration)) {
+                runDeferredFocusedItemEnrichmentIfReady()
+            }
         }
+    }
+
+    internal fun advanceHomeProfileGeneration(): Long {
+        homeProfileGeneration += 1L
+        return homeProfileGeneration
+    }
+
+    internal fun isCurrentHomeProfileGeneration(generation: Long): Boolean {
+        return homeProfileGeneration == generation
     }
 
     internal fun shouldSuppressProfileSwitchRefresh(reason: String): Boolean {
@@ -673,7 +694,8 @@ class HomeViewModel @Inject constructor(
     }
 
     private suspend fun updateCatalogRows() = updateCatalogRowsPipeline()
-    private suspend fun runSerializedPostStartupRefresh() = runSerializedPostStartupRefreshPipeline()
+    private suspend fun runSerializedPostStartupRefresh(expectedGeneration: Long) =
+        runSerializedPostStartupRefreshPipeline(expectedGeneration)
 
     internal var posterStatusReconcileJob: Job? = null
 
