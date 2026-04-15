@@ -1,5 +1,7 @@
 package com.nexio.tv.core.tvdb
 
+import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.remote.api.TvdbAirsDays
 import com.nexio.tv.data.remote.api.TvdbAlias
 import com.nexio.tv.data.remote.api.TvdbApi
@@ -10,12 +12,23 @@ import com.nexio.tv.data.remote.api.TvdbEpisodeRecord
 import com.nexio.tv.data.remote.api.TvdbGenreRecord
 import com.nexio.tv.data.remote.api.TvdbRemoteId
 import com.nexio.tv.data.remote.api.TvdbSeriesEpisodesResponse
+import com.nexio.tv.data.remote.api.TvdbSeriesExtendedResponse
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
 import com.nexio.tv.data.remote.api.TvdbStatusRecord
+import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.PosterRatingsProvider
+import io.mockk.Runs
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.just
+import io.mockk.mockk
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 import retrofit2.http.GET
+import retrofit2.Response
 
 class TvdbMetadataServiceTest {
 
@@ -105,4 +118,165 @@ class TvdbMetadataServiceTest {
         assertEquals(4444, episode.linkedMovie)
         assertEquals("series", episode.finaleType)
     }
+
+    @Test
+    fun `poster ratings override replaces only poster`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val authService = mockk<TvdbAuthService>()
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val cacheStore = mockk<MetadataDiskCacheStore>()
+        val activeProvider = PosterRatingsUrlResolver.ActiveProvider(
+            provider = PosterRatingsProvider.TOP_POSTERS,
+            apiKey = "top-key"
+        )
+        val identity = TvdbSeriesIdentity(
+            tvdbId = 121361,
+            remoteIds = mapOf(TvdbRemoteIdSource.IMDB to setOf("tt0944947"))
+        )
+        val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore)
+
+        coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
+        coEvery { posterResolver.getActiveProvider() } returns activeProvider
+        every {
+            cacheStore.readTvdbEnrichment(121361, "series_extended", "en-US", "TOP_POSTERS:${"top-key".hashCode()}")
+        } returns null
+        every { cacheStore.writeTvdbEnrichment(any(), any(), any(), any(), any()) } just Runs
+        every {
+            posterResolver.resolvePosterUrl(
+                originalPosterUrl = "https://art.example/poster.jpg",
+                contentId = "tvdb:121361",
+                contentType = ContentType.SERIES,
+                activeProvider = activeProvider
+            )
+        } returns "https://api.top-streaming.stream/top-key/tvdb/poster/121361.jpg"
+        coEvery {
+            tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, "translations", false)
+        } returns Response.success(TvdbSeriesExtendedResponse(data = fullSeriesRecord()))
+
+        val enrichment = service.fetchSeriesEnrichment(identity, language = "en-US")
+
+        assertNotNull(enrichment)
+        assertEquals(121361, enrichment?.seriesTvdbId)
+        assertEquals("Game of Thrones", enrichment?.localizedTitle)
+        assertEquals("https://api.top-streaming.stream/top-key/tvdb/poster/121361.jpg", enrichment?.poster)
+        assertEquals("https://art.example/backdrop.jpg", enrichment?.backdrop)
+        assertEquals("https://art.example/logo.png", enrichment?.logo)
+        assertEquals(setOf("tt0944947"), enrichment?.remoteIds?.get("imdb"))
+        assertEquals("21:00", enrichment?.airsTime)
+        assertEquals(57, enrichment?.averageRuntimeMinutes)
+        assertEquals("Ended", enrichment?.status)
+        coVerify(exactly = 1) { tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, "translations", false) }
+    }
+
+    @Test
+    fun `fetch episode enrichment maps TVDB episodes by season and episode`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+
+        coEvery {
+            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+        } returns Response.success(TvdbSeriesEpisodesResponse(data = listOf(episodeRecord())))
+
+        val episodes = service.fetchEpisodeEnrichment(identity, seasonNumbers = listOf(1), language = "en-US")
+
+        val episode = episodes[1 to 1]
+        assertNotNull(episode)
+        assertEquals("tvdb:1001", episode?.providerEpisodeId)
+        assertEquals("Winter Is Coming", episode?.title)
+        assertEquals("https://art.example/episode.jpg", episode?.thumbnail)
+        assertEquals(62, episode?.runtimeMinutes)
+        assertEquals(1, episode?.absoluteNumber)
+        assertEquals(4444, episode?.linkedMovieTvdbId)
+    }
+
+    @Test
+    fun `fetch season episodes reads cache before TVDB network`() = runTest {
+        val tvdbApi = mockk<TvdbApi>(relaxed = true)
+        val authService = mockk<TvdbAuthService>()
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val cacheStore = mockk<MetadataDiskCacheStore>()
+        val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore)
+        val cached = listOf(
+            TvEpisodeMetadata(
+                providerEpisodeId = "tvdb:1001",
+                seasonNumber = 1,
+                episodeNumber = 1,
+                title = "Cached Pilot",
+                airDate = "2011-04-17"
+            )
+        )
+
+        every {
+            cacheStore.readTvdbSeasonEpisodes(121361, "default", 1, "en-US")
+        } returns cached
+
+        val episodes = service.fetchSeasonEpisodes(TvdbSeriesIdentity(tvdbId = 121361), 1, "en-US")
+
+        assertEquals("Cached Pilot", episodes.single().metadata.title)
+        coVerify(exactly = 0) { authService.bearerToken() }
+        coVerify(exactly = 0) { tvdbApi.getSeriesEpisodes(any(), any(), any(), any(), any(), any(), any()) }
+    }
+
+    private fun tvdbService(tvdbApi: TvdbApi): TvdbMetadataService {
+        val authService = mockk<TvdbAuthService>()
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val cacheStore = mockk<MetadataDiskCacheStore>()
+
+        coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
+        coEvery { posterResolver.getActiveProvider() } returns null
+        every { cacheStore.readTvdbEnrichment(any(), any(), any(), any()) } returns null
+        every { cacheStore.writeTvdbEnrichment(any(), any(), any(), any(), any()) } just Runs
+        every { cacheStore.readTvdbSeasonEpisodes(any(), any(), any(), any()) } returns null
+        every { cacheStore.writeTvdbSeasonEpisodes(any(), any(), any(), any(), any()) } just Runs
+        every { posterResolver.resolvePosterUrl(any(), any(), any(), null) } answers { firstArg() }
+
+        return TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore)
+    }
+
+    private fun fullSeriesRecord(): TvdbSeriesExtendedRecord = TvdbSeriesExtendedRecord(
+        id = 121361,
+        name = "Game of Thrones",
+        image = "https://art.example/fallback-poster.jpg",
+        airsDays = TvdbAirsDays(sunday = true),
+        airsTime = "21:00",
+        aliases = listOf(TvdbAlias(name = "GoT")),
+        artworks = listOf(
+            TvdbArtworkRecord(image = "https://art.example/backdrop.jpg", type = 3, score = 90.0),
+            TvdbArtworkRecord(image = "https://art.example/logo.png", type = 23, score = 80.0),
+            TvdbArtworkRecord(image = "https://art.example/poster-low.jpg", type = 2, score = 10.0),
+            TvdbArtworkRecord(image = "https://art.example/poster.jpg", type = 2, score = 95.0)
+        ),
+        averageRuntime = 57,
+        contentRatings = listOf(TvdbContentRating(name = "TV-MA", country = "usa")),
+        country = "usa",
+        episodes = listOf(episodeRecord()),
+        firstAired = "2011-04-17",
+        genres = listOf(TvdbGenreRecord(name = "Drama")),
+        originalCountry = "usa",
+        originalLanguage = "eng",
+        originalNetwork = TvdbCompanyRecord(name = "HBO"),
+        overview = "Nine noble families fight for control.",
+        latestNetwork = TvdbCompanyRecord(name = "HBO"),
+        remoteIds = listOf(TvdbRemoteId(id = "tt0944947", sourceName = "imdb")),
+        score = 8.4,
+        status = TvdbStatusRecord(name = "Ended")
+    )
+
+    private fun episodeRecord(): TvdbEpisodeRecord = TvdbEpisodeRecord(
+        absoluteNumber = 1,
+        aired = "2011-04-17",
+        airsAfterSeason = 0,
+        airsBeforeEpisode = 1,
+        airsBeforeSeason = 2,
+        finaleType = "series",
+        id = 1001,
+        image = "https://art.example/episode.jpg",
+        linkedMovie = 4444,
+        name = "Winter Is Coming",
+        number = 1,
+        overview = "The first episode.",
+        runtime = 62,
+        seasonNumber = 1
+    )
 }
