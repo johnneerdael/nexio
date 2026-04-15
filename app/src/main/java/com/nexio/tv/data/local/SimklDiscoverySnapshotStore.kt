@@ -45,33 +45,33 @@ class SimklDiscoverySnapshotStore private constructor(
     private val gson = Gson()
     private val itemsByCatalogType = object : TypeToken<Map<String, List<MetaPreview>>>() {}.type
 
-    private val profileManager: ProfileManager
-        get() = injectedProfileManager ?: error("ProfileManager unavailable")
+    private fun injectedPrefsName(profileId: Int): String =
+        profilePrefsName(BASE_PREFS_NAME, profileId)
 
-    private fun injectedPrefsName(): String =
-        profilePrefsName(BASE_PREFS_NAME, profileManager.activeProfileId.value)
-
-    private fun prefsName(): String =
+    private fun prefsName(profileId: Int = activeProfileId()): String =
         if (injectedProfileManager != null) {
-            injectedPrefsName()
+            injectedPrefsName(profileId)
         } else {
-            profilePrefsName(BASE_PREFS_NAME, activeProfileId())
+            profilePrefsName(BASE_PREFS_NAME, profileId)
         }
 
-    fun read(): SimklDiscoverySnapshot? {
+    fun read(profileId: Int = activeProfileId()): SimklDiscoverySnapshot? {
         return runCatching {
-            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
             decode(raw)
         }.onFailure {
             Log.w(TAG, "Failed to restore SIMKL discovery snapshot", it)
-            clear()
+            clear(profileId)
         }.getOrNull()
     }
 
-    fun write(snapshot: SimklDiscoverySnapshot) {
+    fun write(
+        snapshot: SimklDiscoverySnapshot,
+        profileId: Int = activeProfileId()
+    ) {
         runCatching {
-            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
                 add("itemsByCatalog", gson.toJsonTree(snapshot.itemsByCatalog))
                 addProperty("updatedAtMs", snapshot.updatedAtMs)
@@ -84,9 +84,9 @@ class SimklDiscoverySnapshotStore private constructor(
         }.onFailure { Log.w(TAG, "Failed to persist SIMKL discovery snapshot", it) }
     }
 
-    fun clear() {
+    fun clear(profileId: Int = activeProfileId()) {
         runCatching {
-            context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE).edit().remove(SNAPSHOT_KEY).commit()
+            context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE).edit().remove(SNAPSHOT_KEY).commit()
         }
     }
 
