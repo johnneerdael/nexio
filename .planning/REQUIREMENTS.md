@@ -38,7 +38,7 @@ Requirements for the TVDB first-class TV metadata milestone. Each maps to roadma
 ### User Experience and Diagnostics
 
 - [ ] **UX-01**: Settings explain provider precedence: TVDB is the TV metadata source when configured, TMDB remains movie metadata and TV fallback when TVDB is not configured, and poster-ratings is authoritative for supported poster imagery
-- [ ] **UX-02**: Users benefit from exact-air-time Continue Watching automatically once TVDB is configured, without needing additional provider-specific toggles
+- [x] **UX-02**: Users benefit from exact-air-time Continue Watching automatically once TVDB is configured, without needing additional provider-specific toggles
 - [ ] **UX-03**: TVDB failures degrade gracefully with validation or diagnostic signals instead of making Continue Watching or TV detail look randomly late, empty, or inconsistent
 
 ### Caching and API Use
@@ -98,7 +98,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AIR-06 | Phase 8 | Verified |
 | META-03 | Phase 9 | Complete |
 | META-05 | Phase 9 | Complete |
-| UX-02 | Phase 9 | Pending |
+| UX-02 | Phase 9 | Complete |
 | UX-03 | Phase 10 | Pending |
 | CACHE-02 | Phase 10 | Pending |
 | CACHE-03 | Phase 10 | Pending |
