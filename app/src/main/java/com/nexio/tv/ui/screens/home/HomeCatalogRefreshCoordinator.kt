@@ -9,14 +9,20 @@ import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
+import com.nexio.tv.core.tvdb.TvMetadataEnrichment
+import com.nexio.tv.core.tvdb.TvMetadataRequest
+import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogDescriptor
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.applyTo
@@ -65,34 +71,44 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
+    private val tvMetadataRouter: TvMetadataRouter,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     @ApplicationContext private val appContext: Context
 ) {
     /**
-     * Overlay TMDB-localized title/description/genres on top of the
+     * Overlay provider-localized title/description/genres on top of the
      * addon-sourced MetaPreview. This ensures every item on Modern Home
      * respects the app display language (addons ship English-only text).
-     * The fetchEnrichment call populates a language-keyed disk cache that
+     * The provider fetch populates a language-keyed disk cache that
      * the Detail screen will later hit, so this does not introduce duplicate
-     * TMDB API traffic — it reuses the same cache.
+     * metadata API traffic — it reuses the same cache.
      */
-    private suspend fun overlayTmdbLocalizedMetadata(item: MetaPreview): MetaPreview {
+    internal suspend fun overlayProviderLocalizedMetadata(
+        item: MetaPreview,
+        onLog: (String, String?) -> Unit = { _, _ -> }
+    ): MetaPreview {
         return try {
-            val apiKey = tmdbSettingsDataStore.settings.first().apiKey.trim()
-            if (apiKey.isEmpty()) return item
-            val tmdbId = tmdbService.ensureTmdbId(item.id, item.apiType) ?: return item
-            val enrichment = tmdbMetadataService.fetchEnrichment(
-                tmdbId = tmdbId,
-                contentType = item.type
-            ) ?: return item
-            item.copy(
-                name = enrichment.localizedTitle?.takeIf { it.isNotBlank() } ?: item.name,
-                description = enrichment.description?.takeIf { it.isNotBlank() } ?: item.description,
-                genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else item.genres,
-                releaseInfo = enrichment.releaseInfo ?: item.releaseInfo,
-                imdbRating = enrichment.rating?.toFloat() ?: item.imdbRating
-            )
+            val enrichment = if (item.type.isHomeCatalogTvContent()) {
+                val decision = tvMetadataRouter.fetchEnrichment(
+                    TvMetadataRequest(
+                        contentId = item.id,
+                        fallbackContentId = null,
+                        contentType = item.type
+                    )
+                )
+                logProviderDecisionDiagnostics(item, decision.diagnostics, onLog)
+                decision.value
+            } else {
+                val apiKey = tmdbSettingsDataStore.settings.first().apiKey.trim()
+                if (apiKey.isEmpty()) return item
+                val tmdbId = tmdbService.ensureTmdbId(item.id, item.apiType) ?: return item
+                tmdbMetadataService.fetchEnrichment(
+                    tmdbId = tmdbId,
+                    contentType = item.type
+                )?.toTvMetadataEnrichment()
+            } ?: return item
+            item.applyProviderEnrichment(enrichment)
         } catch (_: Throwable) {
             item
         }
@@ -155,7 +171,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                     persistedFallback = persistedFallback,
                     externalMeta = externalMeta
                 )
-                val localized = overlayTmdbLocalizedMetadata(merged)
+                val localized = overlayProviderLocalizedMetadata(merged, onLog)
                 val enriched = mdbListRepository.enrichPreview(localized)
                 posterRatingsUrlResolver.apply(enriched, activePosterProvider)
             }
@@ -287,7 +303,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                                 persistedFallback = persistedFallback,
                                 externalMeta = externalMeta
                             )
-                            val localized = overlayTmdbLocalizedMetadata(merged)
+                            val localized = overlayProviderLocalizedMetadata(merged, onLog)
                             val enriched = mdbListRepository.enrichPreview(localized)
                             posterRatingsUrlResolver.apply(enriched, activePosterProvider)
                         }
@@ -526,3 +542,50 @@ internal fun shouldReusePersistedHomeItem(
 ): Boolean {
     return !itemChanged && persistedFallback?.tomatoesRating != null
 }
+
+private fun MetaPreview.applyProviderEnrichment(enrichment: TvMetadataEnrichment): MetaPreview {
+    return copy(
+        name = enrichment.localizedTitle?.takeIf { it.isNotBlank() } ?: name,
+        description = enrichment.description?.takeIf { it.isNotBlank() } ?: description,
+        genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else genres,
+        releaseInfo = enrichment.releaseInfo ?: releaseInfo,
+        imdbRating = enrichment.rating?.toFloat() ?: imdbRating,
+        background = enrichment.backdrop ?: background,
+        logo = enrichment.logo ?: logo,
+        poster = enrichment.poster ?: poster
+    )
+}
+
+private fun TmdbEnrichment.toTvMetadataEnrichment(): TvMetadataEnrichment {
+    return TvMetadataEnrichment(
+        seriesTvdbId = null,
+        localizedTitle = localizedTitle,
+        description = description,
+        genres = genres,
+        backdrop = backdrop,
+        logo = logo,
+        poster = poster,
+        releaseInfo = releaseInfo,
+        rating = rating,
+        runtimeMinutes = runtimeMinutes,
+        ageRating = ageRating,
+        countries = countries,
+        language = language
+    )
+}
+
+private fun logProviderDecisionDiagnostics(
+    item: MetaPreview,
+    diagnostics: List<com.nexio.tv.core.tvdb.TvMetadataDiagnosticEvent>,
+    onLog: (String, String?) -> Unit
+) {
+    val itemKey = "itemKey=${item.apiType}:${item.id}"
+    if (diagnostics.any { it.reason == TvMetadataDecisionReason.TMDB_TV_SKIPPED }) {
+        onLog("tmdb_tv_skipped", itemKey)
+    }
+    if (diagnostics.any { it.reason == TvMetadataDecisionReason.TVDB_FALLBACK_TMDB }) {
+        onLog("tvdb_fallback_tmdb", itemKey)
+    }
+}
+
+private fun ContentType.isHomeCatalogTvContent(): Boolean = this == ContentType.SERIES || this == ContentType.TV
