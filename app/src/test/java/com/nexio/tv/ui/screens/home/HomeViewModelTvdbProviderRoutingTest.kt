@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvMetadataDecision
@@ -12,10 +13,12 @@ import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.WatchProgress
+import com.nexio.tv.domain.repository.MetaRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -86,6 +89,56 @@ class HomeViewModelTvdbProviderRoutingTest {
         assertEquals("TVDB episode overview", result.episodeDescription)
         coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
         coVerify(exactly = 0) { tmdbMetadataService.fetchEnrichment(any(), any(), any()) }
+        coVerify(exactly = 0) { tmdbMetadataService.fetchEpisodeEnrichment(any(), any()) }
+    }
+
+    @Test
+    fun `runtime hydration uses tvdb episode runtime`() = runTest {
+        val viewModel = mockk<HomeViewModel>()
+        val metaRepository = mockk<MetaRepository>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        every { viewModel.metaRepository } returns metaRepository
+        every { viewModel.tvMetadataRouter } returns tvMetadataRouter
+        every { viewModel.tmdbService } returns tmdbService
+        every { viewModel.tmdbMetadataService } returns tmdbMetadataService
+        every {
+            metaRepository.getMetaFromAllAddons(
+                type = "series",
+                id = "tt0944947",
+                cacheOnDisk = true,
+                writeToDisk = true,
+                origin = "continue_watching_runtime"
+            )
+        } returns flowOf(NetworkResult.Error("missing meta"))
+        coEvery { tvMetadataRouter.fetchEpisodeEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = mapOf((2 to 5) to TvEpisodeMetadata(runtimeMinutes = 47))
+        )
+        val item = ContinueWatchingItem.NextUp(
+            NextUpInfo(
+                contentId = "tt0944947",
+                contentType = "series",
+                name = "Game of Thrones",
+                poster = null,
+                backdrop = null,
+                logo = null,
+                videoId = "tt0944947:2:5",
+                season = 2,
+                episode = 5,
+                episodeTitle = "The Ghost of Harrenhal",
+                thumbnail = null,
+                lastWatched = 42L
+            )
+        )
+
+        val runtime = viewModel.resolveContinueWatchingRuntimeMinutes(item)
+
+        assertEquals(47, runtime)
+        coVerify(exactly = 1) { tvMetadataRouter.fetchEpisodeEnrichment(any()) }
+        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
         coVerify(exactly = 0) { tmdbMetadataService.fetchEpisodeEnrichment(any(), any()) }
     }
 }
