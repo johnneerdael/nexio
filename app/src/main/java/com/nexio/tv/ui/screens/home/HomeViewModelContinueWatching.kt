@@ -45,6 +45,7 @@ internal fun shouldEnrichContinueWatchingProviderMetadata(
 internal fun HomeViewModel.loadContinueWatchingPipeline() {
     viewModelScope.launch {
         continueWatchingSnapshotService.observeSnapshot().collectLatest { snapshot ->
+            val capturedGeneration = homeProfileGeneration
             val timeline = buildMixedContinueWatchingTimeline(
                 resumeItems = snapshot.resumeItems,
                 nextUpItems = snapshot.nextUpItems,
@@ -59,6 +60,11 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
             }
             val traktUpNextItems = snapshot.traktUpNextItems.map { entry ->
                 entry.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, System.currentTimeMillis())
+            }
+
+            if (!isCurrentHomeProfileGeneration(capturedGeneration)) {
+                Log.d(HomeViewModel.TAG, "Skipping stale continue watching publish generation=$capturedGeneration")
+                return@collectLatest
             }
 
             _uiState.update { state ->
@@ -79,6 +85,10 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                     try {
                         val enrichedItems = enrichContinueWatchingItems(items, settings)
                         val enrichedTraktItems = enrichContinueWatchingNextUpItems(traktUpNextItems, settings)
+                        if (!isCurrentHomeProfileGeneration(capturedGeneration)) {
+                            Log.d(HomeViewModel.TAG, "Skipping stale continue watching enrichment generation=$capturedGeneration")
+                            return@launch
+                        }
                         _uiState.update { state ->
                             state.copy(
                                 continueWatchingItems = enrichedItems,

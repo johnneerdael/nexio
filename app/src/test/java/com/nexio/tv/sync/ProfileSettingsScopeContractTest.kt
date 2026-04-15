@@ -19,6 +19,7 @@ class ProfileSettingsScopeContractTest {
     private val traktAuthService = File("app/src/main/java/com/nexio/tv/data/repository/TraktAuthService.kt")
     private val simklAuthService = File("app/src/main/java/com/nexio/tv/data/repository/SimklAuthService.kt")
     private val homeCatalogPipeline = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt")
+    private val homeContinueWatching = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelContinueWatching.kt")
     private val metadataDiskCacheStore = File("app/src/main/java/com/nexio/tv/data/local/MetadataDiskCacheStore.kt")
     private val artworkImageCacheKeys = File("app/src/main/java/com/nexio/tv/core/image/ArtworkImageCacheKeys.kt")
 
@@ -393,6 +394,7 @@ class ProfileSettingsScopeContractTest {
     fun `home refreshes are generation gated across profile switches`() {
         val homeViewModelSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModel.kt").readText()
         val homePipelineSource = homeCatalogPipeline.readText()
+        val homeContinueWatchingSource = homeContinueWatching.readText()
 
         assertTrue(homeViewModelSource.contains("internal var homeProfileGeneration"))
         assertTrue(homeViewModelSource.contains("advanceHomeProfileGeneration()"))
@@ -404,6 +406,9 @@ class ProfileSettingsScopeContractTest {
         assertTrue(homePipelineSource.contains("Skipping stale disk-backed home state"))
         assertTrue(homePipelineSource.contains("runSerializedPostStartupRefreshPipeline(expectedGeneration: Long)"))
         assertTrue(homePipelineSource.contains("Skipping stale serialized home refresh"))
+        assertTrue(homeContinueWatchingSource.contains("val capturedGeneration = homeProfileGeneration"))
+        assertTrue(homeContinueWatchingSource.contains("Skipping stale continue watching publish"))
+        assertTrue(homeContinueWatchingSource.contains("Skipping stale continue watching enrichment"))
     }
 
     @Test
