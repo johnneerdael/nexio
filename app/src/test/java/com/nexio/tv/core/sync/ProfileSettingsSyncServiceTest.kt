@@ -433,6 +433,7 @@ class ProfileSettingsSyncServiceTest {
         val startObservingText = extractMethodBody(source, "startObserving")
 
         assertTrue(startObservingText.contains("distinctUntilChanged()"))
+        assertTrue("primary profile should not observe profile settings blob", startObservingText.contains("profileId == 1"))
         assertTrue(startObservingText.contains("pullBlobForProfile(profileId)"))
         assertTrue(startObservingText.contains("observeProfileSettings(profileId)"))
         assertTrue(
@@ -441,5 +442,19 @@ class ProfileSettingsSyncServiceTest {
         )
         assertTrue(startObservingText.contains("debounce(2000)"))
         assertTrue(startObservingText.contains("pushBlobForProfile(profileId)"))
+    }
+
+    @Test
+    fun `primary profile settings blob sync is a no-op`() {
+        val source = java.io.File(
+            "app/src/main/java/com/nexio/tv/core/sync/ProfileSettingsSyncService.kt"
+        ).readText()
+        val pullText = extractMethodBody(source, "pullBlobForProfile")
+        val pushText = extractMethodBody(source, "pushBlobForProfile")
+
+        assertTrue("primary profile should not pull profile settings blob", pullText.contains("profileId == 1"))
+        assertTrue("primary profile pull should return success", pullText.contains("Result.success(Unit)"))
+        assertTrue("primary profile should not push profile settings blob", pushText.contains("profileId == 1"))
+        assertTrue("primary profile push should return success", pushText.contains("Result.success(Unit)"))
     }
 }
