@@ -26,6 +26,7 @@ import com.nexio.tv.data.remote.api.TrailerApi
 import com.nexio.tv.data.remote.api.TopPostersApi
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TorBoxApi
+import com.nexio.tv.data.remote.api.TvdbApi
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import dagger.Module
@@ -340,6 +341,16 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @Named("tvdb")
+    fun provideTvdbRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder()
+            .baseUrl("https://api4.thetvdb.com/v4/")
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
     @Named("trakt")
     fun provideTraktRetrofit(
         @Named("trakt") okHttpClient: OkHttpClient,
@@ -380,6 +391,11 @@ object NetworkModule {
     @Singleton
     fun provideTmdbApi(@Named("tmdb") retrofit: Retrofit): TmdbApi =
         retrofit.create(TmdbApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideTvdbApi(@Named("tvdb") retrofit: Retrofit): TvdbApi =
+        retrofit.create(TvdbApi::class.java)
 
     @Provides
     @Singleton
