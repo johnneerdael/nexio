@@ -26,6 +26,20 @@ import org.junit.Test
 class HomeCatalogStartupReadinessTest {
 
     @Test
+    fun `trakt catalog preferences contribute no home keys when active profile is unauthenticated`() {
+        val prefs = TraktCatalogPreferences(
+            enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES, TraktCatalogIds.RECOMMENDED_SHOWS),
+            catalogOrder = TraktCatalogIds.BUILT_IN_ORDER,
+            selectedPopularListKeys = setOf("popular:custom-list")
+        )
+
+        assertEquals(
+            emptyList<String>(),
+            buildExpectedConfiguredTraktOrderKeys(prefs.onlyWhenAuthenticated(authenticated = false))
+        )
+    }
+
+    @Test
     fun `expected configured home keys include addons trakt and mdblist`() {
         val addons = listOf(
             addonWithCatalog("cinemeta", "movie", "popular")

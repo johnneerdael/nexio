@@ -55,7 +55,7 @@ import com.nexio.tv.ui.theme.NexioColors
 
 @Composable
 fun ProfileSelectionScreen(
-    onProfileSelected: () -> Unit,
+    onProfileSelected: (Int) -> Unit,
     viewModel: ProfileSelectionViewModel = hiltViewModel()
 ) {
     val profiles by viewModel.profiles.collectAsStateWithLifecycle()
@@ -85,7 +85,7 @@ fun ProfileSelectionScreen(
         if (overlayProfile != null && activeProfileId == overlayProfile.id) {
             activePinOverlayProfile = null
             viewModel.resetPinState()
-            onProfileSelected()
+            onProfileSelected(overlayProfile.id)
         }
     }
 
@@ -116,8 +116,7 @@ fun ProfileSelectionScreen(
                             if (profilePinEnabled[profile.id] == true) {
                                 activePinOverlayProfile = profile
                             } else {
-                                viewModel.selectProfile(profile.id)
-                                onProfileSelected()
+                                onProfileSelected(profile.id)
                             }
                         }
                         true
@@ -137,8 +136,7 @@ fun ProfileSelectionScreen(
                             if (isPinLocked) {
                                 activePinOverlayProfile = profile
                             } else {
-                                viewModel.selectProfile(profile.id)
-                                onProfileSelected()
+                                onProfileSelected(profile.id)
                             }
                         },
                         modifier = Modifier
