@@ -63,10 +63,10 @@ Plans:
 **Requirements**: AIR-01, AIR-02, AIR-03, AIR-04, AIR-05, AIR-06
 **Plans:** 4 plans
 Plans:
-- [ ] 08-01-PLAN.md — Create exact TVDB availability contracts, parsing policy, and central gate priority
-- [ ] 08-02-PLAN.md — Enrich tracking next-up rows with TVDB exact timing and fallback diagnostics
-- [ ] 08-03-PLAN.md — Persist withheld rows and apply exact gating across Continue Watching surfaces
-- [ ] 08-04-PLAN.md — Add durable Android alarm scheduling, refresh, and retry behavior
+- [x] 08-01-PLAN.md — Create exact TVDB availability contracts, parsing policy, and central gate priority
+- [x] 08-02-PLAN.md — Enrich tracking next-up rows with TVDB exact timing and fallback diagnostics
+- [x] 08-03-PLAN.md — Persist withheld rows and apply exact gating across Continue Watching surfaces
+- [x] 08-04-PLAN.md — Add durable Android alarm scheduling, refresh, and retry behavior
 **Success Criteria** (what must be TRUE):
   1. For TVDB records with episode aired date plus series `airsTime`, Nexio computes an exact availability instant using the correct source-timezone policy
   2. Continue Watching withholds future TV episodes until the computed instant in the Android TV device timezone
