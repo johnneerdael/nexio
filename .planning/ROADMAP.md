@@ -26,11 +26,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Requirements**: PREF-01, PREF-04, PREF-05, PREF-06, CACHE-01
 **Plans:** 5 plans
 Plans:
-- [ ] 06-01-PLAN.md — Create RED validation coverage for TVDB auth, identity, settings, sync, and fallback behavior
-- [ ] 06-02-PLAN.md — Implement TVDB settings, token cache, Retrofit API, DI, and cached authentication
-- [ ] 06-03-PLAN.md — Implement TVDB remote-ID identity matching, identity cache, and fallback diagnostic decisions
-- [ ] 06-04-PLAN.md — Add TVDB public account sync and secret-backed credential sync support
-- [ ] 06-05-PLAN.md — Build the TVDB settings UI, approved copy, and integration hub routing
+- [x] 06-01-PLAN.md — Create RED validation coverage for TVDB auth, identity, settings, sync, and fallback behavior
+- [x] 06-02-PLAN.md — Implement TVDB settings, token cache, Retrofit API, DI, and cached authentication
+- [x] 06-03-PLAN.md — Implement TVDB remote-ID identity matching, identity cache, and fallback diagnostic decisions
+- [x] 06-04-PLAN.md — Add TVDB public account sync and secret-backed credential sync support
+- [x] 06-05-PLAN.md — Build the TVDB settings UI, approved copy, and integration hub routing
 **Success Criteria** (what must be TRUE):
   1. User can enable TVDB, save an API key, and receive validation feedback without exposing the key in logs or synced public payloads
   2. TVDB settings sync through the account settings system with the key handled through the existing secret channel pattern
