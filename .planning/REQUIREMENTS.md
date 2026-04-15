@@ -33,7 +33,7 @@ Requirements for the TVDB first-class TV metadata milestone. Each maps to roadma
 - [ ] **META-02**: TVDB enriches episode rows with title, overview, image, runtime, aired date, absolute number, specials placement fields, linked movie data when present, and finale type when present
 - [x] **META-03**: TVDB season ordering is preserved at least through the default TVDB season type, without assuming TMDB-style aired ordering when TVDB exposes a different season-type model
 - [ ] **META-04**: TVDB artwork replaces TMDB TV artwork for TV records where TVDB provides artwork, while still honoring existing artwork controls and poster-ratings precedence
-- [ ] **META-05**: TVDB trailers, characters/cast, companies, networks, genres, and content ratings replace TMDB TV metadata where Nexio already has equivalent TV surfaces
+- [x] **META-05**: TVDB trailers, characters/cast, companies, networks, genres, and content ratings replace TMDB TV metadata where Nexio already has equivalent TV surfaces
 
 ### User Experience and Diagnostics
 
@@ -97,7 +97,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AIR-05 | Phase 8 | Verified |
 | AIR-06 | Phase 8 | Verified |
 | META-03 | Phase 9 | Complete |
-| META-05 | Phase 9 | Pending |
+| META-05 | Phase 9 | Complete |
 | UX-02 | Phase 9 | Pending |
 | UX-03 | Phase 10 | Pending |
 | CACHE-02 | Phase 10 | Pending |

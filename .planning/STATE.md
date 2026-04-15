@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-04-15T16:05:49.018Z"
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-04-15T16:14:17.825Z"
 last_activity: 2026-04-15
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 32
-  completed_plans: 21
-  percent: 66
+  completed_plans: 22
+  percent: 69
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 ## Current Position
 
 Phase: 09
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-04-15
 
@@ -56,6 +56,7 @@ Progress: [██████░░░░] 63%
 
 *Updated after each plan completion*
 | Phase 09 P01 | 7min | 3 tasks | 10 files |
+| Phase 09 P02 | 5min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,8 @@ Recent decisions affecting current work:
 - [Phase 09]: Wave 0 scaffold uses reflection and Class.forName for not-yet-created fields/classes; static source guard reads .kt/.xml at test time
 - [Phase 09]: TVDB season-order context stored alongside canonical keys, never replacing Video.season/Video.episode
 - [Phase 09]: TvdbSeasonOrderMapper.applyEpisodeOrder only writes tvdbEpisodeOrder field, enforcing Trakt stability
+- [Phase 09]: TVDB advanced metadata mapper maps characters, companies, networks, genres, content ratings into existing domain surfaces without new UI
+- [Phase 09]: Advanced surface diagnostics (success/missing) emitted in TvMetadataRouter for router-level observability
 
 ### Pending Todos
 
@@ -83,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-15T16:05:49.014Z
-Stopped at: Completed 09-01-PLAN.md
+Last session: 2026-04-15T16:14:17.823Z
+Stopped at: Completed 09-02-PLAN.md
 Resume file: None
