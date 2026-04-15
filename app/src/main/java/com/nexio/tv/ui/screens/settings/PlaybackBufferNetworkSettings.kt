@@ -155,11 +155,23 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
 
     item(key = "network_cache_disk_spool_mode") {
         val context = LocalContext.current
-        val spoolDirectory = DiskSpoolStorageResolver.resolveSpoolDirectory(
-            context,
-            playerSettings.diskSpoolStorageLocation
-        ) ?: DiskSpoolStorageResolver.builtinSpoolDirectory(context)
-        val diskSpoolPolicy = resolveDiskSpoolPolicy(spoolDirectory.usableSpace)
+        val builtInSpoolDirectory = DiskSpoolStorageResolver.builtinSpoolDirectory(context)
+        val externalSpoolDirectory = DiskSpoolStorageResolver.externalSpoolDirectoryOrNull(context)
+        val builtInDiskSpoolPolicy = resolveDiskSpoolPolicy(
+            DiskSpoolStorageResolver.usableSpaceForSpoolDirectory(builtInSpoolDirectory)
+        )
+        val externalDiskSpoolPolicy = externalSpoolDirectory?.let { directory ->
+            resolveDiskSpoolPolicy(DiskSpoolStorageResolver.usableSpaceForSpoolDirectory(directory))
+        }
+        val effectiveLocation = resolveEffectiveDiskSpoolStorageLocation(
+            preferred = playerSettings.diskSpoolStorageLocation,
+            builtInSupported = builtInDiskSpoolPolicy != null,
+            externalSupported = externalDiskSpoolPolicy != null
+        )
+        val diskSpoolPolicy = when (effectiveLocation) {
+            DiskSpoolStorageLocation.BUILTIN -> builtInDiskSpoolPolicy
+            DiskSpoolStorageLocation.EXTERNAL -> externalDiskSpoolPolicy
+        }
         val diskSpoolSupported = diskSpoolPolicy != null
         val diskSpoolSubtitle = if (diskSpoolSupported) {
             stringResource(
@@ -177,6 +189,9 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
             isChecked = playerSettings.progressivePlaybackDiskMode == ProgressivePlaybackDiskMode.SPOOL,
             enabled = diskSpoolSupported,
             onCheckedChange = { enabled ->
+                if (enabled && playerSettings.diskSpoolStorageLocation != effectiveLocation) {
+                    onSetDiskSpoolStorageLocation(effectiveLocation)
+                }
                 onSetProgressivePlaybackDiskMode(
                     if (enabled) ProgressivePlaybackDiskMode.SPOOL else ProgressivePlaybackDiskMode.OFF
                 )
@@ -187,12 +202,20 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
 
     item(key = "network_cache_disk_spool_storage_location") {
         val context = LocalContext.current
-        val externalAvailable = DiskSpoolStorageResolver.externalSpoolDirectoryOrNull(context) != null
-        val effectiveLocation = if (externalAvailable) {
-            playerSettings.diskSpoolStorageLocation
-        } else {
-            DiskSpoolStorageLocation.BUILTIN
+        val builtInSpoolDirectory = DiskSpoolStorageResolver.builtinSpoolDirectory(context)
+        val externalSpoolDirectory = DiskSpoolStorageResolver.externalSpoolDirectoryOrNull(context)
+        val builtInDiskSpoolPolicy = resolveDiskSpoolPolicy(
+            DiskSpoolStorageResolver.usableSpaceForSpoolDirectory(builtInSpoolDirectory)
+        )
+        val externalDiskSpoolPolicy = externalSpoolDirectory?.let { directory ->
+            resolveDiskSpoolPolicy(DiskSpoolStorageResolver.usableSpaceForSpoolDirectory(directory))
         }
+        val externalAvailable = externalSpoolDirectory != null
+        val effectiveLocation = resolveEffectiveDiskSpoolStorageLocation(
+            preferred = playerSettings.diskSpoolStorageLocation,
+            builtInSupported = builtInDiskSpoolPolicy != null,
+            externalSupported = externalDiskSpoolPolicy != null
+        )
         SettingsActionRow(
             title = stringResource(R.string.playback_buffer_disk_spool_storage_location),
             subtitle = if (externalAvailable) {
@@ -227,10 +250,23 @@ internal fun LazyListScope.bufferAndNetworkSettingsItems(
 
     item(key = "network_cache_disk_spool_probe_status") {
         val context = LocalContext.current
-        val spoolDirectory = DiskSpoolStorageResolver.resolveSpoolDirectory(
-            context,
-            playerSettings.diskSpoolStorageLocation
-        ) ?: DiskSpoolStorageResolver.builtinSpoolDirectory(context)
+        val builtInSpoolDirectory = DiskSpoolStorageResolver.builtinSpoolDirectory(context)
+        val externalSpoolDirectory = DiskSpoolStorageResolver.externalSpoolDirectoryOrNull(context)
+        val builtInDiskSpoolPolicy = resolveDiskSpoolPolicy(
+            DiskSpoolStorageResolver.usableSpaceForSpoolDirectory(builtInSpoolDirectory)
+        )
+        val externalDiskSpoolPolicy = externalSpoolDirectory?.let { directory ->
+            resolveDiskSpoolPolicy(DiskSpoolStorageResolver.usableSpaceForSpoolDirectory(directory))
+        }
+        val effectiveLocation = resolveEffectiveDiskSpoolStorageLocation(
+            preferred = playerSettings.diskSpoolStorageLocation,
+            builtInSupported = builtInDiskSpoolPolicy != null,
+            externalSupported = externalDiskSpoolPolicy != null
+        )
+        val spoolDirectory = when (effectiveLocation) {
+            DiskSpoolStorageLocation.BUILTIN -> builtInSpoolDirectory
+            DiskSpoolStorageLocation.EXTERNAL -> externalSpoolDirectory ?: builtInSpoolDirectory
+        }
         val status = resolveDiskSpoolDiagnosticStatus(
             result = SpoolStorageProbeResult.fromJsonOrNull(playerSettings.spoolStorageProbeResultJson),
             probeUiState = diskSpoolStorageProbeUiState,
@@ -311,6 +347,21 @@ internal fun nextDiskSpoolStorageLocation(
     return when (current) {
         DiskSpoolStorageLocation.BUILTIN -> DiskSpoolStorageLocation.EXTERNAL
         DiskSpoolStorageLocation.EXTERNAL -> DiskSpoolStorageLocation.BUILTIN
+    }
+}
+
+internal fun resolveEffectiveDiskSpoolStorageLocation(
+    preferred: DiskSpoolStorageLocation,
+    builtInSupported: Boolean,
+    externalSupported: Boolean
+): DiskSpoolStorageLocation {
+    return when {
+        preferred == DiskSpoolStorageLocation.EXTERNAL && externalSupported ->
+            DiskSpoolStorageLocation.EXTERNAL
+        preferred == DiskSpoolStorageLocation.BUILTIN && builtInSupported ->
+            DiskSpoolStorageLocation.BUILTIN
+        externalSupported -> DiskSpoolStorageLocation.EXTERNAL
+        else -> DiskSpoolStorageLocation.BUILTIN
     }
 }
 

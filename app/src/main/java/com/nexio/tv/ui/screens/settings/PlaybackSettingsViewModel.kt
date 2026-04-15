@@ -418,7 +418,7 @@ class PlaybackSettingsViewModel @Inject constructor(
                 }
                 val randomWriteEnabled = settings.useParallelConnections
                 val diagnosticTotalBytes = DiskSpoolStorageDiagnostic.resolveDefaultTotalBytes(
-                    availableBytes = spoolDirectory.usableSpace,
+                    availableBytes = DiskSpoolStorageResolver.usableSpaceForSpoolDirectory(spoolDirectory),
                     randomWriteEnabled = randomWriteEnabled
                 )
                 val result = diskSpoolStorageProbeRunnerForTesting?.invoke(spoolDirectory, shouldContinue)

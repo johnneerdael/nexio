@@ -60,6 +60,18 @@ class PlaybackBufferNetworkSettingsTest {
     }
 
     @Test
+    fun effectiveDiskSpoolStorageLocation_usesExternalWhenBuiltInIsUnsupported() {
+        assertEquals(
+            DiskSpoolStorageLocation.EXTERNAL,
+            resolveEffectiveDiskSpoolStorageLocation(
+                preferred = DiskSpoolStorageLocation.BUILTIN,
+                builtInSupported = false,
+                externalSupported = true
+            )
+        )
+    }
+
+    @Test
     fun diskSpoolDiagnosticStatus_doesNotDisableSpoolWhenResultIsMissingOrFailed() {
         assertEquals(
             DiskSpoolDiagnosticStatus.NotChecked,
