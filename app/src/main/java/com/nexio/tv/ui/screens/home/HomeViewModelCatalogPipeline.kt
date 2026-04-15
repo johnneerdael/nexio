@@ -86,8 +86,9 @@ private const val SIMKL_ROW_NAME_DVD_RELEASES = "SIMKL Popular DVD Releases"
 
 internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
     viewModelScope.launch(Dispatchers.IO) {
+        val profileId = profileManager.activeProfileId.value
         val posterToken = homeCatalogSnapshotStore.currentPosterProviderToken()
-        val snapshot = homeCatalogSnapshotStore.read(posterToken)
+        val snapshot = homeCatalogSnapshotStore.read(posterToken, profileId = profileId)
         if (snapshot == null) {
             Log.d(HomeViewModel.TAG, "Restored merged home snapshot null")
             return@launch
@@ -121,7 +122,8 @@ internal fun HomeViewModel.restorePersistedCatalogSnapshotPipeline() {
 
 internal fun HomeViewModel.restorePersistedSyntheticCatalogRowsPipeline() {
     viewModelScope.launch(Dispatchers.IO) {
-        val snapshot = syntheticHomeCatalogStore.read()
+        val profileId = profileManager.activeProfileId.value
+        val snapshot = syntheticHomeCatalogStore.read(profileId = profileId)
         if (snapshot == null) {
             Log.d(HomeViewModel.TAG, "Restored synthetic snapshot null")
             return@launch
@@ -208,14 +210,15 @@ internal suspend fun HomeViewModel.loadActiveProfileDiskBackedHomeState(
     reason: String,
     expectedGeneration: Long? = null
 ) {
+    val profileId = profileManager.activeProfileId.value
     val diskState = withContext(Dispatchers.IO) {
         val providerState = trackingProviderStateService.currentState()
-        val syntheticSnapshot = syntheticHomeCatalogStore.read()
+        val syntheticSnapshot = syntheticHomeCatalogStore.read(profileId = profileId)
         val traktSnapshot = traktDiscoverySnapshotStore.read()
         val simklSnapshot = simklDiscoverySnapshotStore.read()
         val mdbSnapshot = mdbListDiscoverySnapshotStore.read()
         val posterProviderToken = homeCatalogSnapshotStore.currentPosterProviderToken()
-        val homeSnapshot = homeCatalogSnapshotStore.read(posterProviderToken)
+        val homeSnapshot = homeCatalogSnapshotStore.read(posterProviderToken, profileId = profileId)
         DiskBackedHomeState(
             traktAuthenticated = providerState.traktAuthenticated,
             simklAuthenticated = providerState.simklAuthenticated,
@@ -967,8 +970,9 @@ private fun mdbSnapshotItemKeys(
 }
 
 internal suspend fun HomeViewModel.reloadPersistedSyntheticCatalogRowsPipeline() {
+    val profileId = profileManager.activeProfileId.value
     val (snapshot, providerState) = withContext(Dispatchers.IO) {
-        val restoredSnapshot = syntheticHomeCatalogStore.read()
+        val restoredSnapshot = syntheticHomeCatalogStore.read(profileId = profileId)
             ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot()
         restoredSnapshot to trackingProviderStateService.currentState()
     }
@@ -982,16 +986,17 @@ internal suspend fun HomeViewModel.reloadPersistedSyntheticCatalogRowsPipeline()
 internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
     snapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot
 ) {
+    val profileId = profileManager.activeProfileId.value
     if (!activeProfileTraktAuthenticated) {
         clearTraktHomeState("renew_trakt_synthetic_unauthenticated")
         syntheticCatalogStoreMutex.withLock {
             withContext(Dispatchers.IO) {
-                val existingSnapshot = syntheticHomeCatalogStore.read()
+                val existingSnapshot = syntheticHomeCatalogStore.read(profileId = profileId)
                     ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot(
                         simklGroups = persistedSimklSyntheticGroups,
                         mdbListGroups = persistedMDBListSyntheticGroups
                     )
-                syntheticHomeCatalogStore.write(existingSnapshot.copy(traktGroups = emptyList()))
+                syntheticHomeCatalogStore.write(existingSnapshot.copy(traktGroups = emptyList()), profileId = profileId)
             }
         }
         return
@@ -1005,7 +1010,7 @@ internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
 
     syntheticCatalogStoreMutex.withLock {
         withContext(Dispatchers.IO) {
-            val existingSnapshot = syntheticHomeCatalogStore.read()
+            val existingSnapshot = syntheticHomeCatalogStore.read(profileId = profileId)
                 ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot(
                     traktGroups = persistedTraktSyntheticGroups,
                     simklGroups = persistedSimklSyntheticGroups,
@@ -1041,7 +1046,7 @@ internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
             if (renewedSnapshot == existingSnapshot) {
                 return@withContext
             }
-            syntheticHomeCatalogStore.write(renewedSnapshot)
+            syntheticHomeCatalogStore.write(renewedSnapshot, profileId = profileId)
             appliedTraktGroups = effectiveTraktGroups
         }
     }
@@ -1055,13 +1060,14 @@ internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
 internal suspend fun HomeViewModel.renewSimklSyntheticSnapshotPipeline(
     snapshot: com.nexio.tv.data.repository.SimklDiscoverySnapshot
 ) {
+    val profileId = profileManager.activeProfileId.value
     val simklPrefsSnapshot = simklCatalogPreferences
     val telemetryEnabled = startupPerfTelemetryEnabled
     var appliedSimklGroups: List<PersistedSyntheticCatalogGroup>? = null
 
     syntheticCatalogStoreMutex.withLock {
         withContext(Dispatchers.IO) {
-            val existingSnapshot = syntheticHomeCatalogStore.read()
+            val existingSnapshot = syntheticHomeCatalogStore.read(profileId = profileId)
                 ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot(
                     traktGroups = persistedTraktSyntheticGroups,
                     simklGroups = persistedSimklSyntheticGroups,
@@ -1096,7 +1102,7 @@ internal suspend fun HomeViewModel.renewSimklSyntheticSnapshotPipeline(
             if (renewedSnapshot == existingSnapshot) {
                 return@withContext
             }
-            syntheticHomeCatalogStore.write(renewedSnapshot)
+            syntheticHomeCatalogStore.write(renewedSnapshot, profileId = profileId)
             appliedSimklGroups = effectiveSimklGroups
         }
     }
@@ -1110,13 +1116,14 @@ internal suspend fun HomeViewModel.renewSimklSyntheticSnapshotPipeline(
 internal suspend fun HomeViewModel.renewMDBListSyntheticSnapshotPipeline(
     snapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 ) {
+    val profileId = profileManager.activeProfileId.value
     val mdbPrefsSnapshot = mdbListCatalogPreferences
     val telemetryEnabled = startupPerfTelemetryEnabled
     var appliedMDBListGroups: List<PersistedSyntheticCatalogGroup>? = null
 
     syntheticCatalogStoreMutex.withLock {
         withContext(Dispatchers.IO) {
-            val existingSnapshot = syntheticHomeCatalogStore.read()
+            val existingSnapshot = syntheticHomeCatalogStore.read(profileId = profileId)
                 ?: com.nexio.tv.data.local.SyntheticHomeCatalogStore.Snapshot(
                     traktGroups = persistedTraktSyntheticGroups,
                     simklGroups = persistedSimklSyntheticGroups,
@@ -1151,7 +1158,7 @@ internal suspend fun HomeViewModel.renewMDBListSyntheticSnapshotPipeline(
             if (renewedSnapshot == existingSnapshot) {
                 return@withContext
             }
-            syntheticHomeCatalogStore.write(renewedSnapshot)
+            syntheticHomeCatalogStore.write(renewedSnapshot, profileId = profileId)
             appliedMDBListGroups = effectiveMDBListGroups
         }
     }
@@ -1273,7 +1280,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             homeSnapshotPersistGeneration += 1
             hasPersistedCatalogSnapshot = false
             restoredCatalogSnapshotActive = false
-            homeCatalogSnapshotStore.clear()
+            homeCatalogSnapshotStore.clear(profileId = profileManager.activeProfileId.value)
             truncatedRowCache.clear()
             hasRenderedFirstCatalog = false
             trailerPreviewLoadingIds.clear()
@@ -1312,7 +1319,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
             lastCatalogComputationSignature = null
             lastCatalogOrderDiagnosticsSignature = null
             restoredCatalogSnapshotActive = false
-            homeCatalogSnapshotStore.clear()
+            homeCatalogSnapshotStore.clear(profileId = profileManager.activeProfileId.value)
             trailerPreviewLoadingIds.clear()
             trailerPreviewNegativeCache.clear()
             trailerPreviewUrlsState.clear()
@@ -2143,6 +2150,8 @@ internal fun HomeViewModel.updateInMemoryHomeSnapshotPipeline(
 internal fun HomeViewModel.persistHomeSnapshotDebouncedPipeline(
     snapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot
 ) {
+    val profileId = profileManager.activeProfileId.value
+    val profileGeneration = homeProfileGeneration
     pendingHomeSnapshotPersist = snapshot
     homeSnapshotPersistGeneration += 1
     val persistGeneration = homeSnapshotPersistGeneration
@@ -2150,10 +2159,11 @@ internal fun HomeViewModel.persistHomeSnapshotDebouncedPipeline(
     homeSnapshotPersistJob = viewModelScope.launch(Dispatchers.IO) {
         delay(HomeViewModel.HOME_SNAPSHOT_PERSIST_DEBOUNCE_MS)
         if (homeSnapshotPersistGeneration != persistGeneration) return@launch
+        if (!isCurrentHomeProfileGeneration(profileGeneration)) return@launch
         val latestSnapshot = pendingHomeSnapshotPersist ?: return@launch
         val posterToken = homeCatalogSnapshotStore.currentPosterProviderToken()
-        homeCatalogSnapshotStore.write(latestSnapshot, posterToken)
-        val persistedSnapshot = homeCatalogSnapshotStore.read(posterToken) ?: latestSnapshot
+        homeCatalogSnapshotStore.write(latestSnapshot, posterToken, profileId = profileId)
+        val persistedSnapshot = homeCatalogSnapshotStore.read(posterToken, profileId = profileId) ?: latestSnapshot
         Log.d(
             HomeViewModel.TAG,
             "Persisted merged home snapshot write rows=${latestSnapshot.catalogRows.size} fullRows=${latestSnapshot.fullCatalogRows.size} " +
@@ -2173,6 +2183,7 @@ internal fun HomeViewModel.persistHomeSnapshotDebouncedPipeline(
         val removedImageUrls = metadataDiskCacheStore.removeHomeUnreferencedMetaEntries(maxEntries = 800)
         homeCatalogRefreshCoordinator.evictCachedImageUrls(removedImageUrls)
         withContext(Dispatchers.Main.immediate) {
+            if (!isCurrentHomeProfileGeneration(profileGeneration)) return@withContext
             if (homeSnapshotPersistGeneration == persistGeneration) {
                 pendingHomeSnapshotPersist = null
             }

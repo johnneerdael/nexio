@@ -66,18 +66,25 @@ class HomeCatalogSnapshotStore private constructor(
         val orderedGroupKeys: List<String> = emptyList()
     )
 
-    fun read(posterProviderToken: String): Snapshot? {
+    fun read(
+        posterProviderToken: String,
+        profileId: Int = activeProfileId()
+    ): Snapshot? {
         return runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val raw = prefs.getString(snapshotKey(), null)?.takeIf { it.isNotBlank() } ?: return null
+            val raw = prefs.getString(snapshotKey(profileId), null)?.takeIf { it.isNotBlank() } ?: return null
             decodeSnapshot(raw, posterProviderToken)?.sanitize()
         }.onFailure { error ->
             Log.w(TAG, "Failed to restore home snapshot", error)
-            clear()
+            clear(profileId)
         }.getOrNull()
     }
 
-    fun write(snapshot: Snapshot, posterProviderToken: String) {
+    fun write(
+        snapshot: Snapshot,
+        posterProviderToken: String,
+        profileId: Int = activeProfileId()
+    ) {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
@@ -90,16 +97,16 @@ class HomeCatalogSnapshotStore private constructor(
                 add("heroItems", gson.toJsonTree(snapshot.heroItems))
                 add("orderedGroupKeys", gson.toJsonTree(snapshot.orderedGroupKeys))
             }
-            prefs.edit().putString(snapshotKey(), gson.toJson(payload)).commit()
+            prefs.edit().putString(snapshotKey(profileId), gson.toJson(payload)).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist home snapshot", error)
         }
     }
 
-    fun clear() {
+    fun clear(profileId: Int = activeProfileId()) {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().remove(snapshotKey()).commit()
+            prefs.edit().remove(snapshotKey(profileId)).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear home snapshot", error)
         }
@@ -146,8 +153,8 @@ class HomeCatalogSnapshotStore private constructor(
         return AppLocaleResolver.resolveEffectiveAppLanguageTag(context)
     }
 
-    private fun snapshotKey(): String {
-        return "$SNAPSHOT_KEY:p${activeProfileId()}:${currentLanguageTag()}"
+    private fun snapshotKey(profileId: Int = activeProfileId()): String {
+        return "$SNAPSHOT_KEY:p$profileId:${currentLanguageTag()}"
     }
 
     private fun Snapshot.sanitize(): Snapshot {
