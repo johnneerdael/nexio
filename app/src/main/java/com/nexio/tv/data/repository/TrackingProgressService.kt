@@ -11,6 +11,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -86,17 +87,22 @@ class DefaultTrackingProgressService @Inject constructor(
 ) : TrackingProgressService {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     @Volatile private var currentProvider: TrackingProvider = TrackingProvider.TRAKT
+    @Volatile private var currentProviderAuthenticated: Boolean = false
 
     init {
         scope.launch {
             trackingProviderStateService.state.collect { state ->
                 currentProvider = state.effectiveProvider
+                currentProviderAuthenticated = state.canReadEffectiveProvider
             }
         }
     }
 
     override fun observeAllProgress(): Flow<List<WatchProgress>> =
         trackingProviderStateService.state.flatMapLatest { state ->
+            if (!state.canReadEffectiveProvider) {
+                return@flatMapLatest flowOf(emptyList())
+            }
             when (state.effectiveProvider) {
                 TrackingProvider.SIMKL -> simklProgressService.observeAllProgress()
                 TrackingProvider.TRAKT -> traktProgressService.observeAllProgress()
@@ -105,6 +111,9 @@ class DefaultTrackingProgressService @Inject constructor(
 
     override fun observeRemoteSnapshotLoaded(): Flow<Boolean> =
         trackingProviderStateService.state.flatMapLatest { state ->
+            if (!state.canReadEffectiveProvider) {
+                return@flatMapLatest flowOf(false)
+            }
             when (state.effectiveProvider) {
                 TrackingProvider.SIMKL -> simklProgressService.observeRemoteSnapshotLoaded()
                 TrackingProvider.TRAKT -> traktProgressService.observeRemoteSnapshotLoaded()
@@ -113,6 +122,9 @@ class DefaultTrackingProgressService @Inject constructor(
 
     override fun observeContinueWatchingNextUp(): Flow<List<TrackingNextUpEntry>> =
         trackingProviderStateService.state.flatMapLatest { state ->
+            if (!state.canReadEffectiveProvider) {
+                return@flatMapLatest flowOf(emptyList())
+            }
             when (state.effectiveProvider) {
                 TrackingProvider.SIMKL -> simklProgressService.observeContinueWatchingNextUp()
                     .mapLatest { items -> tvdbContinueWatchingTimingEnricher.enrich(items) }
@@ -127,6 +139,9 @@ class DefaultTrackingProgressService @Inject constructor(
 
     override fun observeSyntheticContinueWatchingNextUp(): Flow<List<TrackingNextUpEntry>> =
         trackingProviderStateService.state.flatMapLatest { state ->
+            if (!state.canReadEffectiveProvider) {
+                return@flatMapLatest flowOf(emptyList())
+            }
             when (state.effectiveProvider) {
                 TrackingProvider.SIMKL -> simklProgressService.observeSyntheticContinueWatchingNextUp()
                     .mapLatest { items -> tvdbContinueWatchingTimingEnricher.enrich(items) }
@@ -141,6 +156,9 @@ class DefaultTrackingProgressService @Inject constructor(
 
     override fun observeEpisodeProgress(contentId: String): Flow<Map<Pair<Int, Int>, WatchProgress>> =
         trackingProviderStateService.state.flatMapLatest { state ->
+            if (!state.canReadEffectiveProvider) {
+                return@flatMapLatest flowOf(emptyMap())
+            }
             when (state.effectiveProvider) {
                 TrackingProvider.SIMKL -> simklProgressService.observeEpisodeProgress(contentId)
                 TrackingProvider.TRAKT -> traktProgressService.observeEpisodeProgress(contentId)
@@ -149,6 +167,9 @@ class DefaultTrackingProgressService @Inject constructor(
 
     override fun observeMovieWatched(contentId: String): Flow<Boolean> =
         trackingProviderStateService.state.flatMapLatest { state ->
+            if (!state.canReadEffectiveProvider) {
+                return@flatMapLatest flowOf(false)
+            }
             when (state.effectiveProvider) {
                 TrackingProvider.SIMKL -> simklProgressService.observeMovieWatched(contentId)
                 TrackingProvider.TRAKT -> traktProgressService.observeMovieWatched(contentId)
@@ -156,6 +177,7 @@ class DefaultTrackingProgressService @Inject constructor(
         }
 
     override fun applyOptimisticProgress(progress: WatchProgress) {
+        if (!currentProviderAuthenticated) return
         when (currentProvider) {
             TrackingProvider.SIMKL -> simklProgressService.applyOptimisticProgress(progress)
             TrackingProvider.TRAKT -> traktProgressService.applyOptimisticProgress(progress)
@@ -163,6 +185,7 @@ class DefaultTrackingProgressService @Inject constructor(
     }
 
     override fun applyOptimisticRemoval(contentId: String, season: Int?, episode: Int?) {
+        if (!currentProviderAuthenticated) return
         when (currentProvider) {
             TrackingProvider.SIMKL -> simklProgressService.applyOptimisticRemoval(contentId, season, episode)
             TrackingProvider.TRAKT -> traktProgressService.applyOptimisticRemoval(contentId, season, episode)
@@ -170,6 +193,7 @@ class DefaultTrackingProgressService @Inject constructor(
     }
 
     override fun clearOptimistic() {
+        if (!currentProviderAuthenticated) return
         when (currentProvider) {
             TrackingProvider.SIMKL -> simklProgressService.clearOptimistic()
             TrackingProvider.TRAKT -> traktProgressService.clearOptimistic()
@@ -177,6 +201,7 @@ class DefaultTrackingProgressService @Inject constructor(
     }
 
     override fun invalidateLocalizedMetadata() {
+        if (!currentProviderAuthenticated) return
         when (currentProvider) {
             TrackingProvider.SIMKL -> simklProgressService.invalidateLocalizedMetadata()
             TrackingProvider.TRAKT -> traktProgressService.invalidateLocalizedMetadata()
@@ -184,7 +209,9 @@ class DefaultTrackingProgressService @Inject constructor(
     }
 
     override suspend fun refreshNow() {
-        when (trackingProviderStateService.currentState().effectiveProvider) {
+        val state = trackingProviderStateService.currentState()
+        if (!state.canReadEffectiveProvider) return
+        when (state.effectiveProvider) {
             TrackingProvider.SIMKL -> simklProgressService.refreshNow()
             TrackingProvider.TRAKT -> traktProgressService.refreshNow()
         }
@@ -194,28 +221,36 @@ class DefaultTrackingProgressService @Inject constructor(
         contentId: String,
         season: Int?,
         episode: Int?
-    ): List<Long> = when (trackingProviderStateService.currentState().effectiveProvider) {
-        TrackingProvider.SIMKL -> simklProgressService.resolvePlaybackDeleteIdsForOutbox(
-            contentId = contentId,
-            season = season,
-            episode = episode
-        )
-        TrackingProvider.TRAKT -> traktProgressService.resolvePlaybackDeleteIdsForOutbox(
-            contentId = contentId,
-            season = season,
-            episode = episode
-        )
+    ): List<Long> {
+        val state = trackingProviderStateService.currentState()
+        if (!state.canReadEffectiveProvider) return emptyList()
+        return when (state.effectiveProvider) {
+            TrackingProvider.SIMKL -> simklProgressService.resolvePlaybackDeleteIdsForOutbox(
+                contentId = contentId,
+                season = season,
+                episode = episode
+            )
+            TrackingProvider.TRAKT -> traktProgressService.resolvePlaybackDeleteIdsForOutbox(
+                contentId = contentId,
+                season = season,
+                episode = episode
+            )
+        }
     }
 
     override suspend fun resolveSeasonEpisodeTraktIds(
         showContentId: String,
         season: Int,
         episodeNumbers: List<Int>
-    ): Map<Int, TraktEpisodeRef> = traktProgressService.resolveSeasonEpisodeTraktIds(
-        showContentId = showContentId,
-        season = season,
-        episodeNumbers = episodeNumbers
-    )
+    ): Map<Int, TraktEpisodeRef> {
+        val state = trackingProviderStateService.currentState()
+        if (!state.traktAuthenticated) return emptyMap()
+        return traktProgressService.resolveSeasonEpisodeTraktIds(
+            showContentId = showContentId,
+            season = season,
+            episodeNumbers = episodeNumbers
+        )
+    }
 
     override suspend fun rollbackQueuedHistoryRemove(
         contentId: String,
@@ -223,7 +258,9 @@ class DefaultTrackingProgressService @Inject constructor(
         episode: Int?,
         removeShow: Boolean
     ) {
-        when (trackingProviderStateService.currentState().effectiveProvider) {
+        val state = trackingProviderStateService.currentState()
+        if (!state.canReadEffectiveProvider) return
+        when (state.effectiveProvider) {
             TrackingProvider.SIMKL -> simklProgressService.rollbackQueuedHistoryRemove(
                 contentId = contentId,
                 season = season,
@@ -245,7 +282,9 @@ class DefaultTrackingProgressService @Inject constructor(
         episode: Int?,
         clearShow: Boolean
     ) {
-        when (trackingProviderStateService.currentState().effectiveProvider) {
+        val state = trackingProviderStateService.currentState()
+        if (!state.canReadEffectiveProvider) return
+        when (state.effectiveProvider) {
             TrackingProvider.SIMKL -> simklProgressService.rollbackQueuedPlaybackDelete(
                 contentId = contentId,
                 season = season,

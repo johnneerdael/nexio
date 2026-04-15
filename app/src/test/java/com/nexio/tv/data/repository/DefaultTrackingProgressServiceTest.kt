@@ -25,6 +25,19 @@ class DefaultTrackingProgressServiceTest {
         every { this@mockk.state } returns flowOf(state)
     }
 
+    private fun unauthenticatedProviderStateService(
+        storedProvider: TrackingProvider = TrackingProvider.TRAKT
+    ) = mockk<TrackingProviderStateService> {
+        val state = EffectiveTrackingProviderState(
+            storedProvider = storedProvider,
+            effectiveProvider = storedProvider,
+            traktAuthenticated = false,
+            simklAuthenticated = false
+        )
+        every { this@mockk.state } returns flowOf(state)
+        coEvery { currentState() } returns state
+    }
+
     @Test
     fun `observeAllProgress switches to simkl flow when simkl is selected`() = runTest {
         val traktService = mockk<TraktProgressService>()
@@ -184,6 +197,37 @@ class DefaultTrackingProgressServiceTest {
 
         coVerify(exactly = 1) { simklService.refreshNow() }
         coVerify(exactly = 0) { traktService.refreshNow() }
+    }
+
+    @Test
+    fun `unauthenticated profile does not observe Trakt progress`() = runTest {
+        val traktService = mockk<TraktProgressService>(relaxed = true)
+        val simklService = mockk<SimklProgressService>(relaxed = true)
+        val service = DefaultTrackingProgressService(
+            traktProgressService = traktService,
+            simklProgressService = simklService,
+            trackingProviderStateService = unauthenticatedProviderStateService()
+        )
+
+        val observed = service.observeAllProgress().firstValue()
+
+        assertEquals(emptyList<WatchProgress>(), observed)
+        coVerify(exactly = 0) { traktService.refreshNow() }
+    }
+
+    @Test
+    fun `unauthenticated profile reports remote snapshot unloaded without calling Trakt`() = runTest {
+        val traktService = mockk<TraktProgressService>()
+        val simklService = mockk<SimklProgressService>()
+        val service = DefaultTrackingProgressService(
+            traktProgressService = traktService,
+            simklProgressService = simklService,
+            trackingProviderStateService = unauthenticatedProviderStateService()
+        )
+
+        val observed = service.observeRemoteSnapshotLoaded().firstValue()
+
+        assertEquals(false, observed)
     }
 
     private suspend fun <T> kotlinx.coroutines.flow.Flow<T>.firstValue(): T = first()
