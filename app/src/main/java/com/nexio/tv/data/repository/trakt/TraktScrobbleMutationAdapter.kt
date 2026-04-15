@@ -12,11 +12,13 @@ import com.nexio.tv.data.remote.dto.trakt.TraktShowDto
 import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.TraktProgressService
+import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.trakt.outbox.TraktMutationAdapter
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationExecutionResult
 import com.nexio.tv.data.trakt.outbox.TraktMutationPriorityBucket
 import com.nexio.tv.data.trakt.outbox.TraktMutationSettlement
+import com.nexio.tv.domain.model.TrackingProvider
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -66,7 +68,8 @@ class TraktScrobbleMutationAdapter @Inject constructor(
     }
 
     private suspend fun executeCheckin(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
-        val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
+        val session = TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)
+        val response = traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
             traktApi.checkin(authHeader, envelope.buildCheckinRequestBody())
         } ?: return TraktMutationExecutionResult.Failure(reason = "Trakt request failed")
 
@@ -83,7 +86,8 @@ class TraktScrobbleMutationAdapter @Inject constructor(
 
     private suspend fun executeScrobble(envelope: TraktMutationEnvelope): TraktMutationExecutionResult {
         val requestBody = envelope.buildScrobbleRequestBody()
-        val response = traktAuthService.executeAuthorizedWriteRequest { authHeader ->
+        val session = TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)
+        val response = traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
             when (envelope.scrobbleAction()) {
                 "start" -> traktApi.scrobbleStart(authHeader, requestBody)
                 "pause" -> traktApi.scrobblePause(authHeader, requestBody)

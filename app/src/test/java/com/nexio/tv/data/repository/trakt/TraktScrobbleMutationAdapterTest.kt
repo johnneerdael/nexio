@@ -3,6 +3,7 @@ package com.nexio.tv.data.repository.trakt
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
+import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.repository.TraktAuthService
 import com.nexio.tv.data.repository.TraktScrobbleItem
 import com.nexio.tv.data.repository.TraktProgressService
@@ -89,13 +90,17 @@ class TraktScrobbleMutationAdapterTest {
             message = null,
             rollbackState = TraktWatchingNowStateController.Snapshot(),
             optimisticVersion = 1L
-        )
+        ).copy(profileId = 2)
 
-        coEvery { traktAuthService.executeAuthorizedWriteRequest<Any?>(any()) } returns Response.success(null)
+        val sessionSlot = io.mockk.slot<TrackingAuthSession>()
+        coEvery {
+            traktAuthService.executeAuthorizedWriteRequest<Any?>(capture(sessionSlot), any())
+        } returns Response.success(null)
 
         val result = adapter.execute(envelope)
 
         assertTrue(result is TraktMutationExecutionResult.Success)
+        assertEquals(2, sessionSlot.captured.profileId)
         coVerify(exactly = 0) { traktProgressService.refreshNow() }
     }
 

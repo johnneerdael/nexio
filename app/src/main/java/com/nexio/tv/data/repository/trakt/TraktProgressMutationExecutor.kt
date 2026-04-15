@@ -5,6 +5,7 @@ import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryRemoveRequestDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryRemoveResponseDto
+import com.nexio.tv.data.repository.TrackingAuthSession
 import com.nexio.tv.data.repository.TraktAuthService
 import retrofit2.Response
 import javax.inject.Inject
@@ -23,6 +24,15 @@ class TraktProgressMutationExecutor @Inject constructor(
         }
     }
 
+    suspend fun addHistory(
+        session: TrackingAuthSession,
+        body: TraktHistoryAddRequestDto
+    ): Response<TraktHistoryAddResponseDto>? {
+        return traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
+            traktApi.addHistory(authHeader, body)
+        }
+    }
+
     suspend fun removeHistory(
         body: TraktHistoryRemoveRequestDto
     ): Response<TraktHistoryRemoveResponseDto>? {
@@ -31,10 +41,28 @@ class TraktProgressMutationExecutor @Inject constructor(
         }
     }
 
+    suspend fun removeHistory(
+        session: TrackingAuthSession,
+        body: TraktHistoryRemoveRequestDto
+    ): Response<TraktHistoryRemoveResponseDto>? {
+        return traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
+            traktApi.removeHistory(authHeader, body)
+        }
+    }
+
     suspend fun deletePlayback(
         playbackId: Long
     ): Response<Unit>? {
         return traktAuthService.executeAuthorizedWriteRequest { authHeader ->
+            traktApi.deletePlayback(authHeader, playbackId)
+        }
+    }
+
+    suspend fun deletePlayback(
+        session: TrackingAuthSession,
+        playbackId: Long
+    ): Response<Unit>? {
+        return traktAuthService.executeAuthorizedWriteRequest(session) { authHeader ->
             traktApi.deletePlayback(authHeader, playbackId)
         }
     }

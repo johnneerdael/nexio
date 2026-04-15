@@ -300,7 +300,7 @@ class TraktAuthService @Inject constructor(
         call: suspend (authorizationHeader: String) -> Response<T>
     ): Response<T>? = executeAuthorizedRequest(currentAuthSession(), call)
 
-    private suspend fun <T> executeAuthorizedRequest(
+    suspend fun <T> executeAuthorizedRequest(
         session: TrackingAuthSession,
         call: suspend (authorizationHeader: String) -> Response<T>
     ): Response<T>? {
@@ -384,6 +384,11 @@ class TraktAuthService @Inject constructor(
     suspend fun <T> executeAuthorizedWriteRequest(
         call: suspend (authorizationHeader: String) -> Response<T>
     ): Response<T>? = executeAuthorizedRequest(call)
+
+    suspend fun <T> executeAuthorizedWriteRequest(
+        session: TrackingAuthSession,
+        call: suspend (authorizationHeader: String) -> Response<T>
+    ): Response<T>? = executeAuthorizedRequest(session, call)
 
     private suspend fun getValidAccessToken(session: TrackingAuthSession): String? {
         val state = getCurrentAuthState(session)
