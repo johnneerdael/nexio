@@ -24,7 +24,7 @@ human_verification:
     why_human: "Permission state and AlarmManager delivery cannot be proven by source/unit tests alone."
   - test: "Phase 8 security verification"
     expected: "Receiver/export/PendingIntent/logging risks are explicitly evaluated in 08-SECURITY.md or equivalent."
-    why_human: "Security enforcement is enabled and no Phase 8 SECURITY.md exists; this report does not claim security passed."
+    result: "passed: 08-SECURITY.md exists with status secured and threats_open 0."
 ---
 
 # Phase 8: Exact Continue Watching Air Timing Verification Report
@@ -72,8 +72,8 @@ human_verification:
 | `app/src/main/java/com/nexio/tv/core/recommendations/AndroidTvFeedCatalogService.kt` | Android TV feed excludes withheld rows | VERIFIED | Feed mapping uses visible snapshot rows and exact availability fields. |
 | `app/src/main/java/com/nexio/tv/core/scheduler/ContinueWatchingAirScheduler.kt` | Scheduler interface | VERIFIED | `scheduleSoonest` and `cancel` abstraction exists. |
 | `app/src/main/java/com/nexio/tv/core/scheduler/ContinueWatchingAirAlarmScheduler.kt` | AlarmManager implementation | VERIFIED FOR WIRING | Exact/inexact alarm branches are present; real device delivery remains human verification. |
-| `app/src/main/java/com/nexio/tv/core/scheduler/ContinueWatchingAirAlarmReceiver.kt` | Broadcast receiver | VERIFIED FOR WIRING | Receiver calls refresh/reschedule entry points. Security is not marked passed because no `08-SECURITY.md` exists. |
-| `app/src/main/AndroidManifest.xml` | Receiver and permissions | VERIFIED FOR WIRING | Receiver and permissions are declared; this is wiring evidence, not security sign-off. |
+| `app/src/main/java/com/nexio/tv/core/scheduler/ContinueWatchingAirAlarmReceiver.kt` | Broadcast receiver | VERIFIED | Receiver calls refresh/reschedule entry points; Phase 8 security report is secured. |
+| `app/src/main/AndroidManifest.xml` | Receiver and permissions | VERIFIED | Receiver and permissions are declared; Phase 8 security report is secured. |
 | `app/src/test/java/com/nexio/tv/data/repository/ContinueWatchingSnapshotServiceMutationTest.kt` | 08-06 restore/fallback regressions | VERIFIED | Tests cover persisted-load exact due rows, provider-ms fallback due rows, and date-only fallback due rows. |
 
 ### Key Link Verification
@@ -108,7 +108,7 @@ human_verification:
 | 08-06 source link check | `rg "AirDateGate\\.hasDuePending|ensureFresh\\(force = true\\)|soonestPendingMs|handleScheduledReemit" ...` | Found due detection, force refresh, future scheduling, and centralized handler. | PASS |
 | 08-06 regression tests | `./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.data.repository.AirDateGateTest" --tests "com.nexio.tv.data.repository.ContinueWatchingSnapshotServiceMutationTest"` | BUILD SUCCESSFUL in 2s. | PASS |
 | Build sanity | `./gradlew assembleArm64Debug` | BUILD SUCCESSFUL in 25s. | PASS |
-| Security artifact check | `test -f .planning/phases/08-exact-continue-watching-air-timing/08-SECURITY.md` | No Phase 8 security report exists. | HUMAN REQUIRED |
+| Security artifact check | `test -f .planning/phases/08-exact-continue-watching-air-timing/08-SECURITY.md` | Exists; `08-SECURITY.md` reports `status: secured`, `threats_total: 23`, `threats_closed: 23`, `threats_open: 0`. | PASS |
 
 ### Requirements Coverage
 
@@ -127,7 +127,7 @@ human_verification:
 |---|---|---|
 | Former WR-01 | No | Closed by 08-06: persisted restore now calls `handleScheduledReemit`, so overdue persisted rows force refresh before future-only scheduling. |
 | Former WR-02 | No | Closed by 08-06: `AirDateGate.pendingTriggerMs` and `hasDuePending` cover exact TVDB, provider `firstAiredMs`, and date-string fallback rows. |
-| WR-03 | No Phase 8 scheduling blocker | Still real: `TvdbContinueWatchingTimingEnricher` logs `reason=missing_timezone_policy` for all failures and includes raw `contentId`. This report does not claim security passed. |
+| WR-03 | No Phase 8 scheduling blocker | Still real: `TvdbContinueWatchingTimingEnricher` logs `reason=missing_timezone_policy` for all failures and includes raw `contentId`. Security audit accepted this as T-08-23 follow-up risk. |
 
 ### Anti-Patterns Found
 
@@ -155,12 +155,6 @@ human_verification:
 **Expected:** Logs show scheduler fallback diagnostics; UI remains normal and does not expose scheduler degradation on cards.
 **Why human:** Permission state and alarm fallback behavior require a device/emulator runtime.
 
-### 4. Phase 8 Security Verification
-
-**Test:** Run a dedicated security verification for Phase 8 receiver, PendingIntent, permission, and logging behavior.
-**Expected:** Receiver/export/PendingIntent/logging risks are explicitly evaluated in `08-SECURITY.md` or equivalent.
-**Why human:** Security enforcement is enabled and no Phase 8 SECURITY.md exists. This verification does not mark security passed.
-
 ### Gaps Summary
 
 No automated source/test gaps remain after 08-06. The two previous blockers are closed:
@@ -168,7 +162,7 @@ No automated source/test gaps remain after 08-06. The two previous blockers are 
 - Persisted snapshot restore now uses the same due-aware handler as direct reschedule.
 - Date-only/provider fallback rows without a TVDB exact instant now use shared trigger extraction and refresh immediately when overdue.
 
-Overall status is `human_needed`, not `passed`, because real Android TV alarm/reboot/permission behavior and Phase 8 security verification remain outside what source/unit/build checks can prove. WR-03 remains a non-blocking diagnostic/privacy warning.
+Overall status is `human_needed`, not `passed`, because real Android TV alarm/reboot/permission behavior remains outside what source/unit/build checks can prove. WR-03 remains a non-blocking diagnostic/privacy warning accepted in the security report.
 
 ---
 

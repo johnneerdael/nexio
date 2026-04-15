@@ -3,7 +3,7 @@ status: partial
 phase: 08-exact-continue-watching-air-timing
 source: [08-VERIFICATION.md]
 started: 2026-04-15T14:52:55Z
-updated: 2026-04-15T14:52:55Z
+updated: 2026-04-15T15:17:13Z
 ---
 
 ## Current Test
@@ -26,14 +26,14 @@ result: [pending]
 
 ### 4. Phase 8 security verification
 expected: Receiver/export/PendingIntent/logging risks are explicitly evaluated in `08-SECURITY.md` or equivalent.
-result: [pending]
+result: passed; `08-SECURITY.md` exists with `status: secured`, `threats_total: 23`, `threats_closed: 23`, and `threats_open: 0`.
 
 ## Summary
 
 total: 4
-passed: 0
+passed: 1
 issues: 0
-pending: 4
+pending: 3
 skipped: 0
 blocked: 0
 
