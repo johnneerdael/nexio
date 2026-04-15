@@ -40,7 +40,7 @@ class AndroidTvNativeSearchServiceTest {
                 ),
                 requestKey(CINEMETA_BASE_URL, "series") to catalogRow(
                     type = ContentType.SERIES,
-                    items = listOf(preview("tt0108778", ContentType.SERIES, "Friends"))
+                    items = listOf(preview("tt0108778", ContentType.SERIES, "The Matrix: Animated"))
                 ),
                 requestKey("https://private.example", "movie") to catalogRow(
                     addonBaseUrl = "https://private.example",
@@ -56,7 +56,7 @@ class AndroidTvNativeSearchServiceTest {
 
         val results = service.search("matrix", limit = 10)
 
-        assertEquals(listOf("The Matrix", "Friends"), results.map { it.title })
+        assertEquals(listOf("The Matrix", "The Matrix: Animated"), results.map { it.title })
         assertEquals(setOf(CINEMETA_BASE_URL), catalogRepository.requests.map { it.addonBaseUrl }.toSet())
         assertEquals(setOf("movie", "series"), catalogRepository.requests.map { it.type }.toSet())
     }

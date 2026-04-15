@@ -25,6 +25,7 @@ internal fun HomeViewModel.observeAccountSyncRefreshPipeline() {
 
 internal fun HomeViewModel.onForegroundPipeline() {
     viewModelScope.launch {
+        if (shouldSuppressProfileSwitchRefresh("foreground")) return@launch
         if (diskFirstHomeStartupEnabled) {
             openStartupDeferralWindowIfNeeded("home_foreground")
         }

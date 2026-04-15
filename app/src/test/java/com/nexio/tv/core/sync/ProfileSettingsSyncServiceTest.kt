@@ -58,7 +58,7 @@ class ProfileSettingsSyncServiceTest {
     }
 
     private fun extractMethodBody(source: String, methodName: String): String {
-        val methodStart = source.indexOf("fun $methodName()")
+        val methodStart = source.indexOf("fun $methodName")
         assertTrue("$methodName method should exist", methodStart >= 0)
         val bodyStart = source.indexOf('{', methodStart)
         assertTrue("$methodName method body should start", bodyStart >= 0)

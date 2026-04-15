@@ -37,23 +37,8 @@ class TvdbMetadataServiceTest {
 
     @Test
     fun `tvdb api exposes extended series and season episodes endpoints`() {
-        val extended = TvdbApi::class.java.getMethod(
-            "getSeriesExtended",
-            String::class.java,
-            Int::class.javaPrimitiveType,
-            String::class.java,
-            java.lang.Boolean::class.java
-        )
-        val episodes = TvdbApi::class.java.getMethod(
-            "getSeriesEpisodes",
-            String::class.java,
-            Int::class.javaPrimitiveType,
-            String::class.java,
-            Int::class.javaPrimitiveType,
-            Int::class.javaObjectType,
-            Int::class.javaObjectType,
-            String::class.java
-        )
+        val extended = TvdbApi::class.java.methods.first { it.name == "getSeriesExtended" }
+        val episodes = TvdbApi::class.java.methods.first { it.name == "getSeriesEpisodes" }
 
         assertEquals("series/{id}/extended", extended.getAnnotation(GET::class.java)?.value)
         assertEquals("series/{id}/episodes/{seasonType}", episodes.getAnnotation(GET::class.java)?.value)

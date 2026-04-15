@@ -38,6 +38,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
@@ -168,7 +169,7 @@ class ProfileSettingsSyncService @Inject constructor(
                         }
                     ).decodeAs<ProfileSettingsBlobResponse>()
                 }
-                val rawBlob = Json.parseToJsonElement(response.settingsJson).jsonObject
+                val rawBlob = decodeSettingsJson(response.settingsJson)
                 val normalizedBlob = normalizeSettingsBlob(rawBlob)
 
                 applyingRemoteBlob = true
@@ -194,6 +195,27 @@ class ProfileSettingsSyncService @Inject constructor(
             profileDataStoreFactory.get(profileId, feature).data
         }
         return combine(featureFlows) { preferences -> preferences.toList() }
+    }
+
+    @VisibleForTesting
+    internal fun decodeSettingsJson(settingsJson: JsonElement): JsonObject {
+        return decodeSettingsJsonElement(settingsJson, depth = 0)
+    }
+
+    private fun decodeSettingsJsonElement(settingsJson: JsonElement, depth: Int): JsonObject {
+        if (depth > 3) return buildJsonObject {}
+        settingsJson.jsonObjectOrNull()?.let { return it }
+        val raw = settingsJson.primitiveContentOrNull()?.takeIf { it.isNotBlank() } ?: return buildJsonObject {}
+        val parsed = runCatching { Json.parseToJsonElement(raw) }.getOrNull() ?: return buildJsonObject {}
+        return decodeSettingsJsonElement(parsed, depth + 1)
+    }
+
+    private fun JsonElement.jsonObjectOrNull(): JsonObject? {
+        return runCatching { jsonObject }.getOrNull()
+    }
+
+    private fun JsonElement.primitiveContentOrNull(): String? {
+        return runCatching { jsonPrimitive.contentOrNull }.getOrNull()
     }
 
     private suspend fun exportSettingsBlob(profileId: Int): JsonObject {

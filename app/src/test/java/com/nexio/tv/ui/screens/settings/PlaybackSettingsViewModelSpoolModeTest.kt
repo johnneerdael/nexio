@@ -291,6 +291,7 @@ class PlaybackSettingsViewModelSpoolModeTest {
         val addonRepository = mockk<AddonRepository>(relaxed = true)
         val debridBenchmarkService = mockk<DebridBenchmarkService>(relaxed = true)
         val trackingProviderStateRepository = mockk<TrackingProviderStateRepository>(relaxed = true)
+        val context = mockk<Context>(relaxed = true)
 
         every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
         every { trailerSettingsDataStore.settings } returns flowOf(TrailerSettings())
@@ -306,7 +307,8 @@ class PlaybackSettingsViewModelSpoolModeTest {
             debugSettingsDataStore = debugSettingsDataStore,
             addonRepository = addonRepository,
             debridBenchmarkService = debridBenchmarkService,
-            trackingProviderStateRepository = trackingProviderStateRepository
+            trackingProviderStateRepository = trackingProviderStateRepository,
+            context = context
         )
     }
 

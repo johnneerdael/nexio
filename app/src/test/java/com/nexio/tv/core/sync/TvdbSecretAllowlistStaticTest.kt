@@ -31,7 +31,7 @@ class TvdbSecretAllowlistStaticTest {
         )
 
         val secretTypeInBlocks = Regex(
-            pattern = """secret_type\s+(?:text\s+not\s+)?(?:check\s*\(\s*)?secret_type\s+in\s*\((.*?)\)""",
+            pattern = """(?:secret_type\s+text\s+not\s+null\s+)?check\s*\(\s*secret_type\s+in\s*\((.*?)\)""",
             options = setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
         ).findAll(sql).toList()
 

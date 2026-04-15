@@ -166,7 +166,7 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     hasPersistedCatalogSnapshot = false
     hasRenderedFirstCatalog = false
     catalogsLoadInProgress = false
-    startupRefreshPending = true
+    startupRefreshPending = false
     lastCatalogComputationSignature = null
     lastCatalogOrderDiagnosticsSignature = null
     _fullCatalogRows.value = emptyList()

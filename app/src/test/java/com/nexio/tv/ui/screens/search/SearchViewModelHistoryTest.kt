@@ -1,21 +1,14 @@
 package com.nexio.tv.ui.screens.search
 
-import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.PreferenceDataStoreFactory
-import androidx.datastore.preferences.core.Preferences
-import androidx.test.core.app.ApplicationProvider
 import com.nexio.tv.core.network.NetworkResult
-import com.nexio.tv.data.local.LayoutPreferenceDataStore
-import com.nexio.tv.data.local.PlayerSettingsDataStore
-import com.nexio.tv.data.local.SearchHistoryDataStore
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.CatalogRepository
-import java.io.File
-import kotlinx.coroutines.CoroutineScope
+import com.nexio.tv.testutil.layoutPreferenceDataStoreForTest
+import com.nexio.tv.testutil.playerSettingsDataStoreForTest
+import com.nexio.tv.testutil.searchHistoryDataStoreForTest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -51,14 +44,13 @@ class SearchViewModelHistoryTest {
 
     @Test
     fun `submit search persists recent history entry`() = runTest(dispatcher) {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val historyStore = SearchHistoryDataStore(createDataStore(backgroundScope))
+        val historyStore = searchHistoryDataStoreForTest()
         historyStore.clearRecentSearches()
         val viewModel = SearchViewModel(
             addonRepository = EmptyAddonRepository(),
             catalogRepository = EmptyCatalogRepository(),
-            layoutPreferenceDataStore = LayoutPreferenceDataStore(context),
-            playerSettingsDataStore = PlayerSettingsDataStore(context),
+            layoutPreferenceDataStore = layoutPreferenceDataStoreForTest(),
+            playerSettingsDataStore = playerSettingsDataStoreForTest(),
             searchHistoryDataStore = historyStore
         )
 
@@ -128,12 +120,4 @@ class SearchViewModelHistoryTest {
         override fun clearCache() = Unit
     }
 
-    private fun createDataStore(scope: CoroutineScope): DataStore<Preferences> {
-        val tempFile = File.createTempFile("search_view_model_history", ".preferences_pb")
-        tempFile.deleteOnExit()
-        return PreferenceDataStoreFactory.create(
-            scope = scope,
-            produceFile = { tempFile }
-        )
-    }
 }

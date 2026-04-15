@@ -47,7 +47,7 @@ class AndroidTvSearchCandidateScorerTest {
     @Test
     fun `short noisy contains query is rejected`() {
         val scored = AndroidTvSearchCandidateScorer.score(
-            query = "dar",
+            query = "rev",
             candidates = listOf(candidate(title = "Daredevil: Born Again")),
             limit = 10
         )

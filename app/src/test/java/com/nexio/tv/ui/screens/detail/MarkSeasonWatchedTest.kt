@@ -73,6 +73,16 @@ class MarkSeasonWatchedTest {
             val pastDate = "2020-01-01"
             val futureDate = "2099-12-31"
 
+            coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+                provider = TvProvider.TMDB,
+                reason = TvMetadataDecisionReason.TVDB_INACTIVE,
+                value = null
+            )
+            coEvery { tvMetadataRouter.fetchEpisodeEnrichment(any()) } returns TvMetadataDecision(
+                provider = TvProvider.TMDB,
+                reason = TvMetadataDecisionReason.TVDB_INACTIVE,
+                value = emptyMap()
+            )
             coEvery { tmdbService.ensureTmdbId(any(), any()) } coAnswers {
                 val markSeasonCall = Throwable().stackTrace.any { frame ->
                     frame.className.endsWith("MetaDetailsViewModel") && frame.methodName == "markSeasonWatched"
@@ -903,6 +913,16 @@ class MarkSeasonWatchedTest {
         tmdbMetadataService: TmdbMetadataService
     ): TvMetadataRouter {
         val router = mockk<TvMetadataRouter>(relaxed = true)
+        coEvery { router.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TMDB,
+            reason = TvMetadataDecisionReason.TVDB_INACTIVE,
+            value = null
+        )
+        coEvery { router.fetchEpisodeEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TMDB,
+            reason = TvMetadataDecisionReason.TVDB_INACTIVE,
+            value = emptyMap()
+        )
         coEvery { router.fetchSeasonEpisodes(any(), any(), any(), any()) } coAnswers {
             val contentId = firstArg<String>()
             val fallbackContentId = secondArg<String?>()

@@ -5,6 +5,8 @@ package com.nexio.tv.data.remote.supabase
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.buildJsonObject
 
 @Serializable
 data class AccountSnapshotRpcResponse(
@@ -479,6 +481,6 @@ data class ProfileSettingsBlobResponse(
     @SerialName("user_id") val userId: String? = null,
     @SerialName("profile_id") val profileId: Int = 1,
     val platform: String = "tv",
-    @SerialName("settings_json") val settingsJson: String = "{}",
+    @SerialName("settings_json") val settingsJson: JsonElement = buildJsonObject {},
     @SerialName("updated_at") val updatedAt: String? = null
 )

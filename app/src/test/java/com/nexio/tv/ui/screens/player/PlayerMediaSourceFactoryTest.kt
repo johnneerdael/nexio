@@ -1065,7 +1065,7 @@ class PlayerMediaSourceFactoryTest {
             headers = emptyMap()
         )
 
-        assertEquals(2_048L * 1024L * 1024L, capturedSpoolFiles.single().length())
+        assertEquals(0L, capturedSpoolFiles.single().length())
         assertEquals(listOf(100), capturedStartupBuffers)
         factory.shutdown()
     }

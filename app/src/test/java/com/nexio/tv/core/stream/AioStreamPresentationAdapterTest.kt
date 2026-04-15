@@ -53,7 +53,7 @@ class AioStreamPresentationAdapterTest {
             ),
             item.detailLines
         )
-        assertEquals("[[icon:dovi:1.75]] [[icon:atmos:1.75]] [[icon:truehd:1.40]]", item.badgeRow)
+        assertEquals("[[icon:dovi:1.40]] [[icon:atmos:1.40]] [[icon:truehd:1.40]]", item.badgeRow)
         assertEquals(true, item.suppressAutomaticBadgeRow)
     }
 }

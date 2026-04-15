@@ -29,7 +29,7 @@ class StreamPresentationEngineTest {
             ),
             item.detailLines
         )
-        assertEquals("[[icon:atmos:1.75]] [[icon:ddp:1.40]]", item.badgeRow)
+        assertEquals("[[icon:atmos:1.40]] [[icon:ddp:1.40]]", item.badgeRow)
         assertEquals(true, item.suppressAutomaticBadgeRow)
     }
 
@@ -73,9 +73,9 @@ class StreamPresentationEngineTest {
         assertEquals("[[icon:4k]] Movie Title (2023)", item.title)
         assertTrue(detailOutput.contains("[[icon:netflix]] Netflix"))
         assertTrue(detailOutput.contains("[[icon:realdebrid]] Real-Debrid"))
-        assertTrue(badgeRow.contains("[[icon:atmos:1.75]]"))
+        assertTrue(badgeRow.contains("[[icon:atmos:1.40]]"))
         assertTrue(badgeRow.contains("[[icon:truehd:1.40]]"))
-        assertTrue(badgeRow.contains("[[icon:dovi:1.75]]"))
+        assertTrue(badgeRow.contains("[[icon:dovi:1.40]]"))
         assertEquals(true, item.suppressAutomaticBadgeRow)
     }
 

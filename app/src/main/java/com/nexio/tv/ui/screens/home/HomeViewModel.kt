@@ -264,6 +264,10 @@ class HomeViewModel @Inject constructor(
     internal val catalogRowsComputationMutex = Mutex()
     @Volatile
     internal var syntheticSnapshotBatchActive: Boolean = false
+    @Volatile
+    internal var profileSwitchDiskHydrationActive: Boolean = false
+    @Volatile
+    internal var suppressProfileSwitchRefreshUntilMs: Long = 0L
 
     val trailerPreviewUrls: Map<String, String>
         get() = trailerPreviewUrlsState
@@ -408,8 +412,16 @@ class HomeViewModel @Inject constructor(
     private fun observeProfileSwitches() {
         viewModelScope.launch {
             profileManager.profileSwitched.collectLatest { profileId ->
+                profileSwitchDiskHydrationActive = true
+                suppressProfileSwitchRefreshUntilMs = SystemClock.elapsedRealtime() + 5_000L
                 resetProfileScopedHomeState("profile_switch:$profileId")
-                loadActiveProfileDiskBackedHomeState("profile_switch:$profileId")
+                try {
+                    loadActiveProfileDiskBackedHomeState("profile_switch:$profileId")
+                } finally {
+                    profileSwitchDiskHydrationActive = false
+                    pendingSerializedHomeRefreshReason = null
+                    startupRefreshPending = false
+                }
             }
         }
     }
@@ -578,11 +590,13 @@ class HomeViewModel @Inject constructor(
     }
 
     internal fun runDeferredStartupRefreshIfNeeded(reason: String) {
+        if (shouldSuppressProfileSwitchRefresh(reason)) return
         if (!diskFirstHomeStartupEnabled || shouldDeferStartupNetworkWork()) return
         runSerializedHomeRefreshIfNeeded(reason)
     }
 
     internal fun runSerializedHomeRefreshIfNeeded(reason: String) {
+        if (shouldSuppressProfileSwitchRefresh(reason)) return
         if (shouldDeferStartupNetworkWork()) return
         if (deferredStartupRefreshJob?.isActive == true) {
             Log.d(TAG, "Serialized home refresh already running; queueing reason=$reason")
@@ -604,6 +618,16 @@ class HomeViewModel @Inject constructor(
             }
             runDeferredFocusedItemEnrichmentIfReady()
         }
+    }
+
+    internal fun shouldSuppressProfileSwitchRefresh(reason: String): Boolean {
+        if (reason == "account_sync") return false
+        val active = profileSwitchDiskHydrationActive ||
+            SystemClock.elapsedRealtime() < suppressProfileSwitchRefreshUntilMs
+        if (active) {
+            Log.d(TAG, "Suppressing home refresh during profile switch reason=$reason")
+        }
+        return active
     }
 
     internal fun shouldSuppressIncrementalHomeSnapshotPublish(): Boolean {

@@ -141,7 +141,11 @@ fun parseAddonInstallUrl(rawUrl: String): ParsedAddonSyncEntry {
         pathSegments
     }
     val publicPath = if (publicPathSegments.isEmpty()) "/manifest.json" else "/${publicPathSegments.joinToString("/")}"
-    val publicBaseUrl = "${parsed.protocol}://${parsed.host}${portSuffix(parsed)}/${publicPath.removePrefix("/").removeSuffix("/manifest.json")}".trimEnd('/')
+    val publicBasePath = publicPath
+        .removePrefix("/")
+        .removeSuffix("manifest.json")
+        .trimEnd('/')
+    val publicBaseUrl = "${parsed.protocol}://${parsed.host}${portSuffix(parsed)}/$publicBasePath".trimEnd('/')
 
     val publicQueryParams = linkedMapOf<String, String>()
     val secretParams = linkedMapOf<String, String>()
@@ -230,7 +234,7 @@ private fun addonSecretRef(publicBaseUrl: String): String {
 
 private fun looksSensitivePathSegment(segment: String): Boolean {
     val value = segment.trim()
-    if (value.length < 24) return false
+    if (value.length < 16) return false
     return value.all { it.isLetterOrDigit() || it in "._~+=-" }
 }
 
