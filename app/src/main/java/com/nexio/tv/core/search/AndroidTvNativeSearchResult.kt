@@ -9,5 +9,8 @@ data class AndroidTvNativeSearchResult(
     val description: String?,
     val releaseInfo: String?,
     val runtime: String?,
-    val addonBaseUrl: String?
+    val addonBaseUrl: String?,
+    val source: AndroidTvSearchCandidateSource = AndroidTvSearchCandidateSource.LIVE_CINEMETA,
+    val score: Int = 0,
+    val matchExplanation: String? = null
 )

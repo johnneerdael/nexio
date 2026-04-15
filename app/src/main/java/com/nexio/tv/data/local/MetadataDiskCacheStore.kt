@@ -381,6 +381,26 @@ class MetadataDiskCacheStore @Inject constructor(
         }.getOrDefault(false)
     }
 
+    fun readCurrentMetaForItem(itemKey: String, languageTag: String): Meta? {
+        return runCatching {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val expectedPrefix = "$META_PREFIX$itemKey::$languageTag::"
+            prefs.all.entries
+                .asSequence()
+                .filter { (key, _) -> key.startsWith(expectedPrefix) }
+                .mapNotNull { (_, value) ->
+                    val payload = (value as? String).orEmpty()
+                    val root = gson.fromJson(payload, JsonObject::class.java) ?: return@mapNotNull null
+                    val schemaVersion = root.get("metaSchemaVersion")?.asInt ?: 0
+                    if (schemaVersion != META_CACHE_SCHEMA_VERSION) return@mapNotNull null
+                    decodeMetaSafely(root)
+                }
+                .firstOrNull()
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to read current metadata for item", error)
+        }.getOrNull()
+    }
+
     fun replaceHomeFeedReferences(feedKey: String, itemKeys: Set<String>) {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

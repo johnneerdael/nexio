@@ -9,6 +9,7 @@ import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.core.search.AndroidTvSearchRuntimeReadiness
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
@@ -364,6 +365,10 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         var metadataFetchCount = 0
         val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext)
         val catalogKey = "visible_home"
+        val runtimeHydrationKeys = AndroidTvSearchRuntimeReadiness
+            .prioritizeMissingRuntimeCandidates(uniqueItems)
+            .map { "${it.apiType}:${it.id}" }
+            .toSet()
 
         onLog("metadata_hydrate_start", "catalogKey=$catalogKey items=${uniqueItems.size}")
         uniqueItems.forEach { item ->
@@ -377,6 +382,9 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                 if (telemetryEnabled) {
                     onLog("item_metadata_cached", "catalogKey=$catalogKey itemKey=$itemKey")
                 }
+                return@forEach
+            }
+            if (itemKey !in runtimeHydrationKeys) {
                 return@forEach
             }
             metadataFetchCount += 1
