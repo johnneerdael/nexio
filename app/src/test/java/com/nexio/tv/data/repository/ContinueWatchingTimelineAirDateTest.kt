@@ -40,6 +40,64 @@ class ContinueWatchingTimelineAirDateTest {
     }
 
     @Test
+    fun `allRailsAirDateGated - exact future nextUp entries are excluded`() {
+        val nowMs = 10_000L
+        val dateOnlyAiredEntry = nextUp(
+            contentId = "date-only-aired",
+            firstAiredMs = 1_000L,
+            availabilityInstantMs = null
+        )
+        val exactFutureEntry = nextUp(
+            contentId = "exact-future",
+            firstAiredMs = 1_000L,
+            availabilityInstantMs = 20_000L
+        )
+
+        val selection = splitNextUpCandidatesForContinueWatching(
+            resumes = emptyList(),
+            nextUpItems = listOf(dateOnlyAiredEntry, exactFutureEntry),
+            nextUpRef = ::nextUpRef,
+            nowMs = nowMs
+        )
+
+        assertEquals(listOf("date-only-aired"), selection.mainFeedItems.map { it.contentId })
+        assertEquals(
+            listOf("date-only-aired", "exact-future"),
+            selection.syntheticRailItems.map { it.contentId }
+        )
+    }
+
+    @Test
+    fun `allRailsAirDateGated - resume items remain visible when next up is exact future`() {
+        val nowMs = 10_000L
+        val resumeItems = listOf(
+            resume(contentId = "show-a", lastWatched = 9_000L)
+        )
+        val exactFutureEntry = nextUp(
+            contentId = "show-a",
+            firstAiredMs = 1_000L,
+            availabilityInstantMs = 20_000L
+        )
+
+        val selection = splitNextUpCandidatesForContinueWatching(
+            resumes = resumeItems.map(::resumeRef),
+            nextUpItems = listOf(exactFutureEntry),
+            nextUpRef = ::nextUpRef,
+            nowMs = nowMs
+        )
+        val timeline = buildMixedContinueWatchingTimeline(
+            resumeItems = resumeItems,
+            nextUpItems = selection.mainFeedItems,
+            resumeRef = ::resumeRef,
+            nextUpRef = ::nextUpRef
+        )
+
+        assertEquals(emptyList<TrackingNextUpEntry>(), selection.mainFeedItems)
+        assertEquals(1, timeline.size)
+        assertTrue(timeline.single() is ContinueWatchingTimelineRow.Resume)
+    }
+
+    @Test
     fun `allRailsAirDateGated - unaired traktUpNext entries excluded via AirDateGate`() {
         val nowMs = 1_000L
         val airedEntry = nextUp(contentId = "aired-trakt", firstAiredMs = 200L)
@@ -205,7 +263,8 @@ class ContinueWatchingTimelineAirDateTest {
         season: Int = 1,
         episode: Int = 1,
         activityAtMs: Long = 1_000L,
-        firstAiredMs: Long
+        firstAiredMs: Long,
+        availabilityInstantMs: Long? = null
     ): TrackingNextUpEntry {
         return TrackingNextUpEntry(
             contentId = contentId,
@@ -216,7 +275,8 @@ class ContinueWatchingTimelineAirDateTest {
             videoId = "$contentId:$season:$episode",
             firstAired = null,
             firstAiredMs = firstAiredMs,
-            activityAtMs = activityAtMs
+            activityAtMs = activityAtMs,
+            tvdbAvailabilityInstantMs = availabilityInstantMs
         )
     }
 
@@ -224,7 +284,8 @@ class ContinueWatchingTimelineAirDateTest {
         return ContinueWatchingNextUpRef(
             contentId = entry.contentId,
             activityAtMs = entry.activityAtMs,
-            firstAiredMs = entry.firstAiredMs
+            firstAiredMs = entry.firstAiredMs,
+            availabilityInstantMs = entry.tvdbAvailabilityInstantMs
         )
     }
 

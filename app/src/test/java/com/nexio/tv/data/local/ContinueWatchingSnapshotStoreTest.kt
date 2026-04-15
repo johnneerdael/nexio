@@ -2,6 +2,8 @@ package com.nexio.tv.data.local
 
 import android.content.Context
 import com.google.gson.JsonObject
+import com.nexio.tv.core.tvdb.TvdbAirAvailabilityDiagnosticReason
+import com.nexio.tv.core.tvdb.TvdbAirAvailabilityPrecision
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.TrackingNextUpEntry
 import com.nexio.tv.domain.model.HomeDisplayMetadata
@@ -130,6 +132,51 @@ class ContinueWatchingSnapshotStoreTest {
         assertEquals(snapshot.resumeItems, restored?.resumeItems)
         assertEquals(1_500L, restored?.nextUpItems?.singleOrNull()?.activityAtMs)
         assertEquals(1_500L, restored?.traktUpNextItems?.singleOrNull()?.activityAtMs)
+    }
+
+    @Test
+    fun `write persists scheduled reemit and tvdb timing fields`() {
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(prefs, "continue_watching_snapshot", localePrefs("en"))
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 1
+        val store = ContinueWatchingSnapshotStore(context, metadataStore)
+
+        val withheld = TrackingNextUpEntry(
+            contentId = "show-future",
+            name = "Show Future",
+            season = 1,
+            episode = 4,
+            episodeTitle = "Episode 4",
+            videoId = "show-future:1:4",
+            firstAired = "2026-04-16",
+            firstAiredMs = 2_000L,
+            activityAtMs = 1_500L,
+            tvdbAvailabilityInstantMs = 10_000L,
+            tvdbAvailabilityPrecision = TvdbAirAvailabilityPrecision.EXACT_INSTANT,
+            tvdbAvailabilitySourceZoneId = "America/New_York",
+            tvdbAvailabilitySourcePolicy = "us_network_eastern",
+            tvdbAvailabilityDiagnosticReason = TvdbAirAvailabilityDiagnosticReason.MISSING_AIRS_TIME,
+            tvdbAvailabilityDeviceLocalDateTime = "2026-04-17T02:00"
+        )
+
+        store.write(
+            ContinueWatchingSnapshot(
+                scheduledReemit = listOf(withheld),
+                updatedAtMs = 2_000L
+            )
+        )
+
+        val restored = store.read()
+
+        assertEquals(listOf(withheld), restored?.scheduledReemit)
+        val restoredEntry = restored?.scheduledReemit?.singleOrNull()
+        assertEquals(10_000L, restoredEntry?.tvdbAvailabilityInstantMs)
+        assertEquals(TvdbAirAvailabilityPrecision.EXACT_INSTANT, restoredEntry?.tvdbAvailabilityPrecision)
+        assertEquals("America/New_York", restoredEntry?.tvdbAvailabilitySourceZoneId)
+        assertEquals("us_network_eastern", restoredEntry?.tvdbAvailabilitySourcePolicy)
+        assertEquals(TvdbAirAvailabilityDiagnosticReason.MISSING_AIRS_TIME, restoredEntry?.tvdbAvailabilityDiagnosticReason)
+        assertEquals("2026-04-17T02:00", restoredEntry?.tvdbAvailabilityDeviceLocalDateTime)
     }
 
     @Test
