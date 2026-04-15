@@ -5,6 +5,7 @@ import androidx.lifecycle.SavedStateHandle
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.data.local.ImdbSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.PlayerSettings
@@ -42,6 +43,8 @@ fun buildMetaDetailsViewModel(
     metaRepository: MetaRepository = defaultMetaRepository(meta),
     tmdbService: TmdbService = defaultTmdbService(),
     tmdbMetadataService: TmdbMetadataService = mockk(relaxed = true),
+    tvMetadataRouter: TvMetadataRouter = mockk(relaxed = true),
+    tmdbSettings: TmdbSettings = TmdbSettings(),
     watchProgressRepository: WatchProgressRepository = defaultWatchProgressRepository(),
     libraryRepository: LibraryRepository = defaultLibraryRepository()
 ): MetaDetailsViewModel {
@@ -51,7 +54,7 @@ fun buildMetaDetailsViewModel(
     every { layoutPreferenceDataStore.blurUnwatchedEpisodes } returns flowOf(false)
 
     val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
-    every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings())
+    every { tmdbSettingsDataStore.settings } returns flowOf(tmdbSettings)
 
     val imdbSettingsDataStore = mockk<ImdbSettingsDataStore>()
     every { imdbSettingsDataStore.settings } returns flowOf(ImdbSettings())
@@ -82,6 +85,7 @@ fun buildMetaDetailsViewModel(
         imdbSettingsDataStore = imdbSettingsDataStore,
         tmdbService = tmdbService,
         tmdbMetadataService = tmdbMetadataService,
+        tvMetadataRouter = tvMetadataRouter,
         mdbListRepository = mockk(relaxed = true),
         episodeRatingsSelectionRepository = mockk(relaxed = true),
         libraryRepository = libraryRepository,
