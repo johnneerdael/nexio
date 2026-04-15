@@ -21,7 +21,8 @@ class SeasonMarkBatcher @Inject constructor(
         showContentId: String,
         seasonNumber: Int,
         episodes: List<TraktEpisodeRef>,
-        rollbackState: ContinueWatchingSnapshotService.EpisodeRollbackState
+        rollbackState: ContinueWatchingSnapshotService.EpisodeRollbackState,
+        profileId: Int = 1
     ) {
         withContext(ioDispatcher) {
             traktMutationOutboxCoordinator.enqueueAndDrain(
@@ -29,7 +30,8 @@ class SeasonMarkBatcher @Inject constructor(
                     showContentId = showContentId,
                     seasonNumber = seasonNumber,
                     episodes = episodes,
-                    rollbackState = rollbackState
+                    rollbackState = rollbackState,
+                    profileId = profileId
                 )
             )
         }

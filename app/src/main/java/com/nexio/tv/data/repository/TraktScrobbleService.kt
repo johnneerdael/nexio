@@ -218,12 +218,14 @@ class TraktScrobbleService @Inject constructor(
         rollbackState: TraktWatchingNowStateController.Snapshot
     ): MutationResult {
         return runCatching {
+            val session = traktAuthService.currentAuthSession()
             traktMutationOutboxCoordinator.enqueueAndDrain(
                 TraktScrobbleMutationAdapter.buildCheckinEnvelope(
                     item = request.item,
                     message = request.message,
                     rollbackState = rollbackState,
-                    optimisticVersion = request.optimisticVersion
+                    optimisticVersion = request.optimisticVersion,
+                    profileId = session.profileId
                 )
             )
             MutationResult.Success
@@ -241,13 +243,15 @@ class TraktScrobbleService @Inject constructor(
         val clampedProgress = request.progressPercent.coerceIn(0f, 100f)
         if (shouldSkip(action, item.itemKey, clampedProgress)) return MutationResult.Success
         return runCatching {
+            val session = traktAuthService.currentAuthSession()
             traktMutationOutboxCoordinator.enqueueAndDrain(
                 TraktScrobbleMutationAdapter.buildScrobbleEnvelope(
                     item = item,
                     action = action,
                     progressPercent = clampedProgress,
                     rollbackState = rollbackState,
-                    optimisticVersion = request.optimisticVersion
+                    optimisticVersion = request.optimisticVersion,
+                    profileId = session.profileId
                 )
             )
             lastScrobbleStamp = ScrobbleStamp(

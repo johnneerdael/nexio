@@ -118,7 +118,8 @@ class TraktSeasonMarkMutationAdapter @Inject constructor(
             showContentId: String,
             seasonNumber: Int,
             episodes: List<TraktEpisodeRef>,
-            rollbackState: ContinueWatchingSnapshotService.EpisodeRollbackState
+            rollbackState: ContinueWatchingSnapshotService.EpisodeRollbackState,
+            profileId: Int = 1
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 addProperty(PAYLOAD_SHOW_CONTENT_ID, showContentId)
@@ -133,6 +134,7 @@ class TraktSeasonMarkMutationAdapter @Inject constructor(
                 })
             }
             return TraktMutationEnvelope(
+                profileId = profileId,
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND,
                 priority = TraktMutationPriorityBucket.WATCHED,

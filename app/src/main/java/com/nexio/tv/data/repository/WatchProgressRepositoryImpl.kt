@@ -43,6 +43,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
     private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator,
     private val metaRepository: MetaRepository,
     private val seasonMarkBatcher: SeasonMarkBatcher,
+    private val traktAuthService: TraktAuthService,
     // Provider<> breaks the DI cycle: ContinueWatchingSnapshotService → WatchProgressRepository
     //   → WatchProgressRepositoryImpl → ContinueWatchingSnapshotService
     private val snapshotServiceProvider: Provider<ContinueWatchingSnapshotService>
@@ -307,6 +308,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
         val providerState = trackingProviderStateService.currentState()
         val isAuthenticated = providerState.traktAuthenticated || providerState.simklAuthenticated
         if (!isAuthenticated) return
+        val profileId = if (providerState.effectiveProvider == com.nexio.tv.domain.model.TrackingProvider.TRAKT) {
+            traktAuthService.currentTraktProfileId()
+        } else {
+            1
+        }
         trackingProgressService.applyOptimisticRemoval(contentId, season, episode)
         runCatching {
             trackingProgressService.resolvePlaybackDeleteIdsForOutbox(contentId, season, episode)
@@ -324,7 +330,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
                                 playbackId = playbackId,
                                 contentId = contentId,
                                 season = season,
-                                episode = episode
+                                episode = episode,
+                                profileId = profileId
                             )
                     }
                     traktMutationOutboxCoordinator.enqueueAndDrain(envelope)
@@ -346,6 +353,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
         if (!providerState.hasAuthenticatedProvider) {
             return
         }
+        val profileId = if (providerState.effectiveProvider == com.nexio.tv.domain.model.TrackingProvider.TRAKT) {
+            traktAuthService.currentTraktProfileId()
+        } else {
+            1
+        }
         trackingProgressService.applyOptimisticRemoval(contentId, season, episode)
         runCatching {
             val envelope = when (providerState.effectiveProvider) {
@@ -359,7 +371,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
                     TraktProgressHistoryMutationAdapter.buildHistoryRemoveEnvelope(
                         contentId = contentId,
                         season = season,
-                        episode = episode
+                        episode = episode,
+                        profileId = profileId
                     )
             }
             traktMutationOutboxCoordinator.enqueueAndDrain(envelope)
@@ -379,6 +392,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
         val providerState = trackingProviderStateService.currentState()
         if (!providerState.hasAuthenticatedProvider) {
             return
+        }
+        val profileId = if (providerState.effectiveProvider == com.nexio.tv.domain.model.TrackingProvider.TRAKT) {
+            traktAuthService.currentTraktProfileId()
+        } else {
+            1
         }
         val playbackIds = trackingProgressService.resolvePlaybackDeleteIdsForOutbox(
             contentId = contentId,
@@ -403,7 +421,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
                             contentId = contentId,
                             season = null,
                             episode = null,
-                            clearShow = true
+                            clearShow = true,
+                            profileId = profileId
                         )
                 }
                 traktMutationOutboxCoordinator.enqueueAndDrain(deleteEnvelope)
@@ -421,7 +440,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
                         contentId = contentId,
                         season = null,
                         episode = null,
-                        removeShow = true
+                        removeShow = true,
+                        profileId = profileId
                     )
             }
             traktMutationOutboxCoordinator.enqueueAndDrain(removeEnvelope)
@@ -441,6 +461,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
         val providerState = trackingProviderStateService.currentState()
         if (!providerState.hasAuthenticatedProvider) {
             return
+        }
+        val profileId = if (providerState.effectiveProvider == com.nexio.tv.domain.model.TrackingProvider.TRAKT) {
+            traktAuthService.currentTraktProfileId()
+        } else {
+            1
         }
         val now = System.currentTimeMillis()
         val duration = progress.duration.takeIf { it > 0L } ?: 1L
@@ -462,7 +487,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
                     TraktProgressHistoryMutationAdapter.buildHistoryAddEnvelope(
                         progress = completed,
                         title = completed.name.takeIf { it.isNotBlank() },
-                        year = null
+                        year = null,
+                        profileId = profileId
                     )
             }
             traktMutationOutboxCoordinator.enqueueAndDrain(envelope)
@@ -489,6 +515,11 @@ class WatchProgressRepositoryImpl @Inject constructor(
         val providerState = trackingProviderStateService.currentState()
         if (!providerState.hasAuthenticatedProvider) return
         if (episodes.isEmpty()) return
+        val profileId = if (providerState.effectiveProvider == com.nexio.tv.domain.model.TrackingProvider.TRAKT) {
+            traktAuthService.currentTraktProfileId()
+        } else {
+            1
+        }
 
         val showContentId = meta.id
 
@@ -562,7 +593,8 @@ class WatchProgressRepositoryImpl @Inject constructor(
                 showContentId = showContentId,
                 seasonNumber = seasonNumber,
                 episodes = traktRefs,
-                rollbackState = rollbackState.filterEpisodeNumbers(epNumToTraktRef.keys)
+                rollbackState = rollbackState.filterEpisodeNumbers(epNumToTraktRef.keys),
+                profileId = profileId
             )
         } catch (e: Exception) {
             snapshotService.rollbackEpisodes(rollbackState)

@@ -187,7 +187,8 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
         fun buildHistoryAddEnvelope(
             progress: WatchProgress,
             title: String?,
-            year: Int?
+            year: Int?,
+            profileId: Int = 1
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 add(PAYLOAD_PROGRESS, gson.toJsonTree(progress))
@@ -203,6 +204,7 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
             }.ifBlank { null }
 
             return TraktMutationEnvelope(
+                profileId = profileId,
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_HISTORY_ADD,
                 priority = TraktMutationPriorityBucket.WATCHED,
@@ -216,7 +218,8 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
             contentId: String,
             season: Int?,
             episode: Int?,
-            removeShow: Boolean = false
+            removeShow: Boolean = false,
+            profileId: Int = 1
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 addProperty(PAYLOAD_CONTENT_ID, contentId)
@@ -234,6 +237,7 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
                 }
             }.ifBlank { null }
             return TraktMutationEnvelope(
+                profileId = profileId,
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_HISTORY_REMOVE,
                 priority = TraktMutationPriorityBucket.WATCHED,
@@ -247,7 +251,8 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
             contentId: String,
             season: Int?,
             episode: Int?,
-            clearShow: Boolean = false
+            clearShow: Boolean = false,
+            profileId: Int = 1
         ): TraktMutationEnvelope {
             val payload = JsonObject().apply {
                 addProperty(PAYLOAD_PLAYBACK_ID, playbackId)
@@ -257,6 +262,7 @@ class TraktProgressHistoryMutationAdapter @Inject constructor(
                 if (clearShow) addProperty(PAYLOAD_CLEAR_SHOW, true)
             }
             return TraktMutationEnvelope(
+                profileId = profileId,
                 adapterKey = ADAPTER_KEY,
                 mutationKind = MUTATION_KIND_PLAYBACK_DELETE,
                 priority = TraktMutationPriorityBucket.WATCHED,
