@@ -63,6 +63,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -275,7 +276,7 @@ class HomeViewModel @Inject constructor(
     internal var suppressProfileSwitchRefreshUntilMs: Long = 0L
     @Volatile
     internal var homeProfileGeneration: Long = 0L
-    internal var activeHomeProfileSession: HomeProfileSession = HomeProfileSession.DefaultLegacy(generation = 0L)
+    internal var activeHomeProfileSession = startHomeProfileSession(profileManager.activeProfileId.value)
 
     val trailerPreviewUrls: Map<String, String>
         get() = trailerPreviewUrlsState
@@ -420,22 +421,28 @@ class HomeViewModel @Inject constructor(
 
     private fun observeProfileSwitches() {
         viewModelScope.launch {
-            profileManager.profileSwitched.collectLatest { profileId ->
-                val session = startHomeProfileSession(profileId)
-                profileSwitchDiskHydrationActive = true
-                suppressProfileSwitchRefreshUntilMs = SystemClock.elapsedRealtime() + 5_000L
-                resetProfileScopedHomeState("profile_switch:$profileId")
-                try {
-                    continueWatchingSnapshotService.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
-                    loadActiveProfileDiskBackedHomeState("profile_switch:$profileId", expectedGeneration = session.generation)
-                } finally {
-                    if (isCurrentHomeProfileGeneration(session.generation)) {
-                        profileSwitchDiskHydrationActive = false
-                        pendingSerializedHomeRefreshReason = null
-                        startupRefreshPending = false
+            profileManager.activeProfileId
+                .drop(1)
+                .distinctUntilChanged()
+                .collectLatest { profileId ->
+                    val session = startHomeProfileSession(profileId)
+                    profileSwitchDiskHydrationActive = true
+                    suppressProfileSwitchRefreshUntilMs = SystemClock.elapsedRealtime() + 5_000L
+                    resetProfileScopedHomeState("profile_switch:$profileId")
+                    try {
+                        continueWatchingSnapshotService.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
+                        loadActiveProfileDiskBackedHomeState(
+                            reason = "profile_switch:$profileId",
+                            expectedGeneration = session.generation
+                        )
+                    } finally {
+                        if (isCurrentHomeProfileGeneration(session.generation)) {
+                            profileSwitchDiskHydrationActive = false
+                            pendingSerializedHomeRefreshReason = null
+                            startupRefreshPending = false
+                        }
                     }
                 }
-            }
         }
     }
 
