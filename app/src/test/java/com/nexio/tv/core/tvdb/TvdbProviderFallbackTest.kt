@@ -1,8 +1,11 @@
 package com.nexio.tv.core.tvdb
 
-import io.mockk.coEvery
-import io.mockk.coVerify
+import com.nexio.tv.data.local.TvdbSettingsDataStore
+import com.nexio.tv.domain.model.TvdbSettings
+import com.nexio.tv.domain.model.TvdbValidationStatus
+import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -11,68 +14,65 @@ import org.junit.Test
 class TvdbProviderFallbackTest {
 
     @Test
-    fun `inactive TVDB leaves TMDB settings and resolves through non TVDB fallback`() = runTest {
-        val tvdbProvider = mockk<TvdbSeriesProvider>()
-        val tmdbProvider = mockk<TmdbSeriesFallbackProvider>()
-        val diagnostics = mockk<TvdbDiagnosticsRecorder>(relaxed = true)
-        val router = TvdbProviderFallback(
-            tvdbProvider = tvdbProvider,
-            tmdbProvider = tmdbProvider,
-            diagnosticsRecorder = diagnostics
-        )
-
-        coEvery {
-            tmdbProvider.resolveSeries("tt0944947")
-        } returns TvdbProviderResult.Fallback("tmdb-series", tmdbSettingsChanged = false)
-
-        val result = router.resolveSeries(
-            remoteId = "tt0944947",
-            settings = TvdbProviderSettings(
-                enabled = false,
-                validationStatus = TvdbValidationStatus.NOT_CONFIGURED
+    fun `disabled TVDB returns not configured fallback decision`() = runTest {
+        val fallback = TvdbProviderFallback(
+            settingsDataStore = settingsStore(
+                TvdbSettings(
+                    enabled = false,
+                    apiKey = "tvdb-key",
+                    validationStatus = TvdbValidationStatus.VALID
+                )
             )
         )
 
-        assertEquals("tmdb-series", result.seriesId)
-        assertTrue(result.tmdbSettingsChanged.not())
-        coVerify(exactly = 0) { tvdbProvider.resolveSeries(any()) }
-        coVerify(exactly = 1) { tmdbProvider.resolveSeries("tt0944947") }
-        coVerify(exactly = 0) { diagnostics.recordFallback(any()) }
+        val result = fallback.decide()
+
+        assertEquals(
+            TvdbProviderDecision.UseFallback(TvdbProviderFallback.REASON_NOT_CONFIGURED),
+            result
+        )
     }
 
     @Test
-    fun `active unusable TVDB records sanitized fallback diagnostic before TMDB fallback`() = runTest {
-        val tvdbProvider = mockk<TvdbSeriesProvider>()
-        val tmdbProvider = mockk<TmdbSeriesFallbackProvider>()
-        val diagnostics = mockk<TvdbDiagnosticsRecorder>(relaxed = true)
-        val router = TvdbProviderFallback(
-            tvdbProvider = tvdbProvider,
-            tmdbProvider = tmdbProvider,
-            diagnosticsRecorder = diagnostics
-        )
-
-        coEvery { tmdbProvider.resolveSeries("tt0944947") } returns
-            TvdbProviderResult.Fallback("tmdb-series", tmdbSettingsChanged = false)
-
-        val result = router.resolveSeries(
-            remoteId = "tt0944947",
-            settings = TvdbProviderSettings(
-                enabled = true,
-                validationStatus = TvdbValidationStatus.INVALID,
-                lastFailure = "401 for key tvdb-key with pin subscriber-pin token tvdb-token"
+    fun `valid configured TVDB returns use TVDB decision`() = runTest {
+        val fallback = TvdbProviderFallback(
+            settingsDataStore = settingsStore(
+                TvdbSettings(
+                    enabled = true,
+                    apiKey = "tvdb-key",
+                    validationStatus = TvdbValidationStatus.VALID
+                )
             )
         )
 
-        assertEquals("tmdb-series", result.seriesId)
-        coVerify(exactly = 1) {
-            diagnostics.recordFallback(
-                match {
-                    it.reason == TvdbFallbackReason.INVALID_CREDENTIALS &&
-                        it.sanitizedMessage.contains("tvdb-key").not() &&
-                        it.sanitizedMessage.contains("subscriber-pin").not() &&
-                        it.sanitizedMessage.contains("tvdb-token").not()
-                }
+        val result = fallback.decide()
+
+        assertTrue(result is TvdbProviderDecision.UseTvdb)
+    }
+
+    @Test
+    fun `invalid active TVDB returns invalid credentials fallback decision`() = runTest {
+        val fallback = TvdbProviderFallback(
+            settingsDataStore = settingsStore(
+                TvdbSettings(
+                    enabled = true,
+                    apiKey = "tvdb-key",
+                    validationStatus = TvdbValidationStatus.INVALID
+                )
             )
+        )
+
+        val result = fallback.decide()
+
+        assertEquals(
+            TvdbProviderDecision.UseFallback(TvdbProviderFallback.REASON_INVALID_CREDENTIALS),
+            result
+        )
+    }
+
+    private fun settingsStore(settings: TvdbSettings): TvdbSettingsDataStore {
+        return mockk(relaxed = true) {
+            every { this@mockk.settings } returns flowOf(settings)
         }
     }
 }
