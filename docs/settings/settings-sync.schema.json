@@ -8,8 +8,8 @@
   "properties": {
     "schemaVersion": {
       "type": "integer",
-      "const": 6,
-      "default": 6
+      "const": 7,
+      "default": 7
     },
     "integrations": {
       "type": "object",
@@ -18,6 +18,7 @@
         "debrid",
         "theIntroDb",
         "tmdb",
+        "tvdb",
         "omdb",
         "imdb",
         "mdblist",
@@ -105,6 +106,21 @@
             "useEpisodes": { "type": "boolean", "default": true },
             "useMoreLikeThis": { "type": "boolean", "default": true },
             "useCollections": { "type": "boolean", "default": true }
+          }
+        },
+        "tvdb": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "configured", "validationStatus", "lastFailure"],
+          "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "configured": { "type": "boolean", "default": false },
+            "validationStatus": {
+              "type": "string",
+              "enum": ["NOT_CONFIGURED", "VALIDATING", "VALID", "INVALID", "FALLBACK_ACTIVE"],
+              "default": "NOT_CONFIGURED"
+            },
+            "lastFailure": { "type": "string", "default": "" }
           }
         },
         "omdb": {

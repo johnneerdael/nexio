@@ -14,6 +14,7 @@ begin
       check (secret_type in (
         'addon_credential',
         'tmdb_api_key',
+        'tvdb_api_key',
         'omdb_api_key',
         'imdb_api_key',
         'mdblist_api_key',
@@ -37,6 +38,7 @@ begin
       secret_type text not null check (secret_type in (
         'addon_credential',
         'tmdb_api_key',
+        'tvdb_api_key',
         'omdb_api_key',
         'imdb_api_key',
         'mdblist_api_key',
@@ -297,6 +299,7 @@ begin
   if trim(coalesce(p_secret_type, '')) not in (
     'addon_credential',
     'tmdb_api_key',
+    'tvdb_api_key',
     'omdb_api_key',
     'imdb_api_key',
     'mdblist_api_key',
@@ -342,6 +345,7 @@ begin
   if trim(coalesce(p_secret_type, '')) not in (
     'addon_credential',
     'tmdb_api_key',
+    'tvdb_api_key',
     'omdb_api_key',
     'imdb_api_key',
     'mdblist_api_key',
@@ -384,6 +388,7 @@ begin
   if trim(coalesce(p_secret_type, '')) not in (
     'addon_credential',
     'tmdb_api_key',
+    'tvdb_api_key',
     'omdb_api_key',
     'imdb_api_key',
     'mdblist_api_key',
@@ -430,6 +435,7 @@ begin
   if trim(coalesce(p_secret_type, '')) not in (
     'addon_credential',
     'tmdb_api_key',
+    'tvdb_api_key',
     'omdb_api_key',
     'imdb_api_key',
     'mdblist_api_key',
@@ -475,6 +481,7 @@ begin
   if trim(coalesce(p_secret_type, '')) not in (
     'addon_credential',
     'tmdb_api_key',
+    'tvdb_api_key',
     'omdb_api_key',
     'imdb_api_key',
     'mdblist_api_key',
@@ -517,6 +524,7 @@ begin
   if trim(coalesce(p_secret_type, '')) not in (
     'addon_credential',
     'tmdb_api_key',
+    'tvdb_api_key',
     'omdb_api_key',
     'imdb_api_key',
     'mdblist_api_key',
@@ -588,6 +596,12 @@ as $$
         "useEpisodes": true,
         "useMoreLikeThis": true,
         "useCollections": true
+      },
+      "tvdb": {
+        "enabled": false,
+        "configured": false,
+        "validationStatus": "NOT_CONFIGURED",
+        "lastFailure": ""
       },
       "omdb": {
         "enabled": false
@@ -701,6 +715,8 @@ begin
           || coalesce(v_payload#>'{integrations,theIntroDb}', '{}'::jsonb),
         'tmdb', coalesce(v_defaults#>'{integrations,tmdb}', '{}'::jsonb)
           || coalesce(v_payload#>'{integrations,tmdb}', '{}'::jsonb),
+        'tvdb', coalesce(v_defaults#>'{integrations,tvdb}', '{}'::jsonb)
+          || coalesce(v_payload#>'{integrations,tvdb}', '{}'::jsonb),
         'omdb', coalesce(v_defaults#>'{integrations,omdb}', '{}'::jsonb)
           || coalesce(v_payload#>'{integrations,omdb}', '{}'::jsonb),
         'imdb', coalesce(v_defaults#>'{integrations,imdb}', '{}'::jsonb)
@@ -768,6 +784,8 @@ begin
         || coalesce(v_payload#>'{integrations,theIntroDb}', '{}'::jsonb),
       'tmdb', coalesce(v_defaults#>'{integrations,tmdb}', '{}'::jsonb)
         || coalesce(v_payload#>'{integrations,tmdb}', '{}'::jsonb),
+      'tvdb', coalesce(v_defaults#>'{integrations,tvdb}', '{}'::jsonb)
+        || coalesce(v_payload#>'{integrations,tvdb}', '{}'::jsonb),
       'omdb', coalesce(v_defaults#>'{integrations,omdb}', '{}'::jsonb)
         || coalesce(v_payload#>'{integrations,omdb}', '{}'::jsonb),
       'imdb', coalesce(v_defaults#>'{integrations,imdb}', '{}'::jsonb)
