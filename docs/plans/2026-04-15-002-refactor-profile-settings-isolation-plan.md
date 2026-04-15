@@ -167,7 +167,7 @@ flowchart TD
 
 ## Implementation Units
 
-- [ ] **Unit 1: Create Settings Ownership Matrix**
+- [x] **Unit 1: Create Settings Ownership Matrix**
 
 **Goal:** Produce a durable source-of-truth matrix for settings/caches so implementation is contract-led, not symptom-led.
 
