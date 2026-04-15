@@ -2,15 +2,19 @@ package com.nexio.tv.ui.screens.settings
 
 import java.io.File
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Wave 0 validation scaffold for UX-02: no TVDB-specific advanced or timing toggles.
+ * UX-02 static guard: no TVDB-specific advanced or timing toggles.
  *
- * This is a static guard test that reads TvdbSettingsScreen.kt and strings.xml
- * to verify that no provider-specific advanced metadata or exact-timing toggles
- * have been added. Per decisions D-13 and D-14, provider routing decides the source,
- * not user-facing toggles.
+ * This test reads TvdbSettingsScreen.kt and strings.xml to verify that no
+ * provider-specific advanced metadata or exact-timing toggles have been added.
+ * Per decisions D-13 and D-14, provider routing decides the source, not
+ * user-facing toggles.
+ *
+ * It also verifies that the provider precedence copy remains present so users
+ * understand TVDB is used for TV metadata when configured.
  *
  * This test must remain green throughout Phase 9 execution.
  */
@@ -26,7 +30,9 @@ class TvdbSettingsNoAdvancedToggleTest {
             "TVDB advanced toggle",
             "Use TVDB timing",
             "Exact air-time toggle",
-            "provider-specific timing"
+            "provider-specific timing",
+            "Advanced TVDB surfaces",
+            "Enable TVDB trailers"
         )
 
         /**
@@ -87,5 +93,40 @@ class TvdbSettingsNoAdvancedToggleTest {
                 combinedContent.contains(phrase, ignoreCase = true)
             )
         }
+    }
+
+    @Test
+    fun `provider precedence copy is present in settings screen`() {
+        val projectRoot = findProjectRoot()
+
+        // Settings screen must reference provider_precedence_summary
+        val settingsScreenFile = projectRoot.resolve(
+            "app/src/main/java/com/nexio/tv/ui/screens/settings/TvdbSettingsScreen.kt"
+        )
+        val settingsScreenContent = if (settingsScreenFile.exists()) {
+            settingsScreenFile.readText()
+        } else {
+            ""
+        }
+
+        assertTrue(
+            "TvdbSettingsScreen.kt must reference provider_precedence_summary " +
+                "so users understand TVDB is used for TV metadata when configured.",
+            settingsScreenContent.contains("provider_precedence_summary")
+        )
+
+        // strings.xml must contain the actual provider precedence text
+        val stringsFile = projectRoot.resolve("app/src/main/res/values/strings.xml")
+        val stringsContent = if (stringsFile.exists()) {
+            stringsFile.readText()
+        } else {
+            ""
+        }
+
+        assertTrue(
+            "strings.xml must contain 'TVDB is used for TV metadata when configured' " +
+                "in the provider_precedence_summary string.",
+            stringsContent.contains("TVDB is used for TV metadata when configured")
+        )
     }
 }
