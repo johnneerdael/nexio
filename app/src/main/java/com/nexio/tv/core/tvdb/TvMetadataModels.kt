@@ -1,6 +1,8 @@
 package com.nexio.tv.core.tvdb
 
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.TvdbEpisodeOrder
+import com.nexio.tv.domain.model.TvdbSeasonOrderContext
 
 data class TvMetadataRequest(
     val contentId: String,
@@ -42,7 +44,8 @@ data class TvMetadataEnrichment(
     val status: String? = null,
     val aliases: List<String> = emptyList(),
     val contentRatings: List<String> = emptyList(),
-    val remoteIds: Map<String, Set<String>> = emptyMap()
+    val remoteIds: Map<String, Set<String>> = emptyMap(),
+    val seasonOrderContext: TvdbSeasonOrderContext? = null
 )
 
 data class TvEpisodeMetadata(
@@ -59,7 +62,8 @@ data class TvEpisodeMetadata(
     val airsBeforeSeason: Int? = null,
     val airsBeforeEpisode: Int? = null,
     val linkedMovieTvdbId: Int? = null,
-    val finaleType: String? = null
+    val finaleType: String? = null,
+    val tvdbEpisodeOrder: TvdbEpisodeOrder? = null
 )
 
 data class TvSeasonEpisode(
