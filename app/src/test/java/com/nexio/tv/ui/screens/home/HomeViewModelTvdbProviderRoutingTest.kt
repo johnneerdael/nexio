@@ -23,6 +23,8 @@ import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HomeViewModelTvdbProviderRoutingTest {
@@ -99,6 +101,65 @@ class HomeViewModelTvdbProviderRoutingTest {
     }
 
     @Test
+    fun `continue watching enrichment gate allows tvdb series when tmdb disabled`() {
+        val shouldEnrich = shouldEnrichContinueWatchingProviderMetadata(
+            items = listOf(continueWatchingSeriesItem()),
+            traktUpNextItems = emptyList(),
+            settings = TmdbSettings(enabled = false, apiKey = "")
+        )
+
+        assertTrue(shouldEnrich)
+    }
+
+    @Test
+    fun `continue watching enrichment gate allows tvdb next up when tmdb disabled`() {
+        val shouldEnrich = shouldEnrichContinueWatchingProviderMetadata(
+            items = emptyList(),
+            traktUpNextItems = listOf(continueWatchingNextUpItem()),
+            settings = TmdbSettings(enabled = false, apiKey = "")
+        )
+
+        assertTrue(shouldEnrich)
+    }
+
+    @Test
+    fun `continue watching enrichment gate blocks movie only rows when tmdb disabled`() {
+        val shouldEnrich = shouldEnrichContinueWatchingProviderMetadata(
+            items = listOf(continueWatchingMovieItem()),
+            traktUpNextItems = emptyList(),
+            settings = TmdbSettings(enabled = false, apiKey = "")
+        )
+
+        assertFalse(shouldEnrich)
+    }
+
+    @Test
+    fun `continue watching enrichment gate respects disabled basic info`() {
+        val shouldEnrich = shouldEnrichContinueWatchingProviderMetadata(
+            items = listOf(continueWatchingSeriesItem()),
+            traktUpNextItems = emptyList(),
+            settings = TmdbSettings(
+                enabled = false,
+                apiKey = "",
+                useBasicInfo = false
+            )
+        )
+
+        assertFalse(shouldEnrich)
+    }
+
+    @Test
+    fun `continue watching enrichment gate preserves tmdb active behavior`() {
+        val shouldEnrich = shouldEnrichContinueWatchingProviderMetadata(
+            items = listOf(continueWatchingMovieItem()),
+            traktUpNextItems = emptyList(),
+            settings = TmdbSettings(enabled = true, apiKey = "tmdb-key")
+        )
+
+        assertTrue(shouldEnrich)
+    }
+
+    @Test
     fun `continue watching tvdb success does not call tmdb`() = runTest {
         val viewModel = mockk<HomeViewModel>()
         val tvMetadataRouter = mockk<TvMetadataRouter>()
@@ -162,7 +223,7 @@ class HomeViewModelTvdbProviderRoutingTest {
         assertEquals("TVDB episode overview", result.episodeDescription)
         coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
         coVerify(exactly = 0) { tmdbMetadataService.fetchEnrichment(any(), any(), any()) }
-        coVerify(exactly = 0) { tmdbMetadataService.fetchEpisodeEnrichment(any(), any()) }
+        coVerify(exactly = 0) { tmdbMetadataService.fetchEpisodeEnrichment(any(), any(), any()) }
     }
 
     @Test
@@ -212,7 +273,7 @@ class HomeViewModelTvdbProviderRoutingTest {
         assertEquals(47, runtime)
         coVerify(exactly = 1) { tvMetadataRouter.fetchEpisodeEnrichment(any()) }
         coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
-        coVerify(exactly = 0) { tmdbMetadataService.fetchEpisodeEnrichment(any(), any()) }
+        coVerify(exactly = 0) { tmdbMetadataService.fetchEpisodeEnrichment(any(), any(), any()) }
     }
 
     private fun seriesPreview(): MetaPreview {
@@ -242,6 +303,69 @@ class HomeViewModelTvdbProviderRoutingTest {
             releaseInfo = "2011",
             rating = 8.9,
             language = "en"
+        )
+    }
+
+    private fun continueWatchingSeriesItem(
+        contentType: String = "series"
+    ): ContinueWatchingItem.InProgress {
+        return ContinueWatchingItem.InProgress(
+            progress = WatchProgress(
+                contentId = "tt0944947",
+                contentType = contentType,
+                name = "Game of Thrones",
+                poster = "fallback-poster",
+                backdrop = "fallback-backdrop",
+                logo = "fallback-logo",
+                videoId = "tt0944947:2:5",
+                season = 2,
+                episode = 5,
+                episodeTitle = "The Ghost of Harrenhal",
+                position = 1_000L,
+                duration = 3_000L,
+                lastWatched = 42L
+            )
+        )
+    }
+
+    private fun continueWatchingNextUpItem(
+        contentType: String = "series"
+    ): ContinueWatchingItem.NextUp {
+        return ContinueWatchingItem.NextUp(
+            NextUpInfo(
+                contentId = "tt0944947",
+                contentType = contentType,
+                name = "Game of Thrones",
+                poster = "fallback-poster",
+                backdrop = "fallback-backdrop",
+                logo = "fallback-logo",
+                videoId = "tt0944947:2:5",
+                season = 2,
+                episode = 5,
+                episodeTitle = "The Ghost of Harrenhal",
+                thumbnail = null,
+                lastWatched = 42L
+            )
+        )
+    }
+
+    private fun continueWatchingMovieItem(): ContinueWatchingItem.InProgress {
+        return ContinueWatchingItem.InProgress(
+            progress = WatchProgress(
+                contentId = "tt1375666",
+                contentType = "movie",
+                name = "Inception",
+                poster = "fallback-poster",
+                backdrop = "fallback-backdrop",
+                logo = "fallback-logo",
+                videoId = "tt1375666",
+                season = null,
+                episode = null,
+                episodeTitle = null,
+                position = 1_000L,
+                duration = 3_000L,
+                lastWatched = 42L
+            )
         )
     }
 }
