@@ -139,6 +139,18 @@ fun TvdbSettingsContent(
                         onClick = {}
                     )
                 }
+
+                uiState.tvdbStatusLine?.let { statusLine ->
+                    item(key = "tvdb_diagnostics_status") {
+                        SettingsActionRow(
+                            title = stringResource(R.string.tvdb_diagnostics_status_title),
+                            subtitle = statusLine,
+                            value = "",
+                            enabled = false,
+                            onClick = {}
+                        )
+                    }
+                }
             }
         }
 

@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.tvdb.TvdbAuthResult
 import com.nexio.tv.core.tvdb.TvdbAuthService
 import com.nexio.tv.core.tvdb.TvdbValidationStatus
+import com.nexio.tv.data.local.TvdbDiagnosticsDataStore
 import com.nexio.tv.data.local.TvdbSettingsDataStore
+import com.nexio.tv.data.local.settingsStatusLine
 import com.nexio.tv.domain.model.TvdbSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -22,7 +24,8 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class TvdbSettingsViewModel @Inject constructor(
     private val dataStore: TvdbSettingsDataStore,
-    private val authService: TvdbAuthService
+    private val authService: TvdbAuthService,
+    private val diagnosticsDataStore: TvdbDiagnosticsDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TvdbSettingsUiState())
@@ -43,6 +46,16 @@ class TvdbSettingsViewModel @Inject constructor(
                     return@collectLatest
                 }
                 _uiState.update { it.fromSettings(settings) }
+            }
+        }
+        viewModelScope.launch {
+            diagnosticsDataStore.snapshot.collectLatest { snapshot ->
+                _uiState.update {
+                    it.copy(
+                        tvdbStatusLine = snapshot.settingsStatusLine(),
+                        tvdbLastRefreshLine = snapshot.lastUpdateRefreshStatus
+                    )
+                }
             }
         }
     }
@@ -183,7 +196,9 @@ data class TvdbSettingsUiState(
     val enabled: Boolean = false,
     val apiKey: String = "",
     val validationStatus: TvdbValidationStatus = TvdbValidationStatus.NOT_CONFIGURED,
-    val lastFailure: String = ""
+    val lastFailure: String = "",
+    val tvdbStatusLine: String? = null,
+    val tvdbLastRefreshLine: String? = null
 ) {
     val isConfigured: Boolean
         get() = apiKey.isNotBlank()
