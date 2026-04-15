@@ -554,4 +554,14 @@ class ProfileSettingsScopeContractTest {
         assertTrue(homeSource.contains("if (ownedSnapshot.profileId != activeHomeProfileSession.profileId)"))
         assertTrue(homeSource.contains("Skipping foreign continue watching snapshot"))
     }
+
+    @Test
+    fun `tracking scrobble service requires provider specific auth`() {
+        val source = File("app/src/main/java/com/nexio/tv/data/repository/TrackingScrobbleService.kt").readText()
+
+        assertTrue(source.contains("if (!providerState.traktAuthenticated) return"))
+        assertTrue(source.contains("if (!providerState.simklAuthenticated) return"))
+        assertTrue(source.contains("if (!providerState.traktAuthenticated) return false"))
+        assertTrue(source.contains("if (!providerState.simklAuthenticated) return false"))
+    }
 }

@@ -102,4 +102,57 @@ class DefaultTrackingScrobbleServiceTest {
         coVerify(exactly = 1) { simklService.checkin(any(), any()) }
         coVerify(exactly = 0) { traktService.checkin(any(), any()) }
     }
+
+    @Test
+    fun `trakt scrobble start is ignored when profile lacks trakt auth`() = runTest {
+        val traktService = mockk<com.nexio.tv.data.repository.TraktScrobbleService>(relaxed = true)
+        val simklService = mockk<com.nexio.tv.data.repository.SimklScrobbleService>(relaxed = true)
+        val service = com.nexio.tv.data.repository.DefaultTrackingScrobbleService(
+            traktService,
+            simklService,
+            trackingProviderStateService(
+                provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
+                traktAuthenticated = false,
+                simklAuthenticated = false
+            )
+        )
+
+        service.scrobbleStart(
+            com.nexio.tv.data.repository.TrackingScrobbleItem.Movie(
+                contentId = "tt1375666",
+                title = "Inception",
+                year = 2010
+            ),
+            progressPercent = 12f
+        )
+
+        coVerify(exactly = 0) { traktService.scrobbleStart(any(), any()) }
+        coVerify(exactly = 0) { simklService.scrobbleStart(any(), any()) }
+    }
+
+    @Test
+    fun `trakt checkin returns false when profile lacks trakt auth`() = runTest {
+        val traktService = mockk<com.nexio.tv.data.repository.TraktScrobbleService>(relaxed = true)
+        val simklService = mockk<com.nexio.tv.data.repository.SimklScrobbleService>(relaxed = true)
+        val service = com.nexio.tv.data.repository.DefaultTrackingScrobbleService(
+            traktService,
+            simklService,
+            trackingProviderStateService(
+                provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
+                traktAuthenticated = false,
+                simklAuthenticated = false
+            )
+        )
+
+        val result = service.checkin(
+            com.nexio.tv.data.repository.TrackingScrobbleItem.Movie(
+                contentId = "tt1375666",
+                title = "Inception",
+                year = 2010
+            )
+        )
+
+        assertFalse(result)
+        coVerify(exactly = 0) { traktService.checkin(any(), any()) }
+    }
 }
