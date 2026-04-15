@@ -3,6 +3,8 @@ package com.nexio.tv.data.trailer
 import android.util.Log
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.tmdb.TmdbMetadataService
+import com.nexio.tv.core.tvdb.TvdbTrailerLookupResult
+import com.nexio.tv.core.tvdb.TvdbTrailerResolver
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbApi
@@ -63,7 +65,8 @@ class TrailerService(
     private val addonRepository: AddonRepository,
     private val streamRepository: StreamRepository,
     private val trailerAvailabilityService: TrailerAvailabilityService,
-    private val clock: Clock
+    private val clock: Clock,
+    private val tvdbTrailerResolver: TvdbTrailerResolver? = null
 ) {
     @Inject
     constructor(
@@ -75,7 +78,8 @@ class TrailerService(
         tmdbMetadataService: TmdbMetadataService,
         addonRepository: AddonRepository,
         streamRepository: StreamRepository,
-        trailerAvailabilityService: TrailerAvailabilityService
+        trailerAvailabilityService: TrailerAvailabilityService,
+        tvdbTrailerResolver: TvdbTrailerResolver
     ) : this(
         trailerApi = trailerApi,
         tmdbApi = tmdbApi,
@@ -86,7 +90,8 @@ class TrailerService(
         addonRepository = addonRepository,
         streamRepository = streamRepository,
         trailerAvailabilityService = trailerAvailabilityService,
-        clock = Clock.systemUTC()
+        clock = Clock.systemUTC(),
+        tvdbTrailerResolver = tvdbTrailerResolver
     )
 
     private val lookupCache = ConcurrentHashMap<String, CachedTrailerLookup>()
@@ -271,15 +276,57 @@ class TrailerService(
         val fallbackYtCount = fallbackYtIds.count { it.isNotBlank() }
         trailerDebugLog("getTitleMediaAvailability start tmdbId=$tmdbId type=$type contentId=$contentId fallbackYtIds=$fallbackYtCount")
 
-        val numericTmdbId = tmdbId?.toIntOrNull()
         val mediaType = normalizeTmdbMediaType(type)
+
+        // For TV: check TVDB first before TMDB per D-05
+        if (mediaType == "tv") {
+            val tvdbResult = tvdbTrailerResolver?.resolveTitleTrailer(
+                contentId = contentId,
+                type = type,
+                title = null,
+                year = null
+            )
+            if (tvdbResult is TvdbTrailerLookupResult.Resolved || tvdbResult is TvdbTrailerLookupResult.ResolvedYouTube) {
+                trailerDebugLog("getTitleMediaAvailability resolved via tvdb contentId=$contentId")
+                return@withContext true
+            }
+
+            val streailerCandidate = fetchStreailerStreams(contentId = contentId, type = type)
+                ?.let(::selectStreailerTrailerCandidate)
+            if (hasInternalStreailerCandidate(streailerCandidate)) {
+                trailerDebugLog("getTitleMediaAvailability resolved via streailer contentId=$contentId")
+                return@withContext true
+            }
+
+            if (fallbackYtCount > 0) {
+                trailerDebugLog("getTitleMediaAvailability resolved via fallbackYtIds contentId=$contentId")
+                return@withContext true
+            }
+
+            // TMDB TV videos as last resort
+            val numericTmdbId = tmdbId?.toIntOrNull()
+            val apiKey = requireTmdbApiKey()
+            val tmdbLanguage = getPreferredTmdbTrailerLanguage()
+            if (numericTmdbId != null && apiKey != null) {
+                val tmdbTvVideos = fetchTmdbTvVideos(numericTmdbId, tmdbLanguage, apiKey)
+                if (rankTmdbVideoCandidates(tmdbTvVideos).isNotEmpty()) {
+                    trailerDebugLog("getTitleMediaAvailability resolved via tmdb tv fallback tmdbId=$numericTmdbId")
+                    return@withContext true
+                }
+            }
+
+            trailerDebugLog("getTitleMediaAvailability not available contentId=$contentId")
+            return@withContext false
+        }
+
+        // Movie/other: existing order (TMDB first)
+        val numericTmdbId = tmdbId?.toIntOrNull()
         val apiKey = requireTmdbApiKey()
         val tmdbLanguage = getPreferredTmdbTrailerLanguage()
 
         val tmdbTitleVideos = when {
             numericTmdbId == null || apiKey == null -> emptyList()
             mediaType == "movie" -> fetchTmdbMovieVideos(numericTmdbId, tmdbLanguage, apiKey)
-            mediaType == "tv" -> fetchTmdbTvVideos(numericTmdbId, tmdbLanguage, apiKey)
             else -> emptyList()
         }
         if (rankTmdbVideoCandidates(tmdbTitleVideos).isNotEmpty()) {
@@ -426,6 +473,22 @@ class TrailerService(
         contentId: String?,
         fallbackYtIds: List<String>
     ): TrailerResolutionResult? {
+        val isTv = normalizeTmdbMediaType(type) == "tv"
+
+        if (isTv) {
+            // TV fallback order per D-07: TVDB -> Streailer -> fallback YT IDs -> explicit TMDB
+            return resolveTvTrailerInternal(
+                title = title,
+                year = year,
+                tmdbId = tmdbId,
+                type = type,
+                seasonNumber = seasonNumber,
+                contentId = contentId,
+                fallbackYtIds = fallbackYtIds
+            )
+        }
+
+        // Movie ordering unchanged: TMDB -> fallback YT IDs -> Streailer
         resolveTrailerPlaybackFromTmdbId(
             tmdbId = tmdbId,
             type = type,
@@ -448,6 +511,65 @@ class TrailerService(
         return resolveStreailerTrailer(
             contentId = contentId,
             type = type,
+            title = title,
+            year = year
+        )
+    }
+
+    private suspend fun resolveTvTrailerInternal(
+        title: String,
+        year: String?,
+        tmdbId: String?,
+        type: String?,
+        seasonNumber: Int?,
+        contentId: String?,
+        fallbackYtIds: List<String>
+    ): TrailerResolutionResult? {
+        // 1. TVDB title trailer
+        val tvdbResult = tvdbTrailerResolver?.resolveTitleTrailer(
+            contentId = contentId,
+            type = type,
+            title = title,
+            year = year
+        )
+        when (tvdbResult) {
+            is TvdbTrailerLookupResult.ResolvedYouTube -> {
+                resolveYouTubeTrailer(
+                    youtubeUrl = tvdbResult.youtubeUrl,
+                    title = title,
+                    year = year
+                )?.let { return it }
+            }
+            is TvdbTrailerLookupResult.Resolved -> return tvdbResult.result
+            else -> Unit
+        }
+
+        // 2. Streailer
+        resolveStreailerTrailer(
+            contentId = contentId,
+            type = type,
+            title = title,
+            year = year
+        )?.let { return it }
+
+        // 3. Fallback YouTube IDs
+        fallbackYtIds.asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .forEach { ytId ->
+                resolveYouTubeTrailer(
+                    youtubeUrl = "https://www.youtube.com/watch?v=$ytId",
+                    title = title,
+                    year = year
+                )?.let { return it }
+            }
+
+        // 4. Explicit TMDB fallback (last resort for TV)
+        trailerDebugLog("tmdb_trailer_fallback contentId=$contentId tmdbId=$tmdbId")
+        return resolveTrailerPlaybackFromTmdbId(
+            tmdbId = tmdbId,
+            type = type,
+            seasonNumber = seasonNumber,
             title = title,
             year = year
         )
