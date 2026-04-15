@@ -343,6 +343,9 @@ dependencies {
 
     // WorkManager
     implementation(libs.work.runtime)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
+    testImplementation(libs.work.testing)
 
     // Lock-free queues for playback instrumentation
     implementation(libs.jctools.core)
