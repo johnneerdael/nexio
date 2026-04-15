@@ -946,11 +946,10 @@
     <string name="debug_sync_code_subtitle">Show Generate/Enter Sync Code buttons in Account settings</string>
     <string name="debug_streaming_cache_title">Streaming Cache</string>
     <string name="debug_streaming_cache_subtitle">Developer-only: enable read-only Media3 cache path for playback validation</string>
-    <string name="debug_section_troubleshooting">Troubleshooting</string>
-    <string name="debug_invalidate_poster_cache_title">Invalidate Poster Cache</string>
-    <string name="debug_invalidate_poster_cache_subtitle">Clear all cached poster images so they are re-fetched from the configured provider</string>
-    <string name="debug_invalidate_poster_cache_progress">Clearing cache\u2026</string>
-    <string name="debug_invalidate_poster_cache_done">Cache cleared. Restart the app to fetch fresh posters.</string>
+    <string name="poster_ratings_invalidate_cache_title">Invalidate Poster Cache</string>
+    <string name="poster_ratings_invalidate_cache_subtitle">Clear all cached poster images so they are re-fetched from the configured provider</string>
+    <string name="poster_ratings_invalidate_cache_progress">Clearing cache\u2026</string>
+    <string name="poster_ratings_invalidate_cache_done">Cache cleared. Restart the app to fetch fresh posters.</string>
     <string name="debug_tvdb_diagnostics_title">TVDB Diagnostics</string>
     <string name="debug_tvdb_diagnostics_empty">No TVDB diagnostics recorded yet</string>
     <string name="debug_section_account">Account</string>
