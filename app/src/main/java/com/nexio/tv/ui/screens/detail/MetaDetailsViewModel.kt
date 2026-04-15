@@ -1354,6 +1354,11 @@ class MetaDetailsViewModel @Inject constructor(
             updated = updated.copy(networks = tmdbEnrichment.networks)
         }
 
+        // Group: TVDB season-order context
+        if (tvEnrichment?.seasonOrderContext != null) {
+            updated = updated.copy(tvdbSeasonOrderContext = tvEnrichment.seasonOrderContext)
+        }
+
         // Group: Episodes (titles, overviews, thumbnails, runtime)
         if (settings.useEpisodes && isTvContent) {
             val seasonNumbers = meta.videos.mapNotNull { it.season }.distinct()
@@ -1379,7 +1384,8 @@ class MetaDetailsViewModel @Inject constructor(
                             overview = ep?.overview ?: video.overview,
                             released = ep?.airDate ?: video.released,
                             thumbnail = ep?.thumbnail ?: video.thumbnail,
-                            runtime = ep?.runtimeMinutes ?: video.runtime
+                            runtime = ep?.runtimeMinutes ?: video.runtime,
+                            tvdbEpisodeOrder = ep?.tvdbEpisodeOrder ?: video.tvdbEpisodeOrder
                         )
                     }
                 )
