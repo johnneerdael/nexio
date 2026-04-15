@@ -18,12 +18,11 @@ class HomeCatalogSnapshotStoreTest {
     private val testPosterToken = "native"
 
     @Test
-    fun `read restores persisted home snapshot for matching language and epoch`() {
+    fun `read restores persisted home snapshot for matching language`() {
         val snapshotPrefs = InMemorySharedPreferences()
         val localePrefs = localePrefs("en")
-        var epoch = 7
         val metadataStore = mockk<MetadataDiskCacheStore>()
-        every { metadataStore.currentLanguageEpoch() } answers { epoch }
+        every { metadataStore.currentLanguageEpoch() } returns 0
         val posterResolver = mockk<PosterRatingsUrlResolver>()
         val store = HomeCatalogSnapshotStore(
             context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
@@ -54,6 +53,35 @@ class HomeCatalogSnapshotStoreTest {
         localePrefs.edit().putString("locale_tag", "nl").apply()
 
         assertNull(store.read(testPosterToken))
+    }
+
+    @Test
+    fun `read restores the snapshot for the active language without overwriting another language`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver
+        )
+        val englishSnapshot = sampleSnapshot()
+        val dutchSnapshot = HomeCatalogSnapshotStore.Snapshot(
+            catalogRows = listOf(sampleRow("addon", "dutch")),
+            fullCatalogRows = listOf(sampleRow("addon", "dutch")),
+            heroItems = sampleRow("addon", "dutch").items,
+            orderedGroupKeys = listOf("addon_movie_dutch")
+        )
+
+        store.write(englishSnapshot, testPosterToken)
+        localePrefs.edit().putString("locale_tag", "nl").apply()
+        store.write(dutchSnapshot, testPosterToken)
+
+        assertEquals(dutchSnapshot, store.read(testPosterToken))
+        localePrefs.edit().putString("locale_tag", "en").apply()
+        assertEquals(englishSnapshot, store.read(testPosterToken))
     }
 
     @Test

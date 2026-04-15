@@ -55,6 +55,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
@@ -207,9 +208,9 @@ fun ContentCard(
         val imageModel = remember(imageUrl, requestWidthPx, requestHeightPx, item.id, item.posterProviderTag) {
             val isBackdrop = focusedPosterBackdropExpandEnabled && imageUrl == item.background
             val diskKey = if (isBackdrop) {
-                "${item.id}_native_background"
+                ArtworkImageCacheKeys.backdrop(item.id)
             } else {
-                "${item.id}_${item.posterProviderTag ?: "native"}_poster"
+                ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag)
             }
             ImageRequest.Builder(context)
                 .data(imageUrl)
@@ -228,7 +229,7 @@ fun ContentCard(
                     .data(logoUrl)
                     .crossfade(false)
                     .memoryCacheKey("${logoUrl}_${requestWidthPx}x${logoRequestHeightPx}")
-                    .diskCacheKey("${item.id}_native_logo")
+                    .diskCacheKey(ArtworkImageCacheKeys.logo(item.id))
                     .size(width = requestWidthPx, height = logoRequestHeightPx)
                     .build()
             }

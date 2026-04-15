@@ -5,6 +5,7 @@ import coil.imageLoader
 import coil.annotation.ExperimentalCoilApi
 import coil.request.CachePolicy
 import coil.request.ImageRequest
+import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
@@ -425,16 +426,15 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
 
         items.forEach { item ->
             val itemKey = "${item.apiType}:${item.id}"
-            val providerTag = item.posterProviderTag ?: "native"
             val entries = buildList {
                 item.poster?.trim()?.takeIf(String::isNotEmpty)?.let {
-                    add(ImageCacheEntry(it, "${item.id}_${providerTag}_poster"))
+                    add(ImageCacheEntry(it, ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag)))
                 }
                 item.background?.trim()?.takeIf(String::isNotEmpty)?.let {
-                    add(ImageCacheEntry(it, "${item.id}_native_background"))
+                    add(ImageCacheEntry(it, ArtworkImageCacheKeys.backdrop(item.id)))
                 }
                 item.logo?.trim()?.takeIf(String::isNotEmpty)?.let {
-                    add(ImageCacheEntry(it, "${item.id}_native_logo"))
+                    add(ImageCacheEntry(it, ArtworkImageCacheKeys.logo(item.id)))
                 }
             }
             if (entries.isEmpty()) {

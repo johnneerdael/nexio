@@ -21,7 +21,7 @@ import org.junit.Test
 class MetadataDiskCacheStoreTest {
 
     @Test
-    fun `removeHomeUnreferencedMetaEntries evicts dropped feed metadata`() {
+    fun `removeHomeUnreferencedMetaEntries keeps shared metadata for inactive profile catalogs`() {
         val store = MetadataDiskCacheStore(
             context = mockContext(InMemorySharedPreferences())
         )
@@ -30,25 +30,30 @@ class MetadataDiskCacheStoreTest {
         store.writeMeta("movie:tt2", "en", "native", meta("tt2"))
         store.replaceHomeFeedReferences("home_catalog_snapshot", setOf("movie:tt1"))
 
-        store.removeHomeUnreferencedMetaEntries()
+        val removedImageUrls = store.removeHomeUnreferencedMetaEntries()
 
         assertNotNull(store.readMeta("movie:tt1", "en", "native"))
-        assertNull(store.readMeta("movie:tt2", "en", "native"))
+        assertNotNull(store.readMeta("movie:tt2", "en", "native"))
+        assertEquals(emptyList<String>(), removedImageUrls)
     }
 
     @Test
-    fun `removeEntriesFromStaleEpochs evicts metadata after locale epoch change`() {
+    fun `language epoch changes do not invalidate language-keyed metadata`() {
         val store = MetadataDiskCacheStore(
             context = mockContext(InMemorySharedPreferences())
         )
 
-        store.writeMeta("movie:tt1", "en", "native", meta("tt1"))
-        assertNotNull(store.readMeta("movie:tt1", "en", "native"))
+        store.writeMeta("movie:tt1", "en-US", "native", meta("tt1").copy(name = "English title"))
+        store.writeMeta("movie:tt1", "nl-NL", "native", meta("tt1").copy(name = "Dutch title"))
+        assertEquals("English title", store.readMeta("movie:tt1", "en-US", "native")?.name)
+        assertEquals("Dutch title", store.readMeta("movie:tt1", "nl-NL", "native")?.name)
 
         store.bumpLanguageEpoch()
-        store.removeEntriesFromStaleEpochs()
+        val removedImageUrls = store.removeEntriesFromStaleEpochs()
 
-        assertNull(store.readMeta("movie:tt1", "en", "native"))
+        assertEquals("English title", store.readMeta("movie:tt1", "en-US", "native")?.name)
+        assertEquals("Dutch title", store.readMeta("movie:tt1", "nl-NL", "native")?.name)
+        assertEquals(emptyList<String>(), removedImageUrls)
     }
 
     @Test
@@ -289,6 +294,51 @@ class MetadataDiskCacheStoreTest {
                 tmdbId = 123,
                 mediaType = "tv",
                 languageTag = "en-US",
+                providerToken = "trailer"
+            )
+        )
+    }
+
+    @Test
+    fun `tmdb title videos remain cached per language after a different profile changes locale`() {
+        val store = MetadataDiskCacheStore(
+            context = mockContext(InMemorySharedPreferences())
+        )
+        val englishVideos = listOf(tmdbVideo(key = "english-trailer", type = "Trailer"))
+        val dutchVideos = listOf(tmdbVideo(key = "dutch-trailer", type = "Trailer"))
+
+        store.writeTmdbTitleVideos(
+            tmdbId = 123,
+            mediaType = "movie",
+            languageTag = "en-US",
+            providerToken = "trailer",
+            videos = englishVideos
+        )
+        store.writeTmdbTitleVideos(
+            tmdbId = 123,
+            mediaType = "movie",
+            languageTag = "nl-NL",
+            providerToken = "trailer",
+            videos = dutchVideos
+        )
+
+        store.bumpLanguageEpoch()
+
+        assertEquals(
+            englishVideos,
+            store.readTmdbTitleVideos(
+                tmdbId = 123,
+                mediaType = "movie",
+                languageTag = "en-US",
+                providerToken = "trailer"
+            )
+        )
+        assertEquals(
+            dutchVideos,
+            store.readTmdbTitleVideos(
+                tmdbId = 123,
+                mediaType = "movie",
+                languageTag = "nl-NL",
                 providerToken = "trailer"
             )
         )

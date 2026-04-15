@@ -332,9 +332,6 @@ class HomeViewModel @Inject constructor(
             AppLocaleResolver.observeStoredLocaleTag(appContext)
                 .drop(1)
                 .collectLatest {
-                    metadataDiskCacheStore.bumpLanguageEpoch()
-                    val removedImageUrls = metadataDiskCacheStore.removeEntriesFromStaleEpochs()
-                    homeCatalogRefreshCoordinator.evictCachedImageUrls(removedImageUrls)
                     metaRepository.clearCache()
                     tmdbMetadataService.clearCache()
                     homeCatalogSnapshotStore.clear()
@@ -347,7 +344,7 @@ class HomeViewModel @Inject constructor(
                     persistedMDBListSyntheticGroups = emptyList()
                     watchProgressRepository.invalidateLocalizedMetadata()
                     continueWatchingSnapshotService.invalidateLocalizedMetadata()
-                    logStartupPerf("metadata_language_epoch_bumped")
+                    logStartupPerf("metadata_language_changed")
                 }
         }
     }

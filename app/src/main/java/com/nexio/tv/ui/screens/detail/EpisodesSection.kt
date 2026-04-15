@@ -75,6 +75,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.nexio.tv.R
+import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.domain.model.Video
 import com.nexio.tv.ui.components.NexioDialog
 import com.nexio.tv.ui.theme.NexioColors
@@ -512,7 +513,7 @@ private fun EpisodeCard(
             .data(episode.thumbnail)
             .crossfade(false)
             .size(width = thumbnailWidthPx, height = thumbnailHeightPx)
-            .diskCacheKey("${episode.id}_native_thumbnail")
+            .diskCacheKey(ArtworkImageCacheKeys.thumbnail(episode.id))
             .apply {
                 if (shouldBlur) {
                     transformations(com.nexio.tv.ui.util.BlurTransformation())

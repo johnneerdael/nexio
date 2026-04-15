@@ -17,13 +17,12 @@ import org.junit.Test
 class ContinueWatchingSnapshotStoreTest {
 
     @Test
-    fun `read restores persisted display metadata for current language epoch`() {
+    fun `read restores persisted display metadata for matching language`() {
         val prefs = InMemorySharedPreferences()
         val localePrefs = localePrefs("en")
-        var epoch = 3
         val context = mockContext(prefs, "continue_watching_snapshot", localePrefs)
         val metadataStore = mockk<MetadataDiskCacheStore>()
-        every { metadataStore.currentLanguageEpoch() } answers { epoch }
+        every { metadataStore.currentLanguageEpoch() } returns 0
         val store = ContinueWatchingSnapshotStore(context, metadataStore)
 
         val snapshot = ContinueWatchingSnapshot(
@@ -40,8 +39,7 @@ class ContinueWatchingSnapshotStoreTest {
 
         assertEquals(snapshot.displayMetadataByItemKey, store.read()?.displayMetadataByItemKey)
 
-        epoch = 4
-        assertNull(store.read())
+        assertEquals(snapshot.displayMetadataByItemKey, store.read()?.displayMetadataByItemKey)
     }
 
     @Test

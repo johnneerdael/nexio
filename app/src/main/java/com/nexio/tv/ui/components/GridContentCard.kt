@@ -41,6 +41,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.theme.NexioColors
 import androidx.compose.ui.platform.LocalContext
@@ -147,7 +148,7 @@ fun GridContentCard(
                         .crossfade(imageCrossfade)
                         .size(width = requestWidthPx, height = requestHeightPx)
                         .memoryCacheKey("${item.poster}_${requestWidthPx}x${requestHeightPx}")
-                        .diskCacheKey("${item.id}_${item.posterProviderTag ?: "native"}_poster")
+                        .diskCacheKey(ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag))
                         .build()
                 }
                 if (item.poster.isNullOrBlank()) {
