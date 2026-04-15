@@ -1,6 +1,12 @@
 package com.nexio.tv.core.tvdb
 
 import com.nexio.tv.data.remote.api.TvdbApi
+import com.nexio.tv.data.remote.api.TvdbRemoteId as ApiTvdbRemoteId
+import com.nexio.tv.data.remote.api.TvdbRemoteIdSearchResponse
+import com.nexio.tv.data.remote.api.TvdbRemoteIdSearchResult
+import com.nexio.tv.data.remote.api.TvdbSeriesBaseRecord
+import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
+import com.nexio.tv.data.remote.api.TvdbSeriesExtendedResponse
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -18,7 +24,7 @@ class TvdbIdentityServiceTest {
     fun `concurrent remote ID lookups join one TVDB search request`() = runTest {
         val tvdbApi = mockk<TvdbApi>()
         val authService = mockk<TvdbAuthService>()
-        val response = CompletableDeferred<Response<TvdbSeriesIdentity>>()
+        val response = CompletableDeferred<Response<TvdbRemoteIdSearchResponse>>()
         val service = TvdbIdentityService(tvdbApi = tvdbApi, authService = authService)
 
         coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
@@ -27,6 +33,9 @@ class TvdbIdentityServiceTest {
         } coAnswers {
             response.await()
         }
+        coEvery {
+            tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, any(), any())
+        } returns Response.success(TvdbSeriesExtendedResponse(data = gameOfThronesExtendedRecord()))
 
         val first = async {
             service.resolveSeriesByRemoteId("tt0944947", TvdbRemoteIdSource.IMDB)
@@ -35,11 +44,12 @@ class TvdbIdentityServiceTest {
             service.resolveSeriesByRemoteId("tt0944947", TvdbRemoteIdSource.IMDB)
         }
 
-        response.complete(Response.success(gameOfThronesIdentity()))
+        response.complete(Response.success(gameOfThronesRemoteSearchResponse()))
 
         assertEquals(121361, first.await()?.tvdbId)
         assertEquals(121361, second.await()?.tvdbId)
         coVerify(exactly = 1) { tvdbApi.searchByRemoteId("Bearer tvdb-token", "tt0944947") }
+        coVerify(exactly = 1) { tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, any(), any()) }
     }
 
     @Test
@@ -51,7 +61,10 @@ class TvdbIdentityServiceTest {
         coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
         coEvery {
             tvdbApi.searchByRemoteId("Bearer tvdb-token", "tt0944947")
-        } returns Response.success(gameOfThronesIdentity())
+        } returns Response.success(gameOfThronesRemoteSearchResponse())
+        coEvery {
+            tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, any(), any())
+        } returns Response.success(TvdbSeriesExtendedResponse(data = gameOfThronesExtendedRecord()))
 
         val identity = service.resolveSeriesByRemoteId("tt0944947", TvdbRemoteIdSource.IMDB)
 
@@ -68,17 +81,29 @@ class TvdbIdentityServiceTest {
         assertEquals(setOf("legacy:got"), identity?.remoteIds?.get(TvdbRemoteIdSource.OTHER))
     }
 
-    private fun gameOfThronesIdentity(): TvdbSeriesIdentity = TvdbSeriesIdentity(
-        tvdbId = 121361,
+    private fun gameOfThronesRemoteSearchResponse(): TvdbRemoteIdSearchResponse = TvdbRemoteIdSearchResponse(
+        data = listOf(
+            TvdbRemoteIdSearchResult(
+                series = TvdbSeriesBaseRecord(
+                    id = 121361,
+                    name = "Game of Thrones",
+                    firstAired = "2011-04-17"
+                )
+            )
+        )
+    )
+
+    private fun gameOfThronesExtendedRecord(): TvdbSeriesExtendedRecord = TvdbSeriesExtendedRecord(
+        id = 121361,
         name = "Game of Thrones",
-        remoteIds = mapOf(
-            TvdbRemoteIdSource.TVDB to setOf("121361"),
-            TvdbRemoteIdSource.IMDB to setOf("tt0944947"),
-            TvdbRemoteIdSource.TMDB to setOf("1399"),
-            TvdbRemoteIdSource.TV_MAZE to setOf("tvmaze:82"),
-            TvdbRemoteIdSource.WIKIDATA to setOf("Q23572"),
-            TvdbRemoteIdSource.OFFICIAL_SITE to setOf("https://www.hbo.com/game-of-thrones"),
-            TvdbRemoteIdSource.OTHER to setOf("legacy:got")
+        firstAired = "2011-04-17",
+        remoteIds = listOf(
+            ApiTvdbRemoteId(id = "tt0944947", sourceName = "IMDb"),
+            ApiTvdbRemoteId(id = "1399", sourceName = "TheMovieDB.com"),
+            ApiTvdbRemoteId(id = "tvmaze:82", sourceName = "TVMaze"),
+            ApiTvdbRemoteId(id = "Q23572", sourceName = "WikiData"),
+            ApiTvdbRemoteId(id = "https://www.hbo.com/game-of-thrones", sourceName = "official site"),
+            ApiTvdbRemoteId(id = "legacy:got", sourceName = "Legacy")
         )
     )
 }
