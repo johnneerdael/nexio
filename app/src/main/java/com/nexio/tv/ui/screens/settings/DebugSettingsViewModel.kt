@@ -1,23 +1,29 @@
 package com.nexio.tv.ui.screens.settings
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import coil.imageLoader
 import com.nexio.tv.core.auth.AuthManager
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.TvdbDiagnosticsDataStore
 import com.nexio.tv.data.local.TvdbDiagnosticsSnapshot
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
 class DebugSettingsViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val dataStore: DebugSettingsDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val authManager: AuthManager,
@@ -103,6 +109,22 @@ class DebugSettingsViewModel @Inject constructor(
                         .setExperimentalDv5HardwareToneMapCpuFallbackEnabled(event.enabled)
                 }
             }
+            is DebugSettingsEvent.InvalidatePosterCache -> {
+                viewModelScope.launch {
+                    _uiState.update { it.copy(posterCacheInvalidating = true) }
+                    withContext(Dispatchers.IO) {
+                        val imageLoader = appContext.imageLoader
+                        imageLoader.memoryCache?.clear()
+                        imageLoader.diskCache?.clear()
+                    }
+                    _uiState.update {
+                        it.copy(
+                            posterCacheInvalidating = false,
+                            posterCacheInvalidated = true
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -115,7 +137,9 @@ data class DebugSettingsUiState(
     val dv5HardwareToneMapCpuFallbackEnabled: Boolean = false,
     val signInLoading: Boolean = false,
     val signInResult: String? = null,
-    val tvdbDiagnostics: TvdbDiagnosticsSnapshot = TvdbDiagnosticsSnapshot()
+    val tvdbDiagnostics: TvdbDiagnosticsSnapshot = TvdbDiagnosticsSnapshot(),
+    val posterCacheInvalidating: Boolean = false,
+    val posterCacheInvalidated: Boolean = false
 )
 
 sealed class DebugSettingsEvent {
@@ -125,4 +149,5 @@ sealed class DebugSettingsEvent {
     data class ToggleDv5HardwareToneMapToSdr(val enabled: Boolean) : DebugSettingsEvent()
     data class ToggleDv5HardwareToneMapCpuFallback(val enabled: Boolean) : DebugSettingsEvent()
     data class SignIn(val email: String, val password: String) : DebugSettingsEvent()
+    data object InvalidatePosterCache : DebugSettingsEvent()
 }
