@@ -1,6 +1,6 @@
 ---
 phase: 08-exact-continue-watching-air-timing
-reviewed: 2026-04-15T12:11:10Z
+reviewed: 2026-04-15T14:09:46Z
 depth: standard
 files_reviewed: 26
 files_reviewed_list:
@@ -32,89 +32,93 @@ files_reviewed_list:
   - app/src/test/java/com/nexio/tv/data/repository/TvdbContinueWatchingTimingEnricherTest.kt
 findings:
   critical: 0
-  warning: 5
+  warning: 3
   info: 0
-  total: 5
+  total: 3
 status: issues_found
 ---
 
 # Phase 8: Code Review Report
 
-**Reviewed:** 2026-04-15T12:11:10Z
+**Reviewed:** 2026-04-15T14:09:46Z
 **Depth:** standard
 **Files Reviewed:** 26
 **Status:** issues_found
 
 ## Summary
 
-Reviewed the exact continue-watching air timing changes across TVDB timing calculation, snapshot persistence, UI/feed gating, and Android alarm scheduling. The core gating direction is sound, but several edge cases can leave withheld rows stuck, cause duplicate provider refreshes, or emit misleading diagnostics. No critical security issues were found.
+Re-reviewed the Phase 08 continue-watching air timing changes after 08-05. The persisted `scheduledReemit` field is now written and read, and the explicit `rescheduleAirTimeAlarmFromSnapshot()` path does force a refresh for one seeded overdue exact-TVDB case. However, the overdue persisted re-emit gap is not fully closed in production restore paths: startup restore still routes overdue rows through the future-only scheduler, and boot reschedule can run before the async persisted snapshot load completes. No critical security issues were found.
 
 ## Warnings
 
-### WR-01: Overdue Persisted Reemit Rows Are Cancelled Instead Of Refreshed
+### WR-01: Persisted Overdue Reemit Rows Can Still Stay Hidden After Restore
 
-**File:** `app/src/main/java/com/nexio/tv/data/repository/ContinueWatchingSnapshotService.kt:167`
-**Issue:** `rescheduleAirTimeAlarmFromSnapshot()` only calls `scheduleReemitIfNeeded()`. That helper derives a target through `AirDateGate.soonestPendingMs()`, which filters to times strictly greater than `nowMs`. If the device was off, asleep, or the app process was dead when the exact air time passed, boot/permission reschedule sees no future target, cancels the alarm, and never calls `ensureFresh(force = true)`. The row can remain in `scheduledReemit` and hidden until some unrelated observer refresh happens.
-**Fix:** Detect due scheduled rows during restore/boot reschedule and force a refresh immediately; only schedule an alarm when the next target is still in the future. Add a unit test where `scheduledReemit` has a target <= `nowMs` and `rescheduleAirTimeAlarmFromSnapshot()` calls `refreshNow()`.
+**File:** `app/src/main/java/com/nexio/tv/data/repository/ContinueWatchingSnapshotService.kt:185`
+**Issue:** `loadPersistedSnapshotForActiveProfile()` restores `rawSnapshotState` and then calls `scheduleReemitIfNeeded(normalized.scheduledReemit, System.currentTimeMillis())`. That helper only returns future targets because `AirDateGate.soonestPendingMs()` filters `it > nowMs`. If the app process starts after a persisted row's re-emit time has already passed, this restore path cancels scheduling and never forces `ensureFresh(force = true)`, so the row remains only in `scheduledReemit` and stays hidden until another unrelated refresh occurs. The new regression test covers `rescheduleAirTimeAlarmFromSnapshot()` with raw state pre-seeded, but it does not cover the actual persisted-load path or the boot race where the receiver calls `rescheduleAirTimeAlarmFromSnapshot()` before the service init coroutine finishes loading the snapshot.
+**Fix:** Centralize restore handling so every path that loads or reschedules persisted `scheduledReemit` first checks for due entries and forces a refresh before falling back to future alarm scheduling. Add a test that writes an overdue `scheduledReemit` to `ContinueWatchingSnapshotStore`, constructs the service, waits for restore, and verifies `refreshNow()` is invoked.
 
 ```kotlin
-fun rescheduleAirTimeAlarmFromSnapshot() {
-    val snapshot = rawSnapshotState.value
-    val nowMs = System.currentTimeMillis()
-
-    if (snapshot.scheduledReemit.any { entry -> AirDateGate.isDue(entry, nowMs) }) {
-        scope.launch { ensureFresh(force = true) }
+private fun handlePersistedScheduledReemit(entries: List<TrackingNextUpEntry>, nowMs: Long) {
+    if (AirDateGate.hasDuePending(entries, nowMs)) {
+        reemitJob?.cancel()
+        reemitJob = null
+        currentTimerTargetMs = null
+        airScheduler.cancel()
+        launchAirTimeRefreshWithRetry()
         return
     }
 
-    scheduleReemitIfNeeded(snapshot.scheduledReemit, nowMs)
+    scheduleReemitIfNeeded(entries, nowMs)
+}
+
+private suspend fun loadPersistedSnapshotForActiveProfile(clearWhenMissing: Boolean) {
+    val persisted = snapshotStore.read()
+    // existing null handling...
+    val normalized = sanitizeSnapshot(persisted)
+    rawSnapshotState.value = normalized
+    snapshotState.value = normalized
+    lastRefreshRequestMs = normalized.updatedAtMs
+    handlePersistedScheduledReemit(normalized.scheduledReemit, System.currentTimeMillis())
 }
 ```
 
-### WR-02: AlarmManager And In-Process Delay Can Both Force The Same Refresh
+### WR-02: Overdue Date-Only Reemit Rows Are Ignored By Boot Reschedule
 
-**File:** `app/src/main/java/com/nexio/tv/data/repository/ContinueWatchingSnapshotService.kt:644`
-**Issue:** `scheduleReemitIfNeeded()` schedules the Android alarm and also starts an in-process `delay()` job for the same `soonestMs`. When the app process is alive, both the coroutine and `ContinueWatchingAirAlarmReceiver` can fire and call `ensureFresh(force = true)`. The mutex serializes the calls, but `force = true` bypasses throttling, so the provider refresh can run twice at the same air-time boundary.
-**Fix:** Use one trigger path or add a target-level coalescing method shared by the receiver and in-process fallback. For example, pass the target time in the alarm intent and skip if the same target was already handled within the current boundary.
+**File:** `app/src/main/java/com/nexio/tv/data/repository/ContinueWatchingSnapshotService.kt:170`
+**Issue:** The 08-05 overdue check only treats rows as due when `tvdbAvailabilityInstantMs` is present and `<= nowMs`. Phase 08 still adds rows to `scheduledReemit` when they are withheld by provider `firstAiredMs` or `firstAired` date fallback, and those rows have `tvdbAvailabilityInstantMs == null`. After boot or exact-alarm permission changes, an overdue date-only row falls through to `scheduleReemitIfNeeded()`, which returns no future target and cancels without refreshing. That leaves date-only withheld entries stuck in the persisted schedule.
+**Fix:** Expose a shared trigger extractor from `AirDateGate` and use it for both due detection and future scheduling so exact, provider-ms, and date-string fallback rows behave consistently.
 
 ```kotlin
-private var handledAirRefreshTargetMs: Long? = null
+internal fun pendingTriggerMs(
+    firstAiredMs: Long,
+    availabilityInstantMs: Long?,
+    tmdbAirDate: String?
+): Long? {
+    if (availabilityInstantMs != null && availabilityInstantMs > 0L) return availabilityInstantMs
+    if (firstAiredMs > 0L) return firstAiredMs
+    return parseDateToEpochMs(tmdbAirDate?.trim().orEmpty())
+}
 
-suspend fun handleAirTimeTrigger(targetMs: Long) {
-    refreshMutex.withLock {
-        if (handledAirRefreshTargetMs == targetMs) return
-        handledAirRefreshTargetMs = targetMs
-    }
-    ensureFresh(force = true)
+internal fun <T> hasDuePending(
+    entries: List<T>,
+    firstAiredMsSelector: (T) -> Long,
+    availabilityInstantMsSelector: (T) -> Long?,
+    tmdbAirDateSelector: (T) -> String?,
+    nowMs: Long
+): Boolean = entries.any { entry ->
+    pendingTriggerMs(
+        firstAiredMsSelector(entry),
+        availabilityInstantMsSelector(entry),
+        tmdbAirDateSelector(entry)
+    )?.let { it <= nowMs } == true
 }
 ```
 
-### WR-03: Main And Synthetic Next-Up Flows Enrich The Same Provider Rows Separately
-
-**File:** `app/src/main/java/com/nexio/tv/data/repository/TrackingProgressService.kt:114`
-**Issue:** `observeContinueWatchingNextUp()` and `observeSyntheticContinueWatchingNextUp()` each call `tvdbContinueWatchingTimingEnricher.enrich(...)`. The Trakt main and synthetic streams can overlap, and each item enrichment calls both `fetchEnrichment()` and `fetchEpisodeEnrichment()`. A transient provider failure can therefore enrich one rail but not the other, producing inconsistent exact-time gating for the same episode, while also doubling provider work.
-**Fix:** Coalesce raw main and synthetic next-up entries, enrich the distinct set once by `(contentId, season, episode)`, then split the enriched results back into the two exposed flows. Add a test that the same overlapping Trakt entry triggers one router series lookup and one episode lookup.
-
-```kotlin
-private suspend fun enrichBothRails(
-    main: List<TrackingNextUpEntry>,
-    synthetic: List<TrackingNextUpEntry>
-): Pair<List<TrackingNextUpEntry>, List<TrackingNextUpEntry>> {
-    val enrichedByKey = tvdbContinueWatchingTimingEnricher
-        .enrich((main + synthetic).distinctBy { "${it.contentId}|${it.season}|${it.episode}" })
-        .associateBy { "${it.contentId}|${it.season}|${it.episode}" }
-
-    fun TrackingNextUpEntry.key() = "$contentId|$season|$episode"
-    return main.map { enrichedByKey[it.key()] ?: it } to
-        synthetic.map { enrichedByKey[it.key()] ?: it }
-}
-```
-
-### WR-04: Timing Enrichment Failure Logs A False Diagnostic Reason And Raw Content ID
+### WR-03: Timing Enrichment Failure Logs A False Diagnostic Reason And Raw Content ID
 
 **File:** `app/src/main/java/com/nexio/tv/data/repository/TvdbContinueWatchingTimingEnricher.kt:60`
-**Issue:** The `onFailure` branch logs `reason=missing_timezone_policy` for every exception, even when the failure is an auth, network, identity, or parsing error. It also logs `contentId` directly. That makes exact-air diagnostics misleading and unnecessarily exposes watched content identifiers in logs.
-**Fix:** Use the existing `REFRESH_FAILURE` diagnostic for exceptions, avoid raw IDs in reason-level logs, and persist the diagnostic on the returned entry so downstream snapshot persistence reflects the failure.
+**Issue:** The `onFailure` branch logs `reason=missing_timezone_policy` for every exception, including auth, network, routing, and parsing failures. It also includes the raw `contentId`, which can expose watched-item identifiers in device logs. This is not a scheduling blocker, but it makes Phase 08 diagnostics misleading and unnecessarily increases privacy exposure.
+**Fix:** Log a failure-specific reason without raw item IDs, and persist the failure diagnostic on the returned entry so snapshot diagnostics reflect what actually happened.
 
 ```kotlin
 }.onFailure { error ->
@@ -130,21 +134,8 @@ private suspend fun enrichBothRails(
 }
 ```
 
-### WR-05: Previous Snapshot Schema Is Rejected Even Though New Fields Are Optional
-
-**File:** `app/src/main/java/com/nexio/tv/data/local/ContinueWatchingSnapshotStore.kt:115`
-**Issue:** The store bumped from schema 4 to 5 to add `scheduledReemit` and TVDB timing fields, but `decode()` rejects any version that is not exactly 5 before it reaches the backward-compatible field defaults. Schema 4 snapshots already contain the main resume/next-up fields and can safely decode with `scheduledReemit = emptyList()` and unknown TVDB timing fields. Rejecting them clears a usable continue-watching cache on upgrade.
-**Fix:** Accept the previous compatible schema range and keep rejecting older language-unaware payloads. Add a test that a schema 4 payload with `languageTag`, `resumeItems`, `nextUpItems`, and `traktUpNextItems` decodes successfully with empty `scheduledReemit`.
-
-```kotlin
-val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
-if (schemaVersion !in 4..SCHEMA_VERSION) {
-    return null
-}
-```
-
 ---
 
-_Reviewed: 2026-04-15T12:11:10Z_
+_Reviewed: 2026-04-15T14:09:46Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
