@@ -63,6 +63,56 @@ interface TvdbApi {
         @Query("type") type: String? = null,
         @Query("page") page: Int? = null
     ): Response<TvdbUpdatesResponse>
+
+    @GET("artwork/types")
+    suspend fun getArtworkTypes(
+        @Header("Authorization") authorization: String
+    ): Response<TvdbReferenceResponse<TvdbArtworkTypeRecord>>
+
+    @GET("artwork/statuses")
+    suspend fun getArtworkStatuses(
+        @Header("Authorization") authorization: String
+    ): Response<TvdbReferenceResponse<TvdbArtworkStatusRecord>>
+
+    @GET("genres")
+    suspend fun getGenres(
+        @Header("Authorization") authorization: String
+    ): Response<TvdbReferenceResponse<TvdbGenreReferenceRecord>>
+
+    @GET("languages")
+    suspend fun getLanguages(
+        @Header("Authorization") authorization: String
+    ): Response<TvdbReferenceResponse<TvdbLanguageRecord>>
+
+    @GET("series/statuses")
+    suspend fun getSeriesStatuses(
+        @Header("Authorization") authorization: String
+    ): Response<TvdbReferenceResponse<TvdbSeriesStatusRecord>>
+
+    @GET("content/ratings")
+    suspend fun getContentRatings(
+        @Header("Authorization") authorization: String
+    ): Response<TvdbReferenceResponse<TvdbContentRatingRecord>>
+
+    @GET("seasons/types")
+    suspend fun getSeasonTypes(
+        @Header("Authorization") authorization: String
+    ): Response<TvdbReferenceResponse<TvdbSeasonTypeReferenceRecord>>
+
+    @GET("sources/types")
+    suspend fun getSourceTypes(
+        @Header("Authorization") authorization: String
+    ): Response<TvdbReferenceResponse<TvdbSourceTypeRecord>>
+
+    @GET("entities")
+    suspend fun getEntityTypes(
+        @Header("Authorization") authorization: String
+    ): Response<TvdbReferenceResponse<TvdbEntityTypeRecord>>
+
+    @GET("companies/types")
+    suspend fun getCompanyTypes(
+        @Header("Authorization") authorization: String
+    ): Response<TvdbReferenceResponse<TvdbCompanyTypeRecord>>
 }
 
 @JsonClass(generateAdapter = true)
@@ -327,4 +377,96 @@ data class TvdbLinks(
     @Json(name = "next") val next: String? = null,
     @Json(name = "total_items") val totalItems: Int? = null,
     @Json(name = "page_size") val pageSize: Int? = null
+)
+
+// -- Reference data response wrapper and DTOs --
+
+@JsonClass(generateAdapter = true)
+data class TvdbReferenceResponse<T>(
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "data") val data: List<T> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbArtworkTypeRecord(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "recordType") val recordType: String? = null,
+    @Json(name = "slug") val slug: String? = null,
+    @Json(name = "imageFormat") val imageFormat: String? = null,
+    @Json(name = "width") val width: Int? = null,
+    @Json(name = "height") val height: Int? = null,
+    @Json(name = "thumbWidth") val thumbWidth: Int? = null,
+    @Json(name = "thumbHeight") val thumbHeight: Int? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbArtworkStatusRecord(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbGenreReferenceRecord(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "slug") val slug: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbLanguageRecord(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "nativeName") val nativeName: String? = null,
+    @Json(name = "shortCode") val shortCode: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbSeriesStatusRecord(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "recordType") val recordType: String? = null,
+    @Json(name = "keepUpdated") val keepUpdated: Boolean? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbContentRatingRecord(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "description") val description: String? = null,
+    @Json(name = "country") val country: String? = null,
+    @Json(name = "contentType") val contentType: String? = null,
+    @Json(name = "order") val order: Int? = null,
+    @Json(name = "fullName") val fullName: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbSeasonTypeReferenceRecord(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "type") val type: String? = null,
+    @Json(name = "alternateName") val alternateName: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbSourceTypeRecord(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "slug") val slug: String? = null,
+    @Json(name = "prefix") val prefix: String? = null,
+    @Json(name = "postfix") val postfix: String? = null,
+    @Json(name = "sort") val sort: Int? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbEntityTypeRecord(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "hasSpecials") val hasSpecials: Boolean? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbCompanyTypeRecord(
+    @Json(name = "companyTypeId") val companyTypeId: Int? = null,
+    @Json(name = "companyTypeName") val companyTypeName: String? = null
 )

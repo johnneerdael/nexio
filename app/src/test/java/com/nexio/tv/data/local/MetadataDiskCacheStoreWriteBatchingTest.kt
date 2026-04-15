@@ -40,6 +40,27 @@ class MetadataDiskCacheStoreWriteBatchingTest {
         assertEquals(1, prefs.applyCount)
     }
 
+    @Test
+    fun `tvdb reference writes are batched`() {
+        val prefs = RecordingSharedPreferences()
+        val context = mockk<Context>()
+        every { context.getSharedPreferences(any(), any()) } returns prefs
+        val store = MetadataDiskCacheStore(
+            context = context,
+            ioScope = CoroutineScope(EmptyCoroutineContext),
+            debounceMs = Long.MAX_VALUE,
+        )
+
+        // Write multiple reference kinds
+        store.writeTvdbReference("genres", listOf(mapOf("id" to 1, "name" to "Drama")))
+        store.writeTvdbReference("languages", listOf(mapOf("id" to "eng", "name" to "English")))
+        store.writeTvdbReference("entity_types", listOf(mapOf("id" to 1, "name" to "Series")))
+
+        store.flushPendingWritesForTest()
+
+        assertEquals(1, prefs.applyCount)
+    }
+
     private fun meta(index: Int): Meta {
         return Meta(
             id = "item-$index",

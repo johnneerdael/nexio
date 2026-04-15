@@ -16,6 +16,7 @@ import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MetadataDiskCacheStoreTest {
@@ -662,6 +663,65 @@ class MetadataDiskCacheStoreTest {
                 languageTag = "en-US",
                 providerToken = "trailer"
             )
+        )
+    }
+
+    @Test
+    fun `tvdb reference cache uses tvdb ref namespace`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+
+        store.writeTvdbReference("genres", listOf(mapOf("id" to 1, "name" to "Drama")))
+        store.flushPendingWritesForTest()
+
+        // Verify the key uses tvdb_ref:: prefix
+        val keys = prefs.all.keys
+        assertTrue(
+            "Expected a key starting with tvdb_ref::genres::",
+            keys.any { it.startsWith("tvdb_ref::genres::") }
+        )
+
+        // Verify we can read it back
+        val result = store.readTvdbReference<Map<String, Any>>("genres")
+        assertNotNull(result)
+        assertTrue(result!!.isNotEmpty())
+    }
+
+    @Test
+    fun `tvdb reference cache schema mismatch returns null`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+
+        // Manually write a reference entry with a wrong schema version
+        prefs.edit().putString(
+            "tvdb_ref::genres::data",
+            """
+            {
+              "values": [{"id": 1, "name": "Drama"}],
+              "tvdbReferenceSchemaVersion": 999,
+              "updatedAtMs": 1
+            }
+            """.trimIndent()
+        ).apply()
+
+        val result = store.readTvdbReference<Map<String, Any>>("genres")
+        assertNull(result)
+    }
+
+    @Test
+    fun `tvdb reference cache never falls back to raw id label`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+
+        // Write empty reference data
+        store.writeTvdbReference("genres", emptyList<Any>())
+        store.flushPendingWritesForTest()
+
+        // Reading should return empty list or null, never raw IDs
+        val result = store.readTvdbReference<Map<String, Any>>("genres")
+        assertTrue(
+            "Should return null or empty list, not raw IDs",
+            result == null || result.isEmpty()
         )
     }
 
