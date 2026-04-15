@@ -6,6 +6,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
 import com.nexio.tv.data.local.SimklDiscoverySnapshotStore
@@ -21,8 +22,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -121,13 +124,14 @@ class SimklDiscoveryService @Inject constructor(
     private val metaRepository: MetaRepository,
     private val simklSettingsDataStore: SimklSettingsDataStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
-    private val snapshotStore: SimklDiscoverySnapshotStore
+    private val snapshotStore: SimklDiscoverySnapshotStore,
+    private val profileManager: ProfileManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val snapshotState = MutableStateFlow(SimklDiscoverySnapshot())
+    private val profileSnapshots = MutableStateFlow<Map<Int, SimklDiscoverySnapshot>>(emptyMap())
     private val refreshMutex = Mutex()
     private val gson = Gson()
-    private var lastRefreshMs = 0L
+    private val lastRefreshByProfile = mutableMapOf<Int, Long>()
     private val snapshotTtlMs = 6L * 60L * 60L * 1_000L
     private val minRefreshIntervalMs = 30_000L
     private val maxItemsPerRail = 20
@@ -176,39 +180,59 @@ class SimklDiscoveryService @Inject constructor(
         )
     )
 
+    private fun snapshotForProfile(profileId: Int): SimklDiscoverySnapshot =
+        profileSnapshots.value[profileId] ?: SimklDiscoverySnapshot()
+
+    private fun setProfileSnapshot(profileId: Int, snapshot: SimklDiscoverySnapshot) {
+        profileSnapshots.value = profileSnapshots.value + (profileId to snapshot)
+    }
+
     init {
         check(catalogSources.keys.toSet() == SimklCatalogIds.BUILT_IN_ORDER.toSet()) {
             "catalogSources keys must match BUILT_IN_ORDER"
         }
         scope.launch {
-            snapshotStore.read()?.let { persisted ->
-                snapshotState.value = persisted
-                lastRefreshMs = persisted.updatedAtMs
+            val profileId = profileManager.activeProfileId.value
+            snapshotStore.read(profileId = profileId)?.let { persisted ->
+                setProfileSnapshot(profileId, persisted)
+                lastRefreshByProfile[profileId] = persisted.updatedAtMs
             }
         }
     }
 
     fun observeSnapshot(autoRefreshOnStart: Boolean = true): Flow<SimklDiscoverySnapshot> {
-        return snapshotState.onStart {
-            if (autoRefreshOnStart) {
-                scope.launch {
-                    runCatching { ensureFresh(force = false) }
-                        .onFailure { Log.w("SimklDiscovery", "Failed to refresh SIMKL discovery snapshot", it) }
+        return profileManager.activeProfileId.flatMapLatest { profileId ->
+            profileSnapshots
+                .map { snapshots -> snapshots[profileId] ?: SimklDiscoverySnapshot() }
+                .onStart {
+                    snapshotStore.read(profileId = profileId)?.let { persisted ->
+                        setProfileSnapshot(profileId, persisted)
+                        lastRefreshByProfile[profileId] = persisted.updatedAtMs
+                    }
+                    if (autoRefreshOnStart) {
+                        scope.launch {
+                            runCatching { ensureFresh(force = false, profileId = profileId) }
+                                .onFailure { Log.w("SimklDiscovery", "Failed to refresh SIMKL discovery snapshot", it) }
+                        }
+                    }
                 }
-            }
         }
     }
 
     /** Consistent with other discovery services. Simkl has no startup gate. */
     suspend fun priorityFetch() = ensureFresh(force = true)
 
-    suspend fun ensureFresh(force: Boolean) = withContext(Dispatchers.IO) {
+    suspend fun ensureFresh(
+        force: Boolean,
+        profileId: Int = profileManager.activeProfileId.value
+    ) = withContext(Dispatchers.IO) {
         val prefs = simklSettingsDataStore.catalogPreferences.first()
         val now = System.currentTimeMillis()
-        val snapshot = snapshotState.value
+        val snapshot = snapshotForProfile(profileId)
         val isFresh = snapshot.updatedAtMs > 0L && (now - snapshot.updatedAtMs) < snapshotTtlMs
         val hasConfiguredContent = snapshot.hasConfiguredDiscoveryContent(prefs)
         if (!force && isFresh && hasConfiguredContent) return@withContext
+        val lastRefreshMs = lastRefreshByProfile[profileId] ?: 0L
         if (!force && now - lastRefreshMs < minRefreshIntervalMs && snapshot.updatedAtMs > 0L && hasConfiguredContent) {
             return@withContext
         }
@@ -216,11 +240,12 @@ class SimklDiscoveryService @Inject constructor(
 
         refreshMutex.withLock {
             val lockedNow = System.currentTimeMillis()
-            val lockedSnapshot = snapshotState.value
+            val lockedSnapshot = snapshotForProfile(profileId)
             val lockedFresh = lockedSnapshot.updatedAtMs > 0L && (lockedNow - lockedSnapshot.updatedAtMs) < snapshotTtlMs
             val lockedHasConfiguredContent = lockedSnapshot.hasConfiguredDiscoveryContent(prefs)
             if (!force && lockedFresh && lockedHasConfiguredContent) return@withLock
-            if (!force && lockedNow - lastRefreshMs < minRefreshIntervalMs && lockedSnapshot.updatedAtMs > 0L && lockedHasConfiguredContent) {
+            val lockedLastRefreshMs = lastRefreshByProfile[profileId] ?: 0L
+            if (!force && lockedNow - lockedLastRefreshMs < minRefreshIntervalMs && lockedSnapshot.updatedAtMs > 0L && lockedHasConfiguredContent) {
                 return@withLock
             }
 
@@ -240,9 +265,9 @@ class SimklDiscoveryService @Inject constructor(
             } else {
                 refreshed
             }
-            snapshotState.value = snapshotToPersist
-            snapshotStore.write(snapshotToPersist)
-            lastRefreshMs = lockedNow
+            setProfileSnapshot(profileId, snapshotToPersist)
+            snapshotStore.write(snapshotToPersist, profileId = profileId)
+            lastRefreshByProfile[profileId] = lockedNow
         }
     }
 

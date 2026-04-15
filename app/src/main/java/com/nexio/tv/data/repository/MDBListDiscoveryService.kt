@@ -3,6 +3,7 @@ package com.nexio.tv.data.repository
 import android.os.SystemClock
 import android.util.Log
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.MDBListDiscoverySnapshotStore
 import com.nexio.tv.data.local.MDBListCatalogPreferences
@@ -15,6 +16,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.CoroutineScope
@@ -61,12 +64,13 @@ class MDBListDiscoveryService @Inject constructor(
     private val mdbListSettingsDataStore: MDBListSettingsDataStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     private val snapshotStore: MDBListDiscoverySnapshotStore,
-    private val debugSettingsDataStore: DebugSettingsDataStore
+    private val debugSettingsDataStore: DebugSettingsDataStore,
+    private val profileManager: ProfileManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val snapshotState = MutableStateFlow(MDBListDiscoverySnapshot())
+    private val profileSnapshots = MutableStateFlow<Map<Int, MDBListDiscoverySnapshot>>(emptyMap())
     private val refreshMutex = Mutex()
-    private var lastRefreshMs = 0L
+    private val lastRefreshByProfile = mutableMapOf<Int, Long>()
     private val minRefreshIntervalMs = 30_000L
     private val maxItemsPerRail = 20
     private val startupRefreshGateMs = 20_000L
@@ -79,11 +83,19 @@ class MDBListDiscoveryService @Inject constructor(
     @Volatile
     private var startupGateInitialized: Boolean = false
 
+    private fun snapshotForProfile(profileId: Int): MDBListDiscoverySnapshot =
+        profileSnapshots.value[profileId] ?: MDBListDiscoverySnapshot()
+
+    private fun setProfileSnapshot(profileId: Int, snapshot: MDBListDiscoverySnapshot) {
+        profileSnapshots.value = profileSnapshots.value + (profileId to snapshot)
+    }
+
     init {
         scope.launch {
-            snapshotStore.read()?.let { persisted ->
-                snapshotState.value = persisted
-                lastRefreshMs = persisted.updatedAtMs
+            val profileId = profileManager.activeProfileId.value
+            snapshotStore.read(profileId = profileId)?.let { persisted ->
+                setProfileSnapshot(profileId, persisted)
+                lastRefreshByProfile[profileId] = persisted.updatedAtMs
             }
         }
         scope.launch {
@@ -97,20 +109,28 @@ class MDBListDiscoveryService @Inject constructor(
     }
 
     fun observeSnapshot(autoRefreshOnStart: Boolean = true): Flow<MDBListDiscoverySnapshot> {
-        return snapshotState.onStart {
-            if (autoRefreshOnStart) {
-                scope.launch {
-                    ensureStartupGateInitialized()
-                    if (isStartupRefreshGated()) {
-                        Log.d("MDBListDiscovery", "Auto-refresh deferred by startup gate")
-                        return@launch
+        return profileManager.activeProfileId.flatMapLatest { profileId ->
+            profileSnapshots
+                .map { snapshots -> snapshots[profileId] ?: MDBListDiscoverySnapshot() }
+                .onStart {
+                    snapshotStore.read(profileId = profileId)?.let { persisted ->
+                        setProfileSnapshot(profileId, persisted)
+                        lastRefreshByProfile[profileId] = persisted.updatedAtMs
                     }
-                    runCatching { ensureFresh(force = false) }
-                        .onFailure { error ->
-                            Log.w("MDBListDiscovery", "Failed to refresh MDBList discovery snapshot", error)
+                    if (autoRefreshOnStart) {
+                        scope.launch {
+                            ensureStartupGateInitialized()
+                            if (isStartupRefreshGated()) {
+                                Log.d("MDBListDiscovery", "Auto-refresh deferred by startup gate")
+                                return@launch
+                            }
+                            runCatching { ensureFresh(force = false, profileId = profileId) }
+                                .onFailure { error ->
+                                    Log.w("MDBListDiscovery", "Failed to refresh MDBList discovery snapshot", error)
+                                }
                         }
+                    }
                 }
-            }
         }
     }
 
@@ -120,7 +140,10 @@ class MDBListDiscoveryService @Inject constructor(
         ensureFresh(force = true)
     }
 
-    suspend fun ensureFresh(force: Boolean) = withContext(Dispatchers.IO) {
+    suspend fun ensureFresh(
+        force: Boolean,
+        profileId: Int = profileManager.activeProfileId.value
+    ) = withContext(Dispatchers.IO) {
         ensureStartupGateInitialized()
         if (isStartupRefreshGated()) {
             Log.d("MDBListDiscovery", "ensureFresh deferred by startup gate")
@@ -131,20 +154,22 @@ class MDBListDiscoveryService @Inject constructor(
         val apiKey = settings.apiKey.trim()
         if (!settings.enabled || apiKey.isBlank()) {
             Log.d("MDBListDiscovery", "Skipping refresh enabled=${settings.enabled} apiKeyPresent=${apiKey.isNotBlank()}")
-            snapshotState.value = MDBListDiscoverySnapshot()
-            snapshotStore.clear()
+            setProfileSnapshot(profileId, MDBListDiscoverySnapshot())
+            snapshotStore.clear(profileId = profileId)
             return@withContext
         }
 
         val now = System.currentTimeMillis()
-        if (now - lastRefreshMs < minRefreshIntervalMs && snapshotState.value.updatedAtMs > 0L) {
+        val lastRefreshMs = lastRefreshByProfile[profileId] ?: 0L
+        if (now - lastRefreshMs < minRefreshIntervalMs && snapshotForProfile(profileId).updatedAtMs > 0L) {
             return@withContext
         }
 
         refreshMutex.withLock {
             val lockedNow = System.currentTimeMillis()
-            if (lockedNow - lastRefreshMs < minRefreshIntervalMs &&
-                snapshotState.value.updatedAtMs > 0L
+            val lockedLastRefreshMs = lastRefreshByProfile[profileId] ?: 0L
+            if (lockedNow - lockedLastRefreshMs < minRefreshIntervalMs &&
+                snapshotForProfile(profileId).updatedAtMs > 0L
             ) {
                 return@withLock
             }
@@ -164,14 +189,15 @@ class MDBListDiscoveryService @Inject constructor(
                 "Refreshed personal=${personalLists.size} top=${topLists.size} custom=${customCatalogs.size}"
             )
 
-            snapshotState.value = MDBListDiscoverySnapshot(
+            val snapshotState = MDBListDiscoverySnapshot(
                 personalLists = personalLists,
                 topLists = topLists,
                 customListCatalogs = customCatalogs,
                 updatedAtMs = System.currentTimeMillis()
             )
-            snapshotStore.write(snapshotState.value)
-            lastRefreshMs = System.currentTimeMillis()
+            setProfileSnapshot(profileId, snapshotState)
+            snapshotStore.write(snapshotState, profileId = profileId)
+            lastRefreshByProfile[profileId] = System.currentTimeMillis()
         }
     }
 
