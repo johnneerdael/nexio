@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.domain.model.TrackingProvider
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
@@ -49,30 +50,34 @@ class DefaultTrackingScrobbleService @Inject constructor(
 ) : TrackingScrobbleService {
 
     override suspend fun scrobbleStart(item: TrackingScrobbleItem, progressPercent: Float) {
-        when (trackingProviderStateService.currentState().effectiveProvider) {
-            com.nexio.tv.domain.model.TrackingProvider.SIMKL -> simklScrobbleService.scrobbleStart(item, progressPercent)
-            com.nexio.tv.domain.model.TrackingProvider.TRAKT -> toTraktItem(item)?.let { traktScrobbleService.scrobbleStart(it, progressPercent) }
+        val providerState = trackingProviderStateService.currentState()
+        when (providerState.effectiveProvider) {
+            TrackingProvider.SIMKL -> simklScrobbleService.scrobbleStart(item, progressPercent)
+            TrackingProvider.TRAKT -> toTraktItem(item)?.let { traktScrobbleService.scrobbleStart(it, progressPercent) }
         }
     }
 
     override suspend fun scrobbleStop(item: TrackingScrobbleItem, progressPercent: Float) {
-        when (trackingProviderStateService.currentState().effectiveProvider) {
-            com.nexio.tv.domain.model.TrackingProvider.SIMKL -> simklScrobbleService.scrobbleStop(item, progressPercent)
-            com.nexio.tv.domain.model.TrackingProvider.TRAKT -> toTraktItem(item)?.let { traktScrobbleService.scrobbleStop(it, progressPercent) }
+        val providerState = trackingProviderStateService.currentState()
+        when (providerState.effectiveProvider) {
+            TrackingProvider.SIMKL -> simklScrobbleService.scrobbleStop(item, progressPercent)
+            TrackingProvider.TRAKT -> toTraktItem(item)?.let { traktScrobbleService.scrobbleStop(it, progressPercent) }
         }
     }
 
     override suspend fun scrobblePause(item: TrackingScrobbleItem, progressPercent: Float) {
-        when (trackingProviderStateService.currentState().effectiveProvider) {
-            com.nexio.tv.domain.model.TrackingProvider.SIMKL -> simklScrobbleService.scrobblePause(item, progressPercent)
-            com.nexio.tv.domain.model.TrackingProvider.TRAKT -> toTraktItem(item)?.let { traktScrobbleService.scrobblePause(it, progressPercent) }
+        val providerState = trackingProviderStateService.currentState()
+        when (providerState.effectiveProvider) {
+            TrackingProvider.SIMKL -> simklScrobbleService.scrobblePause(item, progressPercent)
+            TrackingProvider.TRAKT -> toTraktItem(item)?.let { traktScrobbleService.scrobblePause(it, progressPercent) }
         }
     }
 
     override suspend fun checkin(item: TrackingScrobbleItem, message: String?): Boolean {
-        return when (trackingProviderStateService.currentState().effectiveProvider) {
-            com.nexio.tv.domain.model.TrackingProvider.SIMKL -> simklScrobbleService.checkin(item, message)
-            com.nexio.tv.domain.model.TrackingProvider.TRAKT -> {
+        val providerState = trackingProviderStateService.currentState()
+        return when (providerState.effectiveProvider) {
+            TrackingProvider.SIMKL -> simklScrobbleService.checkin(item, message)
+            TrackingProvider.TRAKT -> {
                 val traktItem = toTraktItem(item) ?: return false
                 traktScrobbleService.checkin(traktItem, message)
             }
@@ -82,8 +87,8 @@ class DefaultTrackingScrobbleService @Inject constructor(
     override fun observeWatchingNowState(): Flow<TrackingWatchingNowState> {
         return trackingProviderStateService.state.flatMapLatest { state ->
             when (state.effectiveProvider) {
-                com.nexio.tv.domain.model.TrackingProvider.SIMKL -> simklScrobbleService.observeWatchingNowState().map { it.toTrackingState() }
-                com.nexio.tv.domain.model.TrackingProvider.TRAKT -> traktScrobbleService.observeWatchingNowState().map { it.toTrackingState() }
+                TrackingProvider.SIMKL -> simklScrobbleService.observeWatchingNowState().map { it.toTrackingState() }
+                TrackingProvider.TRAKT -> traktScrobbleService.observeWatchingNowState().map { it.toTrackingState() }
             }
         }
     }

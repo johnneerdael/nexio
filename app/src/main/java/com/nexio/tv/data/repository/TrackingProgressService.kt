@@ -184,7 +184,7 @@ class DefaultTrackingProgressService @Inject constructor(
     }
 
     override suspend fun refreshNow() {
-        when (currentProvider) {
+        when (trackingProviderStateService.currentState().effectiveProvider) {
             TrackingProvider.SIMKL -> simklProgressService.refreshNow()
             TrackingProvider.TRAKT -> traktProgressService.refreshNow()
         }
@@ -194,7 +194,7 @@ class DefaultTrackingProgressService @Inject constructor(
         contentId: String,
         season: Int?,
         episode: Int?
-    ): List<Long> = when (currentProvider) {
+    ): List<Long> = when (trackingProviderStateService.currentState().effectiveProvider) {
         TrackingProvider.SIMKL -> simklProgressService.resolvePlaybackDeleteIdsForOutbox(
             contentId = contentId,
             season = season,
@@ -223,7 +223,7 @@ class DefaultTrackingProgressService @Inject constructor(
         episode: Int?,
         removeShow: Boolean
     ) {
-        when (currentProvider) {
+        when (trackingProviderStateService.currentState().effectiveProvider) {
             TrackingProvider.SIMKL -> simklProgressService.rollbackQueuedHistoryRemove(
                 contentId = contentId,
                 season = season,
@@ -245,7 +245,7 @@ class DefaultTrackingProgressService @Inject constructor(
         episode: Int?,
         clearShow: Boolean
     ) {
-        when (currentProvider) {
+        when (trackingProviderStateService.currentState().effectiveProvider) {
             TrackingProvider.SIMKL -> simklProgressService.rollbackQueuedPlaybackDelete(
                 contentId = contentId,
                 season = season,

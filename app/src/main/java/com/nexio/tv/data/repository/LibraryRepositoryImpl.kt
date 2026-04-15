@@ -6,6 +6,7 @@ import com.nexio.tv.domain.model.LibraryListTab
 import com.nexio.tv.domain.model.LibrarySourceMode
 import com.nexio.tv.domain.model.ListMembershipChanges
 import com.nexio.tv.domain.model.ListMembershipSnapshot
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.TraktListPrivacy
 import com.nexio.tv.domain.repository.LibraryRepository
 import kotlinx.coroutines.flow.Flow
@@ -31,9 +32,9 @@ class LibraryRepositoryImpl @Inject constructor(
         debridLibraryService.observeIsConnected()
     ) { providerState, hasProviderCache, hasSimklCache, isDebridConnected ->
         when {
-            providerState.effectiveProvider == com.nexio.tv.domain.model.TrackingProvider.TRAKT &&
+            providerState.effectiveProvider == TrackingProvider.TRAKT &&
                 (providerState.traktAuthenticated || hasProviderCache) -> LibrarySourceMode.TRAKT
-            providerState.effectiveProvider == com.nexio.tv.domain.model.TrackingProvider.SIMKL &&
+            providerState.effectiveProvider == TrackingProvider.SIMKL &&
                 (providerState.simklAuthenticated || hasSimklCache) -> LibrarySourceMode.SIMKL
             isDebridConnected -> LibrarySourceMode.DEBRID
             else -> LibrarySourceMode.LOCAL
@@ -123,39 +124,42 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun toggleDefault(item: LibraryEntryInput) {
-        when (trackingProviderStateService.currentState().effectiveProvider) {
-            com.nexio.tv.domain.model.TrackingProvider.SIMKL -> {
-                if (!trackingProviderStateService.currentState().simklAuthenticated) return
+        val providerState = trackingProviderStateService.currentState()
+        when (providerState.effectiveProvider) {
+            TrackingProvider.SIMKL -> {
+                if (!providerState.simklAuthenticated) return
                 simklLibraryService.toggleWatchlist(item)
             }
-            com.nexio.tv.domain.model.TrackingProvider.TRAKT -> {
-                if (!trackingProviderStateService.currentState().traktAuthenticated) return
+            TrackingProvider.TRAKT -> {
+                if (!providerState.traktAuthenticated) return
                 traktLibraryService.toggleWatchlist(item)
             }
         }
     }
 
     override suspend fun getMembershipSnapshot(item: LibraryEntryInput): ListMembershipSnapshot {
-        return when (trackingProviderStateService.currentState().effectiveProvider) {
-            com.nexio.tv.domain.model.TrackingProvider.SIMKL -> {
-                if (trackingProviderStateService.currentState().simklAuthenticated) simklLibraryService.getMembershipSnapshot(item)
+        val providerState = trackingProviderStateService.currentState()
+        return when (providerState.effectiveProvider) {
+            TrackingProvider.SIMKL -> {
+                if (providerState.simklAuthenticated) simklLibraryService.getMembershipSnapshot(item)
                 else ListMembershipSnapshot(listMembership = emptyMap())
             }
-            com.nexio.tv.domain.model.TrackingProvider.TRAKT -> {
-                if (trackingProviderStateService.currentState().traktAuthenticated) traktLibraryService.getMembershipSnapshot(item)
+            TrackingProvider.TRAKT -> {
+                if (providerState.traktAuthenticated) traktLibraryService.getMembershipSnapshot(item)
                 else ListMembershipSnapshot(listMembership = emptyMap())
             }
         }
     }
 
     override suspend fun applyMembershipChanges(item: LibraryEntryInput, changes: ListMembershipChanges) {
-        when (trackingProviderStateService.currentState().effectiveProvider) {
-            com.nexio.tv.domain.model.TrackingProvider.SIMKL -> {
-                if (!trackingProviderStateService.currentState().simklAuthenticated) return
+        val providerState = trackingProviderStateService.currentState()
+        when (providerState.effectiveProvider) {
+            TrackingProvider.SIMKL -> {
+                if (!providerState.simklAuthenticated) return
                 simklLibraryService.applyMembershipChanges(item, changes)
             }
-            com.nexio.tv.domain.model.TrackingProvider.TRAKT -> {
-                if (!trackingProviderStateService.currentState().traktAuthenticated) return
+            TrackingProvider.TRAKT -> {
+                if (!providerState.traktAuthenticated) return
                 traktLibraryService.applyMembershipChanges(item, changes)
             }
         }
@@ -192,24 +196,26 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun refreshNow() {
-        when (trackingProviderStateService.currentState().effectiveProvider) {
-            com.nexio.tv.domain.model.TrackingProvider.SIMKL -> {
-                if (trackingProviderStateService.currentState().simklAuthenticated) simklLibraryService.refreshNow()
+        val providerState = trackingProviderStateService.currentState()
+        when (providerState.effectiveProvider) {
+            TrackingProvider.SIMKL -> {
+                if (providerState.simklAuthenticated) simklLibraryService.refreshNow()
             }
-            com.nexio.tv.domain.model.TrackingProvider.TRAKT -> {
-                if (trackingProviderStateService.currentState().traktAuthenticated) traktLibraryService.refreshNow()
+            TrackingProvider.TRAKT -> {
+                if (providerState.traktAuthenticated) traktLibraryService.refreshNow()
             }
         }
         debridLibraryService.refreshNow(DebridLibraryService.RefreshTarget.ALL)
     }
 
     override suspend fun refreshProviderNow() {
-        when (trackingProviderStateService.currentState().effectiveProvider) {
-            com.nexio.tv.domain.model.TrackingProvider.SIMKL -> {
-                if (trackingProviderStateService.currentState().simklAuthenticated) simklLibraryService.refreshNow()
+        val providerState = trackingProviderStateService.currentState()
+        when (providerState.effectiveProvider) {
+            TrackingProvider.SIMKL -> {
+                if (providerState.simklAuthenticated) simklLibraryService.refreshNow()
             }
-            com.nexio.tv.domain.model.TrackingProvider.TRAKT -> {
-                if (trackingProviderStateService.currentState().traktAuthenticated) traktLibraryService.refreshNow()
+            TrackingProvider.TRAKT -> {
+                if (providerState.traktAuthenticated) traktLibraryService.refreshNow()
             }
         }
     }
