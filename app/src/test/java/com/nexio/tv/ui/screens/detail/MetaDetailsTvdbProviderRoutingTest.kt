@@ -15,6 +15,7 @@ import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.Video
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coAnswers
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -48,6 +49,13 @@ class MetaDetailsTvdbProviderRoutingTest {
         val tmdbService = mockk<TmdbService>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
         val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
+        coEvery { tmdbService.ensureTmdbId(any(), any()) } coAnswers {
+            val metadataEnrichmentCall = Throwable().stackTrace.any { frame ->
+                frame.className.endsWith("MetaDetailsViewModel") && frame.methodName == "enrichMeta"
+            }
+            check(!metadataEnrichmentCall) { "Series detail metadata enrichment must not resolve TMDB IDs" }
+            null
+        }
         coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
             provider = TvProvider.TVDB,
             reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -100,7 +108,7 @@ class MetaDetailsTvdbProviderRoutingTest {
         assertEquals("en", meta?.language)
 
         coVerify(exactly = 1) { tvMetadataRouter.fetchEnrichment(any()) }
-        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
+        coVerify(exactly = 0) { tmdbService.ensureTmdbId("metadata-enrichment", any()) }
         coVerify(exactly = 0) { tmdbMetadataService.fetchEnrichment(any(), any(), any()) }
     }
 
