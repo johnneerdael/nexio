@@ -97,7 +97,7 @@ internal class PlayerMediaSourceFactory(
     var vodCacheSizeMb: Int = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB
     var progressivePlaybackDiskMode: ProgressivePlaybackDiskMode = ProgressivePlaybackDiskMode.OFF
     var diskSpoolStartupBufferMb: Int = PlayerSettings.DEFAULT_DISK_SPOOL_STARTUP_BUFFER_MB
-    var diskSpoolStorageLocation: DiskSpoolStorageLocation = DiskSpoolStorageLocation.BUILTIN
+    var diskSpoolStorageLocation: DiskSpoolStorageLocation = PlayerSettings.DEFAULT_DISK_SPOOL_STORAGE_LOCATION
     var diskSpoolDiagnosticsEnabled: Boolean = false
     internal var spoolStorageProbeResult: SpoolStorageProbeResult? = null
     var diskSpoolTargetBitrateMbps: Double? = null

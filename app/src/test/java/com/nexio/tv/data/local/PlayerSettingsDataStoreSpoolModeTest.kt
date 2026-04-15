@@ -20,8 +20,8 @@ class PlayerSettingsDataStoreSpoolModeTest {
     }
 
     @Test
-    fun `default disk spool storage location is builtin`() {
-        assertEquals(DiskSpoolStorageLocation.BUILTIN, PlayerSettings().diskSpoolStorageLocation)
+    fun `default disk spool storage location is external`() {
+        assertEquals(DiskSpoolStorageLocation.EXTERNAL, PlayerSettings().diskSpoolStorageLocation)
     }
 
     @Test

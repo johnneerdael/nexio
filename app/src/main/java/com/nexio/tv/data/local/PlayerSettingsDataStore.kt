@@ -246,7 +246,7 @@ data class PlayerSettings(
     val progressivePlaybackDiskMode: ProgressivePlaybackDiskMode = ProgressivePlaybackDiskMode.OFF,
     val diskSpoolSizeMb: Int = DEFAULT_DISK_SPOOL_SIZE_MB,
     val diskSpoolStartupBufferMb: Int = DEFAULT_DISK_SPOOL_STARTUP_BUFFER_MB,
-    val diskSpoolStorageLocation: DiskSpoolStorageLocation = DiskSpoolStorageLocation.BUILTIN,
+    val diskSpoolStorageLocation: DiskSpoolStorageLocation = DEFAULT_DISK_SPOOL_STORAGE_LOCATION,
     val spoolStorageProbeResultJson: String? = null,
     val useParallelConnections: Boolean = DEFAULT_USE_PARALLEL_CONNECTIONS,
     val parallelConnectionCount: Int = DEFAULT_PARALLEL_CONNECTION_COUNT,
@@ -260,6 +260,7 @@ data class PlayerSettings(
         const val MAX_VOD_CACHE_SIZE_MB = 65_536
         const val DEFAULT_DISK_SPOOL_SIZE_MB = 512
         const val DEFAULT_DISK_SPOOL_STARTUP_BUFFER_MB = 100
+        val DEFAULT_DISK_SPOOL_STORAGE_LOCATION: DiskSpoolStorageLocation = DiskSpoolStorageLocation.EXTERNAL
         const val MIN_DISK_SPOOL_SIZE_MB = 512
         const val MAX_DISK_SPOOL_SIZE_MB = 2_048
         const val MIN_DISK_SPOOL_STARTUP_BUFFER_MB = 0
@@ -1321,7 +1322,7 @@ class PlayerSettingsDataStore @Inject constructor(
         return when (value?.trim()?.uppercase()) {
             "EXTERNAL" -> DiskSpoolStorageLocation.EXTERNAL
             "BUILTIN" -> DiskSpoolStorageLocation.BUILTIN
-            else -> DiskSpoolStorageLocation.BUILTIN
+            else -> PlayerSettings.DEFAULT_DISK_SPOOL_STORAGE_LOCATION
         }
     }
 
