@@ -82,7 +82,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             every { allProgress } returns flowOf(emptyList())
         }
         val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
-            every { read() } returns null
+            every { read(any()) } returns null
         }
         val metadataDiskCacheStore = mockk<MetadataDiskCacheStore>(relaxed = true)
         val metaRepository = mockk<MetaRepository>(relaxed = true)
@@ -133,7 +133,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
     private fun buildServiceWithAirScheduler(
         airScheduler: ContinueWatchingAirScheduler,
         snapshotStore: ContinueWatchingSnapshotStore = mockk(relaxed = true) {
-            every { read() } returns null
+            every { read(any()) } returns null
         },
         trackingProgressService: TrackingProgressService = mockk(relaxed = true) {
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)
@@ -398,7 +398,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 traktSettingsDataStore = traktSettingsDataStore,
                 metaRepository = mockk(relaxed = true),
                 metadataDiskCacheStore = mockk(relaxed = true),
-                snapshotStore = mockk(relaxed = true) { every { read() } returns null }
+                snapshotStore = mockk(relaxed = true) { every { read(any()) } returns null }
             )
 
             // First force=true call — must call refreshNow.
@@ -648,7 +648,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
             updatedAtMs = nowMs - 60_000L
         )
         val snapshotStore = mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
-            every { read() } returns persisted
+            every { read(any()) } returns persisted
         }
         val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
             every { observeRemoteSnapshotLoaded() } returns flowOf(false)

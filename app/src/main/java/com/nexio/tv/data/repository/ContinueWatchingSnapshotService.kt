@@ -125,8 +125,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 .flatMapLatest { isAuthenticated ->
                     if (!isAuthenticated) {
                         if (hasSeenAuthenticatedSession) {
+                            val profileId = activeProfileId()
                             rawSnapshotState.value = ContinueWatchingSnapshot()
-                            snapshotStore.clear()
+                            snapshotStore.clear(profileId)
                             metadataDiskCacheStore.replaceHomeFeedReferences(feedKey = "continue_watching", itemKeys = emptySet())
                             lastRefreshRequestMs = 0L
                             cancelReemitScheduling()
@@ -169,7 +170,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     private suspend fun loadPersistedSnapshotForActiveProfile(clearWhenMissing: Boolean) {
-        val persisted = snapshotStore.read()
+        val profileId = activeProfileId()
+        val persisted = snapshotStore.read(profileId)
         if (persisted == null) {
             if (clearWhenMissing) {
                 rawSnapshotState.value = ContinueWatchingSnapshot()
@@ -418,7 +420,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     fun invalidateLocalizedMetadata() {
         trackingProgressService.invalidateLocalizedMetadata()
-        snapshotStore.clear()
+        snapshotStore.clear(activeProfileId())
         metadataDiskCacheStore.replaceHomeFeedReferences(feedKey = "continue_watching", itemKeys = emptySet())
         cancelReemitScheduling()
         scope.launch {
@@ -589,7 +591,10 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
     }
 
-    private suspend fun persistRawSnapshot(snapshot: ContinueWatchingSnapshot) {
+    private suspend fun persistRawSnapshot(
+        snapshot: ContinueWatchingSnapshot,
+        profileId: Int = activeProfileId()
+    ): Boolean {
         val normalized = sanitizeSnapshot(snapshot)
         val hydrated = hydrateSnapshotMetadata(
             snapshot = normalized,
@@ -606,20 +611,32 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 add(homeDisplayItemKey(entry.contentType, entry.contentId))
             }
         }
+        snapshotStore.write(hydrated, profileId = profileId)
+        if (!isActiveProfile(profileId)) {
+            Log.d("ContinueWatching", "Skipping stale continue watching publish for profile=$profileId")
+            return false
+        }
         rawSnapshotState.value = hydrated
-        snapshotStore.write(hydrated)
         metadataDiskCacheStore.replaceHomeFeedReferences(
             feedKey = "continue_watching",
             itemKeys = referencedItemKeys
         )
         metadataDiskCacheStore.removeHomeUnreferencedMetaEntries()
         lastRefreshRequestMs = hydrated.updatedAtMs
+        return true
     }
 
     private suspend fun updateSnapshot(snapshot: ContinueWatchingSnapshot) {
-        persistRawSnapshot(snapshot)
-        scheduleReemitIfNeeded(snapshot.scheduledReemit, snapshot.updatedAtMs)
+        val profileId = activeProfileId()
+        val published = persistRawSnapshot(snapshot, profileId = profileId)
+        if (published) {
+            scheduleReemitIfNeeded(snapshot.scheduledReemit, snapshot.updatedAtMs)
+        }
     }
+
+    private fun activeProfileId(): Int = profileManager?.activeProfileId?.value ?: 1
+
+    private fun isActiveProfile(profileId: Int): Boolean = activeProfileId() == profileId
 
     private fun handleScheduledReemit(
         scheduledReemit: List<TrackingNextUpEntry>,

@@ -57,22 +57,19 @@ class ContinueWatchingSnapshotStore private constructor(
 
     private val gson = Gson()
 
-    private val profileManager: ProfileManager
-        get() = injectedProfileManager ?: error("ProfileManager unavailable")
+    private fun injectedPrefsName(profileId: Int): String =
+        profilePrefsName(BASE_PREFS_NAME, profileId)
 
-    private fun injectedPrefsName(): String =
-        profilePrefsName(BASE_PREFS_NAME, profileManager.activeProfileId.value)
-
-    private fun prefsName(): String =
+    private fun prefsName(profileId: Int = activeProfileId()): String =
         if (injectedProfileManager != null) {
-            injectedPrefsName()
+            injectedPrefsName(profileId)
         } else {
-            profilePrefsName(BASE_PREFS_NAME, activeProfileId())
+            profilePrefsName(BASE_PREFS_NAME, profileId)
         }
 
-    fun read(): ContinueWatchingSnapshot? {
+    fun read(profileId: Int = activeProfileId()): ContinueWatchingSnapshot? {
         return runCatching {
-            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
             decode(raw)
         }.onFailure { error ->
@@ -81,9 +78,12 @@ class ContinueWatchingSnapshotStore private constructor(
         }.getOrNull()
     }
 
-    fun write(snapshot: ContinueWatchingSnapshot) {
+    fun write(
+        snapshot: ContinueWatchingSnapshot,
+        profileId: Int = activeProfileId()
+    ) {
         runCatching {
-            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
                 addProperty("schemaVersion", SCHEMA_VERSION)
                 addProperty("languageEpoch", metadataDiskCacheStore.currentLanguageEpoch())
@@ -101,9 +101,9 @@ class ContinueWatchingSnapshotStore private constructor(
         }
     }
 
-    fun clear() {
+    fun clear(profileId: Int = activeProfileId()) {
         runCatching {
-            val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             prefs.edit().remove(SNAPSHOT_KEY).apply()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear continue watching snapshot", error)
