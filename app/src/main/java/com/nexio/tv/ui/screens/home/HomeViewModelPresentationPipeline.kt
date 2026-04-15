@@ -4,7 +4,10 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbEnrichment
+import com.nexio.tv.core.tvdb.TvMetadataEnrichment
+import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.HomeLayout
 import com.nexio.tv.domain.model.Meta
@@ -345,7 +348,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
         return
     }
     pendingFocusedItemForEnrichment = null
-    if (isFocusedPreviewEnrichmentComplete(item.id)) return
+    if (isFocusedPreviewEnrichmentComplete(item)) return
     if (pendingTmdbEnrichItemId == item.id) return
 
     if (_enrichingItemId.value != null && _enrichingItemId.value != item.id) {
@@ -367,7 +370,7 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
             }
             return@launch
         }
-        if (isFocusedPreviewEnrichmentComplete(item.id)) {
+        if (isFocusedPreviewEnrichmentComplete(item)) {
             if (_enrichingItemId.value == item.id) {
                 setEnrichingItemId(null)
             }
@@ -376,26 +379,14 @@ internal fun HomeViewModel.onItemFocusPipeline(item: MetaPreview) {
 
         try {
             var tmdbEnriched = false
-            if (currentTmdbSettings.isActive) {
-                val tmdbId = withContext(Dispatchers.IO) {
-                    runCatching { tmdbService.ensureTmdbId(item.id, item.apiType) }.getOrNull()
-                }
-                val enrichment = if (tmdbId != null) {
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            tmdbMetadataService.fetchEnrichment(
-                                tmdbId = tmdbId,
-                                contentType = item.type
-                            )
-                        }.getOrNull()
-                    }
-                } else {
-                    null
+            if (currentTmdbSettings.isActive || item.type.isHomeTvContent()) {
+                val enrichment = withContext(Dispatchers.IO) {
+                    runCatching { fetchProviderEnrichmentForPreview(item) }.getOrNull()
                 }
                 if (enrichment != null && pendingTmdbEnrichItemId == item.id) {
                     prefetchedTmdbIds.add(item.id)
                     prefetchedExternalMetaIds.add(item.id)
-                    updateCatalogItemWithTmdb(item.id, enrichment)
+                    updateCatalogItemWithProvider(item.id, enrichment)
                     tmdbEnriched = true
                 }
             }
@@ -447,7 +438,7 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
     if (startupRefreshPending || catalogsLoadInProgress || traktDiscoveryRefreshInProgress || mdbListDiscoveryRefreshInProgress) {
         return
     }
-    if (isFocusedPreviewEnrichmentComplete(item.id)) return
+    if (isFocusedPreviewEnrichmentComplete(item)) return
     if (pendingTmdbEnrichItemId == item.id || pendingAdjacentPrefetchItemId == item.id) return
 
     pendingAdjacentPrefetchItemId = item.id
@@ -455,30 +446,18 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
     adjacentItemPrefetchJob = viewModelScope.launch {
         delay(HomeViewModel.EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS)
         if (pendingAdjacentPrefetchItemId != item.id) return@launch
-        if (isFocusedPreviewEnrichmentComplete(item.id)) return@launch
+        if (isFocusedPreviewEnrichmentComplete(item)) return@launch
 
         try {
             var tmdbEnriched = false
-            if (currentTmdbSettings.isActive) {
-                val tmdbId = withContext(Dispatchers.IO) {
-                    runCatching { tmdbService.ensureTmdbId(item.id, item.apiType) }.getOrNull()
-                }
-                val enrichment = if (tmdbId != null) {
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            tmdbMetadataService.fetchEnrichment(
-                                tmdbId = tmdbId,
-                                contentType = item.type
-                            )
-                        }.getOrNull()
-                    }
-                } else {
-                    null
+            if (currentTmdbSettings.isActive || item.type.isHomeTvContent()) {
+                val enrichment = withContext(Dispatchers.IO) {
+                    runCatching { fetchProviderEnrichmentForPreview(item) }.getOrNull()
                 }
                 if (enrichment != null) {
                     prefetchedTmdbIds.add(item.id)
                     prefetchedExternalMetaIds.add(item.id)
-                    updateCatalogItemWithTmdb(item.id, enrichment)
+                    updateCatalogItemWithProvider(item.id, enrichment)
                     tmdbEnriched = true
                 }
             }
@@ -509,8 +488,8 @@ internal fun HomeViewModel.preloadAdjacentItemPipeline(item: MetaPreview) {
     }
 }
 
-private fun HomeViewModel.updateCatalogItemWithTmdb(itemId: String, enrichment: TmdbEnrichment) {
-    pendingTmdbEnrichmentByItemId[itemId] = enrichment
+private fun HomeViewModel.updateCatalogItemWithProvider(itemId: String, enrichment: TvMetadataEnrichment) {
+    pendingProviderEnrichmentByItemId[itemId] = enrichment
     scheduleMetadataEnrichmentFlushPipeline()
 }
 
@@ -528,14 +507,14 @@ private fun HomeViewModel.scheduleMetadataEnrichmentFlushPipeline() {
 }
 
 private fun HomeViewModel.flushMetadataEnrichmentPipeline() {
-    if (pendingTmdbEnrichmentByItemId.isEmpty() &&
+    if (pendingProviderEnrichmentByItemId.isEmpty() &&
         pendingMetaEnrichmentByItemId.isEmpty()
     ) {
         return
     }
-    val tmdbByItemId = pendingTmdbEnrichmentByItemId.toMap()
+    val providerByItemId = pendingProviderEnrichmentByItemId.toMap()
     val metaByItemId = pendingMetaEnrichmentByItemId.toMap()
-    pendingTmdbEnrichmentByItemId.clear()
+    pendingProviderEnrichmentByItemId.clear()
     pendingMetaEnrichmentByItemId.clear()
 
     var changed = false
@@ -545,7 +524,7 @@ private fun HomeViewModel.flushMetadataEnrichmentPipeline() {
         row.items.forEachIndexed { index, currentItem ->
             val mergedItem = mergeFocusedItemEnrichment(
                 currentItem = currentItem,
-                tmdbEnrichment = tmdbByItemId[currentItem.id],
+                providerEnrichment = providerByItemId[currentItem.id],
                 externalMeta = metaByItemId[currentItem.id]
             )
             if (mergedItem != currentItem) {
@@ -578,26 +557,44 @@ internal fun mergeFocusedItemEnrichment(
         useDetails = true
     )
 ): MetaPreview {
+    return mergeFocusedItemEnrichment(
+        currentItem = currentItem,
+        providerEnrichment = tmdbEnrichment?.toTvMetadataEnrichment(),
+        externalMeta = externalMeta,
+        tmdbSettings = tmdbSettings
+    )
+}
+
+internal fun mergeFocusedItemEnrichment(
+    currentItem: MetaPreview,
+    providerEnrichment: TvMetadataEnrichment?,
+    externalMeta: Meta?,
+    tmdbSettings: TmdbSettings = TmdbSettings(
+        useArtwork = true,
+        useBasicInfo = true,
+        useDetails = true
+    )
+): MetaPreview {
     var merged = currentItem
-    if (tmdbEnrichment != null) {
+    if (providerEnrichment != null) {
         if (tmdbSettings.useArtwork) {
             merged = merged.copy(
-                background = tmdbEnrichment.backdrop ?: merged.background,
-                logo = tmdbEnrichment.logo ?: merged.logo
+                background = providerEnrichment.backdrop ?: merged.background,
+                logo = providerEnrichment.logo ?: merged.logo
             )
         }
         if (tmdbSettings.useBasicInfo) {
             merged = merged.copy(
-                name = tmdbEnrichment.localizedTitle ?: merged.name,
-                description = tmdbEnrichment.description ?: merged.description,
-                imdbRating = tmdbEnrichment.rating?.toFloat() ?: merged.imdbRating,
-                genres = if (tmdbEnrichment.genres.isNotEmpty()) tmdbEnrichment.genres else merged.genres
+                name = providerEnrichment.localizedTitle ?: merged.name,
+                description = providerEnrichment.description ?: merged.description,
+                imdbRating = providerEnrichment.rating?.toFloat() ?: merged.imdbRating,
+                genres = if (providerEnrichment.genres.isNotEmpty()) providerEnrichment.genres else merged.genres
             )
         }
         if (tmdbSettings.useDetails) {
             merged = merged.copy(
-                releaseInfo = tmdbEnrichment.releaseInfo ?: merged.releaseInfo,
-                language = tmdbEnrichment.language ?: merged.language
+                releaseInfo = providerEnrichment.releaseInfo ?: merged.releaseInfo,
+                language = providerEnrichment.language ?: merged.language
             )
         }
     }
@@ -626,10 +623,28 @@ internal fun HomeViewModel.mergeFocusedItemEnrichment(
 ): MetaPreview {
     return mergeFocusedItemEnrichment(
         currentItem = currentItem,
-        tmdbEnrichment = tmdbEnrichment,
+        providerEnrichment = tmdbEnrichment?.toTvMetadataEnrichment(),
         externalMeta = externalMeta,
         tmdbSettings = currentTmdbSettings
     )
+}
+
+internal suspend fun HomeViewModel.fetchProviderEnrichmentForPreview(item: MetaPreview): TvMetadataEnrichment? {
+    if (item.type.isHomeTvContent()) {
+        return tvMetadataRouter.fetchEnrichment(
+            TvMetadataRequest(
+                contentId = item.id,
+                fallbackContentId = null,
+                contentType = item.type
+            )
+        ).value
+    }
+
+    val tmdbId = tmdbService.ensureTmdbId(item.id, item.apiType) ?: return null
+    return tmdbMetadataService.fetchEnrichment(
+        tmdbId = tmdbId,
+        contentType = item.type
+    )?.toTvMetadataEnrichment()
 }
 
 internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
@@ -642,38 +657,13 @@ internal suspend fun HomeViewModel.enrichHeroItemsPipeline(
         items.map { item ->
             async(Dispatchers.IO) {
                 try {
-                    val tmdbId = tmdbService.ensureTmdbId(item.id, item.apiType) ?: return@async item
-                    val enrichment = tmdbMetadataService.fetchEnrichment(
-                        tmdbId = tmdbId,
-                        contentType = item.type
-                    ) ?: return@async item
-
-                    var enriched = item
-
-                    if (settings.useArtwork) {
-                        enriched = enriched.copy(
-                            background = enrichment.backdrop ?: enriched.background,
-                            logo = enrichment.logo ?: enriched.logo
-                        )
-                    }
-
-                    if (settings.useBasicInfo) {
-                        enriched = enriched.copy(
-                            name = enrichment.localizedTitle ?: enriched.name,
-                            description = enrichment.description ?: enriched.description,
-                            genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else enriched.genres,
-                            imdbRating = enrichment.rating?.toFloat() ?: enriched.imdbRating
-                        )
-                    }
-
-                    if (settings.useDetails) {
-                        enriched = enriched.copy(
-                            releaseInfo = enrichment.releaseInfo ?: enriched.releaseInfo,
-                            language = enrichment.language ?: enriched.language
-                        )
-                    }
-
-                    enriched
+                    val enrichment = fetchProviderEnrichmentForPreview(item) ?: return@async item
+                    mergeFocusedItemEnrichment(
+                        currentItem = item,
+                        providerEnrichment = enrichment,
+                        externalMeta = null,
+                        tmdbSettings = settings
+                    )
                 } catch (e: Exception) {
                     Log.w(HomeViewModel.TAG, "Hero enrichment failed for ${item.id}: ${e.message}")
                     item
@@ -814,11 +804,31 @@ internal fun applyTomatoesOverridesToMDBListSnapshot(
     }
 }
 
-private fun HomeViewModel.isFocusedPreviewEnrichmentComplete(itemId: String): Boolean {
-    return (!currentTmdbSettings.isActive && !externalMetaPrefetchEnabled) ||
-        itemId in prefetchedTmdbIds ||
-        itemId in prefetchedExternalMetaIds
+private fun HomeViewModel.isFocusedPreviewEnrichmentComplete(item: MetaPreview): Boolean {
+    return (!item.type.isHomeTvContent() && !currentTmdbSettings.isActive && !externalMetaPrefetchEnabled) ||
+        item.id in prefetchedTmdbIds ||
+        item.id in prefetchedExternalMetaIds
 }
+
+private fun TmdbEnrichment.toTvMetadataEnrichment(): TvMetadataEnrichment {
+    return TvMetadataEnrichment(
+        seriesTvdbId = null,
+        localizedTitle = localizedTitle,
+        description = description,
+        genres = genres,
+        backdrop = backdrop,
+        logo = logo,
+        poster = poster,
+        releaseInfo = releaseInfo,
+        rating = rating,
+        runtimeMinutes = runtimeMinutes,
+        ageRating = ageRating,
+        countries = countries,
+        language = language
+    )
+}
+
+private fun ContentType.isHomeTvContent(): Boolean = this == ContentType.SERIES || this == ContentType.TV
 
 internal fun HomeViewModel.replaceGridHeroItemsPipeline(
     gridItems: List<GridItem>,

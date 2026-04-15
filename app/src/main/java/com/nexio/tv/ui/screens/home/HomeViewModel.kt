@@ -7,9 +7,9 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.locale.AppLocaleResolver
-import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.sync.AccountSyncRefreshNotifier
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.data.local.DebugSettingsDataStore
@@ -164,7 +164,7 @@ class HomeViewModel @Inject constructor(
     internal var homeSnapshotPersistJob: Job? = null
     internal var pendingHomeSnapshotPersist: HomeCatalogSnapshotStore.Snapshot? = null
     internal var homeSnapshotPersistGeneration: Long = 0L
-    internal val pendingTmdbEnrichmentByItemId = linkedMapOf<String, TmdbEnrichment>()
+    internal val pendingProviderEnrichmentByItemId = linkedMapOf<String, TvMetadataEnrichment>()
     internal val pendingMetaEnrichmentByItemId = linkedMapOf<String, Meta>()
     internal val pendingTomatoesEnrichmentByItemId = linkedMapOf<String, Double>()
     internal val syntheticTomatoesOverridesByItemId = linkedMapOf<String, Double>()
@@ -693,7 +693,7 @@ class HomeViewModel @Inject constructor(
         deferredStartupRefreshJob?.cancel()
         metadataEnrichmentFlushJob?.cancel()
         homeSnapshotPersistJob?.cancel()
-        pendingTmdbEnrichmentByItemId.clear()
+        pendingProviderEnrichmentByItemId.clear()
         pendingMetaEnrichmentByItemId.clear()
         pendingHomeSnapshotPersist = null
         cancelInFlightCatalogLoads()
