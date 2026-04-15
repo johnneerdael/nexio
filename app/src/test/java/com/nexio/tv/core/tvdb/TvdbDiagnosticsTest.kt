@@ -1,31 +1,36 @@
 package com.nexio.tv.core.tvdb
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import com.nexio.tv.data.local.TvdbSettingsDataStore
+import com.nexio.tv.domain.model.TvdbSettings
+import com.nexio.tv.domain.model.TvdbValidationStatus
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
 class TvdbDiagnosticsTest {
 
     @Test
-    fun `fallback diagnostic stores reason and removes credential material`() {
-        val recorder = TvdbDiagnosticsRecorder()
+    fun `fallback diagnostic stores sanitized reason without credential material`() = runTest {
+        val dataStore = mockk<TvdbSettingsDataStore>(relaxed = true) {
+            every { settings } returns flowOf(TvdbSettings())
+        }
+        val fallback = TvdbProviderFallback(settingsDataStore = dataStore)
 
-        recorder.recordFallback(
-            TvdbFallbackDiagnostic(
-                reason = TvdbFallbackReason.INVALID_CREDENTIALS,
-                remoteId = "tt0944947",
-                sanitizedMessage = "401 for key tvdb-key with pin subscriber-pin token tvdb-token"
+        coEvery {
+            dataStore.saveValidationFailure(any(), any())
+        } returns Unit
+
+        fallback.recordFallback("401 for key tvdb-key with pin subscriber-pin token tvdb-token")
+
+        coVerify(exactly = 1) {
+            dataStore.saveValidationFailure(
+                status = TvdbValidationStatus.FALLBACK_ACTIVE,
+                lastFailure = TvdbProviderFallback.REASON_AUTH_UNAVAILABLE
             )
-        )
-
-        val latest = recorder.latestFallback()
-
-        assertEquals(TvdbFallbackReason.INVALID_CREDENTIALS, latest?.reason)
-        assertEquals("tt0944947", latest?.remoteId)
-        assertFalse(latest?.sanitizedMessage.orEmpty().contains("tvdb-key"))
-        assertFalse(latest?.sanitizedMessage.orEmpty().contains("subscriber-pin"))
-        assertFalse(latest?.sanitizedMessage.orEmpty().contains("tvdb-token"))
-        assertTrue(latest?.sanitizedMessage.orEmpty().contains("credentials"))
+        }
     }
 }
