@@ -277,14 +277,14 @@ class ProfileSettingsScopeContractTest {
     fun `account snapshot sync only reads and writes primary profile tracking auth`() {
         val source = accountSettingsSyncService.readText()
 
-        assertTrue(source.contains("private const val PRIMARY_PROFILE_ID = 1"))
-        assertTrue(source.contains("traktAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).drop(1).map { Unit }"))
-        assertTrue(source.contains("simklAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).drop(1).map { Unit }"))
-        assertTrue(source.contains("traktAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).first()"))
-        assertTrue(source.contains("simklAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).first()"))
-        assertTrue(source.contains("traktAuthDataStore.clearAuth(PRIMARY_PROFILE_ID)"))
-        assertTrue(source.contains("simklAuthDataStore.clearAuth(PRIMARY_PROFILE_ID)"))
-        assertTrue(source.contains("profileId = PRIMARY_PROFILE_ID"))
+        assertTrue(source.contains("profileModeRouter.defaultLegacyProfileId()"))
+        assertTrue(source.contains("traktAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).drop(1).map { Unit }"))
+        assertTrue(source.contains("simklAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).drop(1).map { Unit }"))
+        assertTrue(source.contains("traktAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()"))
+        assertTrue(source.contains("simklAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()"))
+        assertTrue(source.contains("traktAuthDataStore.clearAuth(profileModeRouter.defaultLegacyProfileId())"))
+        assertTrue(source.contains("simklAuthDataStore.clearAuth(profileModeRouter.defaultLegacyProfileId())"))
+        assertTrue(source.contains("profileId = profileModeRouter.defaultLegacyProfileId()"))
         assertTrue(source.contains("path == \"integrations.traktAuth\""))
         assertTrue(source.contains("path == \"integrations.simklAuth\""))
     }
@@ -327,7 +327,7 @@ class ProfileSettingsScopeContractTest {
         val boundarySource = profileBoundary.readText()
         val routerSource = profileModeRouter.readText()
 
-        assertTrue(routerSource.contains("1 -> ProfileModeRoute.DefaultLegacyRoute"))
+        assertTrue(routerSource.contains("DEFAULT_LEGACY_PROFILE_ID -> ProfileModeRoute.DefaultLegacyRoute"))
         assertTrue(routerSource.contains("in 2..4 -> ProfileModeRoute.SecondaryProfileRoute(profileId)"))
         assertTrue(boundarySource.contains("ProfileBoundary only accepts secondary profiles 2-4"))
         assertTrue(boundarySource.contains("ProfileCacheScope.SharedArtwork"))

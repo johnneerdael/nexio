@@ -11,11 +11,21 @@ sealed interface ProfileModeRoute {
 
 @Singleton
 class ProfileModeRouter @Inject constructor() {
+    companion object {
+        const val DEFAULT_LEGACY_PROFILE_ID = 1
+    }
+
     fun routeFor(profileId: Int): ProfileModeRoute {
         return when (profileId) {
-            1 -> ProfileModeRoute.DefaultLegacyRoute
+            DEFAULT_LEGACY_PROFILE_ID -> ProfileModeRoute.DefaultLegacyRoute
             in 2..4 -> ProfileModeRoute.SecondaryProfileRoute(profileId)
             else -> ProfileModeRoute.InvalidProfileRoute(profileId)
         }
+    }
+
+    fun defaultLegacyProfileId(): Int = DEFAULT_LEGACY_PROFILE_ID
+
+    fun isDefaultLegacy(profileId: Int): Boolean {
+        return routeFor(profileId) is ProfileModeRoute.DefaultLegacyRoute
     }
 }
