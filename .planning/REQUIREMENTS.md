@@ -83,13 +83,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PREF-05 | Phase 6 | Verified with debt |
 | PREF-06 | Phase 6 | Verified |
 | CACHE-01 | Phase 6 | Verified |
-| PREF-02 | Phase 7 | Pending |
-| PREF-03 | Phase 7 | Pending |
-| PREF-07 | Phase 7 | Pending |
-| META-01 | Phase 7 | Pending |
-| META-02 | Phase 7 | Pending |
-| META-04 | Phase 7 | Pending |
-| UX-01 | Phase 7 | Pending |
+| PREF-02 | Phase 7 | Verified for Phase 7 scope |
+| PREF-03 | Phase 7 | Verified |
+| PREF-07 | Phase 7 | Verified |
+| META-01 | Phase 7 | Verified |
+| META-02 | Phase 7 | Verified |
+| META-04 | Phase 7 | Verified |
+| UX-01 | Phase 7 | Verified |
 | AIR-01 | Phase 8 | Pending |
 | AIR-02 | Phase 8 | Pending |
 | AIR-03 | Phase 8 | Pending |
