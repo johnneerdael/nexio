@@ -51,4 +51,40 @@ class PosterRatingsUrlResolverTest {
             resolved
         )
     }
+
+    @Test
+    fun `top posters url is built from tvdb id when source poster is blank`() {
+        val resolved = resolver.resolvePosterUrl(
+            originalPosterUrl = null,
+            contentId = "tvdb:121361",
+            contentType = ContentType.SERIES,
+            activeProvider = PosterRatingsUrlResolver.ActiveProvider(
+                provider = PosterRatingsProvider.TOP_POSTERS,
+                apiKey = "top-key"
+            )
+        )
+
+        assertEquals(
+            "https://api.top-streaming.stream/top-key/tvdb/poster/121361.jpg",
+            resolved
+        )
+    }
+
+    @Test
+    fun `rpdb leaves tvdb id poster unchanged`() {
+        val resolved = resolver.resolvePosterUrl(
+            originalPosterUrl = "https://tvdb.example/poster.jpg",
+            contentId = "tvdb:121361",
+            contentType = ContentType.SERIES,
+            activeProvider = PosterRatingsUrlResolver.ActiveProvider(
+                provider = PosterRatingsProvider.RPDB,
+                apiKey = "rpdb-key"
+            )
+        )
+
+        assertEquals(
+            "https://tvdb.example/poster.jpg",
+            resolved
+        )
+    }
 }
