@@ -597,6 +597,40 @@ class ContinueWatchingSnapshotServiceMutationTest {
     }
 
     @Test
+    fun `rescheduleAirTimeAlarmFromSnapshot refreshes immediately for overdue persisted scheduled reemit`() = runTest {
+        val scheduler = RecordingAirScheduler()
+        var refreshCount = 0
+        val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeRemoteSnapshotLoaded() } returns flowOf(false)
+            every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+            every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+            coEvery { refreshNow() } answers { refreshCount++ }
+        }
+        val service = buildServiceWithAirScheduler(
+            airScheduler = scheduler,
+            trackingProgressService = trackingProgressService
+        )
+        val nowMs = System.currentTimeMillis()
+        val overdue = nextUp(
+            contentId = "show-overdue-restore",
+            firstAiredMs = nowMs - 1_000L,
+            tvdbAvailabilityInstantMs = nowMs - 1_000L,
+            episode = 4
+        )
+
+        rawSnapshotFlow(service).value = ContinueWatchingSnapshot(
+            scheduledReemit = listOf(overdue),
+            updatedAtMs = nowMs - 60_000L
+        )
+
+        service.rescheduleAirTimeAlarmFromSnapshot()
+
+        awaitCondition { refreshCount == 1 }
+        assertTrue(rawSnapshotFlow(service).value.nextUpItems.isEmpty())
+        assertEquals(listOf(overdue), rawSnapshotFlow(service).value.scheduledReemit)
+    }
+
+    @Test
     fun `reemit refresh failure keeps withheld row and schedules retry`() {
         val scheduler = RecordingAirScheduler()
         val failure = IllegalStateException("refresh failed")
