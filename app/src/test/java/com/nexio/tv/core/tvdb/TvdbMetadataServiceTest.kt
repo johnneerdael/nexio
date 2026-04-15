@@ -157,6 +157,24 @@ class TvdbMetadataServiceTest {
     }
 
     @Test
+    fun `series mapping preserves timing source fields`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+
+        coEvery {
+            tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, "translations", false)
+        } returns Response.success(TvdbSeriesExtendedResponse(data = fullSeriesRecord()))
+
+        val enrichment = service.fetchSeriesEnrichment(identity, language = "en-US")
+
+        assertNotNull(enrichment)
+        assertEquals("HBO", enrichment?.originalNetwork)
+        assertEquals("HBO", enrichment?.latestNetwork)
+        assertEquals("HBO", enrichment?.platformName)
+    }
+
+    @Test
     fun `fetch episode enrichment maps TVDB episodes by season and episode`() = runTest {
         val tvdbApi = mockk<TvdbApi>()
         val service = tvdbService(tvdbApi)
