@@ -8,6 +8,8 @@ import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.core.tvdb.TvMetadataRequest
+import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
@@ -69,6 +71,10 @@ import javax.inject.Inject
 
 private const val TAG = "MetaDetailsViewModel"
 
+private fun missingTvMetadataRouterForManualConstruction(): TvMetadataRouter {
+    error("TvMetadataRouter must be provided to MetaDetailsViewModel")
+}
+
 private fun debugLog(tag: String, message: String) {
     if (!BuildConfig.DEBUG) return
     runCatching { Log.d(tag, message) }
@@ -107,6 +113,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val imdbSettingsDataStore: ImdbSettingsDataStore,
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
+    private val tvMetadataRouter: TvMetadataRouter = missingTvMetadataRouterForManualConstruction(),
     private val mdbListRepository: MDBListRepository,
     private val episodeRatingsSelectionRepository: EpisodeRatingsSelectionRepository,
     private val libraryRepository: LibraryRepository,
@@ -1244,58 +1251,83 @@ class MetaDetailsViewModel @Inject constructor(
 
     private suspend fun enrichMeta(meta: Meta): Meta {
         val settings = tmdbSettingsDataStore.settings.first()
-        if (!settings.isActive) return meta
-
         val tmdbContentType = resolveTmdbContentType(meta)
-        val tmdbLookupType = tmdbContentType.toApiString()
-        val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbLookupType)
-            ?: tmdbService.ensureTmdbId(itemId, itemType)
-            ?: return meta
-
-        val enrichment = tmdbMetadataService.fetchEnrichment(
-            tmdbId = tmdbId,
-            contentType = tmdbContentType
-        )
+        val isTvContent = tmdbContentType == ContentType.SERIES || tmdbContentType == ContentType.TV
+        val tvEnrichment = if (isTvContent) {
+            tvMetadataRouter.fetchEnrichment(
+                TvMetadataRequest(
+                    contentId = meta.id,
+                    fallbackContentId = itemId,
+                    contentType = tmdbContentType
+                )
+            ).value
+        } else {
+            null
+        }
+        val tmdbEnrichment = if (isTvContent) {
+            null
+        } else {
+            if (!settings.isActive) return meta
+            val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbContentType.toApiString())
+                ?: tmdbService.ensureTmdbId(itemId, itemType)
+                ?: return meta
+            tmdbMetadataService.fetchEnrichment(
+                tmdbId = tmdbId,
+                contentType = tmdbContentType
+            )
+        }
 
         var updated = meta
+        val localizedTitle = tvEnrichment?.localizedTitle ?: tmdbEnrichment?.localizedTitle
+        val description = tvEnrichment?.description ?: tmdbEnrichment?.description
+        val genres = tvEnrichment?.genres?.takeIf { it.isNotEmpty() }
+            ?: tmdbEnrichment?.genres?.takeIf { it.isNotEmpty() }
+        val backdrop = tvEnrichment?.backdrop ?: tmdbEnrichment?.backdrop
+        val logo = tvEnrichment?.logo ?: tmdbEnrichment?.logo
+        val releaseInfo = tvEnrichment?.releaseInfo ?: tmdbEnrichment?.releaseInfo
+        val rating = tvEnrichment?.rating ?: tmdbEnrichment?.rating
+        val runtimeMinutes = tvEnrichment?.runtimeMinutes ?: tmdbEnrichment?.runtimeMinutes
+        val ageRating = tvEnrichment?.ageRating ?: tmdbEnrichment?.ageRating
+        val countries = tvEnrichment?.countries ?: tmdbEnrichment?.countries
+        val language = tvEnrichment?.language ?: tmdbEnrichment?.language
 
         // Group: Artwork (logo, backdrop)
-        if (enrichment != null && settings.useArtwork) {
+        if ((tvEnrichment != null || tmdbEnrichment != null) && settings.useArtwork) {
             updated = updated.copy(
-                background = enrichment.backdrop ?: updated.background,
-                logo = enrichment.logo ?: updated.logo
+                background = backdrop ?: updated.background,
+                logo = logo ?: updated.logo
             )
         }
 
         // Group: Basic Info (description, genres, rating)
-        if (enrichment != null && settings.useBasicInfo) {
+        if ((tvEnrichment != null || tmdbEnrichment != null) && settings.useBasicInfo) {
             updated = updated.copy(
-                name = enrichment.localizedTitle ?: updated.name,
-                description = enrichment.description ?: updated.description
+                name = localizedTitle ?: updated.name,
+                description = description ?: updated.description
             )
-            if (enrichment.genres.isNotEmpty()) {
-                updated = updated.copy(genres = enrichment.genres)
+            if (!genres.isNullOrEmpty()) {
+                updated = updated.copy(genres = genres)
             }
-            updated = updated.copy(imdbRating = enrichment.rating?.toFloat() ?: updated.imdbRating)
+            updated = updated.copy(imdbRating = rating?.toFloat() ?: updated.imdbRating)
         }
 
         // Group: Details (runtime, release info, country, language)
-        if (enrichment != null && settings.useDetails) {
+        if ((tvEnrichment != null || tmdbEnrichment != null) && settings.useDetails) {
             updated = updated.copy(
-                runtime = enrichment.runtimeMinutes?.toString() ?: updated.runtime,
-                releaseInfo = enrichment.releaseInfo ?: updated.releaseInfo,
-                ageRating = enrichment.ageRating ?: updated.ageRating,
-                country = enrichment.countries?.joinToString(", ") ?: updated.country,
-                language = enrichment.language ?: updated.language
+                runtime = runtimeMinutes?.toString() ?: updated.runtime,
+                releaseInfo = releaseInfo ?: updated.releaseInfo,
+                ageRating = ageRating ?: updated.ageRating,
+                country = countries?.joinToString(", ") ?: updated.country,
+                language = language ?: updated.language
             )
         }
 
         // Group: Credits (cast with photos, director, writer)
-        if (enrichment != null && settings.useCredits) {
+        if (tmdbEnrichment != null && settings.useCredits) {
             val peopleCredits = buildList {
-                addAll(enrichment.directorMembers)
-                addAll(enrichment.writerMembers)
-                addAll(enrichment.castMembers)
+                addAll(tmdbEnrichment.directorMembers)
+                addAll(tmdbEnrichment.writerMembers)
+                addAll(tmdbEnrichment.castMembers)
             }
                 .filter { it.name.isNotBlank() }
                 .distinctBy { it.tmdbId ?: (it.name.lowercase() + "|" + (it.character ?: "")) }
@@ -1303,54 +1335,27 @@ class MetaDetailsViewModel @Inject constructor(
             if (peopleCredits.isNotEmpty()) {
                 updated = updated.copy(
                     castMembers = peopleCredits,
-                    cast = enrichment.castMembers.takeIf { it.isNotEmpty() }?.map { it.name } ?: updated.cast
+                    cast = tmdbEnrichment.castMembers.takeIf { it.isNotEmpty() }?.map { it.name } ?: updated.cast
                 )
             }
             updated = updated.copy(
-                director = if (enrichment.director.isNotEmpty()) enrichment.director else updated.director,
-                writer = if (enrichment.writer.isNotEmpty()) enrichment.writer else updated.writer
+                director = if (tmdbEnrichment.director.isNotEmpty()) tmdbEnrichment.director else updated.director,
+                writer = if (tmdbEnrichment.writer.isNotEmpty()) tmdbEnrichment.writer else updated.writer
             )
         }
 
         // Group: Productions
-        if (enrichment != null && settings.useProductions && enrichment.productionCompanies.isNotEmpty()) {
-            updated = updated.copy(productionCompanies = enrichment.productionCompanies)
+        if (tmdbEnrichment != null && settings.useProductions && tmdbEnrichment.productionCompanies.isNotEmpty()) {
+            updated = updated.copy(productionCompanies = tmdbEnrichment.productionCompanies)
         }
 
         // Group: Networks
-        if (enrichment != null && settings.useNetworks && enrichment.networks.isNotEmpty()) {
-            updated = updated.copy(networks = enrichment.networks)
+        if (tmdbEnrichment != null && settings.useNetworks && tmdbEnrichment.networks.isNotEmpty()) {
+            updated = updated.copy(networks = tmdbEnrichment.networks)
         }
 
-        // Group: Episodes (titles, overviews, thumbnails, runtime)
-        if (settings.useEpisodes && meta.apiType in listOf("series", "tv")) {
-            val seasonNumbers = meta.videos.mapNotNull { it.season }.distinct()
-            val episodeMap = tmdbMetadataService.fetchEpisodeEnrichment(
-                tmdbId = tmdbId,
-                seasonNumbers = seasonNumbers
-            )
-            if (episodeMap.isNotEmpty()) {
-                updated = updated.copy(
-                    videos = meta.videos.map { video ->
-                        val season = video.season
-                        val episode = video.episode
-                        val key = if (season != null && episode != null) season to episode else null
-                        val ep = key?.let { episodeMap[it] }
-
-                        video.copy(
-                            title = ep?.title ?: video.title,
-                            overview = ep?.overview ?: video.overview,
-                            released = ep?.airDate ?: video.released,
-                            thumbnail = ep?.thumbnail ?: video.thumbnail,
-                            runtime = ep?.runtimeMinutes
-                        )
-                    }
-                )
-            }
-        }
-
-        if (enrichment?.collectionId != null) {
-            loadCollectionAsync(enrichment.collectionId, enrichment.collectionName, settings)
+        if (tmdbEnrichment?.collectionId != null) {
+            loadCollectionAsync(tmdbEnrichment.collectionId, tmdbEnrichment.collectionName, settings)
         }
 
         return updated
