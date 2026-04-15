@@ -474,7 +474,8 @@ private fun nextUpRefForContinueWatching(
     return ContinueWatchingNextUpRef(
         contentId = entry.contentId,
         activityAtMs = entry.activityAtMs,
-        firstAiredMs = entry.firstAiredMs
+        firstAiredMs = entry.firstAiredMs,
+        availabilityInstantMs = entry.tvdbAvailabilityInstantMs
     )
 }
 
@@ -496,7 +497,12 @@ private fun com.nexio.tv.data.repository.TrackingNextUpEntry.toContinueWatchingN
     displayMetadataByItemKey: Map<String, HomeDisplayMetadata>,
     nowMs: Long
 ): ContinueWatchingItem.NextUp {
-    val hasAired = com.nexio.tv.data.repository.AirDateGate.isAired(firstAiredMs, firstAired, nowMs)
+    val hasAired = com.nexio.tv.data.repository.AirDateGate.isAired(
+        tvdbAvailabilityInstantMs,
+        firstAiredMs,
+        firstAired,
+        nowMs
+    )
     val releaseDate = if (!hasAired) parseEpisodeReleaseDate(firstAired) else null
     val displayMetadata = displayMetadataByItemKey[homeDisplayItemKey(contentType, contentId)]
     return ContinueWatchingItem.NextUp(

@@ -425,151 +425,158 @@ class AndroidTvFeedCatalogService @Inject constructor(
             .map { catalog -> catalog.toCatalogRow() }
     }
 
-    private fun buildSyntheticRow(
-        addonId: String,
-        addonName: String,
-        addonBaseUrl: String,
-        catalogId: String,
-        catalogName: String,
-        type: ContentType,
-        items: List<MetaPreview>
-    ): CatalogRow {
-        return CatalogRow(
-            addonId = addonId,
-            addonName = addonName,
-            addonBaseUrl = addonBaseUrl,
-            catalogId = catalogId,
-            catalogName = catalogName,
-            type = type,
-            items = items,
-            isLoading = false,
-            hasMore = false,
-            supportsSkip = false
-        )
-    }
-
     private fun buildContinueWatchingItems(snapshot: ContinueWatchingSnapshot): List<MetaPreview> {
-        return buildMixedContinueWatchingTimeline(
-            resumeItems = snapshot.resumeItems,
-            nextUpItems = snapshot.nextUpItems,
-            resumeRef = ::resumeRefForAndroidTvFeed,
-            nextUpRef = ::nextUpRefForAndroidTvFeed
-        ).map { row ->
-            when (row) {
-                is ContinueWatchingTimelineRow.Resume -> row.value.toContinueWatchingMetaPreview()
-                is ContinueWatchingTimelineRow.NextUp -> row.value.toMetaPreview()
-            }
+        return buildContinueWatchingItemsForAndroidTvFeed(snapshot)
+    }
+}
+
+internal fun buildContinueWatchingItemsForAndroidTvFeed(
+    snapshot: ContinueWatchingSnapshot
+): List<MetaPreview> {
+    return buildMixedContinueWatchingTimeline(
+        resumeItems = snapshot.resumeItems,
+        nextUpItems = snapshot.nextUpItems,
+        resumeRef = ::resumeRefForAndroidTvFeed,
+        nextUpRef = ::nextUpRefForAndroidTvFeed
+    ).map { row ->
+        when (row) {
+            is ContinueWatchingTimelineRow.Resume -> row.value.toContinueWatchingMetaPreview()
+            is ContinueWatchingTimelineRow.NextUp -> row.value.toMetaPreview()
         }
     }
+}
 
-    private fun WatchProgress.toContinueWatchingMetaPreview(): MetaPreview {
-        val isMovie = contentType.equals("movie", ignoreCase = true)
-        val artwork = backdrop ?: poster
-        return MetaPreview(
-            id = contentId,
-            type = if (isMovie) ContentType.MOVIE else ContentType.SERIES,
-            rawType = contentType,
-            name = name,
-            poster = artwork,
-            posterShape = if (!backdrop.isNullOrBlank()) PosterShape.LANDSCAPE else PosterShape.POSTER,
-            background = backdrop ?: poster,
-            logo = logo,
-            description = episodeTitle,
-            releaseInfo = buildString {
-                append("Resume")
-                val percent = ((progressPercent ?: progressPercentage * 100f).toInt()).coerceIn(0, 100)
-                append(" • ")
-                append(percent)
-                append('%')
-            },
-            imdbRating = null,
-            genres = emptyList()
-        )
-    }
+private fun WatchProgress.toContinueWatchingMetaPreview(): MetaPreview {
+    val isMovie = contentType.equals("movie", ignoreCase = true)
+    val artwork = backdrop ?: poster
+    return MetaPreview(
+        id = contentId,
+        type = if (isMovie) ContentType.MOVIE else ContentType.SERIES,
+        rawType = contentType,
+        name = name,
+        poster = artwork,
+        posterShape = if (!backdrop.isNullOrBlank()) PosterShape.LANDSCAPE else PosterShape.POSTER,
+        background = backdrop ?: poster,
+        logo = logo,
+        description = episodeTitle,
+        releaseInfo = buildString {
+            append("Resume")
+            val percent = ((progressPercent ?: progressPercentage * 100f).toInt()).coerceIn(0, 100)
+            append(" • ")
+            append(percent)
+            append('%')
+        },
+        imdbRating = null,
+        genres = emptyList()
+    )
+}
 
-    private fun com.nexio.tv.data.repository.TrackingNextUpEntry.toMetaPreview(): MetaPreview {
-        val episodeSuffix = buildString {
-            append("S")
-            append(season)
-            append("E")
-            append(episode)
-            if (!episodeTitle.isNullOrBlank()) {
-                append(" ")
-                append(episodeTitle)
-            }
-        }
-        return MetaPreview(
-            id = contentId,
-            type = ContentType.SERIES,
-            rawType = contentType,
-            name = "$name • $episodeSuffix",
-            poster = poster ?: backdrop,
-            posterShape = PosterShape.LANDSCAPE,
-            background = backdrop ?: poster,
-            logo = logo,
-            description = episodeTitle,
-            releaseInfo = firstAired,
-            imdbRating = null,
-            genres = emptyList()
-        )
-    }
-
-    private fun resumeRefForAndroidTvFeed(progress: WatchProgress): ContinueWatchingResumeRef {
-        val suppressNextUp = progress.season != null &&
-            progress.episode != null &&
-            (progress.contentType.equals("series", ignoreCase = true) || progress.contentType.equals("tv", ignoreCase = true))
-        return ContinueWatchingResumeRef(
-            contentId = progress.contentId,
-            activityAtMs = progress.lastWatched,
-            suppressNextUp = suppressNextUp
-        )
-    }
-
-    private fun nextUpRefForAndroidTvFeed(
-        entry: com.nexio.tv.data.repository.TrackingNextUpEntry
-    ): ContinueWatchingNextUpRef {
-        return ContinueWatchingNextUpRef(
-            contentId = entry.contentId,
-            activityAtMs = entry.activityAtMs,
-            firstAiredMs = entry.firstAiredMs
-        )
-    }
-
-    private fun TraktCustomListCatalog.toCatalogRow(): CatalogRow {
-        return buildSyntheticRow(
-            addonId = TRAKT_RAIL_ADDON_ID,
-            addonName = TRAKT_RAIL_ADDON_NAME,
-            addonBaseUrl = TRAKT_RAIL_ADDON_BASE_URL,
-            catalogId = catalogId,
-            catalogName = catalogName,
-            type = type,
-            items = items
-        )
-    }
-
-    private fun MDBListCustomCatalog.toCatalogRow(): CatalogRow {
-        return buildSyntheticRow(
-            addonId = MDBLIST_RAIL_ADDON_ID,
-            addonName = MDBLIST_RAIL_ADDON_NAME,
-            addonBaseUrl = MDBLIST_RAIL_ADDON_BASE_URL,
-            catalogId = catalogId,
-            catalogName = catalogName,
-            type = type,
-            items = items
-        )
-    }
-
-    private fun CatalogDescriptor.isSearchOnlyCatalog(): Boolean {
-        return extra.any { entry -> entry.name.equals("search", ignoreCase = true) && entry.isRequired }
-    }
-
-    private fun String.displayLabel(): String {
-        return replaceFirstChar { ch ->
-            if (ch.isLowerCase()) ch.titlecase() else ch.toString()
+private fun com.nexio.tv.data.repository.TrackingNextUpEntry.toMetaPreview(): MetaPreview {
+    val episodeSuffix = buildString {
+        append("S")
+        append(season)
+        append("E")
+        append(episode)
+        if (!episodeTitle.isNullOrBlank()) {
+            append(" ")
+            append(episodeTitle)
         }
     }
+    return MetaPreview(
+        id = contentId,
+        type = ContentType.SERIES,
+        rawType = contentType,
+        name = "$name • $episodeSuffix",
+        poster = poster ?: backdrop,
+        posterShape = PosterShape.LANDSCAPE,
+        background = backdrop ?: poster,
+        logo = logo,
+        description = episodeTitle,
+        releaseInfo = firstAired,
+        imdbRating = null,
+        genres = emptyList()
+    )
+}
 
-    private fun catalogGlobalKey(addonId: String, type: String, catalogId: String): String {
-        return "${addonId}_${type}_${catalogId}"
+private fun resumeRefForAndroidTvFeed(progress: WatchProgress): ContinueWatchingResumeRef {
+    val suppressNextUp = progress.season != null &&
+        progress.episode != null &&
+        (progress.contentType.equals("series", ignoreCase = true) || progress.contentType.equals("tv", ignoreCase = true))
+    return ContinueWatchingResumeRef(
+        contentId = progress.contentId,
+        activityAtMs = progress.lastWatched,
+        suppressNextUp = suppressNextUp
+    )
+}
+
+private fun nextUpRefForAndroidTvFeed(
+    entry: com.nexio.tv.data.repository.TrackingNextUpEntry
+): ContinueWatchingNextUpRef {
+    return ContinueWatchingNextUpRef(
+        contentId = entry.contentId,
+        activityAtMs = entry.activityAtMs,
+        firstAiredMs = entry.firstAiredMs,
+        availabilityInstantMs = entry.tvdbAvailabilityInstantMs
+    )
+}
+
+private fun buildSyntheticRow(
+    addonId: String,
+    addonName: String,
+    addonBaseUrl: String,
+    catalogId: String,
+    catalogName: String,
+    type: ContentType,
+    items: List<MetaPreview>
+): CatalogRow {
+    return CatalogRow(
+        addonId = addonId,
+        addonName = addonName,
+        addonBaseUrl = addonBaseUrl,
+        catalogId = catalogId,
+        catalogName = catalogName,
+        type = type,
+        items = items,
+        isLoading = false,
+        hasMore = false,
+        supportsSkip = false
+    )
+}
+
+private fun TraktCustomListCatalog.toCatalogRow(): CatalogRow {
+    return buildSyntheticRow(
+        addonId = TRAKT_RAIL_ADDON_ID,
+        addonName = TRAKT_RAIL_ADDON_NAME,
+        addonBaseUrl = TRAKT_RAIL_ADDON_BASE_URL,
+        catalogId = catalogId,
+        catalogName = catalogName,
+        type = type,
+        items = items
+    )
+}
+
+private fun MDBListCustomCatalog.toCatalogRow(): CatalogRow {
+    return buildSyntheticRow(
+        addonId = MDBLIST_RAIL_ADDON_ID,
+        addonName = MDBLIST_RAIL_ADDON_NAME,
+        addonBaseUrl = MDBLIST_RAIL_ADDON_BASE_URL,
+        catalogId = catalogId,
+        catalogName = catalogName,
+        type = type,
+        items = items
+    )
+}
+
+private fun CatalogDescriptor.isSearchOnlyCatalog(): Boolean {
+    return extra.any { entry -> entry.name.equals("search", ignoreCase = true) && entry.isRequired }
+}
+
+private fun String.displayLabel(): String {
+    return replaceFirstChar { ch ->
+        if (ch.isLowerCase()) ch.titlecase() else ch.toString()
     }
+}
+
+private fun catalogGlobalKey(addonId: String, type: String, catalogId: String): String {
+    return "${addonId}_${type}_${catalogId}"
 }

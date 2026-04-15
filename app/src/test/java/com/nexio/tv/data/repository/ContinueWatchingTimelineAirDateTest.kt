@@ -284,7 +284,8 @@ class ContinueWatchingTimelineAirDateTest {
         return ContinueWatchingNextUpRef(
             contentId = entry.contentId,
             activityAtMs = entry.activityAtMs,
-            firstAiredMs = entry.firstAiredMs
+            firstAiredMs = entry.firstAiredMs,
+            availabilityInstantMs = entry.tvdbAvailabilityInstantMs
         )
     }
 
