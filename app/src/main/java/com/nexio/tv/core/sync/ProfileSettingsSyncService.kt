@@ -13,7 +13,11 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.profile.ProfileModeRoute
+import com.nexio.tv.core.profile.ProfileModeRouter
+import com.nexio.tv.core.profile.ProfileSettingsDomain
 import com.nexio.tv.data.local.ProfileDataStoreFactory
 import com.nexio.tv.data.remote.supabase.ProfileSettingsBlobResponse
 import io.github.jan.supabase.postgrest.Postgrest
@@ -63,7 +67,9 @@ class ProfileSettingsSyncService @Inject constructor(
     private val authManager: AuthManager,
     private val postgrest: Postgrest,
     private val profileManager: ProfileManager,
-    private val profileDataStoreFactory: ProfileDataStoreFactory
+    private val profileDataStoreFactory: ProfileDataStoreFactory,
+    private val profileModeRouter: ProfileModeRouter,
+    private val profileBoundary: ProfileBoundary
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val syncMutex = Mutex()
@@ -88,23 +94,28 @@ class ProfileSettingsSyncService @Inject constructor(
                 .distinctUntilChanged()
                 .flatMapLatest { profileId ->
                     flow {
-                        if (profileId == 1) {
+                        val route = profileModeRouter.routeFor(profileId)
+                        if (route is ProfileModeRoute.DefaultLegacyRoute || route is ProfileModeRoute.InvalidProfileRoute) {
                             return@flow
                         }
-                        val pullResult = pullBlobForProfile(profileId)
+                        val scopedProfileId = profileBoundary.settingsRoute(
+                            route as ProfileModeRoute.SecondaryProfileRoute,
+                            ProfileSettingsDomain.CATALOGS
+                        ).profileId
+                        val pullResult = pullBlobForProfile(scopedProfileId)
                         if (pullResult.isFailure) {
                             Log.w(
                                 TAG,
-                                "Skipping settings observer push for profile $profileId because hydration failed",
+                                "Skipping settings observer push for profile $scopedProfileId because hydration failed",
                                 pullResult.exceptionOrNull()
                             )
                             return@flow
                         }
                         emitAll(
-                            observeProfileSettings(profileId)
+                            observeProfileSettings(scopedProfileId)
                                 .drop(1)
                                 .debounce(2000)
-                                .map { profileId }
+                                .map { scopedProfileId }
                         )
                     }
                 }
@@ -121,13 +132,22 @@ class ProfileSettingsSyncService @Inject constructor(
     }
 
     suspend fun pushBlobForProfile(profileId: Int): Result<Unit> = withContext(Dispatchers.IO) {
-        if (profileId == 1) {
-            return@withContext Result.success(Unit)
+        val route = profileModeRouter.routeFor(profileId)
+        when (route) {
+            ProfileModeRoute.DefaultLegacyRoute -> return@withContext Result.success(Unit)
+            is ProfileModeRoute.InvalidProfileRoute -> return@withContext Result.failure(
+                IllegalArgumentException("Invalid profile id ${route.profileId}")
+            )
+            is ProfileModeRoute.SecondaryProfileRoute -> Unit
         }
+        val scopedProfileId = profileBoundary.settingsRoute(
+            route,
+            ProfileSettingsDomain.CATALOGS
+        ).profileId
 
         syncMutex.withLock {
             try {
-                val blob = exportSettingsBlob(profileId)
+                val blob = exportSettingsBlob(scopedProfileId)
                 val signature = buildSettingsSignature(blob)
                 if (signature == skipNextPushSignature) {
                     skipNextPushSignature = null
@@ -138,25 +158,34 @@ class ProfileSettingsSyncService @Inject constructor(
                     postgrest.rpc(
                         "sync_push_profile_settings_blob",
                         buildJsonObject {
-                            put("p_profile_id", profileId)
+                            put("p_profile_id", scopedProfileId)
                             put("p_settings_json", blob.toString())
                             put("p_platform", "tv")
                         }
                     )
                 }
-                Log.d(TAG, "Pushed settings blob for profile $profileId")
+                Log.d(TAG, "Pushed settings blob for profile $scopedProfileId")
                 Result.success(Unit)
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to push settings blob for profile $profileId", e)
+                Log.e(TAG, "Failed to push settings blob for profile $scopedProfileId", e)
                 Result.failure(e)
             }
         }
     }
 
     suspend fun pullBlobForProfile(profileId: Int): Result<Unit> = withContext(Dispatchers.IO) {
-        if (profileId == 1) {
-            return@withContext Result.success(Unit)
+        val route = profileModeRouter.routeFor(profileId)
+        when (route) {
+            ProfileModeRoute.DefaultLegacyRoute -> return@withContext Result.success(Unit)
+            is ProfileModeRoute.InvalidProfileRoute -> return@withContext Result.failure(
+                IllegalArgumentException("Invalid profile id ${route.profileId}")
+            )
+            is ProfileModeRoute.SecondaryProfileRoute -> Unit
         }
+        val scopedProfileId = profileBoundary.settingsRoute(
+            route,
+            ProfileSettingsDomain.CATALOGS
+        ).profileId
 
         syncMutex.withLock {
             try {
@@ -164,7 +193,7 @@ class ProfileSettingsSyncService @Inject constructor(
                     postgrest.rpc(
                         "sync_pull_profile_settings_blob",
                         buildJsonObject {
-                            put("p_profile_id", profileId)
+                            put("p_profile_id", scopedProfileId)
                             put("p_platform", "tv")
                         }
                     ).decodeAs<ProfileSettingsBlobResponse>()
@@ -174,17 +203,17 @@ class ProfileSettingsSyncService @Inject constructor(
 
                 applyingRemoteBlob = true
                 try {
-                    importSettingsBlob(profileId, normalizedBlob)
+                    importSettingsBlob(scopedProfileId, normalizedBlob)
                     skipNextPushSignature = buildSettingsSignature(normalizedBlob)
                 } finally {
                     applyingRemoteBlob = false
                 }
 
-                Log.d(TAG, "Pulled settings blob for profile $profileId")
+                Log.d(TAG, "Pulled settings blob for profile $scopedProfileId")
                 Result.success(Unit)
             } catch (e: Exception) {
                 applyingRemoteBlob = false
-                Log.e(TAG, "Failed to pull settings blob for profile $profileId", e)
+                Log.e(TAG, "Failed to pull settings blob for profile $scopedProfileId", e)
                 Result.failure(e)
             }
         }

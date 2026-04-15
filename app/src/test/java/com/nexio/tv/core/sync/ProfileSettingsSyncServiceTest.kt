@@ -6,10 +6,14 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.test.core.app.ApplicationProvider
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.data.local.ProfileDataStoreFactory
 import io.github.jan.supabase.postgrest.Postgrest
+import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
@@ -39,21 +43,34 @@ class ProfileSettingsSyncServiceTest {
         }
     }
 
+    private fun profileManagerForTest(activeProfileId: MutableStateFlow<Int> = MutableStateFlow(1)): ProfileManager {
+        return mockk {
+            every { this@mockk.activeProfileId } returns activeProfileId
+            every { this@mockk.isPrimaryProfileActive } answers { activeProfileId.value == 1 }
+        }
+    }
+
     private fun service(): ProfileSettingsSyncService {
+        val profileManager = profileManagerForTest()
         return ProfileSettingsSyncService(
             authManager = mockk<AuthManager>(relaxed = true),
             postgrest = mockk<Postgrest>(relaxed = true),
-            profileManager = mockk<ProfileManager>(relaxed = true),
-            profileDataStoreFactory = mockk<ProfileDataStoreFactory>(relaxed = true)
+            profileManager = profileManager,
+            profileDataStoreFactory = mockk<ProfileDataStoreFactory>(relaxed = true),
+            profileModeRouter = ProfileModeRouter(),
+            profileBoundary = ProfileBoundary(profileManager, languageTagProvider = { "en" })
         )
     }
 
     private fun realDataStoreService(): ProfileSettingsSyncService {
+        val profileManager = profileManagerForTest()
         return ProfileSettingsSyncService(
             authManager = mockk<AuthManager>(relaxed = true),
             postgrest = mockk<Postgrest>(relaxed = true),
-            profileManager = mockk<ProfileManager>(relaxed = true),
-            profileDataStoreFactory = realProfileDataStoreFactory
+            profileManager = profileManager,
+            profileDataStoreFactory = realProfileDataStoreFactory,
+            profileModeRouter = ProfileModeRouter(),
+            profileBoundary = ProfileBoundary(profileManager, languageTagProvider = { "en" })
         )
     }
 
@@ -433,12 +450,13 @@ class ProfileSettingsSyncServiceTest {
         val startObservingText = extractMethodBody(source, "startObserving")
 
         assertTrue(startObservingText.contains("distinctUntilChanged()"))
-        assertTrue("primary profile should not observe profile settings blob", startObservingText.contains("profileId == 1"))
-        assertTrue(startObservingText.contains("pullBlobForProfile(profileId)"))
-        assertTrue(startObservingText.contains("observeProfileSettings(profileId)"))
+        assertTrue("primary profile should not observe profile settings blob", startObservingText.contains("ProfileModeRoute.DefaultLegacyRoute"))
+        assertTrue(startObservingText.contains("profileModeRouter.routeFor(profileId)"))
+        assertTrue(startObservingText.contains("pullBlobForProfile(scopedProfileId)"))
+        assertTrue(startObservingText.contains("observeProfileSettings(scopedProfileId)"))
         assertTrue(
-            startObservingText.indexOf("pullBlobForProfile(profileId)") <
-                startObservingText.indexOf("observeProfileSettings(profileId)")
+            startObservingText.indexOf("pullBlobForProfile(scopedProfileId)") <
+                startObservingText.indexOf("observeProfileSettings(scopedProfileId)")
         )
         assertTrue(startObservingText.contains("debounce(2000)"))
         assertTrue(startObservingText.contains("pushBlobForProfile(profileId)"))
@@ -452,9 +470,9 @@ class ProfileSettingsSyncServiceTest {
         val pullText = extractMethodBody(source, "pullBlobForProfile")
         val pushText = extractMethodBody(source, "pushBlobForProfile")
 
-        assertTrue("primary profile should not pull profile settings blob", pullText.contains("profileId == 1"))
+        assertTrue("primary profile should not pull profile settings blob", pullText.contains("ProfileModeRoute.DefaultLegacyRoute"))
         assertTrue("primary profile pull should return success", pullText.contains("Result.success(Unit)"))
-        assertTrue("primary profile should not push profile settings blob", pushText.contains("profileId == 1"))
+        assertTrue("primary profile should not push profile settings blob", pushText.contains("ProfileModeRoute.DefaultLegacyRoute"))
         assertTrue("primary profile push should return success", pushText.contains("Result.success(Unit)"))
     }
 }
