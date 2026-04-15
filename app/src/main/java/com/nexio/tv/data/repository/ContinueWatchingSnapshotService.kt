@@ -157,6 +157,10 @@ class ContinueWatchingSnapshotService @Inject constructor(
         loadPersistedSnapshotForActiveProfile(clearWhenMissing = clearWhenMissing)
     }
 
+    fun rescheduleAirTimeAlarmFromSnapshot() {
+        scheduleReemitIfNeeded(rawSnapshotState.value.scheduledReemit, System.currentTimeMillis())
+    }
+
     private suspend fun loadPersistedSnapshotForActiveProfile(clearWhenMissing: Boolean) {
         val persisted = snapshotStore.read()
         if (persisted == null) {
