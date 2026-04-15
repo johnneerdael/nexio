@@ -11,7 +11,10 @@ import org.robolectric.RobolectricTestRunner
 class ProfileSettingsScopeContractTest {
     private val scopeDoc = File("docs/architecture/profile-settings-scope.md")
     private val accountSettingsSyncService = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt")
+    private val startupSyncService = File("app/src/main/java/com/nexio/tv/core/sync/StartupSyncService.kt")
     private val profileWebSyncService = File("app/src/main/java/com/nexio/tv/core/sync/ProfileWebSyncService.kt")
+    private val profileBoundary = File("app/src/main/java/com/nexio/tv/core/profile/ProfileBoundary.kt")
+    private val profileModeRouter = File("app/src/main/java/com/nexio/tv/core/profile/ProfileModeRouter.kt")
     private val homeCatalogPipeline = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt")
 
     private fun doc(): String {
@@ -313,8 +316,33 @@ class ProfileSettingsScopeContractTest {
     fun `profile web auth sync does not own primary profile integrations`() {
         val source = profileWebSyncService.readText()
 
-        assertTrue(source.contains("private const val PRIMARY_PROFILE_INDEX = 1"))
-        assertTrue(source.contains("if (profileIndex == PRIMARY_PROFILE_INDEX)"))
+        assertTrue(source.contains("profileModeRouter.routeFor(profileIndex)"))
+        assertTrue(source.contains("ProfileModeRoute.DefaultLegacyRoute"))
+        assertTrue(source.contains("profileBoundary.authRoute"))
         assertTrue(source.contains("account sync owns legacy integrations"))
+    }
+
+    @Test
+    fun `profile boundary owns secondary route decisions and rejects default`() {
+        val boundarySource = profileBoundary.readText()
+        val routerSource = profileModeRouter.readText()
+
+        assertTrue(routerSource.contains("1 -> ProfileModeRoute.DefaultLegacyRoute"))
+        assertTrue(routerSource.contains("in 2..4 -> ProfileModeRoute.SecondaryProfileRoute(profileId)"))
+        assertTrue(boundarySource.contains("ProfileBoundary only accepts secondary profiles 2-4"))
+        assertTrue(boundarySource.contains("ProfileCacheScope.SharedArtwork"))
+        assertTrue(boundarySource.contains("ProfileCacheScope.SharedLanguageMetadata"))
+        assertTrue(boundarySource.contains("ProfileCacheScope.ProfileSnapshot"))
+    }
+
+    @Test
+    fun `startup sync routes default legacy away from secondary profile sync`() {
+        val source = startupSyncService.readText()
+
+        assertTrue(source.contains("profileModeRouter.routeFor(activeId)"))
+        assertTrue(source.contains("ProfileModeRoute.DefaultLegacyRoute"))
+        assertTrue(source.contains("Skipping secondary profile startup sync for default legacy profile"))
+        assertTrue(source.contains("profileSettingsSyncService.pullBlobForProfile(route.profileId)"))
+        assertTrue(source.contains("profileWebSyncService.syncActiveProfile(route.profileId)"))
     }
 }

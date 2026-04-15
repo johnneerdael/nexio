@@ -3,6 +3,8 @@ package com.nexio.tv.core.sync
 import android.content.Context
 import android.util.Log
 import com.nexio.tv.core.auth.AuthManager
+import com.nexio.tv.core.profile.ProfileModeRoute
+import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.repository.AddonRepositoryImpl
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -28,6 +30,7 @@ class StartupSyncService @Inject constructor(
     private val profileSettingsSyncService: ProfileSettingsSyncService,
     private val profileWebSyncService: ProfileWebSyncService,
     private val profileManager: ProfileManager,
+    private val profileModeRouter: ProfileModeRouter,
     private val addonRepository: AddonRepositoryImpl,
     private val accountSyncRefreshNotifier: AccountSyncRefreshNotifier,
     private val postgrest: Postgrest,
@@ -67,17 +70,27 @@ class StartupSyncService @Inject constructor(
         }
         scope.launch {
             profileManager.profileSwitched.collect { activeId ->
-                val blobPullResult = profileSettingsSyncService.pullBlobForProfile(activeId)
-                if (blobPullResult.isSuccess) {
-                    Log.d(TAG, "Profile settings blob pull succeeded for switched profile $activeId")
-                } else {
-                    Log.w(TAG, "Profile settings blob pull failed for switched profile $activeId", blobPullResult.exceptionOrNull())
-                }
-                val result = profileWebSyncService.syncActiveProfile(activeId)
-                if (result.isSuccess) {
-                    Log.d(TAG, "Profile web token sync succeeded for switched profile $activeId")
-                } else {
-                    Log.w(TAG, "Profile web token sync failed for switched profile $activeId", result.exceptionOrNull())
+                when (val route = profileModeRouter.routeFor(activeId)) {
+                    ProfileModeRoute.DefaultLegacyRoute -> {
+                        Log.d(TAG, "Skipping secondary profile sync for default legacy profile $activeId")
+                    }
+                    is ProfileModeRoute.InvalidProfileRoute -> {
+                        Log.w(TAG, "Skipping secondary profile sync for invalid profile ${route.profileId}")
+                    }
+                    is ProfileModeRoute.SecondaryProfileRoute -> {
+                        val blobPullResult = profileSettingsSyncService.pullBlobForProfile(route.profileId)
+                        if (blobPullResult.isSuccess) {
+                            Log.d(TAG, "Profile settings blob pull succeeded for switched profile ${route.profileId}")
+                        } else {
+                            Log.w(TAG, "Profile settings blob pull failed for switched profile ${route.profileId}", blobPullResult.exceptionOrNull())
+                        }
+                        val result = profileWebSyncService.syncActiveProfile(route.profileId)
+                        if (result.isSuccess) {
+                            Log.d(TAG, "Profile web token sync succeeded for switched profile ${route.profileId}")
+                        } else {
+                            Log.w(TAG, "Profile web token sync failed for switched profile ${route.profileId}", result.exceptionOrNull())
+                        }
+                    }
                 }
             }
         }
@@ -155,18 +168,30 @@ class StartupSyncService @Inject constructor(
         }
 
         val activeId = profileManager.activeProfileId.value
-        val blobPullResult = profileSettingsSyncService.pullBlobForProfile(activeId)
-        if (blobPullResult.isSuccess) {
-            Log.d(TAG, "Profile settings blob pull succeeded for profile $activeId")
-        } else {
-            Log.w(TAG, "Profile settings blob pull failed for profile $activeId", blobPullResult.exceptionOrNull())
-        }
-
-        val webTokenPullResult = profileWebSyncService.syncActiveProfile(activeId)
-        if (webTokenPullResult.isSuccess) {
-            Log.d(TAG, "Profile web token pull succeeded for profile $activeId")
-        } else {
-            Log.w(TAG, "Profile web token pull failed for profile $activeId", webTokenPullResult.exceptionOrNull())
+        val (blobPullResult, webTokenPullResult) = when (val route = profileModeRouter.routeFor(activeId)) {
+            ProfileModeRoute.DefaultLegacyRoute -> {
+                Log.d(TAG, "Skipping secondary profile startup sync for default legacy profile $activeId")
+                Result.success(Unit) to Result.success(Unit)
+            }
+            is ProfileModeRoute.InvalidProfileRoute -> {
+                val failure = Result.failure<Unit>(IllegalArgumentException("Invalid profile id ${route.profileId}"))
+                failure to failure
+            }
+            is ProfileModeRoute.SecondaryProfileRoute -> {
+                val blobResult = profileSettingsSyncService.pullBlobForProfile(route.profileId)
+                if (blobResult.isSuccess) {
+                    Log.d(TAG, "Profile settings blob pull succeeded for profile ${route.profileId}")
+                } else {
+                    Log.w(TAG, "Profile settings blob pull failed for profile ${route.profileId}", blobResult.exceptionOrNull())
+                }
+                val tokenResult = profileWebSyncService.syncActiveProfile(route.profileId)
+                if (tokenResult.isSuccess) {
+                    Log.d(TAG, "Profile web token pull succeeded for profile ${route.profileId}")
+                } else {
+                    Log.w(TAG, "Profile web token pull failed for profile ${route.profileId}", tokenResult.exceptionOrNull())
+                }
+                blobResult to tokenResult
+            }
         }
 
         profileSettingsSyncService.startObserving()

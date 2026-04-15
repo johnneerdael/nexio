@@ -1,9 +1,13 @@
 package com.nexio.tv.core.sync
 
 import android.util.Log
+import com.nexio.tv.core.profile.ProfileBoundary
+import com.nexio.tv.core.profile.ProfileModeRoute
+import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
+import com.nexio.tv.domain.model.TrackingProvider
 import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -20,7 +24,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val PROFILE_WEB_SYNC_TAG = "ProfileWebSyncService"
-private const val PRIMARY_PROFILE_INDEX = 1
 
 @Serializable
 data class ProfileAuthToken(
@@ -38,17 +41,26 @@ data class ProfileAuthToken(
 class ProfileWebSyncService @Inject constructor(
     private val postgrest: Postgrest,
     private val traktAuthDataStore: TraktAuthDataStore,
-    private val simklAuthDataStore: SimklAuthDataStore
+    private val simklAuthDataStore: SimklAuthDataStore,
+    private val profileModeRouter: ProfileModeRouter,
+    private val profileBoundary: ProfileBoundary
 ) {
     suspend fun syncActiveProfile(profileIndex: Int): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            if (profileIndex == PRIMARY_PROFILE_INDEX) {
+            val route = profileModeRouter.routeFor(profileIndex)
+            if (route is ProfileModeRoute.DefaultLegacyRoute) {
                 Log.d(
                     PROFILE_WEB_SYNC_TAG,
                     "Skipping profile web auth token sync for primary profile; account sync owns legacy integrations"
                 )
                 return@withContext Result.success(Unit)
             }
+            if (route is ProfileModeRoute.InvalidProfileRoute) {
+                return@withContext Result.failure(
+                    IllegalArgumentException("Invalid profile id ${route.profileId}")
+                )
+            }
+            val secondaryRoute = route as ProfileModeRoute.SecondaryProfileRoute
 
             val remoteTokens = postgrest.from("profile_auth_tokens")
                 .select {
@@ -58,8 +70,14 @@ class ProfileWebSyncService @Inject constructor(
                 }
                 .decodeList<ProfileAuthToken>()
 
-            applyTraktTokens(profileIndex, remoteTokens)
-            applySimklTokens(profileIndex, remoteTokens)
+            applyTraktTokens(
+                profileBoundary.authRoute(secondaryRoute, TrackingProvider.TRAKT).profileId,
+                remoteTokens
+            )
+            applySimklTokens(
+                profileBoundary.authRoute(secondaryRoute, TrackingProvider.SIMKL).profileId,
+                remoteTokens
+            )
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(PROFILE_WEB_SYNC_TAG, "Failed to sync web auth tokens for profile $profileIndex", e)
