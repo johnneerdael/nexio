@@ -76,6 +76,11 @@ class PosterRatingsUrlResolver @Inject constructor(
         val provider = activeProvider ?: return originalPosterUrl
         val id = parseContentId(contentId, contentType) ?: return originalPosterUrl
 
+        // Idempotent: if the poster is already from the active provider, return as-is.
+        if (originalPosterUrl != null && isAlreadyProviderUrl(originalPosterUrl, provider)) {
+            return originalPosterUrl
+        }
+
         return when (provider.provider) {
             PosterRatingsProvider.RPDB -> buildRpdbPosterUrl(
                 apiKey = provider.apiKey,
@@ -87,6 +92,14 @@ class PosterRatingsUrlResolver @Inject constructor(
                 fallbackUrl = originalPosterUrl?.takeIf { it.isNotBlank() }
             )
             PosterRatingsProvider.NONE -> originalPosterUrl
+        }
+    }
+
+    private fun isAlreadyProviderUrl(url: String, provider: ActiveProvider): Boolean {
+        return when (provider.provider) {
+            PosterRatingsProvider.RPDB -> url.startsWith("https://api.ratingposterdb.com/")
+            PosterRatingsProvider.TOP_POSTERS -> url.startsWith("https://api.top-streaming.stream/")
+            PosterRatingsProvider.NONE -> false
         }
     }
 
