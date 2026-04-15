@@ -1,19 +1,35 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.data.local.MDBListCatalogPreferences
+import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
+import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
+import com.nexio.tv.data.repository.MDBListCustomCatalog
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
+import com.nexio.tv.data.repository.TraktCustomListCatalog
 import com.nexio.tv.data.repository.TraktDiscoverySnapshot
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.CatalogRow
+import com.nexio.tv.domain.model.MetaPreview
 
 internal data class CatalogPlan(
     val expectedOrderKeys: List<String>,
     val publishableOrderKeys: List<String>,
-    val descriptors: List<ConfiguredHomeCatalogDescriptor>
+    val descriptors: List<ConfiguredHomeCatalogDescriptor>,
+    val rails: List<PlannedCatalogRail>
 )
+
+internal data class PlannedCatalogRail(
+    val orderKey: String,
+    val descriptor: ConfiguredHomeCatalogDescriptor,
+    private val populatedRows: List<CatalogRow>
+) {
+    fun toLoadingCatalogRow(): CatalogRow = descriptor.toLoadingCatalogRow()
+
+    fun toPopulatedRows(): List<CatalogRow> = populatedRows
+}
 
 internal fun buildConfiguredCatalogPlan(
     addons: List<Addon>,
@@ -22,6 +38,7 @@ internal fun buildConfiguredCatalogPlan(
     traktPrefs: TraktCatalogPreferences,
     traktSnapshot: TraktDiscoverySnapshot,
     hasTraktUpNextItems: Boolean,
+    traktUpNextItems: List<MetaPreview> = emptyList(),
     simklPrefs: SimklCatalogPreferences,
     simklSnapshot: SimklDiscoverySnapshot,
     mdbPrefs: MDBListCatalogPreferences,
@@ -59,10 +76,147 @@ internal fun buildConfiguredCatalogPlan(
         mdbSnapshot = mdbSnapshot,
         existingRowsByOrderKey = existingRowsByOrderKey
     )
+    val descriptorByKey = descriptors.associateBy { it.orderKey }
+    val rails = publishableOrderKeys.mapNotNull { key ->
+        val descriptor = descriptorByKey[key] ?: return@mapNotNull null
+        val rows = when (descriptor.addonId) {
+            TRAKT_HOME_ADDON_ID -> populatedTraktRowsForKey(
+                key = key,
+                descriptor = descriptor,
+                snapshot = traktSnapshot,
+                upNextItems = traktUpNextItems
+            )
+            SIMKL_HOME_ADDON_ID -> populatedRowsForItems(
+                descriptor = descriptor,
+                items = simklItemsForKey(key, simklSnapshot)
+            )
+            MDBLIST_HOME_ADDON_ID -> populatedMDBListRowsForKey(
+                key = key,
+                snapshot = mdbSnapshot
+            )
+            else -> emptyList()
+        }
+        PlannedCatalogRail(
+            orderKey = key,
+            descriptor = descriptor,
+            populatedRows = rows
+        )
+    }
 
     return CatalogPlan(
         expectedOrderKeys = expectedOrderKeys,
         publishableOrderKeys = publishableOrderKeys,
-        descriptors = descriptors
+        descriptors = descriptors,
+        rails = rails
+    )
+}
+
+private fun populatedTraktRowsForKey(
+    key: String,
+    descriptor: ConfiguredHomeCatalogDescriptor,
+    snapshot: TraktDiscoverySnapshot,
+    upNextItems: List<MetaPreview>
+): List<CatalogRow> {
+    val builtInItems = when (key) {
+        TraktCatalogIds.UP_NEXT -> upNextItems
+        TraktCatalogIds.TRENDING_MOVIES -> snapshot.trendingMovieItems
+        TraktCatalogIds.TRENDING_SHOWS -> snapshot.trendingShowItems
+        TraktCatalogIds.POPULAR_MOVIES -> snapshot.popularMovieItems
+        TraktCatalogIds.POPULAR_SHOWS -> snapshot.popularShowItems
+        TraktCatalogIds.RECOMMENDED_MOVIES -> snapshot.recommendationMovieItems
+        TraktCatalogIds.RECOMMENDED_SHOWS -> snapshot.recommendationShowItems
+        TraktCatalogIds.CALENDAR -> snapshot.calendarItems
+        else -> emptyList()
+    }
+    if (builtInItems.isNotEmpty()) {
+        return populatedRowsForItems(descriptor = descriptor, items = builtInItems)
+    }
+
+    return snapshot.customListCatalogs
+        .filter { catalog -> catalog.key == key }
+        .mapNotNull(::traktCustomCatalogRow)
+}
+
+private fun simklItemsForKey(
+    key: String,
+    snapshot: SimklDiscoverySnapshot
+): List<MetaPreview> {
+    return when (key) {
+        SimklCatalogIds.TV_TRENDING_TODAY,
+        SimklCatalogIds.TV_TRENDING_WEEK,
+        SimklCatalogIds.TV_TRENDING_MONTH,
+        SimklCatalogIds.ANIME_TRENDING_TODAY,
+        SimklCatalogIds.ANIME_TRENDING_WEEK,
+        SimklCatalogIds.ANIME_TRENDING_MONTH,
+        SimklCatalogIds.MOVIE_TRENDING_TODAY,
+        SimklCatalogIds.MOVIE_TRENDING_WEEK,
+        SimklCatalogIds.MOVIE_TRENDING_MONTH,
+        SimklCatalogIds.DVD_RELEASES -> snapshot.itemsByCatalog[key].orEmpty()
+        else -> emptyList()
+    }
+}
+
+private fun populatedMDBListRowsForKey(
+    key: String,
+    snapshot: MDBListDiscoverySnapshot
+): List<CatalogRow> {
+    return snapshot.customListCatalogs
+        .filter { catalog -> catalog.key == key }
+        .mapNotNull(::mdbListCustomCatalogRow)
+}
+
+private fun populatedRowsForItems(
+    descriptor: ConfiguredHomeCatalogDescriptor,
+    items: List<MetaPreview>
+): List<CatalogRow> {
+    if (items.isEmpty()) return emptyList()
+    return listOf(
+        CatalogRow(
+            addonId = descriptor.addonId,
+            addonName = descriptor.addonName,
+            addonBaseUrl = descriptor.addonBaseUrl,
+            catalogId = descriptor.catalogId,
+            catalogName = descriptor.catalogName,
+            type = descriptor.type,
+            rawType = descriptor.rawType,
+            items = items,
+            isLoading = false,
+            hasMore = false,
+            supportsSkip = false
+        )
+    )
+}
+
+private fun traktCustomCatalogRow(catalog: TraktCustomListCatalog): CatalogRow? {
+    if (catalog.items.isEmpty()) return null
+    return CatalogRow(
+        addonId = TRAKT_HOME_ADDON_ID,
+        addonName = "Trakt",
+        addonBaseUrl = "https://api.trakt.tv",
+        catalogId = catalog.catalogId,
+        catalogName = catalog.catalogName,
+        type = catalog.type,
+        rawType = catalog.type.toApiString("catalog"),
+        items = catalog.items,
+        isLoading = false,
+        hasMore = false,
+        supportsSkip = false
+    )
+}
+
+private fun mdbListCustomCatalogRow(catalog: MDBListCustomCatalog): CatalogRow? {
+    if (catalog.items.isEmpty()) return null
+    return CatalogRow(
+        addonId = MDBLIST_HOME_ADDON_ID,
+        addonName = "MDBList",
+        addonBaseUrl = "https://api.mdblist.com",
+        catalogId = catalog.catalogId,
+        catalogName = catalog.catalogName,
+        type = catalog.type,
+        rawType = catalog.type.toApiString("catalog"),
+        items = catalog.items,
+        isLoading = false,
+        hasMore = false,
+        supportsSkip = false
     )
 }
