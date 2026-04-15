@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.math.roundToInt
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -272,22 +273,17 @@ class AndroidTvChannelPublisher @Inject constructor(
             "series", "tv" -> TvContractCompat.PreviewPrograms.TYPE_TV_SERIES
             else -> TvContractCompat.PreviewPrograms.TYPE_MOVIE
         }
-        val posterAspectRatio = when (item.posterShape) {
-            PosterShape.LANDSCAPE -> TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9
-            PosterShape.SQUARE -> TvContractCompat.PreviewPrograms.ASPECT_RATIO_1_1
-            else -> TvContractCompat.PreviewPrograms.ASPECT_RATIO_2_3
-        }
-        val primaryArt = when (item.posterShape) {
-            PosterShape.LANDSCAPE -> item.background ?: item.poster
-            else -> item.poster ?: item.background
-        }
+        val presentation = AndroidTvProgramPresentation.from(
+            item = item,
+            feedKey = option.key
+        )
 
         return PreviewProgram.Builder()
             .setChannelId(channelId)
             .setType(programType)
             .setTitle(item.name)
             .setDescription(item.description ?: item.releaseInfo ?: option.subtitle)
-            .setPosterArtAspectRatio(posterAspectRatio)
+            .setPosterArtAspectRatio(presentation.posterArtAspectRatio)
             .setWeight(MAX_PROGRAMS_PER_CHANNEL - position)
             .setInternalProviderId("$PROGRAM_ID_PREFIX${option.key}_${contentType}_${item.id}")
             .setIntentUri(
@@ -303,8 +299,11 @@ class AndroidTvChannelPublisher @Inject constructor(
                 )
             )
             .apply {
-                primaryArt?.takeIf { it.isNotBlank() }?.let { setPosterArtUri(Uri.parse(it)) }
-                item.background?.takeIf { it.isNotBlank() }?.let { setThumbnailUri(Uri.parse(it)) }
+                presentation.posterArtUri?.let { setPosterArtUri(it) }
+                presentation.thumbnailUri?.let { setThumbnailUri(it) }
+                presentation.genre?.let { setGenre(it) }
+                presentation.reviewRatingStyle?.let { setReviewRatingStyle(it) }
+                presentation.reviewRating?.let { setReviewRating(it) }
             }
             .build()
     }
@@ -353,6 +352,83 @@ class AndroidTvChannelPublisher @Inject constructor(
         val channelId: Long,
         val needsBrowsableRequest: Boolean
     )
+}
+
+internal data class AndroidTvProgramPresentation(
+    val posterArtUri: Uri?,
+    val thumbnailUri: Uri?,
+    val posterArtAspectRatio: Int,
+    val genre: String?,
+    val reviewRatingStyle: Int?,
+    val reviewRating: String?
+) {
+    companion object {
+        fun from(
+            item: MetaPreview,
+            feedKey: String
+        ): AndroidTvProgramPresentation {
+            val poster = item.poster.asNonBlankUri()
+            val background = item.background.asNonBlankUri()
+            val useContinueWatchingArtwork = feedKey == AndroidTvFeedCatalogService.CONTINUE_WATCHING_FEED_KEY
+
+            val posterArtUri: Uri?
+            val thumbnailUri: Uri?
+            val posterArtAspectRatio: Int
+
+            if (!useContinueWatchingArtwork && poster != null) {
+                posterArtUri = poster
+                thumbnailUri = null
+                posterArtAspectRatio = TvContractCompat.PreviewPrograms.ASPECT_RATIO_2_3
+            } else {
+                posterArtAspectRatio = when (item.posterShape) {
+                    PosterShape.LANDSCAPE -> TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9
+                    PosterShape.SQUARE -> TvContractCompat.PreviewPrograms.ASPECT_RATIO_1_1
+                    else -> TvContractCompat.PreviewPrograms.ASPECT_RATIO_2_3
+                }
+                posterArtUri = when (item.posterShape) {
+                    PosterShape.LANDSCAPE -> background ?: poster
+                    else -> poster ?: background
+                }
+                thumbnailUri = background
+            }
+
+            val reviewRating = item.imdbRating?.toAndroidTvReviewRating()
+
+            return AndroidTvProgramPresentation(
+                posterArtUri = posterArtUri,
+                thumbnailUri = thumbnailUri,
+                posterArtAspectRatio = posterArtAspectRatio,
+                genre = item.genres
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .distinct()
+                    .joinToString(", ")
+                    .takeIf { it.isNotBlank() },
+                reviewRatingStyle = if (reviewRating != null) {
+                    TvContractCompat.Programs.REVIEW_RATING_STYLE_PERCENTAGE
+                } else {
+                    null
+                },
+                reviewRating = reviewRating
+            )
+        }
+
+        private fun String?.asNonBlankUri(): Uri? {
+            return this
+                ?.takeIf { it.isNotBlank() }
+                ?.let { Uri.parse(it) }
+        }
+
+        private fun Float.toAndroidTvReviewRating(): String? {
+            if (!isFinite()) return null
+            val tenths = (coerceIn(0f, 10f) * 100f).roundToInt()
+            return if (tenths % 10 == 0) {
+                (tenths / 10).toString()
+            } else {
+                "${tenths / 10}.${tenths % 10}"
+            }
+        }
+    }
 }
 
 internal data class AndroidTvOwnedChannel(
