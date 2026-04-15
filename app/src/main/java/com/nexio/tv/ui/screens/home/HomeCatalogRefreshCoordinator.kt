@@ -7,6 +7,7 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.data.local.MetadataDiskCacheStore
@@ -64,6 +65,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
+    private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
     @ApplicationContext private val appContext: Context
 ) {
     /**
@@ -104,6 +106,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         onLog: (String, String?) -> Unit
     ): List<CatalogRow> {
         if (rows.isEmpty()) return rows
+        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
         val languageTag = AppLocaleResolver.resolveEffectiveAppLanguageTag(appContext)
         val hydratedRows = rows.map { row ->
             val rowKey = homeCatalogGlobalKey(row)
@@ -152,7 +155,8 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                     externalMeta = externalMeta
                 )
                 val localized = overlayTmdbLocalizedMetadata(merged)
-                mdbListRepository.enrichPreview(localized)
+                val enriched = mdbListRepository.enrichPreview(localized)
+                posterRatingsUrlResolver.apply(enriched, activePosterProvider)
             }
             row.copy(items = hydratedItems)
         }
@@ -188,6 +192,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         onLog: (String, String?) -> Unit
     ): Int {
         var refreshedCatalogCount = 0
+        val activePosterProvider = posterRatingsUrlResolver.getActiveProvider()
         refreshMutex.withLock {
             addons.forEach { addon ->
                 addon.catalogs
@@ -282,7 +287,8 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                                 externalMeta = externalMeta
                             )
                             val localized = overlayTmdbLocalizedMetadata(merged)
-                            mdbListRepository.enrichPreview(localized)
+                            val enriched = mdbListRepository.enrichPreview(localized)
+                            posterRatingsUrlResolver.apply(enriched, activePosterProvider)
                         }
                         val refreshedHydrated = refreshed.copy(items = hydratedItems)
                         onLog(
