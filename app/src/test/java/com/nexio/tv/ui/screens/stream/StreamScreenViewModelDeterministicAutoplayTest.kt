@@ -262,7 +262,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
                 )
             )
 
-            assertEquals("primary", resolved.streamKey)
+            assertEquals("primary", resolved?.streamKey)
             verify {
                 Log.i(
                     any<String>(),
@@ -495,9 +495,10 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         )
 
         assertEquals("primary-dv", selected?.selectedItem?.stream?.wrappedOriginalStreamKey)
-        assertEquals(
-            "fallback-hdr10",
-            selected?.nonDolbyVisionFallbackItem?.stream?.wrappedOriginalStreamKey
+        assertTrue(
+            selected?.fallbackCandidateItems?.any {
+                it.stream.wrappedOriginalStreamKey == "fallback-hdr10"
+            } == true
         )
     }
 

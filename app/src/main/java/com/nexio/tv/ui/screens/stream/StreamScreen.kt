@@ -159,7 +159,10 @@ fun StreamScreen(
             directAutoPlayResolveInFlight = true
             autoPlayScope.coroutineLaunch {
                 try {
-                    onAutoPlayResolved(viewModel.resolveAutoPlayPlaybackInfo(playbackInfo))
+                    val resolved = viewModel.resolveAutoPlayPlaybackInfo(playbackInfo)
+                    if (resolved != null) {
+                        onAutoPlayResolved(resolved)
+                    }
                     viewModel.onEvent(StreamScreenEvent.OnAutoPlayConsumed)
                 } catch (error: CancellationException) {
                     throw error
