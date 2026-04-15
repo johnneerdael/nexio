@@ -2,6 +2,8 @@ package com.nexio.tv.ui.screens.home
 
 import android.util.Log
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.tvdb.TvMetadataRequest
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.ui.navigation.continueWatchingRuntimeMinutes
@@ -27,6 +29,32 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
     ).first { it !is NetworkResult.Loading } as? NetworkResult.Success)?.data
 
     resolveRuntimeMinutesFromMeta(item, meta)?.let { return it }
+
+    if (isSeriesType(contentType)) {
+        if (season != null && episode != null) {
+            val episodeRuntime = tvMetadataRouter.fetchEpisodeEnrichment(
+                TvMetadataRequest(
+                    contentId = contentId,
+                    fallbackContentId = item.videoId(),
+                    contentType = parseContinueWatchingContentType(contentType),
+                    seasonNumbers = listOf(season)
+                )
+            ).value?.get(season to episode)?.runtimeMinutes
+            if (episodeRuntime != null && episodeRuntime > 0) return episodeRuntime
+        } else {
+            val enrichment = tvMetadataRouter.fetchEnrichment(
+                TvMetadataRequest(
+                    contentId = contentId,
+                    fallbackContentId = item.videoId(),
+                    contentType = parseContinueWatchingContentType(contentType)
+                )
+            ).value
+            val runtime = enrichment?.runtimeMinutes ?: enrichment?.averageRuntimeMinutes
+            if (runtime != null && runtime > 0) return runtime
+        }
+
+        return null
+    }
 
     val tmdbId = tmdbService.ensureTmdbId(contentId, contentType)
         ?: tmdbService.ensureTmdbId(
@@ -147,10 +175,10 @@ private fun ContinueWatchingItem.videoId(): String {
     }
 }
 
-private fun parseContinueWatchingContentType(raw: String): com.nexio.tv.domain.model.ContentType {
+private fun parseContinueWatchingContentType(raw: String): ContentType {
     return when (raw.lowercase()) {
-        "series", "tv" -> com.nexio.tv.domain.model.ContentType.SERIES
-        else -> com.nexio.tv.domain.model.ContentType.MOVIE
+        "series", "tv" -> ContentType.SERIES
+        else -> ContentType.MOVIE
     }
 }
 
