@@ -165,7 +165,21 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     fun rescheduleAirTimeAlarmFromSnapshot() {
-        scheduleReemitIfNeeded(rawSnapshotState.value.scheduledReemit, System.currentTimeMillis())
+        val scheduledReemit = rawSnapshotState.value.scheduledReemit
+        val nowMs = System.currentTimeMillis()
+        if (scheduledReemit.any { entry ->
+                val exactMs = entry.tvdbAvailabilityInstantMs
+                exactMs != null && exactMs > 0L && exactMs <= nowMs
+            }
+        ) {
+            reemitJob?.cancel()
+            reemitJob = null
+            currentTimerTargetMs = null
+            airScheduler.cancel()
+            launchAirTimeRefreshWithRetry()
+            return
+        }
+        scheduleReemitIfNeeded(scheduledReemit, nowMs)
     }
 
     private suspend fun loadPersistedSnapshotForActiveProfile(clearWhenMissing: Boolean) {
@@ -645,6 +659,12 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val delayMs = (soonestMs - nowMs).coerceAtLeast(0L)
         reemitJob = scope.launch {
             delay(delayMs)
+            launchAirTimeRefreshWithRetry()
+        }
+    }
+
+    private fun launchAirTimeRefreshWithRetry() {
+        scope.launch {
             runCatching { ensureFresh(force = true) }
                 .onFailure { error ->
                     Log.w(
