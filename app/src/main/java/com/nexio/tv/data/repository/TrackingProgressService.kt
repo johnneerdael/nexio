@@ -11,7 +11,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -81,7 +81,8 @@ interface TrackingProgressService {
 class DefaultTrackingProgressService @Inject constructor(
     private val traktProgressService: TraktProgressService,
     private val simklProgressService: SimklProgressService,
-    private val trackingProviderStateService: TrackingProviderStateService
+    private val trackingProviderStateService: TrackingProviderStateService,
+    private val tvdbContinueWatchingTimingEnricher: TvdbContinueWatchingTimingEnricher = TvdbContinueWatchingTimingEnricher()
 ) : TrackingProgressService {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     @Volatile private var currentProvider: TrackingProvider = TrackingProvider.TRAKT
@@ -114,8 +115,13 @@ class DefaultTrackingProgressService @Inject constructor(
         trackingProviderStateService.state.flatMapLatest { state ->
             when (state.effectiveProvider) {
                 TrackingProvider.SIMKL -> simklProgressService.observeContinueWatchingNextUp()
+                    .mapLatest { items -> tvdbContinueWatchingTimingEnricher.enrich(items) }
                 TrackingProvider.TRAKT -> traktProgressService.observeContinueWatchingNextUp()
-                    .map { items -> items.map(TraktProgressService.NextUpEntry::toTrackingNextUpEntry) }
+                    .mapLatest { items ->
+                        tvdbContinueWatchingTimingEnricher.enrich(
+                            items.map(TraktProgressService.NextUpEntry::toTrackingNextUpEntry)
+                        )
+                    }
             }
         }
 
@@ -123,8 +129,13 @@ class DefaultTrackingProgressService @Inject constructor(
         trackingProviderStateService.state.flatMapLatest { state ->
             when (state.effectiveProvider) {
                 TrackingProvider.SIMKL -> simklProgressService.observeSyntheticContinueWatchingNextUp()
+                    .mapLatest { items -> tvdbContinueWatchingTimingEnricher.enrich(items) }
                 TrackingProvider.TRAKT -> traktProgressService.observeSyntheticContinueWatchingNextUp()
-                    .map { items -> items.map(TraktProgressService.NextUpEntry::toTrackingNextUpEntry) }
+                    .mapLatest { items ->
+                        tvdbContinueWatchingTimingEnricher.enrich(
+                            items.map(TraktProgressService.NextUpEntry::toTrackingNextUpEntry)
+                        )
+                    }
             }
         }
 
