@@ -1,5 +1,6 @@
 package com.nexio.tv.data.repository
 
+import com.nexio.tv.core.scheduler.ContinueWatchingAirScheduler
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TraktAuthDataStore
@@ -96,6 +97,107 @@ class ContinueWatchingSnapshotServiceMutationTest {
             metadataDiskCacheStore = metadataDiskCacheStore,
             snapshotStore = snapshotStore
         )
+    }
+
+    private class RecordingAirScheduler : ContinueWatchingAirScheduler {
+        val scheduledAt = mutableListOf<Long?>()
+        var cancelCount = 0
+
+        override fun scheduleSoonest(triggerAtMs: Long?) {
+            scheduledAt += triggerAtMs
+        }
+
+        override fun cancel() {
+            cancelCount++
+        }
+    }
+
+    private fun nextUp(
+        contentId: String,
+        firstAiredMs: Long,
+        tvdbAvailabilityInstantMs: Long? = null,
+        episode: Int = 1
+    ): TrackingNextUpEntry = TrackingNextUpEntry(
+        contentId = contentId,
+        name = contentId,
+        season = 1,
+        episode = episode,
+        episodeTitle = "Episode $episode",
+        videoId = "$contentId:1:$episode",
+        firstAired = null,
+        firstAiredMs = firstAiredMs,
+        activityAtMs = firstAiredMs,
+        tvdbAvailabilityInstantMs = tvdbAvailabilityInstantMs
+    )
+
+    private fun buildServiceWithAirScheduler(
+        airScheduler: ContinueWatchingAirScheduler,
+        trackingProgressService: TrackingProgressService = mockk(relaxed = true) {
+            every { observeRemoteSnapshotLoaded() } returns flowOf(false)
+            every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+            every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+        }
+    ): ContinueWatchingSnapshotService {
+        val constructor = ContinueWatchingSnapshotService::class.java.declaredConstructors
+            .firstOrNull { candidate ->
+                candidate.parameterTypes.any { it == ContinueWatchingAirScheduler::class.java }
+            }
+            ?: error("ContinueWatchingSnapshotService must accept ContinueWatchingAirScheduler")
+        constructor.isAccessible = true
+
+        val args = constructor.parameterTypes.map { type ->
+            when (type) {
+                WatchProgressRepository::class.java -> mockk<WatchProgressRepository>(relaxed = true) {
+                    every { allProgress } returns flowOf(emptyList())
+                }
+                TrackingProgressService::class.java -> trackingProgressService
+                TrackingProviderStateService::class.java -> mockk<TrackingProviderStateService>(relaxed = true) {
+                    every { state } returns flowOf(EffectiveTrackingProviderState())
+                }
+                TraktSettingsDataStore::class.java -> mockk<TraktSettingsDataStore>(relaxed = true) {
+                    every { dismissedNextUpKeys } returns flowOf(emptySet())
+                }
+                MetaRepository::class.java -> mockk<MetaRepository>(relaxed = true)
+                MetadataDiskCacheStore::class.java -> mockk<MetadataDiskCacheStore>(relaxed = true)
+                ContinueWatchingSnapshotStore::class.java -> mockk<ContinueWatchingSnapshotStore>(relaxed = true) {
+                    every { read() } returns null
+                }
+                ContinueWatchingAirScheduler::class.java -> airScheduler
+                else -> null
+            }
+        }.toTypedArray()
+
+        return constructor.newInstance(*args) as ContinueWatchingSnapshotService
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun rawSnapshotFlow(service: ContinueWatchingSnapshotService): MutableStateFlow<ContinueWatchingSnapshot> {
+        val field = ContinueWatchingSnapshotService::class.java.getDeclaredField("rawSnapshotState")
+        field.isAccessible = true
+        return field.get(service) as MutableStateFlow<ContinueWatchingSnapshot>
+    }
+
+    private fun invokeScheduleReemitIfNeeded(
+        service: ContinueWatchingSnapshotService,
+        entries: List<TrackingNextUpEntry>,
+        nowMs: Long
+    ) {
+        val method = ContinueWatchingSnapshotService::class.java.getDeclaredMethod(
+            "scheduleReemitIfNeeded",
+            List::class.java,
+            Long::class.javaPrimitiveType
+        )
+        method.isAccessible = true
+        method.invoke(service, entries, nowMs)
+    }
+
+    private fun awaitCondition(timeoutMs: Long = 2_000L, condition: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (condition()) return
+            Thread.sleep(10L)
+        }
+        assertTrue("Condition was not met within ${timeoutMs}ms", condition())
     }
 
     // ── Inline harness ─────────────────────────────────────────────────────────
@@ -461,6 +563,76 @@ class ContinueWatchingSnapshotServiceMutationTest {
         assertTrue(
             "Entry must be restored after rollbackEpisodes",
             harness.state.value.resumeItems.any { it.videoId == "show-d:2:4" }
+        )
+    }
+
+    @Test
+    fun `scheduleReemitIfNeeded schedules only soonest tvdb availability`() {
+        val nowMs = 10_000L
+        val scheduler = RecordingAirScheduler()
+        val service = buildServiceWithAirScheduler(scheduler)
+        val laterProviderEarlierTvdb = nextUp(
+            contentId = "show-exact-soonest",
+            firstAiredMs = nowMs + 50_000L,
+            tvdbAvailabilityInstantMs = nowMs + 5_000L,
+            episode = 1
+        )
+        val earlierProviderLaterTvdb = nextUp(
+            contentId = "show-provider-earlier",
+            firstAiredMs = nowMs + 1_000L,
+            tvdbAvailabilityInstantMs = nowMs + 20_000L,
+            episode = 2
+        )
+
+        invokeScheduleReemitIfNeeded(
+            service = service,
+            entries = listOf(laterProviderEarlierTvdb, earlierProviderLaterTvdb),
+            nowMs = nowMs
+        )
+
+        assertEquals(listOf(nowMs + 5_000L), scheduler.scheduledAt)
+    }
+
+    @Test
+    fun `reemit refresh failure keeps withheld row and schedules retry`() {
+        val scheduler = RecordingAirScheduler()
+        val failure = IllegalStateException("refresh failed")
+        val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+            every { observeRemoteSnapshotLoaded() } returns flowOf(false)
+            every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+            every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+            coEvery { refreshNow() } throws failure
+        }
+        val service = buildServiceWithAirScheduler(
+            airScheduler = scheduler,
+            trackingProgressService = trackingProgressService
+        )
+        val nowMs = System.currentTimeMillis()
+        val withheld = nextUp(
+            contentId = "show-retry",
+            firstAiredMs = nowMs + 5L,
+            tvdbAvailabilityInstantMs = nowMs + 5L,
+            episode = 3
+        )
+        rawSnapshotFlow(service).value = ContinueWatchingSnapshot(
+            scheduledReemit = listOf(withheld),
+            updatedAtMs = nowMs
+        )
+
+        invokeScheduleReemitIfNeeded(
+            service = service,
+            entries = listOf(withheld),
+            nowMs = nowMs
+        )
+
+        awaitCondition { scheduler.scheduledAt.size >= 2 }
+        val retryAtMs = scheduler.scheduledAt.last() ?: error("Retry schedule must not be null")
+        val retryDelayMs = retryAtMs - System.currentTimeMillis()
+
+        assertEquals(listOf(withheld), rawSnapshotFlow(service).value.scheduledReemit)
+        assertTrue(
+            "Retry should be scheduled close to 15 minutes after refresh failure",
+            retryDelayMs in (15 * 60_000L - 2_000L)..(15 * 60_000L + 2_000L)
         )
     }
 }
