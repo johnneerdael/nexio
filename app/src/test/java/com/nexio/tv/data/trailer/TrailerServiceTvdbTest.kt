@@ -4,6 +4,8 @@ import android.util.Log
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tvdb.TvdbTrailerMapper
 import com.nexio.tv.core.tvdb.TvdbTrailerCandidate
+import com.nexio.tv.core.tvdb.TvdbTrailerLookupResult
+import com.nexio.tv.core.tvdb.TvdbTrailerResolver
 import com.nexio.tv.core.tvdb.TvdbTrailerUsability
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
