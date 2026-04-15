@@ -576,4 +576,17 @@ class ProfileSettingsScopeContractTest {
         assertTrue(storeSource.contains("addProperty(\"profileId\", envelope.profileId)"))
         assertTrue(policySource.contains("existing.profileId == incoming.profileId"))
     }
+
+    @Test
+    fun `trakt outbox adapters execute with envelope profile session`() {
+        val authSource = File("app/src/main/java/com/nexio/tv/data/repository/TraktAuthService.kt").readText()
+        val scrobbleSource = File("app/src/main/java/com/nexio/tv/data/repository/trakt/TraktScrobbleMutationAdapter.kt").readText()
+        val historySource = File("app/src/main/java/com/nexio/tv/data/repository/trakt/TraktProgressHistoryMutationAdapter.kt").readText()
+
+        assertTrue(authSource.contains("suspend fun <T> executeAuthorizedWriteRequest("))
+        assertTrue(authSource.contains("session: TrackingAuthSession"))
+        assertTrue(scrobbleSource.contains("TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)"))
+        assertTrue(historySource.contains("TrackingAuthSession(TrackingProvider.TRAKT, envelope.profileId)"))
+        assertTrue(!scrobbleSource.contains("traktAuthService.executeAuthorizedWriteRequest { authHeader ->"))
+    }
 }
