@@ -157,4 +157,5 @@ Every store in this table must appear exactly once. Additions to `app/src/main/j
 - `AccountSettingsSyncService` may write profile-owned UX values only for profile 1.
 - `nexio-web` profile 1 surfaces must not call profile settings APIs for profile-owned UX values.
 - `nexio-web` profile 2-4 surfaces must not mutate account settings for profile-owned UX values.
+- Supabase `sync_pull_profile_settings_blob` and `sync_push_profile_settings_blob` reject profile 1; profile 1/default uses account settings RPCs only.
 - No `profile-local`, `profile-derived-cache`, `shared-language-cache`, or `global-device` value may be serialized to `profile_settings`.

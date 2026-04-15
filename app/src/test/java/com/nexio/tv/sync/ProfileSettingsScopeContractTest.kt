@@ -293,6 +293,7 @@ class ProfileSettingsScopeContractTest {
         val text = doc()
 
         assertTrue(text.contains("`ProfileSettingsSyncService.syncedFeatures` may include only `profile-remote` stores."))
+        assertTrue(text.contains("Supabase `sync_pull_profile_settings_blob` and `sync_push_profile_settings_blob` reject profile 1"))
         assertTrue(text.contains("No `profile-local`, `profile-derived-cache`, `shared-language-cache`, or `global-device` value may be serialized to `profile_settings`."))
     }
 
