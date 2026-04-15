@@ -15,6 +15,7 @@ import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.MetaCompany
 import com.nexio.tv.domain.model.MetaCompanyKind
+import java.lang.reflect.Type
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
@@ -42,6 +43,8 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val TMDB_TITLE_VIDEOS_PREFIX = "tmdb_videos::"
         private const val TMDB_SEASON_VIDEOS_PREFIX = "tmdb_season_videos::"
         private const val TVDB_REF_PREFIX = "tvdb_ref::"
+        private const val TVDB_REFERENCE_PREFIX = "tvdb_ref::"
+        private const val TVDB_REFERENCE_SCHEMA_VERSION = 1
         private const val HOME_REF_PREFIX = "home_ref::"
         private const val META_CACHE_SCHEMA_VERSION = 3
         private const val TMDB_CACHE_SCHEMA_VERSION = 2
@@ -438,6 +441,70 @@ class MetadataDiskCacheStore @Inject constructor(
         // Home references only describe the active profile. Do not prune shared
         // language-keyed metadata or language-independent artwork from them.
         return emptyList()
+    }
+
+    /**
+     * Reads TVDB reference data for the given kind.
+     * Returns null if the cache entry is absent, malformed, or has a schema mismatch.
+     * Never returns raw IDs as labels -- returns null when values are absent.
+     */
+    fun <T> readTvdbReference(kind: String, type: Type): List<T>? {
+        val key = "${TVDB_REFERENCE_PREFIX}${kind.trim().lowercase()}::data"
+        return runCatching {
+            val root = readPendingEntry(key) ?: run {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
+                gson.fromJson(raw, JsonObject::class.java)
+            } ?: return null
+            val schemaVersion = root.get("tvdbReferenceSchemaVersion")?.asInt ?: 0
+            if (schemaVersion != TVDB_REFERENCE_SCHEMA_VERSION) return null
+            val valuesElement = root.get("values") ?: return null
+            val listType = TypeToken.getParameterized(List::class.java, type).type
+            val values: List<T> = gson.fromJson(valuesElement, listType) ?: return null
+            values
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to read TVDB reference cache entry for $kind", error)
+        }.getOrNull()
+    }
+
+    /**
+     * Reads TVDB reference data for the given kind with reified type parameter.
+     */
+    inline fun <reified T> readTvdbReference(kind: String): List<T>? {
+        return readTvdbReference(kind, T::class.java)
+    }
+
+    /**
+     * Writes TVDB reference data for the given kind.
+     * Includes schema version and timestamp for freshness and migration safety.
+     * Uses write batching for efficient bulk writes.
+     */
+    fun writeTvdbReference(kind: String, values: List<Any>) {
+        val key = "${TVDB_REFERENCE_PREFIX}${kind.trim().lowercase()}::data"
+        runCatching {
+            val payload = JsonObject().apply {
+                add("values", gson.toJsonTree(values))
+                addProperty("tvdbReferenceSchemaVersion", TVDB_REFERENCE_SCHEMA_VERSION)
+                addProperty("updatedAtMs", System.currentTimeMillis())
+            }
+            enqueueWrite(key, payload)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to write TVDB reference cache entry for $kind", error)
+        }
+    }
+
+    /**
+     * Removes TVDB reference data for the given kind.
+     */
+    fun removeTvdbReference(kind: String) {
+        val key = "${TVDB_REFERENCE_PREFIX}${kind.trim().lowercase()}::data"
+        pendingWrites.remove(key)
+        runCatching {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().remove(key).apply()
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to remove TVDB reference cache entry for $kind", error)
+        }
     }
 
     /**
