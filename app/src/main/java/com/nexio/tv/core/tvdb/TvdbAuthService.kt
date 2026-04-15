@@ -6,6 +6,7 @@ import com.nexio.tv.data.remote.api.TvdbApi
 import com.nexio.tv.data.remote.api.TvdbLoginRequest
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -31,9 +32,16 @@ sealed class TvdbAuthResult(open val status: TvdbValidationStatus) {
     }
 
     class InvalidCredentials(
+        val lastFailure: String,
+        override val status: TvdbValidationStatus = TvdbValidationStatus.INVALID
+    ) : TvdbAuthResult(status) {
+        override fun toString(): String = "TvdbAuthResult.InvalidCredentials(status=$status, lastFailure=$lastFailure)"
+    }
+
+    class AuthUnavailable(
         val lastFailure: String
-    ) : TvdbAuthResult(TvdbValidationStatus.INVALID) {
-        override fun toString(): String = "TvdbAuthResult.InvalidCredentials(lastFailure=$lastFailure)"
+    ) : TvdbAuthResult(TvdbValidationStatus.FALLBACK_ACTIVE) {
+        override fun toString(): String = "TvdbAuthResult.AuthUnavailable(lastFailure=$lastFailure)"
     }
 }
 
@@ -107,6 +115,14 @@ class TvdbAuthService(
                     )
                     null
                 }
+
+                is TvdbAuthResult.AuthUnavailable -> {
+                    settingsStore.saveValidationFailure(
+                        status = TvdbValidationStatus.FALLBACK_ACTIVE,
+                        lastFailure = result.lastFailure
+                    )
+                    null
+                }
             }
         }
     }
@@ -125,10 +141,16 @@ class TvdbAuthService(
                 tokenStore.clear()
                 result
             }
+
+            is TvdbAuthResult.AuthUnavailable -> result
         }
     }
 
     suspend fun validateCredentials(apiKey: String, subscriberPin: String): Boolean {
+        return validateCredentialsResult(apiKey = apiKey, subscriberPin = subscriberPin).status == TvdbValidationStatus.VALID
+    }
+
+    suspend fun validateCredentialsResult(apiKey: String, subscriberPin: String): TvdbAuthResult {
         val settingsStore = settingsDataStore
         val trimmedApiKey = apiKey.trim()
         val trimmedPin = subscriberPin.trim()
@@ -138,7 +160,10 @@ class TvdbAuthService(
                 status = TvdbValidationStatus.NOT_CONFIGURED,
                 lastFailure = "TVDB API key is required"
             )
-            return false
+            return TvdbAuthResult.InvalidCredentials(
+                lastFailure = "TVDB API key is required",
+                status = TvdbValidationStatus.NOT_CONFIGURED
+            )
         }
 
         return when (val result = requestToken(apiKey = trimmedApiKey, pin = trimmedPin)) {
@@ -153,7 +178,7 @@ class TvdbAuthService(
                     expiresAtEpochMillis = result.expiresAtEpochMillis,
                     credentialFingerprint = credentialFingerprint(trimmedApiKey, trimmedPin)
                 )
-                true
+                result
             }
 
             is TvdbAuthResult.InvalidCredentials -> {
@@ -162,7 +187,15 @@ class TvdbAuthService(
                     status = TvdbValidationStatus.INVALID,
                     lastFailure = result.lastFailure
                 )
-                false
+                result
+            }
+
+            is TvdbAuthResult.AuthUnavailable -> {
+                settingsStore?.saveValidationFailure(
+                    status = TvdbValidationStatus.FALLBACK_ACTIVE,
+                    lastFailure = result.lastFailure
+                )
+                result
             }
         }
     }
@@ -199,20 +232,24 @@ class TvdbAuthService(
                 }
                 val reason = "TVDB auth response did not include credentials"
                 Log.w(TAG, "TVDB /login failed status=${response.code()} reason=missing-auth-data")
+                return TvdbAuthResult.AuthUnavailable(reason)
+            }
+
+            if (response.code() == 401) {
+                val reason = "Invalid TVDB credentials"
+                Log.w(TAG, "TVDB /login failed status=${response.code()} reason=http-${response.code()}")
                 return TvdbAuthResult.InvalidCredentials(reason)
             }
 
-            val reason = if (response.code() == 401) {
-                "Invalid TVDB credentials"
-            } else {
-                "TVDB login failed with HTTP ${response.code()}"
-            }
+            val reason = "TVDB login failed with HTTP ${response.code()}"
             Log.w(TAG, "TVDB /login failed status=${response.code()} reason=http-${response.code()}")
-            TvdbAuthResult.InvalidCredentials(reason)
+            TvdbAuthResult.AuthUnavailable(reason)
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             val reason = "TVDB login failed: ${error.javaClass.simpleName}"
             Log.w(TAG, "TVDB /login failed status=exception reason=${error.javaClass.simpleName}")
-            TvdbAuthResult.InvalidCredentials(reason)
+            TvdbAuthResult.AuthUnavailable(reason)
         }
     }
 

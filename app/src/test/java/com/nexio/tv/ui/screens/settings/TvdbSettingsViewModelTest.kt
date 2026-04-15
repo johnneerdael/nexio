@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.settings
 
+import com.nexio.tv.core.tvdb.TvdbAuthResult
 import com.nexio.tv.core.tvdb.TvdbAuthService
 import com.nexio.tv.core.tvdb.TvdbValidationStatus
 import com.nexio.tv.data.local.TvdbSettings
@@ -66,8 +67,12 @@ class TvdbSettingsViewModelTest {
         val validation = CompletableDeferred<Boolean>()
         var successCount = 0
         every { dataStore.settings } returns settingsFlow
-        coEvery { authService.validateCredentials("tvdb-key", "subscriber-pin") } coAnswers {
+        coEvery { authService.validateCredentialsResult("tvdb-key", "subscriber-pin") } coAnswers {
             validation.await()
+            TvdbAuthResult.Valid(
+                authorizationHeader = "Bearer tvdb-token",
+                expiresAtEpochMillis = 1_700_000_000_000L
+            )
         }
 
         val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = authService)
@@ -88,7 +93,7 @@ class TvdbSettingsViewModelTest {
         assertEquals(1, successCount)
         assertEquals(TvdbValidationStatus.VALID, viewModel.uiState.value.validationStatus)
         assertEquals("••••••-key", viewModel.uiState.value.credentialDisplayValue)
-        coVerify(exactly = 1) { authService.validateCredentials("tvdb-key", "subscriber-pin") }
+        coVerify(exactly = 1) { authService.validateCredentialsResult("tvdb-key", "subscriber-pin") }
     }
 
     @Test
@@ -98,7 +103,9 @@ class TvdbSettingsViewModelTest {
         val authService = mockk<TvdbAuthService>()
         var successCount = 0
         every { dataStore.settings } returns settingsFlow
-        coEvery { authService.validateCredentials("tvdb-key", "subscriber-pin") } returns false
+        coEvery { authService.validateCredentialsResult("tvdb-key", "subscriber-pin") } returns TvdbAuthResult.InvalidCredentials(
+            lastFailure = "Invalid TVDB credentials"
+        )
 
         val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = authService)
         advanceUntilIdle()

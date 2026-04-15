@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.core.tvdb.TvdbAuthResult
 import com.nexio.tv.core.tvdb.TvdbAuthService
 import com.nexio.tv.core.tvdb.TvdbValidationStatus
 import com.nexio.tv.data.local.TvdbSettingsDataStore
@@ -113,31 +114,45 @@ class TvdbSettingsViewModel @Inject constructor(
                 )
             }
 
-            val valid = authService.validateCredentials(trimmedApiKey, trimmedPin)
-            if (valid) {
-                _uiState.update {
-                    it.copy(
-                        apiKey = trimmedApiKey,
-                        validationStatus = TvdbValidationStatus.VALID,
-                        lastFailure = ""
-                    )
+            when (val result = authService.validateCredentialsResult(trimmedApiKey, trimmedPin)) {
+                is TvdbAuthResult.Valid -> {
+                    _uiState.update {
+                        it.copy(
+                            apiKey = trimmedApiKey,
+                            validationStatus = TvdbValidationStatus.VALID,
+                            lastFailure = ""
+                        )
+                    }
+                    onSuccess()
                 }
-                onSuccess()
-            } else {
-                dataStore.setEnabled(false)
-                dataStore.saveValidationFailure(
-                    status = TvdbValidationStatus.INVALID,
-                    lastFailure = "Invalid TVDB credentials"
-                )
-                _uiState.update {
-                    it.copy(
-                        enabled = false,
-                        apiKey = trimmedApiKey,
-                        validationStatus = TvdbValidationStatus.INVALID,
-                        lastFailure = "Invalid TVDB credentials"
+
+                is TvdbAuthResult.InvalidCredentials -> {
+                    dataStore.setEnabled(false)
+                    dataStore.saveValidationFailure(
+                        status = TvdbValidationStatus.INVALID,
+                        lastFailure = result.lastFailure
                     )
+                    _uiState.update {
+                        it.copy(
+                            enabled = false,
+                            apiKey = trimmedApiKey,
+                            validationStatus = TvdbValidationStatus.INVALID,
+                            lastFailure = result.lastFailure
+                        )
+                    }
+                    _validationError.tryEmit(TvdbValidationError.InvalidCredentials)
                 }
-                _validationError.tryEmit(TvdbValidationError.InvalidCredentials)
+
+                is TvdbAuthResult.AuthUnavailable -> {
+                    _uiState.update {
+                        it.copy(
+                            apiKey = trimmedApiKey,
+                            validationStatus = TvdbValidationStatus.FALLBACK_ACTIVE,
+                            lastFailure = result.lastFailure
+                        )
+                    }
+                    _validationError.tryEmit(TvdbValidationError.InvalidCredentials)
+                }
             }
         }
     }
