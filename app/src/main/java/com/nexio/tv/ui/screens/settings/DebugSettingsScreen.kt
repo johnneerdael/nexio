@@ -153,35 +153,6 @@ fun DebugSettingsContent(
                 )
             }
 
-            // ── Troubleshooting ──
-            item(key = "debug_troubleshooting_header") {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.debug_section_troubleshooting),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = NexioColors.TextTertiary,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
-            }
-
-            item(key = "debug_invalidate_poster_cache") {
-                DebugActionCard(
-                    title = stringResource(R.string.debug_invalidate_poster_cache_title),
-                    subtitle = if (uiState.posterCacheInvalidated) {
-                        stringResource(R.string.debug_invalidate_poster_cache_done)
-                    } else if (uiState.posterCacheInvalidating) {
-                        stringResource(R.string.debug_invalidate_poster_cache_progress)
-                    } else {
-                        stringResource(R.string.debug_invalidate_poster_cache_subtitle)
-                    },
-                    onClick = {
-                        if (!uiState.posterCacheInvalidating) {
-                            viewModel.onEvent(DebugSettingsEvent.InvalidatePosterCache)
-                        }
-                    }
-                )
-            }
-
             // ── TVDB Diagnostics ──
             item(key = "debug_tvdb_diagnostics_header") {
                 Spacer(modifier = Modifier.height(8.dp))

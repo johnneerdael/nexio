@@ -51,6 +51,8 @@ fun PosterRatingsSettingsContent(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val validatingRpdb by viewModel.validatingRpdb.collectAsStateWithLifecycle()
     val validatingTop by viewModel.validatingTopPosters.collectAsStateWithLifecycle()
+    val posterCacheInvalidating by viewModel.posterCacheInvalidating.collectAsStateWithLifecycle()
+    val posterCacheInvalidated by viewModel.posterCacheInvalidated.collectAsStateWithLifecycle()
     var showRpdbDialog by remember { mutableStateOf(false) }
     var showTopDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -118,6 +120,19 @@ fun PosterRatingsSettingsContent(
                 value = maskApiKey(uiState.topPostersApiKey, stringResource(R.string.mdblist_not_set)),
                 enabled = uiState.topPostersEnabled,
                 onClick = { showTopDialog = true }
+            )
+
+            SettingsActionRow(
+                title = stringResource(R.string.poster_ratings_invalidate_cache_title),
+                subtitle = if (posterCacheInvalidated) {
+                    stringResource(R.string.poster_ratings_invalidate_cache_done)
+                } else if (posterCacheInvalidating) {
+                    stringResource(R.string.poster_ratings_invalidate_cache_progress)
+                } else {
+                    stringResource(R.string.poster_ratings_invalidate_cache_subtitle)
+                },
+                enabled = !posterCacheInvalidating,
+                onClick = { viewModel.onEvent(PosterRatingsSettingsEvent.InvalidatePosterCache) }
             )
         }
     }

@@ -1,12 +1,16 @@
 package com.nexio.tv.ui.screens.settings
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import coil.imageLoader
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.remote.api.RpdbApi
 import com.nexio.tv.data.remote.api.TopPostersApi
 import com.nexio.tv.domain.model.PosterRatingsSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -16,10 +20,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
 class PosterRatingsSettingsViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val dataStore: PosterRatingsSettingsDataStore,
     private val rpdbApi: RpdbApi,
     private val topPostersApi: TopPostersApi
@@ -45,10 +51,30 @@ class PosterRatingsSettingsViewModel @Inject constructor(
         }
     }
 
+    private val _posterCacheInvalidating = MutableStateFlow(false)
+    val posterCacheInvalidating: StateFlow<Boolean> = _posterCacheInvalidating.asStateFlow()
+
+    private val _posterCacheInvalidated = MutableStateFlow(false)
+    val posterCacheInvalidated: StateFlow<Boolean> = _posterCacheInvalidated.asStateFlow()
+
     fun onEvent(event: PosterRatingsSettingsEvent) {
         when (event) {
             is PosterRatingsSettingsEvent.ToggleRpdb -> update { dataStore.setRpdbEnabled(event.enabled) }
             is PosterRatingsSettingsEvent.ToggleTopPosters -> update { dataStore.setTopPostersEnabled(event.enabled) }
+            is PosterRatingsSettingsEvent.InvalidatePosterCache -> invalidatePosterCache()
+        }
+    }
+
+    private fun invalidatePosterCache() {
+        viewModelScope.launch {
+            _posterCacheInvalidating.value = true
+            withContext(Dispatchers.IO) {
+                val imageLoader = appContext.imageLoader
+                imageLoader.memoryCache?.clear()
+                imageLoader.diskCache?.clear()
+            }
+            _posterCacheInvalidating.value = false
+            _posterCacheInvalidated.value = true
         }
     }
 
@@ -143,5 +169,6 @@ data class PosterRatingsSettingsUiState(
 sealed class PosterRatingsSettingsEvent {
     data class ToggleRpdb(val enabled: Boolean) : PosterRatingsSettingsEvent()
     data class ToggleTopPosters(val enabled: Boolean) : PosterRatingsSettingsEvent()
+    data object InvalidatePosterCache : PosterRatingsSettingsEvent()
 }
 
