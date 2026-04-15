@@ -1,5 +1,8 @@
 <resources>
     <string name="app_name">NEXIO</string>
+    <string name="android_tv_search_authority" translatable="false">com.nexio.tv.search</string>
+    <string name="android_tv_search_hint">Search movies and shows</string>
+    <string name="android_tv_search_description">Movies and TV shows</string>
     <string name="type_movie">Movie</string>
     <string name="type_series">Series</string>
     <string name="type_unknown">Unknown</string>

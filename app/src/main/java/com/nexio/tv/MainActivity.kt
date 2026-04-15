@@ -183,6 +183,7 @@ import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import androidx.compose.ui.res.stringResource
+import com.nexio.tv.core.search.AndroidTvNativeSearchIntent
 import com.nexio.tv.R
 import com.nexio.tv.DrawerItem
 import com.nexio.tv.ModernSidebarBlurPanel
@@ -1260,6 +1261,18 @@ class MainActivity : ComponentActivity() {
 
     private fun handleRecommendationIntent(intent: Intent?) {
         val actualIntent = intent ?: return
+        if (actualIntent.action == Intent.ACTION_VIEW) {
+            AndroidTvNativeSearchIntent.parseDetailUri(actualIntent.data)?.let { target ->
+                pendingRecommendationNavigation.value = RecommendationNavigation(
+                    itemId = target.itemId,
+                    itemType = target.itemType,
+                    addonBaseUrl = target.addonBaseUrl
+                )
+                actualIntent.data = null
+                return
+            }
+        }
+
         val itemId = actualIntent.getStringExtra(EXTRA_RECOMMENDATION_CONTENT_ID)?.trim().orEmpty()
         val itemType = actualIntent.getStringExtra(EXTRA_RECOMMENDATION_CONTENT_TYPE)?.trim().orEmpty()
         if (itemId.isNotEmpty() && itemType.isNotEmpty()) {

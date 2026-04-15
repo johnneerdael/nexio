@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+  <string name="android_tv_search_hint">Filme und Serien suchen</string>
+  <string name="android_tv_search_description">Filme und Serien</string>
   <string name="action_close">Schließen</string>
   <string name="mdblist_catalogs_title">Kataloge</string>
   <string name="animeskip_subtitle">Anime Skip Client-ID für Intro-/Outro-Sprünge konfigurieren</string>

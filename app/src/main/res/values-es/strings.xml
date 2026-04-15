@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+  <string name="android_tv_search_hint">Buscar películas y series</string>
+  <string name="android_tv_search_description">Películas y series</string>
   <string name="type_movie">Película</string>
   <string name="type_series">Serie</string>
   <string name="type_unknown">Desconocido</string>
