@@ -16,6 +16,8 @@ class ProfileSettingsScopeContractTest {
     private val profileBoundary = File("app/src/main/java/com/nexio/tv/core/profile/ProfileBoundary.kt")
     private val profileModeRouter = File("app/src/main/java/com/nexio/tv/core/profile/ProfileModeRouter.kt")
     private val trackingProviderStateService = File("app/src/main/java/com/nexio/tv/data/repository/TrackingProviderStateService.kt")
+    private val traktAuthService = File("app/src/main/java/com/nexio/tv/data/repository/TraktAuthService.kt")
+    private val simklAuthService = File("app/src/main/java/com/nexio/tv/data/repository/SimklAuthService.kt")
     private val homeCatalogPipeline = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt")
     private val metadataDiskCacheStore = File("app/src/main/java/com/nexio/tv/data/local/MetadataDiskCacheStore.kt")
     private val artworkImageCacheKeys = File("app/src/main/java/com/nexio/tv/core/image/ArtworkImageCacheKeys.kt")
@@ -402,5 +404,24 @@ class ProfileSettingsScopeContractTest {
         assertTrue(homePipelineSource.contains("Skipping stale disk-backed home state"))
         assertTrue(homePipelineSource.contains("runSerializedPostStartupRefreshPipeline(expectedGeneration: Long)"))
         assertTrue(homePipelineSource.contains("Skipping stale serialized home refresh"))
+    }
+
+    @Test
+    fun `tracking auth services save and clear through routed profile ids`() {
+        val traktSource = traktAuthService.readText()
+        val simklSource = simklAuthService.readText()
+
+        assertTrue(traktSource.contains("profileModeRouter.routeFor(profileManager.activeProfileId.value)"))
+        assertTrue(traktSource.contains("ProfileModeRoute.DefaultLegacyRoute -> profileModeRouter.defaultLegacyProfileId()"))
+        assertTrue(traktSource.contains("profileBoundary.authRoute(route, TrackingProvider.TRAKT).profileId"))
+        assertTrue(traktSource.contains("ProfileModeRoute.InvalidProfileRoute -> error(\"Invalid active profile id ${'$'}{route.profileId}\")"))
+        assertTrue(traktSource.contains("traktAuthDataStore.clearAuth(profileId)"))
+        assertTrue(traktSource.contains("traktAuthDataStore.saveToken(tokenBody, profileId = profileId)"))
+        assertTrue(simklSource.contains("profileModeRouter.routeFor(profileManager.activeProfileId.value)"))
+        assertTrue(simklSource.contains("ProfileModeRoute.DefaultLegacyRoute -> profileModeRouter.defaultLegacyProfileId()"))
+        assertTrue(simklSource.contains("profileBoundary.authRoute(route, TrackingProvider.SIMKL).profileId"))
+        assertTrue(simklSource.contains("ProfileModeRoute.InvalidProfileRoute -> error(\"Invalid active profile id ${'$'}{route.profileId}\")"))
+        assertTrue(simklSource.contains("simklAuthDataStore.clearAuth(currentRoutedProfileId())"))
+        assertTrue(simklSource.contains("simklAuthDataStore.saveAccessToken(body.accessToken, profileId = profileId)"))
     }
 }

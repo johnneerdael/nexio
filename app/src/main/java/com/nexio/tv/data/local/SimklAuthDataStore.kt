@@ -94,9 +94,12 @@ class SimklAuthDataStore @Inject constructor(
         }
     }
 
-    suspend fun saveDeviceFlow(data: SimklPinResponseDto) {
+    suspend fun saveDeviceFlow(
+        data: SimklPinResponseDto,
+        profileId: Int = profileManager.activeProfileId.value
+    ) {
         val now = System.currentTimeMillis()
-        store().edit { preferences ->
+        store(profileId).edit { preferences ->
             data.deviceCode?.let { preferences[deviceCodeKey] = it }
             data.userCode?.let { preferences[userCodeKey] = it }
             data.verificationUrl?.let { preferences[verificationUrlKey] = it }
@@ -105,8 +108,11 @@ class SimklAuthDataStore @Inject constructor(
         }
     }
 
-    suspend fun updatePollInterval(seconds: Int) {
-        store().edit { preferences ->
+    suspend fun updatePollInterval(
+        seconds: Int,
+        profileId: Int = profileManager.activeProfileId.value
+    ) {
+        store(profileId).edit { preferences ->
             preferences[pollIntervalKey] = seconds
         }
     }
