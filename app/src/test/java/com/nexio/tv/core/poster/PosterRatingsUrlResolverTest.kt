@@ -47,7 +47,7 @@ class PosterRatingsUrlResolverTest {
         )
 
         assertEquals(
-            "https://api.top-streaming.stream/top-key/tmdb/poster/series-123.jpg",
+            "https://api.top-posters.com/top-key/tmdb/poster/series-123.jpg",
             resolved
         )
     }
@@ -65,13 +65,13 @@ class PosterRatingsUrlResolverTest {
         )
 
         assertEquals(
-            "https://api.top-streaming.stream/top-key/tvdb/poster/121361.jpg",
+            "https://api.top-posters.com/top-key/tvdb/poster/121361.jpg",
             resolved
         )
     }
 
     @Test
-    fun `rpdb leaves tvdb id poster unchanged`() {
+    fun `rpdb poster url is built from tvdb id`() {
         val resolved = resolver.resolvePosterUrl(
             originalPosterUrl = "https://tvdb.example/poster.jpg",
             contentId = "tvdb:121361",
@@ -83,7 +83,7 @@ class PosterRatingsUrlResolverTest {
         )
 
         assertEquals(
-            "https://tvdb.example/poster.jpg",
+            "https://api.ratingposterdb.com/rpdb-key/tvdb/poster-default/121361.jpg",
             resolved
         )
     }

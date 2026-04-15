@@ -640,7 +640,7 @@ object NetworkModule {
     @Named("topPosters")
     fun provideTopPostersRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
         Retrofit.Builder()
-            .baseUrl("https://api.top-streaming.stream/")
+            .baseUrl("https://api.top-posters.com/")
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()

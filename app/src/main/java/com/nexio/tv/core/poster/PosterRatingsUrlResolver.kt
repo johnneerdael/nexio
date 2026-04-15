@@ -98,15 +98,19 @@ class PosterRatingsUrlResolver @Inject constructor(
     private fun isAlreadyProviderUrl(url: String, provider: ActiveProvider): Boolean {
         return when (provider.provider) {
             PosterRatingsProvider.RPDB -> url.startsWith("https://api.ratingposterdb.com/")
-            PosterRatingsProvider.TOP_POSTERS -> url.startsWith("https://api.top-streaming.stream/")
+            PosterRatingsProvider.TOP_POSTERS -> url.startsWith("https://api.top-posters.com/")
             PosterRatingsProvider.NONE -> false
         }
     }
 
     private fun buildRpdbPosterUrl(apiKey: String, id: ProviderId): String? {
-        // RPDB is stable for IMDb IDs. Non-IMDb ids are ignored to avoid broken posters.
-        if (id.type != IdType.IMDB) return null
-        return "https://api.ratingposterdb.com/$apiKey/imdb/poster-default/${id.value}.jpg"
+        val idType = when (id.type) {
+            IdType.IMDB -> "imdb"
+            IdType.TMDB -> "tmdb"
+            IdType.TVDB -> "tvdb"
+            else -> return null
+        }
+        return "https://api.ratingposterdb.com/$apiKey/$idType/poster-default/${id.value}.jpg"
     }
 
     private fun buildTopPostersUrl(
@@ -124,7 +128,7 @@ class PosterRatingsUrlResolver @Inject constructor(
             IdType.ANILIST -> "anilist/poster/${id.value}.jpg"
             IdType.ANIDB -> "anidb/poster/${id.value}.jpg"
         }
-        val baseUrl = "https://api.top-streaming.stream/$apiKey/$path"
+        val baseUrl = "https://api.top-posters.com/$apiKey/$path"
         return if (fallbackUrl == null) {
             baseUrl
         } else {
