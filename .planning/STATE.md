@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 10-04-PLAN.md
-last_updated: "2026-04-15T20:14:54.544Z"
+stopped_at: Completed 10-05-PLAN.md
+last_updated: "2026-04-15T20:35:27.289Z"
 last_activity: 2026-04-15
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 32
-  completed_plans: 30
-  percent: 94
+  completed_plans: 31
+  percent: 97
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 ## Current Position
 
 Phase: 10
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-04-15
 
@@ -65,6 +65,7 @@ Progress: [████████░░] 81%
 | Phase 10 P02 | 13min | 2 tasks | 8 files |
 | Phase 10 P03 | 2min | 2 tasks | 8 files |
 | Phase 10 P04 | 9min | 2 tasks | 9 files |
+| Phase 10 P05 | 18min | 1 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,7 @@ Recent decisions affecting current work:
 - [Phase 10]: TvdbCacheInvalidator and TvdbUpdateCoordinator use Provider<TvdbReferenceDataService> to break circular Hilt dependency
 - [Phase 10]: TvdbMetadataService reads disk cache before network fetch; serves stale on outage with STALE_CACHE_SERVED diagnostic
 - [Phase 10]: TvMetadataRouter gates on canCallTvdb() before all TVDB network paths; field-level diagnostics keep TVDB as provider
+- [Phase 10]: settingsStatusLine() prioritizes invalid credentials > stale cache > update failed > reference failed for user-facing TVDB status
 
 ### Pending Todos
 
@@ -109,6 +111,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-15T20:14:54.541Z
-Stopped at: Completed 10-04-PLAN.md
+Last session: 2026-04-15T20:35:27.286Z
+Stopped at: Completed 10-05-PLAN.md
 Resume file: None
