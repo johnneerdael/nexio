@@ -78,11 +78,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PREF-01 | Phase 6 | Pending |
-| PREF-04 | Phase 6 | Pending |
-| PREF-05 | Phase 6 | Pending |
-| PREF-06 | Phase 6 | Pending |
-| CACHE-01 | Phase 6 | Pending |
+| PREF-01 | Phase 6 | Verified |
+| PREF-04 | Phase 6 | Verified |
+| PREF-05 | Phase 6 | Verified with debt |
+| PREF-06 | Phase 6 | Verified |
+| CACHE-01 | Phase 6 | Verified |
 | PREF-02 | Phase 7 | Pending |
 | PREF-03 | Phase 7 | Pending |
 | PREF-07 | Phase 7 | Pending |
