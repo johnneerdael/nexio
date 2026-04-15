@@ -7,6 +7,7 @@ import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRouter
+import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
@@ -15,7 +16,6 @@ import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.Video
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.coAnswers
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -167,6 +167,65 @@ class MetaDetailsTvdbProviderRoutingTest {
         coVerify(exactly = 1) { tmdbService.ensureTmdbId("tt0137523", "movie") }
         coVerify(exactly = 1) { tmdbMetadataService.fetchEnrichment("550", ContentType.MOVIE, any()) }
         coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
+    }
+
+    @Test
+    fun `updates episode rows from tvdb and does not call tmdb episode enrichment`() = runTest(dispatcher) {
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val tvMetadataRouter = mockk<TvMetadataRouter>(relaxed = true)
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = null
+        )
+        coEvery { tvMetadataRouter.fetchEpisodeEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = mapOf(
+                (1 to 1) to TvEpisodeMetadata(
+                    providerEpisodeId = "tvdb:9001",
+                    seasonNumber = 1,
+                    episodeNumber = 1,
+                    title = "TVDB Pilot",
+                    overview = "TVDB episode overview",
+                    thumbnail = "https://image.tvdb.test/episode.jpg",
+                    airDate = "2020-02-03",
+                    runtimeMinutes = 57
+                )
+            )
+        )
+
+        val viewModel = buildMetaDetailsViewModel(
+            meta = buildSeriesMeta(),
+            tmdbMetadataService = tmdbMetadataService,
+            tvMetadataRouter = tvMetadataRouter,
+            tmdbSettings = TmdbSettings(
+                enabled = true,
+                apiKey = "tmdb-key",
+                useArtwork = false,
+                useBasicInfo = false,
+                useDetails = false,
+                useCredits = false,
+                useProductions = false,
+                useNetworks = false,
+                useEpisodes = true,
+                useMoreLikeThis = false,
+                useReviews = false,
+                useCollections = false
+            )
+        )
+
+        advanceUntilIdle()
+
+        val episode = viewModel.uiState.value.meta?.videos?.firstOrNull { it.season == 1 && it.episode == 1 }
+        assertEquals("TVDB Pilot", episode?.title)
+        assertEquals("TVDB episode overview", episode?.overview)
+        assertEquals("2020-02-03", episode?.released)
+        assertEquals("https://image.tvdb.test/episode.jpg", episode?.thumbnail)
+        assertEquals(57, episode?.runtime)
+
+        coVerify(exactly = 1) { tvMetadataRouter.fetchEpisodeEnrichment(any()) }
+        coVerify(exactly = 0) { tmdbMetadataService.fetchEpisodeEnrichment(any(), any(), any()) }
     }
 
     private fun buildSeriesMeta(): Meta {
