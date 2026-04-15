@@ -122,7 +122,7 @@ class AndroidTvFeedCatalogService @Inject constructor(
         val traktPrefs = traktSettingsDataStore.catalogPreferences.first()
         val mdbListSnapshot = mdbListDiscoveryService.observeSnapshot().first()
         val mdbListPrefs = mdbListSettingsDataStore.catalogPreferences.first()
-        val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot().first()
+        val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot().first().snapshot
 
         val optionByKey = buildFeedOptions(
             addons = addons,
@@ -181,7 +181,7 @@ class AndroidTvFeedCatalogService @Inject constructor(
         val traktPrefs = traktSettingsDataStore.catalogPreferences.first()
         val mdbListSnapshot = mdbListDiscoveryService.observeSnapshot().first()
         val mdbListPrefs = mdbListSettingsDataStore.catalogPreferences.first()
-        val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot().first()
+        val continueWatchingSnapshot = continueWatchingSnapshotService.observeSnapshot().first().snapshot
 
         val optionByKey = buildFeedOptions(
             addons = addons,

@@ -44,8 +44,13 @@ internal fun shouldEnrichContinueWatchingProviderMetadata(
 
 internal fun HomeViewModel.loadContinueWatchingPipeline() {
     viewModelScope.launch {
-        continueWatchingSnapshotService.observeSnapshot().collectLatest { snapshot ->
+        continueWatchingSnapshotService.observeSnapshot().collectLatest { ownedSnapshot ->
             val capturedGeneration = homeProfileGeneration
+            if (ownedSnapshot.profileId != activeHomeProfileSession.profileId) {
+                Log.d(HomeViewModel.TAG, "Skipping foreign continue watching snapshot profile=${ownedSnapshot.profileId}")
+                return@collectLatest
+            }
+            val snapshot = ownedSnapshot.snapshot
             val timeline = buildMixedContinueWatchingTimeline(
                 resumeItems = snapshot.resumeItems,
                 nextUpItems = snapshot.nextUpItems,
