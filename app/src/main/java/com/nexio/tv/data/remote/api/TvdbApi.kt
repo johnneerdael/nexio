@@ -55,6 +55,14 @@ interface TvdbApi {
         @Query("episodeNumber") episodeNumber: Int? = null,
         @Query("airDate") airDate: String? = null
     ): Response<TvdbSeriesEpisodesResponse>
+
+    @GET("updates")
+    suspend fun getUpdates(
+        @Header("Authorization") authorization: String,
+        @Query("since") since: Long,
+        @Query("type") type: String? = null,
+        @Query("page") page: Int? = null
+    ): Response<TvdbUpdatesResponse>
 }
 
 @JsonClass(generateAdapter = true)
@@ -291,4 +299,32 @@ data class TvdbTrailerRecord(
     @Json(name = "name") val name: String? = null,
     @Json(name = "url") val url: String? = null,
     @Json(name = "runtime") val runtime: Int? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbUpdatesResponse(
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "data") val data: List<TvdbEntityUpdate> = emptyList(),
+    @Json(name = "links") val links: TvdbLinks? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbEntityUpdate(
+    @Json(name = "entityType") val entityType: String?,
+    @Json(name = "method") val method: String? = null,
+    @Json(name = "methodInt") val methodInt: Int?,
+    @Json(name = "recordId") val recordId: Int?,
+    @Json(name = "timeStamp") val timeStamp: Long?,
+    @Json(name = "seriesId") val seriesId: Int? = null,
+    @Json(name = "mergeToId") val mergeToId: Int? = null,
+    @Json(name = "mergeToEntityType") val mergeToEntityType: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbLinks(
+    @Json(name = "prev") val prev: String? = null,
+    @Json(name = "self") val self: String? = null,
+    @Json(name = "next") val next: String? = null,
+    @Json(name = "total_items") val totalItems: Int? = null,
+    @Json(name = "page_size") val pageSize: Int? = null
 )
