@@ -3,7 +3,6 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.core.scheduler.ContinueWatchingAirScheduler
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.MetadataDiskCacheStore
-import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.MetaRepository
@@ -140,7 +139,11 @@ class ContinueWatchingSnapshotServiceMutationTest {
     ): ContinueWatchingSnapshotService {
         val constructor = ContinueWatchingSnapshotService::class.java.declaredConstructors
             .firstOrNull { candidate ->
-                candidate.parameterTypes.any { it == ContinueWatchingAirScheduler::class.java }
+                candidate.parameterTypes.any { it == ContinueWatchingAirScheduler::class.java } &&
+                    candidate.parameterTypes.none {
+                        it == Int::class.javaPrimitiveType ||
+                            it.name == "kotlin.jvm.internal.DefaultConstructorMarker"
+                    }
             }
             ?: error("ContinueWatchingSnapshotService must accept ContinueWatchingAirScheduler")
         constructor.isAccessible = true
