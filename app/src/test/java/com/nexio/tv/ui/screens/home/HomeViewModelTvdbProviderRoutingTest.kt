@@ -227,6 +227,64 @@ class HomeViewModelTvdbProviderRoutingTest {
     }
 
     @Test
+    fun `continue watching tvdb success applies metadata with tmdb disabled`() = runTest {
+        val viewModel = mockk<HomeViewModel>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        every { viewModel.tvMetadataRouter } returns tvMetadataRouter
+        every { viewModel.tmdbService } returns tmdbService
+        every { viewModel.tmdbMetadataService } returns tmdbMetadataService
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = TvMetadataEnrichment(
+                seriesTvdbId = 121361,
+                localizedTitle = "TVDB title",
+                description = "TVDB description",
+                genres = listOf("Drama"),
+                poster = "tvdb-poster",
+                backdrop = "tvdb-backdrop",
+                logo = "tvdb-logo",
+                releaseInfo = "2011",
+                rating = 8.9
+            )
+        )
+        coEvery { tvMetadataRouter.fetchEpisodeEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = mapOf((2 to 5) to TvEpisodeMetadata(overview = "TVDB episode overview"))
+        )
+
+        val result = viewModel.enrichContinueWatchingItemWithProvider(
+            item = continueWatchingSeriesItem(),
+            settings = TmdbSettings(enabled = false, apiKey = "")
+        ) as ContinueWatchingItem.InProgress
+
+        assertEquals("TVDB title", result.displayMetadata?.title)
+        assertEquals("TVDB description", result.displayMetadata?.description)
+        assertEquals(listOf("Drama"), result.displayMetadata?.genres)
+        assertEquals("tvdb-poster", result.displayMetadata?.poster)
+        assertEquals("tvdb-backdrop", result.displayMetadata?.backdrop)
+        assertEquals("tvdb-logo", result.displayMetadata?.logo)
+        assertEquals("2011", result.displayMetadata?.releaseInfo)
+        assertEquals(8.9f, result.displayMetadata?.imdbRating)
+        assertEquals("TVDB episode overview", result.episodeDescription)
+        coVerify(exactly = 1) {
+            tvMetadataRouter.fetchEnrichment(
+                TvMetadataRequest(
+                    contentId = "tt0944947",
+                    fallbackContentId = "tt0944947:2:5",
+                    contentType = ContentType.SERIES
+                )
+            )
+        }
+        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
+        coVerify(exactly = 0) { tmdbMetadataService.fetchEnrichment(any(), any(), any()) }
+        coVerify(exactly = 0) { tmdbMetadataService.fetchEpisodeEnrichment(any(), any(), any()) }
+    }
+
+    @Test
     fun `runtime hydration uses tvdb episode runtime`() = runTest {
         val viewModel = mockk<HomeViewModel>()
         val metaRepository = mockk<MetaRepository>()
