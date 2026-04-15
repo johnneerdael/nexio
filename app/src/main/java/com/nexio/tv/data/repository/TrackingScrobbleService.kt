@@ -52,32 +52,54 @@ class DefaultTrackingScrobbleService @Inject constructor(
     override suspend fun scrobbleStart(item: TrackingScrobbleItem, progressPercent: Float) {
         val providerState = trackingProviderStateService.currentState()
         when (providerState.effectiveProvider) {
-            TrackingProvider.SIMKL -> simklScrobbleService.scrobbleStart(item, progressPercent)
-            TrackingProvider.TRAKT -> toTraktItem(item)?.let { traktScrobbleService.scrobbleStart(it, progressPercent) }
+            TrackingProvider.SIMKL -> {
+                if (!providerState.simklAuthenticated) return
+                simklScrobbleService.scrobbleStart(item, progressPercent)
+            }
+            TrackingProvider.TRAKT -> {
+                if (!providerState.traktAuthenticated) return
+                toTraktItem(item)?.let { traktScrobbleService.scrobbleStart(it, progressPercent) }
+            }
         }
     }
 
     override suspend fun scrobbleStop(item: TrackingScrobbleItem, progressPercent: Float) {
         val providerState = trackingProviderStateService.currentState()
         when (providerState.effectiveProvider) {
-            TrackingProvider.SIMKL -> simklScrobbleService.scrobbleStop(item, progressPercent)
-            TrackingProvider.TRAKT -> toTraktItem(item)?.let { traktScrobbleService.scrobbleStop(it, progressPercent) }
+            TrackingProvider.SIMKL -> {
+                if (!providerState.simklAuthenticated) return
+                simklScrobbleService.scrobbleStop(item, progressPercent)
+            }
+            TrackingProvider.TRAKT -> {
+                if (!providerState.traktAuthenticated) return
+                toTraktItem(item)?.let { traktScrobbleService.scrobbleStop(it, progressPercent) }
+            }
         }
     }
 
     override suspend fun scrobblePause(item: TrackingScrobbleItem, progressPercent: Float) {
         val providerState = trackingProviderStateService.currentState()
         when (providerState.effectiveProvider) {
-            TrackingProvider.SIMKL -> simklScrobbleService.scrobblePause(item, progressPercent)
-            TrackingProvider.TRAKT -> toTraktItem(item)?.let { traktScrobbleService.scrobblePause(it, progressPercent) }
+            TrackingProvider.SIMKL -> {
+                if (!providerState.simklAuthenticated) return
+                simklScrobbleService.scrobblePause(item, progressPercent)
+            }
+            TrackingProvider.TRAKT -> {
+                if (!providerState.traktAuthenticated) return
+                toTraktItem(item)?.let { traktScrobbleService.scrobblePause(it, progressPercent) }
+            }
         }
     }
 
     override suspend fun checkin(item: TrackingScrobbleItem, message: String?): Boolean {
         val providerState = trackingProviderStateService.currentState()
         return when (providerState.effectiveProvider) {
-            TrackingProvider.SIMKL -> simklScrobbleService.checkin(item, message)
+            TrackingProvider.SIMKL -> {
+                if (!providerState.simklAuthenticated) return false
+                simklScrobbleService.checkin(item, message)
+            }
             TrackingProvider.TRAKT -> {
+                if (!providerState.traktAuthenticated) return false
                 val traktItem = toTraktItem(item) ?: return false
                 traktScrobbleService.checkin(traktItem, message)
             }
