@@ -5,6 +5,7 @@ import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TvdbMergeAliasStore
 import com.nexio.tv.data.remote.api.TvdbEntityUpdate
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 /**
@@ -23,7 +24,8 @@ import javax.inject.Singleton
 class TvdbCacheInvalidator @Inject constructor(
     private val cacheStore: MetadataDiskCacheStore,
     private val mergeAliasStore: TvdbMergeAliasStore,
-    private val diagnosticsRecorder: TvdbDiagnosticsRecorder
+    private val diagnosticsRecorder: TvdbDiagnosticsRecorder,
+    private val referenceDataServiceProvider: Provider<TvdbReferenceDataService>
 ) {
     companion object {
         private const val TAG = "TvdbCacheInvalidator"
@@ -75,7 +77,16 @@ class TvdbCacheInvalidator @Inject constructor(
                 }
             }
             in REFERENCE_ENTITY_TYPES -> {
-                cacheStore.removeTvdbRefEntries(entityType)
+                // Refresh reference kind from update event instead of only deleting
+                // tvdb_ref:: keys (D-04). If refresh returns stale data after failure,
+                // keep the stale reference cache and record/log the failure.
+                try {
+                    referenceDataServiceProvider.get().refreshForUpdateEntityType(entityType)
+                } catch (e: Exception) {
+                    Log.d(TAG, "Reference refresh failed for $entityType, keeping stale cache: ${e.message}")
+                    // Fall back to removing entries if refresh fails entirely
+                    cacheStore.removeTvdbRefEntries(entityType)
+                }
             }
             else -> {
                 recordUnknownEvent(event)
@@ -126,7 +137,7 @@ class TvdbCacheInvalidator @Inject constructor(
         }
     }
 
-    private fun invalidateSourceEntries(entityType: String, recordId: Int, seriesId: Int?) {
+    private suspend fun invalidateSourceEntries(entityType: String, recordId: Int, seriesId: Int?) {
         when (entityType) {
             "series" -> {
                 cacheStore.removeTvdbSeriesEntries(recordId)
@@ -153,6 +164,8 @@ class TvdbCacheInvalidator @Inject constructor(
                 }
             }
             in REFERENCE_ENTITY_TYPES -> {
+                // For delete/merge events on reference types, remove cache entries
+                // (refresh is handled in invalidateChanged for create/update events)
                 cacheStore.removeTvdbRefEntries(entityType)
             }
         }

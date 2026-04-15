@@ -10,6 +10,7 @@ import com.nexio.tv.data.local.TvdbUpdateStateStore
 import com.nexio.tv.workers.TvdbUpdateWorker
 import java.time.Duration
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 /**
@@ -44,7 +45,8 @@ class TvdbUpdateCoordinator @Inject constructor(
     private val processor: TvdbUpdateProcessor,
     private val credentialHealth: TvdbCredentialHealth,
     private val updateStateStore: TvdbUpdateStateStore,
-    private val diagnosticsRecorder: TvdbDiagnosticsRecorder
+    private val diagnosticsRecorder: TvdbDiagnosticsRecorder,
+    private val referenceDataServiceProvider: Provider<TvdbReferenceDataService>
 ) {
     companion object {
         private const val TAG = "TvdbUpdateCoordinator"
@@ -83,6 +85,21 @@ class TvdbUpdateCoordinator @Inject constructor(
             diagnosticsRecorder.record(blockedDiagnostic)
             emitStructuredLog(blockedDiagnostic)
             return TvdbUpdateCoordinatorResult.BlockedInvalidCredentials
+        }
+
+        // Warm core reference data alongside update processing (D-06).
+        // A warm failure must not block /updates processing when stale reference
+        // data exists; it records REFERENCE_REFRESH_FAILED through diagnostics.
+        try {
+            referenceDataServiceProvider.get().warmCoreReferences()
+        } catch (e: Exception) {
+            val refFailDiagnostic = TvdbReliabilityDiagnostic(
+                reason = TvdbReliabilityReason.REFERENCE_REFRESH_FAILED,
+                surface = "update_coordinator",
+                message = "Reference warm failed during catch-up: ${e.message}"
+            )
+            diagnosticsRecorder.record(refFailDiagnostic)
+            emitStructuredLog(refFailDiagnostic)
         }
 
         // Delegate to processor
