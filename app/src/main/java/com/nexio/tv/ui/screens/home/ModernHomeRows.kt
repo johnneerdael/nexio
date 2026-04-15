@@ -84,6 +84,7 @@ import coil.imageLoader
 import coil.memory.MemoryCache
 import coil.request.ImageRequest
 import com.nexio.tv.R
+import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.ui.components.ContinueWatchingCard
@@ -697,9 +698,9 @@ private fun ModernCarouselCard(
             val isBackdrop = focusedPosterBackdropExpandEnabled && isBackdropExpanded
             val diskKey = item.metaPreview?.let { meta ->
                 if (isBackdrop) {
-                    "${meta.id}_native_background"
+                    ArtworkImageCacheKeys.backdrop(meta.id)
                 } else {
-                    "${meta.id}_${meta.posterProviderTag ?: "native"}_poster"
+                    ArtworkImageCacheKeys.poster(meta.id, meta.posterProviderTag)
                 }
             }
             ImageRequest.Builder(context)
@@ -725,7 +726,7 @@ private fun ModernCarouselCard(
                 .data(it)
                 .crossfade(false)
                 .memoryCacheKey("${it}_${maxLogoWidthPx}x${logoHeightPx}")
-                .apply { item.metaPreview?.let { meta -> diskCacheKey("${meta.id}_native_logo") } }
+                .apply { item.metaPreview?.let { meta -> diskCacheKey(ArtworkImageCacheKeys.logo(meta.id)) } }
                 .size(width = maxLogoWidthPx, height = logoHeightPx)
                 .build()
         }

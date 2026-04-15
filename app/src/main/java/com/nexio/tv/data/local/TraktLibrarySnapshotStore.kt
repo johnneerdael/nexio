@@ -145,22 +145,10 @@ class TraktLibrarySnapshotStore private constructor(
             return null
         }
 
-        val currentLanguageEpoch = metadataDiskCacheStore.currentLanguageEpoch()
-        val languageEpoch = root.get("languageEpoch")?.asInt ?: currentLanguageEpoch
-        val metadataRetained = languageEpoch == currentLanguageEpoch
-        if (!metadataRetained) {
-            logDebug(
-                "decode language epoch mismatch stored=$languageEpoch current=$currentLanguageEpoch metadataDropped=true"
-            )
-        }
         return Snapshot(
             listTabs = decodeListTabs(root.get("listTabs")),
             entriesByList = decodeEntriesByList(root.get("entriesByList")),
-            metadataByContentKey = if (metadataRetained) {
-                decodeMetadata(root.get("metadataByContentKey"))
-            } else {
-                emptyMap()
-            },
+            metadataByContentKey = decodeMetadata(root.get("metadataByContentKey")),
             updatedAtMs = root.longOrNull("updatedAtMs") ?: 0L
         )
     }

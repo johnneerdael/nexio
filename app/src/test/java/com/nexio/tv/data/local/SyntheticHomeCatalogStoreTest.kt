@@ -16,13 +16,12 @@ import org.junit.Test
 class SyntheticHomeCatalogStoreTest {
 
     @Test
-    fun `read restores persisted synthetic rows for current language epoch`() {
+    fun `read restores persisted synthetic rows for matching language`() {
         val prefs = InMemorySharedPreferences()
         val localePrefs = localePrefs("en")
-        var epoch = 7
         val context = mockContext(prefs, "synthetic_home_catalogs", localePrefs)
         val metadataStore = mockk<MetadataDiskCacheStore>()
-        every { metadataStore.currentLanguageEpoch() } answers { epoch }
+        every { metadataStore.currentLanguageEpoch() } returns 0
         val store = SyntheticHomeCatalogStore(context, metadataStore)
 
         val snapshot = SyntheticHomeCatalogStore.Snapshot(
@@ -50,8 +49,7 @@ class SyntheticHomeCatalogStoreTest {
 
         assertEquals(snapshot, store.read())
 
-        epoch = 8
-        assertNull(store.read())
+        assertEquals(snapshot, store.read())
     }
 
     @Test
@@ -80,6 +78,40 @@ class SyntheticHomeCatalogStoreTest {
     }
 
     @Test
+    fun `read restores synthetic rows for active language without overwriting another language`() {
+        val prefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val context = mockContext(prefs, "synthetic_home_catalogs", localePrefs)
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val store = SyntheticHomeCatalogStore(context, metadataStore)
+        val englishSnapshot = SyntheticHomeCatalogStore.Snapshot(
+            traktGroups = listOf(
+                PersistedSyntheticCatalogGroup(
+                    orderKey = "trakt_trending_movies",
+                    rows = listOf(sampleRow("trakt", "trending_movies"))
+                )
+            )
+        )
+        val dutchSnapshot = SyntheticHomeCatalogStore.Snapshot(
+            simklGroups = listOf(
+                PersistedSyntheticCatalogGroup(
+                    orderKey = "simkl_tv_trending_today",
+                    rows = listOf(sampleRow("simkl", "simkl_tv_trending_today"))
+                )
+            )
+        )
+
+        store.write(englishSnapshot)
+        localePrefs.edit().putString("locale_tag", "nl").apply()
+        store.write(dutchSnapshot)
+
+        assertEquals(dutchSnapshot, store.read())
+        localePrefs.edit().putString("locale_tag", "en").apply()
+        assertEquals(englishSnapshot, store.read())
+    }
+
+    @Test
     fun `write persists canonical group keys`() {
         val prefs = InMemorySharedPreferences()
         val context = mockContext(prefs, "synthetic_home_catalogs", localePrefs("en"))
@@ -98,7 +130,7 @@ class SyntheticHomeCatalogStoreTest {
             )
         )
 
-        val raw = prefs.getString("snapshot", null).orEmpty()
+        val raw = prefs.all.values.singleOrNull()?.toString().orEmpty()
         assertTrue(raw.contains("\"orderKey\":\"trakt_trending_movies\""))
         assertTrue(raw.contains("\"rows\""))
         assertTrue(raw.contains("\"traktGroups\""))
@@ -123,7 +155,7 @@ class SyntheticHomeCatalogStoreTest {
             )
         )
 
-        val raw = prefs.getString("snapshot", null).orEmpty()
+        val raw = prefs.all.values.singleOrNull()?.toString().orEmpty()
         assertTrue(raw.contains("\"simklGroups\""))
         assertTrue(raw.contains("\"orderKey\":\"simkl_anime_trending_month\""))
     }

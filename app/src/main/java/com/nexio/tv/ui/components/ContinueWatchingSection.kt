@@ -60,6 +60,7 @@ import androidx.compose.ui.window.Dialog
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem
 import com.nexio.tv.ui.screens.home.contentId
 import com.nexio.tv.ui.screens.home.shouldPromoteModernHomeHeroTrailerToFullscreen
+import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.ui.theme.NexioColors
 import com.nexio.tv.ui.theme.NexioTheme
 import androidx.compose.ui.platform.LocalContext
@@ -332,7 +333,7 @@ fun ContinueWatchingCard(
             .data(imageModel)
             .crossfade(false)
             .memoryCacheKey("${imageModel}_${requestWidthPx}x${requestHeightPx}")
-            .diskCacheKey("${item.contentId()}_native_thumbnail")
+            .diskCacheKey(ArtworkImageCacheKeys.thumbnail(item.contentId()))
             .size(width = requestWidthPx, height = requestHeightPx)
             .build()
     }

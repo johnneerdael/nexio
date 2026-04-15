@@ -7,6 +7,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.domain.model.CatalogRow
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -18,10 +19,30 @@ data class PersistedSyntheticCatalogGroup(
 )
 
 @Singleton
-class SyntheticHomeCatalogStore @Inject constructor(
+class SyntheticHomeCatalogStore private constructor(
     @ApplicationContext private val context: Context,
-    private val metadataDiskCacheStore: MetadataDiskCacheStore
+    private val metadataDiskCacheStore: MetadataDiskCacheStore,
+    private val activeProfileId: () -> Int
 ) {
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        metadataDiskCacheStore: MetadataDiskCacheStore,
+        profileManager: ProfileManager
+    ) : this(
+        context = context,
+        metadataDiskCacheStore = metadataDiskCacheStore,
+        activeProfileId = { profileManager.activeProfileId.value }
+    )
+
+    constructor(
+        context: Context,
+        metadataDiskCacheStore: MetadataDiskCacheStore
+    ) : this(
+        context = context,
+        metadataDiskCacheStore = metadataDiskCacheStore,
+        activeProfileId = { 1 }
+    )
 
     companion object {
         private const val TAG = "SyntheticHomeCatalog"
@@ -41,7 +62,7 @@ class SyntheticHomeCatalogStore @Inject constructor(
     fun read(): Snapshot? {
         return runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
+            val raw = prefs.getString(snapshotKey(), null)?.takeIf { it.isNotBlank() } ?: return null
             decodeSnapshot(raw)
         }.onFailure { error ->
             Log.w(TAG, "Failed to restore synthetic home catalogs", error)
@@ -60,7 +81,7 @@ class SyntheticHomeCatalogStore @Inject constructor(
                 add("simklGroups", encodeGroups(snapshot.simklGroups))
                 add("mdbListGroups", encodeGroups(snapshot.mdbListGroups))
             }
-            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).commit()
+            prefs.edit().putString(snapshotKey(), gson.toJson(payload)).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist synthetic home catalogs", error)
         }
@@ -69,7 +90,7 @@ class SyntheticHomeCatalogStore @Inject constructor(
     fun clear() {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().remove(SNAPSHOT_KEY).commit()
+            prefs.edit().remove(snapshotKey()).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear synthetic home catalogs", error)
         }
@@ -79,10 +100,6 @@ class SyntheticHomeCatalogStore @Inject constructor(
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
         val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
         if (schemaVersion != SCHEMA_VERSION) {
-            return null
-        }
-        val languageEpoch = root.get("languageEpoch")?.asInt ?: metadataDiskCacheStore.currentLanguageEpoch()
-        if (languageEpoch != metadataDiskCacheStore.currentLanguageEpoch()) {
             return null
         }
         val languageTag = root.get("languageTag")?.asString?.trim().orEmpty()
@@ -98,6 +115,10 @@ class SyntheticHomeCatalogStore @Inject constructor(
 
     private fun currentLanguageTag(): String {
         return AppLocaleResolver.resolveEffectiveAppLanguageTag(context)
+    }
+
+    private fun snapshotKey(): String {
+        return "$SNAPSHOT_KEY:p${activeProfileId()}:${currentLanguageTag()}"
     }
 
     private fun decodeGroups(array: JsonArray?): List<PersistedSyntheticCatalogGroup> {

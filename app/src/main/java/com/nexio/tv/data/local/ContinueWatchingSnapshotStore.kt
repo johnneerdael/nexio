@@ -113,10 +113,6 @@ class ContinueWatchingSnapshotStore private constructor(
         if (schemaVersion != SCHEMA_VERSION) {
             return null
         }
-        val languageEpoch = root.get("languageEpoch")?.asInt ?: metadataDiskCacheStore.currentLanguageEpoch()
-        if (languageEpoch != metadataDiskCacheStore.currentLanguageEpoch()) {
-            return null
-        }
         val languageTag = root.get("languageTag")?.asString?.trim().orEmpty()
         if (languageTag.isBlank() || languageTag != currentLanguageTag()) {
             return null

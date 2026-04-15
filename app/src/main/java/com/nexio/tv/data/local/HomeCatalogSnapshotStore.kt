@@ -7,6 +7,7 @@ import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.MetaPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -14,11 +15,35 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class HomeCatalogSnapshotStore @Inject constructor(
+class HomeCatalogSnapshotStore private constructor(
     @ApplicationContext private val context: Context,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
-    private val posterRatingsUrlResolver: PosterRatingsUrlResolver
+    private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
+    private val activeProfileId: () -> Int
 ) {
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        metadataDiskCacheStore: MetadataDiskCacheStore,
+        posterRatingsUrlResolver: PosterRatingsUrlResolver,
+        profileManager: ProfileManager
+    ) : this(
+        context = context,
+        metadataDiskCacheStore = metadataDiskCacheStore,
+        posterRatingsUrlResolver = posterRatingsUrlResolver,
+        activeProfileId = { profileManager.activeProfileId.value }
+    )
+
+    constructor(
+        context: Context,
+        metadataDiskCacheStore: MetadataDiskCacheStore,
+        posterRatingsUrlResolver: PosterRatingsUrlResolver
+    ) : this(
+        context = context,
+        metadataDiskCacheStore = metadataDiskCacheStore,
+        posterRatingsUrlResolver = posterRatingsUrlResolver,
+        activeProfileId = { 1 }
+    )
 
     companion object {
         private const val TAG = "HomeCatalogSnapshot"
@@ -44,7 +69,7 @@ class HomeCatalogSnapshotStore @Inject constructor(
     fun read(posterProviderToken: String): Snapshot? {
         return runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
+            val raw = prefs.getString(snapshotKey(), null)?.takeIf { it.isNotBlank() } ?: return null
             decodeSnapshot(raw, posterProviderToken)?.sanitize()
         }.onFailure { error ->
             Log.w(TAG, "Failed to restore home snapshot", error)
@@ -65,7 +90,7 @@ class HomeCatalogSnapshotStore @Inject constructor(
                 add("heroItems", gson.toJsonTree(snapshot.heroItems))
                 add("orderedGroupKeys", gson.toJsonTree(snapshot.orderedGroupKeys))
             }
-            prefs.edit().putString(SNAPSHOT_KEY, gson.toJson(payload)).commit()
+            prefs.edit().putString(snapshotKey(), gson.toJson(payload)).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist home snapshot", error)
         }
@@ -74,7 +99,7 @@ class HomeCatalogSnapshotStore @Inject constructor(
     fun clear() {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().remove(SNAPSHOT_KEY).commit()
+            prefs.edit().remove(snapshotKey()).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear home snapshot", error)
         }
@@ -84,10 +109,6 @@ class HomeCatalogSnapshotStore @Inject constructor(
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
         val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
         if (schemaVersion != SCHEMA_VERSION) {
-            return null
-        }
-        val languageEpoch = root.get("languageEpoch")?.asInt ?: metadataDiskCacheStore.currentLanguageEpoch()
-        if (languageEpoch != metadataDiskCacheStore.currentLanguageEpoch()) {
             return null
         }
         val languageTag = root.get("languageTag")?.asString?.trim().orEmpty()
@@ -123,6 +144,10 @@ class HomeCatalogSnapshotStore @Inject constructor(
 
     private fun currentLanguageTag(): String {
         return AppLocaleResolver.resolveEffectiveAppLanguageTag(context)
+    }
+
+    private fun snapshotKey(): String {
+        return "$SNAPSHOT_KEY:p${activeProfileId()}:${currentLanguageTag()}"
     }
 
     private fun Snapshot.sanitize(): Snapshot {

@@ -138,9 +138,6 @@ class SimklLibrarySnapshotStore private constructor(
         val root = gson.fromJson(raw, JsonObject::class.java) ?: return null
         val schemaVersion = root.get("schemaVersion")?.asInt ?: 0
         if (schemaVersion > SCHEMA_VERSION) return null
-        val currentLanguageEpoch = metadataDiskCacheStore.currentLanguageEpoch()
-        val languageEpoch = root.get("languageEpoch")?.asInt ?: currentLanguageEpoch
-        if (languageEpoch != currentLanguageEpoch) return null
         return Snapshot(
             listTabs = decodeListTabs(root.get("listTabs")),
             entriesByList = decodeEntriesByList(root.get("entriesByList")),

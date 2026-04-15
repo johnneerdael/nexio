@@ -38,7 +38,6 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val TMDB_TITLE_VIDEOS_PREFIX = "tmdb_videos::"
         private const val TMDB_SEASON_VIDEOS_PREFIX = "tmdb_season_videos::"
         private const val HOME_REF_PREFIX = "home_ref::"
-        private const val LANGUAGE_EPOCH_KEY = "metadata_language_epoch"
         private const val META_CACHE_SCHEMA_VERSION = 3
         private const val TMDB_CACHE_SCHEMA_VERSION = 2
         private const val TMDB_VIDEO_CACHE_SCHEMA_VERSION = 2
@@ -107,21 +106,14 @@ class MetadataDiskCacheStore @Inject constructor(
         }
     }
 
-    fun currentLanguageEpoch(): Int {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getInt(LANGUAGE_EPOCH_KEY, 0)
-    }
+    fun currentLanguageEpoch(): Int = 0
 
-    fun bumpLanguageEpoch(): Int {
-        val next = currentLanguageEpoch() + 1
-        runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().putInt(LANGUAGE_EPOCH_KEY, next).apply()
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to bump metadata language epoch", error)
-        }
-        return next
-    }
+    /**
+     * Kept for callers/tests compiled against the old epoch API.
+     * Locale is now represented by the language tag in each metadata key, so changing
+     * one profile's language must not invalidate other profile/language entries.
+     */
+    fun bumpLanguageEpoch(): Int = currentLanguageEpoch()
 
     fun readMeta(itemKey: String, languageTag: String, providerToken: String): Meta? {
         val key = buildMetaKey(itemKey = itemKey, languageTag = languageTag, providerToken = providerToken)
@@ -131,8 +123,6 @@ class MetadataDiskCacheStore @Inject constructor(
                 val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
                 gson.fromJson(raw, JsonObject::class.java)
             } ?: return null
-            val epoch = root.get("languageEpoch")?.asInt ?: 0
-            if (epoch != currentLanguageEpoch()) return null
             val schemaVersion = root.get("metaSchemaVersion")?.asInt ?: 0
             if (schemaVersion != META_CACHE_SCHEMA_VERSION) return null
             decodeMetaSafely(root)
@@ -164,8 +154,6 @@ class MetadataDiskCacheStore @Inject constructor(
                 val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
                 gson.fromJson(raw, JsonObject::class.java)
             } ?: return null
-            val epoch = root.get("languageEpoch")?.asInt ?: 0
-            if (epoch != currentLanguageEpoch()) return null
             val schemaVersion = root.get("tmdbSchemaVersion")?.asInt ?: 0
             if (schemaVersion != TMDB_CACHE_SCHEMA_VERSION) return null
             decodeTmdbEnrichmentSafely(root)
@@ -257,74 +245,28 @@ class MetadataDiskCacheStore @Inject constructor(
     }
 
     fun removeMetaEntriesForItem(itemKey: String): List<String> {
-        flushPendingWrites()
-        val removedImageUrls = mutableListOf<String>()
-        runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val editor = prefs.edit()
-            prefs.all.entries
-                .asSequence()
-                .filter { (key, _) -> key.startsWith("$META_PREFIX$itemKey::") }
-                .forEach { (key, value) ->
-                    val payload = (value as? String).orEmpty()
-                    val root = gson.fromJson(payload, JsonObject::class.java)
-                    val meta = runCatching { decodeMetaSafely(root ?: JsonObject()) }.getOrNull()
-                    meta?.poster?.let(removedImageUrls::add)
-                    meta?.background?.let(removedImageUrls::add)
-                    meta?.logo?.let(removedImageUrls::add)
-                    editor.remove(key)
-                }
-            editor.apply()
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to remove metadata entries for item=$itemKey", error)
-        }
-        return removedImageUrls.distinct()
+        // Metadata and artwork caches are shared across profiles. A catalog diff in
+        // one profile cannot prove another profile no longer needs the same item.
+        return emptyList()
     }
 
     fun removeMetaEntriesNotIn(activeItemKeys: Set<String>, maxEntries: Int = 400): List<String> {
-        if (activeItemKeys.isEmpty()) return emptyList()
-        flushPendingWrites()
-        val removedImageUrls = mutableListOf<String>()
-        runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val editor = prefs.edit()
-            var removedCount = 0
-            prefs.all.entries
-                .asSequence()
-                .filter { (key, _) -> key.startsWith(META_PREFIX) }
-                .forEach { (key, value) ->
-                    if (removedCount >= maxEntries) return@forEach
-                    val remainder = key.removePrefix(META_PREFIX)
-                    val itemKey = remainder.substringBefore("::")
-                    if (itemKey in activeItemKeys) return@forEach
-                    val payload = (value as? String).orEmpty()
-                    val root = gson.fromJson(payload, JsonObject::class.java)
-                    val meta = runCatching { decodeMetaSafely(root ?: JsonObject()) }.getOrNull()
-                    meta?.poster?.let(removedImageUrls::add)
-                    meta?.background?.let(removedImageUrls::add)
-                    meta?.logo?.let(removedImageUrls::add)
-                    editor.remove(key)
-                    removedCount += 1
-                }
-            editor.apply()
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to remove stale metadata entries", error)
-        }
-        return removedImageUrls.distinct()
+        // Active item sets are profile-specific; the metadata cache is shared.
+        return emptyList()
     }
 
     fun hasCurrentMetaForItem(itemKey: String, languageTag: String): Boolean {
         return runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val expectedPrefix = "$META_PREFIX$itemKey::$languageTag::"
-            val currentEpoch = currentLanguageEpoch()
             prefs.all.entries
                 .asSequence()
                 .filter { (key, _) -> key.startsWith(expectedPrefix) }
                 .any { (_, value) ->
                     val payload = (value as? String).orEmpty()
                     val root = gson.fromJson(payload, JsonObject::class.java)
-                    (root?.get("languageEpoch")?.asInt ?: -1) == currentEpoch
+                    val schemaVersion = root?.get("metaSchemaVersion")?.asInt ?: 0
+                    schemaVersion == META_CACHE_SCHEMA_VERSION
                 }
         }.getOrDefault(false)
     }
@@ -362,78 +304,15 @@ class MetadataDiskCacheStore @Inject constructor(
     }
 
     fun removeHomeUnreferencedMetaEntries(maxEntries: Int = 400): List<String> {
-        flushPendingWrites()
-        val activeItemKeys = readHomeReferencedItemKeys()
-        val removedImageUrls = mutableListOf<String>()
-        runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val editor = prefs.edit()
-            var removedCount = 0
-            prefs.all.entries
-                .asSequence()
-                .filter { (key, _) -> key.startsWith(META_PREFIX) }
-                .forEach { (key, value) ->
-                    if (removedCount >= maxEntries) return@forEach
-                    val remainder = key.removePrefix(META_PREFIX)
-                    val itemKey = remainder.substringBefore("::")
-                    if (itemKey in activeItemKeys) return@forEach
-                    val payload = (value as? String).orEmpty()
-                    val root = gson.fromJson(payload, JsonObject::class.java)
-                    val meta = runCatching { decodeMetaSafely(root ?: JsonObject()) }.getOrNull()
-                    meta?.poster?.let(removedImageUrls::add)
-                    meta?.background?.let(removedImageUrls::add)
-                    meta?.logo?.let(removedImageUrls::add)
-                    editor.remove(key)
-                    removedCount += 1
-                }
-            editor.apply()
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to remove home-unreferenced metadata entries", error)
-        }
-        return removedImageUrls.distinct()
+        // Home references only describe the active profile. Do not prune shared
+        // language-keyed metadata or language-independent artwork from them.
+        return emptyList()
     }
 
     fun removeEntriesFromStaleEpochs(maxEntries: Int = 800): List<String> {
-        flushPendingWrites()
-        val currentEpoch = currentLanguageEpoch()
-        val removedImageUrls = mutableListOf<String>()
-        runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val editor = prefs.edit()
-            var removedCount = 0
-            prefs.all.entries
-                .asSequence()
-                .filter { (key, _) ->
-                    key.startsWith(META_PREFIX) ||
-                        key.startsWith(TMDB_PREFIX) ||
-                        key.startsWith(TMDB_TITLE_VIDEOS_PREFIX) ||
-                        key.startsWith(TMDB_SEASON_VIDEOS_PREFIX)
-                }
-                .forEach { (key, value) ->
-                    if (removedCount >= maxEntries) return@forEach
-                    val payload = (value as? String).orEmpty()
-                    val root = gson.fromJson(payload, JsonObject::class.java) ?: return@forEach
-                    val epoch = root.get("languageEpoch")?.asInt ?: return@forEach
-                    if (epoch == currentEpoch) return@forEach
-                    if (key.startsWith(META_PREFIX)) {
-                        val meta = runCatching { decodeMetaSafely(root) }.getOrNull()
-                        meta?.poster?.let(removedImageUrls::add)
-                        meta?.background?.let(removedImageUrls::add)
-                        meta?.logo?.let(removedImageUrls::add)
-                    } else if (key.startsWith(TMDB_PREFIX)) {
-                        val enrichment = runCatching { decodeTmdbEnrichmentSafely(root) }.getOrNull()
-                        enrichment?.poster?.let(removedImageUrls::add)
-                        enrichment?.backdrop?.let(removedImageUrls::add)
-                        enrichment?.logo?.let(removedImageUrls::add)
-                    }
-                    editor.remove(key)
-                    removedCount += 1
-                }
-            editor.apply()
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to remove stale epoch metadata entries", error)
-        }
-        return removedImageUrls.distinct()
+        // The global language epoch has been retired. Text metadata is selected by
+        // languageTag in the key, and image cache entries are language-independent.
+        return emptyList()
     }
 
     private fun buildMetaKey(itemKey: String, languageTag: String, providerToken: String): String {
@@ -469,8 +348,6 @@ class MetadataDiskCacheStore @Inject constructor(
                 val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
                 gson.fromJson(raw, JsonObject::class.java)
             } ?: return null
-            val epoch = root.get("languageEpoch")?.asInt ?: 0
-            if (epoch != currentLanguageEpoch()) return null
             val schemaVersion = root.get("tmdbVideoSchemaVersion")?.asInt ?: 0
             if (schemaVersion != TMDB_VIDEO_CACHE_SCHEMA_VERSION) return null
             val updatedAtMs = root.get("updatedAtMs")?.asLong ?: return null

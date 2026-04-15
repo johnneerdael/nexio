@@ -15,12 +15,11 @@ import org.junit.Test
 class SimklLibrarySnapshotStoreTest {
 
     @Test
-    fun `read restores persisted simkl library snapshot for current language epoch`() {
+    fun `read restores persisted simkl library snapshot without epoch invalidation`() {
         val prefs = InMemorySharedPreferences()
         val context = mockContext(prefs)
-        var epoch = 3
         val metadataStore = mockk<MetadataDiskCacheStore>()
-        every { metadataStore.currentLanguageEpoch() } answers { epoch }
+        every { metadataStore.currentLanguageEpoch() } returns 0
         val store = SimklLibrarySnapshotStore(context, metadataStore)
 
         val snapshot = SimklLibrarySnapshotStore.Snapshot(
@@ -40,8 +39,7 @@ class SimklLibrarySnapshotStoreTest {
         store.write(snapshot)
         assertEquals(snapshot, store.read())
 
-        epoch = 4
-        assertNull(store.read())
+        assertEquals(snapshot, store.read())
     }
 
     private fun sampleEntry(): LibraryEntry {

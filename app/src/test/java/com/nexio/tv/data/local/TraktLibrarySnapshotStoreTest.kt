@@ -17,12 +17,11 @@ import org.junit.Test
 class TraktLibrarySnapshotStoreTest {
 
     @Test
-    fun `read restores snapshot and hydrated metadata for current language epoch`() {
+    fun `read restores snapshot and hydrated metadata without epoch invalidation`() {
         val prefs = InMemorySharedPreferences()
-        var epoch = 4
         val context = mockContext(prefs, "trakt_library_snapshot")
         val metadataStore = mockk<MetadataDiskCacheStore>()
-        every { metadataStore.currentLanguageEpoch() } answers { epoch }
+        every { metadataStore.currentLanguageEpoch() } returns 0
         val store = TraktLibrarySnapshotStore(context, metadataStore)
 
         val snapshot = sampleSnapshot()
@@ -30,11 +29,7 @@ class TraktLibrarySnapshotStoreTest {
 
         assertEquals(snapshot, store.read())
 
-        epoch = 5
-        assertEquals(
-            snapshot.copy(metadataByContentKey = emptyMap()),
-            store.read()
-        )
+        assertEquals(snapshot, store.read())
     }
 
     @Test
