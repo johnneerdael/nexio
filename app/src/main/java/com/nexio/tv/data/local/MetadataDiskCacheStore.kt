@@ -41,6 +41,7 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val TVDB_EPISODE_PREFIX = "tvdb_episode::"
         private const val TMDB_TITLE_VIDEOS_PREFIX = "tmdb_videos::"
         private const val TMDB_SEASON_VIDEOS_PREFIX = "tmdb_season_videos::"
+        private const val TVDB_REF_PREFIX = "tvdb_ref::"
         private const val HOME_REF_PREFIX = "home_ref::"
         private const val META_CACHE_SCHEMA_VERSION = 3
         private const val TMDB_CACHE_SCHEMA_VERSION = 2
@@ -437,6 +438,47 @@ class MetadataDiskCacheStore @Inject constructor(
         // Home references only describe the active profile. Do not prune shared
         // language-keyed metadata or language-independent artwork from them.
         return emptyList()
+    }
+
+    /**
+     * Removes all TVDB series metadata cache entries for the given series ID.
+     * Matches keys starting with `tvdb::$seriesId::`.
+     */
+    fun removeTvdbSeriesEntries(seriesId: Int): Int {
+        return removePrefixedEntries("$TVDB_PREFIX$seriesId::")
+    }
+
+    /**
+     * Removes all TVDB episode cache entries for the given series ID.
+     * Matches keys starting with `tvdb_episode::$seriesId::`.
+     */
+    fun removeTvdbEpisodeEntries(seriesId: Int): Int {
+        return removePrefixedEntries("$TVDB_EPISODE_PREFIX$seriesId::")
+    }
+
+    /**
+     * Removes TVDB reference cache entries matching a specific reference type.
+     * Matches keys starting with `tvdb_ref::$refType::`.
+     */
+    fun removeTvdbRefEntries(refType: String): Int {
+        return removePrefixedEntries("$TVDB_REF_PREFIX${refType.trim().lowercase()}::")
+    }
+
+    private fun removePrefixedEntries(prefix: String): Int {
+        return runCatching {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val keysToRemove = prefs.all.keys.filter { it.startsWith(prefix) }
+            if (keysToRemove.isEmpty()) return 0
+            val editor = prefs.edit()
+            keysToRemove.forEach { key ->
+                editor.remove(key)
+                pendingWrites.remove(key)
+            }
+            editor.apply()
+            keysToRemove.size
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to remove prefixed entries for $prefix", error)
+        }.getOrDefault(0)
     }
 
     fun removeEntriesFromStaleEpochs(maxEntries: Int = 800): List<String> {
