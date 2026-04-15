@@ -160,6 +160,37 @@ class SyntheticHomeCatalogStoreTest {
         assertTrue(raw.contains("\"orderKey\":\"simkl_anime_trending_month\""))
     }
 
+    @Test
+    fun `explicit profile id keeps synthetic snapshots isolated`() {
+        val prefs = InMemorySharedPreferences()
+        val context = mockContext(prefs, "synthetic_home_catalogs", localePrefs("en"))
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val store = SyntheticHomeCatalogStore(context, metadataStore)
+        val profileOneSnapshot = SyntheticHomeCatalogStore.Snapshot(
+            traktGroups = listOf(
+                PersistedSyntheticCatalogGroup(
+                    orderKey = "trakt_trending_movies",
+                    rows = listOf(sampleRow("trakt", "trending_movies"))
+                )
+            )
+        )
+        val profileTwoSnapshot = SyntheticHomeCatalogStore.Snapshot(
+            simklGroups = listOf(
+                PersistedSyntheticCatalogGroup(
+                    orderKey = "simkl_tv_trending_today",
+                    rows = listOf(sampleRow("simkl", "simkl_tv_trending_today"))
+                )
+            )
+        )
+
+        store.write(profileOneSnapshot, profileId = 1)
+        store.write(profileTwoSnapshot, profileId = 2)
+
+        assertEquals(profileOneSnapshot, store.read(profileId = 1))
+        assertEquals(profileTwoSnapshot, store.read(profileId = 2))
+    }
+
     private fun sampleRow(addonId: String, catalogId: String): CatalogRow {
         return CatalogRow(
             addonId = addonId,

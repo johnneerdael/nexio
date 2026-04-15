@@ -350,8 +350,9 @@ class HomeViewModel @Inject constructor(
                 .collectLatest {
                     metaRepository.clearCache()
                     tmdbMetadataService.clearCache()
-                    homeCatalogSnapshotStore.clear()
-                    syntheticHomeCatalogStore.clear()
+                    val profileId = profileManager.activeProfileId.value
+                    homeCatalogSnapshotStore.clear(profileId = profileId)
+                    syntheticHomeCatalogStore.clear(profileId = profileId)
                     inMemoryHomeSnapshot = null
                     pendingRestoredCatalogSnapshot = null
                     pendingHomeSnapshotPersist = null

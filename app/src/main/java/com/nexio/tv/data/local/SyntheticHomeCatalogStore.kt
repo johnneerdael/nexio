@@ -59,18 +59,21 @@ class SyntheticHomeCatalogStore private constructor(
         val mdbListGroups: List<PersistedSyntheticCatalogGroup> = emptyList()
     )
 
-    fun read(): Snapshot? {
+    fun read(profileId: Int = activeProfileId()): Snapshot? {
         return runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val raw = prefs.getString(snapshotKey(), null)?.takeIf { it.isNotBlank() } ?: return null
+            val raw = prefs.getString(snapshotKey(profileId), null)?.takeIf { it.isNotBlank() } ?: return null
             decodeSnapshot(raw)
         }.onFailure { error ->
             Log.w(TAG, "Failed to restore synthetic home catalogs", error)
-            clear()
+            clear(profileId)
         }.getOrNull()
     }
 
-    fun write(snapshot: Snapshot) {
+    fun write(
+        snapshot: Snapshot,
+        profileId: Int = activeProfileId()
+    ) {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
@@ -81,16 +84,16 @@ class SyntheticHomeCatalogStore private constructor(
                 add("simklGroups", encodeGroups(snapshot.simklGroups))
                 add("mdbListGroups", encodeGroups(snapshot.mdbListGroups))
             }
-            prefs.edit().putString(snapshotKey(), gson.toJson(payload)).commit()
+            prefs.edit().putString(snapshotKey(profileId), gson.toJson(payload)).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist synthetic home catalogs", error)
         }
     }
 
-    fun clear() {
+    fun clear(profileId: Int = activeProfileId()) {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().remove(snapshotKey()).commit()
+            prefs.edit().remove(snapshotKey(profileId)).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear synthetic home catalogs", error)
         }
@@ -117,8 +120,8 @@ class SyntheticHomeCatalogStore private constructor(
         return AppLocaleResolver.resolveEffectiveAppLanguageTag(context)
     }
 
-    private fun snapshotKey(): String {
-        return "$SNAPSHOT_KEY:p${activeProfileId()}:${currentLanguageTag()}"
+    private fun snapshotKey(profileId: Int = activeProfileId()): String {
+        return "$SNAPSHOT_KEY:p$profileId:${currentLanguageTag()}"
     }
 
     private fun decodeGroups(array: JsonArray?): List<PersistedSyntheticCatalogGroup> {

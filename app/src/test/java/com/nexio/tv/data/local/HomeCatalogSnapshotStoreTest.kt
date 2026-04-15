@@ -114,6 +114,33 @@ class HomeCatalogSnapshotStoreTest {
         assertEquals(snapshot.orderedGroupKeys, store.read(testPosterToken)?.orderedGroupKeys)
     }
 
+    @Test
+    fun `explicit profile id keeps home snapshots isolated`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver
+        )
+        val profileOneSnapshot = sampleSnapshot()
+        val profileTwoSnapshot = HomeCatalogSnapshotStore.Snapshot(
+            catalogRows = listOf(sampleRow("simkl", "trending")),
+            fullCatalogRows = listOf(sampleRow("simkl", "trending")),
+            heroItems = sampleRow("simkl", "trending").items,
+            orderedGroupKeys = listOf("simkl_trending")
+        )
+
+        store.write(profileOneSnapshot, testPosterToken, profileId = 1)
+        store.write(profileTwoSnapshot, testPosterToken, profileId = 2)
+
+        assertEquals(profileOneSnapshot, store.read(testPosterToken, profileId = 1))
+        assertEquals(profileTwoSnapshot, store.read(testPosterToken, profileId = 2))
+    }
+
     private fun sampleSnapshot(): HomeCatalogSnapshotStore.Snapshot {
         val row = sampleRow("addon", "movies")
         return HomeCatalogSnapshotStore.Snapshot(
