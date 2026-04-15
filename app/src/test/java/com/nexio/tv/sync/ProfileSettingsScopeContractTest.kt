@@ -20,8 +20,10 @@ class ProfileSettingsScopeContractTest {
     private val simklAuthService = File("app/src/main/java/com/nexio/tv/data/repository/SimklAuthService.kt")
     private val homeCatalogPipeline = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt")
     private val homeContinueWatching = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelContinueWatching.kt")
+    private val homeProfileSession = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeProfileSession.kt")
     private val metadataDiskCacheStore = File("app/src/main/java/com/nexio/tv/data/local/MetadataDiskCacheStore.kt")
     private val artworkImageCacheKeys = File("app/src/main/java/com/nexio/tv/core/image/ArtworkImageCacheKeys.kt")
+    private val secondaryProfileSettingsMigration = File("supabase/migrations/20260415000100_enforce_secondary_profile_settings.sql")
 
     private fun doc(): String {
         assertTrue(
@@ -397,8 +399,14 @@ class ProfileSettingsScopeContractTest {
         val homeContinueWatchingSource = homeContinueWatching.readText()
 
         assertTrue(homeViewModelSource.contains("internal var homeProfileGeneration"))
+        assertTrue(homeProfileSession.readText().contains("data class DefaultLegacy"))
+        assertTrue(homeProfileSession.readText().contains("data class Secondary"))
+        assertTrue(homeViewModelSource.contains("activeHomeProfileSession"))
+        assertTrue(homeViewModelSource.contains("startHomeProfileSession(profileId)"))
+        assertTrue(homeViewModelSource.contains("ProfileModeRoute.DefaultLegacyRoute -> HomeProfileSession.DefaultLegacy"))
+        assertTrue(homeViewModelSource.contains("is ProfileModeRoute.SecondaryProfileRoute -> HomeProfileSession.Secondary"))
         assertTrue(homeViewModelSource.contains("advanceHomeProfileGeneration()"))
-        assertTrue(homeViewModelSource.contains("isCurrentHomeProfileGeneration(generation)"))
+        assertTrue(homeViewModelSource.contains("isCurrentHomeProfileGeneration(session.generation)"))
         assertTrue(homeViewModelSource.contains("val capturedGeneration = homeProfileGeneration"))
         assertTrue(homePipelineSource.contains("deferredStartupRefreshJob?.cancel()"))
         assertTrue(homePipelineSource.contains("loadActiveProfileDiskBackedHomeState("))
@@ -428,5 +436,15 @@ class ProfileSettingsScopeContractTest {
         assertTrue(simklSource.contains("ProfileModeRoute.InvalidProfileRoute -> error(\"Invalid active profile id ${'$'}{route.profileId}\")"))
         assertTrue(simklSource.contains("simklAuthDataStore.clearAuth(currentRoutedProfileId())"))
         assertTrue(simklSource.contains("simklAuthDataStore.saveAccessToken(body.accessToken, profileId = profileId)"))
+    }
+
+    @Test
+    fun `supabase profile settings rpc rejects default profile route`() {
+        val migrationSource = secondaryProfileSettingsMigration.readText()
+
+        assertTrue(migrationSource.contains("sync_pull_profile_settings_blob"))
+        assertTrue(migrationSource.contains("sync_push_profile_settings_blob"))
+        assertTrue(migrationSource.contains("p_profile_id < 2 OR p_profile_id > 4"))
+        assertTrue(migrationSource.contains("profile_id must be between 2 and 4 for profile settings"))
     }
 }

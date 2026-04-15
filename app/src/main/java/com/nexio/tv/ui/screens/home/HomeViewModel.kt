@@ -7,7 +7,10 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.profile.ProfileModeRoute
+import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
@@ -105,6 +108,8 @@ class HomeViewModel @Inject constructor(
     internal val metadataDiskCacheStore: MetadataDiskCacheStore,
     internal val syntheticHomeCatalogStore: SyntheticHomeCatalogStore,
     internal val profileManager: ProfileManager,
+    internal val profileModeRouter: ProfileModeRouter,
+    internal val profileBoundary: ProfileBoundary,
     internal val trackingProviderStateService: TrackingProviderStateService,
     @ApplicationContext internal val appContext: Context
 ) : ViewModel() {
@@ -270,6 +275,7 @@ class HomeViewModel @Inject constructor(
     internal var suppressProfileSwitchRefreshUntilMs: Long = 0L
     @Volatile
     internal var homeProfileGeneration: Long = 0L
+    internal var activeHomeProfileSession: HomeProfileSession = HomeProfileSession.DefaultLegacy(generation = 0L)
 
     val trailerPreviewUrls: Map<String, String>
         get() = trailerPreviewUrlsState
@@ -415,15 +421,15 @@ class HomeViewModel @Inject constructor(
     private fun observeProfileSwitches() {
         viewModelScope.launch {
             profileManager.profileSwitched.collectLatest { profileId ->
-                val generation = advanceHomeProfileGeneration()
+                val session = startHomeProfileSession(profileId)
                 profileSwitchDiskHydrationActive = true
                 suppressProfileSwitchRefreshUntilMs = SystemClock.elapsedRealtime() + 5_000L
                 resetProfileScopedHomeState("profile_switch:$profileId")
                 try {
                     continueWatchingSnapshotService.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
-                    loadActiveProfileDiskBackedHomeState("profile_switch:$profileId", expectedGeneration = generation)
+                    loadActiveProfileDiskBackedHomeState("profile_switch:$profileId", expectedGeneration = session.generation)
                 } finally {
-                    if (isCurrentHomeProfileGeneration(generation)) {
+                    if (isCurrentHomeProfileGeneration(session.generation)) {
                         profileSwitchDiskHydrationActive = false
                         pendingSerializedHomeRefreshReason = null
                         startupRefreshPending = false
@@ -637,6 +643,21 @@ class HomeViewModel @Inject constructor(
     internal fun advanceHomeProfileGeneration(): Long {
         homeProfileGeneration += 1L
         return homeProfileGeneration
+    }
+
+    internal fun startHomeProfileSession(profileId: Int): HomeProfileSession {
+        val generation = advanceHomeProfileGeneration()
+        val session = when (val route = profileModeRouter.routeFor(profileId)) {
+            ProfileModeRoute.DefaultLegacyRoute -> HomeProfileSession.DefaultLegacy(generation = generation)
+            is ProfileModeRoute.SecondaryProfileRoute -> HomeProfileSession.Secondary(
+                profileId = profileId,
+                generation = generation,
+                boundaryContext = profileBoundary.contextFor(route)
+            )
+            is ProfileModeRoute.InvalidProfileRoute -> error("Invalid active home profile id ${route.profileId}")
+        }
+        activeHomeProfileSession = session
+        return session
     }
 
     internal fun isCurrentHomeProfileGeneration(generation: Long): Boolean {
