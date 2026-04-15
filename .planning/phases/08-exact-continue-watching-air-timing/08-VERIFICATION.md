@@ -1,7 +1,7 @@
 ---
 phase: 08-exact-continue-watching-air-timing
-verified: 2026-04-15T14:49:30Z
-status: human_needed
+verified: 2026-04-15T15:37:01Z
+status: passed
 score: 14/14 must-haves verified
 overrides_applied: 0
 re_verification:
@@ -15,13 +15,13 @@ re_verification:
 human_verification:
   - test: "Real Android TV missed-trigger restore"
     expected: "A TVDB-backed withheld row appears after its computed airing instant when the app process was killed before the instant."
-    why_human: "Unit tests cover restore logic, but not real device process death, alarm delivery, and provider refresh timing."
+    result: "approved by user"
   - test: "Real Android TV reboot reschedule"
     expected: "A withheld row is rescheduled or refreshed after reboot and appears at or after the computed instant without a day-level refresh."
-    why_human: "Boot receiver and AlarmManager behavior depend on Android device state."
+    result: "approved by user"
   - test: "Android S+ exact-alarm denied fallback"
     expected: "Inexact fallback still refreshes withheld rows and the UI does not expose scheduler degradation on cards."
-    why_human: "Permission state and AlarmManager delivery cannot be proven by source/unit tests alone."
+    result: "approved by user"
   - test: "Phase 8 security verification"
     expected: "Receiver/export/PendingIntent/logging risks are explicitly evaluated in 08-SECURITY.md or equivalent."
     result: "passed: 08-SECURITY.md exists with status secured and threats_open 0."
@@ -30,8 +30,8 @@ human_verification:
 # Phase 8: Exact Continue Watching Air Timing Verification Report
 
 **Phase Goal:** Continue Watching shows TVDB-backed new episodes at their computed device-local airing instant instead of at the start of the release date
-**Verified:** 2026-04-15T14:49:30Z
-**Status:** human_needed
+**Verified:** 2026-04-15T15:37:01Z
+**Status:** passed
 **Re-verification:** Yes - after gap closure plan 08-06
 
 ## Goal Achievement
@@ -135,25 +135,25 @@ human_verification:
 |---|---:|---|---|---|
 | `app/src/main/java/com/nexio/tv/data/repository/TvdbContinueWatchingTimingEnricher.kt` | 61 | False diagnostic reason plus raw content ID in failure log | Warning | Misleading diagnostics and potential watch-history exposure in logs. Not blocking Phase 8 source/test goal; requires security/diagnostics follow-up. |
 
-### Human Verification Required
+### Human Verification Completed
 
 ### 1. Real Android TV Missed-Trigger Restore
 
 **Test:** Schedule a future TVDB-backed next-up row, kill the app process before the airing instant, let the instant pass, then reopen the app.
 **Expected:** Continue Watching refreshes provider state and the row appears when available.
-**Why human:** Unit tests cover restore logic, but not real process death, OS alarm delivery, or provider refresh timing.
+**Result:** Approved by user.
 
 ### 2. Real Android TV Reboot Reschedule
 
 **Test:** Schedule a future row, reboot before the airing instant, and confirm the boot receiver reschedules or refreshes correctly when due.
 **Expected:** Continue Watching appears at or after the airing instant without waiting for a day-level refresh.
-**Why human:** Boot receiver behavior depends on Android device lifecycle and AlarmManager delivery.
+**Result:** Approved by user.
 
 ### 3. Android S+ Exact-Alarm Denied Fallback
 
 **Test:** Disable exact-alarm permission on Android S+ and confirm the inexact fallback still refreshes withheld rows.
 **Expected:** Logs show scheduler fallback diagnostics; UI remains normal and does not expose scheduler degradation on cards.
-**Why human:** Permission state and alarm fallback behavior require a device/emulator runtime.
+**Result:** Approved by user.
 
 ### Gaps Summary
 
