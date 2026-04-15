@@ -83,6 +83,21 @@ class AirDateGateTest {
         assertTrue(AirDateGate.isAired(firstAiredMs = t, tmdbAirDate = null, nowMs = t))
     }
 
+    @Test
+    fun `isAired exact tvdb availability wins over provider firstAiredMs`() {
+        val exactTvdbAvailabilityMs = 1_776_211_200_000L // 2026-04-15T00:00:00Z
+        val futureProviderFirstAiredMs = exactTvdbAvailabilityMs + 86_400_000L
+
+        assertTrue(
+            AirDateGate.isAired(
+                availabilityInstantMs = exactTvdbAvailabilityMs,
+                firstAiredMs = futureProviderFirstAiredMs,
+                tmdbAirDate = "2026-04-16",
+                nowMs = exactTvdbAvailabilityMs
+            )
+        )
+    }
+
     // ── soonestPendingMs ───────────────────────────────────────────────────────
 
     @Test
@@ -179,9 +194,28 @@ class AirDateGateTest {
         assertTrue("Result should reflect the future date", result!! > nowMs)
     }
 
+    @Test
+    fun `soonestPendingMs prefers exact tvdb availability over provider firstAiredMs`() {
+        val nowMs = 1_000L
+        val exactEntry = TestEntry(firstAiredMs = 5_000L, availabilityInstantMs = 2_000L)
+        val providerOnlyEntry = TestEntry(firstAiredMs = 3_000L)
+
+        val result = AirDateGate.soonestPendingMs(
+            entries = listOf(exactEntry, providerOnlyEntry),
+            firstAiredMsSelector = { it.firstAiredMs },
+            availabilityInstantMsSelector = { it.availabilityInstantMs },
+            nowMs = nowMs
+        )
+
+        assertEquals(2_000L, result)
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────────
 
-    private data class TestEntry(val firstAiredMs: Long)
+    private data class TestEntry(
+        val firstAiredMs: Long,
+        val availabilityInstantMs: Long? = null
+    )
 
     private fun entry(firstAiredMs: Long) = TestEntry(firstAiredMs)
 }
