@@ -7,6 +7,8 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.tmdb.TmdbEnrichment
+import com.nexio.tv.core.tvdb.TvEpisodeMetadata
+import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.data.remote.api.TmdbVideoResult
 import com.nexio.tv.data.trailer.filterCacheableTmdbTrailerVideos
 import com.nexio.tv.domain.model.Meta
@@ -35,11 +37,15 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val PREFS_NAME = "metadata_disk_cache_v1"
         private const val META_PREFIX = "meta::"
         private const val TMDB_PREFIX = "tmdb::"
+        private const val TVDB_PREFIX = "tvdb::"
+        private const val TVDB_EPISODE_PREFIX = "tvdb_episode::"
         private const val TMDB_TITLE_VIDEOS_PREFIX = "tmdb_videos::"
         private const val TMDB_SEASON_VIDEOS_PREFIX = "tmdb_season_videos::"
         private const val HOME_REF_PREFIX = "home_ref::"
         private const val META_CACHE_SCHEMA_VERSION = 3
         private const val TMDB_CACHE_SCHEMA_VERSION = 2
+        private const val TVDB_CACHE_SCHEMA_VERSION = 1
+        private const val TVDB_EPISODE_CACHE_SCHEMA_VERSION = 1
         private const val TMDB_VIDEO_CACHE_SCHEMA_VERSION = 2
         private val TMDB_VIDEO_CACHE_TTL: Duration = Duration.ofHours(12)
     }
@@ -182,6 +188,110 @@ class MetadataDiskCacheStore @Inject constructor(
         }
     }
 
+    fun readTvdbEnrichment(
+        seriesId: Int,
+        recordKind: String,
+        languageTag: String,
+        providerToken: String
+    ): TvMetadataEnrichment? {
+        val key = buildTvdbKey(
+            seriesId = seriesId,
+            recordKind = recordKind,
+            languageTag = languageTag,
+            providerToken = providerToken
+        )
+        return runCatching {
+            val root = readPendingEntry(key) ?: run {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
+                gson.fromJson(raw, JsonObject::class.java)
+            } ?: return null
+            val schemaVersion = root.get("tvdbSchemaVersion")?.asInt ?: 0
+            if (schemaVersion != TVDB_CACHE_SCHEMA_VERSION) return null
+            decodeTvdbEnrichmentSafely(root)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to read TVDB enrichment disk cache entry", error)
+        }.getOrNull()
+    }
+
+    fun writeTvdbEnrichment(
+        seriesId: Int,
+        recordKind: String,
+        languageTag: String,
+        providerToken: String,
+        enrichment: TvMetadataEnrichment
+    ) {
+        val key = buildTvdbKey(
+            seriesId = seriesId,
+            recordKind = recordKind,
+            languageTag = languageTag,
+            providerToken = providerToken
+        )
+        runCatching {
+            val payload = JsonObject().apply {
+                add("value", gson.toJsonTree(enrichment))
+                addProperty("languageEpoch", currentLanguageEpoch())
+                addProperty("tvdbSchemaVersion", TVDB_CACHE_SCHEMA_VERSION)
+                addProperty("updatedAtMs", System.currentTimeMillis())
+            }
+            enqueueWrite(key, payload)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to write TVDB enrichment disk cache entry", error)
+        }
+    }
+
+    fun readTvdbSeasonEpisodes(
+        seriesId: Int,
+        seasonType: String,
+        seasonNumber: Int,
+        languageTag: String
+    ): List<TvEpisodeMetadata>? {
+        val key = buildTvdbSeasonEpisodesKey(
+            seriesId = seriesId,
+            seasonType = seasonType,
+            seasonNumber = seasonNumber,
+            languageTag = languageTag
+        )
+        return runCatching {
+            val root = readPendingEntry(key) ?: run {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val raw = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: return null
+                gson.fromJson(raw, JsonObject::class.java)
+            } ?: return null
+            val schemaVersion = root.get("tvdbEpisodeSchemaVersion")?.asInt ?: 0
+            if (schemaVersion != TVDB_EPISODE_CACHE_SCHEMA_VERSION) return null
+            decodeTvdbSeasonEpisodesSafely(root)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to read TVDB episode disk cache entry", error)
+        }.getOrNull()
+    }
+
+    fun writeTvdbSeasonEpisodes(
+        seriesId: Int,
+        seasonType: String,
+        seasonNumber: Int,
+        languageTag: String,
+        episodes: List<TvEpisodeMetadata>
+    ) {
+        val key = buildTvdbSeasonEpisodesKey(
+            seriesId = seriesId,
+            seasonType = seasonType,
+            seasonNumber = seasonNumber,
+            languageTag = languageTag
+        )
+        runCatching {
+            val payload = JsonObject().apply {
+                add("value", gson.toJsonTree(episodes))
+                addProperty("languageEpoch", currentLanguageEpoch())
+                addProperty("tvdbEpisodeSchemaVersion", TVDB_EPISODE_CACHE_SCHEMA_VERSION)
+                addProperty("updatedAtMs", System.currentTimeMillis())
+            }
+            enqueueWrite(key, payload)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to write TVDB episode disk cache entry", error)
+        }
+    }
+
     fun readTmdbTitleVideos(
         tmdbId: Int,
         mediaType: String,
@@ -312,6 +422,13 @@ class MetadataDiskCacheStore @Inject constructor(
     fun removeEntriesFromStaleEpochs(maxEntries: Int = 800): List<String> {
         // The global language epoch has been retired. Text metadata is selected by
         // languageTag in the key, and image cache entries are language-independent.
+        runCatching {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.all.keys
+                .asSequence()
+                .filter { key -> key.startsWith(TVDB_PREFIX) || key.startsWith(TVDB_EPISODE_PREFIX) }
+                .count()
+        }
         return emptyList()
     }
 
@@ -321,6 +438,24 @@ class MetadataDiskCacheStore @Inject constructor(
 
     private fun buildTmdbKey(tmdbKey: String, languageTag: String, providerToken: String): String {
         return "$TMDB_PREFIX$tmdbKey::$languageTag::$providerToken"
+    }
+
+    private fun buildTvdbKey(
+        seriesId: Int,
+        recordKind: String,
+        languageTag: String,
+        providerToken: String
+    ): String {
+        return "$TVDB_PREFIX$seriesId::${recordKind.trim().lowercase()}::$languageTag::$providerToken"
+    }
+
+    private fun buildTvdbSeasonEpisodesKey(
+        seriesId: Int,
+        seasonType: String,
+        seasonNumber: Int,
+        languageTag: String
+    ): String {
+        return "$TVDB_EPISODE_PREFIX$seriesId::${seasonType.trim().lowercase()}::$seasonNumber::$languageTag"
     }
 
     private fun buildTmdbTitleVideosKey(
@@ -402,6 +537,17 @@ class MetadataDiskCacheStore @Inject constructor(
         val value = root.get("value") ?: return null
         val type = object : TypeToken<List<TmdbVideoResult>>() {}.type
         return runCatching { gson.fromJson<List<TmdbVideoResult>>(value, type) }.getOrNull()
+    }
+
+    private fun decodeTvdbEnrichmentSafely(root: JsonObject): TvMetadataEnrichment? {
+        val value = root.get("value") ?: return null
+        return runCatching { gson.fromJson(value, TvMetadataEnrichment::class.java) }.getOrNull()
+    }
+
+    private fun decodeTvdbSeasonEpisodesSafely(root: JsonObject): List<TvEpisodeMetadata>? {
+        val value = root.get("value") ?: return null
+        val type = object : TypeToken<List<TvEpisodeMetadata>>() {}.type
+        return runCatching { gson.fromJson<List<TvEpisodeMetadata>>(value, type) }.getOrNull()
     }
 
     private fun isTmdbVideoCacheEntryExpired(updatedAtMs: Long): Boolean {
