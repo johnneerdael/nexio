@@ -5,11 +5,19 @@ internal object AirDateGate {
      * Returns true if the entry should be treated as aired and shown in the rail.
      *
      * Priority order:
-     * 1. If [firstAiredMs] > 0, compare it against [nowMs].
-     * 2. Else if [tmdbAirDate] is a non-blank ISO date (YYYY-MM-DD), parse and compare.
-     * 3. If both are unknown, return true (treat as aired — preserves behaviour for
+     * 1. If [availabilityInstantMs] > 0, compare it against [nowMs].
+     * 2. Else if [firstAiredMs] > 0, compare it against [nowMs].
+     * 3. Else if [tmdbAirDate] is a non-blank ISO date (YYYY-MM-DD), parse and compare.
+     * 4. If all are unknown, return true (treat as aired — preserves behaviour for
      *    entries with no air-date data).
      */
+    fun isAired(availabilityInstantMs: Long?, firstAiredMs: Long, tmdbAirDate: String?, nowMs: Long): Boolean {
+        if (availabilityInstantMs != null && availabilityInstantMs > 0L) {
+            return availabilityInstantMs <= nowMs
+        }
+        return isAired(firstAiredMs = firstAiredMs, tmdbAirDate = tmdbAirDate, nowMs = nowMs)
+    }
+
     fun isAired(firstAiredMs: Long, tmdbAirDate: String?, nowMs: Long): Boolean {
         if (firstAiredMs > 0L) {
             return firstAiredMs <= nowMs
@@ -32,14 +40,20 @@ internal object AirDateGate {
     fun <T> soonestPendingMs(
         entries: List<T>,
         firstAiredMsSelector: (T) -> Long,
+        availabilityInstantMsSelector: (T) -> Long? = { null },
         tmdbAirDateSelector: (T) -> String? = { null },
         nowMs: Long
     ): Long? {
         return entries
             .asSequence()
             .mapNotNull { entry ->
-                val ms = firstAiredMsSelector(entry)
-                if (ms > 0L) ms else parseDateToEpochMs(tmdbAirDateSelector(entry)?.trim() ?: "")
+                val availabilityMs = availabilityInstantMsSelector(entry)
+                if (availabilityMs != null && availabilityMs > 0L) {
+                    availabilityMs
+                } else {
+                    val ms = firstAiredMsSelector(entry)
+                    if (ms > 0L) ms else parseDateToEpochMs(tmdbAirDateSelector(entry)?.trim() ?: "")
+                }
             }
             .filter { it > nowMs }
             .minOrNull()
