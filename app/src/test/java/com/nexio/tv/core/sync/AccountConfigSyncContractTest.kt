@@ -342,6 +342,7 @@ class AccountConfigSyncContractTest {
                 homeCatalogOrderKeys = MutableSharedFlow<Unit>(),
                 disabledHomeCatalogKeys = MutableSharedFlow<Unit>(),
                 tmdbSettings = MutableSharedFlow<Unit>(),
+                tvdbSettings = MutableSharedFlow<Unit>(),
                 mdbListSettings = MutableSharedFlow<Unit>(),
                 mdbListCatalogPreferences = MutableSharedFlow<Unit>(),
                 omdbSettings = MutableSharedFlow<Unit>(),
@@ -370,6 +371,47 @@ class AccountConfigSyncContractTest {
         advanceUntilIdle()
 
         assertEquals("integrations.imdb", emission.await())
+    }
+
+    @Test
+    fun `observeAccountConfigSyncChangedPaths emits tvdb path label`() = runTest {
+        val tvdbSettings = MutableSharedFlow<Unit>(replay = 1)
+
+        val emission = backgroundScope.async(start = CoroutineStart.UNDISPATCHED) {
+            observeAccountConfigSyncChangedPaths(
+                heroCatalogSelections = MutableSharedFlow<Unit>(),
+                homeCatalogOrderKeys = MutableSharedFlow<Unit>(),
+                disabledHomeCatalogKeys = MutableSharedFlow<Unit>(),
+                tmdbSettings = MutableSharedFlow<Unit>(),
+                tvdbSettings = tvdbSettings,
+                mdbListSettings = MutableSharedFlow<Unit>(),
+                mdbListCatalogPreferences = MutableSharedFlow<Unit>(),
+                omdbSettings = MutableSharedFlow<Unit>(),
+                theIntroDbSettings = MutableSharedFlow<Unit>(),
+                animeSkipEnabled = MutableSharedFlow<Unit>(),
+                animeSkipClientId = MutableSharedFlow<Unit>(),
+                subtitleTranslationSettings = MutableSharedFlow<Unit>(),
+                imdbSettings = MutableSharedFlow<Unit>(),
+                posterRatingsSettings = MutableSharedFlow<Unit>(),
+                premiumizeSettings = MutableSharedFlow<Unit>(),
+                premiumizeAccountState = MutableSharedFlow<Unit>(),
+                torBoxSettings = MutableSharedFlow<Unit>(),
+                torBoxAccountState = MutableSharedFlow<Unit>(),
+                easyDebridSettings = MutableSharedFlow<Unit>(),
+                easyDebridAccountState = MutableSharedFlow<Unit>(),
+                realDebridState = MutableSharedFlow<Unit>(),
+                traktAuthState = MutableSharedFlow<Unit>(),
+                traktCatalogPreferences = MutableSharedFlow<Unit>(),
+                simklCatalogPreferences = MutableSharedFlow<Unit>(),
+                simklAuthState = MutableSharedFlow<Unit>(),
+                playerSettings = MutableSharedFlow<Unit>()
+            ).first()
+        }
+
+        tvdbSettings.emit(Unit)
+        advanceUntilIdle()
+
+        assertEquals("integrations.tvdb", emission.await())
     }
 
     @Test
@@ -572,6 +614,7 @@ class AccountConfigSyncContractTest {
                 homeCatalogOrderKeys = homeCatalogOrderKeys,
                 disabledHomeCatalogKeys = disabledHomeCatalogKeys,
                 tmdbSettings = tmdbSettings,
+                tvdbSettings = MutableSharedFlow<Unit>(),
                 mdbListSettings = mdbListSettings,
                 mdbListCatalogPreferences = mdbListCatalogPreferences,
                 omdbSettings = omdbSettings,
@@ -612,6 +655,7 @@ class AccountConfigSyncContractTest {
                 homeCatalogOrderKeys = MutableSharedFlow<Unit>(),
                 disabledHomeCatalogKeys = MutableSharedFlow<Unit>(),
                 tmdbSettings = MutableSharedFlow<Unit>(),
+                tvdbSettings = MutableSharedFlow<Unit>(),
                 mdbListSettings = MutableSharedFlow<Unit>(),
                 mdbListCatalogPreferences = MutableSharedFlow<Unit>(),
                 omdbSettings = MutableSharedFlow<Unit>(),
