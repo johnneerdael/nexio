@@ -5,6 +5,8 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.sync.profilePrefsName
 import com.nexio.tv.data.repository.MDBListCustomCatalog
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.MDBListListOption
@@ -13,9 +15,23 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class MDBListDiscoverySnapshotStore @Inject constructor(
-    @ApplicationContext private val context: Context
+class MDBListDiscoverySnapshotStore private constructor(
+    @ApplicationContext private val context: Context,
+    private val activeProfileId: () -> Int
 ) {
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        profileManager: ProfileManager
+    ) : this(
+        context = context,
+        activeProfileId = { profileManager.activeProfileId.value }
+    )
+
+    constructor(context: Context) : this(
+        context = context,
+        activeProfileId = { 1 }
+    )
 
     companion object {
         private const val TAG = "MDBListDiscoveryStore"
@@ -25,20 +41,26 @@ class MDBListDiscoverySnapshotStore @Inject constructor(
 
     private val gson = Gson()
 
-    fun read(): MDBListDiscoverySnapshot? {
+    private fun prefsName(profileId: Int = activeProfileId()): String =
+        profilePrefsName(PREFS_NAME, profileId)
+
+    fun read(profileId: Int = activeProfileId()): MDBListDiscoverySnapshot? {
         return runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             val raw = prefs.getString(SNAPSHOT_KEY, null)?.takeIf { it.isNotBlank() } ?: return null
             decode(raw)
         }.onFailure { error ->
             Log.w(TAG, "Failed to restore MDBList discovery snapshot", error)
-            clear()
+            clear(profileId)
         }.getOrNull()
     }
 
-    fun write(snapshot: MDBListDiscoverySnapshot) {
+    fun write(
+        snapshot: MDBListDiscoverySnapshot,
+        profileId: Int = activeProfileId()
+    ) {
         runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             val payload = JsonObject().apply {
                 add("personalLists", gson.toJsonTree(snapshot.personalLists))
                 add("topLists", gson.toJsonTree(snapshot.topLists))
@@ -51,9 +73,9 @@ class MDBListDiscoverySnapshotStore @Inject constructor(
         }
     }
 
-    fun clear() {
+    fun clear(profileId: Int = activeProfileId()) {
         runCatching {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             prefs.edit().remove(SNAPSHOT_KEY).commit()
         }.onFailure { error ->
             Log.w(TAG, "Failed to clear MDBList discovery snapshot", error)
