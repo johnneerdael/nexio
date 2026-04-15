@@ -9,6 +9,8 @@ import com.google.gson.reflect.TypeToken
 import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.sync.profilePrefsName
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.tvdb.TvdbAirAvailabilityDiagnosticReason
+import com.nexio.tv.core.tvdb.TvdbAirAvailabilityPrecision
 import com.nexio.tv.data.repository.ContinueWatchingSnapshot
 import com.nexio.tv.data.repository.TrackingNextUpEntry
 import com.nexio.tv.domain.model.WatchProgress
@@ -50,7 +52,7 @@ class ContinueWatchingSnapshotStore private constructor(
         private const val TAG = "ContinueWatchingStore"
         internal const val BASE_PREFS_NAME = "continue_watching_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
-        private const val SCHEMA_VERSION = 4
+        private const val SCHEMA_VERSION = 5
     }
 
     private val gson = Gson()
@@ -89,6 +91,7 @@ class ContinueWatchingSnapshotStore private constructor(
                 add("resumeItems", gson.toJsonTree(snapshot.resumeItems))
                 add("nextUpItems", encodeNextUpItems(snapshot.nextUpItems))
                 add("traktUpNextItems", encodeNextUpItems(snapshot.traktUpNextItems))
+                add("scheduledReemit", encodeNextUpItems(snapshot.scheduledReemit))
                 add("displayMetadataByItemKey", gson.toJsonTree(snapshot.displayMetadataByItemKey))
                 addProperty("updatedAtMs", snapshot.updatedAtMs)
             }
@@ -125,6 +128,7 @@ class ContinueWatchingSnapshotStore private constructor(
             traktUpNextItems = decodeNextUpItems(root, "traktUpNextItems").ifEmpty {
                 decodeNextUpItems(root, "nextUpItems")
             },
+            scheduledReemit = decodeNextUpItems(root, "scheduledReemit"),
             displayMetadataByItemKey = decodeDisplayMetadata(root, "displayMetadataByItemKey"),
             updatedAtMs = root.get("updatedAtMs")?.asLong ?: 0L
         )
@@ -180,6 +184,20 @@ class ContinueWatchingSnapshotStore private constructor(
                         entry.logo?.let { addProperty("logo", it) }
                         entry.traktShowId?.let { addProperty("traktShowId", it) }
                         entry.traktEpisodeId?.let { addProperty("traktEpisodeId", it) }
+                        entry.tvdbAvailabilityInstantMs
+                            ?.takeIf { it > 0L }
+                            ?.let { addProperty("tvdbAvailabilityInstantMs", it) }
+                        if (entry.tvdbAvailabilityPrecision != TvdbAirAvailabilityPrecision.UNKNOWN) {
+                            addProperty("tvdbAvailabilityPrecision", entry.tvdbAvailabilityPrecision.name)
+                        }
+                        entry.tvdbAvailabilitySourceZoneId?.let { addProperty("tvdbAvailabilitySourceZoneId", it) }
+                        entry.tvdbAvailabilitySourcePolicy?.let { addProperty("tvdbAvailabilitySourcePolicy", it) }
+                        entry.tvdbAvailabilityDiagnosticReason?.let {
+                            addProperty("tvdbAvailabilityDiagnosticReason", it.name)
+                        }
+                        entry.tvdbAvailabilityDeviceLocalDateTime?.let {
+                            addProperty("tvdbAvailabilityDeviceLocalDateTime", it)
+                        }
                     }
                 )
             }
@@ -257,7 +275,13 @@ class ContinueWatchingSnapshotStore private constructor(
             backdrop = obj.stringOrNull("backdrop"),
             logo = obj.stringOrNull("logo"),
             traktShowId = obj.intOrNull("traktShowId"),
-            traktEpisodeId = obj.intOrNull("traktEpisodeId")
+            traktEpisodeId = obj.intOrNull("traktEpisodeId"),
+            tvdbAvailabilityInstantMs = obj.longOrNull("tvdbAvailabilityInstantMs"),
+            tvdbAvailabilityPrecision = obj.tvdbAvailabilityPrecisionOrDefault(),
+            tvdbAvailabilitySourceZoneId = obj.stringOrNull("tvdbAvailabilitySourceZoneId"),
+            tvdbAvailabilitySourcePolicy = obj.stringOrNull("tvdbAvailabilitySourcePolicy"),
+            tvdbAvailabilityDiagnosticReason = obj.tvdbAvailabilityDiagnosticReasonOrNull(),
+            tvdbAvailabilityDeviceLocalDateTime = obj.stringOrNull("tvdbAvailabilityDeviceLocalDateTime")
         )
     }
 
@@ -295,6 +319,20 @@ class ContinueWatchingSnapshotStore private constructor(
     private fun JsonObject.longOrNull(key: String): Long? {
         return runCatching {
             get(key)?.takeIf { !it.isJsonNull }?.asLong
+        }.getOrNull()
+    }
+
+    private fun JsonObject.tvdbAvailabilityPrecisionOrDefault(): TvdbAirAvailabilityPrecision {
+        val value = stringOrNull("tvdbAvailabilityPrecision") ?: return TvdbAirAvailabilityPrecision.UNKNOWN
+        return runCatching {
+            TvdbAirAvailabilityPrecision.valueOf(value)
+        }.getOrDefault(TvdbAirAvailabilityPrecision.UNKNOWN)
+    }
+
+    private fun JsonObject.tvdbAvailabilityDiagnosticReasonOrNull(): TvdbAirAvailabilityDiagnosticReason? {
+        val value = stringOrNull("tvdbAvailabilityDiagnosticReason") ?: return null
+        return runCatching {
+            TvdbAirAvailabilityDiagnosticReason.valueOf(value)
         }.getOrNull()
     }
 }
