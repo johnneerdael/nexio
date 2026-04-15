@@ -4,9 +4,11 @@ import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbEpisodeEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TvdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbEpisode
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.TvdbSettings
 import com.nexio.tv.domain.model.TvdbValidationStatus
 import io.mockk.coEvery
@@ -91,6 +93,120 @@ class TvMetadataRouterTest {
         assertTrue(decision.diagnostics.any { it.reason == TvMetadataDecisionReason.TVDB_FALLBACK_TMDB })
         coVerify(exactly = 1) { tmdbService.ensureTmdbId("tt0944947", "series") }
         coVerify(exactly = 1) { tmdbMetadataService.fetchEnrichment("1399", ContentType.SERIES, "en-US") }
+    }
+
+    @Test
+    fun `does not call tmdb fallback when tvdb inactive and tmdb disabled`() = runTest {
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val router = tvMetadataRouter(
+            settings = TvdbSettings(enabled = false),
+            tmdbSettings = TmdbSettings(enabled = false, apiKey = "tmdb-key"),
+            tmdbService = tmdbService,
+            tmdbMetadataService = tmdbMetadataService
+        )
+
+        val decision = router.fetchEnrichment(
+            TvMetadataRequest(
+                contentId = "tt0944947",
+                contentType = ContentType.SERIES,
+                language = "en-US"
+            )
+        )
+
+        assertEquals(TvProvider.TMDB, decision.provider)
+        assertEquals(TvMetadataDecisionReason.TVDB_INACTIVE, decision.reason)
+        assertNull(decision.value)
+        assertTrue(decision.diagnostics.any { it.reason == TvMetadataDecisionReason.TVDB_INACTIVE })
+        assertTrue(decision.diagnostics.any { it.reason == TvMetadataDecisionReason.TVDB_FALLBACK_TMDB })
+        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
+        coVerify(exactly = 0) { tmdbMetadataService.fetchEnrichment(any(), any(), any()) }
+    }
+
+    @Test
+    fun `does not call tmdb fallback when tvdb record missing and tmdb disabled`() = runTest {
+        val tvdbIdentityService = mockk<TvdbIdentityService>()
+        val tvdbMetadataService = mockk<TvdbMetadataService>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+        val router = tvMetadataRouter(
+            tvdbIdentityService = tvdbIdentityService,
+            tvdbMetadataService = tvdbMetadataService,
+            tmdbSettings = TmdbSettings(enabled = false, apiKey = "tmdb-key"),
+            tmdbService = tmdbService,
+            tmdbMetadataService = tmdbMetadataService
+        )
+
+        coEvery {
+            tvdbIdentityService.resolveSeriesByRemoteId("tt0944947", TvdbRemoteIdSource.IMDB)
+        } returns identity
+        coEvery { tvdbMetadataService.fetchSeriesEnrichment(identity, "en-US") } returns null
+
+        val decision = router.fetchEnrichment(
+            TvMetadataRequest(
+                contentId = "tt0944947",
+                contentType = ContentType.SERIES,
+                language = "en-US"
+            )
+        )
+
+        assertEquals(TvProvider.TMDB, decision.provider)
+        assertEquals(TvMetadataDecisionReason.TVDB_RECORD_MISSING, decision.reason)
+        assertNull(decision.value)
+        assertTrue(decision.diagnostics.any { it.reason == TvMetadataDecisionReason.TVDB_RECORD_MISSING })
+        assertTrue(decision.diagnostics.any { it.reason == TvMetadataDecisionReason.TVDB_FALLBACK_TMDB })
+        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
+        coVerify(exactly = 0) { tmdbMetadataService.fetchEnrichment(any(), any(), any()) }
+    }
+
+    @Test
+    fun `does not call tmdb episode or season fallback when tmdb disabled`() = runTest {
+        val tvdbIdentityService = mockk<TvdbIdentityService>()
+        val tvdbMetadataService = mockk<TvdbMetadataService>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+        val router = tvMetadataRouter(
+            tvdbIdentityService = tvdbIdentityService,
+            tvdbMetadataService = tvdbMetadataService,
+            tmdbSettings = TmdbSettings(enabled = false, apiKey = "tmdb-key"),
+            tmdbService = tmdbService,
+            tmdbMetadataService = tmdbMetadataService
+        )
+
+        coEvery {
+            tvdbIdentityService.resolveSeriesByRemoteId("tt0944947", TvdbRemoteIdSource.IMDB)
+        } returns identity
+        coEvery {
+            tvdbMetadataService.fetchEpisodeEnrichment(identity, listOf(1), "en-US")
+        } returns emptyMap()
+        coEvery { tvdbMetadataService.fetchSeasonEpisodes(identity, 1, "en-US") } returns emptyList()
+
+        val episodeDecision = router.fetchEpisodeEnrichment(
+            TvMetadataRequest(
+                contentId = "tt0944947",
+                contentType = ContentType.SERIES,
+                language = "en-US",
+                seasonNumbers = listOf(1)
+            )
+        )
+        val seasonDecision = router.fetchSeasonEpisodes(
+            contentId = "tt0944947",
+            fallbackContentId = null,
+            seasonNumber = 1,
+            language = "en-US"
+        )
+
+        assertEquals(TvProvider.TMDB, episodeDecision.provider)
+        assertEquals(TvMetadataDecisionReason.TVDB_RECORD_MISSING, episodeDecision.reason)
+        assertEquals(emptyMap<Pair<Int, Int>, TvEpisodeMetadata>(), episodeDecision.value)
+        assertEquals(TvProvider.TMDB, seasonDecision.provider)
+        assertEquals(TvMetadataDecisionReason.TVDB_RECORD_MISSING, seasonDecision.reason)
+        assertEquals(emptyList<TvSeasonEpisode>(), seasonDecision.value)
+        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
+        coVerify(exactly = 0) { tmdbMetadataService.fetchEpisodeEnrichment(any(), any(), any()) }
+        coVerify(exactly = 0) { tmdbMetadataService.fetchSeasonEpisodes(any(), any(), any()) }
     }
 
     @Test
@@ -208,16 +324,20 @@ class TvMetadataRouterTest {
             apiKey = "tvdb-key",
             validationStatus = TvdbValidationStatus.VALID
         ),
+        tmdbSettings: TmdbSettings = TmdbSettings(enabled = true, apiKey = "tmdb-key"),
         tvdbIdentityService: TvdbIdentityService = mockk(relaxed = true),
         tvdbMetadataService: TvdbMetadataService = mockk(relaxed = true),
         tmdbService: TmdbService = mockk(relaxed = true),
         tmdbMetadataService: TmdbMetadataService = mockk(relaxed = true)
     ): TvMetadataRouter {
         val settingsDataStore = mockk<TvdbSettingsDataStore>()
+        val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
         every { settingsDataStore.settings } returns flowOf(settings)
+        every { tmdbSettingsDataStore.settings } returns flowOf(tmdbSettings)
 
         return TvMetadataRouter(
             tvdbSettingsDataStore = settingsDataStore,
+            tmdbSettingsDataStore = tmdbSettingsDataStore,
             tvdbIdentityService = tvdbIdentityService,
             tvdbMetadataService = tvdbMetadataService,
             tmdbService = tmdbService,
