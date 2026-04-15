@@ -304,12 +304,13 @@
             {
               "type": "object",
               "additionalProperties": false,
-              "required": ["id", "label", "nameTemplate", "descriptionTemplate"],
+              "required": ["id", "label", "nameTemplate", "descriptionTemplate", "badgeRowTemplate"],
               "properties": {
                 "id": { "type": "string", "default": "custom" },
                 "label": { "type": "string", "default": "Custom" },
                 "nameTemplate": { "type": "string", "default": "" },
-                "descriptionTemplate": { "type": "string", "default": "" }
+                "descriptionTemplate": { "type": "string", "default": "" },
+                "badgeRowTemplate": { "type": "string", "default": "" }
               }
             }
           ],

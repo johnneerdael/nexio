@@ -35,6 +35,7 @@ import com.nexio.tv.domain.model.AddonParserPreset
 import com.nexio.tv.domain.model.ImdbSettings
 import com.nexio.tv.domain.model.SubtitleTranslationProvider
 import com.nexio.tv.domain.model.TrackingProvider
+import java.io.File
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -50,6 +51,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -145,6 +147,7 @@ class AccountConfigSyncContractTest {
                 ?.get("badgeRowTemplate")
                 ?.toString()
         )
+        assertCustomFormatterPayloadAllowedBySchema(json)
         assertEquals(
             "\"SIMKL\"",
             json["playback"]?.jsonObject?.get("streamSelection")?.jsonObject?.get("trackingProvider")?.toString()
@@ -862,5 +865,38 @@ class AccountConfigSyncContractTest {
                 badgeRowTemplate = "[[chip:cached]]"
             )
         }
+    }
+
+    private fun assertCustomFormatterPayloadAllowedBySchema(payload: JsonObject) {
+        val customTemplatePayload = payload["formatter"]!!
+            .jsonObject["customTemplate"]!!
+            .jsonObject
+        val customTemplateSchema = settingsSyncSchema()
+            .getJSONObject("properties")
+            .getJSONObject("formatter")
+            .getJSONObject("properties")
+            .getJSONObject("customTemplate")
+            .getJSONArray("anyOf")
+            .getJSONObject(1)
+        val schemaProperties = customTemplateSchema.getJSONObject("properties")
+        val schemaRequired = customTemplateSchema.getJSONArray("required")
+        val requiredKeys = (0 until schemaRequired.length())
+            .map { schemaRequired.getString(it) }
+            .toSet()
+
+        assertFalse(customTemplateSchema.getBoolean("additionalProperties"))
+        assertTrue(requiredKeys.contains("badgeRowTemplate"))
+        customTemplatePayload.keys.forEach { key ->
+            assertTrue("settings sync schema should allow customTemplate.$key", schemaProperties.has(key))
+        }
+    }
+
+    private fun settingsSyncSchema(): JSONObject {
+        val schemaFile = listOf(
+            File("docs/settings/settings-sync.schema.json"),
+            File("../docs/settings/settings-sync.schema.json")
+        ).first { it.isFile }
+
+        return JSONObject(schemaFile.readText())
     }
 }
