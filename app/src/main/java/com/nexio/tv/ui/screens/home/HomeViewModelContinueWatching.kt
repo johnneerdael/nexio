@@ -31,6 +31,17 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+internal fun shouldEnrichContinueWatchingProviderMetadata(
+    items: List<ContinueWatchingItem>,
+    traktUpNextItems: List<ContinueWatchingItem.NextUp>,
+    settings: TmdbSettings
+): Boolean {
+    if (!settings.useBasicInfo) return false
+    if (settings.isActive) return true
+    return items.any { item -> isSeriesType(item.contentType()) } ||
+        traktUpNextItems.any { item -> isSeriesType(item.contentType()) }
+}
+
 internal fun HomeViewModel.loadContinueWatchingPipeline() {
     viewModelScope.launch {
         continueWatchingSnapshotService.observeSnapshot().collectLatest { snapshot ->
@@ -62,7 +73,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
             }
 
             val settings = currentTmdbSettings
-            if (settings.isActive && settings.useBasicInfo) {
+            if (shouldEnrichContinueWatchingProviderMetadata(items, traktUpNextItems, settings)) {
                 continueWatchingEnrichmentJob?.cancel()
                 continueWatchingEnrichmentJob = viewModelScope.launch {
                     try {
@@ -516,9 +527,9 @@ private fun com.nexio.tv.data.repository.TrackingNextUpEntry.toContinueWatchingN
 
 internal fun HomeViewModel.enrichContinueWatchingWithCurrentSettings() {
     val settings = currentTmdbSettings
-    if (!settings.isActive || !settings.useBasicInfo) return
     val currentItems = _uiState.value.continueWatchingItems
     val currentTraktItems = _uiState.value.traktUpNextItems
+    if (!shouldEnrichContinueWatchingProviderMetadata(currentItems, currentTraktItems, settings)) return
     if (currentItems.isEmpty() && currentTraktItems.isEmpty()) return
 
     continueWatchingEnrichmentJob?.cancel()
@@ -533,7 +544,7 @@ internal fun HomeViewModel.enrichContinueWatchingWithCurrentSettings() {
                 )
             }
         } catch (e: Exception) {
-            Log.w(HomeViewModel.TAG, "Continue watching TMDB enrichment failed: ${e.message}")
+            Log.w(HomeViewModel.TAG, "Continue watching metadata enrichment failed: ${e.message}")
         }
     }
 }
