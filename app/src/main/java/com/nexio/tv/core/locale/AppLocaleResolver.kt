@@ -2,6 +2,7 @@ package com.nexio.tv.core.locale
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.res.Resources
 import java.util.Locale
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -16,6 +17,7 @@ data class AppLocaleOption(
 object AppLocaleResolver {
     private const val PREFS_NAME = "app_locale"
     private const val LOCALE_TAG_KEY = "locale_tag"
+    private const val ACTIVE_PROFILE_ID_KEY = "active_profile_id"
 
     val supportedOptions: List<AppLocaleOption> = listOf(
         AppLocaleOption(tag = null, displayName = "System default"),
@@ -28,8 +30,8 @@ object AppLocaleResolver {
     )
 
     fun getStoredLocaleTag(context: Context): String? {
-        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .readStoredLocaleTag()
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.readStoredLocaleTag()
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
             ?.takeUnless { it.equals("system", ignoreCase = true) }
@@ -39,18 +41,25 @@ object AppLocaleResolver {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val editor = prefs.edit()
         if (tag.isNullOrBlank() || tag.equals("system", ignoreCase = true)) {
-            editor.remove(LOCALE_TAG_KEY)
+            editor.remove(localeTagKey(prefs.activeProfileId()))
         } else {
-            editor.putString(LOCALE_TAG_KEY, tag)
+            editor.putString(localeTagKey(prefs.activeProfileId()), tag)
         }
         // Locale writes must complete before activity recreation to avoid reverting to stale values.
         editor.commit()
     }
 
+    fun setActiveProfileId(context: Context, profileId: Int) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(ACTIVE_PROFILE_ID_KEY, profileId.coerceAtLeast(1))
+            .commit()
+    }
+
     fun observeStoredLocaleTag(context: Context): Flow<String?> = callbackFlow {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { sharedPrefs, changedKey ->
-            if (changedKey == LOCALE_TAG_KEY) {
+            if (changedKey == ACTIVE_PROFILE_ID_KEY || changedKey == localeTagKey(sharedPrefs.activeProfileId())) {
                 trySend(sharedPrefs.readStoredLocaleTag())
             }
         }
@@ -62,7 +71,15 @@ object AppLocaleResolver {
     }.distinctUntilChanged()
 
     private fun SharedPreferences.readStoredLocaleTag(): String? {
-        return getString(LOCALE_TAG_KEY, null)
+        return getString(localeTagKey(activeProfileId()), null)
+    }
+
+    private fun SharedPreferences.activeProfileId(): Int {
+        return getInt(ACTIVE_PROFILE_ID_KEY, 1).coerceAtLeast(1)
+    }
+
+    private fun localeTagKey(profileId: Int): String {
+        return if (profileId == 1) LOCALE_TAG_KEY else "${LOCALE_TAG_KEY}_p$profileId"
     }
 
     fun resolveEffectiveAppLanguageTag(context: Context): String {
@@ -70,7 +87,7 @@ object AppLocaleResolver {
         if (stored != null) {
             return normalizeToSupportedAppTag(stored)
         }
-        return normalizeToSupportedAppTag(Locale.getDefault().toLanguageTag())
+        return normalizeToSupportedAppTag(systemLocaleTag())
     }
 
     fun resolveTmdbLanguageTag(context: Context): String {
@@ -95,5 +112,11 @@ object AppLocaleResolver {
             lower.startsWith("zh") -> "zh-CN"
             else -> "en"
         }
+    }
+
+    private fun systemLocaleTag(): String {
+        val locales = Resources.getSystem().configuration.locales
+        return locales.takeIf { !it.isEmpty }?.get(0)?.toLanguageTag()
+            ?: Locale.getDefault().toLanguageTag()
     }
 }

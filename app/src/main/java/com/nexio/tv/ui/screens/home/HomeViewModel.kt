@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
@@ -32,6 +33,7 @@ import com.nexio.tv.data.local.TraktDiscoverySnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.local.YouTubeTrailerAuthDataStore
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
+import com.nexio.tv.data.repository.TrackingProviderStateService
 import com.nexio.tv.data.repository.MDBListRepository
 import com.nexio.tv.data.repository.SimklDiscoveryService
 import com.nexio.tv.data.repository.MDBListDiscoveryService
@@ -102,6 +104,8 @@ class HomeViewModel @Inject constructor(
     internal val debugSettingsDataStore: DebugSettingsDataStore,
     internal val metadataDiskCacheStore: MetadataDiskCacheStore,
     internal val syntheticHomeCatalogStore: SyntheticHomeCatalogStore,
+    internal val profileManager: ProfileManager,
+    internal val trackingProviderStateService: TrackingProviderStateService,
     @ApplicationContext internal val appContext: Context
 ) : ViewModel() {
     companion object {
@@ -175,6 +179,8 @@ class HomeViewModel @Inject constructor(
     internal var persistedTraktDiscoverySnapshot: com.nexio.tv.data.repository.TraktDiscoverySnapshot =
         com.nexio.tv.data.repository.TraktDiscoverySnapshot()
     internal var traktCatalogPreferences: TraktCatalogPreferences = TraktCatalogPreferences()
+    internal var activeProfileTraktAuthenticated: Boolean = false
+    internal var activeProfileSimklAuthenticated: Boolean = false
     internal var simklDiscoverySnapshot: com.nexio.tv.data.repository.SimklDiscoverySnapshot =
         com.nexio.tv.data.repository.SimklDiscoverySnapshot()
     internal var persistedSimklDiscoverySnapshot: com.nexio.tv.data.repository.SimklDiscoverySnapshot =
@@ -279,6 +285,8 @@ class HomeViewModel @Inject constructor(
         observeStartupPerfTelemetry()
         observeDiskFirstHomeStartupToggle()
         observeLocaleChangesForMetadata()
+        observeProfileSwitches()
+        observeTrackingProviderState()
         restorePersistedDiscoverySnapshots()
         restorePersistedSyntheticCatalogRows()
         restorePersistedCatalogSnapshot()
@@ -376,6 +384,32 @@ class HomeViewModel @Inject constructor(
                         state.copy(deterministicAutoplayEnabled = settings.deterministicAutoplayEnabled)
                     }
                 }
+            }
+        }
+    }
+
+    private fun observeTrackingProviderState() {
+        viewModelScope.launch {
+            trackingProviderStateService.state.collectLatest { state ->
+                val authChanged = activeProfileTraktAuthenticated != state.traktAuthenticated ||
+                    activeProfileSimklAuthenticated != state.simklAuthenticated
+                activeProfileTraktAuthenticated = state.traktAuthenticated
+                activeProfileSimklAuthenticated = state.simklAuthenticated
+                if (authChanged) {
+                    if (!state.traktAuthenticated) {
+                        clearTraktHomeState("tracking_auth_changed")
+                    }
+                    scheduleUpdateCatalogRows()
+                }
+            }
+        }
+    }
+
+    private fun observeProfileSwitches() {
+        viewModelScope.launch {
+            profileManager.profileSwitched.collectLatest {
+                resetProfileScopedHomeState("profile_switch")
+                loadActiveProfileDiskBackedHomeState("profile_switch")
             }
         }
     }

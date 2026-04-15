@@ -2,6 +2,7 @@ package com.nexio.tv.core.profile
 
 import android.content.Context
 import android.util.Log
+import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.sync.profilePrefsName
 import com.nexio.tv.data.local.ProfileDataStore
 import com.nexio.tv.data.local.ProfileDataStoreFactory
@@ -12,6 +13,7 @@ import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.io.File
@@ -64,6 +67,14 @@ class ProfileManager(
             listOf(UserProfile(id = 1, name = "Default", avatarColorHex = "#1E88E5"))
         )
 
+    init {
+        scope.launch {
+            activeProfileId.collect { id ->
+                AppLocaleResolver.setActiveProfileId(context, id)
+            }
+        }
+    }
+
     val activeProfile: UserProfile?
         get() = profiles.value.find { it.id == activeProfileId.value }
 
@@ -74,6 +85,7 @@ class ProfileManager(
         // Read latest from DataStore directly to avoid StateFlow lag
         val current = dataStore.profilesList.first()
         if (current.any { it.id == id }) {
+            AppLocaleResolver.setActiveProfileId(context, id)
             dataStore.setActiveProfile(id)
             _profileSwitched.emit(Unit)
         }
