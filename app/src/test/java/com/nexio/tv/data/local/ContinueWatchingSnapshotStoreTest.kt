@@ -135,6 +135,28 @@ class ContinueWatchingSnapshotStoreTest {
     }
 
     @Test
+    fun `explicit profile id keeps continue watching snapshots isolated`() {
+        val profileOnePrefs = InMemorySharedPreferences()
+        val profileTwoPrefs = InMemorySharedPreferences()
+        val context = mockContext(
+            preferencesByName = mapOf(
+                "continue_watching_snapshot" to profileOnePrefs,
+                "continue_watching_snapshot_p2" to profileTwoPrefs
+            ),
+            localePrefs = localePrefs("en")
+        )
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 1
+        val store = ContinueWatchingSnapshotStore(context, metadataStore)
+
+        store.write(ContinueWatchingSnapshot(updatedAtMs = 1_000L), profileId = 1)
+        store.write(ContinueWatchingSnapshot(updatedAtMs = 2_000L), profileId = 2)
+
+        assertEquals(1_000L, store.read(profileId = 1)?.updatedAtMs)
+        assertEquals(2_000L, store.read(profileId = 2)?.updatedAtMs)
+    }
+
+    @Test
     fun `write persists scheduled reemit and tvdb timing fields`() {
         val prefs = InMemorySharedPreferences()
         val context = mockContext(prefs, "continue_watching_snapshot", localePrefs("en"))
@@ -234,12 +256,23 @@ class ContinueWatchingSnapshotStoreTest {
         expectedName: String,
         localePrefs: InMemorySharedPreferences
     ): Context {
+        return mockContext(
+            preferencesByName = mapOf(expectedName to prefs),
+            localePrefs = localePrefs
+        )
+    }
+
+    private fun mockContext(
+        preferencesByName: Map<String, InMemorySharedPreferences>,
+        localePrefs: InMemorySharedPreferences
+    ): Context {
         return mockk {
             every { getSharedPreferences(any(), Context.MODE_PRIVATE) } answers {
-                when (firstArg<String>()) {
-                    expectedName -> prefs
+                val name = firstArg<String>()
+                when (name) {
+                    in preferencesByName -> preferencesByName.getValue(name)
                     "app_locale" -> localePrefs
-                    else -> throw IllegalArgumentException("Unexpected prefs ${firstArg<String>()}")
+                    else -> throw IllegalArgumentException("Unexpected prefs $name")
                 }
             }
         }
