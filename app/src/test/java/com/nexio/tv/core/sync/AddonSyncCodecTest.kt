@@ -48,4 +48,26 @@ class AddonSyncCodecTest {
         assertEquals(null, parsed.secretRef)
         assertEquals(null, parsed.secretPayload)
     }
+
+    @Test
+    fun `configured path manifest resolves back to original install url`() {
+        val parsed = parseAddonInstallUrl(
+            "https://cometfortheweebs.midnightignite.me/eyJjb25maWciOnRydWV9/manifest.json"
+        )
+
+        val resolved = buildResolvedAddonUrl(
+            baseUrl = parsed.publicBaseUrl,
+            manifestUrl = parsed.manifestUrl,
+            publicQueryParams = parsed.publicQueryParams,
+            secretPayload = parsed.secretPayload
+        )
+
+        assertEquals("https://cometfortheweebs.midnightignite.me", parsed.publicBaseUrl)
+        assertEquals("configured", parsed.installKind)
+        assertEquals("eyJjb25maWciOnRydWV9", parsed.secretPayload?.pathSegment)
+        assertEquals(
+            "https://cometfortheweebs.midnightignite.me/eyJjb25maWciOnRydWV9/manifest.json",
+            resolved
+        )
+    }
 }
