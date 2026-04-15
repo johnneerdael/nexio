@@ -4,50 +4,88 @@ import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
+import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvProvider
 import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.TmdbSettings
+import com.nexio.tv.domain.model.WatchProgress
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HomeViewModelTvdbProviderRoutingTest {
 
     @Test
     fun `continue watching tvdb success does not call tmdb`() = runTest {
+        val viewModel = mockk<HomeViewModel>()
         val tvMetadataRouter = mockk<TvMetadataRouter>()
         val tmdbService = mockk<TmdbService>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
-        val request = TvMetadataRequest(
-            contentId = "tt0944947",
-            fallbackContentId = "tt0944947:2:5",
-            contentType = ContentType.SERIES
+        every { viewModel.tvMetadataRouter } returns tvMetadataRouter
+        every { viewModel.tmdbService } returns tmdbService
+        every { viewModel.tmdbMetadataService } returns tmdbMetadataService
+        val item = ContinueWatchingItem.InProgress(
+            progress = WatchProgress(
+                contentId = "tt0944947",
+                contentType = "series",
+                name = "Game of Thrones",
+                poster = "fallback-poster",
+                backdrop = "fallback-backdrop",
+                logo = "fallback-logo",
+                videoId = "tt0944947:2:5",
+                season = 2,
+                episode = 5,
+                episodeTitle = "The Ghost of Harrenhal",
+                position = 1_000L,
+                duration = 3_000L,
+                lastWatched = 42L
+            ),
+            episodeDescription = "English episode"
         )
-        coEvery { tvMetadataRouter.fetchEnrichment(request) } returns TvMetadataDecision(
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
             provider = TvProvider.TVDB,
             reason = TvMetadataDecisionReason.TVDB_SUCCESS,
             value = TvMetadataEnrichment(
                 seriesTvdbId = 121361,
-                localizedTitle = "Game of Thrones"
+                localizedTitle = "TVDB title",
+                description = "TVDB description",
+                genres = listOf("Drama"),
+                poster = "tvdb-poster",
+                backdrop = "tvdb-backdrop",
+                logo = "tvdb-logo",
+                releaseInfo = "2011",
+                rating = 8.9
             )
         )
-
-        val decision = tvMetadataRouter.fetchEnrichment(request)
-
-        assertEquals(TvProvider.TVDB, decision.provider)
-        assertEquals("Game of Thrones", decision.value?.localizedTitle)
-        assertTrue(
-            HomeViewModel::class.java.declaredConstructors.any { constructor ->
-                constructor.parameterTypes.contains(TvMetadataRouter::class.java)
-            }
+        coEvery { tvMetadataRouter.fetchEpisodeEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TVDB,
+            reason = TvMetadataDecisionReason.TVDB_SUCCESS,
+            value = mapOf((2 to 5) to TvEpisodeMetadata(overview = "TVDB episode overview"))
         )
+
+        val result = viewModel.enrichContinueWatchingItemWithProvider(
+            item = item,
+            settings = TmdbSettings(enabled = true, apiKey = "tmdb-key")
+        ) as ContinueWatchingItem.InProgress
+
+        assertEquals("TVDB title", result.displayMetadata?.title)
+        assertEquals("TVDB description", result.displayMetadata?.description)
+        assertEquals(listOf("Drama"), result.displayMetadata?.genres)
+        assertEquals("tvdb-poster", result.displayMetadata?.poster)
+        assertEquals("tvdb-backdrop", result.displayMetadata?.backdrop)
+        assertEquals("tvdb-logo", result.displayMetadata?.logo)
+        assertEquals("2011", result.displayMetadata?.releaseInfo)
+        assertEquals(8.9f, result.displayMetadata?.imdbRating)
+        assertEquals("TVDB episode overview", result.episodeDescription)
         coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
         coVerify(exactly = 0) { tmdbMetadataService.fetchEnrichment(any(), any(), any()) }
+        coVerify(exactly = 0) { tmdbMetadataService.fetchEpisodeEnrichment(any(), any()) }
     }
 }
