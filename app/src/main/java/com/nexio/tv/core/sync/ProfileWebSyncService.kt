@@ -20,6 +20,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val PROFILE_WEB_SYNC_TAG = "ProfileWebSyncService"
+private const val PRIMARY_PROFILE_INDEX = 1
 
 @Serializable
 data class ProfileAuthToken(
@@ -41,6 +42,14 @@ class ProfileWebSyncService @Inject constructor(
 ) {
     suspend fun syncActiveProfile(profileIndex: Int): Result<Unit> = withContext(Dispatchers.IO) {
         try {
+            if (profileIndex == PRIMARY_PROFILE_INDEX) {
+                Log.d(
+                    PROFILE_WEB_SYNC_TAG,
+                    "Skipping profile web auth token sync for primary profile; account sync owns legacy integrations"
+                )
+                return@withContext Result.success(Unit)
+            }
+
             val remoteTokens = postgrest.from("profile_auth_tokens")
                 .select {
                     filter {
