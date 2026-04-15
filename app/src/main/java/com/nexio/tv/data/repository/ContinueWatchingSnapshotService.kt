@@ -3,6 +3,7 @@ package com.nexio.tv.data.repository
 import android.util.Log
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.scheduler.ContinueWatchingAirScheduler
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -38,6 +39,13 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val REFRESH_FAILURE_RETRY_MS = 15 * 60_000L
+
+private object NoopContinueWatchingAirScheduler : ContinueWatchingAirScheduler {
+    override fun scheduleSoonest(triggerAtMs: Long?) = Unit
+    override fun cancel() = Unit
+}
+
 data class ContinueWatchingSnapshot(
     val resumeItems: List<WatchProgress> = emptyList(),
     val nextUpItems: List<TrackingNextUpEntry> = emptyList(),
@@ -58,6 +66,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private val metaRepository: MetaRepository,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
     private val snapshotStore: ContinueWatchingSnapshotStore,
+    private val airScheduler: ContinueWatchingAirScheduler = NoopContinueWatchingAirScheduler,
     private val profileManager: ProfileManager? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -120,9 +129,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                             snapshotStore.clear()
                             metadataDiskCacheStore.replaceHomeFeedReferences(feedKey = "continue_watching", itemKeys = emptySet())
                             lastRefreshRequestMs = 0L
-                            reemitJob?.cancel()
-                            reemitJob = null
-                            currentTimerTargetMs = null
+                            cancelReemitScheduling()
                         }
                         hasSeenAuthenticatedSession = false
                         flowOf<ContinueWatchingSnapshot?>(null)
@@ -168,9 +175,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 rawSnapshotState.value = ContinueWatchingSnapshot()
                 snapshotState.value = ContinueWatchingSnapshot()
                 lastRefreshRequestMs = 0L
-                reemitJob?.cancel()
-                reemitJob = null
-                currentTimerTargetMs = null
+                cancelReemitScheduling()
             }
             return
         }
@@ -178,7 +183,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         rawSnapshotState.value = normalized
         snapshotState.value = normalized
         lastRefreshRequestMs = normalized.updatedAtMs
-        scheduleReemitIfNeeded(normalized.scheduledReemit, normalized.updatedAtMs)
+        scheduleReemitIfNeeded(normalized.scheduledReemit, System.currentTimeMillis())
     }
 
     fun observeSnapshot(): Flow<ContinueWatchingSnapshot> {
@@ -415,6 +420,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         trackingProgressService.invalidateLocalizedMetadata()
         snapshotStore.clear()
         metadataDiskCacheStore.replaceHomeFeedReferences(feedKey = "continue_watching", itemKeys = emptySet())
+        cancelReemitScheduling()
         scope.launch {
             rawSnapshotState.update { it.copy(displayMetadataByItemKey = emptyMap()) }
             snapshotState.value = rawSnapshotState.value
@@ -628,17 +634,35 @@ class ContinueWatchingSnapshotService @Inject constructor(
         )
         if (soonestMs == currentTimerTargetMs) return
         reemitJob?.cancel()
-        currentTimerTargetMs = soonestMs
-        if (soonestMs != null) {
-            val delayMs = (soonestMs - nowMs).coerceAtLeast(0L)
-            reemitJob = scope.launch {
-                delay(delayMs)
-                runCatching { ensureFresh(force = true) }
-                    .onFailure { error ->
-                        Log.w("ContinueWatching", "Re-emit refresh failed", error)
-                    }
-            }
+        if (soonestMs == null) {
+            reemitJob = null
+            currentTimerTargetMs = null
+            airScheduler.cancel()
+            return
         }
+        currentTimerTargetMs = soonestMs
+        airScheduler.scheduleSoonest(soonestMs)
+        val delayMs = (soonestMs - nowMs).coerceAtLeast(0L)
+        reemitJob = scope.launch {
+            delay(delayMs)
+            runCatching { ensureFresh(force = true) }
+                .onFailure { error ->
+                    Log.w(
+                        "ContinueWatching",
+                        "exact_air_time_diagnostic reason=refresh_failure retryMs=900000",
+                        error
+                    )
+                    currentTimerTargetMs = null
+                    airScheduler.scheduleSoonest(System.currentTimeMillis() + REFRESH_FAILURE_RETRY_MS)
+                }
+        }
+    }
+
+    private fun cancelReemitScheduling() {
+        reemitJob?.cancel()
+        reemitJob = null
+        currentTimerTargetMs = null
+        airScheduler.cancel()
     }
 
     private suspend fun hydrateSnapshotMetadata(
