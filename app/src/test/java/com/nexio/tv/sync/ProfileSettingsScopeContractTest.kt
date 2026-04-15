@@ -393,6 +393,16 @@ class ProfileSettingsScopeContractTest {
     }
 
     @Test
+    fun `tracking provider state exposes unauthenticated runtime state explicitly`() {
+        val source = trackingProviderStateService.readText()
+
+        assertTrue(source.contains("val hasAuthenticatedProvider: Boolean"))
+        assertTrue(source.contains("val canReadEffectiveProvider: Boolean"))
+        assertTrue(source.contains("effectiveProvider = if (authState.hasAnyAuthenticatedProvider)"))
+        assertTrue(!source.contains("else -> settings.trackingProvider"))
+    }
+
+    @Test
     fun `shared metadata and artwork cache keys stay profile independent`() {
         val metadataSource = metadataDiskCacheStore.readText()
         val artworkSource = artworkImageCacheKeys.readText()

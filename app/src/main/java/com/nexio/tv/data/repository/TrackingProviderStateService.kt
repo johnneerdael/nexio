@@ -26,6 +26,16 @@ data class EffectiveTrackingProviderState(
 ) {
     val hasAuthenticatedProvider: Boolean
         get() = traktAuthenticated || simklAuthenticated
+
+    val canReadEffectiveProvider: Boolean
+        get() = hasAuthenticatedProvider
+
+    fun isProviderAuthenticated(provider: TrackingProvider): Boolean {
+        return when (provider) {
+            TrackingProvider.TRAKT -> traktAuthenticated
+            TrackingProvider.SIMKL -> simklAuthenticated
+        }
+    }
 }
 
 @Singleton
@@ -42,10 +52,15 @@ class TrackingProviderStateService @Inject constructor(
         playerSettingsDataStore.playerSettings,
         profileManager.activeProfileId.flatMapLatest(::authStateForProfile)
     ) { settings, authState ->
-        val effectiveProvider = when {
-            authState.traktAuthenticated && !authState.simklAuthenticated -> TrackingProvider.TRAKT
-            authState.simklAuthenticated && !authState.traktAuthenticated -> TrackingProvider.SIMKL
-            else -> settings.trackingProvider
+        val effectiveProvider = if (authState.hasAnyAuthenticatedProvider) {
+            when {
+                authState.traktAuthenticated && !authState.simklAuthenticated -> TrackingProvider.TRAKT
+                authState.simklAuthenticated && !authState.traktAuthenticated -> TrackingProvider.SIMKL
+                authState.traktAuthenticated && authState.simklAuthenticated -> settings.trackingProvider
+                else -> selectedProvider(settings.trackingProvider)
+            }
+        } else {
+            settings.trackingProvider
         }
         EffectiveTrackingProviderState(
             storedProvider = settings.trackingProvider,
@@ -56,6 +71,8 @@ class TrackingProviderStateService @Inject constructor(
     }
 
     suspend fun currentState(): EffectiveTrackingProviderState = state.first()
+
+    private fun selectedProvider(provider: TrackingProvider): TrackingProvider = provider
 
     private fun authStateForProfile(profileId: Int): Flow<TrackingAuthState> {
         return when (val route = profileModeRouter.routeFor(profileId)) {
@@ -87,5 +104,8 @@ class TrackingProviderStateService @Inject constructor(
     private data class TrackingAuthState(
         val traktAuthenticated: Boolean = false,
         val simklAuthenticated: Boolean = false
-    )
+    ) {
+        val hasAnyAuthenticatedProvider: Boolean
+            get() = traktAuthenticated || simklAuthenticated
+    }
 }
