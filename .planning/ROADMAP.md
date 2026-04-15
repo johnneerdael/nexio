@@ -97,13 +97,13 @@ Plans:
 **Goal**: TVDB metadata stays reliable over time through update-aware caching, heavily cached reference data, graceful failure behavior, and clear diagnostics
 **Depends on**: Phase 8 and Phase 9
 **Requirements**: UX-03, CACHE-02, CACHE-03
-**Plans:** 4/7 plans executed
+**Plans:** 5/7 plans executed
 Plans:
 - [x] 10-00-PLAN.md — Bind Phase 6-9 TVDB source contracts and create sanitized reliability diagnostics
 - [x] 10-01-PLAN.md — Process TVDB `/updates` and invalidate TVDB cache namespaces safely
 - [x] 10-02-PLAN.md — Schedule background update checks with startup catch-up and credential-health gating
 - [x] 10-03-PLAN.md — Cache stable TVDB reference data heavily with stale-on-failure behavior
-- [ ] 10-04-PLAN.md — Preserve last-known-good TVDB metadata through outages and invalid credentials
+- [x] 10-04-PLAN.md — Preserve last-known-good TVDB metadata through outages and invalid credentials
 - [ ] 10-05-PLAN.md — Surface TVDB diagnostics in settings/debug UI with shared recorder logging
 - [ ] 10-06-PLAN.md — Update user-facing TVDB setup and behavior docs
 **Success Criteria** (what must be TRUE):
@@ -126,7 +126,7 @@ Note: Phase 9 can begin after Phase 7 while Phase 8 is being validated, but Phas
 | 7. TVDB Provider Replacement | 8/8 | Complete | 2026-04-15 |
 | 8. Exact Continue Watching Air Timing | 6/6 | Complete | 2026-04-15 |
 | 9. TVDB Advanced TV Surfaces | 0/? | Planned | - |
-| 10. TVDB Reliability, Updates, and Diagnostics | 4/7 | In Progress|  |
+| 10. TVDB Reliability, Updates, and Diagnostics | 5/7 | In Progress|  |
 
 ## Requirement Coverage
 
