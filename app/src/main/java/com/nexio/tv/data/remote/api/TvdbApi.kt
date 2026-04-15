@@ -154,7 +154,8 @@ data class TvdbSeriesExtendedRecord(
     @Json(name = "defaultSeasonType") val defaultSeasonType: Int? = null,
     @Json(name = "seasonTypes") val seasonTypes: List<TvdbSeasonTypeRecord> = emptyList(),
     @Json(name = "characters") val characters: List<TvdbCharacterRecord> = emptyList(),
-    @Json(name = "companies") val companies: List<TvdbCompanyExtendedRecord> = emptyList()
+    @Json(name = "companies") val companies: List<TvdbCompanyExtendedRecord> = emptyList(),
+    @Json(name = "trailers") val trailers: List<TvdbTrailerRecord> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
@@ -281,4 +282,13 @@ data class TvdbCompanyExtendedRecord(
     @Json(name = "primaryCompanyType") val primaryCompanyType: Int? = null,
     @Json(name = "activeDate") val activeDate: String? = null,
     @Json(name = "inactiveDate") val inactiveDate: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbTrailerRecord(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "language") val language: String? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "url") val url: String? = null,
+    @Json(name = "runtime") val runtime: Int? = null
 )

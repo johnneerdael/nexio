@@ -2,6 +2,9 @@ package com.nexio.tv.data.trailer
 
 import android.util.Log
 import com.nexio.tv.core.tmdb.TmdbMetadataService
+import com.nexio.tv.core.tvdb.TvdbTrailerMapper
+import com.nexio.tv.core.tvdb.TvdbTrailerCandidate
+import com.nexio.tv.core.tvdb.TvdbTrailerUsability
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbApi
@@ -22,20 +25,15 @@ import java.time.ZoneOffset
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
 /**
- * Wave 0 validation scaffold for META-05: TVDB trailer priority and fallback order.
- *
- * These tests define the contract for TVDB trailer resolution:
- * - TVDB trailer is tried before Streailer fallback IDs and TMDB.
- * - TMDB TV trailer fallback runs only when TVDB has no usable trailer.
- * - Unsupported TVDB trailer URLs are diagnosed and fallback continues.
- *
- * All tests are expected to fail until TrailerService is extended with TVDB trailer
- * support in Plan 09-03.
+ * META-05: TVDB trailer priority, fallback order, and URL usability classification.
  */
 class TrailerServiceTvdbTest {
 
@@ -50,6 +48,149 @@ class TrailerServiceTvdbTest {
     fun tearDown() {
         unmockkStatic(Log::class)
     }
+
+    // --- TvdbTrailerMapper URL classification tests ---
+
+    private val mapper = TvdbTrailerMapper()
+
+    @Test
+    fun `youtube url with valid 11-char video id classifies as YouTube`() {
+        val candidate = TvdbTrailerCandidate(
+            url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            name = "Official Trailer"
+        )
+        val result = mapper.classify(candidate)
+        assertTrue("Expected YouTube usability", result is TvdbTrailerUsability.YouTube)
+        val yt = result as TvdbTrailerUsability.YouTube
+        assertEquals("dQw4w9WgXcQ", yt.videoId)
+    }
+
+    @Test
+    fun `youtu-be short url classifies as YouTube`() {
+        val candidate = TvdbTrailerCandidate(
+            url = "https://youtu.be/dQw4w9WgXcQ"
+        )
+        val result = mapper.classify(candidate)
+        assertTrue("Expected YouTube usability", result is TvdbTrailerUsability.YouTube)
+    }
+
+    @Test
+    fun `vimeo url classifies as External`() {
+        val candidate = TvdbTrailerCandidate(
+            url = "https://vimeo.com/123456789"
+        )
+        val result = mapper.classify(candidate)
+        assertTrue("Expected External usability", result is TvdbTrailerUsability.External)
+    }
+
+    @Test
+    fun `direct mp4 url classifies as DirectMedia`() {
+        val candidate = TvdbTrailerCandidate(
+            url = "https://cdn.example.com/trailer.mp4"
+        )
+        val result = mapper.classify(candidate)
+        assertTrue("Expected DirectMedia usability", result is TvdbTrailerUsability.DirectMedia)
+    }
+
+    @Test
+    fun `direct m3u8 url classifies as DirectMedia`() {
+        val candidate = TvdbTrailerCandidate(
+            url = "https://cdn.example.com/trailer.m3u8"
+        )
+        val result = mapper.classify(candidate)
+        assertTrue("Expected DirectMedia usability", result is TvdbTrailerUsability.DirectMedia)
+    }
+
+    @Test
+    fun `direct webm url classifies as DirectMedia`() {
+        val candidate = TvdbTrailerCandidate(
+            url = "https://cdn.example.com/trailer.webm"
+        )
+        val result = mapper.classify(candidate)
+        assertTrue("Expected DirectMedia usability", result is TvdbTrailerUsability.DirectMedia)
+    }
+
+    @Test
+    fun `intent scheme url classifies as Unusable`() {
+        val candidate = TvdbTrailerCandidate(
+            url = "intent://play#Intent;end"
+        )
+        val result = mapper.classify(candidate)
+        assertTrue("Expected Unusable for intent: scheme", result is TvdbTrailerUsability.Unusable)
+    }
+
+    @Test
+    fun `file scheme url classifies as Unusable`() {
+        val candidate = TvdbTrailerCandidate(
+            url = "file:///sdcard/trailer.mp4"
+        )
+        val result = mapper.classify(candidate)
+        assertTrue("Expected Unusable for file: scheme", result is TvdbTrailerUsability.Unusable)
+    }
+
+    @Test
+    fun `content scheme url classifies as Unusable`() {
+        val candidate = TvdbTrailerCandidate(
+            url = "content://media/external/video/123"
+        )
+        val result = mapper.classify(candidate)
+        assertTrue("Expected Unusable for content: scheme", result is TvdbTrailerUsability.Unusable)
+    }
+
+    @Test
+    fun `javascript scheme url classifies as Unusable`() {
+        val candidate = TvdbTrailerCandidate(
+            url = "javascript:alert('xss')"
+        )
+        val result = mapper.classify(candidate)
+        assertTrue("Expected Unusable for javascript: scheme", result is TvdbTrailerUsability.Unusable)
+    }
+
+    @Test
+    fun `blank url classifies as Unusable`() {
+        val candidate = TvdbTrailerCandidate(url = "")
+        val result = mapper.classify(candidate)
+        assertTrue("Expected Unusable for blank url", result is TvdbTrailerUsability.Unusable)
+    }
+
+    @Test
+    fun `other https url classifies as External`() {
+        val candidate = TvdbTrailerCandidate(
+            url = "https://dai.ly/x8abc123"
+        )
+        val result = mapper.classify(candidate)
+        assertTrue("Expected External for other https url", result is TvdbTrailerUsability.External)
+    }
+
+    @Test
+    fun `isRecap is true when name contains recap case insensitive`() {
+        val candidate = TvdbTrailerCandidate(
+            url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            name = "Season 3 Recap"
+        )
+        assertTrue("Expected isRecap true when name contains recap", candidate.isRecap)
+    }
+
+    @Test
+    fun `isRecap is true when type contains recap case insensitive`() {
+        val candidate = TvdbTrailerCandidate(
+            url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            type = "RECAP"
+        )
+        assertTrue("Expected isRecap true when type contains recap", candidate.isRecap)
+    }
+
+    @Test
+    fun `isRecap is false when neither name nor type contains recap`() {
+        val candidate = TvdbTrailerCandidate(
+            url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            name = "Official Trailer",
+            type = "Trailer"
+        )
+        assertFalse("Expected isRecap false", candidate.isRecap)
+    }
+
+    // --- TrailerService TVDB integration tests (updated in Task 2) ---
 
     private fun createTrailerService(
         trailerApi: TrailerApi = mockk(relaxed = true),
@@ -82,14 +223,12 @@ class TrailerServiceTvdbTest {
 
     @Test
     fun `tvdb trailer is tried before streailer fallback ids and tmdb`() = runTest {
-        // Given: A TV series with a TVDB YouTube trailer URL available.
         val tmdbApi = mockk<TmdbApi>(relaxed = true)
         val inAppYouTubeExtractor = mockk<InAppYouTubeExtractor>()
         val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
 
         coEvery { trailerAvailabilityService.isSignedIn() } returns false
 
-        // The TVDB trailer resolves to a YouTube video.
         val tvdbTrailerYouTubeUrl = "https://www.youtube.com/watch?v=FakeTrailer1"
         val playbackSource = TrailerPlaybackSource(
             videoUrl = "https://video.example/tvdb_trailer.m3u8"
@@ -102,9 +241,6 @@ class TrailerServiceTvdbTest {
             trailerAvailabilityService = trailerAvailabilityService
         )
 
-        // When: TrailerService resolves a trailer for a TVDB-active TV series.
-        // Phase 9 Plan 03 must add a TVDB trailer resolution path that is tried first.
-        // For now, calling resolveTrailer with the existing signature.
         val result = service.resolveTrailer(
             title = "Fringe",
             year = "2008",
@@ -113,11 +249,8 @@ class TrailerServiceTvdbTest {
             contentId = "tt1119644"
         )
 
-        // Then: TMDB TV video API was NOT called because TVDB trailer resolved.
         coVerify(exactly = 0) { tmdbApi.getTvVideos(any(), any(), any()) }
 
-        // And: The result is a playback source from the TVDB trailer.
-        // This assertion will fail until Plan 09-03 wires TVDB trailer priority.
         assertNotNull(
             "Trailer resolution must return a result when TVDB has a usable YouTube trailer",
             result
@@ -126,21 +259,15 @@ class TrailerServiceTvdbTest {
 
     @Test
     fun `tmdb tv trailer fallback runs only when tvdb has no usable trailer`() = runTest {
-        // Given: A TV series where TVDB has no usable trailer data.
         val tmdbApi = mockk<TmdbApi>(relaxed = true)
         val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
         coEvery { trailerAvailabilityService.isSignedIn() } returns false
-
-        // TVDB returns no trailer (null/empty trailer list).
-        // Streailer and fallback YouTube IDs also miss.
-        // TMDB TV videos endpoint should be called as last resort.
 
         val service = createTrailerService(
             tmdbApi = tmdbApi,
             trailerAvailabilityService = trailerAvailabilityService
         )
 
-        // When: TrailerService resolves a trailer after TVDB and Streailer miss.
         val result = service.resolveTrailer(
             title = "Fringe",
             year = "2008",
@@ -149,29 +276,20 @@ class TrailerServiceTvdbTest {
             contentId = "tt1119644"
         )
 
-        // Then: TMDB TV videos endpoint was called exactly once as fallback.
-        // This assertion will fail until Plan 09-03 implements the full fallback chain.
-        // The current code may call TMDB first (pre-Phase 9 behavior), which is the opposite
-        // of the D-07 decision. The test documents the target behavior.
         coVerify(atMost = 1) { tmdbApi.getTvVideos(any(), any(), any()) }
     }
 
     @Test
     fun `unsupported tvdb trailer url is diagnosed and fallback continues`() = runTest {
-        // Given: A TV series with a TVDB trailer URL that is not a supported format
-        // (not YouTube, not Vimeo, not a direct playable URL).
         val tmdbApi = mockk<TmdbApi>(relaxed = true)
         val trailerAvailabilityService = mockk<TrailerAvailabilityService>()
         coEvery { trailerAvailabilityService.isSignedIn() } returns false
-
-        val unsupportedTrailerUrl = "https://dai.ly/x8abc123"  // Dailymotion - unsupported
 
         val service = createTrailerService(
             tmdbApi = tmdbApi,
             trailerAvailabilityService = trailerAvailabilityService
         )
 
-        // When: TrailerService encounters an unsupported TVDB trailer URL.
         val result = service.resolveTrailer(
             title = "Test Show",
             year = "2025",
@@ -180,14 +298,6 @@ class TrailerServiceTvdbTest {
             contentId = "tt9999999"
         )
 
-        // Then: The unsupported URL is skipped and fallback continues.
-        // The service should not crash or return the unsupported URL as a playback source.
-        // Instead, it should fall through to Streailer/TMDB fallback.
-
-        // This test scaffolds the diagnostic requirement: when a TVDB trailer URL is
-        // unsupported, a diagnostic event should be logged (Plan 09-03 implementation).
-        // For now, verify that the service does not throw on unsupported URLs.
-        // The fallback chain should eventually reach TMDB if all else fails.
         coVerify(atMost = 1) { tmdbApi.getTvVideos(any(), any(), any()) }
     }
 }

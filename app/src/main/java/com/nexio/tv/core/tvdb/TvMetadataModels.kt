@@ -76,3 +76,21 @@ data class TvSeasonEpisode(
     val airDate: String?,
     val metadata: TvEpisodeMetadata
 )
+
+data class TvdbTrailerCandidate(
+    val url: String,
+    val name: String? = null,
+    val type: String? = null,
+    val seasonNumber: Int? = null
+) {
+    val isRecap: Boolean
+        get() = name?.contains("recap", ignoreCase = true) == true ||
+            type?.contains("recap", ignoreCase = true) == true
+}
+
+sealed interface TvdbTrailerUsability {
+    data class YouTube(val url: String, val videoId: String) : TvdbTrailerUsability
+    data class External(val url: String) : TvdbTrailerUsability
+    data class DirectMedia(val url: String) : TvdbTrailerUsability
+    data class Unusable(val reason: String, val url: String?) : TvdbTrailerUsability
+}
