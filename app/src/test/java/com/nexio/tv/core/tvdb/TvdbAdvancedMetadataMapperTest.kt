@@ -132,20 +132,17 @@ class TvdbAdvancedMetadataMapperTest {
 
         val result = mapper.mapAdvancedMetadata(series, listOf("usa"))
 
-        // Characters with blank/null personName are omitted
-        assertEquals(0, result.castMembers.size)
+        // D-16: blank/null advanced data produces empty lists and null rating
+        // (graceful omission, no UI warning or fallback error state)
+        assertEquals("Cast members must be empty list for blank data", emptyList<Any>(), result.castMembers)
+        assertEquals("Production companies must be empty list for blank data", emptyList<Any>(), result.productionCompanies)
+        assertEquals("Networks must be empty list for blank data", emptyList<Any>(), result.networks)
 
-        // Companies with blank/null name are omitted
-        assertEquals(0, result.productionCompanies.size)
-
-        // Networks with blank name are omitted
-        assertEquals(0, result.networks.size)
-
-        // Blank genres are filtered out
+        // Only nonblank genres survive
         assertEquals(listOf("Drama"), result.genres)
 
-        // Content ratings with blank/null name produce null age rating
-        assertNull(result.ageRating)
+        // Content ratings with blank/null name produce null age rating (not a placeholder or warning)
+        assertNull("Age rating must be null for blank content ratings, not a fallback warning", result.ageRating)
     }
 
     @Test
