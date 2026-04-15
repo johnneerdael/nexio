@@ -15,6 +15,7 @@ class ProfileSettingsScopeContractTest {
     private val profileWebSyncService = File("app/src/main/java/com/nexio/tv/core/sync/ProfileWebSyncService.kt")
     private val profileBoundary = File("app/src/main/java/com/nexio/tv/core/profile/ProfileBoundary.kt")
     private val profileModeRouter = File("app/src/main/java/com/nexio/tv/core/profile/ProfileModeRouter.kt")
+    private val trackingProviderStateService = File("app/src/main/java/com/nexio/tv/data/repository/TrackingProviderStateService.kt")
     private val homeCatalogPipeline = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt")
 
     private fun doc(): String {
@@ -344,5 +345,15 @@ class ProfileSettingsScopeContractTest {
         assertTrue(source.contains("Skipping secondary profile startup sync for default legacy profile"))
         assertTrue(source.contains("profileSettingsSyncService.pullBlobForProfile(route.profileId)"))
         assertTrue(source.contains("profileWebSyncService.syncActiveProfile(route.profileId)"))
+    }
+
+    @Test
+    fun `tracking provider state reads auth through profile routes`() {
+        val source = trackingProviderStateService.readText()
+
+        assertTrue(source.contains("profileManager.activeProfileId.flatMapLatest(::authStateForProfile)"))
+        assertTrue(source.contains("ProfileModeRoute.DefaultLegacyRoute -> authStateForRoutedProfile(profileModeRouter.defaultLegacyProfileId())"))
+        assertTrue(source.contains("profileBoundary.authRoute(route, TrackingProvider.TRAKT).profileId"))
+        assertTrue(source.contains("profileBoundary.authRoute(route, TrackingProvider.SIMKL).profileId"))
     }
 }
