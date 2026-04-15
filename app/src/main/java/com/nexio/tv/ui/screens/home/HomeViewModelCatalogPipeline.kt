@@ -4,6 +4,7 @@ import android.util.Log
 import com.nexio.tv.data.local.MDBListCatalogPreferences
 import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
 import com.nexio.tv.data.local.SimklCatalogIds
+import com.nexio.tv.data.local.SimklCatalogPreferences
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.TraktCatalogIds
@@ -1041,11 +1042,24 @@ internal suspend fun HomeViewModel.renewTraktSyntheticSnapshotPipeline(
                     simklGroups = persistedSimklSyntheticGroups,
                     mdbListGroups = persistedMDBListSyntheticGroups
                 )
-            val liveGroups = buildSyntheticTraktRows(
-                prefs = traktPrefsSnapshot,
-                upNextItems = traktUpNextItems,
-                snapshot = snapshot
-            )
+            val liveGroups = buildConfiguredCatalogPlan(
+                addons = emptyList(),
+                disabledHomeCatalogKeys = emptySet(),
+                availableAddonOrderKeys = emptySet(),
+                traktPrefs = traktPrefsSnapshot,
+                traktSnapshot = snapshot,
+                hasTraktUpNextItems = traktUpNextItems.isNotEmpty(),
+                traktUpNextItems = traktUpNextItems,
+                simklPrefs = SimklCatalogPreferences(),
+                simklSnapshot = com.nexio.tv.data.repository.SimklDiscoverySnapshot(),
+                mdbPrefs = MDBListCatalogPreferences(),
+                mdbSnapshot = com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
+            ).rails
+                .filter { rail -> rail.descriptor.addonId == TRAKT_HOME_ADDON_ID }
+                .mapNotNull { rail ->
+                    val rows = rail.toPopulatedRows()
+                    if (rows.isEmpty()) null else SyntheticCatalogOrderGroup(orderKey = rail.orderKey, rows = rows)
+                }
             val existingRowsByKey = (existingSnapshot.traktGroups + existingSnapshot.simklGroups + existingSnapshot.mdbListGroups)
                 .flatMap { it.rows }
                 .associateBy(::homeCatalogGlobalKey)
@@ -1098,10 +1112,23 @@ internal suspend fun HomeViewModel.renewSimklSyntheticSnapshotPipeline(
                     simklGroups = persistedSimklSyntheticGroups,
                     mdbListGroups = persistedMDBListSyntheticGroups
                 )
-            val liveGroups = buildSyntheticSimklRows(
-                prefs = simklPrefsSnapshot,
-                snapshot = snapshot
-            )
+            val liveGroups = buildConfiguredCatalogPlan(
+                addons = emptyList(),
+                disabledHomeCatalogKeys = emptySet(),
+                availableAddonOrderKeys = emptySet(),
+                traktPrefs = TraktCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+                traktSnapshot = com.nexio.tv.data.repository.TraktDiscoverySnapshot(),
+                hasTraktUpNextItems = false,
+                simklPrefs = simklPrefsSnapshot,
+                simklSnapshot = snapshot,
+                mdbPrefs = MDBListCatalogPreferences(),
+                mdbSnapshot = com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
+            ).rails
+                .filter { rail -> rail.descriptor.addonId == SIMKL_HOME_ADDON_ID }
+                .mapNotNull { rail ->
+                    val rows = rail.toPopulatedRows()
+                    if (rows.isEmpty()) null else SyntheticCatalogOrderGroup(orderKey = rail.orderKey, rows = rows)
+                }
             val existingRowsByKey = (existingSnapshot.traktGroups + existingSnapshot.simklGroups + existingSnapshot.mdbListGroups)
                 .flatMap { it.rows }
                 .associateBy(::homeCatalogGlobalKey)

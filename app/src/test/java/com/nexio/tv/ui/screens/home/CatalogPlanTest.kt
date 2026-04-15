@@ -93,6 +93,37 @@ class CatalogPlanTest {
         assertFalse(plan.descriptors.any { it.addonId == TRAKT_HOME_ADDON_ID })
     }
 
+    @Test
+    fun `planned simkl rail builds matching loading descriptor and populated row`() {
+        val plan = buildConfiguredCatalogPlan(
+            addons = emptyList(),
+            disabledHomeCatalogKeys = emptySet(),
+            availableAddonOrderKeys = emptySet(),
+            traktPrefs = TraktCatalogPreferences(enabledCatalogs = emptySet(), catalogOrder = emptyList()),
+            traktSnapshot = TraktDiscoverySnapshot(),
+            hasTraktUpNextItems = false,
+            simklPrefs = SimklCatalogPreferences(
+                enabledCatalogs = setOf(SimklCatalogIds.MOVIE_TRENDING_MONTH),
+                catalogOrder = listOf(SimklCatalogIds.MOVIE_TRENDING_MONTH)
+            ),
+            simklSnapshot = SimklDiscoverySnapshot(
+                itemsByCatalog = mapOf(SimklCatalogIds.MOVIE_TRENDING_MONTH to listOf(sampleItem()))
+            ),
+            mdbPrefs = MDBListCatalogPreferences(),
+            mdbSnapshot = MDBListDiscoverySnapshot()
+        )
+
+        val rail = plan.rails.single()
+        val loading = rail.toLoadingCatalogRow()
+        val populated = rail.toPopulatedRows().single()
+
+        assertEquals(loading.addonId, populated.addonId)
+        assertEquals(loading.catalogId, populated.catalogId)
+        assertEquals(loading.catalogName, populated.catalogName)
+        assertFalse(populated.isLoading)
+        assertEquals(1, populated.items.size)
+    }
+
     private fun sampleItem(): MetaPreview {
         return MetaPreview(
             id = "tt1234567",
