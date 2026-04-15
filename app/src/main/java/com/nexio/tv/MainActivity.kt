@@ -334,6 +334,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun switchProfileAndApplyLocale(profileId: Int) {
+        lifecycleScope.launch {
+            val beforeLocale = AppLocaleResolver.resolveEffectiveAppLanguageTag(this@MainActivity)
+            profileManager.setActiveProfile(profileId)
+            val afterLocale = AppLocaleResolver.resolveEffectiveAppLanguageTag(this@MainActivity)
+            if (beforeLocale != afterLocale) {
+                recreate()
+            }
+        }
+    }
+
     @OptIn(ExperimentalFoundationApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -491,7 +502,10 @@ class MainActivity : ComponentActivity() {
 
                     if (shouldShowProfileSelection) {
                         ProfileSelectionScreen(
-                            onProfileSelected = { hasSelectedProfileThisSession = true }
+                            onProfileSelected = { profileId ->
+                                hasSelectedProfileThisSession = true
+                                switchProfileAndApplyLocale(profileId)
+                            }
                         )
                         return@Surface
                     }
@@ -945,9 +959,7 @@ class MainActivity : ComponentActivity() {
                                 activeProfileId = profileManager.activeProfileId.collectAsState().value,
                                 onSwitchProfile = { profileId ->
                                     hasSelectedProfileThisSession = false
-                                    lifecycleScope.launch {
-                                        profileManager.setActiveProfile(profileId)
-                                    }
+                                    switchProfileAndApplyLocale(profileId)
                                 }
                             )
                         } else {
@@ -980,9 +992,7 @@ class MainActivity : ComponentActivity() {
                                 activeProfileId = profileManager.activeProfileId.collectAsState().value,
                                 onSwitchProfile = { profileId ->
                                     hasSelectedProfileThisSession = false
-                                    lifecycleScope.launch {
-                                        profileManager.setActiveProfile(profileId)
-                                    }
+                                    switchProfileAndApplyLocale(profileId)
                                 }
                             )
                         }

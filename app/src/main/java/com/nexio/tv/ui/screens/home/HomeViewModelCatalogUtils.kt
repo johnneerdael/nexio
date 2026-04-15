@@ -279,6 +279,20 @@ internal fun buildExpectedConfiguredTraktOrderKeys(
     return (orderedEnabledBuiltIns + remainingEnabledBuiltIns + orderedCustomKeys).distinct()
 }
 
+internal fun TraktCatalogPreferences.onlyWhenAuthenticated(
+    authenticated: Boolean
+): TraktCatalogPreferences {
+    return if (authenticated) {
+        this
+    } else {
+        TraktCatalogPreferences(
+            enabledCatalogs = emptySet(),
+            catalogOrder = emptyList(),
+            selectedPopularListKeys = emptySet()
+        )
+    }
+}
+
 internal fun buildExpectedConfiguredMDBListOrderKeys(
     prefs: MDBListCatalogPreferences,
     snapshot: MDBListDiscoverySnapshot
