@@ -242,7 +242,7 @@ class ProfileManagerTest {
     @Test
     fun `deleteProfile with remote failure still completes local deletion`() = runTest {
         val postgrest = mockk<Postgrest>()
-        coEvery { postgrest.rpc<JsonObject>(any(), any()) } throws RuntimeException("remote down")
+        coEvery { postgrest.rpc(any<String>(), any<JsonObject>()) } throws RuntimeException("remote down")
         val manager = makeManager(postgrest)
         manager.createProfile("Alice", "#E53935")
         val profilesAfterCreate = manager.profiles.first { it.size == 2 }
@@ -372,7 +372,7 @@ class ProfileManagerTest {
         val profilesAfterCreate = manager.profiles.first { it.size == 2 }
         val aliceId = profilesAfterCreate.first { it.name == "Alice" }.id
 
-        val emissions = mutableListOf<Unit>()
+        val emissions = mutableListOf<Int>()
         val collectJob = launch(backgroundScope.coroutineContext) {
             manager.profileSwitched.toList(emissions)
         }
@@ -382,6 +382,6 @@ class ProfileManagerTest {
         manager.activeProfileId.first { it == aliceId }
 
         collectJob.cancel()
-        assertTrue("Expected at least one profileSwitched emission", emissions.isNotEmpty())
+        assertTrue("Expected at least one profileSwitched emission", emissions.contains(aliceId))
     }
 }

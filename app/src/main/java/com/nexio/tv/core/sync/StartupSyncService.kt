@@ -66,8 +66,13 @@ class StartupSyncService @Inject constructor(
             }
         }
         scope.launch {
-            profileManager.profileSwitched.collect {
-                val activeId = profileManager.activeProfileId.value
+            profileManager.profileSwitched.collect { activeId ->
+                val blobPullResult = profileSettingsSyncService.pullBlobForProfile(activeId)
+                if (blobPullResult.isSuccess) {
+                    Log.d(TAG, "Profile settings blob pull succeeded for switched profile $activeId")
+                } else {
+                    Log.w(TAG, "Profile settings blob pull failed for switched profile $activeId", blobPullResult.exceptionOrNull())
+                }
                 val result = profileWebSyncService.syncActiveProfile(activeId)
                 if (result.isSuccess) {
                     Log.d(TAG, "Profile web token sync succeeded for switched profile $activeId")

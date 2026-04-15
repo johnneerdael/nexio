@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository
 
 import android.util.Log
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.profile.ProfileManager
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.ContinueWatchingSnapshotStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
@@ -56,7 +57,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private val traktSettingsDataStore: TraktSettingsDataStore,
     private val metaRepository: MetaRepository,
     private val metadataDiskCacheStore: MetadataDiskCacheStore,
-    private val snapshotStore: ContinueWatchingSnapshotStore
+    private val snapshotStore: ContinueWatchingSnapshotStore,
+    private val profileManager: ProfileManager? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val rawSnapshotState = MutableStateFlow(ContinueWatchingSnapshot())
@@ -74,12 +76,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
             reemitJob = null
             currentTimerTargetMs = null
         }
-        scope.launch {
-            snapshotStore.read()?.let { persisted ->
-                val normalized = sanitizeSnapshot(persisted)
-                rawSnapshotState.value = normalized
-                snapshotState.value = normalized
-                lastRefreshRequestMs = normalized.updatedAtMs
+        scope.launch { loadPersistedSnapshotForActiveProfile(clearWhenMissing = false) }
+
+        profileManager?.let { manager ->
+            scope.launch {
+                manager.profileSwitched.collectLatest {
+                    loadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
+                }
             }
         }
 
@@ -148,6 +151,26 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     updateSnapshot(snapshot)
                 }
         }
+    }
+
+    private suspend fun loadPersistedSnapshotForActiveProfile(clearWhenMissing: Boolean) {
+        val persisted = snapshotStore.read()
+        if (persisted == null) {
+            if (clearWhenMissing) {
+                rawSnapshotState.value = ContinueWatchingSnapshot()
+                snapshotState.value = ContinueWatchingSnapshot()
+                lastRefreshRequestMs = 0L
+                reemitJob?.cancel()
+                reemitJob = null
+                currentTimerTargetMs = null
+            }
+            return
+        }
+        val normalized = sanitizeSnapshot(persisted)
+        rawSnapshotState.value = normalized
+        snapshotState.value = normalized
+        lastRefreshRequestMs = normalized.updatedAtMs
+        scheduleReemitIfNeeded(normalized.scheduledReemit, normalized.updatedAtMs)
     }
 
     fun observeSnapshot(): Flow<ContinueWatchingSnapshot> {
