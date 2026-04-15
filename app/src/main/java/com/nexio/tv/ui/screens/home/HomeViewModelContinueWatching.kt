@@ -2,7 +2,8 @@ package com.nexio.tv.ui.screens.home
 
 import android.util.Log
 import androidx.lifecycle.viewModelScope
-import com.nexio.tv.core.tmdb.TmdbMetadataService
+import com.nexio.tv.core.tvdb.TvMetadataEnrichment
+import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.data.repository.ContinueWatchingNextUpRef
 import com.nexio.tv.data.repository.ContinueWatchingResumeRef
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
@@ -14,6 +15,7 @@ import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.homeDisplayItemKey
+import com.nexio.tv.domain.model.mergeFallback
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -73,7 +75,7 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                             )
                         }
                     } catch (e: Exception) {
-                        Log.w(HomeViewModel.TAG, "Continue watching TMDB enrichment failed: ${e.message}")
+                        Log.w(HomeViewModel.TAG, "Continue watching metadata enrichment failed: ${e.message}")
                     }
                 }
             }
@@ -87,7 +89,7 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItems(
 ): List<ContinueWatchingItem> = coroutineScope {
     items.map { item ->
         async(Dispatchers.IO) {
-            enrichContinueWatchingItemWithTmdb(item, settings)
+            enrichContinueWatchingItemWithProvider(item, settings)
         }
     }.awaitAll()
 }
@@ -98,12 +100,12 @@ internal suspend fun HomeViewModel.enrichContinueWatchingNextUpItems(
 ): List<ContinueWatchingItem.NextUp> = coroutineScope {
     items.map { item ->
         async(Dispatchers.IO) {
-            enrichContinueWatchingItemWithTmdb(item, settings) as? ContinueWatchingItem.NextUp ?: item
+            enrichContinueWatchingItemWithProvider(item, settings) as? ContinueWatchingItem.NextUp ?: item
         }
     }.awaitAll()
 }
 
-internal suspend fun HomeViewModel.enrichContinueWatchingItemWithTmdb(
+internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
     item: ContinueWatchingItem,
     settings: TmdbSettings
 ): ContinueWatchingItem {
@@ -116,14 +118,15 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithTmdb(
         is ContinueWatchingItem.NextUp -> item.info.contentType
     }
     return try {
-        val tmdbId = tmdbService.ensureTmdbId(contentId, contentType) ?: return item
-        val enrichment = tmdbMetadataService.fetchEnrichment(
-            tmdbId = tmdbId,
-            contentType = ContentType.fromString(contentType)
-        ) ?: return item
+        val enrichment = tvMetadataRouter.fetchEnrichment(
+            TvMetadataRequest(
+                contentId = contentId,
+                fallbackContentId = item.providerFallbackContentId(),
+                contentType = ContentType.fromString(contentType)
+            )
+        ).value ?: return item
         val localizedEpisodeDescription = localizedContinueWatchingEpisodeDescription(
-            tmdbMetadataService = tmdbMetadataService,
-            tmdbId = tmdbId,
+            tvMetadataRouter = tvMetadataRouter,
             item = item
         )
 
@@ -132,17 +135,9 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithTmdb(
             is ContinueWatchingItem.NextUp -> item.info.displayMetadata
         }
 
-        val enrichedMetadata = HomeDisplayMetadata(
-            title = enrichment.localizedTitle ?: existing?.title,
-            description = enrichment.description ?: existing?.description,
-            genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else existing?.genres.orEmpty(),
-            imdbRating = enrichment.rating?.toFloat() ?: existing?.imdbRating,
-            poster = if (settings.useArtwork) enrichment.poster ?: existing?.poster else existing?.poster,
-            backdrop = if (settings.useArtwork) enrichment.backdrop ?: existing?.backdrop else existing?.backdrop,
-            logo = if (settings.useArtwork) enrichment.logo ?: existing?.logo else existing?.logo,
-            releaseInfo = if (settings.useDetails) enrichment.releaseInfo ?: existing?.releaseInfo else existing?.releaseInfo,
-            runtime = existing?.runtime,
-            tomatoesRating = existing?.tomatoesRating
+        val enrichedMetadata = enrichment.toHomeDisplayMetadata(
+            fallback = existing,
+            settings = settings
         )
 
         when (item) {
@@ -170,24 +165,50 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithTmdb(
             )
         }
     } catch (e: Exception) {
-        Log.w(HomeViewModel.TAG, "TMDB enrichment failed for continue watching item $contentId: ${e.message}")
+        Log.w(HomeViewModel.TAG, "Provider enrichment failed for continue watching item $contentId: ${e.message}")
         item
     }
 }
 
 internal suspend fun localizedContinueWatchingEpisodeDescription(
-    tmdbMetadataService: TmdbMetadataService,
-    tmdbId: String,
+    tvMetadataRouter: com.nexio.tv.core.tvdb.TvMetadataRouter,
     item: ContinueWatchingItem
 ): String? {
     val season = item.season() ?: return null
     val episode = item.episode() ?: return null
     if (!isSeriesType(item.contentType())) return null
 
-    return tmdbMetadataService.fetchEpisodeEnrichment(
-        tmdbId = tmdbId,
-        seasonNumbers = listOf(season)
-    )[season to episode]?.overview?.takeIf { it.isNotBlank() }
+    return tvMetadataRouter.fetchEpisodeEnrichment(
+        TvMetadataRequest(
+            contentId = item.contentId(),
+            fallbackContentId = item.providerFallbackContentId(),
+            contentType = ContentType.fromString(item.contentType()),
+            seasonNumbers = listOf(season)
+        )
+    ).value?.get(season to episode)?.overview?.takeIf { it.isNotBlank() }
+}
+
+private fun TvMetadataEnrichment.toHomeDisplayMetadata(
+    fallback: HomeDisplayMetadata?,
+    settings: TmdbSettings
+): HomeDisplayMetadata {
+    return HomeDisplayMetadata(
+        title = localizedTitle,
+        description = description,
+        genres = genres,
+        imdbRating = rating?.toFloat(),
+        poster = if (settings.useArtwork) poster else null,
+        backdrop = if (settings.useArtwork) backdrop else null,
+        logo = if (settings.useArtwork) logo else null,
+        releaseInfo = if (settings.useDetails) releaseInfo else null
+    ).mergeFallback(fallback)
+}
+
+private fun ContinueWatchingItem.providerFallbackContentId(): String {
+    return when (this) {
+        is ContinueWatchingItem.InProgress -> progress.videoId
+        is ContinueWatchingItem.NextUp -> info.videoId
+    }
 }
 
 private fun parseEpisodeReleaseDate(raw: String?): LocalDate? {
