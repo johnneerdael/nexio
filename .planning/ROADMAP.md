@@ -81,7 +81,7 @@ Plans:
 **Plans:** 6 plans
 Plans:
 - [x] 09-00-PLAN.md — Create Wave 0 validation scaffolds and block unless Phase 7 TVDB provider outputs exist
-- [ ] 09-01-PLAN.md — Preserve TVDB default season type and season-order context while keeping canonical Trakt progress keys stable
+- [x] 09-01-PLAN.md — Preserve TVDB default season type and season-order context while keeping canonical Trakt progress keys stable
 - [ ] 09-02-PLAN.md — Map TVDB cast, companies, networks, genres, and content ratings into provider output with diagnostics
 - [ ] 09-03-PLAN.md — Propagate TVDB advanced metadata through existing detail, Home, stream, screensaver, and player surfaces
 - [ ] 09-04-PLAN.md — Route TV trailers through TVDB-first discovery before Streailer, fallback IDs, and explicit TMDB fallback
