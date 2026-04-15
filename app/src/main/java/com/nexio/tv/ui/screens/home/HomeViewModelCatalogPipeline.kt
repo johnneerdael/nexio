@@ -1579,15 +1579,11 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         persistedMDBListDiscoverySnapshot
     }
     val recommendationRefMap = effectiveTraktSnapshot.recommendationRefsByStatusKey
-    val simklExpectedOrderKeys = buildExpectedConfiguredSimklOrderKeys(simklPrefs)
     val addonExpectedOrderKeys = buildExpectedConfiguredAddonOrderKeys(
         addons = addonsCache,
         disabledHomeCatalogKeys = disabledHomeCatalogKeys
     )
-    val traktExpectedOrderKeys = buildExpectedConfiguredTraktOrderKeys(traktPrefs)
-    val mdbExpectedOrderKeys = buildExpectedConfiguredMDBListOrderKeys(mdbListPrefs, effectiveMDBListSnapshot)
-    val expectedConfiguredOrderKeys = (traktExpectedOrderKeys + simklExpectedOrderKeys + mdbExpectedOrderKeys + addonExpectedOrderKeys).distinct()
-    val publishableExpectedOrderKeys = buildPublishableConfiguredHomeOrderKeys(
+    val catalogPlan = buildConfiguredCatalogPlan(
         addons = addonsCache,
         disabledHomeCatalogKeys = disabledHomeCatalogKeys,
         availableAddonOrderKeys = catalogSnapshot.keys,
@@ -1599,6 +1595,8 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         mdbPrefs = mdbListPrefs,
         mdbSnapshot = effectiveMDBListSnapshot
     )
+    val expectedConfiguredOrderKeys = catalogPlan.expectedOrderKeys
+    val publishableExpectedOrderKeys = catalogPlan.publishableOrderKeys
     val activeRefreshInProgress =
         catalogsLoadInProgress ||
             traktDiscoveryRefreshInProgress ||
@@ -1663,17 +1661,19 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
                 group.rows.firstOrNull()?.let { row -> put(group.orderKey, row) }
             }
         }
-        val pendingRowsByKey = buildConfiguredHomeCatalogDescriptors(
+        val pendingRowsByKey = buildConfiguredCatalogPlan(
             addons = addonsCache,
             disabledHomeCatalogKeys = disabledHomeCatalogKeys,
+            availableAddonOrderKeys = catalogSnapshot.keys,
             traktPrefs = traktPrefs,
             traktSnapshot = effectiveTraktSnapshot,
             hasTraktUpNextItems = activeProfileTraktAuthenticated && currentState.traktUpNextItems.isNotEmpty(),
             simklPrefs = simklPrefs,
+            simklSnapshot = effectiveSimklSnapshot,
             mdbPrefs = mdbListPrefs,
             mdbSnapshot = effectiveMDBListSnapshot,
             existingRowsByOrderKey = existingRowsByOrderKey
-        )
+        ).descriptors
             .filterNot { descriptor ->
                 descriptor.orderKey in rawRowsByKey || descriptor.orderKey in syntheticRowsByKey
             }
@@ -2064,9 +2064,7 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
         mdbListCatalogPreferences,
         mdbListDiscoverySnapshot
     )
-    val expectedConfiguredOrderKeys =
-        (traktExpectedOrderKeys + simklExpectedOrderKeys + mdbExpectedOrderKeys + addonExpectedOrderKeys).distinct()
-    val publishableExpectedOrderKeys = buildPublishableConfiguredHomeOrderKeys(
+    val catalogPlan = buildConfiguredCatalogPlan(
         addons = addonsCache,
         disabledHomeCatalogKeys = disabledHomeCatalogKeys,
         availableAddonOrderKeys = catalogsMap.keys,
@@ -2078,6 +2076,8 @@ internal fun HomeViewModel.applyPersistedHomeSnapshotIfEligiblePipeline(
         mdbPrefs = mdbListCatalogPreferences,
         mdbSnapshot = mdbListDiscoverySnapshot
     )
+    val expectedConfiguredOrderKeys = catalogPlan.expectedOrderKeys
+    val publishableExpectedOrderKeys = catalogPlan.publishableOrderKeys
     val sourceCachesReady = areConfiguredHomeSourceCachesReady(
         addonExpectedOrderKeys = addonExpectedOrderKeys,
         availableAddonOrderKeys = catalogsMap.keys,
