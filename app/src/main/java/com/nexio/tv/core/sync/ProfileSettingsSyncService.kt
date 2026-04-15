@@ -87,6 +87,9 @@ class ProfileSettingsSyncService @Inject constructor(
                 .distinctUntilChanged()
                 .flatMapLatest { profileId ->
                     flow {
+                        if (profileId == 1) {
+                            return@flow
+                        }
                         val pullResult = pullBlobForProfile(profileId)
                         if (pullResult.isFailure) {
                             Log.w(
@@ -117,6 +120,10 @@ class ProfileSettingsSyncService @Inject constructor(
     }
 
     suspend fun pushBlobForProfile(profileId: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        if (profileId == 1) {
+            return@withContext Result.success(Unit)
+        }
+
         syncMutex.withLock {
             try {
                 val blob = exportSettingsBlob(profileId)
@@ -146,6 +153,10 @@ class ProfileSettingsSyncService @Inject constructor(
     }
 
     suspend fun pullBlobForProfile(profileId: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        if (profileId == 1) {
+            return@withContext Result.success(Unit)
+        }
+
         syncMutex.withLock {
             try {
                 val response = withJwtRefreshRetry {

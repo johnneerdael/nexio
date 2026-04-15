@@ -52,6 +52,7 @@ import com.nexio.tv.data.remote.supabase.AnimeSkipSyncSettings
 import com.nexio.tv.data.remote.supabase.AppearanceSettings
 import com.nexio.tv.data.remote.supabase.AudioSettings
 import com.nexio.tv.data.remote.supabase.BufferNetworkSettings
+import com.nexio.tv.data.remote.supabase.CustomFormatterSyncTemplate
 import com.nexio.tv.data.remote.supabase.DebridSyncSettings
 import com.nexio.tv.data.remote.supabase.DebugSettingsPayload
 import com.nexio.tv.data.remote.supabase.EasyDebridSyncSettings
@@ -93,7 +94,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -233,10 +233,11 @@ class AccountSettingsSyncService @Inject constructor(
     private fun observeLocalChanges() {
         scope.launch {
             observeAccountConfigSyncChangedPaths(
-                // Layout/catalog-order settings moved to v8 per-profile blob sync.
-                heroCatalogSelections = emptyFlow(),
-                homeCatalogOrderKeys = emptyFlow(),
-                disabledHomeCatalogKeys = emptyFlow(),
+                // Default profile keeps these in the account contract; secondary
+                // profiles sync them through ProfileSettingsSyncService blobs.
+                heroCatalogSelections = layoutPreferenceDataStore.heroCatalogSelections.drop(1).map { Unit },
+                homeCatalogOrderKeys = layoutPreferenceDataStore.homeCatalogOrderKeys.drop(1).map { Unit },
+                disabledHomeCatalogKeys = layoutPreferenceDataStore.disabledHomeCatalogKeys.drop(1).map { Unit },
                 tmdbSettings = tmdbSettingsDataStore.settings.drop(1).map { Unit },
                 mdbListSettings = mdbListSettingsDataStore.settings.drop(1).map { Unit },
                 mdbListCatalogPreferences = mdbListSettingsDataStore.catalogPreferences.drop(1).map { Unit },
@@ -267,12 +268,16 @@ class AccountSettingsSyncService @Inject constructor(
                 easyDebridAccountState = easyDebridService.observeAccountState().drop(1).map { Unit },
                 realDebridState = realDebridAuthDataStore.state.drop(1).map { Unit },
                 traktAuthState = traktAuthDataStore.state.drop(1).map { Unit },
-                // Per-profile settings removed from v7 — synced via ProfileSettingsSyncService (v8 blob)
-                traktCatalogPreferences = emptyFlow(),
-                simklCatalogPreferences = emptyFlow(),
+                // Default profile keeps these in the account contract; secondary
+                // profiles sync them through ProfileSettingsSyncService blobs.
+                traktCatalogPreferences = traktSettingsDataStore.catalogPreferences.drop(1).map { Unit },
+                simklCatalogPreferences = simklSettingsDataStore.catalogPreferences.drop(1).map { Unit },
                 simklAuthState = simklAuthDataStore.state.drop(1).map { Unit },
-                playerSettings = emptyFlow()
+                playerSettings = playerSettingsDataStore.playerSettings.drop(1).map { Unit }
             ).collect { changedPath ->
+                if (!profileManager.isPrimaryProfileActive && isPrimaryProfileAccountPath(changedPath)) {
+                    return@collect
+                }
                 if (isApplyingRemote || suppressPushForSwitchGeneration != 0L) return@collect
                 synchronized(pendingChangedPaths) {
                     pendingChangedPaths.add(changedPath)
@@ -296,6 +301,14 @@ class AccountSettingsSyncService @Inject constructor(
             delay(500)
             pushToRemote()
         }
+    }
+
+    private fun isPrimaryProfileAccountPath(path: String): Boolean {
+        return path == "formatter" ||
+            path.startsWith("catalogs.home") ||
+            path.startsWith("catalogs.trakt") ||
+            path.startsWith("catalogs.simkl") ||
+            path.startsWith("playback.streamSelection")
     }
 
     fun onStartupSyncUserChanged(userId: String?) {
@@ -450,6 +463,13 @@ class AccountSettingsSyncService @Inject constructor(
         val tmdb = tmdbSettingsDataStore.settings.first()
         val mdbList = mdbListSettingsDataStore.settings.first()
         val mdbListPrefs = mdbListSettingsDataStore.catalogPreferences.first()
+        val isPrimaryProfile = profileManager.isPrimaryProfileActive
+        val heroCatalogKeys = if (isPrimaryProfile) layoutPreferenceDataStore.heroCatalogSelections.first() else emptyList()
+        val homeCatalogOrderKeys = if (isPrimaryProfile) layoutPreferenceDataStore.homeCatalogOrderKeys.first() else emptyList()
+        val disabledHomeCatalogKeys = if (isPrimaryProfile) layoutPreferenceDataStore.disabledHomeCatalogKeys.first() else emptyList()
+        val traktCatalogPrefs = if (isPrimaryProfile) traktSettingsDataStore.catalogPreferences.first() else null
+        val simklCatalogPrefs = if (isPrimaryProfile) simklSettingsDataStore.catalogPreferences.first() else null
+        val playerSettings = if (isPrimaryProfile) playerSettingsDataStore.playerSettings.first() else null
         val theIntroDb = theIntroDbSettingsDataStore.settings.first()
         val animeSkipEnabled = animeSkipSettingsDataStore.enabled.first()
         val animeSkipClientId = animeSkipSettingsDataStore.clientId.first()
@@ -558,29 +578,69 @@ class AccountSettingsSyncService @Inject constructor(
                 )
             ),
             // Layout/catalog-order settings moved to v8 per-profile blob sync.
-            heroCatalogKeys = emptyList(),
-            homeCatalogOrderKeys = emptyList(),
-            disabledHomeCatalogKeys = emptyList(),
-            // Moved to v8 per-profile blob sync
-            traktCatalogEnabledSet = emptyList(),
-            traktCatalogOrder = emptyList(),
-            traktSelectedPopularListKeys = emptyList(),
-            // Moved to v8 per-profile blob sync
-            simklCatalogEnabledSet = emptyList(),
-            simklCatalogOrder = emptyList(),
+            heroCatalogKeys = heroCatalogKeys,
+            homeCatalogOrderKeys = homeCatalogOrderKeys,
+            disabledHomeCatalogKeys = disabledHomeCatalogKeys,
+            traktCatalogEnabledSet = traktCatalogPrefs?.enabledCatalogs?.toList() ?: emptyList(),
+            traktCatalogOrder = traktCatalogPrefs?.catalogOrder ?: emptyList(),
+            traktSelectedPopularListKeys = traktCatalogPrefs?.selectedPopularListKeys?.toList() ?: emptyList(),
+            simklCatalogEnabledSet = simklCatalogPrefs?.enabledCatalogs?.toList() ?: emptyList(),
+            simklCatalogOrder = simklCatalogPrefs?.catalogOrder ?: emptyList(),
             mdbListHiddenPersonalListKeys = mdbListPrefs.hiddenPersonalListKeys.toList(),
             mdbListSelectedTopListKeys = mdbListPrefs.selectedTopListKeys.toList(),
             mdbListCatalogOrder = mdbListPrefs.catalogOrder,
-            // Moved to v8 per-profile blob sync
-            trackingProvider = TrackingProvider.TRAKT,
-            // Moved to v8 per-profile blob sync
-            formatter = FormatterSyncSettings()
+            trackingProvider = playerSettings?.trackingProvider ?: TrackingProvider.TRAKT,
+            formatter = playerSettings?.syncedFormatterTemplate?.let { formatter ->
+                FormatterSyncSettings(
+                    enabled = formatter.enabled,
+                    selectedTemplateId = formatter.selectedTemplateId,
+                    customTemplate = if (
+                        formatter.customTemplateLabel == null &&
+                        formatter.customNameTemplate == null &&
+                        formatter.customDescriptionTemplate == null &&
+                        formatter.customBadgeRowTemplate == null
+                    ) {
+                        null
+                    } else {
+                        CustomFormatterSyncTemplate(
+                            label = formatter.customTemplateLabel ?: "Custom",
+                            nameTemplate = formatter.customNameTemplate ?: "",
+                            descriptionTemplate = formatter.customDescriptionTemplate ?: "",
+                            badgeRowTemplate = formatter.customBadgeRowTemplate ?: ""
+                        )
+                    }
+                )
+            } ?: FormatterSyncSettings()
         )
     }
 
     private suspend fun applySharedAccountConfigSyncSettings(settings: AccountConfigSyncPayload) {
-        // Layout/catalog-order settings moved to v8 per-profile blob sync.
-        // Do not apply settings.catalogs.home.* into LayoutPreferenceDataStore from v7.
+        if (profileManager.isPrimaryProfileActive) {
+            layoutPreferenceDataStore.setHeroCatalogKeys(settings.catalogs.home.heroCatalogKeys)
+            layoutPreferenceDataStore.setHomeCatalogOrderKeys(settings.catalogs.home.homeCatalogOrderKeys)
+            layoutPreferenceDataStore.setDisabledHomeCatalogKeys(settings.catalogs.home.disabledHomeCatalogKeys)
+            traktSettingsDataStore.setCatalogPreferences(
+                enabledCatalogs = settings.catalogs.trakt.catalogEnabledSet.toSet(),
+                catalogOrder = settings.catalogs.trakt.catalogOrder,
+                selectedPopularListKeys = settings.catalogs.trakt.selectedPopularListKeys.toSet()
+            )
+            simklSettingsDataStore.setCatalogPreferences(
+                enabledCatalogs = settings.catalogs.simkl.catalogEnabledSet.toSet(),
+                catalogOrder = settings.catalogs.simkl.catalogOrder
+            )
+            playerSettingsDataStore.setTrackingProvider(
+                runCatching { TrackingProvider.valueOf(settings.playback.streamSelection.trackingProvider) }
+                    .getOrDefault(TrackingProvider.TRAKT)
+            )
+            playerSettingsDataStore.setSyncedFormatterEnabled(settings.formatter.enabled)
+            playerSettingsDataStore.setSyncedFormatterSelectedTemplateId(settings.formatter.selectedTemplateId)
+            playerSettingsDataStore.setSyncedFormatterCustomTemplate(
+                label = settings.formatter.customTemplate?.label,
+                nameTemplate = settings.formatter.customTemplate?.nameTemplate,
+                descriptionTemplate = settings.formatter.customTemplate?.descriptionTemplate,
+                badgeRowTemplate = settings.formatter.customTemplate?.badgeRowTemplate
+            )
+        }
 
         tmdbSettingsDataStore.setEnabled(settings.integrations.tmdb.enabled)
         tmdbSettingsDataStore.setUseArtwork(settings.integrations.tmdb.useArtwork)
