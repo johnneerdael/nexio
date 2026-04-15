@@ -80,6 +80,7 @@ import com.nexio.tv.data.remote.supabase.TraktAuthSyncSettings
 import com.nexio.tv.data.remote.supabase.TraktSettingsPayload
 import com.nexio.tv.data.remote.supabase.TvdbSyncSettings
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.data.repository.EasyDebridService
 import com.nexio.tv.data.repository.PremiumizeService
 import com.nexio.tv.data.repository.TorBoxService
@@ -111,7 +112,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "AccountSettingsSync"
-private const val PRIMARY_PROFILE_ID = 1
 private const val TMDB_SECRET_TYPE = "tmdb_api_key"
 private const val TMDB_SECRET_REF = "integration:tmdb"
 private const val TVDB_SECRET_TYPE = "tvdb_api_key"
@@ -193,6 +193,7 @@ class AccountSettingsSyncService @Inject constructor(
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val profileManager: ProfileManager,
+    private val profileModeRouter: ProfileModeRouter,
     @ApplicationContext private val context: Context
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -276,15 +277,15 @@ class AccountSettingsSyncService @Inject constructor(
                 easyDebridSettings = easyDebridSettingsDataStore.settings.drop(1).map { Unit },
                 easyDebridAccountState = easyDebridService.observeAccountState().drop(1).map { Unit },
                 realDebridState = realDebridAuthDataStore.state.drop(1).map { Unit },
-                traktAuthState = traktAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).drop(1).map { Unit },
+                traktAuthState = traktAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).drop(1).map { Unit },
                 // Default profile keeps these in the account contract; secondary
                 // profiles sync them through ProfileSettingsSyncService blobs.
                 traktCatalogPreferences = traktSettingsDataStore.catalogPreferences.drop(1).map { Unit },
                 simklCatalogPreferences = simklSettingsDataStore.catalogPreferences.drop(1).map { Unit },
-                simklAuthState = simklAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).drop(1).map { Unit },
+                simklAuthState = simklAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).drop(1).map { Unit },
                 playerSettings = playerSettingsDataStore.playerSettings.drop(1).map { Unit }
             ).collect { changedPath ->
-                if (!profileManager.isPrimaryProfileActive && isPrimaryProfileAccountPath(changedPath)) {
+                if (!isDefaultLegacyActive() && isPrimaryProfileAccountPath(changedPath)) {
                     return@collect
                 }
                 if (isApplyingRemote || suppressPushForSwitchGeneration != 0L) return@collect
@@ -320,6 +321,10 @@ class AccountSettingsSyncService @Inject constructor(
             path == "integrations.traktAuth" ||
             path == "integrations.simklAuth" ||
             path.startsWith("playback.streamSelection")
+    }
+
+    private fun isDefaultLegacyActive(): Boolean {
+        return profileModeRouter.isDefaultLegacy(profileManager.activeProfileId.value)
     }
 
     fun onStartupSyncUserChanged(userId: String?) {
@@ -476,7 +481,7 @@ class AccountSettingsSyncService @Inject constructor(
         val tvdb = tvdbSettingsDataStore.settings.first()
         val mdbList = mdbListSettingsDataStore.settings.first()
         val mdbListPrefs = mdbListSettingsDataStore.catalogPreferences.first()
-        val isPrimaryProfile = profileManager.isPrimaryProfileActive
+        val isPrimaryProfile = isDefaultLegacyActive()
         val heroCatalogKeys = if (isPrimaryProfile) layoutPreferenceDataStore.heroCatalogSelections.first() else emptyList()
         val homeCatalogOrderKeys = if (isPrimaryProfile) layoutPreferenceDataStore.homeCatalogOrderKeys.first() else emptyList()
         val disabledHomeCatalogKeys = if (isPrimaryProfile) layoutPreferenceDataStore.disabledHomeCatalogKeys.first() else emptyList()
@@ -495,8 +500,9 @@ class AccountSettingsSyncService @Inject constructor(
         val easyDebrid = easyDebridSettingsDataStore.settings.first()
         val easyDebridAccount = easyDebridService.observeAccountState().first()
         val realDebrid = realDebridAuthDataStore.state.first()
-        val traktAuth = traktAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).first()
-        val simklAuth = simklAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).first()
+        val defaultProfileId = profileModeRouter.defaultLegacyProfileId()
+        val traktAuth = traktAuthDataStore.stateForProfile(defaultProfileId).first()
+        val simklAuth = simklAuthDataStore.stateForProfile(defaultProfileId).first()
 
         return buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(
@@ -634,7 +640,7 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private suspend fun applySharedAccountConfigSyncSettings(settings: AccountConfigSyncPayload) {
-        if (profileManager.isPrimaryProfileActive) {
+        if (isDefaultLegacyActive()) {
             layoutPreferenceDataStore.setHeroCatalogKeys(settings.catalogs.home.heroCatalogKeys)
             layoutPreferenceDataStore.setHomeCatalogOrderKeys(settings.catalogs.home.homeCatalogOrderKeys)
             layoutPreferenceDataStore.setDisabledHomeCatalogKeys(settings.catalogs.home.disabledHomeCatalogKeys)
@@ -1011,7 +1017,7 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private suspend fun syncTraktSecretsToRemote() {
-        val traktState = traktAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).first()
+        val traktState = traktAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()
         val accessToken = traktState.accessToken?.trim().orEmpty()
         val refreshToken = traktState.refreshToken?.trim().orEmpty()
 
@@ -1081,7 +1087,7 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private suspend fun syncSimklSecretsToRemote() {
-        val simklState = simklAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).first()
+        val simklState = simklAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()
         val accessToken = simklState.accessToken?.trim().orEmpty()
 
         if (accessToken.isBlank()) {
@@ -1247,7 +1253,7 @@ class AccountSettingsSyncService @Inject constructor(
             // not connected (and not in a pending device-flow). Mirrors RD's logic.
             val remote = settings.integrations.traktAuth
             if (!remote.connected && !remote.pending) {
-                traktAuthDataStore.clearAuth(PRIMARY_PROFILE_ID)
+                traktAuthDataStore.clearAuth(profileModeRouter.defaultLegacyProfileId())
             }
             return
         }
@@ -1262,7 +1268,7 @@ class AccountSettingsSyncService @Inject constructor(
         // remote refresh token → invalid_grant → clearAuth(). That's the
         // upgrade-time logout. Instead, keep local and shove it back upstream
         // so both sides converge.
-        val localState = traktAuthDataStore.stateForProfile(PRIMARY_PROFILE_ID).first()
+        val localState = traktAuthDataStore.stateForProfile(profileModeRouter.defaultLegacyProfileId()).first()
         val localCreatedAt = localState.createdAt ?: 0L
         val remoteCreatedAt = accessPayload?.createdAt ?: 0L
         val localHasTokens = !localState.accessToken.isNullOrBlank() &&
@@ -1278,10 +1284,10 @@ class AccountSettingsSyncService @Inject constructor(
             traktAuthDataStore.saveUser(
                 username = settings.integrations.traktAuth.username.takeIf { it.isNotBlank() },
                 userSlug = settings.integrations.traktAuth.userSlug.takeIf { it.isNotBlank() },
-                profileId = PRIMARY_PROFILE_ID
+                profileId = profileModeRouter.defaultLegacyProfileId()
             )
             if (!settings.integrations.traktAuth.pending) {
-                traktAuthDataStore.clearDeviceFlow(PRIMARY_PROFILE_ID)
+                traktAuthDataStore.clearDeviceFlow(profileModeRouter.defaultLegacyProfileId())
             }
             return
         }
@@ -1294,15 +1300,15 @@ class AccountSettingsSyncService @Inject constructor(
                 refreshToken = refreshToken,
                 createdAt = accessPayload?.createdAt ?: 0L
             ),
-            profileId = PRIMARY_PROFILE_ID
+            profileId = profileModeRouter.defaultLegacyProfileId()
         )
         traktAuthDataStore.saveUser(
             username = settings.integrations.traktAuth.username.takeIf { it.isNotBlank() },
             userSlug = settings.integrations.traktAuth.userSlug.takeIf { it.isNotBlank() },
-            profileId = PRIMARY_PROFILE_ID
+            profileId = profileModeRouter.defaultLegacyProfileId()
         )
         if (!settings.integrations.traktAuth.pending) {
-            traktAuthDataStore.clearDeviceFlow(PRIMARY_PROFILE_ID)
+            traktAuthDataStore.clearDeviceFlow(profileModeRouter.defaultLegacyProfileId())
         }
     }
 
@@ -1328,20 +1334,20 @@ class AccountSettingsSyncService @Inject constructor(
         if (accessToken.isBlank()) {
             val remote = settings.integrations.simklAuth
             if (!remote.connected && !remote.pending) {
-                simklAuthDataStore.clearAuth(PRIMARY_PROFILE_ID)
+                simklAuthDataStore.clearAuth(profileModeRouter.defaultLegacyProfileId())
             }
             return
         }
 
-        simklAuthDataStore.saveAccessToken(accessToken, profileId = PRIMARY_PROFILE_ID)
+        simklAuthDataStore.saveAccessToken(accessToken, profileId = profileModeRouter.defaultLegacyProfileId())
         simklAuthDataStore.saveUser(
             username = settings.integrations.simklAuth.username.takeIf { it.isNotBlank() },
             accountId = settings.integrations.simklAuth.accountId,
             accountType = settings.integrations.simklAuth.accountType.takeIf { it.isNotBlank() },
-            profileId = PRIMARY_PROFILE_ID
+            profileId = profileModeRouter.defaultLegacyProfileId()
         )
         if (!settings.integrations.simklAuth.pending) {
-            simklAuthDataStore.clearDeviceFlow(PRIMARY_PROFILE_ID)
+            simklAuthDataStore.clearDeviceFlow(profileModeRouter.defaultLegacyProfileId())
         }
     }
 

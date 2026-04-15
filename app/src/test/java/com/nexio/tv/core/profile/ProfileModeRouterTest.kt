@@ -10,6 +10,8 @@ class ProfileModeRouterTest {
     @Test
     fun `profile one maps to default legacy route`() {
         assertEquals(ProfileModeRoute.DefaultLegacyRoute, router.routeFor(1))
+        assertTrue(router.isDefaultLegacy(1))
+        assertEquals(1, router.defaultLegacyProfileId())
     }
 
     @Test
