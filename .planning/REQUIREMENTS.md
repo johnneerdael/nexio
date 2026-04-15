@@ -39,13 +39,13 @@ Requirements for the TVDB first-class TV metadata milestone. Each maps to roadma
 
 - [ ] **UX-01**: Settings explain provider precedence: TVDB is the TV metadata source when configured, TMDB remains movie metadata and TV fallback when TVDB is not configured, and poster-ratings is authoritative for supported poster imagery
 - [x] **UX-02**: Users benefit from exact-air-time Continue Watching automatically once TVDB is configured, without needing additional provider-specific toggles
-- [ ] **UX-03**: TVDB failures degrade gracefully with validation or diagnostic signals instead of making Continue Watching or TV detail look randomly late, empty, or inconsistent
+- [x] **UX-03**: TVDB failures degrade gracefully with validation or diagnostic signals instead of making Continue Watching or TV detail look randomly late, empty, or inconsistent
 
 ### Caching and API Use
 
 - [ ] **CACHE-01**: TVDB authentication tokens and metadata responses are cached so normal browsing does not repeatedly authenticate or refetch stable TV metadata
-- [ ] **CACHE-02**: TVDB cache invalidation accounts for TVDB update signals or record timestamps so metadata can improve without aggressive refetching
-- [ ] **CACHE-03**: Stable TVDB reference data such as artwork types, genres, languages, statuses, and content ratings is heavily cached in line with TVDB guidance
+- [x] **CACHE-02**: TVDB cache invalidation accounts for TVDB update signals or record timestamps so metadata can improve without aggressive refetching
+- [x] **CACHE-03**: Stable TVDB reference data such as artwork types, genres, languages, statuses, and content ratings is heavily cached in line with TVDB guidance
 
 ## v2 Requirements
 
@@ -99,9 +99,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | META-03 | Phase 9 | Complete |
 | META-05 | Phase 9 | Complete |
 | UX-02 | Phase 9 | Complete |
-| UX-03 | Phase 10 | Pending |
-| CACHE-02 | Phase 10 | Pending |
-| CACHE-03 | Phase 10 | Pending |
+| UX-03 | Phase 10 | Complete |
+| CACHE-02 | Phase 10 | Complete |
+| CACHE-03 | Phase 10 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 24 total
