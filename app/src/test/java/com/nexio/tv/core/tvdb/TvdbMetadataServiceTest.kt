@@ -23,12 +23,15 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.test.runTest
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
-import retrofit2.http.GET
 import retrofit2.Response
+import retrofit2.http.GET
 
 class TvdbMetadataServiceTest {
 
@@ -216,6 +219,72 @@ class TvdbMetadataServiceTest {
         assertEquals("Cached Pilot", episodes.single().metadata.title)
         coVerify(exactly = 0) { authService.bearerToken() }
         coVerify(exactly = 0) { tvdbApi.getSeriesEpisodes(any(), any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `does not cache thrown season episode request`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val authService = mockk<TvdbAuthService>()
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val cacheStore = mockk<MetadataDiskCacheStore>()
+        val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore)
+
+        every { cacheStore.readTvdbSeasonEpisodes(121361, "default", 1, "en-US") } returns null
+        every { cacheStore.writeTvdbSeasonEpisodes(any(), any(), any(), any(), any()) } just Runs
+        coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
+        coEvery {
+            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+        } throws RuntimeException("remote down")
+
+        val episodes = service.fetchSeasonEpisodes(TvdbSeriesIdentity(tvdbId = 121361), 1, "en-US")
+
+        assertEquals(emptyList<TvSeasonEpisode>(), episodes)
+        verify(exactly = 0) { cacheStore.writeTvdbSeasonEpisodes(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `does not cache non success season episode response`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val authService = mockk<TvdbAuthService>()
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val cacheStore = mockk<MetadataDiskCacheStore>()
+        val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore)
+
+        every { cacheStore.readTvdbSeasonEpisodes(121361, "default", 1, "en-US") } returns null
+        every { cacheStore.writeTvdbSeasonEpisodes(any(), any(), any(), any(), any()) } just Runs
+        coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
+        coEvery {
+            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+        } returns Response.error(
+            500,
+            "{}".toResponseBody("application/json".toMediaType())
+        )
+
+        val episodes = service.fetchSeasonEpisodes(TvdbSeriesIdentity(tvdbId = 121361), 1, "en-US")
+
+        assertEquals(emptyList<TvSeasonEpisode>(), episodes)
+        verify(exactly = 0) { cacheStore.writeTvdbSeasonEpisodes(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `caches successful empty season episode response`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val authService = mockk<TvdbAuthService>()
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val cacheStore = mockk<MetadataDiskCacheStore>()
+        val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore)
+
+        every { cacheStore.readTvdbSeasonEpisodes(121361, "default", 1, "en-US") } returns null
+        every { cacheStore.writeTvdbSeasonEpisodes(121361, "default", 1, "en-US", emptyList()) } just Runs
+        coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
+        coEvery {
+            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+        } returns Response.success(TvdbSeriesEpisodesResponse(data = emptyList()))
+
+        val episodes = service.fetchSeasonEpisodes(TvdbSeriesIdentity(tvdbId = 121361), 1, "en-US")
+
+        assertEquals(emptyList<TvSeasonEpisode>(), episodes)
+        verify(exactly = 1) { cacheStore.writeTvdbSeasonEpisodes(121361, "default", 1, "en-US", emptyList()) }
     }
 
     private fun tvdbService(tvdbApi: TvdbApi): TvdbMetadataService {
