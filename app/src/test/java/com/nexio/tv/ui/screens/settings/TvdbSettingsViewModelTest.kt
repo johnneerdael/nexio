@@ -126,6 +126,30 @@ class TvdbSettingsViewModelTest {
     }
 
     @Test
+    fun `configured fallback active settings remain enabled while observed`() = runTest(dispatcher) {
+        val settingsFlow = MutableStateFlow(
+            TvdbSettings(
+                enabled = true,
+                apiKey = "tvdb-key",
+                subscriberPin = "subscriber-pin",
+                validationStatus = TvdbValidationStatus.FALLBACK_ACTIVE,
+                lastFailure = "TVDB login failed with HTTP 500"
+            )
+        )
+        val dataStore = mockk<TvdbSettingsDataStore>(relaxed = true)
+        val authService = mockk<TvdbAuthService>()
+        every { dataStore.settings } returns settingsFlow
+
+        val viewModel = TvdbSettingsViewModel(dataStore = dataStore, authService = authService)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.enabled)
+        assertEquals(TvdbValidationStatus.FALLBACK_ACTIVE, viewModel.uiState.value.validationStatus)
+        assertFalse(viewModel.uiState.value.isProviderActive)
+        coVerify(exactly = 0) { dataStore.setEnabled(false) }
+    }
+
+    @Test
     fun `clearCredentials clears local credentials and cached token state`() = runTest(dispatcher) {
         val settingsFlow = MutableStateFlow(
             TvdbSettings(

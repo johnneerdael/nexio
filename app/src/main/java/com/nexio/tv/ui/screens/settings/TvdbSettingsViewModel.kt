@@ -34,7 +34,10 @@ class TvdbSettingsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             dataStore.settings.collectLatest { settings ->
-                if (settings.enabled && !settings.isActive) {
+                val shouldForceDisable = settings.enabled &&
+                    (!settings.configured || settings.validationStatus == TvdbValidationStatus.INVALID)
+
+                if (shouldForceDisable) {
                     dataStore.setEnabled(false)
                     _uiState.update { it.fromSettings(settings.copy(enabled = false)) }
                     return@collectLatest
