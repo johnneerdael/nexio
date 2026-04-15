@@ -1354,6 +1354,38 @@ class MetaDetailsViewModel @Inject constructor(
             updated = updated.copy(networks = tmdbEnrichment.networks)
         }
 
+        // Group: Episodes (titles, overviews, thumbnails, runtime)
+        if (settings.useEpisodes && isTvContent) {
+            val seasonNumbers = meta.videos.mapNotNull { it.season }.distinct()
+            val episodeDecision = tvMetadataRouter.fetchEpisodeEnrichment(
+                TvMetadataRequest(
+                    contentId = meta.id,
+                    fallbackContentId = itemId,
+                    contentType = tmdbContentType,
+                    seasonNumbers = seasonNumbers
+                )
+            )
+            val episodeMap = episodeDecision.value.orEmpty()
+            if (episodeMap.isNotEmpty()) {
+                updated = updated.copy(
+                    videos = meta.videos.map { video ->
+                        val season = video.season
+                        val episode = video.episode
+                        val key = if (season != null && episode != null) season to episode else null
+                        val ep = key?.let { episodeMap[it] }
+
+                        video.copy(
+                            title = ep?.title ?: video.title,
+                            overview = ep?.overview ?: video.overview,
+                            released = ep?.airDate ?: video.released,
+                            thumbnail = ep?.thumbnail ?: video.thumbnail,
+                            runtime = ep?.runtimeMinutes ?: video.runtime
+                        )
+                    }
+                )
+            }
+        }
+
         if (tmdbEnrichment?.collectionId != null) {
             loadCollectionAsync(tmdbEnrichment.collectionId, tmdbEnrichment.collectionName, settings)
         }
