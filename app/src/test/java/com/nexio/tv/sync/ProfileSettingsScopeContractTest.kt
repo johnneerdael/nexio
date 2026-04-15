@@ -302,6 +302,14 @@ class ProfileSettingsScopeContractTest {
     }
 
     @Test
+    fun `home session generation ownership is documented`() {
+        val text = doc()
+
+        assertTrue(text.contains("`HomeProfileSession` owns Home UI-session generation"))
+        assertTrue(text.contains("`ProfileBoundary` owns secondary profile route decisions"))
+    }
+
+    @Test
     fun `account snapshot sync only reads and writes primary profile tracking auth`() {
         val source = accountSettingsSyncService.readText()
 
