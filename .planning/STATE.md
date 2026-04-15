@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 09-00-PLAN.md
-last_updated: "2026-04-15T15:54:23.614Z"
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-04-15T16:05:49.018Z"
 last_activity: 2026-04-15
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 32
-  completed_plans: 20
-  percent: 63
+  completed_plans: 21
+  percent: 66
 ---
 
 # Project State
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 ## Current Position
 
 Phase: 09
-Plan: 01 of 6
-Status: Executing
+Plan: 2 of 6
+Status: Ready to execute
 Last activity: 2026-04-15
 
 Progress: [██████░░░░] 63%
@@ -55,6 +55,7 @@ Progress: [██████░░░░] 63%
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 09 P01 | 7min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,8 @@ Recent decisions affecting current work:
 - TVDB `airsTime` plus episode aired date drives exact Continue Watching availability when precise data exists
 - Continue Watching remains exact-air-time gated; TV detail may continue to show future unaired episodes
 - [Phase 09]: Wave 0 scaffold uses reflection and Class.forName for not-yet-created fields/classes; static source guard reads .kt/.xml at test time
+- [Phase 09]: TVDB season-order context stored alongside canonical keys, never replacing Video.season/Video.episode
+- [Phase 09]: TvdbSeasonOrderMapper.applyEpisodeOrder only writes tvdbEpisodeOrder field, enforcing Trakt stability
 
 ### Pending Todos
 
@@ -80,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-15T15:54:23.611Z
-Stopped at: Completed 09-00-PLAN.md
+Last session: 2026-04-15T16:05:49.014Z
+Stopped at: Completed 09-01-PLAN.md
 Resume file: None
