@@ -70,7 +70,7 @@ class AndroidTvChannelPublisher @Inject constructor(
             ) { prefs, snapshot ->
                 prefs.enabled &&
                     AndroidTvFeedCatalogService.CONTINUE_WATCHING_FEED_KEY in prefs.selectedFeedKeys &&
-                    snapshot.updatedAtMs > 0L
+                    snapshot.snapshot.updatedAtMs > 0L
             }
                 .distinctUntilChanged()
                 .collect { shouldSync ->

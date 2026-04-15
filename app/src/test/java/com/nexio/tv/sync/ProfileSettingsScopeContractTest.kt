@@ -541,4 +541,17 @@ class ProfileSettingsScopeContractTest {
         assertTrue(!source.contains("private val remoteProgress = MutableStateFlow<List<WatchProgress>>(emptyList())"))
         assertTrue(!source.contains("private val myShowsNextUp = MutableStateFlow<List<NextUpEntry>>(emptyList())"))
     }
+
+    @Test
+    fun `continue watching snapshots carry and enforce profile owner`() {
+        val serviceSource = File("app/src/main/java/com/nexio/tv/data/repository/ContinueWatchingSnapshotService.kt").readText()
+        val homeSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelContinueWatching.kt").readText()
+
+        assertTrue(serviceSource.contains("val profileId: Int = 1"))
+        assertTrue(serviceSource.contains("ProfileOwnedContinueWatchingSnapshot"))
+        assertTrue(serviceSource.contains("rawSnapshotState.value = ProfileOwnedContinueWatchingSnapshot(profileId = profileId)"))
+        assertTrue(homeSource.contains("ownedSnapshot.profileId != activeHomeProfileSession.profileId"))
+        assertTrue(homeSource.contains("if (ownedSnapshot.profileId != activeHomeProfileSession.profileId)"))
+        assertTrue(homeSource.contains("Skipping foreign continue watching snapshot"))
+    }
 }

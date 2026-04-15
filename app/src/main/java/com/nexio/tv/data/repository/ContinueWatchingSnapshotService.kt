@@ -56,6 +56,15 @@ data class ContinueWatchingSnapshot(
     val scheduledReemit: List<TrackingNextUpEntry> = emptyList()
 )
 
+data class ProfileOwnedContinueWatchingSnapshot(
+    val profileId: Int = 1,
+    val snapshot: ContinueWatchingSnapshot = ContinueWatchingSnapshot()
+) {
+    fun isOwnedBy(activeProfileId: Int): Boolean {
+        return profileId == activeProfileId
+    }
+}
+
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContinueWatchingSnapshotService @Inject constructor(
@@ -70,8 +79,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private val profileManager: ProfileManager? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val rawSnapshotState = MutableStateFlow(ContinueWatchingSnapshot())
-    private val snapshotState = MutableStateFlow(ContinueWatchingSnapshot())
+    private val rawSnapshotState = MutableStateFlow(ProfileOwnedContinueWatchingSnapshot())
+    private val snapshotState = MutableStateFlow(ProfileOwnedContinueWatchingSnapshot())
     private val refreshMutex = Mutex()
     private var lastRefreshRequestMs = 0L
     private val minRefreshIntervalMs = 30_000L
@@ -99,17 +108,20 @@ class ContinueWatchingSnapshotService @Inject constructor(
             combine(
                 rawSnapshotState,
                 traktSettingsDataStore.dismissedNextUpKeys
-            ) { snapshot, dismissedKeys ->
+            ) { ownedSnapshot, dismissedKeys ->
+                val snapshot = ownedSnapshot.snapshot
                 if (dismissedKeys.isEmpty()) {
-                    snapshot
+                    ownedSnapshot
                 } else {
-                    snapshot.copy(
-                        nextUpItems = snapshot.nextUpItems.filter { entry ->
-                            entry.contentId.trim() !in dismissedKeys
-                        },
-                        traktUpNextItems = snapshot.traktUpNextItems.filter { entry ->
-                            entry.contentId.trim() !in dismissedKeys
-                        }
+                    ownedSnapshot.copy(
+                        snapshot = snapshot.copy(
+                            nextUpItems = snapshot.nextUpItems.filter { entry ->
+                                entry.contentId.trim() !in dismissedKeys
+                            },
+                            traktUpNextItems = snapshot.traktUpNextItems.filter { entry ->
+                                entry.contentId.trim() !in dismissedKeys
+                            }
+                        )
                     )
                 }
             }.collectLatest { filtered ->
@@ -124,14 +136,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
                 .distinctUntilChanged()
                 .flatMapLatest { isAuthenticated ->
                     if (!isAuthenticated) {
-                        if (hasSeenAuthenticatedSession) {
-                            val profileId = activeProfileId()
-                            rawSnapshotState.value = ContinueWatchingSnapshot()
-                            snapshotStore.clear(profileId)
-                            metadataDiskCacheStore.replaceHomeFeedReferences(feedKey = "continue_watching", itemKeys = emptySet())
-                            lastRefreshRequestMs = 0L
-                            cancelReemitScheduling()
-                        }
+                        val profileId = activeProfileId()
+                        val empty = ProfileOwnedContinueWatchingSnapshot(profileId = profileId)
+                        rawSnapshotState.value = empty
+                        snapshotState.value = empty
+                        metadataDiskCacheStore.replaceHomeFeedReferences(feedKey = "continue_watching", itemKeys = emptySet())
+                        lastRefreshRequestMs = 0L
+                        cancelReemitScheduling()
                         hasSeenAuthenticatedSession = false
                         flowOf<ContinueWatchingSnapshot?>(null)
                     } else {
@@ -166,7 +177,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     fun rescheduleAirTimeAlarmFromSnapshot() {
-        handleScheduledReemit(rawSnapshotState.value.scheduledReemit, System.currentTimeMillis())
+        handleScheduledReemit(rawSnapshotState.value.snapshot.scheduledReemit, System.currentTimeMillis())
     }
 
     private suspend fun loadPersistedSnapshotForActiveProfile(clearWhenMissing: Boolean) {
@@ -174,21 +185,22 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val persisted = snapshotStore.read(profileId)
         if (persisted == null) {
             if (clearWhenMissing) {
-                rawSnapshotState.value = ContinueWatchingSnapshot()
-                snapshotState.value = ContinueWatchingSnapshot()
+                rawSnapshotState.value = ProfileOwnedContinueWatchingSnapshot(profileId = profileId)
+                snapshotState.value = ProfileOwnedContinueWatchingSnapshot(profileId = profileId)
                 lastRefreshRequestMs = 0L
                 cancelReemitScheduling()
             }
             return
         }
         val normalized = sanitizeSnapshot(persisted)
-        rawSnapshotState.value = normalized
-        snapshotState.value = normalized
+        val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = normalized)
+        rawSnapshotState.value = owned
+        snapshotState.value = owned
         lastRefreshRequestMs = normalized.updatedAtMs
         handleScheduledReemit(normalized.scheduledReemit, System.currentTimeMillis())
     }
 
-    fun observeSnapshot(): Flow<ContinueWatchingSnapshot> {
+    fun observeSnapshot(): Flow<ProfileOwnedContinueWatchingSnapshot> {
         return snapshotState.onStart {
             scope.launch {
                 runCatching { ensureFresh(force = false) }
@@ -201,7 +213,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     suspend fun ensureFresh(force: Boolean) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        if (!force && now - lastRefreshRequestMs < minRefreshIntervalMs && snapshotState.value.updatedAtMs > 0L) {
+        if (!force && now - lastRefreshRequestMs < minRefreshIntervalMs && snapshotState.value.snapshot.updatedAtMs > 0L) {
             return@withContext
         }
 
@@ -209,7 +221,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
             val lockedNow = System.currentTimeMillis()
             if (!force &&
                 lockedNow - lastRefreshRequestMs < minRefreshIntervalMs &&
-                snapshotState.value.updatedAtMs > 0L
+                snapshotState.value.snapshot.updatedAtMs > 0L
             ) {
                 return@withLock
             }
@@ -222,7 +234,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
      * Current raw resume entries (pre dismissal/next-up filtering). Used by callers that need
      * to look up the exact [WatchProgress] for rollback of an optimistic mutation.
      */
-    fun currentRawResumeItems(): List<WatchProgress> = rawSnapshotState.value.resumeItems
+    fun currentRawResumeItems(): List<WatchProgress> = rawSnapshotState.value.snapshot.resumeItems
 
     // ── Synchronous rawSnapshotState mutation helpers (Phase 3) ───────────────
 
@@ -249,7 +261,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
                 current.copy(
-                    resumeItems = current.resumeItems.filterNot { it.videoId == videoId }
+                    snapshot = current.snapshot.copy(
+                        resumeItems = current.snapshot.resumeItems.filterNot { it.videoId == videoId }
+                    )
                 )
             }
         }
@@ -262,7 +276,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
                 current.copy(
-                    resumeItems = current.resumeItems.filterNot { it.contentId == showId }
+                    snapshot = current.snapshot.copy(
+                        resumeItems = current.snapshot.resumeItems.filterNot { it.contentId == showId }
+                    )
                 )
             }
         }
@@ -274,10 +290,10 @@ class ContinueWatchingSnapshotService @Inject constructor(
     suspend fun reinsertResumeEntry(entry: WatchProgress) {
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
-                val merged = (current.resumeItems + entry)
+                val merged = (current.snapshot.resumeItems + entry)
                     .sortedByDescending { it.lastWatched }
                     .distinctBy { it.videoId }
-                current.copy(resumeItems = merged)
+                current.copy(snapshot = current.snapshot.copy(resumeItems = merged))
             }
         }
     }
@@ -286,7 +302,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
      * Returns the current snapshot data from the raw state for use as a rollback baseline.
      * Must be called before [applyEpisodesMarked] to capture the pre-mutation state.
      */
-    fun snapshotForRollback(): EpisodeRollbackState = rawSnapshotState.value.let { snapshot ->
+    fun snapshotForRollback(): EpisodeRollbackState = rawSnapshotState.value.snapshot.let { snapshot ->
         EpisodeRollbackState(
             resumeItems = snapshot.resumeItems,
             nextUpItems = snapshot.nextUpItems,
@@ -304,7 +320,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val keys = episodes
             .map { "${it.showId}|${it.seasonNumber}|${it.episodeNumber}" }
             .toSet()
-        return rawSnapshotState.value.let { snapshot ->
+        return rawSnapshotState.value.snapshot.let { snapshot ->
             EpisodeRollbackState(
                 resumeItems = snapshot.resumeItems.filter { progress ->
                     progress.season != null &&
@@ -330,27 +346,29 @@ class ContinueWatchingSnapshotService @Inject constructor(
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
                 current.copy(
-                    resumeItems = current.resumeItems.filterNot { progress ->
-                        episodes.any { ref ->
-                            progress.contentId == ref.showId &&
-                                progress.season == ref.seasonNumber &&
-                                progress.episode == ref.episodeNumber
+                    snapshot = current.snapshot.copy(
+                        resumeItems = current.snapshot.resumeItems.filterNot { progress ->
+                            episodes.any { ref ->
+                                progress.contentId == ref.showId &&
+                                    progress.season == ref.seasonNumber &&
+                                    progress.episode == ref.episodeNumber
+                            }
+                        },
+                        nextUpItems = current.snapshot.nextUpItems.filterNot { entry ->
+                            episodes.any { ref ->
+                                entry.contentId == ref.showId &&
+                                    entry.season == ref.seasonNumber &&
+                                    entry.episode == ref.episodeNumber
+                            }
+                        },
+                        traktUpNextItems = current.snapshot.traktUpNextItems.filterNot { entry ->
+                            episodes.any { ref ->
+                                entry.contentId == ref.showId &&
+                                    entry.season == ref.seasonNumber &&
+                                    entry.episode == ref.episodeNumber
+                            }
                         }
-                    },
-                    nextUpItems = current.nextUpItems.filterNot { entry ->
-                        episodes.any { ref ->
-                            entry.contentId == ref.showId &&
-                                entry.season == ref.seasonNumber &&
-                                entry.episode == ref.episodeNumber
-                        }
-                    },
-                    traktUpNextItems = current.traktUpNextItems.filterNot { entry ->
-                        episodes.any { ref ->
-                            entry.contentId == ref.showId &&
-                                entry.season == ref.seasonNumber &&
-                                entry.episode == ref.episodeNumber
-                        }
-                    }
+                    )
                 )
             }
         }
@@ -365,7 +383,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
-                val rollbackResume = current.resumeItems
+                val currentSnapshot = current.snapshot
+                val rollbackResume = currentSnapshot.resumeItems
                     .associateByTo(LinkedHashMap<String, WatchProgress>()) { it.videoId }
                     .also { existing ->
                         state.resumeItems.forEach { entry -> existing.putIfAbsent(entry.videoId, entry) }
@@ -374,22 +393,24 @@ class ContinueWatchingSnapshotService @Inject constructor(
                     .toList()
                     .sortedByDescending { it.lastWatched }
 
-                val rollbackNextUp = (current.nextUpItems + state.nextUpItems)
+                val rollbackNextUp = (currentSnapshot.nextUpItems + state.nextUpItems)
                     .distinctBy {
                         "${it.contentId}|${it.season}|${it.episode}"
                     }
                     .sortedByDescending { it.activityAtMs }
 
-                val rollbackTraktUpNext = (current.traktUpNextItems + state.traktUpNextItems)
+                val rollbackTraktUpNext = (currentSnapshot.traktUpNextItems + state.traktUpNextItems)
                     .distinctBy {
                         "${it.contentId}|${it.season}|${it.episode}"
                     }
                     .sortedByDescending { it.activityAtMs }
 
                 current.copy(
-                    resumeItems = rollbackResume,
-                    nextUpItems = rollbackNextUp,
-                    traktUpNextItems = rollbackTraktUpNext
+                    snapshot = currentSnapshot.copy(
+                        resumeItems = rollbackResume,
+                        nextUpItems = rollbackNextUp,
+                        traktUpNextItems = rollbackTraktUpNext
+                    )
                 )
             }
         }
@@ -411,8 +432,10 @@ class ContinueWatchingSnapshotService @Inject constructor(
         refreshMutex.withLock {
             rawSnapshotState.update { current ->
                 current.copy(
-                    nextUpItems = current.nextUpItems.filterNot { it.contentId == target },
-                    traktUpNextItems = current.traktUpNextItems.filterNot { it.contentId == target }
+                    snapshot = current.snapshot.copy(
+                        nextUpItems = current.snapshot.nextUpItems.filterNot { it.contentId == target },
+                        traktUpNextItems = current.snapshot.traktUpNextItems.filterNot { it.contentId == target }
+                    )
                 )
             }
         }
@@ -424,7 +447,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
         metadataDiskCacheStore.replaceHomeFeedReferences(feedKey = "continue_watching", itemKeys = emptySet())
         cancelReemitScheduling()
         scope.launch {
-            rawSnapshotState.update { it.copy(displayMetadataByItemKey = emptyMap()) }
+            rawSnapshotState.update { owned ->
+                owned.copy(snapshot = owned.snapshot.copy(displayMetadataByItemKey = emptyMap()))
+            }
             snapshotState.value = rawSnapshotState.value
         }
     }
@@ -598,7 +623,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val normalized = sanitizeSnapshot(snapshot)
         val hydrated = hydrateSnapshotMetadata(
             snapshot = normalized,
-            fallbackMetadata = rawSnapshotState.value.displayMetadataByItemKey
+            fallbackMetadata = rawSnapshotState.value.snapshot.displayMetadataByItemKey
         )
         val referencedItemKeys = buildSet {
             hydrated.resumeItems.forEach { progress ->
@@ -616,7 +641,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
             Log.d("ContinueWatching", "Skipping stale continue watching publish for profile=$profileId")
             return false
         }
-        rawSnapshotState.value = hydrated
+        val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = hydrated)
+        rawSnapshotState.value = owned
         metadataDiskCacheStore.replaceHomeFeedReferences(
             feedKey = "continue_watching",
             itemKeys = referencedItemKeys
