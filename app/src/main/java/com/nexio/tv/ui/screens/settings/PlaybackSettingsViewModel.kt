@@ -364,18 +364,6 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setProgressivePlaybackDiskMode(mode)
     }
 
-    suspend fun setDiskSpoolSizeMb(mb: Int) {
-        playerSettingsDataStore.setDiskSpoolSizeMb(mb)
-    }
-
-    suspend fun setDiskSpoolStartupBufferMb(mb: Int) {
-        playerSettingsDataStore.setDiskSpoolStartupBufferMb(mb)
-    }
-
-    suspend fun setDiskSpoolRamReadBufferMb(mb: Int) {
-        playerSettingsDataStore.setDiskSpoolRamReadBufferMb(mb)
-    }
-
     suspend fun setDiskSpoolStorageLocation(location: DiskSpoolStorageLocation) {
         playerSettingsDataStore.setDiskSpoolStorageLocation(location)
     }

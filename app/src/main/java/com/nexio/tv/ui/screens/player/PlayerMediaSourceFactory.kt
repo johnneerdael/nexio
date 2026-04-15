@@ -96,9 +96,7 @@ internal class PlayerMediaSourceFactory(
         }
     var vodCacheSizeMb: Int = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB
     var progressivePlaybackDiskMode: ProgressivePlaybackDiskMode = ProgressivePlaybackDiskMode.OFF
-    var diskSpoolSizeMb: Int = PlayerSettings.DEFAULT_DISK_SPOOL_SIZE_MB
     var diskSpoolStartupBufferMb: Int = PlayerSettings.DEFAULT_DISK_SPOOL_STARTUP_BUFFER_MB
-    var diskSpoolRamReadBufferMb: Int = PlayerSettings.DEFAULT_DISK_SPOOL_RAM_READ_BUFFER_MB
     var diskSpoolStorageLocation: DiskSpoolStorageLocation = DiskSpoolStorageLocation.BUILTIN
     var diskSpoolDiagnosticsEnabled: Boolean = false
     internal var spoolStorageProbeResult: SpoolStorageProbeResult? = null
@@ -109,8 +107,6 @@ internal class PlayerMediaSourceFactory(
     internal var diskSpoolDirectoryResolverForTesting: ((Context, DiskSpoolStorageLocation) -> File?)? = null
     internal var diskSpoolSessionObserverForTesting: ((File, Long) -> Unit)? = null
     internal var diskSpoolWriterProfileObserverForTesting: ((Int, Int, Long) -> Unit)? = null
-    internal var diskSpoolHeapLimitBytesForTesting: Long? = null
-    internal var diskSpoolReadAheadObserverForTesting: ((Long) -> Unit)? = null
     internal var diskSpoolDiagnosticsLoggerForTesting: ((String) -> Unit)? = null
 
     fun isDiskSpoolSessionActive(): Boolean {
@@ -157,8 +153,7 @@ internal class PlayerMediaSourceFactory(
         logDiskSpoolDiagnostics {
             "createMediaSource host=${safeHost(url)} mode=$progressivePlaybackDiskMode " +
                 "mime=${resolvedMimeType ?: "unknown"} hls=$isHls dash=$isDash http=${usesHttpUpstream(url)} " +
-                "eligibleBySetting=$diskSpoolEligibleBySetting spoolMb=$diskSpoolSizeMb " +
-                "startupMb=$diskSpoolStartupBufferMb ramMb=$diskSpoolRamReadBufferMb " +
+                "eligibleBySetting=$diskSpoolEligibleBySetting " +
                 "storage=$diskSpoolStorageLocation"
         }
         val useVodCache = ENABLE_VOD_CACHE &&
@@ -816,8 +811,7 @@ internal class PlayerMediaSourceFactory(
             return null
         }
 
-        val requestedSpoolBytes = resolveRequestedDiskSpoolBytes()
-        if (!hasDiskSpoolCapacity(spoolDir, requestedSpoolBytes)) return null
+        val requestedSpoolBytes = resolveRequestedDiskSpoolBytes(spoolDir) ?: return null
         val diskSpoolProfile = if (parallelConnectionsEnabled) {
             resolveParallelProviderProfiles(
                 url = url,
@@ -893,54 +887,45 @@ internal class PlayerMediaSourceFactory(
             session = session,
             uri = Uri.parse(url),
             randomAccessFallbackFactory = createOkHttpDataSourceFactory(requestHeaders),
-            startupPrebufferBytes = startupPrebufferBytes,
-            ramReadAheadBytes = resolveDiskSpoolRamReadAheadBytes()
+            startupPrebufferBytes = startupPrebufferBytes
         )
     }
 
-    private fun resolveRequestedDiskSpoolBytes(): Long {
-        return diskSpoolSizeMb.coerceIn(
-            PlayerSettings.MIN_DISK_SPOOL_SIZE_MB,
-            PlayerSettings.MAX_DISK_SPOOL_SIZE_MB
-        ).toLong() * 1024L * 1024L
-    }
-
     private fun resolveDiskSpoolStartupBufferBytes(requestedSpoolBytes: Long): Long {
-        val requestedMb = diskSpoolStartupBufferMb.coerceIn(
+        val requestedMb = FIXED_DISK_SPOOL_STARTUP_BUFFER_MB.coerceIn(
             PlayerSettings.MIN_DISK_SPOOL_STARTUP_BUFFER_MB,
             (requestedSpoolBytes / 1024L / 1024L).toInt().coerceAtLeast(PlayerSettings.MIN_DISK_SPOOL_STARTUP_BUFFER_MB)
         )
         return requestedMb.toLong() * 1024L * 1024L
     }
 
-    private fun resolveDiskSpoolRamReadAheadBytes(): Long {
-        val heapLimitBytes = diskSpoolHeapLimitBytesForTesting
-            ?: MemoryBudget(context).heapLimitBytes
-        val bytes = MemoryBudget.effectiveDiskSpoolReadAheadBytes(
-            requestedMb = diskSpoolRamReadBufferMb,
-            heapLimitBytes = heapLimitBytes
-        )
-        diskSpoolReadAheadObserverForTesting?.invoke(bytes)
-        return bytes
-    }
-
-    private fun hasDiskSpoolCapacity(spoolDir: File, requestedSpoolBytes: Long): Boolean {
+    private fun resolveRequestedDiskSpoolBytes(spoolDir: File): Long? {
         val availableBytes = diskSpoolAvailableBytesForTesting ?: runCatching {
             spoolDir.mkdirs()
             StatFs(spoolDir.absolutePath).availableBytes
         }.getOrElse { error ->
             Log.w(TAG, "Unable to check disk spool free space", error)
             logDiskSpoolDiagnostics { "capacity check failed dir=${spoolDir.absolutePath} message=${error.message}" }
-            return false
+            return null
         }
-        val hasCapacity = availableBytes >= requestedSpoolBytes &&
-            availableBytes - requestedSpoolBytes >= DISK_SPOOL_FREE_SPACE_RESERVE_BYTES
+        val requestedSpoolBytes = resolveAutomaticDiskSpoolBytes(availableBytes)
         logDiskSpoolDiagnostics {
             "capacity dir=${spoolDir.absolutePath} availableMb=${availableBytes / 1024L / 1024L} " +
-                "requestedMb=${requestedSpoolBytes / 1024L / 1024L} " +
-                "reserveMb=${DISK_SPOOL_FREE_SPACE_RESERVE_BYTES / 1024L / 1024L} ok=$hasCapacity"
+                "requestedMb=${(requestedSpoolBytes ?: 0L) / 1024L / 1024L} " +
+                "ok=${requestedSpoolBytes != null}"
         }
-        return hasCapacity
+        return requestedSpoolBytes
+    }
+
+    internal fun resolveAutomaticDiskSpoolBytes(availableBytes: Long): Long? {
+        val availableMb = availableBytes.coerceAtLeast(0L) / BYTES_PER_MB
+        if (availableMb < MIN_DISK_SPOOL_FREE_SPACE_MB) return null
+        val requestedMb = minOf(
+            PlayerSettings.MAX_DISK_SPOOL_SIZE_MB.toLong(),
+            (availableMb * 3L) / 4L
+        )
+        if (requestedMb < PlayerSettings.MIN_DISK_SPOOL_SIZE_MB) return null
+        return requestedMb * BYTES_PER_MB
     }
 
     private fun scheduleDiskSpoolWriter(
@@ -1268,7 +1253,9 @@ internal class PlayerMediaSourceFactory(
         private const val ENABLE_VOD_CACHE = true
         private const val VOD_CACHE_DIR = "player_vod_cache"
         private const val DISK_SPOOL_DIR = "player_disk_spool"
-        private const val DISK_SPOOL_FREE_SPACE_RESERVE_BYTES = 512L * 1024L * 1024L
+        private const val BYTES_PER_MB = 1024L * 1024L
+        private const val FIXED_DISK_SPOOL_STARTUP_BUFFER_MB = 100
+        private const val MIN_DISK_SPOOL_FREE_SPACE_MB = 768L
         private const val VOD_CACHE_FREE_SPACE_RESERVE_BYTES = 1024L * 1024L * 1024L
         private const val MIN_RUNTIME_VOD_CACHE_BYTES = 1L * 1024L * 1024L
         private const val PREFETCH_BLOCK_BYTES = 16L * 1024L * 1024L

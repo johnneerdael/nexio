@@ -74,27 +74,6 @@ class PlayerSettingsDataStoreSpoolModeTest {
     }
 
     @Test
-    fun `setting disk spool ram read buffer persists with bounds`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
-
-        dataStore.setDiskSpoolRamReadBufferMb(96)
-
-        assertEquals(96, dataStore.playerSettings.first().diskSpoolRamReadBufferMb)
-    }
-
-    @Test
-    fun `disk spool ram read buffer clamps to supported range`() = runTest {
-        val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
-
-        dataStore.setDiskSpoolRamReadBufferMb(999)
-
-        assertEquals(
-            PlayerSettings.MAX_DISK_SPOOL_RAM_READ_BUFFER_MB,
-            dataStore.playerSettings.first().diskSpoolRamReadBufferMb
-        )
-    }
-
-    @Test
     fun `changing disk spool storage location clears diagnostic result`() = runTest {
         val dataStore = PlayerSettingsDataStore(ApplicationProvider.getApplicationContext<Context>())
 
