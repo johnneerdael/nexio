@@ -84,7 +84,7 @@ Plans:
 - [x] 09-01-PLAN.md — Preserve TVDB default season type and season-order context while keeping canonical Trakt progress keys stable
 - [x] 09-02-PLAN.md — Map TVDB cast, companies, networks, genres, and content ratings into provider output with diagnostics
 - [x] 09-03-PLAN.md — Propagate TVDB advanced metadata through existing detail, Home, stream, screensaver, and player surfaces
-- [ ] 09-04-PLAN.md — Route TV trailers through TVDB-first discovery before Streailer, fallback IDs, and explicit TMDB fallback
+- [x] 09-04-PLAN.md — Route TV trailers through TVDB-first discovery before Streailer, fallback IDs, and explicit TMDB fallback
 - [ ] 09-05-PLAN.md — Lock no-toggle provider UX, diagnostics, and Phase 9 validation gates
 **Success Criteria** (what must be TRUE):
   1. TVDB default season type is preserved in Nexio's season/episode model without assuming TMDB-style aired ordering
