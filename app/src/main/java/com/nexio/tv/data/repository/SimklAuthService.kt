@@ -36,12 +36,16 @@ class SimklAuthService @Inject constructor(
     fun hasRequiredCredentials(): Boolean = BuildConfig.SIMKL_CLIENT_ID.isNotBlank()
 
     suspend fun getCurrentAuthState(): SimklAuthState =
-        simklAuthDataStore.stateForProfile(currentRoutedProfileId()).first()
+        getCurrentAuthState(currentAuthSession())
+
+    private suspend fun getCurrentAuthState(session: TrackingAuthSession): SimklAuthState =
+        simklAuthDataStore.stateForProfile(session.profileId).first()
 
     suspend fun startPinAuth(): Result<Unit> {
         if (!hasRequiredCredentials()) {
             return Result.failure(IllegalStateException("Missing SIMKL_CLIENT_ID"))
         }
+        val session = currentAuthSession()
         val response = try {
             simklApi.requestPinCode()
         } catch (e: IOException) {
@@ -49,7 +53,7 @@ class SimklAuthService @Inject constructor(
         }
         val body = response.body()
         if (response.isSuccessful && body?.deviceCode != null && body.userCode != null) {
-            simklAuthDataStore.saveDeviceFlow(body, profileId = currentRoutedProfileId())
+            simklAuthDataStore.saveDeviceFlow(body, profileId = session.profileId)
             return Result.success(Unit)
         }
         return Result.failure(IllegalStateException("Failed to start SIMKL auth (${response.code()})"))
@@ -57,8 +61,9 @@ class SimklAuthService @Inject constructor(
 
     suspend fun pollPin(): SimklTokenPollResult {
         if (!hasRequiredCredentials()) return SimklTokenPollResult.Failed("Missing SIMKL_CLIENT_ID")
-        val state = getCurrentAuthState()
-        val profileId = currentRoutedProfileId()
+        val session = currentAuthSession()
+        val state = getCurrentAuthState(session)
+        val profileId = session.profileId
         val userCode = state.userCode
         if (userCode.isNullOrBlank()) return SimklTokenPollResult.Failed("No active SIMKL PIN code")
 
@@ -74,7 +79,7 @@ class SimklAuthService @Inject constructor(
         if (body.result.equals("OK", ignoreCase = true) && !body.accessToken.isNullOrBlank()) {
             simklAuthDataStore.saveAccessToken(body.accessToken, profileId = profileId)
             simklAuthDataStore.clearDeviceFlow(profileId)
-            val username = fetchUserSettings()
+            val username = fetchUserSettings(session)
             return SimklTokenPollResult.Approved(username)
         }
         return when (body.message?.trim()?.lowercase()) {
@@ -89,7 +94,11 @@ class SimklAuthService @Inject constructor(
     }
 
     suspend fun fetchUserSettings(): String? {
-        val response = executeAuthorizedRequest { authHeader ->
+        return fetchUserSettings(currentAuthSession())
+    }
+
+    private suspend fun fetchUserSettings(session: TrackingAuthSession): String? {
+        val response = executeAuthorizedRequest(session) { authHeader ->
             simklApi.getUserSettings(authorization = authHeader)
         } ?: return null
         if (!response.isSuccessful) return null
@@ -99,19 +108,24 @@ class SimklAuthService @Inject constructor(
             username = username,
             accountId = body?.account?.id,
             accountType = body?.account?.type,
-            profileId = currentRoutedProfileId()
+            profileId = session.profileId
         )
         return username
     }
 
     suspend fun revokeAndLogout() {
-        simklAuthDataStore.clearAuth(currentRoutedProfileId())
+        simklAuthDataStore.clearAuth(currentAuthSession().profileId)
     }
 
     suspend fun <T> executeAuthorizedRequest(
         call: suspend (authorizationHeader: String) -> Response<T>
+    ): Response<T>? = executeAuthorizedRequest(currentAuthSession(), call)
+
+    private suspend fun <T> executeAuthorizedRequest(
+        session: TrackingAuthSession,
+        call: suspend (authorizationHeader: String) -> Response<T>
     ): Response<T>? {
-        val token = getCurrentAuthState().accessToken ?: return null
+        val token = getCurrentAuthState(session).accessToken ?: return null
         return try {
             requestGate.acquire { call("Bearer $token") }
         } catch (e: IOException) {
@@ -123,6 +137,13 @@ class SimklAuthService @Inject constructor(
     suspend fun <T> executeAuthorizedWriteRequest(
         call: suspend (authorizationHeader: String) -> Response<T>
     ): Response<T>? = executeAuthorizedRequest(call)
+
+    private fun currentAuthSession(): TrackingAuthSession {
+        return TrackingAuthSession(
+            provider = TrackingProvider.SIMKL,
+            profileId = currentRoutedProfileId()
+        )
+    }
 
     private fun currentRoutedProfileId(): Int {
         return when (val route = profileModeRouter.routeFor(profileManager.activeProfileId.value)) {

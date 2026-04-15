@@ -4,7 +4,11 @@ import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.profile.ProfileModeRouter
 import com.nexio.tv.data.local.TraktAuthDataStore
 import com.nexio.tv.data.remote.api.TraktApi
+import com.nexio.tv.data.remote.dto.trakt.TraktDeviceCodeResponseDto
+import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
 import com.nexio.tv.data.remote.dto.trakt.TraktTokenResponseDto
+import com.nexio.tv.data.remote.dto.trakt.TraktUserDto
+import com.nexio.tv.data.remote.dto.trakt.TraktUserSettingsResponseDto
 import com.nexio.tv.testutil.profileDataStoreFactoryForTest
 import com.nexio.tv.testutil.testProfileManager
 import io.mockk.coEvery
@@ -17,6 +21,8 @@ import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
@@ -114,5 +120,67 @@ class TraktAuthServiceTest {
         assertFalse(refreshed)
         assertTrue(traktAuthDataStore.stateForProfile(1).first().isAuthenticated)
         assertFalse(traktAuthDataStore.stateForProfile(2).first().isAuthenticated)
+    }
+
+    @Test
+    fun `poll token saves token and user to same captured profile after profile switch`() = runTest {
+        val traktApi = mockk<TraktApi>()
+        val activeProfileId = MutableStateFlow(2)
+        val profileManager = testProfileManager(activeProfileId)
+        val traktAuthDataStore = TraktAuthDataStore(
+            factory = profileDataStoreFactoryForTest(),
+            profileManager = profileManager
+        )
+        traktAuthDataStore.saveDeviceFlow(
+            TraktDeviceCodeResponseDto(
+                deviceCode = "device",
+                userCode = "user",
+                verificationUrl = "https://trakt.tv/activate",
+                expiresIn = 600,
+                interval = 5
+            ),
+            profileId = 2
+        )
+        coEvery {
+            traktApi.requestDeviceToken(any())
+        } answers {
+            activeProfileId.value = 3
+            Response.success(
+                TraktTokenResponseDto(
+                    accessToken = "access",
+                    tokenType = "Bearer",
+                    expiresIn = 3600,
+                    refreshToken = "refresh",
+                    createdAt = System.currentTimeMillis() / 1000L
+                )
+            )
+        }
+        coEvery {
+            traktApi.getUserSettings(any())
+        } returns Response.success(
+            TraktUserSettingsResponseDto(
+                user = TraktUserDto(
+                    username = "profile-two-user",
+                    ids = TraktIdsDto(slug = "profile-two")
+                )
+            )
+        )
+
+        val service = spyk(
+            TraktAuthService(
+                traktApi = traktApi,
+                traktAuthDataStore = traktAuthDataStore,
+                requestGate = com.nexio.tv.data.remote.TraktRequestGate(),
+                profileManager = profileManager,
+                profileModeRouter = ProfileModeRouter(),
+                profileBoundary = ProfileBoundary(profileManager, languageTagProvider = { "en" })
+            )
+        )
+        every { service.hasRequiredCredentials() } returns true
+
+        service.pollDeviceToken()
+
+        assertEquals("profile-two-user", traktAuthDataStore.stateForProfile(2).first().username)
+        assertNull(traktAuthDataStore.stateForProfile(3).first().username)
     }
 }
