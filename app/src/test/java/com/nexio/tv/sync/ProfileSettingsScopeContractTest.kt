@@ -477,6 +477,19 @@ class ProfileSettingsScopeContractTest {
     }
 
     @Test
+    fun `tracking runtime session exists and carries profile owner`() {
+        val sessionFile = File("app/src/main/java/com/nexio/tv/data/repository/TrackingRuntimeSession.kt")
+        val authSessionSource = trackingAuthSession.readText()
+        val runtimeSessionSource = sessionFile.readText()
+
+        assertTrue(authSessionSource.contains("fun toRuntimeSession"))
+        assertTrue(runtimeSessionSource.contains("data class TrackingRuntimeSession"))
+        assertTrue(runtimeSessionSource.contains("val provider: TrackingProvider"))
+        assertTrue(runtimeSessionSource.contains("val profileId: Int"))
+        assertTrue(runtimeSessionSource.contains("val generation: Long"))
+    }
+
+    @Test
     fun `supabase profile settings rpc rejects default profile route`() {
         val migrationSource = secondaryProfileSettingsMigration.readText()
 
