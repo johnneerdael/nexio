@@ -1,7 +1,7 @@
 ---
 phase: 07-tvdb-provider-replacement
-verified: 2026-04-15T10:35:37Z
-status: human_needed
+verified: 2026-04-15T11:23:03Z
+status: passed
 score: "8/8 must-haves verified"
 overrides_applied: 0
 re_verification:
@@ -17,23 +17,20 @@ deferred:
   - truth: "PREF-02 broad surfaces for TV trailers, related content, credits/cast, and networks"
     addressed_in: "Phase 9"
     evidence: "Phase 9 success criteria cover TVDB trailers plus characters/cast, companies, networks, genres, and content ratings."
-human_verification:
-  - test: "Resolve unrelated dirty-worktree source compile blockers, then rerun ./gradlew compileArm64DebugKotlin"
-    expected: "Source compilation exits 0 with Phase 7 code included."
-    why_human: "Current compile is blocked by unrelated dirty files outside 07-07/07-08 ownership: ProfileManager.kt unresolved coroutine usage and HomeViewModel.kt unresolved profile-scoped reset helpers."
-  - test: "Resolve unrelated unit-test compile debt, then rerun targeted Phase 7 tests"
-    expected: "TvMetadataRouterTest, TvdbMetadataServiceTest, and HomeViewModelTvdbProviderRoutingTest execute and pass."
-    why_human: "Unit-test compilation is blocked before targeted tests can run, so test pass cannot be claimed from this verification."
-  - test: "Run/create the Phase 7 security verification artifact"
+external_verification:
+  - test: "./gradlew testArm64DebugUnitTest --continue"
+    expected: "Unit test task completes with Phase 7 code included."
+    result: "passed: BUILD SUCCESSFUL in 50s"
+  - test: "Phase 7 security verification"
     expected: ".planning/phases/07-tvdb-provider-replacement/07-SECURITY.md exists and records the enforced security gate result."
-    why_human: "Security enforcement is enabled, but no Phase 07 SECURITY.md exists; no security pass was fabricated."
+    result: "passed: 07-SECURITY.md status secured, threats_open 0"
 ---
 
 # Phase 7: TVDB Provider Replacement Verification Report
 
 **Phase Goal:** TVDB replaces TMDB as the normal TV metadata provider across existing TV enrichment surfaces, while poster-ratings integrations remain authoritative for poster imagery
-**Verified:** 2026-04-15T10:35:37Z
-**Status:** human_needed
+**Verified:** 2026-04-15T11:23:03Z
+**Status:** passed
 **Re-verification:** Yes - after gap closure plans 07-07 and 07-08
 
 ## Goal Achievement
@@ -148,38 +145,20 @@ Items not yet met but explicitly addressed in later milestone phases.
 
 No blocker anti-patterns remain in the gap-owned source files.
 
-### Human Verification Required
+### External Verification Completed
 
-### 1. Source Compile Gate
-
-**Test:** Resolve unrelated dirty-worktree compile blockers, then run `./gradlew compileArm64DebugKotlin`.
-**Expected:** Source compilation exits 0 with Phase 7 code included.
-**Why human:** The current dirty worktree compile failure is outside Phase 7 gap-owned files: `ProfileManager.kt` unresolved coroutine usage and `HomeViewModel.kt` unresolved profile-scoped reset helpers.
-
-### 2. Targeted Unit Test Gate
-
-**Test:** Resolve unrelated unit-test compile debt, then run:
-
-```sh
-./gradlew testArm64DebugUnitTest --tests "com.nexio.tv.core.tvdb.TvMetadataRouterTest" --tests "com.nexio.tv.core.tvdb.TvdbMetadataServiceTest" --tests "com.nexio.tv.ui.screens.home.HomeViewModelTvdbProviderRoutingTest"
-```
-
-**Expected:** The targeted Phase 7 regression tests execute and pass.
-**Why human:** Current unit-test compilation fails before these tests run; source-level test coverage exists but cannot be counted as executed.
-
-### 3. Security Gate
-
-**Test:** Run the enforced Phase 7 security review and create `.planning/phases/07-tvdb-provider-replacement/07-SECURITY.md`.
-**Expected:** Security gate result is recorded; if findings exist, they are handled before marking Phase 7 fully passed.
-**Why human:** Security enforcement is enabled, but no Phase 07 SECURITY.md exists.
+| Gate | Evidence | Status |
+|---|---|---|
+| Source and unit-test compile/test gate | User ran `./gradlew testArm64DebugUnitTest --continue`; result: `BUILD SUCCESSFUL in 50s` | PASSED |
+| Security gate | `07-SECURITY.md` exists with `status: secured`, `threats_total: 34`, `threats_closed: 34`, `threats_open: 0` | PASSED |
 
 ### Gaps Summary
 
 The original three source gaps are closed. Continue Watching can now reach TVDB-backed provider enrichment when TMDB is disabled, TMDB fallback is guarded by active TMDB settings, and failed TVDB season requests no longer write empty authoritative season cache entries.
 
-This verification is `human_needed`, not `passed`, because build/test/security gates are not actually green in the current worktree. The blockers are external to the Phase 7 gap-owned source files, but they still prevent a full pass from being honestly recorded.
+Phase 7 is passed. The original three source gaps are closed, post-gap code review is clean, the security gate is secured, and the external test gate was reported green with `./gradlew testArm64DebugUnitTest --continue`.
 
 ---
 
-_Verified: 2026-04-15T10:35:37Z_
+_Verified: 2026-04-15T11:23:03Z_
 _Verifier: Claude (gsd-verifier)_
