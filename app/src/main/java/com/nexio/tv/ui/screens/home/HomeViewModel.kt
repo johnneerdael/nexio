@@ -407,9 +407,9 @@ class HomeViewModel @Inject constructor(
 
     private fun observeProfileSwitches() {
         viewModelScope.launch {
-            profileManager.profileSwitched.collectLatest {
-                resetProfileScopedHomeState("profile_switch")
-                loadActiveProfileDiskBackedHomeState("profile_switch")
+            profileManager.profileSwitched.collectLatest { profileId ->
+                resetProfileScopedHomeState("profile_switch:$profileId")
+                loadActiveProfileDiskBackedHomeState("profile_switch:$profileId")
             }
         }
     }

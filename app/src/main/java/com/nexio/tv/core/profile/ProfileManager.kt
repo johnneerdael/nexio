@@ -14,10 +14,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
@@ -55,11 +57,11 @@ class ProfileManager(
         postgrest = postgrest
     )
 
-    private val _profileSwitched = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val profileSwitched: SharedFlow<Unit> = _profileSwitched.asSharedFlow()
+    private val _profileSwitched = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+    val profileSwitched: SharedFlow<Int> = _profileSwitched.asSharedFlow()
 
-    val activeProfileId: StateFlow<Int> = dataStore.activeProfileId
-        .stateIn(scope, SharingStarted.Eagerly, 1)
+    private val _activeProfileId = MutableStateFlow(1)
+    val activeProfileId: StateFlow<Int> = _activeProfileId.asStateFlow()
 
     val profiles: StateFlow<List<UserProfile>> = dataStore.profilesList
         .stateIn(
@@ -69,7 +71,8 @@ class ProfileManager(
 
     init {
         scope.launch {
-            activeProfileId.collect { id ->
+            dataStore.activeProfileId.collect { id ->
+                _activeProfileId.value = id
                 AppLocaleResolver.setActiveProfileId(context, id)
             }
         }
@@ -86,8 +89,9 @@ class ProfileManager(
         val current = dataStore.profilesList.first()
         if (current.any { it.id == id }) {
             AppLocaleResolver.setActiveProfileId(context, id)
+            _activeProfileId.value = id
             dataStore.setActiveProfile(id)
-            _profileSwitched.emit(Unit)
+            _profileSwitched.emit(id)
         }
     }
 
