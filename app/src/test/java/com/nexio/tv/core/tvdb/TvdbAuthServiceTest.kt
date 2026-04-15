@@ -91,7 +91,7 @@ class TvdbAuthServiceTest {
 
         val result = service.loginAndCacheToken(apiKey = "tvdb-key", pin = "subscriber-pin")
 
-        assertEquals(TvdbValidationStatus.InvalidCredentials, result.status)
+        assertEquals(TvdbValidationStatus.INVALID, result.status)
         coVerify(exactly = 0) { tokenStore.saveToken(any(), any()) }
     }
 
