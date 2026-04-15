@@ -27,6 +27,7 @@ import com.nexio.tv.data.remote.dto.trakt.TraktShowSeasonProgressDto
 import com.nexio.tv.data.remote.dto.trakt.TraktUserEpisodeHistoryItemDto
 import com.nexio.tv.data.remote.dto.trakt.TraktWatchedShowItemDto
 import com.nexio.tv.data.repository.trakt.TraktProgressMutationExecutor
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.repository.MetaRepository
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -112,12 +113,12 @@ class TraktProgressService @Inject constructor(
         val totalWatchedHours: Int = 0
     )
 
-    private data class TimedCache<T>(
+    internal data class TimedCache<T>(
         val value: T,
         val updatedAtMs: Long
     )
 
-    private data class EpisodeProgressCacheEntry(
+    internal data class EpisodeProgressCacheEntry(
         val progress: Map<Pair<Int, Int>, WatchProgress>,
         val updatedAtMs: Long,
         val activityVersion: Long,
@@ -129,30 +130,30 @@ class TraktProgressService @Inject constructor(
         val hasCompletedSnapshot: Boolean
     )
 
-    private data class OptimisticProgressEntry(
+    internal data class OptimisticProgressEntry(
         val progress: WatchProgress,
         val expiresAtMs: Long
     )
 
-    private data class EpisodeMetadata(
+    internal data class EpisodeMetadata(
         val title: String?,
         val thumbnail: String?
     )
 
-    private data class WatchedShowIndexEntry(
+    internal data class WatchedShowIndexEntry(
         val contentId: String,
         val name: String,
         val lastWatchedAtMs: Long,
         val traktShowId: Int? = null
     )
 
-    private data class HiddenProgressSnapshot(
+    internal data class HiddenProgressSnapshot(
         val hiddenShowIds: Set<String> = emptySet(),
         val hiddenSeasonKeys: Set<String> = emptySet(),
         val droppedShowIds: Set<String> = emptySet()
     )
 
-    private data class ShowNextUpCacheEntry(
+    internal data class ShowNextUpCacheEntry(
         val entry: NextUpEntry?,
         val updatedAtMs: Long,
         val activityVersion: Long,
@@ -170,7 +171,7 @@ class TraktProgressService @Inject constructor(
         val weakDerivation: Boolean
     )
 
-    private data class CachedNextUpValidation(
+    internal data class CachedNextUpValidation(
         val result: TraktNextUpValidationResult,
         val updatedAtMs: Long,
         val ttlMs: Long
@@ -188,7 +189,7 @@ class TraktProgressService @Inject constructor(
         data object Failure : ShowNextUpFetchResult
     }
 
-    private data class ContentMetadata(
+    internal data class ContentMetadata(
         val name: String?,
         val poster: String?,
         val backdrop: String?,
@@ -196,25 +197,133 @@ class TraktProgressService @Inject constructor(
         val episodes: Map<Pair<Int, Int>, EpisodeMetadata>
     )
 
+    private data class TraktProgressRuntimeState(
+        val remoteProgress: MutableStateFlow<List<WatchProgress>> = MutableStateFlow(emptyList()),
+        val myShowsNextUp: MutableStateFlow<List<NextUpEntry>> = MutableStateFlow(emptyList()),
+        val myShowsNextUpAll: MutableStateFlow<List<NextUpEntry>> = MutableStateFlow(emptyList()),
+        val optimisticProgress: MutableStateFlow<Map<String, OptimisticProgressEntry>> = MutableStateFlow(emptyMap()),
+        val metadataState: MutableStateFlow<Map<String, ContentMetadata>> = MutableStateFlow(emptyMap()),
+        val watchedMoviesState: MutableStateFlow<Set<String>> = MutableStateFlow(emptySet()),
+        val watchedShowsState: MutableStateFlow<Map<String, WatchedShowIndexEntry>> = MutableStateFlow(emptyMap()),
+        val hiddenProgressState: MutableStateFlow<HiddenProgressSnapshot> = MutableStateFlow(HiddenProgressSnapshot()),
+        val episodeProgressState: MutableStateFlow<Map<String, EpisodeProgressCacheEntry>> = MutableStateFlow(emptyMap()),
+        val showNextUpState: MutableStateFlow<Map<String, ShowNextUpCacheEntry>> = MutableStateFlow(emptyMap()),
+        val nextUpValidationCache: MutableMap<String, CachedNextUpValidation> = mutableMapOf(),
+        val nextUpValidationBypassKeys: MutableSet<String> = mutableSetOf(),
+        val hasLoadedRemoteProgress: MutableStateFlow<Boolean> = MutableStateFlow(false),
+        val inFlightMetadataKeys: MutableSet<String> = mutableSetOf(),
+        val inFlightEpisodeProgressKeys: MutableSet<String> = mutableSetOf(),
+        val inFlightShowNextUpKeys: MutableSet<String> = mutableSetOf(),
+        val episodeProgressLastAttemptAtMs: MutableMap<String, Long> = mutableMapOf(),
+        val showNextUpLastAttemptAtMs: MutableMap<String, Long> = mutableMapOf(),
+        var cachedMoviesPlayback: TimedCache<List<TraktPlaybackItemDto>>? = null,
+        var cachedEpisodesPlayback: TimedCache<List<TraktPlaybackItemDto>>? = null,
+        var cachedUserStats: TimedCache<TraktCachedStats>? = null,
+        var forceRefreshUntilMs: Long = 0L,
+        var watchedMoviesUpdatedAtMs: Long = 0L,
+        var watchedMoviesLastAttemptAtMs: Long = 0L,
+        var watchedShowsUpdatedAtMs: Long = 0L,
+        var watchedShowsLastAttemptAtMs: Long = 0L,
+        var hiddenProgressUpdatedAtMs: Long = 0L,
+        var hiddenProgressLastAttemptAtMs: Long = 0L,
+        var hasLoadedWatchedMovies: Boolean = false,
+        var hasLoadedWatchedShows: Boolean = false,
+        var hasLoadedHiddenProgress: Boolean = false,
+        var watchedMoviesStale: Boolean = true,
+        var watchedShowsStale: Boolean = true,
+        var hiddenProgressStale: Boolean = true,
+        var lastFastSyncRequestMs: Long = 0L,
+        var lastKnownActivityFingerprint: String? = null,
+        var lastKnownMoviesWatchedAt: String? = null,
+        var lastKnownEpisodeActivityFingerprint: String? = null,
+        var lastKnownWatchedShowsFingerprint: String? = null,
+        var lastKnownHiddenProgressFingerprint: String? = null,
+        var lastManualRefreshSignalMs: Long = 0L,
+        val episodeProgressActivityVersion: AtomicLong = AtomicLong(0L),
+        val showNextUpActivityVersion: AtomicLong = AtomicLong(0L)
+    ) {
+        fun clear() {
+            remoteProgress.value = emptyList()
+            myShowsNextUp.value = emptyList()
+            myShowsNextUpAll.value = emptyList()
+            optimisticProgress.value = emptyMap()
+            metadataState.value = emptyMap()
+            watchedMoviesState.value = emptySet()
+            watchedShowsState.value = emptyMap()
+            hiddenProgressState.value = HiddenProgressSnapshot()
+            episodeProgressState.value = emptyMap()
+            showNextUpState.value = emptyMap()
+            nextUpValidationCache.clear()
+            nextUpValidationBypassKeys.clear()
+            hasLoadedRemoteProgress.value = false
+            inFlightMetadataKeys.clear()
+            inFlightEpisodeProgressKeys.clear()
+            inFlightShowNextUpKeys.clear()
+            episodeProgressLastAttemptAtMs.clear()
+            showNextUpLastAttemptAtMs.clear()
+            cachedMoviesPlayback = null
+            cachedEpisodesPlayback = null
+            cachedUserStats = null
+            forceRefreshUntilMs = 0L
+            watchedMoviesUpdatedAtMs = 0L
+            watchedMoviesLastAttemptAtMs = 0L
+            watchedShowsUpdatedAtMs = 0L
+            watchedShowsLastAttemptAtMs = 0L
+            hiddenProgressUpdatedAtMs = 0L
+            hiddenProgressLastAttemptAtMs = 0L
+            hasLoadedWatchedMovies = false
+            hasLoadedWatchedShows = false
+            hasLoadedHiddenProgress = false
+            watchedMoviesStale = true
+            watchedShowsStale = true
+            hiddenProgressStale = true
+            lastFastSyncRequestMs = 0L
+            lastKnownActivityFingerprint = null
+            lastKnownMoviesWatchedAt = null
+            lastKnownEpisodeActivityFingerprint = null
+            lastKnownWatchedShowsFingerprint = null
+            lastKnownHiddenProgressFingerprint = null
+            lastManualRefreshSignalMs = 0L
+            episodeProgressActivityVersion.set(0L)
+            showNextUpActivityVersion.set(0L)
+        }
+    }
+
+    private class TraktProgressRuntimeRegistry {
+        private val states = mutableMapOf<Int, TraktProgressRuntimeState>()
+
+        fun stateFor(session: TrackingRuntimeSession): TraktProgressRuntimeState {
+            require(session.provider == com.nexio.tv.domain.model.TrackingProvider.TRAKT) {
+                "TraktProgressRuntimeRegistry only accepts TRAKT sessions"
+            }
+            return states.getOrPut(session.profileId) { TraktProgressRuntimeState() }
+        }
+
+        fun clearProfile(profileId: Int) {
+            states[profileId]?.clear()
+        }
+    }
+
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
         Log.e(TAG, "Uncaught exception in TraktProgressService scope", throwable)
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
     private val refreshSignals = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val episodeVideoIdCache = mutableMapOf<String, String>()
-    private val remoteProgress = MutableStateFlow<List<WatchProgress>>(emptyList())
-    private val myShowsNextUp = MutableStateFlow<List<NextUpEntry>>(emptyList())
-    private val myShowsNextUpAll = MutableStateFlow<List<NextUpEntry>>(emptyList())
-    private val optimisticProgress = MutableStateFlow<Map<String, OptimisticProgressEntry>>(emptyMap())
-    private val metadataState = MutableStateFlow<Map<String, ContentMetadata>>(emptyMap())
-    private val watchedMoviesState = MutableStateFlow<Set<String>>(emptySet())
-    private val watchedShowsState = MutableStateFlow<Map<String, WatchedShowIndexEntry>>(emptyMap())
-    private val hiddenProgressState = MutableStateFlow(HiddenProgressSnapshot())
-    private val episodeProgressState = MutableStateFlow<Map<String, EpisodeProgressCacheEntry>>(emptyMap())
-    private val showNextUpState = MutableStateFlow<Map<String, ShowNextUpCacheEntry>>(emptyMap())
-    private val nextUpValidationCache = mutableMapOf<String, CachedNextUpValidation>()
-    private val nextUpValidationBypassKeys = mutableSetOf<String>()
-    private val hasLoadedRemoteProgress = MutableStateFlow(false)
+    private val runtimeRegistry = TraktProgressRuntimeRegistry()
+    private val remoteProgress get() = runtimeState().remoteProgress
+    private val myShowsNextUp get() = runtimeState().myShowsNextUp
+    private val myShowsNextUpAll get() = runtimeState().myShowsNextUpAll
+    private val optimisticProgress get() = runtimeState().optimisticProgress
+    private val metadataState get() = runtimeState().metadataState
+    private val watchedMoviesState get() = runtimeState().watchedMoviesState
+    private val watchedShowsState get() = runtimeState().watchedShowsState
+    private val hiddenProgressState get() = runtimeState().hiddenProgressState
+    private val episodeProgressState get() = runtimeState().episodeProgressState
+    private val showNextUpState get() = runtimeState().showNextUpState
+    private val nextUpValidationCache get() = runtimeState().nextUpValidationCache
+    private val nextUpValidationBypassKeys get() = runtimeState().nextUpValidationBypassKeys
+    private val hasLoadedRemoteProgress get() = runtimeState().hasLoadedRemoteProgress
     private val cacheMutex = Mutex()
     private val metadataMutex = Mutex()
     private val watchedMoviesMutex = Mutex()
@@ -222,43 +331,91 @@ class TraktProgressService @Inject constructor(
     private val hiddenProgressMutex = Mutex()
     private val episodeProgressMutex = Mutex()
     private val showNextUpMutex = Mutex()
-    private val inFlightMetadataKeys = mutableSetOf<String>()
-    private val inFlightEpisodeProgressKeys = mutableSetOf<String>()
-    private val inFlightShowNextUpKeys = mutableSetOf<String>()
-    private val episodeProgressLastAttemptAtMs = mutableMapOf<String, Long>()
-    private val showNextUpLastAttemptAtMs = mutableMapOf<String, Long>()
-    private var cachedMoviesPlayback: TimedCache<List<TraktPlaybackItemDto>>? = null
-    private var cachedEpisodesPlayback: TimedCache<List<TraktPlaybackItemDto>>? = null
-    private var cachedUserStats: TimedCache<TraktCachedStats>? = null
-    private var forceRefreshUntilMs: Long = 0L
-    private var watchedMoviesUpdatedAtMs: Long = 0L
-    private var watchedMoviesLastAttemptAtMs: Long = 0L
-    private var watchedShowsUpdatedAtMs: Long = 0L
-    private var watchedShowsLastAttemptAtMs: Long = 0L
-    private var hiddenProgressUpdatedAtMs: Long = 0L
-    private var hiddenProgressLastAttemptAtMs: Long = 0L
-    private var hasLoadedWatchedMovies: Boolean = false
-    private var hasLoadedWatchedShows: Boolean = false
-    private var hasLoadedHiddenProgress: Boolean = false
-    private var watchedMoviesStale: Boolean = true
-    private var watchedShowsStale: Boolean = true
-    private var hiddenProgressStale: Boolean = true
-    @Volatile
-    private var lastFastSyncRequestMs: Long = 0L
-    @Volatile
-    private var lastKnownActivityFingerprint: String? = null
-    @Volatile
-    private var lastKnownMoviesWatchedAt: String? = null
-    @Volatile
-    private var lastKnownEpisodeActivityFingerprint: String? = null
-    @Volatile
-    private var lastKnownWatchedShowsFingerprint: String? = null
-    @Volatile
-    private var lastKnownHiddenProgressFingerprint: String? = null
-    @Volatile
-    private var lastManualRefreshSignalMs: Long = 0L
-    private val episodeProgressActivityVersion = AtomicLong(0L)
-    private val showNextUpActivityVersion = AtomicLong(0L)
+    private val inFlightMetadataKeys get() = runtimeState().inFlightMetadataKeys
+    private val inFlightEpisodeProgressKeys get() = runtimeState().inFlightEpisodeProgressKeys
+    private val inFlightShowNextUpKeys get() = runtimeState().inFlightShowNextUpKeys
+    private val episodeProgressLastAttemptAtMs get() = runtimeState().episodeProgressLastAttemptAtMs
+    private val showNextUpLastAttemptAtMs get() = runtimeState().showNextUpLastAttemptAtMs
+    private var cachedMoviesPlayback: TimedCache<List<TraktPlaybackItemDto>>?
+        get() = runtimeState().cachedMoviesPlayback
+        set(value) { runtimeState().cachedMoviesPlayback = value }
+    private var cachedEpisodesPlayback: TimedCache<List<TraktPlaybackItemDto>>?
+        get() = runtimeState().cachedEpisodesPlayback
+        set(value) { runtimeState().cachedEpisodesPlayback = value }
+    private var cachedUserStats: TimedCache<TraktCachedStats>?
+        get() = runtimeState().cachedUserStats
+        set(value) { runtimeState().cachedUserStats = value }
+    private var forceRefreshUntilMs: Long
+        get() = runtimeState().forceRefreshUntilMs
+        set(value) { runtimeState().forceRefreshUntilMs = value }
+    private var watchedMoviesUpdatedAtMs: Long
+        get() = runtimeState().watchedMoviesUpdatedAtMs
+        set(value) { runtimeState().watchedMoviesUpdatedAtMs = value }
+    private var watchedMoviesLastAttemptAtMs: Long
+        get() = runtimeState().watchedMoviesLastAttemptAtMs
+        set(value) { runtimeState().watchedMoviesLastAttemptAtMs = value }
+    private var watchedShowsUpdatedAtMs: Long
+        get() = runtimeState().watchedShowsUpdatedAtMs
+        set(value) { runtimeState().watchedShowsUpdatedAtMs = value }
+    private var watchedShowsLastAttemptAtMs: Long
+        get() = runtimeState().watchedShowsLastAttemptAtMs
+        set(value) { runtimeState().watchedShowsLastAttemptAtMs = value }
+    private var hiddenProgressUpdatedAtMs: Long
+        get() = runtimeState().hiddenProgressUpdatedAtMs
+        set(value) { runtimeState().hiddenProgressUpdatedAtMs = value }
+    private var hiddenProgressLastAttemptAtMs: Long
+        get() = runtimeState().hiddenProgressLastAttemptAtMs
+        set(value) { runtimeState().hiddenProgressLastAttemptAtMs = value }
+    private var hasLoadedWatchedMovies: Boolean
+        get() = runtimeState().hasLoadedWatchedMovies
+        set(value) { runtimeState().hasLoadedWatchedMovies = value }
+    private var hasLoadedWatchedShows: Boolean
+        get() = runtimeState().hasLoadedWatchedShows
+        set(value) { runtimeState().hasLoadedWatchedShows = value }
+    private var hasLoadedHiddenProgress: Boolean
+        get() = runtimeState().hasLoadedHiddenProgress
+        set(value) { runtimeState().hasLoadedHiddenProgress = value }
+    private var watchedMoviesStale: Boolean
+        get() = runtimeState().watchedMoviesStale
+        set(value) { runtimeState().watchedMoviesStale = value }
+    private var watchedShowsStale: Boolean
+        get() = runtimeState().watchedShowsStale
+        set(value) { runtimeState().watchedShowsStale = value }
+    private var hiddenProgressStale: Boolean
+        get() = runtimeState().hiddenProgressStale
+        set(value) { runtimeState().hiddenProgressStale = value }
+    private var lastFastSyncRequestMs: Long
+        get() = runtimeState().lastFastSyncRequestMs
+        set(value) { runtimeState().lastFastSyncRequestMs = value }
+    private var lastKnownActivityFingerprint: String?
+        get() = runtimeState().lastKnownActivityFingerprint
+        set(value) { runtimeState().lastKnownActivityFingerprint = value }
+    private var lastKnownMoviesWatchedAt: String?
+        get() = runtimeState().lastKnownMoviesWatchedAt
+        set(value) { runtimeState().lastKnownMoviesWatchedAt = value }
+    private var lastKnownEpisodeActivityFingerprint: String?
+        get() = runtimeState().lastKnownEpisodeActivityFingerprint
+        set(value) { runtimeState().lastKnownEpisodeActivityFingerprint = value }
+    private var lastKnownWatchedShowsFingerprint: String?
+        get() = runtimeState().lastKnownWatchedShowsFingerprint
+        set(value) { runtimeState().lastKnownWatchedShowsFingerprint = value }
+    private var lastKnownHiddenProgressFingerprint: String?
+        get() = runtimeState().lastKnownHiddenProgressFingerprint
+        set(value) { runtimeState().lastKnownHiddenProgressFingerprint = value }
+    private var lastManualRefreshSignalMs: Long
+        get() = runtimeState().lastManualRefreshSignalMs
+        set(value) { runtimeState().lastManualRefreshSignalMs = value }
+    private val episodeProgressActivityVersion get() = runtimeState().episodeProgressActivityVersion
+    private val showNextUpActivityVersion get() = runtimeState().showNextUpActivityVersion
+
+    private fun runtimeState(): TraktProgressRuntimeState {
+        return runtimeRegistry.stateFor(
+            TrackingRuntimeSession(
+                provider = com.nexio.tv.domain.model.TrackingProvider.TRAKT,
+                profileId = traktAuthService.currentTraktProfileId()
+            )
+        )
+    }
 
     private val playbackCacheTtlMs = 30_000L
     private val userStatsCacheTtlMs = Long.MAX_VALUE

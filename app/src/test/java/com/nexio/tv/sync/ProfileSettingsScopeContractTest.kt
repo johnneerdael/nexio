@@ -528,4 +528,17 @@ class ProfileSettingsScopeContractTest {
         assertTrue(homePipelineSource.contains("val capturedGeneration = homeProfileGeneration"))
         assertTrue(homePipelineSource.contains("Skipping stale discovery snapshot"))
     }
+
+    @Test
+    fun `trakt progress runtime state is profile keyed`() {
+        val source = File("app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt").readText()
+
+        assertTrue(source.contains("class TraktProgressRuntimeRegistry"))
+        assertTrue(source.contains("private val states = mutableMapOf<Int, TraktProgressRuntimeState>()"))
+        assertTrue(source.contains("fun stateFor(session: TrackingRuntimeSession): TraktProgressRuntimeState"))
+        assertTrue(source.contains("fun clearProfile(profileId: Int)"))
+        assertTrue(source.contains("private fun runtimeState(): TraktProgressRuntimeState"))
+        assertTrue(!source.contains("private val remoteProgress = MutableStateFlow<List<WatchProgress>>(emptyList())"))
+        assertTrue(!source.contains("private val myShowsNextUp = MutableStateFlow<List<NextUpEntry>>(emptyList())"))
+    }
 }

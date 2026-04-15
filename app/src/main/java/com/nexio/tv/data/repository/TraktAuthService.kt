@@ -411,6 +411,8 @@ class TraktAuthService @Inject constructor(
         }
     }
 
+    fun currentTraktProfileId(): Int = currentRoutedProfileId()
+
     private fun isTokenExpiredOrExpiring(state: TraktAuthState): Boolean {
         val createdAt = state.createdAt ?: return true
         val expiresIn = state.expiresIn ?: return true
