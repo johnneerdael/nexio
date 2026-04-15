@@ -2,6 +2,7 @@ package com.nexio.tv.data.trakt.outbox
 
 import android.content.Context
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -116,16 +117,30 @@ class TraktMutationOutboxStore private constructor(
     private fun deserializeEnvelope(element: JsonElement?): TraktMutationEnvelope? {
         if (element == null || element.isJsonNull) return null
         return runCatching {
-            gson.fromJson(element, TraktMutationEnvelope::class.java)
+            val obj = element.asJsonObject
+            gson.fromJson(obj, TraktMutationEnvelope::class.java)
+                .copy(profileId = obj.intOrNull("profileId") ?: 1)
         }.getOrNull()
     }
 
     private fun TraktMutationOutboxSnapshot.toJson(): JsonObject {
         return JsonObject().apply {
-            add(JSON_ITEMS, gson.toJsonTree(items))
+            add(JSON_ITEMS, JsonArray().apply {
+                items.forEach { envelope ->
+                    val obj = gson.toJsonTree(envelope).asJsonObject
+                    obj.addProperty("profileId", envelope.profileId)
+                    add(obj)
+                }
+            })
             addProperty(JSON_NEXT_WRITABLE_AT_MS, nextWritableAtMs)
             addProperty(JSON_UPDATED_AT_MS, updatedAtMs)
         }
+    }
+
+    private fun JsonObject.intOrNull(key: String): Int? {
+        return runCatching {
+            get(key)?.takeIf { !it.isJsonNull }?.asInt
+        }.getOrNull()
     }
 
     private fun JsonObject.longOrZero(fieldName: String): Long {

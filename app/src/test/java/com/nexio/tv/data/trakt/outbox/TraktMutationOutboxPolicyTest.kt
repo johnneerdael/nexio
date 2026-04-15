@@ -45,6 +45,28 @@ class TraktMutationOutboxPolicyTest {
     }
 
     @Test
+    fun `mutations with same collapse key but different profiles do not collapse`() {
+        val first = sampleEnvelope(
+            id = "p1",
+            priority = TraktMutationPriorityBucket.SCROBBLE,
+            profileId = 1,
+            collapseKey = "scrobble:tt1375666"
+        )
+        val second = sampleEnvelope(
+            id = "p2",
+            priority = TraktMutationPriorityBucket.SCROBBLE,
+            profileId = 2,
+            collapseKey = "scrobble:tt1375666"
+        )
+
+        val afterFirst = policy.enqueue(TraktMutationOutboxSnapshot(), first, 1_000L)
+        val afterSecond = policy.enqueue(afterFirst, second, 1_001L)
+
+        assertEquals(2, afterSecond.items.count { it.state == TraktMutationLifecycleState.QUEUED })
+    }
+
+
+    @Test
     fun `lease selection yields lower priority bucket after scrobble burst`() {
         var snapshot = TraktMutationOutboxSnapshot(
             items = listOf(
@@ -224,13 +246,15 @@ class TraktMutationOutboxPolicyTest {
         id: String,
         priority: TraktMutationPriorityBucket,
         collapseKey: String? = null,
+        profileId: Int = 1,
         createdAtMs: Long = 10L,
         updatedAtMs: Long = 10L
     ): TraktMutationEnvelope {
         return TraktMutationEnvelope(
             id = id,
+            profileId = profileId,
             adapterKey = "progress",
-            mutationKind = "mutation:$id",
+            mutationKind = "progress.history",
             priority = priority,
             collapseKey = collapseKey,
             payload = JsonObject(),

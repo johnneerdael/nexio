@@ -218,7 +218,10 @@ class TraktMutationOutboxPolicy(
             if (
                 existing.isQueueCollapsible() &&
                 existing.adapterKey == incoming.adapterKey &&
-                existing.collapseKey == collapseKey
+                existing.mutationKind == incoming.mutationKind &&
+                existing.collapseKey == collapseKey &&
+                existing.priority == incoming.priority &&
+                existing.profileId == incoming.profileId
             ) {
                 existing.copy(
                     state = TraktMutationLifecycleState.COLLAPSED,
