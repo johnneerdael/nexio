@@ -11,6 +11,7 @@ import org.robolectric.RobolectricTestRunner
 class ProfileSettingsScopeContractTest {
     private val scopeDoc = File("docs/architecture/profile-settings-scope.md")
     private val accountSettingsSyncService = File("app/src/main/java/com/nexio/tv/core/sync/AccountSettingsSyncService.kt")
+    private val profileWebSyncService = File("app/src/main/java/com/nexio/tv/core/sync/ProfileWebSyncService.kt")
     private val homeCatalogPipeline = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt")
 
     private fun doc(): String {
@@ -297,5 +298,23 @@ class ProfileSettingsScopeContractTest {
             "Trakt Up Next must not be described from stale UI state after profile auth is cleared",
             !source.contains("hasTraktUpNextItems = currentState.traktUpNextItems.isNotEmpty()")
         )
+    }
+
+    @Test
+    fun `synthetic trakt and simkl rows include enabled catalogs missing from saved order`() {
+        val source = homeCatalogPipeline.readText()
+
+        assertTrue(source.contains("val orderedBuiltInKeys = prefs.catalogOrder.filter { it in builtInRows }"))
+        assertTrue(source.contains("val remainingBuiltInKeys = builtInRows.keys.filterNot { it in orderedBuiltInKeys }"))
+        assertTrue(source.contains("(orderedBuiltInKeys + remainingBuiltInKeys).mapNotNull"))
+    }
+
+    @Test
+    fun `profile web auth sync does not own primary profile integrations`() {
+        val source = profileWebSyncService.readText()
+
+        assertTrue(source.contains("private const val PRIMARY_PROFILE_INDEX = 1"))
+        assertTrue(source.contains("if (profileIndex == PRIMARY_PROFILE_INDEX)"))
+        assertTrue(source.contains("account sync owns legacy integrations"))
     }
 }

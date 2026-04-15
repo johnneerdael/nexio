@@ -2571,7 +2571,9 @@ private fun buildSyntheticTraktRows(
         )
     }
 
-    val orderedBuiltIns = prefs.catalogOrder.mapNotNull { id ->
+    val orderedBuiltInKeys = prefs.catalogOrder.filter { it in builtInRows }
+    val remainingBuiltInKeys = builtInRows.keys.filterNot { it in orderedBuiltInKeys }
+    val orderedBuiltIns = (orderedBuiltInKeys + remainingBuiltInKeys).mapNotNull { id ->
         builtInRows[id]?.let { row -> SyntheticCatalogOrderGroup(orderKey = id, rows = listOf(row)) }
     }
     val selectedCustomKeys = prefs.selectedPopularListKeys.toSet()
@@ -2630,7 +2632,9 @@ private fun buildSyntheticSimklRows(
             items = items
         )
     }
-    return prefs.catalogOrder.mapNotNull { id ->
+    val orderedBuiltInKeys = prefs.catalogOrder.filter { it in builtInRows }
+    val remainingBuiltInKeys = builtInRows.keys.filterNot { it in orderedBuiltInKeys }
+    return (orderedBuiltInKeys + remainingBuiltInKeys).mapNotNull { id ->
         builtInRows[id]?.let { row -> SyntheticCatalogOrderGroup(orderKey = id, rows = listOf(row)) }
     }
 }
