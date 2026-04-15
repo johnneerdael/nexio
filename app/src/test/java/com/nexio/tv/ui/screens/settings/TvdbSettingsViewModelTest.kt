@@ -3,6 +3,8 @@ package com.nexio.tv.ui.screens.settings
 import com.nexio.tv.core.tvdb.TvdbAuthResult
 import com.nexio.tv.core.tvdb.TvdbAuthService
 import com.nexio.tv.core.tvdb.TvdbValidationStatus
+import com.nexio.tv.data.local.TvdbDiagnosticsDataStore
+import com.nexio.tv.data.local.TvdbDiagnosticsSnapshot
 import com.nexio.tv.data.local.TvdbSettings
 import com.nexio.tv.data.local.TvdbSettingsDataStore
 import io.mockk.coEvery
@@ -14,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -23,6 +26,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -204,5 +208,34 @@ class TvdbSettingsViewModelTest {
         advanceUntilIdle()
 
         assertEquals("Not set", viewModel.uiState.value.credentialDisplayValue)
+    }
+
+    @Test
+    fun `settings status shows invalid credentials stale cache and refresh failures`() = runTest(dispatcher) {
+        val settingsFlow = MutableStateFlow(
+            TvdbSettings(enabled = true, apiKey = "tvdb-key", validationStatus = TvdbValidationStatus.VALID)
+        )
+        val dataStore = mockk<TvdbSettingsDataStore>(relaxed = true)
+        val authService = mockk<TvdbAuthService>()
+        every { dataStore.settings } returns settingsFlow
+
+        val diagnosticsDataStore = mockk<TvdbDiagnosticsDataStore>()
+        every { diagnosticsDataStore.snapshot } returns flowOf(
+            TvdbDiagnosticsSnapshot(
+                lastInvalidCredentialStatus = "invalid_credentials",
+                lastStaleCacheStatus = "stale_cache_served",
+                lastUpdateRefreshStatus = "update_refresh_failed",
+                lastReferenceRefreshStatus = "reference_refresh_failed"
+            )
+        )
+
+        val viewModel = TvdbSettingsViewModel(
+            dataStore = dataStore,
+            authService = authService,
+            diagnosticsDataStore = diagnosticsDataStore
+        )
+        advanceUntilIdle()
+
+        assertNotNull(viewModel.uiState.value.tvdbStatusLine)
     }
 }
