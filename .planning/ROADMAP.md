@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 6: TVDB Foundation and Identity** - TVDB settings, API validation, auth token handling, remote-ID matching, fallback diagnostics, and first-pass metadata caching (completed 2026-04-15)
 - [x] **Phase 7: TVDB Provider Replacement** - Replace TMDB TV metadata paths with TVDB-backed TV detail, episode, artwork, poster precedence, and settings-facing provider rules (completed 2026-04-15)
-- [ ] **Phase 8: Exact Continue Watching Air Timing** - Compute device-local TVDB airing instants, gate future next-up rows, and re-emit when episodes become available
+- [x] **Phase 8: Exact Continue Watching Air Timing** - Compute device-local TVDB airing instants, gate future next-up rows, and re-emit when episodes become available (completed 2026-04-15)
 - [ ] **Phase 9: TVDB Advanced TV Surfaces** - Preserve TVDB season ordering and replace remaining TMDB TV surfaces such as trailers, cast, companies, networks, genres, and content ratings
 - [ ] **Phase 10: TVDB Reliability, Updates, and Diagnostics** - Update-aware cache invalidation, heavily cached reference data, graceful failure behavior, diagnostics, and documentation
 
@@ -124,7 +124,7 @@ Note: Phase 9 can begin after Phase 7 while Phase 8 is being validated, but Phas
 |-------|----------------|--------|-----------|
 | 6. TVDB Foundation and Identity | 5/5 | Complete | 2026-04-15 |
 | 7. TVDB Provider Replacement | 8/8 | Complete | 2026-04-15 |
-| 8. Exact Continue Watching Air Timing | 0/? | Planned | - |
+| 8. Exact Continue Watching Air Timing | 6/6 | Complete | 2026-04-15 |
 | 9. TVDB Advanced TV Surfaces | 0/? | Planned | - |
 | 10. TVDB Reliability, Updates, and Diagnostics | 0/? | Planned | - |
 
@@ -144,12 +144,12 @@ Note: Phase 9 can begin after Phase 7 while Phase 8 is being validated, but Phas
 | META-02 | Phase 7 | Verified |
 | META-04 | Phase 7 | Verified |
 | UX-01 | Phase 7 | Verified |
-| AIR-01 | Phase 8 | Pending |
-| AIR-02 | Phase 8 | Pending |
-| AIR-03 | Phase 8 | Pending |
-| AIR-04 | Phase 8 | Pending |
-| AIR-05 | Phase 8 | Pending |
-| AIR-06 | Phase 8 | Pending |
+| AIR-01 | Phase 8 | Verified |
+| AIR-02 | Phase 8 | Verified |
+| AIR-03 | Phase 8 | Verified |
+| AIR-04 | Phase 8 | Verified |
+| AIR-05 | Phase 8 | Verified |
+| AIR-06 | Phase 8 | Verified |
 | META-03 | Phase 9 | Pending |
 | META-05 | Phase 9 | Pending |
 | UX-02 | Phase 9 | Pending |

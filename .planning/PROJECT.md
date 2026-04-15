@@ -38,15 +38,13 @@ Reliable, high-quality streaming playback with smart source selection and seamle
 - TMDB, MDBList, IMDB Ratings, OMDB, RPDB integrations
 - TVDB foundation settings, API validation, auth token handling, account sync support, remote-ID identity matching, fallback diagnostics, and first-pass token/identity caching (validated in Phase 6: TVDB Foundation and Identity)
 - TVDB provider replacement for Phase 7 surfaces: detail, episodes, Continue Watching metadata/runtime, Home focused/hero/catalog refresh, TV artwork, poster-ratings poster precedence, provider diagnostics, and settings provider-precedence copy (validated in Phase 7: TVDB Provider Replacement)
+- Exact Continue Watching air-time gating using TVDB aired date plus series airsTime, device-local timezone conversion, withheld row persistence, Android TV feed gating, and durable alarm-backed re-evaluation with retry behavior (validated in Phase 8: Exact Continue Watching Air Timing)
 
 ### Active
 
 <!-- Current scope. Building toward these. -->
 
 - [ ] TVDB-backed trailer, related-content, credits/cast, network, genre, and content-rating metadata
-- [ ] Exact Continue Watching air-time gating using TVDB `airsTime` plus episode aired date
-- [ ] Device-local timezone conversion for TVDB availability decisions
-- [ ] Scheduled Continue Watching re-evaluation at the computed TVDB availability instant
 - [ ] TVDB update-aware metadata cache invalidation and heavy-cache reference data strategy
 - [ ] Diagnostics for provider precedence, fallback, and missing precise air times
 
@@ -124,4 +122,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-15 after completing Phase 7 TVDB Provider Replacement*
+*Last updated: 2026-04-15 after completing Phase 8 Exact Continue Watching Air Timing*
