@@ -165,21 +165,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
     }
 
     fun rescheduleAirTimeAlarmFromSnapshot() {
-        val scheduledReemit = rawSnapshotState.value.scheduledReemit
-        val nowMs = System.currentTimeMillis()
-        if (scheduledReemit.any { entry ->
-                val exactMs = entry.tvdbAvailabilityInstantMs
-                exactMs != null && exactMs > 0L && exactMs <= nowMs
-            }
-        ) {
-            reemitJob?.cancel()
-            reemitJob = null
-            currentTimerTargetMs = null
-            airScheduler.cancel()
-            launchAirTimeRefreshWithRetry()
-            return
-        }
-        scheduleReemitIfNeeded(scheduledReemit, nowMs)
+        handleScheduledReemit(rawSnapshotState.value.scheduledReemit, System.currentTimeMillis())
     }
 
     private suspend fun loadPersistedSnapshotForActiveProfile(clearWhenMissing: Boolean) {
@@ -197,7 +183,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         rawSnapshotState.value = normalized
         snapshotState.value = normalized
         lastRefreshRequestMs = normalized.updatedAtMs
-        scheduleReemitIfNeeded(normalized.scheduledReemit, System.currentTimeMillis())
+        handleScheduledReemit(normalized.scheduledReemit, System.currentTimeMillis())
     }
 
     fun observeSnapshot(): Flow<ContinueWatchingSnapshot> {
@@ -633,6 +619,29 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private suspend fun updateSnapshot(snapshot: ContinueWatchingSnapshot) {
         persistRawSnapshot(snapshot)
         scheduleReemitIfNeeded(snapshot.scheduledReemit, snapshot.updatedAtMs)
+    }
+
+    private fun handleScheduledReemit(
+        scheduledReemit: List<TrackingNextUpEntry>,
+        nowMs: Long
+    ) {
+        if (AirDateGate.hasDuePending(
+                entries = scheduledReemit,
+                firstAiredMsSelector = { it.firstAiredMs },
+                availabilityInstantMsSelector = { it.tvdbAvailabilityInstantMs },
+                tmdbAirDateSelector = { it.firstAired },
+                nowMs = nowMs
+            )
+        ) {
+            reemitJob?.cancel()
+            reemitJob = null
+            currentTimerTargetMs = null
+            airScheduler.cancel()
+            launchAirTimeRefreshWithRetry()
+            return
+        }
+
+        scheduleReemitIfNeeded(scheduledReemit, nowMs)
     }
 
     private fun scheduleReemitIfNeeded(
