@@ -84,6 +84,12 @@ class AccountConfigSyncContractTest {
                     showPreviewButton = true
                 ),
                 tmdb = TmdbSyncSettings(enabled = true, useArtwork = false),
+                tvdb = TvdbSyncSettings(
+                    enabled = true,
+                    configured = true,
+                    validationStatus = "VALID",
+                    lastFailure = ""
+                ),
                 omdb = OmdbSyncSettings(enabled = true),
                 imdb = ImdbSyncSettings(enabled = true, baseUrl = "https://custom.imdb.example"),
                 mdblist = MDBListSyncSettings(enabled = true, showImdb = false),
@@ -151,6 +157,13 @@ class AccountConfigSyncContractTest {
         assertEquals("\"openai/gpt-5.2\"", subtitleTranslation["model"].toString())
         assertEquals("\"https://openrouter.ai/api/v1\"", subtitleTranslation["baseUrl"].toString())
         assertEquals(null, json["integrations"]?.jsonObject?.get("gemini")?.jsonObject?.get("enabled"))
+        val tvdb = json["integrations"]?.jsonObject?.get("tvdb")?.jsonObject
+        assertEquals("true", tvdb?.get("enabled").toString())
+        assertEquals("true", tvdb?.get("configured").toString())
+        assertEquals("\"VALID\"", tvdb?.get("validationStatus").toString())
+        assertFalse(tvdb?.containsKey("apiKey") == true)
+        assertFalse(tvdb?.containsKey("pin") == true)
+        assertFalse(tvdb?.containsKey("token") == true)
         assertEquals(
             "https://custom.imdb.example",
             json["integrations"]?.jsonObject?.get("imdb")?.jsonObject?.get("baseUrl")?.toString()?.trim('"')
@@ -221,7 +234,7 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
-    fun `tvdb public sync serializes enabled configured validation status and last failure without apiKey pin or token`() {
+    fun `tvdb public sync omits credential fields`() {
         val payload = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(
                 tvdb = TvdbSyncSettings(
@@ -256,8 +269,6 @@ class AccountConfigSyncContractTest {
         assertFalse(tvdb.containsKey("apiKey"))
         assertFalse(tvdb.containsKey("pin"))
         assertFalse(tvdb.containsKey("token"))
-        assertEquals("tvdb_api_key", TVDB_ACCOUNT_SECRET_TYPE)
-        assertEquals("integration:tvdb", TVDB_ACCOUNT_SECRET_REF)
     }
 
     @Test
