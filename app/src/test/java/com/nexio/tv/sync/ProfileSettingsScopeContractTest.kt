@@ -16,6 +16,7 @@ class ProfileSettingsScopeContractTest {
     private val profileBoundary = File("app/src/main/java/com/nexio/tv/core/profile/ProfileBoundary.kt")
     private val profileModeRouter = File("app/src/main/java/com/nexio/tv/core/profile/ProfileModeRouter.kt")
     private val trackingProviderStateService = File("app/src/main/java/com/nexio/tv/data/repository/TrackingProviderStateService.kt")
+    private val trackingAuthSession = File("app/src/main/java/com/nexio/tv/data/repository/TrackingAuthSession.kt")
     private val traktAuthService = File("app/src/main/java/com/nexio/tv/data/repository/TraktAuthService.kt")
     private val simklAuthService = File("app/src/main/java/com/nexio/tv/data/repository/SimklAuthService.kt")
     private val homeCatalogPipeline = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt")
@@ -443,8 +444,28 @@ class ProfileSettingsScopeContractTest {
         assertTrue(simklSource.contains("ProfileModeRoute.DefaultLegacyRoute -> profileModeRouter.defaultLegacyProfileId()"))
         assertTrue(simklSource.contains("profileBoundary.authRoute(route, TrackingProvider.SIMKL).profileId"))
         assertTrue(simklSource.contains("ProfileModeRoute.InvalidProfileRoute -> error(\"Invalid active profile id ${'$'}{route.profileId}\")"))
-        assertTrue(simklSource.contains("simklAuthDataStore.clearAuth(currentRoutedProfileId())"))
+        assertTrue(simklSource.contains("simklAuthDataStore.clearAuth(currentAuthSession().profileId)"))
         assertTrue(simklSource.contains("simklAuthDataStore.saveAccessToken(body.accessToken, profileId = profileId)"))
+    }
+
+    @Test
+    fun `tracking auth services capture routed session once per operation`() {
+        val sessionSource = trackingAuthSession.readText()
+        val traktSource = traktAuthService.readText()
+        val simklSource = simklAuthService.readText()
+
+        assertTrue(sessionSource.contains("data class TrackingAuthSession"))
+        assertTrue(sessionSource.contains("val profileId: Int"))
+        assertTrue(traktSource.contains("private fun currentAuthSession(): TrackingAuthSession"))
+        assertTrue(traktSource.contains("getCurrentAuthState(session: TrackingAuthSession)"))
+        assertTrue(traktSource.contains("fetchUserSettings(session: TrackingAuthSession)"))
+        assertTrue(traktSource.contains("executeAuthorizedRequest("))
+        assertTrue(traktSource.contains("session: TrackingAuthSession"))
+        assertTrue(simklSource.contains("private fun currentAuthSession(): TrackingAuthSession"))
+        assertTrue(simklSource.contains("getCurrentAuthState(session: TrackingAuthSession)"))
+        assertTrue(simklSource.contains("fetchUserSettings(session: TrackingAuthSession)"))
+        assertTrue(simklSource.contains("executeAuthorizedRequest("))
+        assertTrue(simklSource.contains("session: TrackingAuthSession"))
     }
 
     @Test
