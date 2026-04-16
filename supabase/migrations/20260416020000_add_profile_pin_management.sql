@@ -302,7 +302,7 @@ BEGIN
   FOR UPDATE;
 
   IF NOT FOUND THEN
-    RETURN QUERY SELECT true, 0, false;
+    RETURN QUERY SELECT false, 0, true;
     RETURN;
   END IF;
 

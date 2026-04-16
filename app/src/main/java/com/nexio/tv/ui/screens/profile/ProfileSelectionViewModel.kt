@@ -8,10 +8,13 @@ import com.nexio.tv.domain.model.UserProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -24,10 +27,13 @@ class ProfileSelectionViewModel @Inject constructor(
     private val profileSyncService: ProfileSyncService
 ) : ViewModel() {
     private val pinVerificationLock = Any()
+    private val _pinUnlockedProfileId = MutableSharedFlow<Int>(extraBufferCapacity = 1)
 
     val profiles: StateFlow<List<UserProfile>> = profileManager.profiles
 
     val activeProfileId: StateFlow<Int> = profileManager.activeProfileId
+
+    val pinUnlockedProfileId: SharedFlow<Int> = _pinUnlockedProfileId.asSharedFlow()
 
     // Derive PIN-enabled map directly from profiles (no Supabase in Phase 3, per Pitfall 5)
     val profilePinEnabled: StateFlow<Map<Int, Boolean>> = profileManager.profiles
@@ -64,6 +70,7 @@ class ProfileSelectionViewModel @Inject constructor(
             if (pinResult.unlocked) {
                 resetPinState()
                 profileManager.setActiveProfile(profileId)
+                _pinUnlockedProfileId.emit(profileId)
             } else if (pinResult.retryAfterSeconds > 0) {
                 _pinState.update {
                     it.copy(
