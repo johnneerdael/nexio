@@ -18,6 +18,8 @@ import com.nexio.tv.data.remote.api.TvdbSeriesEpisodesResponse
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedResponse
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
 import com.nexio.tv.data.remote.api.TvdbStatusRecord
+import com.nexio.tv.data.remote.api.TvdbTranslationRecord
+import com.nexio.tv.data.remote.api.TvdbTranslationResponse
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.PosterRatingsProvider
 import io.mockk.Runs
@@ -39,12 +41,16 @@ import retrofit2.http.GET
 class TvdbMetadataServiceTest {
 
     @Test
-    fun `tvdb api exposes extended series and season episodes endpoints`() {
+    fun `tvdb api exposes extended series episodes and translation endpoints`() {
         val extended = TvdbApi::class.java.methods.first { it.name == "getSeriesExtended" }
         val episodes = TvdbApi::class.java.methods.first { it.name == "getSeriesEpisodes" }
+        val seriesTranslation = TvdbApi::class.java.methods.first { it.name == "getSeriesTranslation" }
+        val translatedEpisodes = TvdbApi::class.java.methods.first { it.name == "getSeriesEpisodesTranslated" }
 
         assertEquals("series/{id}/extended", extended.getAnnotation(GET::class.java)?.value)
         assertEquals("series/{id}/episodes/{seasonType}", episodes.getAnnotation(GET::class.java)?.value)
+        assertEquals("series/{id}/translations/{language}", seriesTranslation.getAnnotation(GET::class.java)?.value)
+        assertEquals("series/{id}/episodes/{seasonType}/{language}", translatedEpisodes.getAnnotation(GET::class.java)?.value)
     }
 
     @Test
@@ -181,6 +187,72 @@ class TvdbMetadataServiceTest {
     }
 
     @Test
+    fun `series enrichment overlays tvdb translated overview for requested app language`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+
+        coEvery {
+            tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, null, false)
+        } returns Response.success(
+            TvdbSeriesExtendedResponse(
+                data = fullSeriesRecord().copy(
+                    name = "Game of Thrones",
+                    overview = "English TVDB overview"
+                )
+            )
+        )
+        coEvery {
+            tvdbApi.getSeriesTranslation("Bearer tvdb-token", 121361, "nld")
+        } returns Response.success(
+            TvdbTranslationResponse(
+                data = TvdbTranslationRecord(
+                    language = "nld",
+                    name = "Dutch title from translation endpoint",
+                    overview = "Nederlandse TVDB beschrijving"
+                )
+            )
+        )
+
+        val enrichment = service.fetchSeriesEnrichment(identity, language = "nl")
+
+        assertNotNull(enrichment)
+        assertEquals("Game of Thrones", enrichment?.localizedTitle)
+        assertEquals("Nederlandse TVDB beschrijving", enrichment?.description)
+        coVerify(exactly = 1) { tvdbApi.getSeriesTranslation("Bearer tvdb-token", 121361, "nld") }
+    }
+
+    @Test
+    fun `series enrichment keeps base overview when tvdb translation is missing`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+
+        coEvery {
+            tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, null, false)
+        } returns Response.success(
+            TvdbSeriesExtendedResponse(
+                data = fullSeriesRecord().copy(
+                    name = "Game of Thrones",
+                    overview = "English TVDB overview"
+                )
+            )
+        )
+        coEvery {
+            tvdbApi.getSeriesTranslation("Bearer tvdb-token", 121361, "nld")
+        } returns Response.error(
+            404,
+            "{}".toResponseBody("application/json".toMediaType())
+        )
+
+        val enrichment = service.fetchSeriesEnrichment(identity, language = "nl")
+
+        assertNotNull(enrichment)
+        assertEquals("Game of Thrones", enrichment?.localizedTitle)
+        assertEquals("English TVDB overview", enrichment?.description)
+    }
+
+    @Test
     fun `series mapping preserves timing source fields`() = runTest {
         val tvdbApi = mockk<TvdbApi>()
         val service = tvdbService(tvdbApi)
@@ -218,6 +290,57 @@ class TvdbMetadataServiceTest {
         assertEquals(62, episode?.runtimeMinutes)
         assertEquals(1, episode?.absoluteNumber)
         assertEquals(4444, episode?.linkedMovieTvdbId)
+    }
+
+    @Test
+    fun `fetch episode enrichment overlays only translated episode overviews`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+
+        coEvery {
+            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+        } returns Response.success(
+            TvdbSeriesEpisodesResponse(
+                data = TvdbSeriesEpisodesData(
+                    episodes = listOf(
+                        episodeRecord().copy(
+                            id = 3254641,
+                            name = "Winter Is Coming",
+                            overview = "English episode overview",
+                            runtime = 62
+                        )
+                    )
+                )
+            )
+        )
+        coEvery {
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 121361, "default", "nld", 0, 1, null, null)
+        } returns Response.success(
+            TvdbSeriesEpisodesResponse(
+                data = TvdbSeriesEpisodesData(
+                    episodes = listOf(
+                        episodeRecord().copy(
+                            id = 3254641,
+                            name = "Dutch title from translation endpoint",
+                            overview = "Nederlandse afleveringstekst",
+                            runtime = 99
+                        )
+                    )
+                )
+            )
+        )
+
+        val episodes = service.fetchEpisodeEnrichment(identity, seasonNumbers = listOf(1), language = "nl")
+
+        val episode = episodes[1 to 1]
+        assertNotNull(episode)
+        assertEquals("Winter Is Coming", episode?.title)
+        assertEquals("Nederlandse afleveringstekst", episode?.overview)
+        assertEquals(62, episode?.runtimeMinutes)
+        coVerify(exactly = 1) {
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 121361, "default", "nld", 0, 1, null, null)
+        }
     }
 
     @Test
