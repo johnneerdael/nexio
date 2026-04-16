@@ -531,6 +531,16 @@ class MetadataDiskCacheStore @Inject constructor(
         return removePrefixedEntries("$TVDB_REF_PREFIX${refType.trim().lowercase()}::")
     }
 
+    fun clearAll() {
+        pendingWrites.clear()
+        runCatching {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().clear().commit()
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to clear all metadata cache entries", error)
+        }
+    }
+
     private fun removePrefixedEntries(prefix: String): Int {
         return runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

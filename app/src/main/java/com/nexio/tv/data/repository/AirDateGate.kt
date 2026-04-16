@@ -81,10 +81,12 @@ internal object AirDateGate {
             .minOrNull()
     }
 
-    /** Parses an ISO date string (YYYY-MM-DD) to epoch milliseconds at midnight UTC. */
+    /** Parses an ISO date string (YYYY-MM-DD) or ISO 8601 timestamp to epoch milliseconds at midnight UTC. */
     private fun parseDateToEpochMs(dateStr: String): Long? {
         return try {
-            val parts = dateStr.split('-')
+            // Strip time component from ISO 8601 timestamps (e.g. "2026-04-21T04:00:00.000Z" → "2026-04-21")
+            val datePart = dateStr.substringBefore('T')
+            val parts = datePart.split('-')
             if (parts.size != 3) return null
             val year = parts[0].toInt()
             val month = parts[1].toInt() - 1

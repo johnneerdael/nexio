@@ -52,8 +52,6 @@ data class TvdbDiagnosticsSnapshot(
 fun TvdbDiagnosticsSnapshot.settingsStatusLine(): String? = when {
     lastInvalidCredentialStatus != null -> "TVDB credentials need attention"
     lastStaleCacheStatus != null -> "TVDB served cached data while refresh is unavailable"
-    lastUpdateRefreshStatus?.contains("failed") == true -> "TVDB cache refresh failed"
-    lastReferenceRefreshStatus?.contains("failed") == true -> "TVDB reference refresh failed"
     else -> null
 }
 
