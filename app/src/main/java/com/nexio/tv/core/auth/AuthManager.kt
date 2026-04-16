@@ -133,11 +133,7 @@ class AuthManager @Inject constructor(
             cachedEffectiveUserId = null
             cachedEffectiveUserSourceUserId = null
         }
-        _authState.value = if (email.isNullOrBlank()) {
-            AuthState.SignedOut
-        } else {
-            AuthState.FullAccount(userId = userId, email = email)
-        }
+        _authState.value = fullAccountStateForSupabaseUser(userId = userId, email = email)
     }
 
     /**
@@ -368,6 +364,15 @@ class AuthManager @Inject constructor(
             Result.failure(e)
         }
     }
+}
+
+internal fun fullAccountStateForSupabaseUser(userId: String, email: String?): AuthState {
+    val normalizedUserId = userId.trim()
+    if (normalizedUserId.isBlank()) return AuthState.SignedOut
+    return AuthState.FullAccount(
+        userId = normalizedUserId,
+        email = email?.takeIf { it.isNotBlank() } ?: normalizedUserId
+    )
 }
 
 private fun Throwable.isJwtExpiredError(): Boolean {
