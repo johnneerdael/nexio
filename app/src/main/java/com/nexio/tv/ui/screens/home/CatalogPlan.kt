@@ -5,6 +5,7 @@ import com.nexio.tv.data.local.SimklCatalogIds
 import com.nexio.tv.data.local.SimklCatalogPreferences
 import com.nexio.tv.data.local.TraktCatalogIds
 import com.nexio.tv.data.local.TraktCatalogPreferences
+import com.nexio.tv.data.local.PersistedSyntheticCatalogGroup
 import com.nexio.tv.data.repository.MDBListCustomCatalog
 import com.nexio.tv.data.repository.MDBListDiscoverySnapshot
 import com.nexio.tv.data.repository.SimklDiscoverySnapshot
@@ -29,6 +30,20 @@ internal data class PlannedCatalogRail(
     fun toLoadingCatalogRow(): CatalogRow = descriptor.toLoadingCatalogRow()
 
     fun toPopulatedRows(): List<CatalogRow> = populatedRows
+}
+
+internal fun CatalogPlan.toPersistedSyntheticCatalogGroups(): List<PersistedSyntheticCatalogGroup> {
+    return rails.mapNotNull { rail ->
+        val rows = rail.toPopulatedRows()
+        if (rows.isEmpty()) {
+            null
+        } else {
+            PersistedSyntheticCatalogGroup(
+                orderKey = rail.orderKey,
+                rows = rows
+            )
+        }
+    }
 }
 
 internal fun buildConfiguredCatalogPlan(

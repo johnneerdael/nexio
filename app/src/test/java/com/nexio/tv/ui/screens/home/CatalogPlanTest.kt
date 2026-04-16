@@ -124,6 +124,37 @@ class CatalogPlanTest {
         assertEquals(1, populated.items.size)
     }
 
+    @Test
+    fun `populated trakt rails become synthetic groups for immediate restore`() {
+        val plan = buildConfiguredCatalogPlan(
+            addons = emptyList(),
+            disabledHomeCatalogKeys = emptySet(),
+            availableAddonOrderKeys = emptySet(),
+            traktPrefs = TraktCatalogPreferences(
+                enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES),
+                catalogOrder = listOf(TraktCatalogIds.TRENDING_MOVIES)
+            ),
+            traktSnapshot = TraktDiscoverySnapshot(
+                trendingMovieItems = listOf(sampleItem()),
+                updatedAtMs = 1L
+            ),
+            hasTraktUpNextItems = false,
+            simklPrefs = SimklCatalogPreferences(),
+            simklSnapshot = SimklDiscoverySnapshot(),
+            mdbPrefs = MDBListCatalogPreferences(),
+            mdbSnapshot = MDBListDiscoverySnapshot()
+        )
+
+        val groups = plan.toPersistedSyntheticCatalogGroups()
+
+        assertEquals(listOf(TraktCatalogIds.TRENDING_MOVIES), groups.map { it.orderKey })
+        val row = groups.single().rows.single()
+        assertEquals(TRAKT_HOME_ADDON_ID, row.addonId)
+        assertEquals(TraktCatalogIds.TRENDING_MOVIES, row.catalogId)
+        assertFalse(row.isLoading)
+        assertEquals(1, row.items.size)
+    }
+
     private fun sampleItem(): MetaPreview {
         return MetaPreview(
             id = "tt1234567",

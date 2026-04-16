@@ -1781,6 +1781,9 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             .filterNot { isSyntheticHomeCatalogDisabled(it.orderKey, disabledHomeCatalogKeys) }
         val syntheticMDBListGroups = persistedMDBListSyntheticGroups.toSyntheticCatalogOrderGroups()
             .filterNot { isSyntheticHomeCatalogDisabled(it.orderKey, disabledHomeCatalogKeys) }
+        val liveSyntheticGroups = catalogPlan.toPersistedSyntheticCatalogGroups()
+            .toSyntheticCatalogOrderGroups()
+            .filterNot { isSyntheticHomeCatalogDisabled(it.orderKey, disabledHomeCatalogKeys) }
         val rawRowsByKey = orderedKeys
             .mapNotNull { key ->
                 catalogSnapshot[key]?.let { row ->
@@ -1789,7 +1792,9 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
             }
             .toMap(linkedMapOf())
 
-        val syntheticGroups = syntheticTraktGroups + syntheticSimklGroups + syntheticMDBListGroups
+        val persistedSyntheticGroups = syntheticTraktGroups + syntheticSimklGroups + syntheticMDBListGroups
+        val persistedSyntheticOrderKeys = persistedSyntheticGroups.mapTo(mutableSetOf()) { it.orderKey }
+        val syntheticGroups = persistedSyntheticGroups + liveSyntheticGroups.filterNot { it.orderKey in persistedSyntheticOrderKeys }
         val syntheticRowsByKey = linkedMapOf<String, List<CatalogRow>>().apply {
             syntheticGroups.forEach { group -> put(group.orderKey, group.rows) }
         }
