@@ -52,7 +52,7 @@ val doviStaticLibPath = resolveProperty(devProperties, localProperties, "DOVI_LI
 val doviIncludeDirPath = resolveProperty(devProperties, localProperties, "DOVI_LIBDOVI_INCLUDE_DIR")
 val doviPrebuiltRootPath = resolveProperty(devProperties, localProperties, "DOVI_LIBDOVI_PREBUILT_ROOT")
 val useMedia3Source = parseBooleanProperty(
-    resolveProperty(devProperties, localProperties, "USE_MEDIA3_SOURCE")
+    resolveProperty(devProperties, localProperties, "USE_MEDIA3_SOURCE", "true")
 )
 val playPublishTaskRequested = gradle.startParameter.taskNames.any { taskName ->
     taskName.endsWith("bundlePlayRelease") || taskName.endsWith(":app:bundlePlayRelease")
