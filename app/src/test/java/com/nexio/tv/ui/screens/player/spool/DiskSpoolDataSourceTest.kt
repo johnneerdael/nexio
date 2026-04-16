@@ -24,6 +24,38 @@ class DiskSpoolDataSourceTest {
     val temp = TemporaryFolder()
 
     @Test
+    fun `open publishes initial read position to session`() {
+        val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 1_000L)
+        session.writeRange(0L, ByteArray(512) { 1 }, 512)
+        val uri = Uri.parse("https://example.com/movie.mkv")
+
+        val dataSource = DiskSpoolDataSource(session, uri)
+        dataSource.open(DataSpec.Builder().setUri(uri).setPosition(256L).build())
+
+        assertEquals(256L, session.currentReadPositionBytes())
+
+        dataSource.close()
+        session.close()
+    }
+
+    @Test
+    fun `read publishes advanced read position to session`() {
+        val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 1_000L)
+        session.writeRange(0L, ByteArray(512) { 1 }, 512)
+        val uri = Uri.parse("https://example.com/movie.mkv")
+        val dataSource = DiskSpoolDataSource(session, uri)
+
+        dataSource.open(DataSpec(uri))
+        val buffer = ByteArray(128)
+        assertEquals(128, dataSource.read(buffer, 0, 128))
+
+        assertEquals(128L, session.currentReadPositionBytes())
+
+        dataSource.close()
+        session.close()
+    }
+
+    @Test
     fun `reads bytes without closing shared session`() {
         val session = DiskSpoolSession(
             File(temp.root, "movie.spool"),

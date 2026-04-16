@@ -44,6 +44,7 @@ internal class DiskSpoolDataSource(
 
         openedDataSpec = dataSpec
         position = dataSpec.position
+        session.updateReadPosition(position)
         resolvedContentLength = when {
             contentLength != C.LENGTH_UNSET.toLong() -> contentLength
             session.contentLengthBytes() != C.LENGTH_UNSET.toLong() -> session.contentLengthBytes()
@@ -81,6 +82,7 @@ internal class DiskSpoolDataSource(
             val read = session.read(position, buffer, offset, readLength)
             if (read > 0) {
                 position += read.toLong()
+                session.updateReadPosition(position)
                 if (remaining != C.LENGTH_UNSET.toLong()) {
                     remaining -= read.toLong()
                 }
