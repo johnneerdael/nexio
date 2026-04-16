@@ -10,6 +10,7 @@ import com.nexio.tv.data.remote.api.TvdbArtworkRecord
 import com.nexio.tv.data.remote.api.TvdbEpisodeRecord
 import com.nexio.tv.data.remote.api.TvdbRemoteId
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
+import com.nexio.tv.data.remote.api.TvdbTranslationRecord
 import com.nexio.tv.domain.model.ContentType
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -145,7 +146,20 @@ class TvdbMetadataService @Inject constructor(
         } else {
             Log.d(TAG, "tvdb_advanced_surface_missing contentId=tvdb:${resolvedId}")
         }
-        val enrichment = record.toEnrichment(identity.copy(tvdbId = resolvedId), activeProvider, seasonOrderContext, advancedMetadata) ?: return@withContext null
+        val baseEnrichment = record.toEnrichment(
+            identity = identity.copy(tvdbId = resolvedId),
+            activeProvider = activeProvider,
+            seasonOrderContext = seasonOrderContext,
+            advancedMetadata = advancedMetadata
+        ) ?: return@withContext null
+        val translatedOverview = fetchSeriesTranslationOverview(
+            authorization = authorization,
+            seriesId = resolvedId,
+            language = normalizedLanguage
+        )
+        val enrichment = baseEnrichment.copy(
+            description = translatedOverview ?: baseEnrichment.description
+        )
         metadataDiskCacheStore.writeTvdbEnrichment(
             seriesId = resolvedId,
             recordKind = SERIES_EXTENDED_RECORD_KIND,
@@ -258,9 +272,19 @@ class TvdbMetadataService @Inject constructor(
         }
 
         val records = response.body()?.data?.episodes.orEmpty()
+        val translatedOverviewsById = fetchTranslatedSeasonEpisodeOverviews(
+            authorization = authorization,
+            seriesId = identity.tvdbId,
+            seasonNumber = seasonNumber,
+            language = normalizedLanguage
+        )
 
         val mapped = records
-            .map { record -> record.toEpisodeMetadata() }
+            .map { record ->
+                record.toEpisodeMetadata(
+                    translatedOverview = record.id?.let { translatedOverviewsById[it] }
+                )
+            }
             .filter { metadata -> metadata.seasonNumber == seasonNumber }
             .sortedWith(compareBy<TvEpisodeMetadata> { it.episodeNumber ?: Int.MAX_VALUE }.thenBy { it.providerEpisodeId })
 
@@ -273,6 +297,27 @@ class TvdbMetadataService @Inject constructor(
         )
 
         mapped.map { metadata -> metadata.toSeasonEpisode() }
+    }
+
+    private suspend fun fetchSeriesTranslationOverview(
+        authorization: String,
+        seriesId: Int,
+        language: String
+    ): String? {
+        if (language == "eng") return null
+        return runCatching {
+            tvdbApi.getSeriesTranslation(
+                authorization = authorization,
+                id = seriesId,
+                language = language
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "TVDB series translation request failed reason=${error.javaClass.simpleName}")
+        }.getOrNull()
+            ?.takeIf { response -> response.isSuccessful }
+            ?.body()
+            ?.data
+            .overviewText()
     }
 
     private fun TvdbSeriesExtendedRecord.toEnrichment(
@@ -339,13 +384,47 @@ class TvdbMetadataService @Inject constructor(
         )
     }
 
-    private fun TvdbEpisodeRecord.toEpisodeMetadata(): TvEpisodeMetadata {
+    private suspend fun fetchTranslatedSeasonEpisodeOverviews(
+        authorization: String,
+        seriesId: Int,
+        seasonNumber: Int,
+        language: String
+    ): Map<Int, String> {
+        if (language == "eng") return emptyMap()
+        return runCatching {
+            tvdbApi.getSeriesEpisodesTranslated(
+                authorization = authorization,
+                id = seriesId,
+                seasonType = DEFAULT_SEASON_TYPE,
+                language = language,
+                page = 0,
+                season = seasonNumber
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "TVDB translated season episodes request failed reason=${error.javaClass.simpleName}")
+        }.getOrNull()
+            ?.takeIf { response -> response.isSuccessful }
+            ?.body()
+            ?.data
+            ?.episodes
+            .orEmpty()
+            .mapNotNull { record ->
+                val id = record.id ?: return@mapNotNull null
+                val overview = record.overview.trimmed() ?: return@mapNotNull null
+                id to overview
+            }
+            .toMap()
+    }
+
+    private fun TvdbEpisodeRecord.toEpisodeMetadata(
+        translatedOverview: String? = null
+    ): TvEpisodeMetadata {
         val base = TvEpisodeMetadata(
             providerEpisodeId = id?.let { "tvdb:$it" },
             seasonNumber = seasonNumber,
             episodeNumber = number,
             title = name.trimmed(),
-            overview = overview.trimmed(),
+            overview = translatedOverview ?: overview.trimmed(),
             thumbnail = image.trimmed(),
             airDate = aired.trimmed(),
             runtimeMinutes = runtime,
@@ -426,14 +505,14 @@ class TvdbMetadataService @Inject constructor(
     }
 
     private fun normalizeLanguage(language: String?): String {
-        return language
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?.replace('_', '-')
-            ?: "en-US"
+        return TvdbLanguageMapper.normalize(language)
     }
 
     private fun String?.trimmed(): String? = this?.trim()?.takeIf { it.isNotBlank() }
+
+    private fun TvdbTranslationRecord?.overviewText(): String? {
+        return this?.overview.trimmed()
+    }
 
     /**
      * D-02: Resolve merge alias for a series ID before cache lookup or API fetch.
