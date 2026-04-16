@@ -28,6 +28,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -268,6 +269,29 @@ private fun formatEpisodeAirDateLabel(releaseDate: LocalDate): String {
         DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault())
     }
     return releaseDate.format(formatter)
+}
+
+/**
+ * When TVDB provides an exact air-time instant, format it as device-local date + 24h time
+ * (e.g., "Apr 23, 03:00"). This gives users a clear visual indicator that TVDB timing is
+ * active and shows the converted local release time.
+ *
+ * Falls back to null when no TVDB instant is available (caller should use date-only label).
+ */
+private fun formatDeviceLocalAirLabel(tvdbInstantMs: Long?, deviceLocalDateTimeStr: String?): String? {
+    if (tvdbInstantMs == null || tvdbInstantMs <= 0L) return null
+
+    val deviceZone = ZoneId.systemDefault()
+    val deviceLocal: ZonedDateTime = (
+        if (!deviceLocalDateTimeStr.isNullOrBlank()) {
+            runCatching { ZonedDateTime.parse(deviceLocalDateTimeStr).withZoneSameInstant(deviceZone) }.getOrNull()
+        } else null
+    ) ?: runCatching { Instant.ofEpochMilli(tvdbInstantMs).atZone(deviceZone) }.getOrNull()
+        ?: return null
+
+    val todayLocal = LocalDate.now(deviceZone)
+    val pattern = if (deviceLocal.toLocalDate().year == todayLocal.year) "MMM d, HH:mm" else "MMM d yyyy, HH:mm"
+    return deviceLocal.format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
 }
 
 private fun nextUpDismissKey(contentId: String): String {
@@ -521,7 +545,10 @@ private fun com.nexio.tv.data.repository.TrackingNextUpEntry.toContinueWatchingN
         firstAired,
         nowMs
     )
-    val releaseDate = if (!hasAired) parseEpisodeReleaseDate(firstAired) else null
+    val airLabel = if (!hasAired) {
+        formatDeviceLocalAirLabel(tvdbAvailabilityInstantMs, tvdbAvailabilityDeviceLocalDateTime)
+            ?: parseEpisodeReleaseDate(firstAired)?.let(::formatEpisodeAirDateLabel)
+    } else null
     val displayMetadata = displayMetadataByItemKey[homeDisplayItemKey(contentType, contentId)]
     return ContinueWatchingItem.NextUp(
         NextUpInfo(
@@ -540,7 +567,7 @@ private fun com.nexio.tv.data.repository.TrackingNextUpEntry.toContinueWatchingN
             thumbnail = null,
             released = firstAired,
             hasAired = hasAired,
-            airDateLabel = releaseDate?.let(::formatEpisodeAirDateLabel),
+            airDateLabel = airLabel,
             lastWatched = activityAtMs,
             imdbRating = displayMetadata?.imdbRating,
             genres = displayMetadata?.genres.orEmpty(),

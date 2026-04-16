@@ -2,6 +2,7 @@ package com.nexio.tv.data.repository
 
 import com.nexio.tv.data.local.TraktAuthState
 import com.nexio.tv.data.remote.dto.trakt.TraktIdsDto
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.data.repository.trakt.TraktWatchingNowStateController
 import com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope
 import com.nexio.tv.data.trakt.outbox.TraktMutationOutboxCoordinator
@@ -67,6 +68,7 @@ class TraktScrobbleServiceTest {
 
         coEvery { traktAuthService.getCurrentAuthState() } returns authenticatedState()
         every { traktAuthService.hasRequiredCredentials() } returns true
+        every { traktAuthService.currentAuthSession() } returns TrackingAuthSession(TrackingProvider.TRAKT, 1)
         coEvery { coordinator.enqueueAndDrain(any()) } coAnswers {
             requestGate.await()
             throw IllegalStateException("boom")
@@ -99,6 +101,7 @@ class TraktScrobbleServiceTest {
 
         coEvery { traktAuthService.getCurrentAuthState() } returns authenticatedState()
         every { traktAuthService.hasRequiredCredentials() } returns true
+        every { traktAuthService.currentAuthSession() } returns TrackingAuthSession(TrackingProvider.TRAKT, 1)
         coEvery { coordinator.enqueueAndDrain(any()) } coAnswers {
             when (callCount++) {
                 0 -> {
