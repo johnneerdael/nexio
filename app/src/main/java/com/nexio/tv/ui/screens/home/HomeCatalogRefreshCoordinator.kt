@@ -551,18 +551,22 @@ internal fun shouldReusePersistedHomeItem(
     return !itemChanged && persistedFallback?.tomatoesRating != null
 }
 
-private fun MetaPreview.applyProviderEnrichment(enrichment: TvMetadataEnrichment): MetaPreview {
+internal fun MetaPreview.applyTvMetadataEnrichmentForHome(enrichment: TvMetadataEnrichment): MetaPreview {
     return copy(
         name = enrichment.localizedTitle?.takeIf { it.isNotBlank() } ?: name,
         description = enrichment.description?.takeIf { it.isNotBlank() } ?: description,
         genres = if (enrichment.genres.isNotEmpty()) enrichment.genres else genres,
         releaseInfo = enrichment.releaseInfo ?: releaseInfo,
+        runtime = (enrichment.runtimeMinutes ?: enrichment.averageRuntimeMinutes)?.toString() ?: runtime,
         imdbRating = enrichment.rating?.toFloat() ?: imdbRating,
         background = enrichment.backdrop ?: background,
         logo = enrichment.logo ?: logo,
         poster = enrichment.poster ?: poster
     )
 }
+
+private fun MetaPreview.applyProviderEnrichment(enrichment: TvMetadataEnrichment): MetaPreview =
+    applyTvMetadataEnrichmentForHome(enrichment)
 
 private fun TmdbEnrichment.toTvMetadataEnrichment(): TvMetadataEnrichment {
     return TvMetadataEnrichment(
