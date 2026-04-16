@@ -23,6 +23,7 @@ class ProfileSelectionViewModel @Inject constructor(
     private val profileManager: ProfileManager,
     private val profileSyncService: ProfileSyncService
 ) : ViewModel() {
+    private val pinVerificationLock = Any()
 
     val profiles: StateFlow<List<UserProfile>> = profileManager.profiles
 
@@ -44,10 +45,8 @@ class ProfileSelectionViewModel @Inject constructor(
     }
 
     fun verifyPin(profileId: Int, pin: String) {
-        if (_pinState.value.isVerifying) return
+        if (!beginPinVerification()) return
         viewModelScope.launch {
-            _pinState.update { it.copy(isVerifying = true, isError = false, errorMessage = null) }
-
             val result = profileSyncService.verifyProfilePin(profileId, pin)
             if (result.isFailure) {
                 _pinState.update {
@@ -85,6 +84,13 @@ class ProfileSelectionViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun beginPinVerification(): Boolean = synchronized(pinVerificationLock) {
+        val state = _pinState.value
+        if (state.isVerifying || state.retryAfterSeconds > 0) return false
+        _pinState.value = state.copy(isVerifying = true, isError = false, errorMessage = null)
+        true
     }
 
     private var countdownJob: Job? = null

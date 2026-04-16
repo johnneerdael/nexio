@@ -101,6 +101,47 @@ class ProfileSelectionViewModelTest {
     }
 
     @Test
+    fun `duplicate verifyPin calls before dispatch only submit once`() = runTest(dispatcher) {
+        val profileManager = profileManager()
+        val profileSyncService = mockk<ProfileSyncService>()
+        coEvery { profileSyncService.verifyProfilePin(2, "1234") } returns Result.success(
+            SupabaseProfilePinVerifyResult(
+                unlocked = false,
+                retryAfterSeconds = 0,
+                pinEnabled = true
+            )
+        )
+
+        val viewModel = ProfileSelectionViewModel(profileManager, profileSyncService)
+        viewModel.verifyPin(2, "1234")
+        viewModel.verifyPin(2, "1234")
+        runCurrent()
+
+        coVerify(exactly = 1) { profileSyncService.verifyProfilePin(2, "1234") }
+    }
+
+    @Test
+    fun `rate limited pin blocks additional submits until countdown clears`() = runTest(dispatcher) {
+        val profileManager = profileManager()
+        val profileSyncService = mockk<ProfileSyncService>()
+        coEvery { profileSyncService.verifyProfilePin(2, "1234") } returns Result.success(
+            SupabaseProfilePinVerifyResult(
+                unlocked = false,
+                retryAfterSeconds = 5,
+                pinEnabled = true
+            )
+        )
+
+        val viewModel = ProfileSelectionViewModel(profileManager, profileSyncService)
+        viewModel.verifyPin(2, "1234")
+        runCurrent()
+        viewModel.verifyPin(2, "1234")
+        runCurrent()
+
+        coVerify(exactly = 1) { profileSyncService.verifyProfilePin(2, "1234") }
+    }
+
+    @Test
     fun `failed RPC sets Unable to verify PIN and does not switch`() = runTest(dispatcher) {
         val profileManager = profileManager()
         val profileSyncService = mockk<ProfileSyncService>()
