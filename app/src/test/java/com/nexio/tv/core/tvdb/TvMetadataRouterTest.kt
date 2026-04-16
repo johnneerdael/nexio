@@ -25,6 +25,45 @@ import org.junit.Test
 class TvMetadataRouterTest {
 
     @Test
+    fun `tvdb default settings route through tvdb instead of inactive fallback`() = runTest {
+        val tvdbIdentityService = mockk<TvdbIdentityService>()
+        val tvdbMetadataService = mockk<TvdbMetadataService>()
+        val tmdbService = mockk<TmdbService>(relaxed = true)
+        val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+        val router = tvMetadataRouter(
+            settings = TvdbSettings(),
+            tvdbIdentityService = tvdbIdentityService,
+            tvdbMetadataService = tvdbMetadataService,
+            tmdbService = tmdbService,
+            tmdbMetadataService = tmdbMetadataService
+        )
+
+        coEvery {
+            tvdbIdentityService.resolveSeriesByRemoteId("tt0944947", TvdbRemoteIdSource.IMDB)
+        } returns identity
+        coEvery {
+            tvdbMetadataService.fetchSeriesEnrichment(identity, "en-US")
+        } returns TvMetadataEnrichment(
+            seriesTvdbId = 121361,
+            localizedTitle = "Game of Thrones"
+        )
+
+        val decision = router.fetchEnrichment(
+            TvMetadataRequest(
+                contentId = "tt0944947",
+                contentType = ContentType.SERIES,
+                language = "en-US"
+            )
+        )
+
+        assertEquals(TvProvider.TVDB, decision.provider)
+        assertEquals(TvMetadataDecisionReason.TVDB_SUCCESS, decision.reason)
+        coVerify(exactly = 0) { tmdbService.ensureTmdbId(any(), any()) }
+        coVerify(exactly = 0) { tmdbMetadataService.fetchEnrichment(any(), any(), any()) }
+    }
+
+    @Test
     fun `does not call tmdb when tvdb succeeds`() = runTest {
         val tvdbIdentityService = mockk<TvdbIdentityService>()
         val tvdbMetadataService = mockk<TvdbMetadataService>()

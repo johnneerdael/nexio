@@ -71,6 +71,18 @@ class AccountConfigSyncContractTest {
     }
 
     @Test
+    fun `metadata provider sync defaults are core enabled`() {
+        val tmdb = TmdbSyncSettings()
+        val tvdb = TvdbSyncSettings()
+
+        assertTrue(tmdb.enabled)
+        assertTrue(tvdb.enabled)
+        assertTrue(tvdb.configured)
+        assertEquals("VALID", tvdb.validationStatus)
+        assertEquals("", tvdb.lastFailure)
+    }
+
+    @Test
     fun `buildAccountConfigSyncPayload serializes integrations catalogs formatter and imdb`() {
         val payload = buildAccountConfigSyncPayload(
             integrations = IntegrationSettings(
