@@ -106,6 +106,10 @@ internal fun PlayerRuntimeController.pausePlaybackForLifecycle() {
         resumeAutoplayAfterLifecyclePause = view?.isPlayingNow() == true && !hasRenderedFirstFrame && !userPausedManually
         view?.setPaused(true)
         _uiState.update { it.copy(isPlaying = false) }
+        if (shouldPersistWatchProgressOnPlaybackStopEvent()) {
+            emitStopScrobbleForCurrentProgress()
+            saveWatchProgress()
+        }
         return
     }
     val player = _exoPlayer
