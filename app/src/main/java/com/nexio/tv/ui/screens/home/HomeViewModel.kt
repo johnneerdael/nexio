@@ -55,6 +55,7 @@ import com.nexio.tv.domain.repository.LibraryRepository
 import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import com.nexio.tv.data.trailer.TrailerService
+import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -112,6 +113,7 @@ class HomeViewModel @Inject constructor(
     internal val profileModeRouter: ProfileModeRouter,
     internal val profileBoundary: ProfileBoundary,
     internal val trackingProviderStateService: TrackingProviderStateService,
+    internal val playbackIdleGateState: PlaybackIdleGateState,
     @ApplicationContext internal val appContext: Context
 ) : ViewModel() {
     companion object {
@@ -120,6 +122,7 @@ class HomeViewModel @Inject constructor(
         private const val MAX_RECENT_PROGRESS_ITEMS = 300
         private const val MAX_NEXT_UP_LOOKUPS = 24
         private const val MAX_NEXT_UP_CONCURRENCY = 4
+        internal const val CONTINUE_WATCHING_ENRICHMENT_CONCURRENCY = 2
         private const val STARTUP_CATALOG_LOAD_CONCURRENCY = 1
         private const val MAX_CATALOG_LOAD_CONCURRENCY = 4
         internal const val STARTUP_NETWORK_DEFERRAL_WINDOW_MS = 20_000L
@@ -231,8 +234,10 @@ class HomeViewModel @Inject constructor(
     internal val trailerPreviewExternalUrlsState = mutableStateMapOf<String, String>()
     internal val trailerMetadataAvailableState = mutableStateMapOf<String, Boolean>()
     internal val trailerMetadataAvailabilityInFlightKeys = Collections.synchronizedSet(mutableSetOf<String>())
+    internal val trailerMetadataAvailabilityJobs = Collections.synchronizedSet(mutableSetOf<Job>())
     internal var activeTrailerPreviewItemId: String? = null
     internal var trailerPreviewRequestVersion: Long = 0L
+    internal var trailerPreviewJob: Job? = null
     internal val trailerMetadataAvailabilitySemaphore = Semaphore(4)
     internal val prefetchedExternalMetaIds = Collections.synchronizedSet(mutableSetOf<String>())
     internal val externalMetaPrefetchInFlightIds = Collections.synchronizedSet(mutableSetOf<String>())
@@ -320,6 +325,7 @@ class HomeViewModel @Inject constructor(
 
     init {
         observeStartupPerfTelemetry()
+        observePlaybackWorkGate()
         observeDiskFirstHomeStartupToggle()
         observeLocaleChangesForMetadata()
         observeProfileSwitches()
@@ -650,6 +656,7 @@ class HomeViewModel @Inject constructor(
     internal fun runDeferredStartupRefreshIfNeeded(reason: String) {
         if (shouldSuppressProfileSwitchRefresh(reason)) return
         if (shouldBlockProfileSwitchDiskSnapshotRefresh(reason)) return
+        if (!isNonPlaybackHomeWorkAllowed()) return
         if (!diskFirstHomeStartupEnabled || shouldDeferStartupNetworkWork()) return
         runSerializedHomeRefreshIfNeeded(reason)
     }
@@ -657,6 +664,12 @@ class HomeViewModel @Inject constructor(
     internal fun runSerializedHomeRefreshIfNeeded(reason: String) {
         if (shouldSuppressProfileSwitchRefresh(reason)) return
         if (shouldBlockProfileSwitchDiskSnapshotRefresh(reason)) return
+        if (!isNonPlaybackHomeWorkAllowed()) {
+            startupRefreshPending = false
+            pendingSerializedHomeRefreshReason = null
+            Log.d(TAG, "Skipping serialized home refresh during active playback reason=$reason")
+            return
+        }
         if (shouldDeferStartupNetworkWork()) return
         if (deferredStartupRefreshJob?.isActive == true) {
             Log.d(TAG, "Serialized home refresh already running; queueing reason=$reason")
@@ -668,6 +681,12 @@ class HomeViewModel @Inject constructor(
             var nextReason: String? = reason
             while (nextReason != null && isCurrentHomeProfileGeneration(capturedGeneration)) {
                 val currentReason = nextReason
+                if (!isNonPlaybackHomeWorkAllowed()) {
+                    startupRefreshPending = false
+                    pendingSerializedHomeRefreshReason = null
+                    Log.d(TAG, "Stopping serialized home refresh during active playback reason=$currentReason")
+                    return@launch
+                }
                 pendingSerializedHomeRefreshReason = null
                 startupRefreshPending = true
                 Log.d(TAG, "Serialized home refresh start reason=$currentReason")
@@ -875,6 +894,11 @@ class HomeViewModel @Inject constructor(
         startupDeferralWindowJob?.cancel()
         deferredStartupRefreshJob?.cancel()
         metadataEnrichmentFlushJob?.cancel()
+        trailerPreviewJob?.cancel()
+        val trailerAvailabilityJobs = synchronized(trailerMetadataAvailabilityJobs) {
+            trailerMetadataAvailabilityJobs.toList().also { trailerMetadataAvailabilityJobs.clear() }
+        }
+        trailerAvailabilityJobs.forEach { it.cancel() }
         homeSnapshotPersistJob?.cancel()
         pendingProviderEnrichmentByItemId.clear()
         pendingMetaEnrichmentByItemId.clear()

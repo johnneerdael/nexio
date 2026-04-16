@@ -459,7 +459,8 @@ internal fun HomeViewModel.observeTraktCatalogPreferencesPipeline() {
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_trakt_prefs")
             if (activeProfileTraktAuthenticated &&
                 shouldRefreshTraktDiscoveryForState(prefs, traktDiscoverySnapshot) &&
-                !shouldSuppressProfileSwitchRefresh("trakt_pref_change")
+                !shouldSuppressProfileSwitchRefresh("trakt_pref_change") &&
+                isNonPlaybackHomeWorkAllowed()
             ) {
                 if (shouldDeferStartupNetworkWork()) {
                     startupRefreshPending = true
@@ -517,7 +518,8 @@ internal fun HomeViewModel.observeSimklCatalogPreferencesPipeline() {
             simklCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_simkl_prefs")
             if (shouldRefreshSimklDiscoveryForState(prefs, simklDiscoverySnapshot) &&
-                !shouldSuppressProfileSwitchRefresh("simkl_pref_change")
+                !shouldSuppressProfileSwitchRefresh("simkl_pref_change") &&
+                isNonPlaybackHomeWorkAllowed()
             ) {
                 if (shouldDeferStartupNetworkWork()) {
                     startupRefreshPending = true
@@ -582,7 +584,8 @@ internal fun HomeViewModel.observeMDBListSettingsPipeline() {
             .collectLatest { settings ->
                 if (settings.enabled && settings.apiKey.isNotBlank() &&
                     shouldRefreshMDBListDiscoveryForState(mdbListCatalogPreferences, mdbListDiscoverySnapshot) &&
-                    !shouldSuppressProfileSwitchRefresh("mdblist_settings_change")
+                    !shouldSuppressProfileSwitchRefresh("mdblist_settings_change") &&
+                    isNonPlaybackHomeWorkAllowed()
                 ) {
                     if (shouldDeferStartupNetworkWork()) {
                         startupRefreshPending = true
@@ -615,7 +618,8 @@ internal fun HomeViewModel.observeMDBListCatalogPreferencesPipeline() {
             mdbListCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_mdblist_prefs")
             if (shouldRefreshMDBListDiscoveryForState(prefs, mdbListDiscoverySnapshot) &&
-                !shouldSuppressProfileSwitchRefresh("mdblist_pref_change")
+                !shouldSuppressProfileSwitchRefresh("mdblist_pref_change") &&
+                isNonPlaybackHomeWorkAllowed()
             ) {
                 if (shouldDeferStartupNetworkWork()) {
                     startupRefreshPending = true
@@ -712,6 +716,11 @@ internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expec
         return
     }
     if (shouldBlockProfileSwitchDiskSnapshotRefresh(reason)) return
+    if (!isNonPlaybackHomeWorkAllowed()) {
+        startupRefreshPending = false
+        Log.d(HomeViewModel.TAG, "Skipping post-startup refresh during active playback reason=$reason")
+        return
+    }
     Log.d(
         HomeViewModel.TAG,
         "Post-startup refresh pipeline begin addons=${addonsCache.size} persistedTraktGroups=${persistedTraktSyntheticGroups.size} " +
@@ -1524,6 +1533,16 @@ internal fun HomeViewModel.loadCatalogPipeline(
         val withStartupGate = shouldDeferStartupNetworkWork()
         suspend fun runCatalogLoad() {
             if (generation != catalogLoadGeneration) return
+            if (!isNonPlaybackHomeWorkAllowed()) {
+                if (!hasCountedCompletion) {
+                    pendingCatalogLoads = (pendingCatalogLoads - 1).coerceAtLeast(0)
+                    hasCountedCompletion = true
+                }
+                if (pendingCatalogLoads == 0) {
+                    catalogsLoadInProgress = false
+                }
+                return
+            }
             val supportsSkip = catalog.supportsExtra("skip")
             val skipStep = catalog.skipStep()
             Log.d(
@@ -2056,9 +2075,10 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
     val shouldUseEnrichedHeroItems = tmdbSettings.isActive &&
         (tmdbSettings.useArtwork || tmdbSettings.useBasicInfo || tmdbSettings.useDetails)
 
-    if (shouldUseEnrichedHeroItems && baseHeroItems.isNotEmpty()) {
+    if (shouldUseEnrichedHeroItems && baseHeroItems.isNotEmpty() && isNonPlaybackHomeWorkAllowed()) {
         heroEnrichmentJob?.cancel()
         heroEnrichmentJob = viewModelScope.launch {
+            if (!isNonPlaybackHomeWorkAllowed()) return@launch
             val enrichmentSignature = heroEnrichmentSignaturePipeline(baseHeroItems, tmdbSettings)
             if (lastHeroEnrichmentSignature == enrichmentSignature) {
                 val cached = lastHeroEnrichedItems
@@ -2066,7 +2086,9 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
                     snapshot.copy(heroItems = cached)
                 }
             } else {
+                if (!isNonPlaybackHomeWorkAllowed()) return@launch
                 val enrichedItems = enrichHeroItemsPipeline(baseHeroItems, tmdbSettings)
+                if (!isNonPlaybackHomeWorkAllowed()) return@launch
                 lastHeroEnrichmentSignature = enrichmentSignature
                 lastHeroEnrichedItems = enrichedItems
                 updateInMemoryHomeSnapshotPipeline { snapshot ->
@@ -2079,8 +2101,10 @@ internal suspend fun HomeViewModel.updateCatalogRowsPipeline() {
         lastHeroEnrichedItems = emptyList()
     }
 
-    refreshTrailerMetadataAvailabilityPipeline(displayRows)
-    schedulePosterStatusReconcilePipeline(displayRows)
+    if (isNonPlaybackHomeWorkAllowed()) {
+        refreshTrailerMetadataAvailabilityPipeline(displayRows)
+        schedulePosterStatusReconcilePipeline(displayRows)
+    }
     }
 }
 
@@ -2919,6 +2943,8 @@ internal fun nextUpToMetaPreview(nextUp: ContinueWatchingItem.NextUp): MetaPrevi
 }
 
 internal fun HomeViewModel.schedulePosterStatusReconcilePipeline(rows: List<CatalogRow>) {
+    if (!isNonPlaybackHomeWorkAllowed()) return
+
     posterStatusReconcileJob?.cancel()
     if (rows.isEmpty()) {
         reconcilePosterStatusObserversPipeline(rows)

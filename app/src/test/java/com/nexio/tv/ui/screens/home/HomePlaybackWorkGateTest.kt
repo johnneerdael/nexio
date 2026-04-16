@@ -1,0 +1,65 @@
+package com.nexio.tv.ui.screens.home
+
+import com.nexio.tv.ui.screensaver.PlaybackIdleGateSnapshot
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class HomePlaybackWorkGateTest {
+
+    @Test
+    fun `home background work is blocked while playback session is active`() {
+        assertFalse(
+            shouldRunHomeBackgroundWork(
+                PlaybackIdleGateSnapshot(hasActiveSession = true, isPausedByUser = false)
+            )
+        )
+    }
+
+    @Test
+    fun `home background work is allowed when no playback session is active`() {
+        assertTrue(
+            shouldRunHomeBackgroundWork(
+                PlaybackIdleGateSnapshot(hasActiveSession = false, isPausedByUser = false)
+            )
+        )
+    }
+
+    @Test
+    fun `continue watching enrichment never exceeds configured concurrency`() = runTest {
+        val active = AtomicInteger(0)
+        val maxActive = AtomicInteger(0)
+        val entered = Channel<Unit>(capacity = Channel.UNLIMITED)
+        val release = CompletableDeferred<Unit>()
+
+        val job = async {
+            mapContinueWatchingEnrichmentWithLimit(
+                items = listOf(1, 2, 3),
+                maxConcurrency = 2
+            ) { item ->
+                val current = active.incrementAndGet()
+                maxActive.updateAndGet { previous -> maxOf(previous, current) }
+                entered.send(Unit)
+                release.await()
+                active.decrementAndGet()
+                item
+            }
+        }
+
+        entered.receive()
+        entered.receive()
+
+        assertFalse(entered.tryReceive().isSuccess)
+
+        release.complete(Unit)
+
+        assertEquals(listOf(1, 2, 3), job.await())
+        assertEquals(2, maxActive.get())
+    }
+}

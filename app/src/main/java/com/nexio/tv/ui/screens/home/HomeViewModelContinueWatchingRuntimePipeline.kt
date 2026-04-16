@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.update
 internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
     item: ContinueWatchingItem
 ): Int? {
+    if (!isNonPlaybackHomeWorkAllowed()) return null
     continueWatchingRuntimeMinutes(item)?.let { return it }
 
     val contentId = item.contentId().takeIf { it.isNotBlank() } ?: return null
@@ -101,10 +102,13 @@ internal fun ContinueWatchingItem.withHydratedRuntimeMinutes(runtimeMinutes: Int
 }
 
 internal suspend fun HomeViewModel.warmContinueWatchingRuntimeIfNeededPipeline() {
+    if (!isNonPlaybackHomeWorkAllowed()) return
+
     val candidates = continueWatchingItemsMissingRuntime(_uiState.value.continueWatchingItems)
     if (candidates.isEmpty()) return
 
     candidates.forEach { item ->
+        if (!isNonPlaybackHomeWorkAllowed()) return
         val runtime = runCatching { resolveContinueWatchingRuntimeMinutes(item) }
             .onFailure { error ->
                 Log.w(HomeViewModel.TAG, "Failed to warm continue watching runtime for ${item.contentId()}: ${error.message}")
