@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.media3.common.C
 import androidx.media3.datasource.DataSpec
 import java.io.File
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import okhttp3.OkHttpClient
@@ -101,12 +102,14 @@ class DiskSpoolPipelineTest {
     }
 
     @Test
-    fun `parallel writer feeds datasource while playback reads from spool`() {
+    fun `single writer feeds datasource while playback reads from spool`() {
         val content = ByteArray(192 * 1024) { (it % 251).toByte() }
+        val requestedRanges = CopyOnWriteArrayList<String>()
         val server = MockWebServer()
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 val range = request.getHeader("Range")
+                range?.let { requestedRanges += it }
                 return when (range) {
                     "bytes=0-0" -> MockResponse()
                         .setResponseCode(206)
@@ -119,14 +122,13 @@ class DiskSpoolPipelineTest {
             }
         }
         server.start()
-        val session = DiskSpoolSession(File(temp.root, "parallel-pipeline.spool"), capacityBytes = 256 * 1024L)
+        val session = DiskSpoolSession(File(temp.root, "single-writer-pipeline.spool"), capacityBytes = 256 * 1024L)
         val uri = Uri.parse(server.url("/movie.bin").toString())
         val writerThread = Thread {
             DiskSpoolWriter(
                 okHttpClient = OkHttpClient(),
                 chunkBytes = 64 * 1024,
                 ioBufferBytes = 8 * 1024,
-                parallelConnections = 2,
                 startupPriorityBytes = 64 * 1024L
             ).downloadUntil(uri.toString(), session, content.size.toLong())
         }
@@ -144,6 +146,10 @@ class DiskSpoolPipelineTest {
             }
             assertEquals(content.size, offset)
             assertArrayEquals(content, actual)
+            assertEquals(
+                listOf("bytes=0-0", "bytes=0-65535", "bytes=65536-131071", "bytes=131072-196607"),
+                requestedRanges.toList()
+            )
         } finally {
             dataSource.close()
             session.close()

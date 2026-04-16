@@ -521,9 +521,11 @@ class DiskSpoolWriterTest {
     }
 
     @Test
-    fun `parallel writer schedules multiple adjacent range requests into one session`() {
+    fun `disk spool writer ignores parallel connection requests`() {
         val content = ByteArray(96 * 1024) { (it % 251).toByte() }
         val requestedRanges = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val activeRangeRequests = AtomicInteger(0)
+        val maxActiveRangeRequests = AtomicInteger(0)
         val server = MockWebServer()
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
@@ -536,12 +538,21 @@ class DiskSpoolWriterTest {
                         .setHeader("Content-Range", "bytes 0-0/${content.size}")
                         .setHeader("Content-Length", 1)
                         .setBody(Buffer().writeByte(0x2A))
-                    else -> rangedResponse(content, range ?: error("Missing range"))
+                    else -> {
+                        val active = activeRangeRequests.incrementAndGet()
+                        maxActiveRangeRequests.updateAndGet { previous -> maxOf(previous, active) }
+                        try {
+                            Thread.sleep(100L)
+                            rangedResponse(content, range ?: error("Missing range"))
+                        } finally {
+                            activeRangeRequests.decrementAndGet()
+                        }
+                    }
                 }
             }
         }
         server.start()
-        val session = DiskSpoolSession(File(temp.root, "parallel.spool"), capacityBytes = 128 * 1024L)
+        val session = DiskSpoolSession(File(temp.root, "single-writer.spool"), capacityBytes = 128 * 1024L)
 
         try {
             DiskSpoolWriter(
@@ -549,15 +560,17 @@ class DiskSpoolWriterTest {
                 chunkBytes = 32 * 1024,
                 ioBufferBytes = 4 * 1024,
                 parallelConnections = 3,
-                startupPriorityBytes = 64 * 1024L
+                startupPriorityBytes = 0L
             ).downloadUntil(server.url("/movie.bin").toString(), session, content.size.toLong())
 
             val buffer = ByteArray(content.size)
             assertEquals(content.size, session.read(0L, buffer, 0, buffer.size))
             assertArrayEquals(content, buffer)
-            assertTrue(requestedRanges.contains("bytes=0-32767"))
-            assertTrue(requestedRanges.contains("bytes=32768-65535"))
-            assertTrue(requestedRanges.contains("bytes=65536-98303"))
+            assertEquals(
+                listOf("bytes=0-0", "bytes=0-32767", "bytes=32768-65535", "bytes=65536-98303"),
+                requestedRanges.toList()
+            )
+            assertEquals(1, maxActiveRangeRequests.get())
         } finally {
             session.close()
             server.shutdown()
