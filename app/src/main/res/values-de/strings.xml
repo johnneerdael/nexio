@@ -17,7 +17,7 @@
   <string name="appearance_title">Darstellung</string>
   <string name="tmdb_title">TMDB-Anreicherung</string>
   <string name="sub_forced_lang">Erzwungen</string>
-  <string name="tmdb_api_key_subtitle">Erforderlich, um die TMDB-Integration zu aktivieren</string>
+  <string name="tmdb_api_key_subtitle">Optionaler benutzerdefinierter TMDB-Schlüssel. Nexio verwendet integrierten Metadatenzugriff, wenn dieses Feld leer ist.</string>
   <string name="settings_animeskip_subtitle">Anime Intro/Outro Skip-Zeitstempel</string>
   <string name="playback_osd_clock">OSD-Uhr</string>
   <string name="sub_startup_mode_all">Alle Untertitel</string>
@@ -27,7 +27,7 @@
   <string name="settings_catalogs">Kataloge</string>
   <string name="sub_startup_mode_title">Untertitel-Startmodus</string>
   <string name="animeskip_title">Anime Skip</string>
-  <string name="tmdb_missing_api_key">TMDB API-Schlüssel ist erforderlich</string>
+  <string name="tmdb_missing_api_key">TMDB verwendet integrierten Zugriff, wenn kein benutzerdefinierter Schlüssel gespeichert ist.</string>
   <string name="poster_ratings_title">Poster-Bewertungen</string>
   <string name="trakt_catalogs_title">Trakt-Kataloge</string>
   <string name="appearance_font">App-Schriftart</string>
@@ -47,7 +47,7 @@
   <string name="animeskip_dialog_title">Anime Skip Client-ID</string>
   <string name="audio_dts_iec_experimental_sub">Experimenteller Fire OS Audio-Quirk-Pfad. Aktiviert die Fire TV-Kompatibilitätsschicht im Media3-Audio-Stack, einschließlich DTS Core Fallback und Capability-Routing-Quirks. Standardmäßig deaktiviert, da es auf Nicht-Fire-Geräten zu Problemen führen kann.</string>
   <string name="trakt_catalog_popular_movies_subtitle">Filme mit der höchsten langfristigen Popularität.</string>
-  <string name="tmdb_dialog_subtitle">Gib deinen persönlichen TMDB-API-Schlüssel ein</string>
+  <string name="tmdb_dialog_subtitle">Füge nur dann einen persönlichen TMDB-API-Schlüssel hinzu, wenn du dein eigenes Anbieter-Kontingent verwenden möchtest.</string>
   <string name="audio_dv_experimental_sub">Nativer Konvertierungspfad von DV7 zu DV8.1. Wenn die Konvertierung nicht verfügbar ist oder fehlschlägt, greift die Wiedergabe auf das HEVC-Mapping zurück.</string>
   <string name="sub_startup_mode_fast_desc">Starte die Wiedergabe sofort. Durch die Auswahl von Add-on-Untertiteln kann es sein, dass der Player einmal neu geladen wird.</string>
   <string name="trakt_catalog_calendar_subtitle">Kommende Episoden aus deinem Trakt-Kalender.</string>
@@ -469,7 +469,7 @@
   <string name="mdblist_not_set">Nicht festgelegt</string>
   <string name="action_clear">Leeren</string>
   <string name="tmdb_enable_title">TMDB-Anreicherung aktivieren</string>
-  <string name="tmdb_enable_subtitle">Verwende TMDB als Metadatenquelle, um Add-on-Daten zu verbessern (erfordert deinen TMDB-API-Schlüssel).</string>
+  <string name="tmdb_enable_subtitle">TMDB ist standardmäßig als Metadatenquelle aktiv. Ein benutzerdefinierter Schlüssel ist optional.</string>
   <string name="tmdb_artwork_title">Artwork</string>
   <string name="tmdb_artwork_subtitle">Logo und Hintergrundbilder von TMDB</string>
   <string name="tmdb_basic_info_title">Grundlegende Informationen</string>

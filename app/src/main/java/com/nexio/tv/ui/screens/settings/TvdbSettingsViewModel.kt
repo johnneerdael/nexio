@@ -38,14 +38,6 @@ class TvdbSettingsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             dataStore.settings.collectLatest { settings ->
-                val shouldForceDisable = settings.enabled &&
-                    settings.validationStatus == TvdbValidationStatus.INVALID
-
-                if (shouldForceDisable) {
-                    dataStore.setEnabled(false)
-                    _uiState.update { it.fromSettings(settings.copy(enabled = false)) }
-                    return@collectLatest
-                }
                 _uiState.update { it.fromSettings(settings) }
             }
         }
@@ -64,80 +56,7 @@ class TvdbSettingsViewModel @Inject constructor(
     fun onEvent(event: TvdbSettingsEvent) {
         when (event) {
             is TvdbSettingsEvent.ToggleEnabled -> update {
-                if (!event.enabled) {
-                    dataStore.setEnabled(false)
-                    return@update
-                }
-
-                val state = _uiState.value
-                when {
-                    state.apiKey.isBlank() -> {
-                        _validationError.tryEmit(TvdbValidationError.MissingApiKey)
-                        dataStore.setEnabled(false)
-                    }
-
-                    state.validationStatus == TvdbValidationStatus.VALID -> {
-                        dataStore.setEnabled(true)
-                    }
-
-                    state.apiKey.isNotBlank() -> {
-                        // Key present but not yet validated on this device — validate now
-                        val currentSettings = dataStore.settings.first()
-                        val pin = currentSettings.subscriberPin
-                        _uiState.update { it.copy(validationStatus = TvdbValidationStatus.VALIDATING) }
-                        when (val result = authService.validateCredentialsResult(
-                            state.apiKey, pin
-                        )) {
-                            is TvdbAuthResult.Valid -> {
-                                dataStore.saveCredentials(
-                                    apiKey = state.apiKey,
-                                    pin = pin,
-                                    validationStatus = TvdbValidationStatus.VALID
-                                )
-                                dataStore.setEnabled(true)
-                                _uiState.update {
-                                    it.copy(
-                                        validationStatus = TvdbValidationStatus.VALID,
-                                        lastFailure = ""
-                                    )
-                                }
-                            }
-                            is TvdbAuthResult.InvalidCredentials -> {
-                                dataStore.saveValidationFailure(
-                                    status = TvdbValidationStatus.INVALID,
-                                    lastFailure = result.lastFailure
-                                )
-                                dataStore.setEnabled(false)
-                                _uiState.update {
-                                    it.copy(
-                                        enabled = false,
-                                        validationStatus = TvdbValidationStatus.INVALID,
-                                        lastFailure = result.lastFailure
-                                    )
-                                }
-                                _validationError.tryEmit(TvdbValidationError.InvalidCredentials)
-                            }
-                            is TvdbAuthResult.AuthUnavailable -> {
-                                dataStore.saveValidationFailure(
-                                    status = TvdbValidationStatus.FALLBACK_ACTIVE,
-                                    lastFailure = result.lastFailure
-                                )
-                                dataStore.setEnabled(true)
-                                _uiState.update {
-                                    it.copy(
-                                        validationStatus = TvdbValidationStatus.FALLBACK_ACTIVE,
-                                        lastFailure = result.lastFailure
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    else -> {
-                        _validationError.tryEmit(TvdbValidationError.InvalidCredentials)
-                        dataStore.setEnabled(false)
-                    }
-                }
+                dataStore.setEnabled(true)
             }
         }
     }
@@ -157,20 +76,16 @@ class TvdbSettingsViewModel @Inject constructor(
 
         if (trimmedApiKey.isBlank()) {
             update {
-                dataStore.setEnabled(false)
-                dataStore.saveValidationFailure(
-                    status = TvdbValidationStatus.NOT_CONFIGURED,
-                    lastFailure = "TVDB API key is required"
-                )
+                dataStore.clearCredentials()
                 _uiState.update {
                     it.copy(
-                        enabled = false,
+                        enabled = true,
                         apiKey = "",
-                        validationStatus = TvdbValidationStatus.NOT_CONFIGURED,
-                        lastFailure = "TVDB API key is required"
+                        validationStatus = TvdbValidationStatus.VALID,
+                        lastFailure = ""
                     )
                 }
-                _validationError.tryEmit(TvdbValidationError.MissingApiKey)
+                onSuccess()
             }
             return
         }
@@ -202,14 +117,13 @@ class TvdbSettingsViewModel @Inject constructor(
                 }
 
                 is TvdbAuthResult.InvalidCredentials -> {
-                    dataStore.setEnabled(false)
                     dataStore.saveValidationFailure(
                         status = TvdbValidationStatus.INVALID,
                         lastFailure = result.lastFailure
                     )
                     _uiState.update {
                         it.copy(
-                            enabled = false,
+                            enabled = true,
                             apiKey = trimmedApiKey,
                             validationStatus = TvdbValidationStatus.INVALID,
                             lastFailure = result.lastFailure
@@ -237,9 +151,9 @@ class TvdbSettingsViewModel @Inject constructor(
             dataStore.clearCredentials()
             _uiState.update {
                 it.copy(
-                    enabled = false,
+                    enabled = true,
                     apiKey = "",
-                    validationStatus = TvdbValidationStatus.NOT_CONFIGURED,
+                    validationStatus = TvdbValidationStatus.VALID,
                     lastFailure = ""
                 )
             }
@@ -260,10 +174,10 @@ data class TvdbSettingsUiState(
     val tvdbLastRefreshLine: String? = null
 ) {
     val isConfigured: Boolean
-        get() = apiKey.isNotBlank()
+        get() = true
 
     val isProviderActive: Boolean
-        get() = enabled && isConfigured && validationStatus == TvdbValidationStatus.VALID
+        get() = enabled
 
     val credentialDisplayValue: String
         get() = if (apiKey.isBlank()) {

@@ -17,7 +17,7 @@
   <string name="appearance_title">外观</string>
   <string name="tmdb_title">TMDB 数据增强</string>
   <string name="sub_forced_lang">强制</string>
-  <string name="tmdb_api_key_subtitle">激活 TMDB 集成所需</string>
+  <string name="tmdb_api_key_subtitle">可选的自定义 TMDB 密钥。留空时 Nexio 使用内置元数据访问。</string>
   <string name="settings_animeskip_subtitle">Anime 片头/片尾跳过时间戳</string>
   <string name="playback_osd_clock">OSD 时钟</string>
   <string name="sub_startup_mode_all">全部字幕</string>
@@ -27,7 +27,7 @@
   <string name="settings_catalogs">目录</string>
   <string name="sub_startup_mode_title">字幕启动模式</string>
   <string name="animeskip_title">跳过动漫片头片尾 (Anime Skip)</string>
-  <string name="tmdb_missing_api_key">需要 TMDB API 密钥</string>
+  <string name="tmdb_missing_api_key">未保存自定义密钥时，TMDB 使用内置访问。</string>
   <string name="poster_ratings_title">海报评分</string>
   <string name="trakt_catalogs_title">Trakt 目录</string>
   <string name="appearance_font">应用字体</string>
@@ -47,7 +47,7 @@
   <string name="animeskip_dialog_title">Anime Skip 客户端 ID</string>
   <string name="audio_dts_iec_experimental_sub">实验性 Fire OS 音频兼容路径。启用 Media3 音频堆栈中的 Fire TV 兼容层，包括 DTS 核心回退和路由兼容。默认关闭，因为它可能会影响非 Fire 设备。</string>
   <string name="trakt_catalog_popular_movies_subtitle">长期最受欢迎的电影。</string>
-  <string name="tmdb_dialog_subtitle">输入您的个人 TMDB API 密钥</string>
+  <string name="tmdb_dialog_subtitle">仅在想使用自己的提供商配额时添加个人 TMDB API 密钥。</string>
   <string name="audio_dv_experimental_sub">原生 DV7 到 DV8.1 转换路径。如果转换不可用或失败，播放将回退到 HEVC 映射。</string>
   <string name="sub_startup_mode_fast_desc">立即开始播放。选择插件字幕可能会重新加载播放器一次。</string>
   <string name="trakt_catalog_calendar_subtitle">Trakt 日历中即将播出的剧集。</string>
@@ -469,7 +469,7 @@
   <string name="mdblist_not_set">未设置</string>
   <string name="action_clear">清除</string>
   <string name="tmdb_enable_title">启用 TMDB 数据增强</string>
-  <string name="tmdb_enable_subtitle">使用 TMDB 作为元数据源，以弥补插件数据的不足（需要您的 TMDB API 密钥）</string>
+  <string name="tmdb_enable_subtitle">TMDB 默认作为元数据源启用。自定义密钥是可选的。</string>
   <string name="tmdb_artwork_title">海报与背景图</string>
   <string name="tmdb_artwork_subtitle">使用来自 TMDB 的 Logo 和背景图片</string>
   <string name="tmdb_basic_info_title">基本信息</string>

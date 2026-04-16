@@ -33,10 +33,6 @@ class TmdbSettingsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             dataStore.settings.collectLatest { settings ->
-                if (settings.enabled && settings.apiKey.isBlank()) {
-                    dataStore.setEnabled(false)
-                    return@collectLatest
-                }
                 _uiState.update { it.fromSettings(settings) }
             }
         }
@@ -45,17 +41,7 @@ class TmdbSettingsViewModel @Inject constructor(
     fun onEvent(event: TmdbSettingsEvent) {
         when (event) {
             is TmdbSettingsEvent.ToggleEnabled -> update {
-                if (!event.enabled) {
-                    dataStore.setEnabled(false)
-                } else {
-                    val key = _uiState.value.apiKey.trim()
-                    if (key.isBlank()) {
-                        _validationError.tryEmit(TmdbValidationError.MissingApiKey)
-                        dataStore.setEnabled(false)
-                    } else {
-                        dataStore.setEnabled(true)
-                    }
-                }
+                dataStore.setEnabled(true)
             }
             is TmdbSettingsEvent.ToggleArtwork -> update { dataStore.setUseArtwork(event.enabled) }
             is TmdbSettingsEvent.ToggleBasicInfo -> update { dataStore.setUseBasicInfo(event.enabled) }
@@ -75,7 +61,7 @@ class TmdbSettingsViewModel @Inject constructor(
         if (trimmed.isBlank()) {
             viewModelScope.launch {
                 dataStore.setApiKey("")
-                dataStore.setEnabled(false)
+                dataStore.setEnabled(true)
             }
             onSuccess()
             return
@@ -117,7 +103,7 @@ data class TmdbSettingsUiState(
     val useCollections: Boolean = true
 ) {
     val isActive: Boolean
-        get() = enabled && apiKey.isNotBlank()
+        get() = enabled
 
     fun fromSettings(settings: TmdbSettings): TmdbSettingsUiState = copy(
         enabled = settings.enabled,

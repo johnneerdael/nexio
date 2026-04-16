@@ -17,7 +17,7 @@
   <string name="appearance_title">Weergave</string>
   <string name="tmdb_title">TMDB-verrijking</string>
   <string name="sub_forced_lang">Geforceerd</string>
-  <string name="tmdb_api_key_subtitle">Vereist om TMDB-integratie te activeren</string>
+  <string name="tmdb_api_key_subtitle">Optionele aangepaste TMDB-sleutel. Nexio gebruikt ingebouwde metadatatoegang wanneer dit leeg is.</string>
   <string name="settings_animeskip_subtitle">Tijdstempels voor het overslaan van anime intro\'s/outro\'s</string>
   <string name="playback_osd_clock">OSD-klok</string>
   <string name="sub_startup_mode_all">Alle ondertitels</string>
@@ -27,7 +27,7 @@
   <string name="settings_catalogs">Catalogi</string>
   <string name="sub_startup_mode_title">Opstartmodus ondertiteling</string>
   <string name="animeskip_title">Anime Skip</string>
-  <string name="tmdb_missing_api_key">TMDB API-sleutel is verplicht</string>
+  <string name="tmdb_missing_api_key">TMDB gebruikt ingebouwde toegang wanneer er geen aangepaste sleutel is opgeslagen.</string>
   <string name="poster_ratings_title">Poster-beoordelingen</string>
   <string name="trakt_catalogs_title">Trakt-catalogi</string>
   <string name="appearance_font">App-lettertype</string>
@@ -47,7 +47,7 @@
   <string name="animeskip_dialog_title">Anime Skip Client-ID</string>
   <string name="audio_dts_iec_experimental_sub">Experimenteel Fire OS audio quirk-pad. Schakelt de Fire TV-compatibiliteitslaag in de Media3-audiostack in, inclusief DTS core fallback en capability-routing quirks. Standaard uitgeschakeld omdat dit problemen kan veroorzaken op niet-Fire-apparaten.</string>
   <string name="trakt_catalog_popular_movies_subtitle">Films met de hoogste populariteit op lange termijn.</string>
-  <string name="tmdb_dialog_subtitle">Voer je persoonlijke TMDB API-sleutel in</string>
+  <string name="tmdb_dialog_subtitle">Voeg alleen een persoonlijke TMDB API-sleutel toe als je je eigen providerquotum wilt gebruiken.</string>
   <string name="audio_dv_experimental_sub">Native conversiepad van DV7 naar DV8.1. Als de conversie niet beschikbaar is of mislukt, valt het afspelen terug op HEVC-mapping.</string>
   <string name="sub_startup_mode_fast_desc">Begin direct met afspelen. Als je add-on-ondertitels selecteert, wordt de speler mogelijk één keer opnieuw geladen.</string>
   <string name="trakt_catalog_calendar_subtitle">Aankomende afleveringen uit je Trakt-kalender.</string>
@@ -471,7 +471,7 @@
   <string name="mdblist_not_set">Niet ingesteld</string>
   <string name="action_clear">Wissen</string>
   <string name="tmdb_enable_title">Schakel TMDB-verrijking in</string>
-  <string name="tmdb_enable_subtitle">Gebruik TMDB als metadatabron om add-ongegevens te verbeteren (vereist je TMDB API-sleutel)</string>
+  <string name="tmdb_enable_subtitle">TMDB is standaard actief als metadatabron. Een aangepaste sleutel is optioneel.</string>
   <string name="tmdb_artwork_title">Artwork</string>
   <string name="tmdb_artwork_subtitle">Logo- en achtergrondafbeeldingen van TMDB</string>
   <string name="tmdb_basic_info_title">Basisinformatie</string>

@@ -103,27 +103,18 @@ fun TmdbSettingsContent(
                 contentPadding = PaddingValues(bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item(key = "tmdb_enabled") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.tmdb_enable_title),
-                        subtitle = stringResource(R.string.tmdb_enable_subtitle),
-                        checked = uiState.enabled,
-                        onToggle = { viewModel.onEvent(TmdbSettingsEvent.ToggleEnabled(!uiState.enabled)) },
-                        modifier = if (initialFocusRequester != null) {
-                            Modifier.focusRequester(initialFocusRequester)
-                        } else {
-                            Modifier
-                        }
-                    )
-                }
-
                 item(key = "tmdb_api_key") {
                     SettingsActionRow(
                         title = stringResource(R.string.tmdb_api_key_title),
                         subtitle = stringResource(R.string.tmdb_api_key_subtitle),
                         value = maskApiKey(uiState.apiKey, stringResource(R.string.mdblist_not_set)),
                         enabled = true,
-                        onClick = { showApiKeyDialog = true }
+                        onClick = { showApiKeyDialog = true },
+                        modifier = if (initialFocusRequester != null) {
+                            Modifier.focusRequester(initialFocusRequester)
+                        } else {
+                            Modifier
+                        }
                     )
                 }
 
