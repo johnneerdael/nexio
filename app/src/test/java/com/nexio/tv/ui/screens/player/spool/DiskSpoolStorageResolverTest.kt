@@ -78,6 +78,22 @@ class DiskSpoolStorageResolverTest {
     }
 
     @Test
+    fun `external directory falls back to mounted removable storage root when app cache candidates omit it`() {
+        val usbRoot = temp.newFolder("6A6D-59F8")
+
+        val result = DiskSpoolStorageResolver.externalSpoolDirectoryFromStorageRoots(
+            storageRoots = listOf(usbRoot),
+            packageName = "com.nexio.tv",
+            stateOf = { Environment.MEDIA_MOUNTED }
+        )
+
+        assertEquals(
+            File(usbRoot, "Android/data/com.nexio.tv/cache/player_disk_spool"),
+            result
+        )
+    }
+
+    @Test
     fun `external directory is unavailable when no removable mounted app cache dir exists`() {
         val primary = temp.newFolder("primary")
         val usb = temp.newFolder("usb")
