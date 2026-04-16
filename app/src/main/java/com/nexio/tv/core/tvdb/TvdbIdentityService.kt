@@ -73,7 +73,7 @@ class TvdbIdentityService @Inject constructor(
             deferred.complete(identity)
             identity
         } catch (error: Exception) {
-            Log.w(TAG, "TVDB identity lookup failed reason=${error.javaClass.simpleName}")
+            Log.w(TAG, "TVDB identity lookup failed reason=${error.javaClass.simpleName} message=${error.message}")
             deferred.complete(null)
             null
         } finally {

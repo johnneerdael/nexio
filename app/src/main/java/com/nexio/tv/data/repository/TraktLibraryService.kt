@@ -97,7 +97,7 @@ class TraktLibraryService @Inject constructor(
     private val inFlightMetadataKeys = mutableSetOf<String>()
     private var lastRefreshMs: Long = 0L
 
-    private val cacheTtlMs = 60_000L
+    private val cacheTtlMs = 24L * 60 * 60 * 1_000L
     private val startupRefreshGateMs = 20_000L
     private val metadataHydrationLimit = 110
     private val listFetchConcurrency = 3

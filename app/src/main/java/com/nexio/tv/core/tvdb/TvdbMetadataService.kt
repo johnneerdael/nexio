@@ -257,7 +257,7 @@ class TvdbMetadataService @Inject constructor(
             return@withContext emptyList()
         }
 
-        val records = response.body()?.data.orEmpty()
+        val records = response.body()?.data?.episodes.orEmpty()
 
         val mapped = records
             .map { record -> record.toEpisodeMetadata() }

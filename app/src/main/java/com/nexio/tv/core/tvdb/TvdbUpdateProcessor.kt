@@ -57,10 +57,26 @@ class TvdbUpdateProcessor @Inject constructor(
      * Convenience overload that fetches the current cursor from the state store.
      */
     suspend fun processSince(): TvdbUpdateProcessResult {
-        return processSince(stateStore.currentCursor())
+        var cursor = stateStore.currentCursor()
+        if (cursor <= 0L) {
+            // First run: seed cursor to now (Unix seconds) so TVDB /updates doesn't 400.
+            // This skips historical updates, but there is no local cache to invalidate yet.
+            cursor = System.currentTimeMillis() / 1000
+            stateStore.storeSuccessfulCursor(cursor)
+            return TvdbUpdateProcessResult(success = true, processedCount = 0, skippedCount = 0)
+        }
+        return processSince(cursor)
     }
 
     suspend fun processSince(since: Long): TvdbUpdateProcessResult {
+        // TVDB /updates requires a valid recent Unix timestamp in seconds.
+        if (since <= 0L) {
+            val seedCursor = System.currentTimeMillis() / 1000
+            stateStore.storeSuccessfulCursor(seedCursor)
+            Log.d(TAG, "First run: seeded update cursor to $seedCursor, skipping /updates call")
+            return TvdbUpdateProcessResult(success = true, processedCount = 0, skippedCount = 0)
+        }
+
         // Record start diagnostic
         val startDiagnostic = TvdbReliabilityDiagnostic(
             reason = TvdbReliabilityReason.UPDATE_REFRESH_STARTED,

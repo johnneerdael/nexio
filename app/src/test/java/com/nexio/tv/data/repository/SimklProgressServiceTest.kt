@@ -3,6 +3,7 @@ package com.nexio.tv.data.repository
 import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklAuthState
 import com.nexio.tv.data.local.SimklProgressSyncStateStore
+import com.nexio.tv.data.remote.SimklRequestGate
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -138,9 +139,9 @@ class SimklProgressServiceTest {
             }
             .build()
 
-        val service = SimklProgressService(client, authStore, syncStateStore)
+        val service = SimklProgressService(client, authStore, syncStateStore, SimklRequestGate())
 
-        service.refreshNow()
+        service.refreshNowImmediate()
 
         val progress = service.observeAllProgress().first()
         val nextUp = service.observeContinueWatchingNextUp().first()
@@ -181,9 +182,9 @@ class SimklProgressServiceTest {
             }
             .build()
 
-        val service = SimklProgressService(client, authStore, syncStateStore)
+        val service = SimklProgressService(client, authStore, syncStateStore, SimklRequestGate())
 
-        service.refreshNow()
+        service.refreshNowImmediate()
 
         assertTrue(recordedPaths.any { it.contains("/sync/playback/movies") && it.contains("date_from=") })
         assertTrue(recordedPaths.any { it.contains("/sync/playback/episodes") && it.contains("date_from=") })
@@ -212,9 +213,9 @@ class SimklProgressServiceTest {
             }
             .build()
 
-        val service = SimklProgressService(client, authStore, syncStateStore)
+        val service = SimklProgressService(client, authStore, syncStateStore, SimklRequestGate())
 
-        service.refreshNow()
+        service.refreshNowImmediate()
 
         assertTrue(recordedPaths.any { it.contains("/sync/all-items/movies/?extended=full") && !it.contains("date_from=") })
         assertTrue(recordedPaths.any { it.contains("/sync/all-items/shows/?extended=full") && !it.contains("date_from=") })
@@ -280,9 +281,9 @@ class SimklProgressServiceTest {
             }
             .build()
 
-        val service = SimklProgressService(client, authStore, syncStateStore)
+        val service = SimklProgressService(client, authStore, syncStateStore, SimklRequestGate())
 
-        service.refreshNow()
+        service.refreshNowImmediate()
 
         val episodeMap = service.observeEpisodeProgress("tt9999999").first()
         assertTrue((2 to 3) in episodeMap.keys)

@@ -226,7 +226,13 @@ data class TvdbRemoteId(
 @JsonClass(generateAdapter = true)
 data class TvdbSeriesEpisodesResponse(
     @Json(name = "status") val status: String? = null,
-    @Json(name = "data") val data: List<TvdbEpisodeRecord> = emptyList()
+    @Json(name = "data") val data: TvdbSeriesEpisodesData? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbSeriesEpisodesData(
+    @Json(name = "series") val series: TvdbSeriesBaseRecord? = null,
+    @Json(name = "episodes") val episodes: List<TvdbEpisodeRecord> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
