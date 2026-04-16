@@ -15,6 +15,8 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
@@ -378,5 +380,25 @@ class ProfileManagerTest {
         manager.setActiveProfile(aliceId)
 
         assertEquals(aliceId, emitted.await())
+    }
+
+    @Test
+    fun `setActiveProfile on already active profile does not emit duplicate switch`() = runTest {
+        val manager = makeManager()
+        manager.createProfile("Alice", "#E53935")
+        val profilesAfterCreate = manager.profiles.first { it.size == 2 }
+        val aliceId = profilesAfterCreate.first { it.name == "Alice" }.id
+
+        val emitted = mutableListOf<Int>()
+        val job = launch { manager.profileSwitched.collect { emitted.add(it) } }
+        runCurrent()
+
+        manager.setActiveProfile(aliceId)
+        runCurrent()
+        manager.setActiveProfile(aliceId)
+        runCurrent()
+
+        assertEquals(listOf(aliceId), emitted)
+        job.cancel()
     }
 }
