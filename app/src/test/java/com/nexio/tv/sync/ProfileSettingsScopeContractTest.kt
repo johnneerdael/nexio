@@ -550,7 +550,7 @@ class ProfileSettingsScopeContractTest {
         val homeSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModel.kt").readText()
         val diskHydrationIndex = homeSource.indexOf("loadActiveProfileDiskBackedHomeState(")
         val addonReloadIndex = homeSource.indexOf(
-            "reloadDiskCachedAddonCatalogsForActiveProfileSwitch()",
+            "reloadDiskCachedAddonCatalogsForActiveProfileSwitch(",
             startIndex = diskHydrationIndex
         )
 
@@ -560,6 +560,41 @@ class ProfileSettingsScopeContractTest {
             addonReloadIndex > diskHydrationIndex
         )
         assertTrue(homeCatalogPipeline.readText().contains("reloadDiskCachedAddonCatalogsForActiveProfileSwitchPipeline"))
+    }
+
+    @Test
+    fun `profile switch uses disk-only catalog reload when profile disk state exists`() {
+        val homeSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModel.kt").readText()
+        val pipelineSource = homeCatalogPipeline.readText()
+
+        assertTrue(homeSource.contains("val hasDiskCacheState = loadActiveProfileDiskBackedHomeState("))
+        assertTrue(homeSource.contains("reloadDiskCachedAddonCatalogsForActiveProfileSwitch(allowNetworkRefresh = !hasDiskCacheState)"))
+        assertTrue(pipelineSource.contains("allowNetworkRefresh: Boolean"))
+        assertTrue(pipelineSource.contains("loadAllCatalogsPipeline(addons, allowNetworkRefresh = allowNetworkRefresh)"))
+        assertTrue(pipelineSource.contains("allowNetworkRefresh = allowNetworkRefresh"))
+    }
+
+    @Test
+    fun `profile switch discovery observers do not auto refresh when disk snapshots exist`() {
+        listOf(
+            "TraktDiscoveryService" to traktDiscoveryService.readText(),
+            "SimklDiscoveryService" to simklDiscoveryService.readText(),
+            "MDBListDiscoveryService" to mdbListDiscoveryService.readText()
+        ).forEach { (serviceName, source) ->
+            assertTrue("$serviceName should track whether a persisted profile snapshot was restored", source.contains("var hadPersistedSnapshot = false"))
+            assertTrue("$serviceName should mark restored snapshots before auto refresh decisions", source.contains("hadPersistedSnapshot = true"))
+            assertTrue("$serviceName should only auto refresh when no profile disk snapshot exists", source.contains("if (autoRefreshOnStart && !hadPersistedSnapshot)"))
+        }
+    }
+
+    @Test
+    fun `profile switch suppresses direct provider ensureFresh calls from home observers`() {
+        val source = homeCatalogPipeline.readText()
+
+        assertTrue(source.contains("!shouldSuppressProfileSwitchRefresh(\"trakt_pref_change\")"))
+        assertTrue(source.contains("!shouldSuppressProfileSwitchRefresh(\"simkl_pref_change\")"))
+        assertTrue(source.contains("!shouldSuppressProfileSwitchRefresh(\"mdblist_settings_change\")"))
+        assertTrue(source.contains("!shouldSuppressProfileSwitchRefresh(\"mdblist_pref_change\")"))
     }
 
     @Test

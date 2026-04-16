@@ -113,11 +113,13 @@ class MDBListDiscoveryService @Inject constructor(
             profileSnapshots
                 .map { snapshots -> snapshots[profileId] ?: MDBListDiscoverySnapshot() }
                 .onStart {
+                    var hadPersistedSnapshot = false
                     snapshotStore.read(profileId = profileId)?.let { persisted ->
+                        hadPersistedSnapshot = true
                         setProfileSnapshot(profileId, persisted)
                         lastRefreshByProfile[profileId] = persisted.updatedAtMs
                     }
-                    if (autoRefreshOnStart) {
+                    if (autoRefreshOnStart && !hadPersistedSnapshot) {
                         scope.launch {
                             ensureStartupGateInitialized()
                             if (isStartupRefreshGated()) {

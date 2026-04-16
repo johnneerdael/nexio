@@ -208,11 +208,13 @@ class SimklDiscoveryService @Inject constructor(
             profileSnapshots
                 .map { snapshots -> snapshots[profileId] ?: SimklDiscoverySnapshot() }
                 .onStart {
+                    var hadPersistedSnapshot = false
                     snapshotStore.read(profileId = profileId)?.let { persisted ->
+                        hadPersistedSnapshot = true
                         setProfileSnapshot(profileId, persisted)
                         lastRefreshByProfile[profileId] = persisted.updatedAtMs
                     }
-                    if (autoRefreshOnStart) {
+                    if (autoRefreshOnStart && !hadPersistedSnapshot) {
                         scope.launch {
                             runCatching { ensureFresh(force = false, profileId = profileId) }
                                 .onFailure { Log.w("SimklDiscovery", "Failed to refresh SIMKL discovery snapshot", it) }

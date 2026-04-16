@@ -210,7 +210,7 @@ internal fun HomeViewModel.clearTraktHomeState(reason: String) {
 internal suspend fun HomeViewModel.loadActiveProfileDiskBackedHomeState(
     reason: String,
     expectedGeneration: Long? = null
-) {
+): Boolean {
     val profileId = profileManager.activeProfileId.value
     val diskState = withContext(Dispatchers.IO) {
         val providerState = trackingProviderStateService.currentState()
@@ -230,9 +230,10 @@ internal suspend fun HomeViewModel.loadActiveProfileDiskBackedHomeState(
             homeSnapshot = homeSnapshot
         )
     }
+    val hasDiskCacheState = diskState.hasDiskCacheState()
     if (expectedGeneration != null && !isCurrentHomeProfileGeneration(expectedGeneration)) {
         Log.d(HomeViewModel.TAG, "Skipping stale disk-backed home state reason=$reason generation=$expectedGeneration")
-        return
+        return false
     }
 
     withContext(Dispatchers.Main.immediate) {
@@ -271,15 +272,18 @@ internal suspend fun HomeViewModel.loadActiveProfileDiskBackedHomeState(
         }
         Log.d(HomeViewModel.TAG, "Loaded active profile disk-backed home state reason=$reason")
     }
+    return hasDiskCacheState
 }
 
-internal suspend fun HomeViewModel.reloadDiskCachedAddonCatalogsForActiveProfileSwitchPipeline() {
+internal suspend fun HomeViewModel.reloadDiskCachedAddonCatalogsForActiveProfileSwitchPipeline(
+    allowNetworkRefresh: Boolean
+) {
     val addons = addonsCache
     if (addons.isEmpty()) {
         scheduleUpdateCatalogRows()
         return
     }
-    loadAllCatalogsPipeline(addons)
+    loadAllCatalogsPipeline(addons, allowNetworkRefresh = allowNetworkRefresh)
 }
 
 private data class DiskBackedHomeState(
@@ -290,7 +294,15 @@ private data class DiskBackedHomeState(
     val simklSnapshot: com.nexio.tv.data.repository.SimklDiscoverySnapshot?,
     val mdbSnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot?,
     val homeSnapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot?
-)
+) {
+    fun hasDiskCacheState(): Boolean {
+        return syntheticSnapshot != null ||
+            traktSnapshot != null ||
+            simklSnapshot != null ||
+            mdbSnapshot != null ||
+            homeSnapshot != null
+    }
+}
 
 internal fun HomeViewModel.restorePersistedDiscoverySnapshotsPipeline() {
     viewModelScope.launch(Dispatchers.IO) {
@@ -420,7 +432,10 @@ internal fun HomeViewModel.observeTraktCatalogPreferencesPipeline() {
             if (prefs == traktCatalogPreferences) return@collectLatest
             traktCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_trakt_prefs")
-            if (activeProfileTraktAuthenticated && shouldRefreshTraktDiscoveryForState(prefs, traktDiscoverySnapshot)) {
+            if (activeProfileTraktAuthenticated &&
+                shouldRefreshTraktDiscoveryForState(prefs, traktDiscoverySnapshot) &&
+                !shouldSuppressProfileSwitchRefresh("trakt_pref_change")
+            ) {
                 if (shouldDeferStartupNetworkWork()) {
                     startupRefreshPending = true
                     logStartupPerf("catalog_refresh_deferred", "reason=trakt_pref_change")
@@ -476,7 +491,9 @@ internal fun HomeViewModel.observeSimklCatalogPreferencesPipeline() {
             if (prefs == simklCatalogPreferences) return@collectLatest
             simklCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_simkl_prefs")
-            if (shouldRefreshSimklDiscoveryForState(prefs, simklDiscoverySnapshot)) {
+            if (shouldRefreshSimklDiscoveryForState(prefs, simklDiscoverySnapshot) &&
+                !shouldSuppressProfileSwitchRefresh("simkl_pref_change")
+            ) {
                 if (shouldDeferStartupNetworkWork()) {
                     startupRefreshPending = true
                     logStartupPerf("catalog_refresh_deferred", "reason=simkl_pref_change")
@@ -539,7 +556,8 @@ internal fun HomeViewModel.observeMDBListSettingsPipeline() {
             .distinctUntilChanged()
             .collectLatest { settings ->
                 if (settings.enabled && settings.apiKey.isNotBlank() &&
-                    shouldRefreshMDBListDiscoveryForState(mdbListCatalogPreferences, mdbListDiscoverySnapshot)
+                    shouldRefreshMDBListDiscoveryForState(mdbListCatalogPreferences, mdbListDiscoverySnapshot) &&
+                    !shouldSuppressProfileSwitchRefresh("mdblist_settings_change")
                 ) {
                     if (shouldDeferStartupNetworkWork()) {
                         startupRefreshPending = true
@@ -569,7 +587,9 @@ internal fun HomeViewModel.observeMDBListCatalogPreferencesPipeline() {
             if (prefs == mdbListCatalogPreferences) return@collectLatest
             mdbListCatalogPreferences = prefs
             applyPendingPersistedHomeSnapshotIfPossiblePipeline("observe_mdblist_prefs")
-            if (shouldRefreshMDBListDiscoveryForState(prefs, mdbListDiscoverySnapshot)) {
+            if (shouldRefreshMDBListDiscoveryForState(prefs, mdbListDiscoverySnapshot) &&
+                !shouldSuppressProfileSwitchRefresh("mdblist_pref_change")
+            ) {
                 if (shouldDeferStartupNetworkWork()) {
                     startupRefreshPending = true
                     logStartupPerf("catalog_refresh_deferred", "reason=mdblist_pref_change")
@@ -1287,7 +1307,8 @@ private fun List<PersistedSyntheticCatalogGroup>.toSyntheticCatalogOrderGroups()
 
 internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
     addons: List<Addon>,
-    forceReload: Boolean = false
+    forceReload: Boolean = false,
+    allowNetworkRefresh: Boolean = true
 ) {
     fun hasSyntheticHomeSourcesConfigured(): Boolean {
         if ((activeProfileTraktAuthenticated && persistedTraktSyntheticGroups.isNotEmpty()) ||
@@ -1453,7 +1474,7 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
         trailerPreviewRequestVersion = 0L
         pendingCatalogLoads = catalogsToLoad.size
         catalogsToLoad.forEach { (addon, catalog) ->
-            loadCatalogPipeline(addon, catalog, generation)
+            loadCatalogPipeline(addon, catalog, generation, allowNetworkRefresh = allowNetworkRefresh)
         }
     } catch (e: Exception) {
         catalogsLoadInProgress = false
@@ -1464,7 +1485,8 @@ internal suspend fun HomeViewModel.loadAllCatalogsPipeline(
 internal fun HomeViewModel.loadCatalogPipeline(
     addon: Addon,
     catalog: CatalogDescriptor,
-    generation: Long
+    generation: Long,
+    allowNetworkRefresh: Boolean = true
 ) {
     val loadJob = viewModelScope.launch {
         var hasCountedCompletion = false
@@ -1487,7 +1509,7 @@ internal fun HomeViewModel.loadCatalogPipeline(
                 skip = 0,
                 skipStep = skipStep,
                 supportsSkip = supportsSkip,
-                allowNetworkRefresh = !shouldDeferStartupNetworkWork()
+                allowNetworkRefresh = allowNetworkRefresh && !shouldDeferStartupNetworkWork()
             ).collect { result ->
                 if (generation != catalogLoadGeneration) return@collect
                 when (result) {
