@@ -114,6 +114,7 @@ That includes:
 NEXIO goes well beyond raw addon metadata with support for:
 
 - **TMDB** enrichment
+- **TheTVDB** enrichment
 - **MDBList** ratings and lists
 - **OMDb / IMDb episode ratings**
 - **RPDB** and **TOP Posters**
@@ -148,7 +149,7 @@ If you want the fastest way to understand what makes NEXIO work best in practice
 NEXIO is at its best when you combine:
 
 - one connected debrid provider
-- TMDB enrichment
+- built-in TMDB and TheTVDB enrichment
 - Trakt sign-in
 - benchmark-driven transport tuning
 - Service Wrap
@@ -167,6 +168,8 @@ NEXIO is built for users who want a modern TV experience with:
 - deeper Trakt integration
 - more serious playback tuning
 - more control over how the app actually behaves in the living room
+
+TMDB and TheTVDB are core metadata providers. Nexio includes built-in access for non-commercial app usage, and users can optionally save their own API keys to use their own provider quota.
 
 If that is what you want, start with the setup guide above and then explore the full features overview.
 
