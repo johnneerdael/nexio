@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.profile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.sync.ProfileSyncService
 import com.nexio.tv.domain.model.UserProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -19,7 +20,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ProfileSelectionViewModel @Inject constructor(
-    private val profileManager: ProfileManager
+    private val profileManager: ProfileManager,
+    private val profileSyncService: ProfileSyncService
 ) : ViewModel() {
 
     val profiles: StateFlow<List<UserProfile>> = profileManager.profiles
@@ -46,25 +48,33 @@ class ProfileSelectionViewModel @Inject constructor(
         viewModelScope.launch {
             _pinState.update { it.copy(isVerifying = true, isError = false, errorMessage = null) }
 
-            // Phase 3 stub: no ProfileSyncService yet.
-            // Phase 4 will replace this with: profileSyncService.verifyProfilePin(profileId, pin)
-            // Since we have no server to verify the actual PIN value, simulate a network call.
-            delay(500)
-            val result = PinVerifyResult(unlocked = false, retryAfterSeconds = 0)
+            val result = profileSyncService.verifyProfilePin(profileId, pin)
+            if (result.isFailure) {
+                _pinState.update {
+                    it.copy(
+                        isVerifying = false,
+                        isError = true,
+                        errorMessage = "Unable to verify PIN"
+                    )
+                }
+                return@launch
+            }
 
-            if (result.unlocked) {
-                _pinState.update { PinVerificationState() }
+            val pinResult = result.getOrThrow()
+
+            if (pinResult.unlocked) {
+                resetPinState()
                 profileManager.setActiveProfile(profileId)
-            } else if (result.retryAfterSeconds > 0) {
+            } else if (pinResult.retryAfterSeconds > 0) {
                 _pinState.update {
                     it.copy(
                         isVerifying = false,
                         isError = false,
                         errorMessage = null,
-                        retryAfterSeconds = result.retryAfterSeconds
+                        retryAfterSeconds = pinResult.retryAfterSeconds
                     )
                 }
-                startRateLimitCountdown(result.retryAfterSeconds)
+                startRateLimitCountdown(pinResult.retryAfterSeconds)
             } else {
                 _pinState.update {
                     it.copy(
@@ -106,15 +116,6 @@ class ProfileSelectionViewModel @Inject constructor(
         val isVerifying: Boolean = false,
         val isError: Boolean = false,
         val errorMessage: String? = null,
-        val retryAfterSeconds: Int = 0
-    )
-
-    /**
-     * Local result type for Phase 3 PIN verification stub.
-     * Phase 4 will replace this with SupabaseProfilePinVerifyResult from the sync service.
-     */
-    data class PinVerifyResult(
-        val unlocked: Boolean = false,
         val retryAfterSeconds: Int = 0
     )
 }

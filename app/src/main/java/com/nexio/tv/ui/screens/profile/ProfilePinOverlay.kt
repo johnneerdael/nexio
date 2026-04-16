@@ -37,7 +37,7 @@ import kotlinx.coroutines.delay
  * @param onDismiss Called when the user presses Back to cancel PIN entry.
  * @param isVerifying True while network verification is in progress — disables numpad.
  * @param isError True when the last PIN attempt was rejected (triggers shake + "Wrong PIN" text).
- * @param errorMessage Optional override message (currently unused; "Wrong PIN" is hardcoded per spec).
+ * @param errorMessage Optional override message for rejected PINs.
  * @param retryAfterSeconds Remaining rate-limit seconds from ViewModel. >0 disables numpad and shows countdown.
  * @param onErrorConsumed Called after the shake animation completes to clear the error flag.
  */
@@ -127,7 +127,7 @@ internal fun ProfilePinOverlay(
                     color = NexioColors.TextSecondary
                 )
                 isError -> Text(
-                    text = "Wrong PIN",
+                    text = errorMessage ?: "Wrong PIN",
                     style = MaterialTheme.typography.bodyMedium,
                     color = NexioColors.Error
                 )
