@@ -440,7 +440,7 @@ class ProfileSettingsScopeContractTest {
         assertTrue(homePipelineSource.contains("loadActiveProfileDiskBackedHomeState("))
         assertTrue(homePipelineSource.contains("expectedGeneration: Long? = null"))
         assertTrue(homePipelineSource.contains("Skipping stale disk-backed home state"))
-        assertTrue(homePipelineSource.contains("runSerializedPostStartupRefreshPipeline(expectedGeneration: Long)"))
+        assertTrue(homePipelineSource.contains("runSerializedPostStartupRefreshPipeline(expectedGeneration: Long, reason: String)"))
         assertTrue(homePipelineSource.contains("Skipping stale serialized home refresh"))
         assertTrue(homeContinueWatchingSource.contains("val capturedGeneration = homeProfileGeneration"))
         assertTrue(homeContinueWatchingSource.contains("Skipping stale continue watching publish"))
@@ -595,6 +595,67 @@ class ProfileSettingsScopeContractTest {
         assertTrue(source.contains("!shouldSuppressProfileSwitchRefresh(\"simkl_pref_change\")"))
         assertTrue(source.contains("!shouldSuppressProfileSwitchRefresh(\"mdblist_settings_change\")"))
         assertTrue(source.contains("!shouldSuppressProfileSwitchRefresh(\"mdblist_pref_change\")"))
+    }
+
+    @Test
+    fun `profile switch disk snapshot mode durably blocks observer refresh reasons`() {
+        val homeSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModel.kt").readText()
+
+        assertTrue(homeSource.contains("internal var profileSwitchDiskSnapshotActive: Boolean = false"))
+        assertTrue(homeSource.contains("internal var profileSwitchDiskSnapshotGeneration: Long = 0L"))
+        assertTrue(homeSource.contains("activateProfileSwitchDiskSnapshotMode(session.generation)"))
+        assertTrue(homeSource.contains("clearProfileSwitchDiskSnapshotMode(\"profile_switch_no_disk_state\")"))
+        assertTrue(homeSource.contains("shouldBlockProfileSwitchDiskSnapshotRefresh(reason: String)"))
+        assertTrue(homeSource.contains("if (shouldBlockProfileSwitchDiskSnapshotRefresh(reason)) return"))
+
+        listOf(
+            "trakt_discovery",
+            "trakt_pref_change",
+            "simkl_discovery",
+            "simkl_pref_change",
+            "mdblist_discovery",
+            "mdblist_pref_change",
+            "mdblist_settings_change",
+            "mdblist_settings_disabled",
+            "window_closed",
+            "observe_disabled_home_catalogs",
+            "observe_installed_addons"
+        ).forEach { blockedReason ->
+            assertTrue("disk snapshot mode should list blocked observer reason $blockedReason", homeSource.contains("\"$blockedReason\""))
+        }
+    }
+
+    @Test
+    fun `serialized refresh cannot bypass profile switch disk snapshot mode`() {
+        val homeSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModel.kt").readText()
+        val source = homeCatalogPipeline.readText()
+        val functionStart = source.indexOf("runSerializedPostStartupRefreshPipeline(")
+        val guardIndex = source.indexOf("if (shouldBlockProfileSwitchDiskSnapshotRefresh(reason)) return", startIndex = functionStart)
+        val traktRefreshIndex = source.indexOf("traktDiscoveryService.ensureFresh(force = false)", startIndex = functionStart)
+        val simklRefreshIndex = source.indexOf("simklDiscoveryService.ensureFresh(force = false)", startIndex = functionStart)
+        val mdbRefreshIndex = source.indexOf("mdbListDiscoveryService.ensureFresh(force = false)", startIndex = functionStart)
+        val addonRefreshIndex = source.indexOf("homeCatalogRefreshCoordinator.refreshSerially(", startIndex = functionStart)
+
+        assertTrue(homeSource.contains("runSerializedPostStartupRefresh(expectedGeneration = capturedGeneration, reason = currentReason)"))
+        assertTrue(homeSource.contains("runSerializedPostStartupRefreshPipeline(expectedGeneration, reason)"))
+        assertTrue(source.contains("runSerializedPostStartupRefreshPipeline(expectedGeneration: Long, reason: String)"))
+        assertTrue("serialized refresh function should exist", functionStart >= 0)
+        assertTrue("disk snapshot guard should exist in serialized refresh", guardIndex > functionStart)
+        assertTrue("Trakt network refresh should be after disk snapshot guard", traktRefreshIndex > guardIndex)
+        assertTrue("SIMKL network refresh should be after disk snapshot guard", simklRefreshIndex > guardIndex)
+        assertTrue("MDBList network refresh should be after disk snapshot guard", mdbRefreshIndex > guardIndex)
+        assertTrue("addon network refresh should be after disk snapshot guard", addonRefreshIndex > guardIndex)
+    }
+
+    @Test
+    fun `disk backed profile switch marks restored discovery sources observed for immediate rows`() {
+        val source = homeCatalogPipeline.readText()
+
+        assertTrue(source.contains("traktDiscoveryObserved = true"))
+        assertTrue(source.contains("simklDiscoveryObserved = true"))
+        assertTrue(source.contains("mdbListDiscoveryObserved = true"))
+        assertTrue(source.contains("scheduleUpdateCatalogRows()"))
+        assertTrue(source.contains("hasDiskCacheState"))
     }
 
     @Test

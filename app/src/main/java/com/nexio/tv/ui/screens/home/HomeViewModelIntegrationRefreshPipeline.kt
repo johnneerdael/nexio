@@ -9,6 +9,7 @@ private const val FOREGROUND_REFRESH_THROTTLE_MS = 20_000L
 internal fun HomeViewModel.observeAccountSyncRefreshPipeline() {
     viewModelScope.launch {
         accountSyncRefreshNotifier.events.collect {
+            clearProfileSwitchDiskSnapshotMode("account_sync")
             startupRefreshPending = true
             if (diskFirstHomeStartupEnabled) {
                 openStartupDeferralWindowIfNeeded("account_sync")
@@ -26,6 +27,7 @@ internal fun HomeViewModel.observeAccountSyncRefreshPipeline() {
 internal fun HomeViewModel.onForegroundPipeline() {
     viewModelScope.launch {
         if (shouldSuppressProfileSwitchRefresh("foreground")) return@launch
+        clearProfileSwitchDiskSnapshotMode("foreground")
         if (diskFirstHomeStartupEnabled) {
             openStartupDeferralWindowIfNeeded("home_foreground")
         }
