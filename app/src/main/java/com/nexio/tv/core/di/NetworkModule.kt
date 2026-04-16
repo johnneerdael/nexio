@@ -2,6 +2,7 @@ package com.nexio.tv.core.di
 
 import android.content.Context
 import android.util.Log
+import com.nexio.tv.core.metadata.MetadataProviderConfig
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.logging.sanitizeRequestTargetForLogs
 import com.nexio.tv.data.remote.api.AddonApi
@@ -334,7 +335,7 @@ object NetworkModule {
     @Named("tmdb")
     fun provideTmdbRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
         Retrofit.Builder()
-            .baseUrl("https://api.themoviedb.org/3/")
+            .baseUrl(MetadataProviderConfig.tmdbBaseUrl())
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
@@ -344,7 +345,7 @@ object NetworkModule {
     @Named("tvdb")
     fun provideTvdbRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
         Retrofit.Builder()
-            .baseUrl("https://api4.thetvdb.com/v4/")
+            .baseUrl(MetadataProviderConfig.tvdbBaseUrl())
             .client(okHttpClient)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
