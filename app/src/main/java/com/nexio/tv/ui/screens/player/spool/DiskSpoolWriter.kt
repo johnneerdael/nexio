@@ -3,12 +3,7 @@ package com.nexio.tv.ui.screens.player.spool
 import android.util.Log
 import java.io.EOFException
 import java.io.IOException
-import java.util.concurrent.ExecutionException
-import java.util.concurrent.Executors
-import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.atomic.AtomicReference
 import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -20,11 +15,10 @@ internal class DiskSpoolWriter(
     private val requestHeaders: Map<String, String> = emptyMap(),
     private val chunkBytes: Int = 18 * 1024 * 1024,
     private val ioBufferBytes: Int = 512 * 1024,
-    private val parallelConnections: Int = 1,
+    @Suppress("UNUSED_PARAMETER")
+    parallelConnections: Int = 1,
     private val startupPriorityBytes: Long = 100L * 1024L * 1024L
 ) {
-    private val normalizedParallelConnections = parallelConnections.coerceAtLeast(1)
-
     data class SourceMetadata(
         val contentLength: Long,
         val supportsRanges: Boolean
@@ -149,21 +143,12 @@ internal class DiskSpoolWriter(
                 contentLength = metadata.contentLength
             )
         }
-        if (normalizedParallelConnections <= 1) {
-            downloadSequentially(
-                url = url,
-                bridge = bridge,
-                targetFrontierBytes = targetFrontierBytes,
-                contentLength = metadata.contentLength
-            )
-        } else {
-            downloadParallel(
-                url = url,
-                bridge = bridge,
-                targetFrontierBytes = targetFrontierBytes,
-                contentLength = metadata.contentLength
-            )
-        }
+        downloadSequentially(
+            url = url,
+            bridge = bridge,
+            targetFrontierBytes = targetFrontierBytes,
+            contentLength = metadata.contentLength
+        )
     }
 
     private fun downloadSequentially(
@@ -189,76 +174,6 @@ internal class DiskSpoolWriter(
 
             val endInclusive = minOf(cursor + chunkBytes - 1L, targetFrontierBytes - 1L, contentLength - 1L)
             cursor = downloadRangeIntoSession(url, cursor, endInclusive, bridge)
-        }
-    }
-
-    private fun downloadParallel(
-        url: String,
-        bridge: SessionBridge,
-        targetFrontierBytes: Long,
-        contentLength: Long
-    ) {
-        val limitExclusive = minOf(targetFrontierBytes, contentLength)
-        if (bridge.contiguousFrontierBytes() >= limitExclusive) return
-
-        val executor = Executors.newFixedThreadPool(normalizedParallelConnections)
-        val nextStart = AtomicLong(bridge.contiguousFrontierBytes())
-        val failure = AtomicReference<Throwable?>()
-        fun claimRange(): LongRange? {
-            while (true) {
-                val start = nextStart.getAndAdd(chunkBytes.toLong())
-                if (start >= limitExclusive) return null
-                val endInclusive = minOf(start + chunkBytes - 1L, limitExclusive - 1L)
-                return start..endInclusive
-            }
-        }
-
-        val workers = ArrayList<Future<*>>(normalizedParallelConnections)
-        repeat(normalizedParallelConnections) {
-            workers += executor.submit {
-                try {
-                    while (
-                        !bridge.isClosed() &&
-                        !Thread.currentThread().isInterrupted &&
-                        failure.get() == null
-                    ) {
-                        val priority = bridge.consumePriorityPosition()
-                        if (priority >= 0L) {
-                            if (!rebaseTo(bridge, priority)) return@submit
-                            nextStart.set(priority)
-                        }
-
-                        val range = claimRange() ?: return@submit
-                        val cursor = downloadRangeIntoSession(url, range.first, range.last, bridge)
-                        if (
-                            cursor <= range.first &&
-                            !bridge.isClosed() &&
-                            !Thread.currentThread().isInterrupted
-                        ) {
-                            failure.compareAndSet(
-                                null,
-                                IOException("Disk spool parallel worker made no progress for range $range")
-                            )
-                            return@submit
-                        }
-                    }
-                } catch (throwable: Throwable) {
-                    failure.compareAndSet(null, throwable)
-                }
-            }
-        }
-
-        try {
-            workers.forEach { worker -> worker.get() }
-            failure.get()?.let { throw it }
-        } catch (interrupted: InterruptedException) {
-            Thread.currentThread().interrupt()
-            workers.forEach { worker -> worker.cancel(true) }
-            throw IOException("Interrupted while downloading disk spool ranges", interrupted)
-        } catch (execution: ExecutionException) {
-            throw execution.cause ?: execution
-        } finally {
-            executor.shutdownNow()
         }
     }
 
