@@ -91,6 +91,10 @@ android {
         buildConfigField("String", "TV_LOGIN_WEB_BASE_URL", "\"${localProperties.getProperty("TV_LOGIN_WEB_BASE_URL", "https://app.nuvio.tv/tv-login")}\"")
         buildConfigField("String", "SHADOW_DATA_COLLECTION_BASE_URL", "\"${resolveProperty(devProperties, localProperties, "SHADOW_DATA_COLLECTION_BASE_URL", "https://datacollection.nexioapp.org")}\"")
         buildConfigField("String", "SHADOW_DATA_COLLECTION_WRITE_TOKEN", "\"${resolveProperty(devProperties, localProperties, "SHADOW_DATA_COLLECTION_WRITE_TOKEN")}\"")
+        buildConfigField("String", "TMDB_API_KEY", "\"${resolveProperty(devProperties, localProperties, "TMDB_API_KEY")}\"")
+        buildConfigField("String", "TMDB_API_URL", "\"${resolveProperty(devProperties, localProperties, "TMDB_API_URL", "https://api.themoviedb.org/3/")}\"")
+        buildConfigField("String", "TVDB_API_KEY", "\"${resolveProperty(devProperties, localProperties, "TVDB_API_KEY")}\"")
+        buildConfigField("String", "TVDB_API_URL", "\"${resolveProperty(devProperties, localProperties, "TVDB_API_URL", "https://api4.thetvdb.com/v4/")}\"")
         buildConfigField("boolean", "DOVI_NATIVE_ENABLED", enableDoviNative.toString())
         buildConfigField("boolean", "DOVI_EXTRACTOR_HOOK_READY", doviExtractorHookReady.toString())
         if (enableDoviNative) {
