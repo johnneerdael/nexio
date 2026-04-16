@@ -57,15 +57,18 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                 resumeRef = ::resumeRefForContinueWatching,
                 nextUpRef = ::nextUpRefForContinueWatching
             )
+            val nowMs = System.currentTimeMillis()
             val items = timeline.map { row ->
                 when (row) {
                     is ContinueWatchingTimelineRow.Resume -> row.value.toContinueWatchingInProgress(snapshot.displayMetadataByItemKey)
-                    is ContinueWatchingTimelineRow.NextUp -> row.value.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, System.currentTimeMillis())
+                    is ContinueWatchingTimelineRow.NextUp -> row.value.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
                 }
+            }.filter { item ->
+                item !is ContinueWatchingItem.NextUp || item.info.hasAired
             }
             val traktUpNextItems = snapshot.traktUpNextItems.map { entry ->
-                entry.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, System.currentTimeMillis())
-            }
+                entry.toContinueWatchingNextUp(snapshot.displayMetadataByItemKey, nowMs)
+            }.filter { it.info.hasAired }
 
             if (!isCurrentHomeProfileGeneration(capturedGeneration)) {
                 Log.d(HomeViewModel.TAG, "Skipping stale continue watching publish generation=$capturedGeneration")

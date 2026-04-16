@@ -4,10 +4,15 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.imageLoader
+import com.nexio.tv.core.tmdb.TmdbMetadataService
+import com.nexio.tv.data.local.HomeCatalogSnapshotStore
+import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.PosterRatingsSettingsDataStore
 import com.nexio.tv.data.remote.api.RpdbApi
 import com.nexio.tv.data.remote.api.TopPostersApi
 import com.nexio.tv.domain.model.PosterRatingsSettings
+import com.nexio.tv.domain.repository.CatalogRepository
+import com.nexio.tv.domain.repository.MetaRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +33,12 @@ class PosterRatingsSettingsViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val dataStore: PosterRatingsSettingsDataStore,
     private val rpdbApi: RpdbApi,
-    private val topPostersApi: TopPostersApi
+    private val topPostersApi: TopPostersApi,
+    private val metadataDiskCacheStore: MetadataDiskCacheStore,
+    private val homeCatalogSnapshotStore: HomeCatalogSnapshotStore,
+    private val metaRepository: MetaRepository,
+    private val catalogRepository: CatalogRepository,
+    private val tmdbMetadataService: TmdbMetadataService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PosterRatingsSettingsUiState())
@@ -69,6 +79,14 @@ class PosterRatingsSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _posterCacheInvalidating.value = true
             withContext(Dispatchers.IO) {
+                // Clear metadata caches that store poster URLs
+                metadataDiskCacheStore.clearAll()
+                homeCatalogSnapshotStore.clear()
+                metaRepository.clearCache()
+                catalogRepository.clearCache()
+                tmdbMetadataService.clearCache()
+
+                // Clear Coil image pixel caches
                 val imageLoader = appContext.imageLoader
                 imageLoader.memoryCache?.clear()
                 imageLoader.diskCache?.clear()

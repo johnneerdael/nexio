@@ -309,7 +309,7 @@ class TraktProgressService @Inject constructor(
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + exceptionHandler)
     private val refreshSignals = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    private val episodeVideoIdCache = mutableMapOf<String, String>()
+    private val episodeInfoCache = mutableMapOf<String, ResolvedEpisodeInfo>()
     private val runtimeRegistry = TraktProgressRuntimeRegistry()
     private val remoteProgress get() = runtimeState().remoteProgress
     private val myShowsNextUp get() = runtimeState().myShowsNextUp
@@ -1652,7 +1652,7 @@ class TraktProgressService @Inject constructor(
 
             if (hiddenProgress.hiddenSeasonKeys.contains(hiddenSeasonKey(contentId, nextSeason))) continue
 
-            val videoId = "$contentId:$nextSeason:$nextEpisode"
+            val episodeInfo = resolveEpisodeInfo(contentId, nextSeason, nextEpisode)
 
             entries.add(
                 DerivedNextUpCandidate(
@@ -1663,8 +1663,8 @@ class TraktProgressService @Inject constructor(
                         season = nextSeason,
                         episode = nextEpisode,
                         episodeTitle = null,
-                        videoId = videoId,
-                        firstAired = null,
+                        videoId = episodeInfo.videoId,
+                        firstAired = episodeInfo.released,
                         firstAiredMs = 0L,
                         activityAtMs = latestEpisode.lastWatched,
                         traktShowId = showInfo?.traktShowId ?: latestEpisode.traktShowId,
@@ -1844,13 +1844,14 @@ class TraktProgressService @Inject constructor(
                 return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
             }
 
+            val episodeInfo = resolveEpisodeInfo(candidate.contentId, season, episode)
             TraktNextUpValidationResult.CurrentAiredNextEpisode(
                 candidate.copy(
                     season = season,
                     episode = episode,
                     episodeTitle = nextEpisode.title ?: candidate.episodeTitle,
-                    videoId = resolveEpisodeVideoId(candidate.contentId, season, episode),
-                    firstAired = null,
+                    videoId = episodeInfo.videoId,
+                    firstAired = episodeInfo.released,
                     firstAiredMs = 0L,
                     traktEpisodeId = nextEpisode.ids?.trakt ?: candidate.traktEpisodeId
                 )
@@ -2174,13 +2175,24 @@ class TraktProgressService @Inject constructor(
             }
     }
 
+    private data class ResolvedEpisodeInfo(
+        val videoId: String,
+        val released: String? = null
+    )
+
     private suspend fun resolveEpisodeVideoId(
         contentId: String,
         season: Int,
         episode: Int
-    ): String {
+    ): String = resolveEpisodeInfo(contentId, season, episode).videoId
+
+    private suspend fun resolveEpisodeInfo(
+        contentId: String,
+        season: Int,
+        episode: Int
+    ): ResolvedEpisodeInfo {
         val key = "$contentId:$season:$episode"
-        episodeVideoIdCache[key]?.let { return it }
+        episodeInfoCache[key]?.let { return it }
 
         val candidates = buildList {
             add(contentId)
@@ -2196,18 +2208,22 @@ class TraktProgressService @Inject constructor(
                 } ?: continue
 
                 val meta = (result as? NetworkResult.Success)?.data ?: continue
-                val videoId = meta.videos.firstOrNull {
+                val video = meta.videos.firstOrNull {
                     it.season == season && it.episode == episode
-                }?.id
+                }
 
-                if (!videoId.isNullOrBlank()) {
-                    episodeVideoIdCache[key] = videoId
-                    return videoId
+                if (video != null && !video.id.isNullOrBlank()) {
+                    val info = ResolvedEpisodeInfo(
+                        videoId = video.id,
+                        released = video.released
+                    )
+                    episodeInfoCache[key] = info
+                    return info
                 }
             }
         }
 
-        return "$contentId:$season:$episode"
+        return ResolvedEpisodeInfo(videoId = "$contentId:$season:$episode")
     }
 
     private fun progressKey(progress: WatchProgress): String {
