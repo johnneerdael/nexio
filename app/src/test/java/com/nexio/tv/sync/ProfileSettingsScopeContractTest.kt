@@ -331,12 +331,25 @@ class ProfileSettingsScopeContractTest {
 
         assertTrue(source.contains("hasTraktUpNextItems = activeProfileTraktAuthenticated && currentState.traktUpNextItems.isNotEmpty()"))
         assertTrue(source.contains("persistedTraktSyntheticGroups = if (providerState.traktAuthenticated) snapshot.traktGroups else emptyList()"))
-        assertTrue(source.contains("activeProfileTraktAuthenticated = providerState.traktAuthenticated"))
         assertTrue(source.contains("trackingProviderStateService.currentState()"))
         assertTrue(
             "Trakt Up Next must not be described from stale UI state after profile auth is cleared",
             !source.contains("hasTraktUpNextItems = currentState.traktUpNextItems.isNotEmpty()")
         )
+    }
+
+    @Test
+    fun `profile switch restores disk backed trakt rows before auth state settles`() {
+        val source = homeCatalogPipeline.readText()
+
+        assertTrue(source.contains("val hasTraktDiskState = diskState.hasTraktDiskState()"))
+        assertTrue(source.contains("activeProfileTraktAuthenticated = diskState.traktAuthenticated || hasTraktDiskState"))
+        assertTrue(source.contains("diskState.traktSnapshot?.let { snapshot ->"))
+        assertTrue(
+            "Disk-backed Trakt snapshots must not be dropped just because tracking auth state is still settling",
+            !source.contains("diskState.traktSnapshot?.takeIf { diskState.traktAuthenticated }")
+        )
+        assertTrue(source.contains("persistedTraktSyntheticGroups = if (diskState.traktAuthenticated || hasTraktDiskState) snapshot.traktGroups else emptyList()"))
     }
 
     @Test
@@ -536,6 +549,12 @@ class ProfileSettingsScopeContractTest {
 
         assertTrue(source.contains("hydratedSnapshot.updatedAtMs <= 0L && shouldSuppressProfileSwitchRefresh(\"trakt_discovery\")"))
         assertTrue(source.contains("Skipping empty Trakt discovery emission during profile switch"))
+        val traktSuppressIndex = source.indexOf("hydratedSnapshot.updatedAtMs <= 0L && shouldSuppressProfileSwitchRefresh(\"trakt_discovery\")")
+        val traktClearIndex = source.indexOf("clearTraktHomeState(\"observe_trakt_discovery_unauthenticated\")")
+        assertTrue(
+            "Empty Trakt emissions during profile switch must be skipped before unauthenticated clearing can run",
+            traktSuppressIndex >= 0 && traktClearIndex > traktSuppressIndex
+        )
         assertTrue(source.contains("snapshot.updatedAtMs <= 0L && shouldSuppressProfileSwitchRefresh(\"simkl_discovery\")"))
         assertTrue(source.contains("Skipping empty Simkl discovery emission during profile switch"))
         assertTrue(source.contains("hydratedSnapshot.updatedAtMs <= 0L && shouldSuppressProfileSwitchRefresh(\"mdblist_discovery\")"))

@@ -241,14 +241,15 @@ internal suspend fun HomeViewModel.loadActiveProfileDiskBackedHomeState(
             Log.d(HomeViewModel.TAG, "Skipping stale disk-backed home state on main reason=$reason generation=$expectedGeneration")
             return@withContext
         }
-        activeProfileTraktAuthenticated = diskState.traktAuthenticated
+        val hasTraktDiskState = diskState.hasTraktDiskState()
+        activeProfileTraktAuthenticated = diskState.traktAuthenticated || hasTraktDiskState
         activeProfileSimklAuthenticated = diskState.simklAuthenticated
         diskState.syntheticSnapshot?.let { snapshot ->
-            persistedTraktSyntheticGroups = if (diskState.traktAuthenticated) snapshot.traktGroups else emptyList()
+            persistedTraktSyntheticGroups = if (diskState.traktAuthenticated || hasTraktDiskState) snapshot.traktGroups else emptyList()
             persistedSimklSyntheticGroups = snapshot.simklGroups
             persistedMDBListSyntheticGroups = snapshot.mdbListGroups
         }
-        diskState.traktSnapshot?.takeIf { diskState.traktAuthenticated }?.let { snapshot ->
+        diskState.traktSnapshot?.let { snapshot ->
             val hydrated = applyTomatoesOverridesToTraktSnapshot(snapshot, syntheticTomatoesOverridesByItemId)
             persistedTraktDiscoverySnapshot = hydrated
             traktDiscoverySnapshot = hydrated
@@ -301,6 +302,11 @@ private data class DiskBackedHomeState(
     val mdbSnapshot: com.nexio.tv.data.repository.MDBListDiscoverySnapshot?,
     val homeSnapshot: com.nexio.tv.data.local.HomeCatalogSnapshotStore.Snapshot?
 ) {
+    fun hasTraktDiskState(): Boolean {
+        return syntheticSnapshot?.traktGroups?.isNotEmpty() == true ||
+            traktSnapshot?.hasRenderableContent() == true
+    }
+
     fun hasDiskCacheState(): Boolean {
         return syntheticSnapshot != null ||
             traktSnapshot != null ||
@@ -308,6 +314,19 @@ private data class DiskBackedHomeState(
             mdbSnapshot != null ||
             homeSnapshot != null
     }
+}
+
+private fun com.nexio.tv.data.repository.TraktDiscoverySnapshot.hasRenderableContent(): Boolean {
+    return updatedAtMs > 0L ||
+        calendarItems.isNotEmpty() ||
+        recommendationMovieItems.isNotEmpty() ||
+        recommendationShowItems.isNotEmpty() ||
+        trendingMovieItems.isNotEmpty() ||
+        trendingShowItems.isNotEmpty() ||
+        popularMovieItems.isNotEmpty() ||
+        popularShowItems.isNotEmpty() ||
+        customListCatalogs.isNotEmpty() ||
+        popularLists.isNotEmpty()
 }
 
 internal fun HomeViewModel.restorePersistedDiscoverySnapshotsPipeline() {
@@ -388,6 +407,22 @@ internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
         val autoRefreshOnStart = !shouldDeferStartupNetworkWork()
         traktDiscoveryService.observeSnapshot(autoRefreshOnStart = autoRefreshOnStart).collectLatest { snapshot ->
             val capturedGeneration = homeProfileGeneration
+            val hydratedSnapshot = applyTomatoesOverridesToTraktSnapshot(
+                snapshot,
+                syntheticTomatoesOverridesByItemId
+            )
+            if (!isCurrentHomeProfileGeneration(capturedGeneration)) {
+                Log.d(HomeViewModel.TAG, "Skipping stale discovery snapshot generation=$capturedGeneration")
+                return@collectLatest
+            }
+            // During profile switch, discovery flows re-emit an empty snapshot before
+            // onStart loads disk data. Accepting that empty emission would overwrite the
+            // disk-cached data that loadActiveProfileDiskBackedHomeState just set.
+            // Skip empty emissions while the profile-switch suppress window is active.
+            if (hydratedSnapshot.updatedAtMs <= 0L && shouldSuppressProfileSwitchRefresh("trakt_discovery")) {
+                Log.d(HomeViewModel.TAG, "Skipping empty Trakt discovery emission during profile switch")
+                return@collectLatest
+            }
             if (!activeProfileTraktAuthenticated) {
                 val providerState = withContext(Dispatchers.IO) {
                     trackingProviderStateService.currentState()
@@ -403,23 +438,7 @@ internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
                     return@collectLatest
                 }
             }
-            val hydratedSnapshot = applyTomatoesOverridesToTraktSnapshot(
-                snapshot,
-                syntheticTomatoesOverridesByItemId
-            )
-            if (!isCurrentHomeProfileGeneration(capturedGeneration)) {
-                Log.d(HomeViewModel.TAG, "Skipping stale discovery snapshot generation=$capturedGeneration")
-                return@collectLatest
-            }
             if (traktDiscoveryObserved && hydratedSnapshot == traktDiscoverySnapshot) return@collectLatest
-            // During profile switch, discovery flows re-emit an empty snapshot before
-            // onStart loads disk data. Accepting that empty emission would overwrite the
-            // disk-cached data that loadActiveProfileDiskBackedHomeState just set.
-            // Skip empty emissions while the profile-switch suppress window is active.
-            if (hydratedSnapshot.updatedAtMs <= 0L && shouldSuppressProfileSwitchRefresh("trakt_discovery")) {
-                Log.d(HomeViewModel.TAG, "Skipping empty Trakt discovery emission during profile switch")
-                return@collectLatest
-            }
             traktDiscoveryObserved = true
             traktDiscoverySnapshot = hydratedSnapshot
             persistedTraktDiscoverySnapshot = hydratedSnapshot
