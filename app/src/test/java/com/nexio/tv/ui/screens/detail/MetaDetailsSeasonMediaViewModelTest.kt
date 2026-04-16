@@ -440,6 +440,7 @@ class MetaDetailsSeasonMediaViewModelTest {
                 airDate = "2020-01-01"
             )
         )
+        coEvery { tmdbMetadataService.fetchEpisodeEnrichment("42", any(), "eng") } returns emptyMap()
 
         val viewModel = buildViewModel(
             trailerService = trailerService,
@@ -472,6 +473,7 @@ class MetaDetailsSeasonMediaViewModelTest {
                 airDate = "2020-01-01"
             )
         )
+        coEvery { tmdbMetadataService.fetchEpisodeEnrichment("42", any(), "eng") } returns emptyMap()
 
         val viewModel = buildViewModel(
             trailerService = trailerService,
