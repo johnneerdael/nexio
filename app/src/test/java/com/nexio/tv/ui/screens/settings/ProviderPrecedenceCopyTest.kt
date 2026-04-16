@@ -15,8 +15,8 @@ class ProviderPrecedenceCopyTest {
             ?.get(1)
             .orEmpty()
 
-        assertTrue(summary.contains("TVDB is used for TV metadata when configured"))
-        assertTrue(summary.contains("TMDB remains movie metadata and TV fallback"))
+        assertTrue(summary.contains("TVDB is used for TV metadata"))
+        assertTrue(summary.contains("TMDB is used for movies and fallback metadata"))
         assertTrue(summary.contains("Poster-ratings providers override supported poster artwork"))
     }
 }
