@@ -40,7 +40,7 @@ class TmdbSettingsDataStore @Inject constructor(
 
     val settings: Flow<TmdbSettings> = dataStore.data.map { prefs ->
         TmdbSettings(
-            enabled = prefs[enabledKey] ?: false,
+            enabled = prefs[enabledKey] ?: true,
             apiKey = prefs[apiKeyKey] ?: "",
             useArtwork = prefs[useArtworkKey] ?: true,
             useBasicInfo = prefs[useBasicInfoKey] ?: true,
@@ -56,7 +56,7 @@ class TmdbSettingsDataStore @Inject constructor(
     }
 
     suspend fun setEnabled(enabled: Boolean) {
-        store().edit { it[enabledKey] = enabled }
+        store().edit { it[enabledKey] = true }
     }
 
     suspend fun setApiKey(apiKey: String) {

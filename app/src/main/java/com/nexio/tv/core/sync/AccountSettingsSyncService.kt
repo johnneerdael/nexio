@@ -667,7 +667,7 @@ class AccountSettingsSyncService @Inject constructor(
             )
         }
 
-        tmdbSettingsDataStore.setEnabled(settings.integrations.tmdb.enabled)
+        tmdbSettingsDataStore.setEnabled(true)
         tmdbSettingsDataStore.setUseArtwork(settings.integrations.tmdb.useArtwork)
         tmdbSettingsDataStore.setUseBasicInfo(settings.integrations.tmdb.useBasicInfo)
         tmdbSettingsDataStore.setUseDetails(settings.integrations.tmdb.useDetails)
@@ -1466,11 +1466,13 @@ class AccountSettingsSyncService @Inject constructor(
     }
 
     private suspend fun applyTvdbPublicSyncSettings(settings: TvdbSyncSettings) {
-        tvdbSettingsDataStore.setEnabled(settings.enabled)
+        tvdbSettingsDataStore.setEnabled(true)
         tvdbSettingsDataStore.saveValidationFailure(
             status = runCatching { TvdbValidationStatus.valueOf(settings.validationStatus) }
-                .getOrDefault(TvdbValidationStatus.NOT_CONFIGURED),
-            lastFailure = settings.lastFailure
+                .getOrDefault(TvdbValidationStatus.VALID)
+                .takeUnless { it == TvdbValidationStatus.NOT_CONFIGURED }
+                ?: TvdbValidationStatus.VALID,
+            lastFailure = settings.lastFailure.takeIf { settings.validationStatus == TvdbValidationStatus.INVALID.name }.orEmpty()
         )
     }
 

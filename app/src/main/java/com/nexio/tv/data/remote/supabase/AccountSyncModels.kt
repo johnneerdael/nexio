@@ -256,7 +256,8 @@ data class TheIntroDbSyncSettings(
 
 @Serializable
 data class TmdbSyncSettings(
-    val enabled: Boolean = false,
+    @EncodeDefault
+    val enabled: Boolean = true,
     val useArtwork: Boolean = true,
     val useBasicInfo: Boolean = true,
     val useDetails: Boolean = true,
@@ -270,9 +271,13 @@ data class TmdbSyncSettings(
 
 @Serializable
 data class TvdbSyncSettings(
-    val enabled: Boolean = false,
-    val configured: Boolean = false,
-    val validationStatus: String = "NOT_CONFIGURED",
+    @EncodeDefault
+    val enabled: Boolean = true,
+    @EncodeDefault
+    val configured: Boolean = true,
+    @EncodeDefault
+    val validationStatus: String = "VALID",
+    @EncodeDefault
     val lastFailure: String = ""
 )
 
