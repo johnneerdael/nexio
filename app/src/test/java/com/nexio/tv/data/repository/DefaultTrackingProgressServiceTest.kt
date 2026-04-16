@@ -195,8 +195,8 @@ class DefaultTrackingProgressServiceTest {
 
         service.refreshNow()
 
-        coVerify(exactly = 1) { simklService.refreshNow() }
-        coVerify(exactly = 0) { traktService.refreshNow() }
+        coVerify(exactly = 1) { simklService.refreshNowImmediate() }
+        coVerify(exactly = 0) { traktService.refreshNowImmediate() }
     }
 
     @Test

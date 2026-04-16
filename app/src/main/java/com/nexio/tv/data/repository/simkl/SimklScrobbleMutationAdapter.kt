@@ -56,7 +56,11 @@ class SimklScrobbleMutationAdapter @Inject constructor(
     }
 
     override suspend fun reconcileSuccess(envelope: TraktMutationEnvelope) {
-        simklProgressService.refreshNow()
+        // Only refresh after stop/checkin - heartbeat starts and pauses don't change
+        // watch history or playback state on SIMKL, so there is nothing to reconcile.
+        if (envelope.mutationKind == MUTATION_KIND_CHECKIN || envelope.scrobbleAction() == "stop") {
+            simklProgressService.refreshNow()
+        }
     }
 
     override suspend fun rollbackToServerTruth(

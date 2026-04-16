@@ -530,6 +530,22 @@ class ProfileSettingsScopeContractTest {
     }
 
     @Test
+    fun `home discovery observers preserve disk snapshots during profile switch empty emissions`() {
+        val homeSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModel.kt").readText()
+        val source = homeCatalogPipeline.readText()
+
+        assertTrue(source.contains("hydratedSnapshot.updatedAtMs <= 0L && shouldSuppressProfileSwitchRefresh(\"trakt_discovery\")"))
+        assertTrue(source.contains("Skipping empty Trakt discovery emission during profile switch"))
+        assertTrue(source.contains("snapshot.updatedAtMs <= 0L && shouldSuppressProfileSwitchRefresh(\"simkl_discovery\")"))
+        assertTrue(source.contains("Skipping empty Simkl discovery emission during profile switch"))
+        assertTrue(source.contains("hydratedSnapshot.updatedAtMs <= 0L && shouldSuppressProfileSwitchRefresh(\"mdblist_discovery\")"))
+        assertTrue(source.contains("Skipping empty MDBList discovery emission during profile switch"))
+        assertTrue(source.contains("loadActiveProfileDiskBackedHomeState("))
+        assertTrue(homeSource.contains("profileSwitchDiskHydrationActive"))
+        assertTrue(homeSource.contains("shouldSuppressProfileSwitchRefresh(reason: String)"))
+    }
+
+    @Test
     fun `trakt progress runtime state is profile keyed`() {
         val source = File("app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt").readText()
 

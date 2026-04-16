@@ -40,6 +40,7 @@ class SimklDiscoverySnapshotStore private constructor(
         internal const val BASE_PREFS_NAME = "simkl_discovery_snapshot_v2"
         private const val LEGACY_PREFS_NAME = "simkl_discovery_snapshot"
         private const val SNAPSHOT_KEY = "snapshot"
+        private const val EXTERNAL_ID_CACHE_KEY = "external_id_cache"
     }
 
     private val gson = Gson()
@@ -88,6 +89,22 @@ class SimklDiscoverySnapshotStore private constructor(
         runCatching {
             context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE).edit().remove(SNAPSHOT_KEY).commit()
         }
+    }
+
+    fun readExternalIdCache(profileId: Int = activeProfileId()): Map<String, String?> {
+        return runCatching {
+            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
+            val raw = prefs.getString(EXTERNAL_ID_CACHE_KEY, null)?.takeIf { it.isNotBlank() } ?: return emptyMap()
+            val type = object : TypeToken<Map<String, String?>>() {}.type
+            gson.fromJson<Map<String, String?>>(raw, type) ?: emptyMap()
+        }.onFailure { Log.w(TAG, "Failed to restore external ID cache", it) }.getOrDefault(emptyMap())
+    }
+
+    fun writeExternalIdCache(cache: Map<String, String?>, profileId: Int = activeProfileId()) {
+        runCatching {
+            val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
+            prefs.edit().putString(EXTERNAL_ID_CACHE_KEY, gson.toJson(cache)).commit()
+        }.onFailure { Log.w(TAG, "Failed to persist external ID cache", it) }
     }
 
     private fun decode(raw: String): SimklDiscoverySnapshot {

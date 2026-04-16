@@ -8,6 +8,7 @@ import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.TraktSettingsDataStore
 import com.nexio.tv.data.remote.api.TraktApi
 import com.nexio.tv.data.remote.dto.trakt.TraktEpisodeDto
+import com.nexio.tv.data.remote.dto.trakt.TraktLastActivitiesResponseDto
 import com.nexio.tv.data.remote.dto.trakt.TraktEpisodeSummaryDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryEpisodeAddDto
 import com.nexio.tv.data.remote.dto.trakt.TraktHistoryAddRequestDto
@@ -417,6 +418,30 @@ class TraktProgressService @Inject constructor(
         )
     }
 
+    @Volatile private var cachedActivities: TraktLastActivitiesResponseDto? = null
+    @Volatile private var cachedActivitiesAtMs: Long = 0L
+
+    // Shared last-activities cache - avoids duplicate /sync/last_activities calls
+    // when both TraktProgressService and TraktDiscoveryService refresh in the same cycle.
+    /**
+     * Returns a recent `/sync/last_activities` response, reusing a cached copy if it was
+     * fetched within [maxAgeMs]. Called by [TraktDiscoveryService] to avoid a duplicate API call.
+     */
+    suspend fun getRecentActivities(maxAgeMs: Long = 10_000L): TraktLastActivitiesResponseDto? {
+        val now = System.currentTimeMillis()
+        cachedActivities?.let { cached ->
+            if (now - cachedActivitiesAtMs < maxAgeMs) return cached
+        }
+        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
+            traktApi.getLastActivities(authHeader)
+        } ?: return null
+        if (!response.isSuccessful) return null
+        val body = response.body() ?: return null
+        cachedActivities = body
+        cachedActivitiesAtMs = System.currentTimeMillis()
+        return body
+    }
+
     private val playbackCacheTtlMs = 30_000L
     private val userStatsCacheTtlMs = Long.MAX_VALUE
     private val watchedMoviesCacheTtlMs = 10 * 60_000L
@@ -433,7 +458,7 @@ class TraktProgressService @Inject constructor(
     private val metadataFetchSemaphore = Semaphore(5)
     private val nextUpValidationSemaphore = Semaphore(2)
     private val fastSyncThrottleMs = 15_000L
-    private val manualRefreshSignalThrottleMs = 2_000L
+    private val manualRefreshSignalThrottleMs = 3_000L
     private val eventDrivenRefreshThrottleMs = 30_000L
     private val nextUpValidationVisibleCandidateLimit = 20
     private val nextUpValidationBudget = 5
@@ -498,6 +523,23 @@ class TraktProgressService @Inject constructor(
         }
         lastManualRefreshSignalMs = now
         trace("refreshNow: emitting signal, force window active for 30s")
+        refreshSignals.emit(Unit)
+    }
+
+    /**
+     * Immediate refresh - bypasses the throttle window. Use for critical paths where the caller
+     * needs fresh state right away (app startup, foreground resume, user-initiated refresh).
+     */
+    suspend fun refreshNowImmediate() {
+        ensureStartupGateInitialized()
+        if (isStartupRefreshGated()) {
+            trace("refreshNowImmediate: deferred by startup gate")
+            return
+        }
+        val now = System.currentTimeMillis()
+        forceRefreshUntilMs = now + 30_000L
+        lastManualRefreshSignalMs = now
+        trace("refreshNowImmediate: emitting immediate signal, force window active for 30s")
         refreshSignals.emit(Unit)
     }
 
@@ -1133,12 +1175,8 @@ class TraktProgressService @Inject constructor(
     }
 
     private suspend fun hasActivityChanged(): Boolean {
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getLastActivities(authHeader)
-        } ?: return !hasLoadedRemoteProgress.value
-        if (!response.isSuccessful) return !hasLoadedRemoteProgress.value
-
-        val activities = response.body() ?: return true
+        val activities = getRecentActivities(maxAgeMs = 0L)
+            ?: return !hasLoadedRemoteProgress.value
         val moviesWatchedAt = activities.movies?.watchedAt
         if (moviesWatchedAt != lastKnownMoviesWatchedAt) {
             watchedMoviesStale = true

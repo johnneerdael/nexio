@@ -212,8 +212,8 @@ class DefaultTrackingProgressService @Inject constructor(
         val state = trackingProviderStateService.currentState()
         if (!state.canReadEffectiveProvider) return
         when (state.effectiveProvider) {
-            TrackingProvider.SIMKL -> simklProgressService.refreshNow()
-            TrackingProvider.TRAKT -> traktProgressService.refreshNow()
+            TrackingProvider.SIMKL -> simklProgressService.refreshNowImmediate()
+            TrackingProvider.TRAKT -> traktProgressService.refreshNowImmediate()
         }
     }
 

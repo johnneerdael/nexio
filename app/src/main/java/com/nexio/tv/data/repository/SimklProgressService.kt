@@ -7,13 +7,21 @@ import com.google.gson.JsonObject
 import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklProgressSyncState
 import com.nexio.tv.data.local.SimklProgressSyncStateStore
+import com.nexio.tv.data.remote.SimklRequestGate
 import com.nexio.tv.domain.model.WatchProgress
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
@@ -28,9 +36,13 @@ import javax.inject.Singleton
 class SimklProgressService @Inject constructor(
     @Named("simkl") private val okHttpClient: OkHttpClient,
     private val simklAuthDataStore: SimklAuthDataStore,
-    private val syncStateStore: SimklProgressSyncStateStore
+    private val syncStateStore: SimklProgressSyncStateStore,
+    private val requestGate: SimklRequestGate
 ) {
     private val gson = Gson()
+    private val debounceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var refreshDebounceJob: Job? = null
+    private val refreshDebounceMutex = Mutex()
     private val remoteProgress = MutableStateFlow<List<WatchProgress>>(emptyList())
     private val nextUp = MutableStateFlow<List<TrackingNextUpEntry>>(emptyList())
     private val episodeProgress = MutableStateFlow<Map<String, Map<Pair<Int, Int>, WatchProgress>>>(emptyMap())
@@ -92,7 +104,33 @@ class SimklProgressService @Inject constructor(
     fun clearOptimistic() = Unit
     fun invalidateLocalizedMetadata() = Unit
 
+    /**
+     * Debounced refresh - collapses rapid successive calls (e.g. batch season marks)
+     * into a single API refresh cycle after a 3-second quiet window. Safe for mutation
+     * reconcile paths where multiple adapters may settle in quick succession.
+     */
     suspend fun refreshNow() {
+        refreshDebounceMutex.withLock {
+            refreshDebounceJob?.cancel()
+            refreshDebounceJob = debounceScope.launch {
+                delay(3_000L)
+                executeRefresh()
+            }
+        }
+    }
+
+    /**
+     * Immediate refresh - bypasses debounce. Use for critical paths where the caller
+     * needs fresh state right away (app startup, foreground resume, user-initiated refresh).
+     */
+    suspend fun refreshNowImmediate() {
+        refreshDebounceMutex.withLock {
+            refreshDebounceJob?.cancel()
+        }
+        executeRefresh()
+    }
+
+    private suspend fun executeRefresh() {
         val auth = simklAuthDataStore.state.first()
         val accessToken = auth.accessToken?.trim().orEmpty()
         if (accessToken.isBlank()) {
@@ -519,17 +557,19 @@ class SimklProgressService @Inject constructor(
         } else {
             builder.get().build()
         }
-        runCatching {
-            okHttpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    Log.w("SimklProgress", "Request failed ${response.code} ${request.url}")
-                    return@use null
+        requestGate.acquire {
+            runCatching {
+                okHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        Log.w("SimklProgress", "Request failed ${response.code} ${request.url}")
+                        return@use null
+                    }
+                    response.body?.string()
                 }
-                response.body?.string()
+            }.getOrElse {
+                Log.w("SimklProgress", "Request error ${request.url}", it)
+                null
             }
-        }.getOrElse {
-            Log.w("SimklProgress", "Request error ${request.url}", it)
-            null
         }
     }
 

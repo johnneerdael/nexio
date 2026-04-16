@@ -11,6 +11,7 @@ import com.nexio.tv.data.remote.api.TvdbContentRating
 import com.nexio.tv.data.remote.api.TvdbEpisodeRecord
 import com.nexio.tv.data.remote.api.TvdbGenreRecord
 import com.nexio.tv.data.remote.api.TvdbRemoteId
+import com.nexio.tv.data.remote.api.TvdbSeriesEpisodesData
 import com.nexio.tv.data.remote.api.TvdbSeriesEpisodesResponse
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedResponse
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
@@ -80,27 +81,29 @@ class TvdbMetadataServiceTest {
     fun `episode dto carries placement and linked movie fields`() {
         val response = TvdbSeriesEpisodesResponse(
             status = "success",
-            data = listOf(
-                TvdbEpisodeRecord(
-                    absoluteNumber = 1,
-                    aired = "2011-04-17",
-                    airsAfterSeason = 0,
-                    airsBeforeEpisode = 1,
-                    airsBeforeSeason = 2,
-                    finaleType = "series",
-                    id = 1001,
-                    image = "https://art.example/episode.jpg",
-                    linkedMovie = 4444,
-                    name = "Winter Is Coming",
-                    number = 1,
-                    overview = "The first episode.",
-                    runtime = 62,
-                    seasonNumber = 1
+            data = TvdbSeriesEpisodesData(
+                episodes = listOf(
+                    TvdbEpisodeRecord(
+                        absoluteNumber = 1,
+                        aired = "2011-04-17",
+                        airsAfterSeason = 0,
+                        airsBeforeEpisode = 1,
+                        airsBeforeSeason = 2,
+                        finaleType = "series",
+                        id = 1001,
+                        image = "https://art.example/episode.jpg",
+                        linkedMovie = 4444,
+                        name = "Winter Is Coming",
+                        number = 1,
+                        overview = "The first episode.",
+                        runtime = 62,
+                        seasonNumber = 1
+                    )
                 )
             )
         )
 
-        val episode = response.data.single()
+        val episode = requireNotNull(response.data?.episodes?.single())
         assertNotNull(episode.id)
         assertEquals(1, episode.absoluteNumber)
         assertEquals(4444, episode.linkedMovie)
@@ -182,7 +185,7 @@ class TvdbMetadataServiceTest {
 
         coEvery {
             tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
-        } returns Response.success(TvdbSeriesEpisodesResponse(data = listOf(episodeRecord())))
+        } returns Response.success(TvdbSeriesEpisodesResponse(data = TvdbSeriesEpisodesData(episodes = listOf(episodeRecord()))))
 
         val episodes = service.fetchEpisodeEnrichment(identity, seasonNumbers = listOf(1), language = "en-US")
 
@@ -282,7 +285,7 @@ class TvdbMetadataServiceTest {
         coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
         coEvery {
             tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
-        } returns Response.success(TvdbSeriesEpisodesResponse(data = emptyList()))
+        } returns Response.success(TvdbSeriesEpisodesResponse(data = TvdbSeriesEpisodesData(episodes = emptyList())))
 
         val episodes = service.fetchSeasonEpisodes(TvdbSeriesIdentity(tvdbId = 121361), 1, "en-US")
 

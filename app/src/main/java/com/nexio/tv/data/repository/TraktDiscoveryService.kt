@@ -126,7 +126,8 @@ class TraktDiscoveryService @Inject constructor(
     private val snapshotStore: TraktDiscoverySnapshotStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val traktMutationOutboxCoordinator: TraktMutationOutboxCoordinator,
-    private val profileManager: ProfileManager
+    private val profileManager: ProfileManager,
+    private val traktProgressService: TraktProgressService
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val rawProfileSnapshots = MutableStateFlow<Map<Int, TraktDiscoverySnapshot>>(emptyMap())
@@ -136,7 +137,7 @@ class TraktDiscoveryService @Inject constructor(
     private var lastActivitiesFingerprint: String? = null
 
     private val minRefreshIntervalMs = 30_000L
-    private val fallbackRefreshIntervalMs = 15 * 60_000L
+    private val fallbackRefreshIntervalMs = 6L * 60 * 60 * 1_000L
     private val maxItemsPerRail = 20
     private val startupRefreshGateMs = 20_000L
     @Volatile
@@ -407,12 +408,8 @@ class TraktDiscoveryService @Inject constructor(
     }
 
     private suspend fun hasActivitiesChanged(): Boolean {
-        val response = traktAuthService.executeAuthorizedRequest { authHeader ->
-            traktApi.getLastActivities(authHeader)
-        } ?: return true
-        if (!response.isSuccessful) return true
-
-        val body = response.body() ?: return true
+        val body = traktProgressService.getRecentActivities(maxAgeMs = 10_000L)
+            ?: return true
         val fingerprint = listOfNotNull(
             body.movies?.watchedAt,
             body.movies?.pausedAt,

@@ -94,7 +94,7 @@ class SimklLibraryService @Inject constructor(
     private var lastTvShowsRemovedFromListAt: String? = null
     private var lastMoviesRemovedFromListAt: String? = null
     private var lastAnimeRemovedFromListAt: String? = null
-    private val autoRefreshThrottleMs = 20 * 60 * 1000L
+    private val autoRefreshThrottleMs = 6L * 60 * 60 * 1000L
     private var lastAutoRefreshMs = 0L
 
     init {

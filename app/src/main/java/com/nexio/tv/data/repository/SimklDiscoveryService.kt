@@ -136,7 +136,9 @@ class SimklDiscoveryService @Inject constructor(
     private val minRefreshIntervalMs = 30_000L
     private val maxItemsPerRail = 20
     @Volatile private var activePosterProvider: PosterRatingsUrlResolver.ActiveProvider? = null
-    private val externalIdCache = linkedMapOf<String, String?>()
+    private val externalIdCache = object : LinkedHashMap<String, String?>(200, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String?>?) = size > 200
+    }
     private val catalogSources = linkedMapOf(
         SimklCatalogIds.TV_TRENDING_TODAY to SimklCatalogSource(
             url = "https://data.simkl.in/discover/trending/tv/today_100.json",
@@ -197,6 +199,7 @@ class SimklDiscoveryService @Inject constructor(
                 setProfileSnapshot(profileId, persisted)
                 lastRefreshByProfile[profileId] = persisted.updatedAtMs
             }
+            externalIdCache.putAll(snapshotStore.readExternalIdCache(profileId))
         }
     }
 
@@ -267,6 +270,7 @@ class SimklDiscoveryService @Inject constructor(
             }
             setProfileSnapshot(profileId, snapshotToPersist)
             snapshotStore.write(snapshotToPersist, profileId = profileId)
+            snapshotStore.writeExternalIdCache(externalIdCache, profileId = profileId)
             lastRefreshByProfile[profileId] = lockedNow
         }
     }
