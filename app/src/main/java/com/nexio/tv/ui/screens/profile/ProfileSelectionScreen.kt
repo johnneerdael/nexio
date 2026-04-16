@@ -81,9 +81,11 @@ fun ProfileSelectionScreen(
 
     LaunchedEffect(Unit) {
         viewModel.pinUnlockedProfileId.collect { profileId ->
-            activePinOverlayProfile = null
-            viewModel.resetPinState()
-            onProfileSelected(profileId)
+            if (activePinOverlayProfile?.id == profileId) {
+                activePinOverlayProfile = null
+                viewModel.resetPinState()
+                onProfileSelected(profileId)
+            }
         }
     }
 
