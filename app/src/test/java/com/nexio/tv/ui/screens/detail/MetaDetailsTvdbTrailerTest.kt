@@ -97,7 +97,8 @@ class MetaDetailsTvdbTrailerTest {
         val vm = buildMetaDetailsViewModel(
             meta = meta,
             itemType = "series",
-            tmdbService = tmdbService
+            tmdbService = tmdbService,
+            tmdbSettings = com.nexio.tv.domain.model.TmdbSettings(enabled = false)
         )
 
         advanceUntilIdle()

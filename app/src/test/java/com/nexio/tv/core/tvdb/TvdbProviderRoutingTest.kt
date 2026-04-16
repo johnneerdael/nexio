@@ -236,6 +236,7 @@ class TvdbProviderRoutingTest {
 
         // TVDB identity resolution fails
         coEvery { tvdbIdentityService.resolveSeriesByRemoteId(any(), any()) } returns null
+        coEvery { tmdbService.ensureTmdbId("tt0000000", "series") } returns null
 
         val router = TvMetadataRouter(
             tvdbSettingsDataStore = tvdbSettingsDataStore,
