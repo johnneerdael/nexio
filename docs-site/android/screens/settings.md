@@ -15,3 +15,5 @@ This is the legacy settings page. The old screen-by-screen breakdown is no longe
 - [Media Detail](./detail.md) for title-level actions
 - [Search and Cast](./search-and-cast.md) for finding titles and following cast links
 - [Portal Integrations](/web/admin-workspaces/integrations) for account-backed service setup
+
+TMDB and TheTVDB are active by default. Their settings screens only manage optional custom provider keys and metadata-field preferences.

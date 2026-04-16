@@ -6,17 +6,16 @@ Ratings and metadata shape how detail pages feel in Nexio. This page is the prac
 
 For most users, the simplest path is:
 
-1. Keep TMDB enabled for the main metadata layer.
+1. Use the built-in TMDB and TheTVDB metadata layer.
 2. Add MDBList if you want extra ratings or list-backed inputs to appear where supported.
 3. Use OMDb if you want a straightforward season and episode ratings path.
 4. Ignore the self-hosted IMDb path unless you already know you want to operate it yourself.
 
-## TMDB metadata enrichment
+## TMDB and TheTVDB
 
-- TMDB is the main metadata enrichment path for title, season, cast, collection, and related-detail surfaces.
-- It is the service that makes detail pages feel complete instead of bare stream entries.
-- If season tabs, richer artwork, related titles, or cast context are missing, TMDB is the first thing to check.
-- Most users should leave TMDB on because it is the default-friendly path for the detail experience.
+TMDB and TheTVDB enrichment are enabled by default. Nexio uses built-in metadata access so artwork, descriptions, cast, release details, episode data, trailers, and TV season ordering work without setup.
+
+Optional custom API keys remain supported. When a custom key is saved, Nexio uses it before the built-in key. Removing the custom key returns the app to built-in access.
 
 ## MDBList ratings and list inputs
 
@@ -33,7 +32,7 @@ For most users, the simplest path is:
 
 ## What to expect in Nexio
 
-- TMDB handles the main enrichment layer for titles, seasons, episodes, cast, and related browsing surfaces.
+- TMDB and TheTVDB handle the main enrichment layer for titles, seasons, episodes, cast, and related browsing surfaces.
 - MDBList and OMDb add rating context where their inputs are enabled and supported.
 - Ratings and metadata do not all come from one place, so one missing signal does not always mean the whole detail flow is broken.
 - If detail pages are mostly complete but one rating source is missing, check that service first instead of resetting the full account.
@@ -47,7 +46,7 @@ For most users, the simplest path is:
 ## Who actually needs self-hosting
 
 - Most users do not need the self-hosted path.
-- If you only want season ratings and episode ratings to show up in Nexio, TMDB plus OMDb is usually enough.
+- If you only want season ratings and episode ratings to show up in Nexio, the built-in metadata layer plus OMDb is usually enough.
 - Self-hosting is mainly for people who want to control the ratings backend themselves, keep it behind their own infrastructure, or use the custom IMDb stack end to end.
 
 ## Where to go next
@@ -56,7 +55,7 @@ For most users, the simplest path is:
 
 ## If this is not working
 
-- If season tabs, cast sections, or related-title surfaces are missing, check TMDB first.
+- If season tabs, cast sections, or related-title surfaces are missing, check the metadata provider status first.
 - If metadata is present but richer score signals are missing, check MDBList and OMDb before you assume the detail flow is broken.
 - Start with OMDb if you only need ratings to show up and do not already run the self-hosted path.
 - Check one known series or episode after saving the providers so you do not diagnose a title that lacks source data.
