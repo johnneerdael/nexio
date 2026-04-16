@@ -140,6 +140,7 @@ class HomeViewModelTvdbProviderRoutingTest {
             logo = "tvdb-logo",
             releaseInfo = "2011",
             rating = 8.9,
+            runtimeMinutes = 52,
             language = "en"
         )
     }

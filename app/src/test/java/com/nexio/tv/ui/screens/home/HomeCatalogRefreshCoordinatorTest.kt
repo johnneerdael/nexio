@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.screens.home
 
+import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.MetaPreview
 import com.nexio.tv.domain.model.PosterShape
@@ -58,6 +59,19 @@ class HomeCatalogRefreshCoordinatorTest {
 
         assertEquals(1, diff.addedOrChanged.size)
         assertEquals("a", diff.addedOrChanged.first().id)
+    }
+
+    @Test
+    fun `tvdb home enrichment carries runtime into preview`() {
+        val enriched = preview(id = "a", poster = "posterA")
+            .applyTvMetadataEnrichmentForHome(
+                TvMetadataEnrichment(
+                    seriesTvdbId = 121361,
+                    runtimeMinutes = 52
+                )
+            )
+
+        assertEquals("52", enriched.runtime)
     }
 
     @Test
