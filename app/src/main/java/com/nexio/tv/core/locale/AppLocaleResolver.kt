@@ -101,6 +101,17 @@ object AppLocaleResolver {
         }
     }
 
+    fun resolveTvdbLanguageTag(context: Context): String {
+        return when (resolveEffectiveAppLanguageTag(context)) {
+            "es" -> "spa"
+            "fr" -> "fra"
+            "de" -> "deu"
+            "nl" -> "nld"
+            "zh-CN" -> "zho"
+            else -> "eng"
+        }
+    }
+
     private fun normalizeToSupportedAppTag(tag: String): String {
         val normalized = tag.trim().replace('_', '-')
         val lower = normalized.lowercase(Locale.US)
