@@ -1,7 +1,10 @@
 package com.nexio.tv.ui.screens.player
 
 import com.nexio.tv.R
+import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.tvdb.TvMetadataRequest
+import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
 import com.nexio.tv.domain.model.Stream
@@ -20,6 +23,7 @@ internal fun PlayerRuntimeController.fetchMetaDetails(id: String?, type: String?
         ) {
             is NetworkResult.Success -> {
                 applyMetaDetails(result.data)
+                applyProviderLocalizedPlaybackMetadata(result.data)
             }
             is NetworkResult.Error -> {
                 
@@ -43,6 +47,53 @@ internal fun PlayerRuntimeController.applyMetaDetails(meta: Meta) {
         )
     }
     recomputeNextEpisode(resetVisibility = false)
+}
+
+internal suspend fun PlayerRuntimeController.applyProviderLocalizedPlaybackMetadata(meta: Meta? = null) {
+    val lookupContentType = resolvePlaybackContentType(meta) ?: return
+    val lookupContentId = meta?.id.nonBlank()
+        ?: contentId.nonBlank()
+        ?: return
+    val fallbackContentId = contentId.nonBlank()
+        ?.takeUnless { it == lookupContentId }
+    val language = AppLocaleResolver.resolveTmdbLanguageTag(context)
+
+    val enrichment = tvMetadataRouter.fetchEnrichment(
+        TvMetadataRequest(
+            contentId = lookupContentId,
+            fallbackContentId = fallbackContentId,
+            contentType = lookupContentType,
+            language = language
+        )
+    ).value
+    val episodeMetadata = if (lookupContentType.isPlaybackTvContent()) {
+        val season = currentSeason
+        val episode = currentEpisode
+        if (season != null && episode != null) {
+            tvMetadataRouter.fetchEpisodeEnrichment(
+                TvMetadataRequest(
+                    contentId = lookupContentId,
+                    fallbackContentId = fallbackContentId,
+                    contentType = lookupContentType,
+                    language = language,
+                    seasonNumbers = listOf(season)
+                )
+            ).value.orEmpty()[season to episode]
+        } else {
+            null
+        }
+    } else {
+        null
+    }
+
+    if (enrichment != null || episodeMetadata != null) {
+        _uiState.update { state ->
+            state.withLocalizedPlaybackMetadata(
+                enrichment = enrichment,
+                currentEpisodeMetadata = episodeMetadata
+            )
+        }
+    }
 }
 
 private fun sanitizeCastMembers(meta: Meta): List<MetaCastMember> {
@@ -92,7 +143,29 @@ internal fun PlayerRuntimeController.updateEpisodeDescription() {
     if (!overview.isNullOrBlank()) {
         _uiState.update { it.copy(description = overview) }
     }
+
+    scope.launch {
+        applyProviderLocalizedPlaybackMetadata()
+    }
 }
+
+private fun PlayerRuntimeController.resolvePlaybackContentType(meta: Meta?): ContentType? {
+    val routeType = contentType?.let(ContentType::fromString)
+        ?.takeUnless { it == ContentType.UNKNOWN }
+    if (routeType != null) return routeType
+
+    val metaType = meta?.type?.takeUnless { it == ContentType.UNKNOWN }
+    if (metaType != null) return metaType
+
+    return meta?.apiType?.let(ContentType::fromString)
+        ?.takeUnless { it == ContentType.UNKNOWN }
+}
+
+private fun ContentType.isPlaybackTvContent(): Boolean = this == ContentType.SERIES || this == ContentType.TV
+
+private fun String?.nonBlank(): String? = this
+    ?.trim()
+    ?.takeIf { it.isNotBlank() }
 
 internal fun PlayerRuntimeController.recomputeNextEpisode(resetVisibility: Boolean) {
     val normalizedType = contentType?.lowercase()
