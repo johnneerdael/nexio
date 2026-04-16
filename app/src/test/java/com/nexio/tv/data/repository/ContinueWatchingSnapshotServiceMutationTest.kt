@@ -159,7 +159,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 }
                 TrackingProgressService::class.java -> trackingProgressService
                 TrackingProviderStateService::class.java -> mockk<TrackingProviderStateService>(relaxed = true) {
-                    every { state } returns flowOf(EffectiveTrackingProviderState())
+                    every { state } returns flowOf(EffectiveTrackingProviderState(traktAuthenticated = true))
                 }
                 TraktSettingsDataStore::class.java -> mockk<TraktSettingsDataStore>(relaxed = true) {
                     every { dismissedNextUpKeys } returns flowOf(emptySet())
@@ -176,10 +176,23 @@ class ContinueWatchingSnapshotServiceMutationTest {
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun rawSnapshotFlow(service: ContinueWatchingSnapshotService): MutableStateFlow<ContinueWatchingSnapshot> {
+    private fun rawSnapshotFlow(
+        service: ContinueWatchingSnapshotService
+    ): MutableStateFlow<ProfileOwnedContinueWatchingSnapshot> {
         val field = ContinueWatchingSnapshotService::class.java.getDeclaredField("rawSnapshotState")
         field.isAccessible = true
-        return field.get(service) as MutableStateFlow<ContinueWatchingSnapshot>
+        return field.get(service) as MutableStateFlow<ProfileOwnedContinueWatchingSnapshot>
+    }
+
+    private fun setRawSnapshot(
+        service: ContinueWatchingSnapshotService,
+        snapshot: ContinueWatchingSnapshot
+    ) {
+        rawSnapshotFlow(service).value = ProfileOwnedContinueWatchingSnapshot(snapshot = snapshot)
+    }
+
+    private fun rawSnapshot(service: ContinueWatchingSnapshotService): ContinueWatchingSnapshot {
+        return rawSnapshotFlow(service).value.snapshot
     }
 
     private fun invokeScheduleReemitIfNeeded(
@@ -620,16 +633,16 @@ class ContinueWatchingSnapshotServiceMutationTest {
             episode = 4
         )
 
-        rawSnapshotFlow(service).value = ContinueWatchingSnapshot(
+        setRawSnapshot(service, ContinueWatchingSnapshot(
             scheduledReemit = listOf(overdue),
             updatedAtMs = nowMs - 60_000L
-        )
+        ))
 
         service.rescheduleAirTimeAlarmFromSnapshot()
 
         awaitCondition { refreshCount == 1 }
-        assertTrue(rawSnapshotFlow(service).value.nextUpItems.isEmpty())
-        assertEquals(listOf(overdue), rawSnapshotFlow(service).value.scheduledReemit)
+        assertTrue(rawSnapshot(service).nextUpItems.isEmpty())
+        assertEquals(listOf(overdue), rawSnapshot(service).scheduledReemit)
     }
 
     @Test
@@ -665,8 +678,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
         service.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
 
         awaitCondition { refreshCount >= 1 }
-        assertTrue(rawSnapshotFlow(service).value.nextUpItems.isEmpty())
-        assertEquals(listOf(overdue), rawSnapshotFlow(service).value.scheduledReemit)
+        assertTrue(rawSnapshot(service).nextUpItems.isEmpty())
+        assertEquals(listOf(overdue), rawSnapshot(service).scheduledReemit)
     }
 
     @Test
@@ -691,16 +704,16 @@ class ContinueWatchingSnapshotServiceMutationTest {
             episode = 6
         )
 
-        rawSnapshotFlow(service).value = ContinueWatchingSnapshot(
+        setRawSnapshot(service, ContinueWatchingSnapshot(
             scheduledReemit = listOf(overdue),
             updatedAtMs = nowMs - 60_000L
-        )
+        ))
 
         service.rescheduleAirTimeAlarmFromSnapshot()
 
         awaitCondition { refreshCount == 1 }
-        assertTrue(rawSnapshotFlow(service).value.nextUpItems.isEmpty())
-        assertEquals(listOf(overdue), rawSnapshotFlow(service).value.scheduledReemit)
+        assertTrue(rawSnapshot(service).nextUpItems.isEmpty())
+        assertEquals(listOf(overdue), rawSnapshot(service).scheduledReemit)
     }
 
     @Test
@@ -726,16 +739,16 @@ class ContinueWatchingSnapshotServiceMutationTest {
             episode = 7
         )
 
-        rawSnapshotFlow(service).value = ContinueWatchingSnapshot(
+        setRawSnapshot(service, ContinueWatchingSnapshot(
             scheduledReemit = listOf(overdue),
             updatedAtMs = nowMs - 60_000L
-        )
+        ))
 
         service.rescheduleAirTimeAlarmFromSnapshot()
 
         awaitCondition { refreshCount == 1 }
-        assertTrue(rawSnapshotFlow(service).value.nextUpItems.isEmpty())
-        assertEquals(listOf(overdue), rawSnapshotFlow(service).value.scheduledReemit)
+        assertTrue(rawSnapshot(service).nextUpItems.isEmpty())
+        assertEquals(listOf(overdue), rawSnapshot(service).scheduledReemit)
     }
 
     @Test
@@ -759,10 +772,10 @@ class ContinueWatchingSnapshotServiceMutationTest {
             tvdbAvailabilityInstantMs = nowMs + 5L,
             episode = 3
         )
-        rawSnapshotFlow(service).value = ContinueWatchingSnapshot(
+        setRawSnapshot(service, ContinueWatchingSnapshot(
             scheduledReemit = listOf(withheld),
             updatedAtMs = nowMs
-        )
+        ))
 
         invokeScheduleReemitIfNeeded(
             service = service,
@@ -774,7 +787,7 @@ class ContinueWatchingSnapshotServiceMutationTest {
         val retryAtMs = scheduler.scheduledAt.last() ?: error("Retry schedule must not be null")
         val retryDelayMs = retryAtMs - System.currentTimeMillis()
 
-        assertEquals(listOf(withheld), rawSnapshotFlow(service).value.scheduledReemit)
+        assertEquals(listOf(withheld), rawSnapshot(service).scheduledReemit)
         assertTrue(
             "Retry should be scheduled close to 15 minutes after refresh failure",
             retryDelayMs in (15 * 60_000L - 2_000L)..(15 * 60_000L + 2_000L)
