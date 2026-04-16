@@ -15,11 +15,6 @@ internal class DiskSpoolSession(
     private val capacityBytes: Long,
     private val waitTimeoutMs: Long = 10_000L
 ) : Closeable {
-    private data class Range(
-        val start: Long,
-        val endExclusive: Long
-    )
-
     private val lock = java.lang.Object()
     private val closed = AtomicBoolean(false)
     private val windowStart = AtomicLong(0L)
@@ -27,7 +22,6 @@ internal class DiskSpoolSession(
     private val priorityPosition = AtomicLong(C.TIME_UNSET.toLong())
     private val contentLength = AtomicLong(C.LENGTH_UNSET.toLong())
     private val supportsRangesFlag = AtomicBoolean(false)
-    private val ranges = mutableListOf<Range>()
 
     private var writer: RandomAccessFile? = null
     private var reader: RandomAccessFile? = null
@@ -113,7 +107,6 @@ internal class DiskSpoolSession(
     fun rebaseTo(position: Long) {
         synchronized(lock) {
             ensureOpenLocked()
-            ranges.clear()
             windowStart.set(position)
             frontier.set(position)
             lock.notifyAll()
@@ -132,6 +125,10 @@ internal class DiskSpoolSession(
             if (start < currentWindowStart) {
                 return
             }
+            val currentFrontier = frontier.get()
+            if (start != currentFrontier) {
+                return
+            }
 
             val file = writer ?: throw IllegalStateException("Session closed")
             var remaining = length
@@ -145,8 +142,9 @@ internal class DiskSpoolSession(
                 logicalOffset += chunkLength.toLong()
             }
 
-            recordRangeLocked(start, start + length.toLong())
-            updateFrontierAndWindowLocked()
+            val nextFrontier = start + length.toLong()
+            frontier.set(nextFrontier)
+            windowStart.set(maxOf(windowStart.get(), nextFrontier - capacityBytes))
             lock.notifyAll()
         }
     }
@@ -274,55 +272,6 @@ internal class DiskSpoolSession(
             closeFailure.drop(1).forEach(failure::addSuppressed)
             throw failure
         }
-    }
-
-    private fun updateFrontierAndWindowLocked() {
-        val currentFrontier = computeFrontierLocked()
-        frontier.set(currentFrontier)
-        val nextWindowStart = maxOf(windowStart.get(), currentFrontier - capacityBytes)
-        windowStart.set(nextWindowStart)
-        pruneRangesLocked()
-    }
-
-    private fun computeFrontierLocked(): Long {
-        var current = windowStart.get()
-        for (range in ranges) {
-            if (range.endExclusive <= current) {
-                continue
-            }
-            if (range.start > current) {
-                break
-            }
-            current = maxOf(current, range.endExclusive)
-        }
-        return current
-    }
-
-    private fun recordRangeLocked(start: Long, endExclusive: Long) {
-        ranges.add(Range(start, endExclusive))
-        ranges.sortBy { it.start }
-
-        val merged = ArrayList<Range>(ranges.size)
-        for (range in ranges) {
-            val last = merged.lastOrNull()
-            if (last == null || range.start > last.endExclusive) {
-                merged.add(range)
-            } else {
-                merged[merged.lastIndex] = last.copy(endExclusive = maxOf(last.endExclusive, range.endExclusive))
-            }
-        }
-
-        ranges.clear()
-        ranges.addAll(merged)
-    }
-
-    private fun pruneRangesLocked() {
-        val currentWindowStart = windowStart.get()
-        if (ranges.isEmpty()) return
-
-        val retained = ranges.filter { it.endExclusive > currentWindowStart }
-        ranges.clear()
-        ranges.addAll(retained)
     }
 
     private fun readFullyLocked(position: Long, buffer: ByteArray, offset: Int, length: Int) {
