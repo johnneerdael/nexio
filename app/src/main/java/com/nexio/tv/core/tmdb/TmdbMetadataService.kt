@@ -3,6 +3,9 @@ package com.nexio.tv.core.tmdb
 import android.content.Context
 import android.util.Log
 import com.nexio.tv.core.locale.AppLocaleResolver
+import com.nexio.tv.core.metadata.MetadataApiKeyResolver
+import com.nexio.tv.core.metadata.MetadataProviderConfig
+import com.nexio.tv.core.metadata.MetadataProviderCredential
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
@@ -40,13 +43,47 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 private const val TAG = "TmdbMetadataService"
 
 @Singleton
-class TmdbMetadataService @Inject constructor(
+class TmdbMetadataService(
     @ApplicationContext private val appContext: Context,
     private val tmdbApi: TmdbApi,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
-    private val tmdbSettingsDataStore: TmdbSettingsDataStore,
+    private val tmdbCredentialProvider: suspend () -> MetadataProviderCredential,
     private val metadataDiskCacheStore: MetadataDiskCacheStore
 ) {
+    @Inject
+    constructor(
+        @ApplicationContext appContext: Context,
+        tmdbApi: TmdbApi,
+        posterRatingsUrlResolver: PosterRatingsUrlResolver,
+        metadataApiKeyResolver: MetadataApiKeyResolver,
+        metadataDiskCacheStore: MetadataDiskCacheStore
+    ) : this(
+        appContext = appContext,
+        tmdbApi = tmdbApi,
+        posterRatingsUrlResolver = posterRatingsUrlResolver,
+        tmdbCredentialProvider = { metadataApiKeyResolver.tmdbCredential() },
+        metadataDiskCacheStore = metadataDiskCacheStore
+    )
+
+    constructor(
+        appContext: Context,
+        tmdbApi: TmdbApi,
+        posterRatingsUrlResolver: PosterRatingsUrlResolver,
+        tmdbSettingsDataStore: TmdbSettingsDataStore,
+        metadataDiskCacheStore: MetadataDiskCacheStore
+    ) : this(
+        appContext = appContext,
+        tmdbApi = tmdbApi,
+        posterRatingsUrlResolver = posterRatingsUrlResolver,
+        tmdbCredentialProvider = {
+            MetadataProviderConfig.resolveCredential(
+                customApiKey = tmdbSettingsDataStore.settings.first().apiKey,
+                builtInApiKey = MetadataProviderConfig.builtInTmdbApiKey()
+            )
+        },
+        metadataDiskCacheStore = metadataDiskCacheStore
+    )
+
     // In-memory caches
     private val enrichmentCache = ConcurrentHashMap<String, TmdbEnrichment>()
     private val episodeSeasonCache = ConcurrentHashMap<String, Map<Int, TmdbEpisodeEnrichment>>()
@@ -717,12 +754,12 @@ class TmdbMetadataService @Inject constructor(
     }
 
     private suspend fun requireApiKey(): String? {
-        val key = tmdbSettingsDataStore.settings.first().apiKey.trim()
-        if (key.isBlank()) {
+        val credential = tmdbCredentialProvider()
+        if (credential.missing) {
             Log.w(TAG, "TMDB API key is missing; metadata request skipped")
             return null
         }
-        return key
+        return credential.apiKey
     }
 
     private fun posterProviderCacheToken(

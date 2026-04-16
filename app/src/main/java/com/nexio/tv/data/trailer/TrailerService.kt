@@ -2,6 +2,7 @@ package com.nexio.tv.data.trailer
 
 import android.util.Log
 import com.nexio.tv.BuildConfig
+import com.nexio.tv.core.metadata.MetadataApiKeyResolver
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tvdb.TvdbTrailerLookupResult
 import com.nexio.tv.core.tvdb.TvdbTrailerResolver
@@ -66,6 +67,7 @@ class TrailerService(
     private val streamRepository: StreamRepository,
     private val trailerAvailabilityService: TrailerAvailabilityService,
     private val clock: Clock,
+    private val metadataApiKeyResolver: MetadataApiKeyResolver? = null,
     private val tvdbTrailerResolver: TvdbTrailerResolver? = null
 ) {
     @Inject
@@ -79,6 +81,7 @@ class TrailerService(
         addonRepository: AddonRepository,
         streamRepository: StreamRepository,
         trailerAvailabilityService: TrailerAvailabilityService,
+        metadataApiKeyResolver: MetadataApiKeyResolver,
         tvdbTrailerResolver: TvdbTrailerResolver
     ) : this(
         trailerApi = trailerApi,
@@ -91,6 +94,7 @@ class TrailerService(
         streamRepository = streamRepository,
         trailerAvailabilityService = trailerAvailabilityService,
         clock = Clock.systemUTC(),
+        metadataApiKeyResolver = metadataApiKeyResolver,
         tvdbTrailerResolver = tvdbTrailerResolver
     )
 
@@ -1089,6 +1093,13 @@ class TrailerService(
     }
 
     private suspend fun requireTmdbApiKey(): String? {
+        metadataApiKeyResolver?.tmdbCredential()?.let { credential ->
+            if (credential.missing) {
+                trailerDebugLog("TMDB trailer lookup skipped: api_key_missing")
+                return null
+            }
+            return credential.apiKey
+        }
         val apiKey = tmdbSettingsDataStore.settings.first().apiKey.trim()
         return apiKey.takeIf { it.isNotBlank() }
     }

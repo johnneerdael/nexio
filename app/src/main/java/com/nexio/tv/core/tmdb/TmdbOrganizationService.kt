@@ -1,7 +1,9 @@
 package com.nexio.tv.core.tmdb
 
 import android.util.Log
-import com.nexio.tv.data.local.TmdbSettingsDataStore
+import com.nexio.tv.core.metadata.MetadataApiKeyResolver
+import com.nexio.tv.core.metadata.MetadataProviderConfig
+import com.nexio.tv.core.metadata.MetadataProviderCredential
 import com.nexio.tv.data.remote.api.TmdbApi
 import com.nexio.tv.data.remote.api.TmdbDiscoverResult
 import com.nexio.tv.domain.model.ContentType
@@ -13,7 +15,6 @@ import com.nexio.tv.domain.model.TmdbOrganizationDetail
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,15 +24,28 @@ private const val TAG = "TmdbOrganizationSvc"
 @Singleton
 class TmdbOrganizationService(
     private val tmdbApi: TmdbApi,
-    private val apiKeyFlow: Flow<String>
+    private val tmdbCredentialProvider: suspend () -> MetadataProviderCredential
 ) {
     @Inject
     constructor(
         tmdbApi: TmdbApi,
-        tmdbSettingsDataStore: TmdbSettingsDataStore
+        metadataApiKeyResolver: MetadataApiKeyResolver
     ) : this(
         tmdbApi = tmdbApi,
-        apiKeyFlow = tmdbSettingsDataStore.settings.map { it.apiKey.trim() }
+        tmdbCredentialProvider = { metadataApiKeyResolver.tmdbCredential() }
+    )
+
+    constructor(
+        tmdbApi: TmdbApi,
+        apiKeyFlow: Flow<String>
+    ) : this(
+        tmdbApi = tmdbApi,
+        tmdbCredentialProvider = {
+            MetadataProviderConfig.resolveCredential(
+                customApiKey = apiKeyFlow.first(),
+                builtInApiKey = MetadataProviderConfig.builtInTmdbApiKey()
+            )
+        }
     )
 
     suspend fun fetchOrganizationDetail(
@@ -109,12 +123,12 @@ class TmdbOrganizationService(
     }
 
     private suspend fun requireApiKey(): String? {
-        val key = apiKeyFlow.first().trim()
-        if (key.isBlank()) {
+        val credential = tmdbCredentialProvider()
+        if (credential.missing) {
             Log.w(TAG, "TMDB API key is missing; organization lookup skipped")
             return null
         }
-        return key
+        return credential.apiKey
     }
 
     private fun buildImageUrl(path: String?, size: String): String? {
