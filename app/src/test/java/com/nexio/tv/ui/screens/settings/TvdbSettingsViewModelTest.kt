@@ -51,7 +51,7 @@ class TvdbSettingsViewModelTest {
     }
 
     @Test
-    fun `enabling TVDB with no API key keeps provider inactive and emits MissingApiKey`() = runTest(dispatcher) {
+    fun `enabling TVDB with no API key keeps provider active through builtin access`() = runTest(dispatcher) {
         val settingsFlow = MutableStateFlow(TvdbSettings(enabled = false, apiKey = ""))
         val dataStore = mockk<TvdbSettingsDataStore>(relaxed = true)
         val authService = mockk<TvdbAuthService>()
@@ -63,9 +63,8 @@ class TvdbSettingsViewModelTest {
         viewModel.onEvent(TvdbSettingsEvent.ToggleEnabled(true))
         advanceUntilIdle()
 
-        assertFalse(viewModel.uiState.value.isProviderActive)
-        assertEquals(TvdbValidationError.MissingApiKey, viewModel.validationError.first())
-        coVerify(exactly = 1) { dataStore.setEnabled(false) }
+        coVerify(exactly = 1) { dataStore.setEnabled(true) }
+        coVerify(exactly = 0) { dataStore.setEnabled(false) }
     }
 
     @Test
@@ -106,7 +105,7 @@ class TvdbSettingsViewModelTest {
     }
 
     @Test
-    fun `invalid credentials set INVALID status keep dialog open and keep provider inactive`() = runTest(dispatcher) {
+    fun `invalid custom credentials set INVALID status but keep builtin provider active`() = runTest(dispatcher) {
         val settingsFlow = MutableStateFlow(TvdbSettings(enabled = true, apiKey = "old-key"))
         val dataStore = mockk<TvdbSettingsDataStore>(relaxed = true)
         val authService = mockk<TvdbAuthService>()
@@ -129,9 +128,9 @@ class TvdbSettingsViewModelTest {
         assertEquals(0, successCount)
         assertEquals(TvdbValidationStatus.INVALID, viewModel.uiState.value.validationStatus)
         assertEquals("Invalid TVDB credentials", viewModel.uiState.value.lastFailure)
-        assertFalse(viewModel.uiState.value.isProviderActive)
+        assertTrue(viewModel.uiState.value.isProviderActive)
         assertEquals(TvdbValidationError.InvalidCredentials, viewModel.validationError.first())
-        coVerify(exactly = 1) { dataStore.setEnabled(false) }
+        coVerify(exactly = 0) { dataStore.setEnabled(false) }
     }
 
     @Test
@@ -154,7 +153,7 @@ class TvdbSettingsViewModelTest {
 
         assertTrue(viewModel.uiState.value.enabled)
         assertEquals(TvdbValidationStatus.FALLBACK_ACTIVE, viewModel.uiState.value.validationStatus)
-        assertFalse(viewModel.uiState.value.isProviderActive)
+        assertTrue(viewModel.uiState.value.isProviderActive)
         coVerify(exactly = 0) { dataStore.setEnabled(false) }
     }
 
@@ -179,6 +178,9 @@ class TvdbSettingsViewModelTest {
         advanceUntilIdle()
 
         coVerify(exactly = 1) { dataStore.clearCredentials() }
+        assertTrue(viewModel.uiState.value.enabled)
+        assertEquals(TvdbValidationStatus.VALID, viewModel.uiState.value.validationStatus)
+        assertTrue(viewModel.uiState.value.isProviderActive)
     }
 
     @Test

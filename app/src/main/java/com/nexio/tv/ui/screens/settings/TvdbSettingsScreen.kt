@@ -100,23 +100,6 @@ fun TvdbSettingsContent(
                 contentPadding = PaddingValues(bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item(key = "tvdb_enabled") {
-                    SettingsToggleRow(
-                        title = stringResource(R.string.tvdb_enable_title),
-                        subtitle = stringResource(R.string.tvdb_enable_subtitle),
-                        checked = uiState.enabled,
-                        onToggle = {
-                            validationMessage = null
-                            viewModel.onEvent(TvdbSettingsEvent.ToggleEnabled(!uiState.enabled))
-                        },
-                        modifier = if (initialFocusRequester != null) {
-                            Modifier.focusRequester(initialFocusRequester)
-                        } else {
-                            Modifier
-                        }
-                    )
-                }
-
                 item(key = "tvdb_credentials") {
                     SettingsActionRow(
                         title = stringResource(R.string.tvdb_credentials_title),
@@ -126,6 +109,11 @@ fun TvdbSettingsContent(
                         onClick = {
                             validationMessage = null
                             showCredentialsDialog = true
+                        },
+                        modifier = if (initialFocusRequester != null) {
+                            Modifier.focusRequester(initialFocusRequester)
+                        } else {
+                            Modifier
                         }
                     )
                 }
