@@ -69,7 +69,6 @@ class ProfileSelectionViewModel @Inject constructor(
 
             if (pinResult.unlocked) {
                 resetPinState()
-                profileManager.setActiveProfile(profileId)
                 _pinUnlockedProfileId.emit(profileId)
             } else if (pinResult.retryAfterSeconds > 0) {
                 _pinState.update {
