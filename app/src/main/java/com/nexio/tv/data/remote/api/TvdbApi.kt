@@ -41,7 +41,7 @@ interface TvdbApi {
     suspend fun getSeriesExtended(
         @Header("Authorization") authorization: String,
         @Path("id") id: Int,
-        @Query("meta") meta: String? = "translations",
+        @Query("meta") meta: String? = null,
         @Query("short") short: Boolean? = false
     ): Response<TvdbSeriesExtendedResponse>
 
@@ -113,6 +113,12 @@ interface TvdbApi {
     suspend fun getCompanyTypes(
         @Header("Authorization") authorization: String
     ): Response<TvdbReferenceResponse<TvdbCompanyTypeRecord>>
+
+    @GET("people/{id}/extended")
+    suspend fun getPersonExtended(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: Int
+    ): Response<TvdbPersonExtendedResponse>
 }
 
 @JsonClass(generateAdapter = true)
@@ -135,7 +141,7 @@ data class TvdbLoginResponse(
 @JsonClass(generateAdapter = true)
 data class TvdbSearchResponse(
     @Json(name = "status") val status: String? = null,
-    @Json(name = "data") val data: List<TvdbSearchResult> = emptyList()
+    @Json(name = "data") val data: List<TvdbSearchResult>? = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
@@ -147,13 +153,13 @@ data class TvdbSearchResult(
     @Json(name = "type") val type: String? = null,
     @Json(name = "year") val year: String? = null,
     @Json(name = "first_air_time") val firstAirTime: String? = null,
-    @Json(name = "remote_ids") val remoteIds: List<TvdbRemoteId> = emptyList()
+    @Json(name = "remote_ids") val remoteIds: List<TvdbRemoteId>? = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
 data class TvdbRemoteIdSearchResponse(
     @Json(name = "status") val status: String? = null,
-    @Json(name = "data") val data: List<TvdbRemoteIdSearchResult> = emptyList()
+    @Json(name = "data") val data: List<TvdbRemoteIdSearchResult>? = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
@@ -191,29 +197,29 @@ data class TvdbSeriesExtendedRecord(
     @Json(name = "image") val image: String? = null,
     @Json(name = "airsDays") val airsDays: TvdbAirsDays? = null,
     @Json(name = "airsTime") val airsTime: String? = null,
-    @Json(name = "aliases") val aliases: List<TvdbAlias> = emptyList(),
-    @Json(name = "artworks") val artworks: List<TvdbArtworkRecord> = emptyList(),
+    @Json(name = "aliases") val aliases: List<TvdbAlias>? = emptyList(),
+    @Json(name = "artworks") val artworks: List<TvdbArtworkRecord>? = emptyList(),
     @Json(name = "averageRuntime") val averageRuntime: Int? = null,
-    @Json(name = "contentRatings") val contentRatings: List<TvdbContentRating> = emptyList(),
+    @Json(name = "contentRatings") val contentRatings: List<TvdbContentRating>? = emptyList(),
     @Json(name = "country") val country: String? = null,
-    @Json(name = "episodes") val episodes: List<TvdbEpisodeRecord> = emptyList(),
+    @Json(name = "episodes") val episodes: List<TvdbEpisodeRecord>? = emptyList(),
     @Json(name = "firstAired") val firstAired: String? = null,
-    @Json(name = "genres") val genres: List<TvdbGenreRecord> = emptyList(),
+    @Json(name = "genres") val genres: List<TvdbGenreRecord>? = emptyList(),
     @Json(name = "lastAired") val lastAired: String? = null,
     @Json(name = "originalCountry") val originalCountry: String? = null,
     @Json(name = "originalLanguage") val originalLanguage: String? = null,
     @Json(name = "originalNetwork") val originalNetwork: TvdbCompanyRecord? = null,
     @Json(name = "overview") val overview: String? = null,
     @Json(name = "latestNetwork") val latestNetwork: TvdbCompanyRecord? = null,
-    @Json(name = "remoteIds") val remoteIds: List<TvdbRemoteId> = emptyList(),
+    @Json(name = "remoteIds") val remoteIds: List<TvdbRemoteId>? = emptyList(),
     @Json(name = "score") val score: Double? = null,
     @Json(name = "status") val status: TvdbStatusRecord? = null,
     @Json(name = "translations") val translations: TvdbTranslations? = null,
     @Json(name = "defaultSeasonType") val defaultSeasonType: Int? = null,
-    @Json(name = "seasonTypes") val seasonTypes: List<TvdbSeasonTypeRecord> = emptyList(),
-    @Json(name = "characters") val characters: List<TvdbCharacterRecord> = emptyList(),
-    @Json(name = "companies") val companies: List<TvdbCompanyExtendedRecord> = emptyList(),
-    @Json(name = "trailers") val trailers: List<TvdbTrailerRecord> = emptyList()
+    @Json(name = "seasonTypes") val seasonTypes: List<TvdbSeasonTypeRecord>? = emptyList(),
+    @Json(name = "characters") val characters: List<TvdbCharacterRecord>? = emptyList(),
+    @Json(name = "companies") val companies: List<TvdbCompanyExtendedRecord>? = emptyList(),
+    @Json(name = "trailers") val trailers: List<TvdbTrailerRecord>? = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
@@ -310,8 +316,8 @@ data class TvdbStatusRecord(
 
 @JsonClass(generateAdapter = true)
 data class TvdbTranslations(
-    @Json(name = "nameTranslations") val nameTranslations: List<String> = emptyList(),
-    @Json(name = "overviewTranslations") val overviewTranslations: List<String> = emptyList()
+    @Json(name = "nameTranslations") val nameTranslations: List<String>? = emptyList(),
+    @Json(name = "overviewTranslations") val overviewTranslations: List<String>? = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
@@ -330,11 +336,46 @@ data class TvdbCharacterRecord(
     @Json(name = "personImgURL") val personImgURL: String? = null,
     @Json(name = "peopleId") val peopleId: Int? = null,
     @Json(name = "peopleType") val peopleType: String? = null,
+    @Json(name = "seriesId") val seriesId: Int? = null,
+    @Json(name = "movieId") val movieId: Int? = null,
+    @Json(name = "series") val series: TvdbLinkedEntity? = null,
+    @Json(name = "movie") val movie: TvdbLinkedEntity? = null,
     @Json(name = "sort") val sort: Int? = null,
     @Json(name = "type") val type: Int? = null,
     @Json(name = "url") val url: String? = null,
-    @Json(name = "nameTranslations") val nameTranslations: List<String> = emptyList(),
+    @Json(name = "nameTranslations") val nameTranslations: List<String>? = emptyList(),
     @Json(name = "isFeatured") val isFeatured: Boolean? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbLinkedEntity(
+    @Json(name = "image") val image: String? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "year") val year: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbPersonExtendedResponse(
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "data") val data: TvdbPersonExtendedRecord? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbPersonExtendedRecord(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "image") val image: String? = null,
+    @Json(name = "biographies") val biographies: List<TvdbBiography>? = emptyList(),
+    @Json(name = "birth") val birth: String? = null,
+    @Json(name = "death") val death: String? = null,
+    @Json(name = "birthPlace") val birthPlace: String? = null,
+    @Json(name = "characters") val characters: List<TvdbCharacterRecord>? = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbBiography(
+    @Json(name = "biography") val biography: String? = null,
+    @Json(name = "language") val language: String? = null
 )
 
 @JsonClass(generateAdapter = true)

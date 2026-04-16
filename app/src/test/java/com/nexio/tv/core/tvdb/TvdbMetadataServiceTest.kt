@@ -6,6 +6,8 @@ import com.nexio.tv.data.remote.api.TvdbAirsDays
 import com.nexio.tv.data.remote.api.TvdbAlias
 import com.nexio.tv.data.remote.api.TvdbApi
 import com.nexio.tv.data.remote.api.TvdbArtworkRecord
+import com.nexio.tv.data.remote.api.TvdbCharacterRecord
+import com.nexio.tv.data.remote.api.TvdbCompanyExtendedRecord
 import com.nexio.tv.data.remote.api.TvdbCompanyRecord
 import com.nexio.tv.data.remote.api.TvdbContentRating
 import com.nexio.tv.data.remote.api.TvdbEpisodeRecord
@@ -72,9 +74,9 @@ class TvdbMetadataServiceTest {
         )
 
         assertEquals("21:00", record.airsTime)
-        assertEquals("Drama", record.genres.single().name)
-        assertEquals("tt0944947", record.remoteIds.single().id)
-        assertEquals("Winter Is Coming", record.episodes.single().name)
+        assertEquals("Drama", record.genres.orEmpty().single().name)
+        assertEquals("tt0944947", record.remoteIds.orEmpty().single().id)
+        assertEquals("Winter Is Coming", record.episodes.orEmpty().single().name)
     }
 
     @Test
@@ -141,7 +143,7 @@ class TvdbMetadataServiceTest {
             )
         } returns "https://api.top-streaming.stream/top-key/tvdb/poster/121361.jpg"
         coEvery {
-            tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, "translations", false)
+            tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, null, false)
         } returns Response.success(TvdbSeriesExtendedResponse(data = fullSeriesRecord()))
 
         val enrichment = service.fetchSeriesEnrichment(identity, language = "en-US")
@@ -156,7 +158,26 @@ class TvdbMetadataServiceTest {
         assertEquals("21:00", enrichment?.airsTime)
         assertEquals(57, enrichment?.averageRuntimeMinutes)
         assertEquals("Ended", enrichment?.status)
-        coVerify(exactly = 1) { tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, "translations", false) }
+        coVerify(exactly = 1) { tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, null, false) }
+    }
+
+    @Test
+    fun `fetch series enrichment requests full extended record so advanced fields hydrate`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+
+        coEvery {
+            tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, null, false)
+        } returns Response.success(TvdbSeriesExtendedResponse(data = fullSeriesRecord()))
+
+        val enrichment = service.fetchSeriesEnrichment(identity, language = "en-US")
+
+        assertNotNull(enrichment)
+        assertEquals("Pedro Pascal", enrichment?.castMembers?.firstOrNull()?.name)
+        assertEquals("HBO", enrichment?.networks?.firstOrNull()?.name)
+        assertEquals("Bighead Littlehead", enrichment?.productionCompanies?.firstOrNull()?.name)
+        coVerify(exactly = 1) { tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, null, false) }
     }
 
     @Test
@@ -166,7 +187,7 @@ class TvdbMetadataServiceTest {
         val identity = TvdbSeriesIdentity(tvdbId = 121361)
 
         coEvery {
-            tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, "translations", false)
+            tvdbApi.getSeriesExtended("Bearer tvdb-token", 121361, null, false)
         } returns Response.success(TvdbSeriesExtendedResponse(data = fullSeriesRecord()))
 
         val enrichment = service.fetchSeriesEnrichment(identity, language = "en-US")
@@ -341,7 +362,13 @@ class TvdbMetadataServiceTest {
         latestNetwork = TvdbCompanyRecord(name = "HBO"),
         remoteIds = listOf(TvdbRemoteId(id = "tt0944947", sourceName = "imdb")),
         score = 8.4,
-        status = TvdbStatusRecord(name = "Ended")
+        status = TvdbStatusRecord(name = "Ended"),
+        characters = listOf(
+            TvdbCharacterRecord(personName = "Pedro Pascal", name = "Joel Miller", peopleType = "Actor", sort = 1)
+        ),
+        companies = listOf(
+            TvdbCompanyExtendedRecord(name = "Bighead Littlehead", primaryCompanyType = 3)
+        )
     )
 
     private fun episodeRecord(): TvdbEpisodeRecord = TvdbEpisodeRecord(

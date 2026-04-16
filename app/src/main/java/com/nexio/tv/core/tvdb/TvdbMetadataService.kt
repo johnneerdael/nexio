@@ -77,7 +77,7 @@ class TvdbMetadataService @Inject constructor(
             tvdbApi.getSeriesExtended(
                 authorization = authorization,
                 id = resolvedId,
-                meta = "translations",
+                meta = null,
                 short = false
             )
         }.onFailure { error ->
@@ -281,7 +281,7 @@ class TvdbMetadataService @Inject constructor(
         seasonOrderContext: com.nexio.tv.domain.model.TvdbSeasonOrderContext? = null,
         advancedMetadata: TvdbAdvancedMetadata? = null
     ): TvMetadataEnrichment? {
-        val artwork = selectArtwork(artworks)
+        val artwork = selectArtwork(artworks.orEmpty())
         val tvdbPoster = artwork.poster ?: image.trimmed()
         val poster = posterRatingsUrlResolver.resolvePosterUrl(
             originalPosterUrl = tvdbPoster,
@@ -289,9 +289,9 @@ class TvdbMetadataService @Inject constructor(
             contentType = ContentType.SERIES,
             activeProvider = activeProvider
         )
-        val remoteIds = mergeRemoteIds(identity.remoteIds, remoteIds)
-        val genres = genres.mapNotNull { it.name.trimmed() }
-        val contentRatings = contentRatings.mapNotNull { it.name.trimmed() }
+        val remoteIds = mergeRemoteIds(identity.remoteIds, remoteIds.orEmpty())
+        val genres = genres.orEmpty().mapNotNull { it.name.trimmed() }
+        val contentRatings = contentRatings.orEmpty().mapNotNull { it.name.trimmed() }
         val description = overview.trimmed()
         val title = name.trimmed()
         val countries = listOfNotNull(country.trimmed(), originalCountry.trimmed()).distinct()
@@ -329,7 +329,7 @@ class TvdbMetadataService @Inject constructor(
             platformName = originalNetworkName ?: latestNetworkName,
             originalLanguage = originalLanguage.trimmed(),
             status = status?.name.trimmed(),
-            aliases = aliases.mapNotNull { it.name.trimmed() },
+            aliases = aliases.orEmpty().mapNotNull { it.name.trimmed() },
             contentRatings = contentRatings,
             remoteIds = remoteIds,
             seasonOrderContext = seasonOrderContext,

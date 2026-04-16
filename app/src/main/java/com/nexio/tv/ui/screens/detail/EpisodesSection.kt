@@ -464,8 +464,8 @@ private fun EpisodeCard(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
-    val formattedDate = remember(episode.released) {
-        episode.released?.let(::formatEpisodeCardDate).orEmpty()
+    val formattedDate = remember(episode.localReleaseInfo, episode.released) {
+        (episode.localReleaseInfo ?: episode.released)?.let(::formatEpisodeCardDate).orEmpty()
     }
     val runtimeLabel = remember(episode.runtime) {
         episode.runtime?.takeIf { it > 0 }?.let(::formatEpisodeRuntime)
@@ -1133,18 +1133,24 @@ private fun formatEpisodeRuntime(runtimeMinutes: Int): String {
 
 private fun formatEpisodeCardDate(isoDate: String): String {
     val locale = Locale.getDefault()
-    val outputFormat = SimpleDateFormat("MMM d, yyyy", locale)
+    val dateTimeOutputFormat = SimpleDateFormat("MMM d, yyyy HH:mm", locale)
+    val dateOutputFormat = SimpleDateFormat("MMM d, yyyy", locale)
+    runCatching {
+        val inputFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
+        val date = inputFormat.parse(isoDate)
+        if (date != null) return dateTimeOutputFormat.format(date)
+    }
     return try {
         val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }
         val date = inputFormat.parse(isoDate)
-        date?.let { outputFormat.format(it) }.orEmpty()
+        date?.let { dateOutputFormat.format(it) }.orEmpty()
     } catch (_: Exception) {
         try {
             val inputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
             val date = inputFormat.parse(isoDate)
-            date?.let { outputFormat.format(it) }.orEmpty()
+            date?.let { dateOutputFormat.format(it) }.orEmpty()
         } catch (_: Exception) {
             ""
         }

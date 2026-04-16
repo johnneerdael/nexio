@@ -11,7 +11,7 @@ private val REJECTED_SCHEMES = setOf("intent", "file", "content", "javascript")
 class TvdbTrailerMapper @Inject constructor() {
 
     fun mapCandidates(series: TvdbSeriesExtendedRecord): List<TvdbTrailerCandidate> {
-        return series.trailers.mapNotNull { trailer ->
+        return series.trailers.orEmpty().mapNotNull { trailer ->
             val url = trailer.url?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             TvdbTrailerCandidate(
                 url = url,

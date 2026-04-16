@@ -30,12 +30,12 @@ class TvdbAdvancedMetadataMapper @Inject constructor() {
         series: TvdbSeriesExtendedRecord,
         preferredCountryCodes: List<String>
     ): TvdbAdvancedMetadata {
-        val castMembers = mapCharacters(series.characters)
+        val castMembers = mapCharacters(series.characters.orEmpty())
         val networks = mapNetworks(series.originalNetwork, series.latestNetwork)
         val networkNames = networks.map { it.name.lowercase() }.toSet()
-        val productionCompanies = mapCompanies(series.companies, networkNames)
-        val genres = mapGenres(series.genres)
-        val ageRating = selectContentRating(series.contentRatings, preferredCountryCodes)
+        val productionCompanies = mapCompanies(series.companies.orEmpty(), networkNames)
+        val genres = mapGenres(series.genres.orEmpty())
+        val ageRating = selectContentRating(series.contentRatings.orEmpty(), preferredCountryCodes)
 
         return TvdbAdvancedMetadata(
             castMembers = castMembers,
@@ -62,9 +62,10 @@ class TvdbAdvancedMetadataMapper @Inject constructor() {
             .map { character ->
                 MetaCastMember(
                     name = character.personName.trimmed()!!,
-                    character = character.name.trimmed(),
+                    character = character.name.trimmed() ?: character.peopleType.trimmed()?.toCreditRoleLabel(),
                     photo = character.personImgURL.trimmed(),
-                    tmdbId = null
+                    tmdbId = null,
+                    tvdbPeopleId = character.peopleId
                 )
             }
     }
@@ -166,6 +167,16 @@ class TvdbAdvancedMetadataMapper @Inject constructor() {
     }
 
     private fun String?.trimmed(): String? = this?.trim()?.takeIf { it.isNotBlank() }
+
+    private fun String.toCreditRoleLabel(): String {
+        val normalized = trim().lowercase()
+        return when {
+            "creator" in normalized || "created by" in normalized -> "Creator"
+            "director" in normalized -> "Director"
+            "writer" in normalized -> "Writer"
+            else -> trim()
+        }
+    }
 }
 
 /**

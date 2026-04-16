@@ -40,6 +40,12 @@
 -keep class com.nexio.tv.data.remote.dto.** { *; }
 -keep class com.nexio.tv.domain.model.** { *; }
 -keep class com.nexio.tv.core.tmdb.TmdbEnrichment { *; }
+-keep class com.nexio.tv.core.tvdb.TvMetadataEnrichment { *; }
+-keep class com.nexio.tv.core.tvdb.TvEpisodeMetadata { *; }
+-keep class com.nexio.tv.core.tvdb.TvdbSeriesIdentity { *; }
+-keep class com.nexio.tv.core.tvdb.TvdbRemoteIdSource { *; }
+-keep class com.nexio.tv.core.tvdb.TvdbAirAvailabilityPrecision { *; }
+-keep class com.nexio.tv.core.tvdb.TvdbAirAvailabilityDiagnosticReason { *; }
 # Keep local snapshot payload models serialized with Gson to survive restarts/updates.
 -keep class com.nexio.tv.data.local.HomeCatalogSnapshotStore$Snapshot { *; }
 -keep class com.nexio.tv.data.trakt.outbox.TraktMutationEnvelope { *; }

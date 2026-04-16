@@ -260,8 +260,13 @@ fun NexioNavHost(
                 },
                 onTrailerPlaybackActiveChanged = onDetailTrailerPlaybackActiveChanged,
                 onBackPress = { navController.navigateDetailBack(detailArgs.getString("detailSource")) },
-                onNavigateToCastDetail = { personId, personName, preferCrew ->
-                    navController.navigate(Screen.CastDetail.createRoute(personId, personName, preferCrew))
+                onNavigateToCastDetail = { personId, personName, preferCrew, provider ->
+                    val route = if (provider.equals("tvdb", ignoreCase = true)) {
+                        Screen.CastDetail.createTvdbRoute(personId, personName, preferCrew)
+                    } else {
+                        Screen.CastDetail.createRoute(personId, personName, preferCrew)
+                    }
+                    navController.navigate(route)
                 },
                 onNavigateToOrganizationDetail = { entityId, entityName, kindName, discoverTypeName ->
                     navController.navigate(
@@ -1092,6 +1097,10 @@ fun NexioNavHost(
                 navArgument("preferCrew") {
                     type = NavType.BoolType
                     defaultValue = false
+                },
+                navArgument("provider") {
+                    type = NavType.StringType
+                    defaultValue = "tmdb"
                 }
             )
         ) {

@@ -48,7 +48,7 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val HOME_REF_PREFIX = "home_ref::"
         private const val META_CACHE_SCHEMA_VERSION = 3
         private const val TMDB_CACHE_SCHEMA_VERSION = 2
-        private const val TVDB_CACHE_SCHEMA_VERSION = 1
+        private const val TVDB_CACHE_SCHEMA_VERSION = 2
         private const val TVDB_EPISODE_CACHE_SCHEMA_VERSION = 1
         private const val TMDB_VIDEO_CACHE_SCHEMA_VERSION = 2
         private val TMDB_VIDEO_CACHE_TTL: Duration = Duration.ofHours(12)
@@ -680,7 +680,17 @@ class MetadataDiskCacheStore @Inject constructor(
 
     private fun decodeTvdbEnrichmentSafely(root: JsonObject): TvMetadataEnrichment? {
         val value = root.get("value") ?: return null
-        return runCatching { gson.fromJson(value, TvMetadataEnrichment::class.java) }.getOrNull()
+        val parsed = runCatching { gson.fromJson(value, TvMetadataEnrichment::class.java) }.getOrNull() ?: return null
+        val valueObj = runCatching { value.asJsonObject }.getOrNull() ?: return parsed.copy(
+            castMembers = emptyList(),
+            productionCompanies = emptyList(),
+            networks = emptyList()
+        )
+        return parsed.copy(
+            castMembers = readCastMembersFromJson(valueObj, "castMembers"),
+            productionCompanies = readCompaniesFromJson(valueObj, "productionCompanies"),
+            networks = readCompaniesFromJson(valueObj, "networks")
+        )
     }
 
     private fun decodeTvdbSeasonEpisodesSafely(root: JsonObject): List<TvEpisodeMetadata>? {
