@@ -10,7 +10,9 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -55,6 +57,34 @@ class ProfileSelectionViewModelTest {
         advanceUntilIdle()
 
         coVerify(exactly = 1) { profileManager.setActiveProfile(2) }
+        assertEquals(ProfileSelectionViewModel.PinVerificationState(), viewModel.pinState.value)
+    }
+
+    @Test
+    fun `successful unlock emits completion even when profile is already active`() = runTest(dispatcher) {
+        val profileManager = profileManager(MutableStateFlow(2))
+        val profileSyncService = mockk<ProfileSyncService>()
+        coEvery { profileSyncService.verifyProfilePin(2, "1234") } returns Result.success(
+            SupabaseProfilePinVerifyResult(
+                unlocked = true,
+                retryAfterSeconds = 0,
+                pinEnabled = true
+            )
+        )
+
+        val viewModel = ProfileSelectionViewModel(profileManager, profileSyncService)
+        val unlockedProfileId = CompletableDeferred<Int>()
+        val collector = launch {
+            viewModel.pinUnlockedProfileId.collect { if (!unlockedProfileId.isCompleted) unlockedProfileId.complete(it) }
+        }
+        runCurrent()
+
+        viewModel.verifyPin(2, "1234")
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { profileManager.setActiveProfile(2) }
+        assertEquals(2, unlockedProfileId.await())
+        collector.cancel()
         assertEquals(ProfileSelectionViewModel.PinVerificationState(), viewModel.pinState.value)
     }
 
@@ -158,8 +188,7 @@ class ProfileSelectionViewModelTest {
         assertEquals("Unable to verify PIN", viewModel.pinState.value.errorMessage)
     }
 
-    private fun profileManager(): ProfileManager {
-        val activeProfileId = MutableStateFlow(1)
+    private fun profileManager(activeProfileId: MutableStateFlow<Int> = MutableStateFlow(1)): ProfileManager {
         val profiles = MutableStateFlow(
             listOf(
                 UserProfile(id = 1, name = "Default", avatarColorHex = "#1E88E5"),
