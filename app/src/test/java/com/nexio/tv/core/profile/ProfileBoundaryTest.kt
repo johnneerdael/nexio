@@ -118,4 +118,31 @@ class ProfileBoundaryTest {
         assertEquals(2, contextForTwo.profileId)
         assertTrue(contextForTwo.generation >= 0L)
     }
+
+    @Test
+    fun `current language tag comes from profile boundary provider`() {
+        val boundary = ProfileBoundary(
+            profileManager = profileManager(),
+            languageTagProvider = { "nl" }
+        )
+
+        assertEquals("nl", boundary.currentLanguageTag())
+    }
+
+    @Test
+    fun `secondary context reads current profile language from provider`() {
+        val activeProfileId = MutableStateFlow(2)
+        var language = "en"
+        val boundary = ProfileBoundary(
+            profileManager = profileManager(activeProfileId),
+            languageTagProvider = { language }
+        )
+
+        val initial = boundary.contextFor(ProfileModeRoute.SecondaryProfileRoute(2))
+        language = "nl"
+        val updated = boundary.contextFor(ProfileModeRoute.SecondaryProfileRoute(2))
+
+        assertEquals("en", initial.languageTag)
+        assertEquals("nl", updated.languageTag)
+    }
 }

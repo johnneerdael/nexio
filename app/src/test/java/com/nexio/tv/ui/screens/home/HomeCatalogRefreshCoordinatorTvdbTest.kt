@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.home
 
 import android.content.Context
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
@@ -76,7 +77,8 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
                 TvMetadataRequest(
                     contentId = "tt0944947",
                     fallbackContentId = null,
-                    contentType = ContentType.SERIES
+                    contentType = ContentType.SERIES,
+                    language = "eng"
                 )
             )
         }
@@ -130,7 +132,9 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
         tmdbMetadataService: TmdbMetadataService
     ): HomeCatalogRefreshCoordinator {
         val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
+        val profileBoundary = mockk<ProfileBoundary>()
         every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings(enabled = true, apiKey = "tmdb-key"))
+        every { profileBoundary.currentLanguageTag() } returns "en"
         return HomeCatalogRefreshCoordinator(
             catalogRepository = mockk<CatalogRepository>(relaxed = true),
             metaRepository = mockk<MetaRepository>(relaxed = true),
@@ -141,6 +145,7 @@ class HomeCatalogRefreshCoordinatorTvdbTest {
             tvMetadataRouter = tvMetadataRouter,
             tmdbSettingsDataStore = tmdbSettingsDataStore,
             posterRatingsUrlResolver = mockk<PosterRatingsUrlResolver>(relaxed = true),
+            profileBoundary = profileBoundary,
             appContext = mockk<Context>(relaxed = true)
         )
     }

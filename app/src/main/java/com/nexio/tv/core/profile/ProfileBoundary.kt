@@ -160,6 +160,18 @@ class ProfileBoundary(
         }
     }
 
+    fun currentLanguageTag(): String {
+        val languageTag = readCurrentLanguageTag()
+        val context = _activeContext.value
+        if (context != null && context.languageTag != languageTag) {
+            _activeContext.value = context.copy(
+                languageTag = languageTag,
+                generation = generation.incrementAndGet()
+            )
+        }
+        return languageTag
+    }
+
     fun isCurrent(generation: Long): Boolean {
         return _activeContext.value?.generation == generation
     }
@@ -167,7 +179,7 @@ class ProfileBoundary(
     private fun buildContext(profileId: Int, generation: Long): SecondaryProfileRuntimeContext {
         return SecondaryProfileRuntimeContext(
             profileId = requireSecondaryProfileId(profileId),
-            languageTag = currentLanguageTag(),
+            languageTag = readCurrentLanguageTag(),
             generation = generation
         )
     }
@@ -179,7 +191,7 @@ class ProfileBoundary(
         return profileId
     }
 
-    private fun currentLanguageTag(): String {
+    private fun readCurrentLanguageTag(): String {
         return languageTagProvider()
     }
 }

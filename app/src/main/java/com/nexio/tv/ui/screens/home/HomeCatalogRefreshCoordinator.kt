@@ -9,6 +9,7 @@ import com.nexio.tv.core.image.ArtworkImageCacheKeys
 import com.nexio.tv.core.locale.AppLocaleResolver
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
+import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.search.AndroidTvSearchRuntimeReadiness
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
@@ -17,6 +18,7 @@ import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvMetadataRouter
+import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.repository.MDBListRepository
@@ -75,6 +77,7 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
     private val tvMetadataRouter: TvMetadataRouter,
     private val tmdbSettingsDataStore: TmdbSettingsDataStore,
     private val posterRatingsUrlResolver: PosterRatingsUrlResolver,
+    private val profileBoundary: ProfileBoundary,
     @ApplicationContext private val appContext: Context
 ) {
     /**
@@ -95,7 +98,8 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
                     TvMetadataRequest(
                         contentId = item.id,
                         fallbackContentId = null,
-                        contentType = item.type
+                        contentType = item.type,
+                        language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
                     )
                 )
                 logProviderDecisionDiagnostics(item, decision.diagnostics, onLog)

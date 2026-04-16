@@ -6,11 +6,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvMetadataRouter
+import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityCalculator
 import com.nexio.tv.core.tvdb.TvdbAirAvailabilityPrecision
 import com.nexio.tv.core.tvdb.TvdbSeriesTiming
@@ -164,6 +166,7 @@ class MetaDetailsViewModel @Inject constructor(
     private val tmdbService: TmdbService,
     private val tmdbMetadataService: TmdbMetadataService,
     private val tvMetadataRouter: TvMetadataRouter = missingTvMetadataRouterForManualConstruction(),
+    private val profileBoundary: ProfileBoundary,
     private val mdbListRepository: MDBListRepository,
     private val episodeRatingsSelectionRepository: EpisodeRatingsSelectionRepository,
     private val libraryRepository: LibraryRepository,
@@ -1303,12 +1306,14 @@ class MetaDetailsViewModel @Inject constructor(
         val settings = tmdbSettingsDataStore.settings.first()
         val tmdbContentType = resolveTmdbContentType(meta)
         val isTvContent = tmdbContentType == ContentType.SERIES || tmdbContentType == ContentType.TV
+        val tvdbLanguage = currentTvdbLanguageTag()
         val tvEnrichment = if (isTvContent) {
             tvMetadataRouter.fetchEnrichment(
                 TvMetadataRequest(
                     contentId = meta.id,
                     fallbackContentId = itemId,
-                    contentType = tmdbContentType
+                    contentType = tmdbContentType,
+                    language = tvdbLanguage
                 )
             ).value
         } else {
@@ -1446,6 +1451,7 @@ class MetaDetailsViewModel @Inject constructor(
                     contentId = meta.id,
                     fallbackContentId = itemId,
                     contentType = tmdbContentType,
+                    language = tvdbLanguage,
                     seasonNumbers = seasonNumbers
                 )
             )
@@ -1492,6 +1498,10 @@ class MetaDetailsViewModel @Inject constructor(
         if (settings.useProductions && tvEnrichment.productionCompanies.any { it.tmdbId == null || it.logo == null }) return true
         if (settings.useNetworks && tvEnrichment.networks.any { it.tmdbId == null || it.logo == null }) return true
         return false
+    }
+
+    private fun currentTvdbLanguageTag(): String {
+        return TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
     }
 
     private fun resolveTmdbContentType(meta: Meta): ContentType {

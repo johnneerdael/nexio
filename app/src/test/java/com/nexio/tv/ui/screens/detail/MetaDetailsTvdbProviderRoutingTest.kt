@@ -6,6 +6,7 @@ import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
+import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvProvider
@@ -17,6 +18,7 @@ import com.nexio.tv.domain.model.Video
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -107,7 +109,11 @@ class MetaDetailsTvdbProviderRoutingTest {
         assertEquals("United States", meta?.country)
         assertEquals("en", meta?.language)
 
-        coVerify(exactly = 1) { tvMetadataRouter.fetchEnrichment(any()) }
+        val enrichmentRequest = slot<TvMetadataRequest>()
+        coVerify(exactly = 1) { tvMetadataRouter.fetchEnrichment(capture(enrichmentRequest)) }
+        assertEquals("tt0944947", enrichmentRequest.captured.contentId)
+        assertEquals(ContentType.SERIES, enrichmentRequest.captured.contentType)
+        assertEquals("eng", enrichmentRequest.captured.language)
         coVerify(exactly = 0) { tmdbService.ensureTmdbId("metadata-enrichment", any()) }
         coVerify(exactly = 0) { tmdbMetadataService.fetchEnrichment(any(), any(), any()) }
     }

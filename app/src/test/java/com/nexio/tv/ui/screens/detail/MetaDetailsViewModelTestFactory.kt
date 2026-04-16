@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.detail
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvMetadataDecision
@@ -47,6 +48,7 @@ fun buildMetaDetailsViewModel(
     tmdbService: TmdbService = defaultTmdbService(),
     tmdbMetadataService: TmdbMetadataService = mockk(relaxed = true),
     tvMetadataRouter: TvMetadataRouter = defaultTvMetadataRouter(),
+    profileBoundary: ProfileBoundary = defaultProfileBoundary(),
     tmdbSettings: TmdbSettings = TmdbSettings(),
     watchProgressRepository: WatchProgressRepository = defaultWatchProgressRepository(),
     libraryRepository: LibraryRepository = defaultLibraryRepository()
@@ -89,6 +91,7 @@ fun buildMetaDetailsViewModel(
         tmdbService = tmdbService,
         tmdbMetadataService = tmdbMetadataService,
         tvMetadataRouter = tvMetadataRouter,
+        profileBoundary = profileBoundary,
         mdbListRepository = mockk(relaxed = true),
         episodeRatingsSelectionRepository = mockk(relaxed = true),
         libraryRepository = libraryRepository,
@@ -147,6 +150,12 @@ fun defaultTvMetadataRouter(): TvMetadataRouter {
         value = emptyList()
     )
     return router
+}
+
+fun defaultProfileBoundary(): ProfileBoundary {
+    return mockk {
+        every { currentLanguageTag() } returns "en"
+    }
 }
 
 fun defaultWatchProgressRepository(): WatchProgressRepository {

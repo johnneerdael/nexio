@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
+import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.data.repository.ContinueWatchingNextUpRef
 import com.nexio.tv.data.repository.ContinueWatchingResumeRef
 import com.nexio.tv.data.repository.ContinueWatchingSnapshotService
@@ -147,17 +148,20 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
         is ContinueWatchingItem.InProgress -> item.progress.contentType
         is ContinueWatchingItem.NextUp -> item.info.contentType
     }
+    val tvdbLanguage = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
     return try {
         val enrichment = tvMetadataRouter.fetchEnrichment(
             TvMetadataRequest(
                 contentId = contentId,
                 fallbackContentId = item.providerFallbackContentId(),
-                contentType = ContentType.fromString(contentType)
+                contentType = ContentType.fromString(contentType),
+                language = tvdbLanguage
             )
         ).value ?: return item
         val localizedEpisodeDescription = localizedContinueWatchingEpisodeDescription(
             tvMetadataRouter = tvMetadataRouter,
-            item = item
+            item = item,
+            language = tvdbLanguage
         )
 
         val existing = when (item) {
@@ -202,7 +206,8 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
 
 internal suspend fun localizedContinueWatchingEpisodeDescription(
     tvMetadataRouter: com.nexio.tv.core.tvdb.TvMetadataRouter,
-    item: ContinueWatchingItem
+    item: ContinueWatchingItem,
+    language: String? = null
 ): String? {
     val season = item.season() ?: return null
     val episode = item.episode() ?: return null
@@ -213,6 +218,7 @@ internal suspend fun localizedContinueWatchingEpisodeDescription(
             contentId = item.contentId(),
             fallbackContentId = item.providerFallbackContentId(),
             contentType = ContentType.fromString(item.contentType()),
+            language = language,
             seasonNumbers = listOf(season)
         )
     ).value?.get(season to episode)?.overview?.takeIf { it.isNotBlank() }
