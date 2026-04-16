@@ -41,7 +41,7 @@ class ProfileSelectionViewModelTest {
     }
 
     @Test
-    fun `successful unlock switches profile`() = runTest(dispatcher) {
+    fun `successful unlock emits completion event`() = runTest(dispatcher) {
         val profileManager = profileManager()
         val profileSyncService = mockk<ProfileSyncService>()
         coEvery { profileSyncService.verifyProfilePin(2, "1234") } returns Result.success(
@@ -53,10 +53,18 @@ class ProfileSelectionViewModelTest {
         )
 
         val viewModel = ProfileSelectionViewModel(profileManager, profileSyncService)
+        val unlockedProfileId = CompletableDeferred<Int>()
+        val collector = launch {
+            viewModel.pinUnlockedProfileId.collect { if (!unlockedProfileId.isCompleted) unlockedProfileId.complete(it) }
+        }
+        runCurrent()
+
         viewModel.verifyPin(2, "1234")
         advanceUntilIdle()
 
-        coVerify(exactly = 1) { profileManager.setActiveProfile(2) }
+        coVerify(exactly = 0) { profileManager.setActiveProfile(any()) }
+        assertEquals(2, unlockedProfileId.await())
+        collector.cancel()
         assertEquals(ProfileSelectionViewModel.PinVerificationState(), viewModel.pinState.value)
     }
 
@@ -82,7 +90,7 @@ class ProfileSelectionViewModelTest {
         viewModel.verifyPin(2, "1234")
         advanceUntilIdle()
 
-        coVerify(exactly = 1) { profileManager.setActiveProfile(2) }
+        coVerify(exactly = 0) { profileManager.setActiveProfile(any()) }
         assertEquals(2, unlockedProfileId.await())
         collector.cancel()
         assertEquals(ProfileSelectionViewModel.PinVerificationState(), viewModel.pinState.value)
