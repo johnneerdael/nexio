@@ -27,13 +27,13 @@ class ProfileSelectionViewModel @Inject constructor(
     private val profileSyncService: ProfileSyncService
 ) : ViewModel() {
     private val pinVerificationLock = Any()
-    private val _pinUnlockedProfileId = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+    private val _pinUnlockedProfile = MutableSharedFlow<PinUnlockEvent>(extraBufferCapacity = 1)
 
     val profiles: StateFlow<List<UserProfile>> = profileManager.profiles
 
     val activeProfileId: StateFlow<Int> = profileManager.activeProfileId
 
-    val pinUnlockedProfileId: SharedFlow<Int> = _pinUnlockedProfileId.asSharedFlow()
+    val pinUnlockedProfile: SharedFlow<PinUnlockEvent> = _pinUnlockedProfile.asSharedFlow()
 
     // Derive PIN-enabled map directly from profiles (no Supabase in Phase 3, per Pitfall 5)
     val profilePinEnabled: StateFlow<Map<Int, Boolean>> = profileManager.profiles
@@ -50,7 +50,7 @@ class ProfileSelectionViewModel @Inject constructor(
         }
     }
 
-    fun verifyPin(profileId: Int, pin: String) {
+    fun verifyPin(profileId: Int, pin: String, pinSessionId: Long) {
         if (!beginPinVerification()) return
         viewModelScope.launch {
             val result = profileSyncService.verifyProfilePin(profileId, pin)
@@ -69,7 +69,7 @@ class ProfileSelectionViewModel @Inject constructor(
 
             if (pinResult.unlocked) {
                 resetPinState()
-                _pinUnlockedProfileId.emit(profileId)
+                _pinUnlockedProfile.emit(PinUnlockEvent(profileId, pinSessionId))
             } else if (pinResult.retryAfterSeconds > 0) {
                 _pinState.update {
                     it.copy(
@@ -129,5 +129,10 @@ class ProfileSelectionViewModel @Inject constructor(
         val isError: Boolean = false,
         val errorMessage: String? = null,
         val retryAfterSeconds: Int = 0
+    )
+
+    data class PinUnlockEvent(
+        val profileId: Int,
+        val pinSessionId: Long
     )
 }
