@@ -8,6 +8,7 @@ import com.nexio.tv.data.local.SimklAuthDataStore
 import com.nexio.tv.data.local.SimklProgressSyncState
 import com.nexio.tv.data.local.SimklProgressSyncStateStore
 import com.nexio.tv.data.remote.SimklRequestGate
+import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.model.WatchProgress
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,25 +40,81 @@ class SimklProgressService @Inject constructor(
     private val syncStateStore: SimklProgressSyncStateStore,
     private val requestGate: SimklRequestGate
 ) {
+    private class SimklProgressRuntimeState(
+        persisted: SimklProgressSyncState = SimklProgressSyncState()
+    ) {
+        val remoteProgress = MutableStateFlow<List<WatchProgress>>(emptyList())
+        val nextUp = MutableStateFlow<List<TrackingNextUpEntry>>(emptyList())
+        val episodeProgress = MutableStateFlow<Map<String, Map<Pair<Int, Int>, WatchProgress>>>(emptyMap())
+        val watchedMovies = MutableStateFlow<Set<String>>(emptySet())
+        val playbackIdsByKey = MutableStateFlow<Map<String, Long>>(emptyMap())
+        val loaded = MutableStateFlow(false)
+        var lastAllActivityAt: String? = persisted.lastAllActivityAt
+        var lastPlaybackActivityAt: String? = persisted.lastPlaybackActivityAt
+        var lastRemovedFromListActivityAt: String? = persisted.lastRemovedFromListActivityAt
+
+        fun clear() {
+            remoteProgress.value = emptyList()
+            nextUp.value = emptyList()
+            episodeProgress.value = emptyMap()
+            watchedMovies.value = emptySet()
+            playbackIdsByKey.value = emptyMap()
+            loaded.value = false
+            lastAllActivityAt = null
+            lastPlaybackActivityAt = null
+            lastRemovedFromListActivityAt = null
+        }
+    }
+
+    private class SimklProgressRuntimeRegistry(
+        private val syncStateStore: SimklProgressSyncStateStore
+    ) {
+        private val states = mutableMapOf<Int, SimklProgressRuntimeState>()
+
+        fun stateFor(session: TrackingRuntimeSession): SimklProgressRuntimeState {
+            require(session.provider == TrackingProvider.SIMKL) {
+                "SimklProgressRuntimeRegistry only accepts SIMKL sessions"
+            }
+            return states.getOrPut(session.profileId) {
+                SimklProgressRuntimeState(readPersistedState(session.profileId))
+            }
+        }
+
+        private fun readPersistedState(profileId: Int): SimklProgressSyncState {
+            val currentProfileId = runCatching { syncStateStore.currentProfileId() }
+                .getOrDefault(profileId)
+                .takeIf { it in 1..4 }
+                ?: 1
+            if (profileId == currentProfileId) {
+                return syncStateStore.read()
+            }
+            return syncStateStore.read(profileId)
+        }
+    }
+
     private val gson = Gson()
     private val debounceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var refreshDebounceJob: Job? = null
     private val refreshDebounceMutex = Mutex()
-    private val remoteProgress = MutableStateFlow<List<WatchProgress>>(emptyList())
-    private val nextUp = MutableStateFlow<List<TrackingNextUpEntry>>(emptyList())
-    private val episodeProgress = MutableStateFlow<Map<String, Map<Pair<Int, Int>, WatchProgress>>>(emptyMap())
-    private val watchedMovies = MutableStateFlow<Set<String>>(emptySet())
-    private val playbackIdsByKey = MutableStateFlow<Map<String, Long>>(emptyMap())
-    private val loaded = MutableStateFlow(false)
-    private var lastAllActivityAt: String? = null
-    private var lastPlaybackActivityAt: String? = null
-    private var lastRemovedFromListActivityAt: String? = null
+    private val runtimeRegistry = SimklProgressRuntimeRegistry(syncStateStore)
+    private val remoteProgress get() = runtimeState().remoteProgress
+    private val nextUp get() = runtimeState().nextUp
+    private val episodeProgress get() = runtimeState().episodeProgress
+    private val watchedMovies get() = runtimeState().watchedMovies
+    private val playbackIdsByKey get() = runtimeState().playbackIdsByKey
+    private val loaded get() = runtimeState().loaded
 
-    init {
-        val persisted = syncStateStore.read()
-        lastAllActivityAt = persisted.lastAllActivityAt
-        lastPlaybackActivityAt = persisted.lastPlaybackActivityAt
-        lastRemovedFromListActivityAt = persisted.lastRemovedFromListActivityAt
+    private fun currentProfileId(): Int {
+        return syncStateStore.currentProfileId().takeIf { it in 1..4 } ?: 1
+    }
+
+    private fun runtimeState(profileId: Int = currentProfileId()): SimklProgressRuntimeState {
+        return runtimeRegistry.stateFor(
+            TrackingRuntimeSession(
+                provider = TrackingProvider.SIMKL,
+                profileId = profileId
+            )
+        )
     }
 
     fun observeAllProgress(): Flow<List<WatchProgress>> = remoteProgress
@@ -110,11 +167,12 @@ class SimklProgressService @Inject constructor(
      * reconcile paths where multiple adapters may settle in quick succession.
      */
     suspend fun refreshNow() {
+        val profileId = currentProfileId()
         refreshDebounceMutex.withLock {
             refreshDebounceJob?.cancel()
             refreshDebounceJob = debounceScope.launch {
                 delay(3_000L)
-                executeRefresh()
+                executeRefresh(profileId)
             }
         }
     }
@@ -124,24 +182,21 @@ class SimklProgressService @Inject constructor(
      * needs fresh state right away (app startup, foreground resume, user-initiated refresh).
      */
     suspend fun refreshNowImmediate() {
+        val profileId = currentProfileId()
         refreshDebounceMutex.withLock {
             refreshDebounceJob?.cancel()
         }
-        executeRefresh()
+        executeRefresh(profileId)
     }
 
-    private suspend fun executeRefresh() {
-        val auth = simklAuthDataStore.state.first()
+    private suspend fun executeRefresh(profileId: Int = currentProfileId()) {
+        val runtime = runtimeState(profileId)
+        val auth = runCatching { simklAuthDataStore.stateForProfile(profileId).first() }
+            .getOrElse { simklAuthDataStore.state.first() }
         val accessToken = auth.accessToken?.trim().orEmpty()
         if (accessToken.isBlank()) {
-            remoteProgress.value = emptyList()
-            nextUp.value = emptyList()
-            episodeProgress.value = emptyMap()
-            watchedMovies.value = emptySet()
-            loaded.value = false
-            syncStateStore.clear()
-            lastAllActivityAt = null
-            lastPlaybackActivityAt = null
+            runtime.clear()
+            syncStateStore.clear(profileId)
             return
         }
 
@@ -163,8 +218,8 @@ class SimklProgressService @Inject constructor(
             activities?.getAsJsonObject("movies")?.stringValue("removed_from_list")
         )
 
-        if (!loaded.value || playbackActivity != lastPlaybackActivityAt) {
-            val playbackDateFrom = lastPlaybackActivityAt
+        if (!runtime.loaded.value || playbackActivity != runtime.lastPlaybackActivityAt) {
+            val playbackDateFrom = runtime.lastPlaybackActivityAt
             val moviePlaybacks = fetchJsonArrayAsObjects(
                 url = buildPlaybackUrl("movies", playbackDateFrom),
                 accessToken = accessToken
@@ -175,10 +230,10 @@ class SimklProgressService @Inject constructor(
             )
             val playbackDelta = (moviePlaybacks.mapNotNull(::mapMoviePlayback) + episodePlaybacks.mapNotNull(::mapEpisodePlayback))
                 .sortedByDescending { it.lastWatched }
-            remoteProgress.value = if (playbackDateFrom == null) {
+            runtime.remoteProgress.value = if (playbackDateFrom == null) {
                 playbackDelta
             } else {
-                mergePlaybackDelta(remoteProgress.value, playbackDelta)
+                mergePlaybackDelta(runtime.remoteProgress.value, playbackDelta)
             }
             val playbackIdDelta = buildMap {
                 moviePlaybacks.forEach { item ->
@@ -203,16 +258,23 @@ class SimklProgressService @Inject constructor(
                     put("$contentId:$seasonNumber:$episodeNumber", playbackId)
                 }
             }
-            playbackIdsByKey.value = if (playbackDateFrom == null) {
+            runtime.playbackIdsByKey.value = if (playbackDateFrom == null) {
                 playbackIdDelta
             } else {
-                playbackIdsByKey.value + playbackIdDelta
+                runtime.playbackIdsByKey.value + playbackIdDelta
             }
-            lastPlaybackActivityAt = playbackActivity
+            runtime.lastPlaybackActivityAt = playbackActivity
         }
 
-        if (!loaded.value || allActivity != lastAllActivityAt || removedFromListActivity != lastRemovedFromListActivityAt) {
-            val allDateFrom = if (removedFromListActivity != lastRemovedFromListActivityAt) null else lastAllActivityAt
+        if (!runtime.loaded.value ||
+            allActivity != runtime.lastAllActivityAt ||
+            removedFromListActivity != runtime.lastRemovedFromListActivityAt
+        ) {
+            val allDateFrom = if (removedFromListActivity != runtime.lastRemovedFromListActivityAt) {
+                null
+            } else {
+                runtime.lastAllActivityAt
+            }
             val moviesRoot = fetchJsonObject(
                 url = buildAllItemsUrl("movies", allDateFrom, "full"),
                 accessToken = accessToken
@@ -225,32 +287,33 @@ class SimklProgressService @Inject constructor(
                 url = buildAllItemsUrl("anime", allDateFrom, "full_anime_seasons"),
                 accessToken = accessToken
             )
-            watchedMovies.value = if (allDateFrom == null) {
+            runtime.watchedMovies.value = if (allDateFrom == null) {
                 buildWatchedMovies(moviesRoot)
             } else {
-                mergeWatchedMovies(watchedMovies.value, moviesRoot)
+                mergeWatchedMovies(runtime.watchedMovies.value, moviesRoot)
             }
-            nextUp.value = if (allDateFrom == null) {
+            runtime.nextUp.value = if (allDateFrom == null) {
                 buildNextUp(showsRoot, animeRoot)
             } else {
-                mergeNextUp(nextUp.value, showsRoot, animeRoot)
+                mergeNextUp(runtime.nextUp.value, showsRoot, animeRoot)
             }
-            episodeProgress.value = if (allDateFrom == null) {
+            runtime.episodeProgress.value = if (allDateFrom == null) {
                 buildEpisodeProgressMap(showsRoot, animeRoot)
             } else {
-                mergeEpisodeProgress(episodeProgress.value, showsRoot, animeRoot)
+                mergeEpisodeProgress(runtime.episodeProgress.value, showsRoot, animeRoot)
             }
-            lastAllActivityAt = allActivity
-            lastRemovedFromListActivityAt = removedFromListActivity
+            runtime.lastAllActivityAt = allActivity
+            runtime.lastRemovedFromListActivityAt = removedFromListActivity
         }
 
-        loaded.value = true
+        runtime.loaded.value = true
         syncStateStore.write(
             SimklProgressSyncState(
-                lastAllActivityAt = lastAllActivityAt,
-                lastPlaybackActivityAt = lastPlaybackActivityAt,
-                lastRemovedFromListActivityAt = lastRemovedFromListActivityAt
-            )
+                lastAllActivityAt = runtime.lastAllActivityAt,
+                lastPlaybackActivityAt = runtime.lastPlaybackActivityAt,
+                lastRemovedFromListActivityAt = runtime.lastRemovedFromListActivityAt
+            ),
+            profileId = profileId
         )
     }
 

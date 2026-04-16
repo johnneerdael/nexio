@@ -435,6 +435,9 @@ class HomeViewModel @Inject constructor(
                             reason = "profile_switch:$profileId",
                             expectedGeneration = session.generation
                         )
+                        if (isCurrentHomeProfileGeneration(session.generation)) {
+                            reloadDiskCachedAddonCatalogsForActiveProfileSwitch()
+                        }
                     } finally {
                         if (isCurrentHomeProfileGeneration(session.generation)) {
                             profileSwitchDiskHydrationActive = false
@@ -521,6 +524,9 @@ class HomeViewModel @Inject constructor(
     private fun observePriorityHydration() = observePriorityHydrationPipeline()
 
     fun onForeground() = onForegroundPipeline()
+
+    private suspend fun reloadDiskCachedAddonCatalogsForActiveProfileSwitch() =
+        reloadDiskCachedAddonCatalogsForActiveProfileSwitchPipeline()
 
     private fun restorePersistedSyntheticCatalogRows() = restorePersistedSyntheticCatalogRowsPipeline()
 

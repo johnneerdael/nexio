@@ -546,6 +546,23 @@ class ProfileSettingsScopeContractTest {
     }
 
     @Test
+    fun `profile switch reloads disk cached addon catalogs after disk backed hydration`() {
+        val homeSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModel.kt").readText()
+        val diskHydrationIndex = homeSource.indexOf("loadActiveProfileDiskBackedHomeState(")
+        val addonReloadIndex = homeSource.indexOf(
+            "reloadDiskCachedAddonCatalogsForActiveProfileSwitch()",
+            startIndex = diskHydrationIndex
+        )
+
+        assertTrue(diskHydrationIndex >= 0)
+        assertTrue(
+            "Profile switches clear catalogsMap and catalogOrder, so they must reload cached addon catalogs from the already observed addons list instead of waiting for installed addons to emit again.",
+            addonReloadIndex > diskHydrationIndex
+        )
+        assertTrue(homeCatalogPipeline.readText().contains("reloadDiskCachedAddonCatalogsForActiveProfileSwitchPipeline"))
+    }
+
+    @Test
     fun `trakt progress runtime state is profile keyed`() {
         val source = File("app/src/main/java/com/nexio/tv/data/repository/TraktProgressService.kt").readText()
 

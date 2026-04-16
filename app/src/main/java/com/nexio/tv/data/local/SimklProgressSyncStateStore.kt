@@ -45,18 +45,20 @@ class SimklProgressSyncStateStore private constructor(
     private val profileManager: ProfileManager
         get() = injectedProfileManager ?: error("ProfileManager unavailable")
 
-    private fun injectedPrefsName(): String =
-        profilePrefsName(BASE_PREFS_NAME, profileManager.activeProfileId.value)
+    private fun injectedPrefsName(profileId: Int): String =
+        profilePrefsName(BASE_PREFS_NAME, profileId)
 
-    private fun prefsName(): String =
+    private fun prefsName(profileId: Int = activeProfileId()): String =
         if (injectedProfileManager != null) {
-            injectedPrefsName()
+            injectedPrefsName(profileId)
         } else {
-            profilePrefsName(BASE_PREFS_NAME, activeProfileId())
+            profilePrefsName(BASE_PREFS_NAME, profileId)
         }
 
-    fun read(): SimklProgressSyncState {
-        val prefs = context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
+    fun read(): SimklProgressSyncState = read(activeProfileId())
+
+    fun read(profileId: Int): SimklProgressSyncState {
+        val prefs = context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
         return SimklProgressSyncState(
             lastAllActivityAt = prefs.getString(KEY_LAST_ALL, null),
             lastPlaybackActivityAt = prefs.getString(KEY_LAST_PLAYBACK, null),
@@ -64,8 +66,10 @@ class SimklProgressSyncStateStore private constructor(
         )
     }
 
-    fun write(state: SimklProgressSyncState) {
-        context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
+    fun write(state: SimklProgressSyncState) = write(state, activeProfileId())
+
+    fun write(state: SimklProgressSyncState, profileId: Int) {
+        context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_LAST_ALL, state.lastAllActivityAt)
             .putString(KEY_LAST_PLAYBACK, state.lastPlaybackActivityAt)
@@ -73,12 +77,16 @@ class SimklProgressSyncStateStore private constructor(
             .commit()
     }
 
-    fun clear() {
-        context.getSharedPreferences(prefsName(), Context.MODE_PRIVATE)
+    fun clear() = clear(activeProfileId())
+
+    fun clear(profileId: Int) {
+        context.getSharedPreferences(prefsName(profileId), Context.MODE_PRIVATE)
             .edit()
             .remove(KEY_LAST_ALL)
             .remove(KEY_LAST_PLAYBACK)
             .remove(KEY_LAST_REMOVED)
             .commit()
     }
+
+    fun currentProfileId(): Int = activeProfileId()
 }

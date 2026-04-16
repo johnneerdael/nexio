@@ -65,6 +65,12 @@ data class ProfileOwnedContinueWatchingSnapshot(
     }
 }
 
+private data class LiveContinueWatchingSnapshotEmission(
+    val profileId: Int,
+    val hasLoadedRemoteSnapshot: Boolean,
+    val snapshot: ContinueWatchingSnapshot?
+)
+
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContinueWatchingSnapshotService @Inject constructor(
@@ -88,8 +94,15 @@ class ContinueWatchingSnapshotService @Inject constructor(
     private var hasSeenAuthenticatedSession = false
     private var reemitJob: Job? = null
     private var currentTimerTargetMs: Long? = null
+    private val liveProfileGateLock = Any()
+    private val liveProfilesReady = mutableSetOf<Int>()
+    private val profilesAwaitingRemoteReset = mutableSetOf<Int>()
+    private val profilesThatObservedRemoteReset = mutableSetOf<Int>()
 
     init {
+        synchronized(liveProfileGateLock) {
+            liveProfilesReady += activeProfileId()
+        }
         scope.coroutineContext[Job]?.invokeOnCompletion {
             reemitJob = null
             currentTimerTargetMs = null
@@ -98,7 +111,8 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
         profileManager?.let { manager ->
             scope.launch {
-                manager.profileSwitched.collectLatest {
+                manager.profileSwitched.collectLatest { profileId ->
+                    markProfileAwaitingLiveReset(profileId)
                     loadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
                 }
             }
@@ -132,11 +146,15 @@ class ContinueWatchingSnapshotService @Inject constructor(
         }
 
         scope.launch {
-            trackingProviderStateService.state.map { it.hasAuthenticatedProvider }
+            activeProfileIdFlow()
                 .distinctUntilChanged()
-                .flatMapLatest { isAuthenticated ->
+                .flatMapLatest { profileId ->
+                    trackingProviderStateService.state.map { state ->
+                        profileId to state.hasAuthenticatedProvider
+                    }.distinctUntilChanged()
+                }
+                .flatMapLatest { (profileId, isAuthenticated) ->
                     if (!isAuthenticated) {
-                        val profileId = activeProfileId()
                         val empty = ProfileOwnedContinueWatchingSnapshot(profileId = profileId)
                         rawSnapshotState.value = empty
                         snapshotState.value = empty
@@ -144,7 +162,13 @@ class ContinueWatchingSnapshotService @Inject constructor(
                         lastRefreshRequestMs = 0L
                         cancelReemitScheduling()
                         hasSeenAuthenticatedSession = false
-                        flowOf<ContinueWatchingSnapshot?>(null)
+                        flowOf(
+                            LiveContinueWatchingSnapshotEmission(
+                                profileId = profileId,
+                                hasLoadedRemoteSnapshot = false,
+                                snapshot = null
+                            )
+                        )
                     } else {
                         hasSeenAuthenticatedSession = true
                         combine(
@@ -154,20 +178,39 @@ class ContinueWatchingSnapshotService @Inject constructor(
                             trackingProgressService.observeSyntheticContinueWatchingNextUp()
                         ) { hasLoadedRemoteSnapshot, allProgress, nextUpEntries, traktUpNextEntries ->
                             if (!hasLoadedRemoteSnapshot) {
-                                null
+                                LiveContinueWatchingSnapshotEmission(
+                                    profileId = profileId,
+                                    hasLoadedRemoteSnapshot = false,
+                                    snapshot = null
+                                )
                             } else {
-                                buildRawSnapshot(
-                                    allProgress = allProgress,
-                                    nextUpEntries = nextUpEntries,
-                                    traktUpNextEntries = traktUpNextEntries
+                                LiveContinueWatchingSnapshotEmission(
+                                    profileId = profileId,
+                                    hasLoadedRemoteSnapshot = true,
+                                    snapshot = buildRawSnapshot(
+                                        allProgress = allProgress,
+                                        nextUpEntries = nextUpEntries,
+                                        traktUpNextEntries = traktUpNextEntries
+                                    )
                                 )
                             }
                         }
                     }
                 }
-                .collectLatest { snapshot ->
-                    if (snapshot == null) return@collectLatest
-                    updateSnapshot(snapshot)
+                .collectLatest { emission ->
+                    noteRemoteSnapshotState(
+                        profileId = emission.profileId,
+                        hasLoadedRemoteSnapshot = emission.hasLoadedRemoteSnapshot
+                    )
+                    val snapshot = emission.snapshot ?: return@collectLatest
+                    if (!canPublishLiveSnapshot(emission.profileId)) {
+                        Log.d(
+                            "ContinueWatching",
+                            "Skipping live continue watching snapshot before profile=${emission.profileId} remote reset"
+                        )
+                        return@collectLatest
+                    }
+                    updateSnapshot(snapshot, profileId = emission.profileId)
                 }
         }
     }
@@ -652,8 +695,10 @@ class ContinueWatchingSnapshotService @Inject constructor(
         return true
     }
 
-    private suspend fun updateSnapshot(snapshot: ContinueWatchingSnapshot) {
-        val profileId = activeProfileId()
+    private suspend fun updateSnapshot(
+        snapshot: ContinueWatchingSnapshot,
+        profileId: Int = activeProfileId()
+    ) {
         val published = persistRawSnapshot(snapshot, profileId = profileId)
         if (published) {
             scheduleReemitIfNeeded(snapshot.scheduledReemit, snapshot.updatedAtMs)
@@ -662,7 +707,42 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
     private fun activeProfileId(): Int = profileManager?.activeProfileId?.value ?: 1
 
+    private fun activeProfileIdFlow(): Flow<Int> = profileManager?.activeProfileId ?: flowOf(1)
+
     private fun isActiveProfile(profileId: Int): Boolean = activeProfileId() == profileId
+
+    private fun markProfileAwaitingLiveReset(profileId: Int) {
+        synchronized(liveProfileGateLock) {
+            if (profileId !in liveProfilesReady) {
+                profilesAwaitingRemoteReset += profileId
+                profilesThatObservedRemoteReset -= profileId
+            }
+        }
+    }
+
+    private fun noteRemoteSnapshotState(profileId: Int, hasLoadedRemoteSnapshot: Boolean) {
+        synchronized(liveProfileGateLock) {
+            if (!hasLoadedRemoteSnapshot && profileId in profilesAwaitingRemoteReset) {
+                profilesThatObservedRemoteReset += profileId
+            }
+        }
+    }
+
+    private fun canPublishLiveSnapshot(profileId: Int): Boolean {
+        synchronized(liveProfileGateLock) {
+            if (profileId !in profilesAwaitingRemoteReset) {
+                liveProfilesReady += profileId
+                return true
+            }
+            if (profileId !in profilesThatObservedRemoteReset) {
+                return false
+            }
+            profilesAwaitingRemoteReset -= profileId
+            profilesThatObservedRemoteReset -= profileId
+            liveProfilesReady += profileId
+            return true
+        }
+    }
 
     private fun handleScheduledReemit(
         scheduledReemit: List<TrackingNextUpEntry>,

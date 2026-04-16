@@ -273,6 +273,15 @@ internal suspend fun HomeViewModel.loadActiveProfileDiskBackedHomeState(
     }
 }
 
+internal suspend fun HomeViewModel.reloadDiskCachedAddonCatalogsForActiveProfileSwitchPipeline() {
+    val addons = addonsCache
+    if (addons.isEmpty()) {
+        scheduleUpdateCatalogRows()
+        return
+    }
+    loadAllCatalogsPipeline(addons)
+}
+
 private data class DiskBackedHomeState(
     val traktAuthenticated: Boolean,
     val simklAuthenticated: Boolean,
