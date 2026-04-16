@@ -180,7 +180,7 @@ class MetadataDiskCacheStoreTvdbTest {
               },
               "tvdbSchemaVersion": 2,
               "languageEpoch": 0,
-              "updatedAtMs": 1
+              "updatedAtMs": ${System.currentTimeMillis()}
             }
             """.trimIndent()
         ).apply()
@@ -212,9 +212,49 @@ class MetadataDiskCacheStoreTvdbTest {
         )
     }
 
+    @Test
+    fun `expired TVDB enrichment cache entry is ignored`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+        store.writeTvdbEnrichment(
+            seriesId = 121361,
+            recordKind = "series_extended",
+            languageTag = "en-US",
+            providerToken = "native",
+            enrichment = TvMetadataEnrichment(seriesTvdbId = 121361, localizedTitle = "Game of Thrones")
+        )
+        store.flushPendingWritesForTest()
+        rewriteUpdatedAt(prefs, "tvdb::121361::series_extended::en-US::native", 0L)
+
+        assertNull(store.readTvdbEnrichment(121361, "series_extended", "en-US", "native"))
+    }
+
+    @Test
+    fun `expired TVDB season episode cache entry is ignored`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+        store.writeTvdbSeasonEpisodes(
+            seriesId = 121361,
+            seasonType = "default",
+            seasonNumber = 1,
+            languageTag = "en-US",
+            episodes = listOf(TvEpisodeMetadata(seasonNumber = 1, episodeNumber = 1, title = "Winter Is Coming"))
+        )
+        store.flushPendingWritesForTest()
+        rewriteUpdatedAt(prefs, "tvdb_episode::121361::default::1::en-US", 0L)
+
+        assertNull(store.readTvdbSeasonEpisodes(121361, "default", 1, "en-US"))
+    }
+
     private fun mockContext(prefs: InMemorySharedPreferences): Context {
         return mockk {
             every { getSharedPreferences("metadata_disk_cache_v1", Context.MODE_PRIVATE) } returns prefs
         }
+    }
+
+    private fun rewriteUpdatedAt(prefs: InMemorySharedPreferences, key: String, updatedAtMs: Long) {
+        val root = Gson().fromJson(prefs.all[key] as String, JsonObject::class.java)
+        root.addProperty("updatedAtMs", updatedAtMs)
+        prefs.edit().putString(key, root.toString()).commit()
     }
 }

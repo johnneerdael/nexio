@@ -95,7 +95,7 @@ class MetadataDiskCacheStoreTest {
               },
               "metaSchemaVersion": 2,
               "languageEpoch": 0,
-              "updatedAtMs": 1
+              "updatedAtMs": ${System.currentTimeMillis()}
             }
             """.trimIndent()
         ).apply()
@@ -148,7 +148,7 @@ class MetadataDiskCacheStoreTest {
               },
               "languageEpoch": 0,
               "tmdbSchemaVersion": 2,
-              "updatedAtMs": 1
+              "updatedAtMs": ${System.currentTimeMillis()}
             }
             """.trimIndent()
         ).apply()
@@ -206,6 +206,23 @@ class MetadataDiskCacheStoreTest {
         val enrichment = store.readTmdbEnrichment("123:MOVIE", "en", "native")
 
         assertNull(enrichment)
+    }
+
+    @Test
+    fun `expired tmdb enrichment cache entry is ignored`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+
+        store.writeTmdbEnrichment(
+            tmdbKey = "550:MOVIE",
+            languageTag = "en-US",
+            providerToken = "native",
+            enrichment = tmdbEnrichment("Fight Club")
+        )
+        store.flushPendingWritesForTest()
+        rewriteUpdatedAt(prefs, "tmdb::550:MOVIE::en-US::native", 0L)
+
+        assertNull(store.readTmdbEnrichment("550:MOVIE", "en-US", "native"))
     }
 
     @Test
@@ -763,9 +780,41 @@ class MetadataDiskCacheStoreTest {
         )
     }
 
+    private fun tmdbEnrichment(title: String): TmdbEnrichment {
+        return TmdbEnrichment(
+            localizedTitle = title,
+            description = null,
+            genres = emptyList(),
+            backdrop = null,
+            logo = null,
+            poster = null,
+            directorMembers = emptyList(),
+            writerMembers = emptyList(),
+            castMembers = emptyList(),
+            releaseInfo = null,
+            rating = null,
+            runtimeMinutes = null,
+            director = emptyList(),
+            writer = emptyList(),
+            productionCompanies = emptyList(),
+            networks = emptyList(),
+            ageRating = null,
+            countries = null,
+            language = null,
+            collectionId = null,
+            collectionName = null
+        )
+    }
+
     private fun mockContext(prefs: InMemorySharedPreferences): Context {
         return mockk {
             every { getSharedPreferences("metadata_disk_cache_v1", Context.MODE_PRIVATE) } returns prefs
         }
+    }
+
+    private fun rewriteUpdatedAt(prefs: InMemorySharedPreferences, key: String, updatedAtMs: Long) {
+        val root = com.google.gson.Gson().fromJson(prefs.all[key] as String, JsonObject::class.java)
+        root.addProperty("updatedAtMs", updatedAtMs)
+        prefs.edit().putString(key, root.toString()).commit()
     }
 }
