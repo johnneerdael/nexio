@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.player.spool
 import android.content.Context
 import android.os.Build
 import android.os.Environment
+import android.os.storage.StorageManager
 import java.io.File
 
 enum class DiskSpoolStorageLocation {
@@ -37,7 +38,7 @@ internal object DiskSpoolStorageResolver {
             externalCacheDirs = context.externalCacheDirs,
             stateOf = { file -> Environment.getExternalStorageState(file) },
             removableOf = { file -> Environment.isExternalStorageRemovable(file) }
-        )
+        ) ?: externalSpoolDirectoryFromStorageManager(context)
     }
 
     fun resolveSpoolDirectory(
@@ -79,6 +80,34 @@ internal object DiskSpoolStorageResolver {
             ?: mountedCandidates.drop(1).firstOrNull()
 
         return selectedDirectory?.resolve(DISK_SPOOL_DIR)
+    }
+
+    internal fun externalSpoolDirectoryFromStorageRoots(
+        storageRoots: List<File>,
+        packageName: String,
+        stateOf: (File) -> String
+    ): File? {
+        return storageRoots
+            .asSequence()
+            .filter { root -> stateOf(root) == Environment.MEDIA_MOUNTED }
+            .map { root -> root.resolve("Android/data/$packageName/cache/$DISK_SPOOL_DIR") }
+            .firstOrNull()
+    }
+
+    private fun externalSpoolDirectoryFromStorageManager(context: Context): File? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+        val storageManager = context.getSystemService(StorageManager::class.java) ?: return null
+        val roots = storageManager.storageVolumes
+            .asSequence()
+            .filter { volume -> volume.isRemovable }
+            .filter { volume -> volume.state == Environment.MEDIA_MOUNTED }
+            .mapNotNull { volume -> volume.directory }
+            .toList()
+        return externalSpoolDirectoryFromStorageRoots(
+            storageRoots = roots,
+            packageName = context.packageName,
+            stateOf = { file -> Environment.getExternalStorageState(file) }
+        )
     }
 
     internal fun usableSpaceForSpoolDirectory(spoolDirectory: File): Long {
