@@ -99,7 +99,7 @@ class TraktProgressHistoryMutationAdapterTest {
             traktProgressService.hasHistoryAddNotFoundForOutbox(any())
         } returns false
         coEvery {
-            traktAuthService.executeAuthorizedWriteRequest<TraktHistoryAddResponseDto>(any())
+            traktAuthService.executeAuthorizedWriteRequest<TraktHistoryAddResponseDto>(any(), any())
         } returns Response.success(null)
 
         val result = adapter.execute(envelope)
@@ -125,7 +125,7 @@ class TraktProgressHistoryMutationAdapterTest {
         )
 
         coEvery {
-            traktAuthService.executeAuthorizedWriteRequest<Unit>(any())
+            traktAuthService.executeAuthorizedWriteRequest<Unit>(any(), any())
         } returns Response.success(Unit)
 
         val result = adapter.execute(envelope)

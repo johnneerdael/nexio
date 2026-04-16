@@ -385,6 +385,14 @@ internal fun HomeViewModel.observeTraktDiscoveryPipeline() {
                 return@collectLatest
             }
             if (traktDiscoveryObserved && hydratedSnapshot == traktDiscoverySnapshot) return@collectLatest
+            // During profile switch, discovery flows re-emit an empty snapshot before
+            // onStart loads disk data. Accepting that empty emission would overwrite the
+            // disk-cached data that loadActiveProfileDiskBackedHomeState just set.
+            // Skip empty emissions while the profile-switch suppress window is active.
+            if (hydratedSnapshot.updatedAtMs <= 0L && shouldSuppressProfileSwitchRefresh("trakt_discovery")) {
+                Log.d(HomeViewModel.TAG, "Skipping empty Trakt discovery emission during profile switch")
+                return@collectLatest
+            }
             traktDiscoveryObserved = true
             traktDiscoverySnapshot = hydratedSnapshot
             persistedTraktDiscoverySnapshot = hydratedSnapshot
@@ -429,6 +437,14 @@ internal fun HomeViewModel.observeSimklDiscoveryPipeline() {
                 return@collectLatest
             }
             if (simklDiscoveryObserved && snapshot == simklDiscoverySnapshot) return@collectLatest
+            // During profile switch, discovery flows re-emit an empty snapshot before
+            // onStart loads disk data. Accepting that empty emission would overwrite the
+            // disk-cached data that loadActiveProfileDiskBackedHomeState just set.
+            // Skip empty emissions while the profile-switch suppress window is active.
+            if (snapshot.updatedAtMs <= 0L && shouldSuppressProfileSwitchRefresh("simkl_discovery")) {
+                Log.d(HomeViewModel.TAG, "Skipping empty Simkl discovery emission during profile switch")
+                return@collectLatest
+            }
             simklDiscoveryObserved = true
             simklDiscoverySnapshot = snapshot
             persistedSimklDiscoverySnapshot = snapshot
@@ -484,6 +500,14 @@ internal fun HomeViewModel.observeMDBListDiscoveryPipeline() {
                 return@collectLatest
             }
             if (mdbListDiscoveryObserved && hydratedSnapshot == mdbListDiscoverySnapshot) return@collectLatest
+            // During profile switch, discovery flows re-emit an empty snapshot before
+            // onStart loads disk data. Accepting that empty emission would overwrite the
+            // disk-cached data that loadActiveProfileDiskBackedHomeState just set.
+            // Skip empty emissions while the profile-switch suppress window is active.
+            if (hydratedSnapshot.updatedAtMs <= 0L && shouldSuppressProfileSwitchRefresh("mdblist_discovery")) {
+                Log.d(HomeViewModel.TAG, "Skipping empty MDBList discovery emission during profile switch")
+                return@collectLatest
+            }
             mdbListDiscoveryObserved = true
             mdbListDiscoverySnapshot = hydratedSnapshot
             persistedMDBListDiscoverySnapshot = hydratedSnapshot

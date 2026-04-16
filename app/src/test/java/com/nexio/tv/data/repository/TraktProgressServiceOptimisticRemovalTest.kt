@@ -23,9 +23,12 @@ class TraktProgressServiceOptimisticRemovalTest {
         val debugSettings = mockk<DebugSettingsDataStore>(relaxed = true) {
             every { diskFirstHomeStartupEnabled } returns flowOf(false)
         }
+        val traktAuthService = mockk<TraktAuthService>(relaxed = true) {
+            every { currentTraktProfileId() } returns 1
+        }
         val service = TraktProgressService(
             traktApi = mockk<TraktApi>(relaxed = true),
-            traktAuthService = mockk<TraktAuthService>(relaxed = true),
+            traktAuthService = traktAuthService,
             traktProgressMutationExecutor = mockk<TraktProgressMutationExecutor>(relaxed = true),
             metaRepository = mockk<MetaRepository>(relaxed = true),
             traktSettingsDataStore = traktSettings,
@@ -71,9 +74,22 @@ class TraktProgressServiceOptimisticRemovalTest {
 
     @Suppress("UNCHECKED_CAST")
     private fun episodeProgressState(service: TraktProgressService): MutableStateFlow<Map<String, Any>> {
-        val field = TraktProgressService::class.java.getDeclaredField("episodeProgressState")
-        field.isAccessible = true
-        return field.get(service) as MutableStateFlow<Map<String, Any>>
+        val registryField = TraktProgressService::class.java.getDeclaredField("runtimeRegistry")
+        registryField.isAccessible = true
+        val registry = registryField.get(service)!!
+
+        val statesField = registry.javaClass.getDeclaredField("states")
+        statesField.isAccessible = true
+        val states = statesField.get(registry) as MutableMap<Int, Any>
+
+        val runtimeStateClass = Class.forName("com.nexio.tv.data.repository.TraktProgressService\$TraktProgressRuntimeState")
+        val runtimeState = states.getOrPut(1) {
+            runtimeStateClass.declaredConstructors.first().let { it.isAccessible = true; it.newInstance() }
+        }
+
+        val episodeField = runtimeStateClass.getDeclaredField("episodeProgressState")
+        episodeField.isAccessible = true
+        return episodeField.get(runtimeState) as MutableStateFlow<Map<String, Any>>
     }
 
     private fun seedEpisodeProgressSnapshot(
