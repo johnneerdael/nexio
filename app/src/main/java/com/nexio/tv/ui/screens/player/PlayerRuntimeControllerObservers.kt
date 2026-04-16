@@ -12,6 +12,7 @@ import androidx.media3.common.util.UnstableApi
 import com.nexio.tv.data.local.SubtitleOrganizationMode
 import com.nexio.tv.data.local.diskSpoolTargetBitrateMbps
 import com.nexio.tv.domain.model.Subtitle
+import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -412,7 +413,7 @@ internal fun PlayerRuntimeController.loadSavedProgressFor(season: Int?, episode:
         
         progress?.let { saved ->
             
-            if (saved.isInProgress()) {
+            if (shouldUseSavedProgressForResume(saved)) {
                 pendingResumeProgress = saved
                 if (backendIsReady()) {
                     _exoPlayer?.let { player ->
@@ -424,6 +425,17 @@ internal fun PlayerRuntimeController.loadSavedProgressFor(season: Int?, episode:
             }
         }
     }
+}
+
+internal fun shouldUseSavedProgressForResume(progress: WatchProgress): Boolean {
+    if (progress.isCompleted()) return false
+    if (progress.progressPercentage >= 0.02f) return true
+
+    val hasStartedPlayback = progress.position > 0L ||
+        progress.progressPercent?.let { it > 0f } == true
+    return hasStartedPlayback &&
+        progress.source != WatchProgress.SOURCE_TRAKT_HISTORY &&
+        progress.source != WatchProgress.SOURCE_TRAKT_SHOW_PROGRESS
 }
 
 internal fun PlayerRuntimeController.fetchSkipIntervals(id: String?, season: Int?, episode: Int?) {

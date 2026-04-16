@@ -431,12 +431,12 @@ class HomeViewModel @Inject constructor(
                     resetProfileScopedHomeState("profile_switch:$profileId")
                     try {
                         continueWatchingSnapshotService.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
-                        loadActiveProfileDiskBackedHomeState(
+                        val hasDiskCacheState = loadActiveProfileDiskBackedHomeState(
                             reason = "profile_switch:$profileId",
                             expectedGeneration = session.generation
                         )
                         if (isCurrentHomeProfileGeneration(session.generation)) {
-                            reloadDiskCachedAddonCatalogsForActiveProfileSwitch()
+                            reloadDiskCachedAddonCatalogsForActiveProfileSwitch(allowNetworkRefresh = !hasDiskCacheState)
                         }
                     } finally {
                         if (isCurrentHomeProfileGeneration(session.generation)) {
@@ -525,8 +525,8 @@ class HomeViewModel @Inject constructor(
 
     fun onForeground() = onForegroundPipeline()
 
-    private suspend fun reloadDiskCachedAddonCatalogsForActiveProfileSwitch() =
-        reloadDiskCachedAddonCatalogsForActiveProfileSwitchPipeline()
+    private suspend fun reloadDiskCachedAddonCatalogsForActiveProfileSwitch(allowNetworkRefresh: Boolean) =
+        reloadDiskCachedAddonCatalogsForActiveProfileSwitchPipeline(allowNetworkRefresh = allowNetworkRefresh)
 
     private fun restorePersistedSyntheticCatalogRows() = restorePersistedSyntheticCatalogRowsPipeline()
 
