@@ -1,6 +1,7 @@
 package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvMetadataDecision
@@ -35,9 +36,12 @@ class HomeViewModelTvdbProviderRoutingTest {
         val tvMetadataRouter = mockk<TvMetadataRouter>()
         val tmdbService = mockk<TmdbService>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val profileBoundary = mockk<ProfileBoundary>()
         every { viewModel.tvMetadataRouter } returns tvMetadataRouter
         every { viewModel.tmdbService } returns tmdbService
         every { viewModel.tmdbMetadataService } returns tmdbMetadataService
+        every { viewModel.profileBoundary } returns profileBoundary
+        every { profileBoundary.currentLanguageTag() } returns "en"
         coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
             provider = TvProvider.TVDB,
             reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -61,7 +65,8 @@ class HomeViewModelTvdbProviderRoutingTest {
                 TvMetadataRequest(
                     contentId = "tt0944947",
                     fallbackContentId = null,
-                    contentType = ContentType.SERIES
+                    contentType = ContentType.SERIES,
+                    language = "eng"
                 )
             )
         }
@@ -75,9 +80,12 @@ class HomeViewModelTvdbProviderRoutingTest {
         val tvMetadataRouter = mockk<TvMetadataRouter>()
         val tmdbService = mockk<TmdbService>(relaxed = true)
         val tmdbMetadataService = mockk<TmdbMetadataService>(relaxed = true)
+        val profileBoundary = mockk<ProfileBoundary>()
         every { viewModel.tvMetadataRouter } returns tvMetadataRouter
         every { viewModel.tmdbService } returns tmdbService
         every { viewModel.tmdbMetadataService } returns tmdbMetadataService
+        every { viewModel.profileBoundary } returns profileBoundary
+        every { profileBoundary.currentLanguageTag() } returns "en"
         coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
             provider = TvProvider.TVDB,
             reason = TvMetadataDecisionReason.TVDB_SUCCESS,
@@ -92,7 +100,8 @@ class HomeViewModelTvdbProviderRoutingTest {
                 TvMetadataRequest(
                     contentId = "tt0944947",
                     fallbackContentId = null,
-                    contentType = ContentType.SERIES
+                    contentType = ContentType.SERIES,
+                    language = "eng"
                 )
             )
         }

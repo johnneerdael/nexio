@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.home
 import android.util.Log
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tvdb.TvMetadataRequest
+import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.Meta
@@ -31,12 +32,14 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
     resolveRuntimeMinutesFromMeta(item, meta)?.let { return it }
 
     if (isSeriesType(contentType)) {
+        val tvdbLanguage = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
         if (season != null && episode != null) {
             val episodeRuntime = tvMetadataRouter.fetchEpisodeEnrichment(
                 TvMetadataRequest(
                     contentId = contentId,
                     fallbackContentId = item.videoId(),
                     contentType = parseContinueWatchingContentType(contentType),
+                    language = tvdbLanguage,
                     seasonNumbers = listOf(season)
                 )
             ).value?.get(season to episode)?.runtimeMinutes
@@ -46,7 +49,8 @@ internal suspend fun HomeViewModel.resolveContinueWatchingRuntimeMinutes(
                 TvMetadataRequest(
                     contentId = contentId,
                     fallbackContentId = item.videoId(),
-                    contentType = parseContinueWatchingContentType(contentType)
+                    contentType = parseContinueWatchingContentType(contentType),
+                    language = tvdbLanguage
                 )
             ).value
             val runtime = enrichment?.runtimeMinutes ?: enrichment?.averageRuntimeMinutes

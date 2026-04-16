@@ -6,6 +6,7 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
+import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.domain.model.CatalogRow
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.FocusedPosterTrailerPlaybackTarget
@@ -637,7 +638,8 @@ internal suspend fun HomeViewModel.fetchProviderEnrichmentForPreview(item: MetaP
             TvMetadataRequest(
                 contentId = item.id,
                 fallbackContentId = null,
-                contentType = item.type
+                contentType = item.type,
+                language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
             )
         ).value
     }

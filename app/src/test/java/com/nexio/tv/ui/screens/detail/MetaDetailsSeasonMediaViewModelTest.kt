@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.detail
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import com.nexio.tv.core.network.NetworkResult
+import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
 import com.nexio.tv.core.tvdb.TvMetadataRouter
@@ -1048,8 +1049,10 @@ class MetaDetailsSeasonMediaViewModelTest {
         val addonRepository = mockk<AddonRepository>()
         val context = mockk<Context>(relaxed = true)
         val playerSettingsDataStore = mockk<PlayerSettingsDataStore>()
+        val profileBoundary = mockk<ProfileBoundary>()
         every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
         every { addonRepository.getInstalledAddons() } returns flowOf(installedAddons)
+        every { profileBoundary.currentLanguageTag() } returns "en"
 
         return MetaDetailsViewModel(
             context = context,
@@ -1062,6 +1065,7 @@ class MetaDetailsSeasonMediaViewModelTest {
             tmdbService = resolvedTmdbService,
             tmdbMetadataService = resolvedTmdbMetadataService,
             tvMetadataRouter = tvMetadataRouter,
+            profileBoundary = profileBoundary,
             mdbListRepository = mdbListRepository,
             episodeRatingsSelectionRepository = episodeRatingsSelectionRepository,
             libraryRepository = libraryRepository,
