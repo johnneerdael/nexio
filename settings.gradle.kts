@@ -16,7 +16,7 @@ fun readUseMedia3SourceFlag(): Boolean {
     }
     val fromGradleProperty = providers.gradleProperty("USE_MEDIA3_SOURCE").orNull
     val fromLocalProperties = mergedLocalProps.getProperty("USE_MEDIA3_SOURCE")
-    return parseBooleanProperty(fromGradleProperty ?: fromLocalProperties)
+    return parseBooleanProperty(fromGradleProperty ?: fromLocalProperties ?: "true")
 }
 
 pluginManagement {
