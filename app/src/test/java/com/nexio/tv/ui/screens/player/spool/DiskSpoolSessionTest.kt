@@ -89,13 +89,40 @@ class DiskSpoolSessionTest {
     }
 
     @Test
-    fun `overlapping writes advance frontier through overlap`() {
+    fun `overlapping writes are ignored in sequential spool mode`() {
         val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 1_000L)
 
         session.writeRange(start = 0L, bytes = ByteArray(100) { 1 }, length = 100)
         session.writeRange(start = 50L, bytes = ByteArray(150) { 2 }, length = 150)
 
-        assertEquals(200L, session.contiguousFrontierBytes())
+        assertEquals(100L, session.contiguousFrontierBytes())
+
+        session.close()
+    }
+
+    @Test
+    fun `sequential writes advance frontier without range bookkeeping`() {
+        val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 1_000L)
+
+        session.writeRange(start = 0L, bytes = ByteArray(100) { 1 }, length = 100)
+        session.writeRange(start = 100L, bytes = ByteArray(150) { 2 }, length = 150)
+
+        assertEquals(250L, session.contiguousFrontierBytes())
+
+        session.close()
+    }
+
+    @Test
+    fun `out of order future writes are ignored in sequential spool mode`() {
+        val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 1_000L)
+
+        session.writeRange(start = 128L, bytes = ByteArray(64) { 9 }, length = 64)
+
+        assertEquals(0L, session.contiguousFrontierBytes())
+
+        session.writeRange(start = 0L, bytes = ByteArray(128) { 1 }, length = 128)
+
+        assertEquals(128L, session.contiguousFrontierBytes())
 
         session.close()
     }
