@@ -74,6 +74,13 @@ data class TvLoginExchangeResult(
 )
 
 @Serializable
+data class SupabaseProfilePinVerifyResult(
+    val unlocked: Boolean = false,
+    @SerialName("retry_after_seconds") val retryAfterSeconds: Int = 0,
+    @SerialName("pin_enabled") val pinEnabled: Boolean = false
+)
+
+@Serializable
 data class SupabaseWatchProgress(
     val id: String? = null,
     @SerialName("user_id") val userId: String,
