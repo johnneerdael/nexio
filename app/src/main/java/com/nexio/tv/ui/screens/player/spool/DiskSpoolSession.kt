@@ -19,6 +19,7 @@ internal class DiskSpoolSession(
     private val closed = AtomicBoolean(false)
     private val windowStart = AtomicLong(0L)
     private val frontier = AtomicLong(0L)
+    private val readPosition = AtomicLong(0L)
     private val priorityPosition = AtomicLong(C.TIME_UNSET.toLong())
     private val contentLength = AtomicLong(C.LENGTH_UNSET.toLong())
     private val supportsRangesFlag = AtomicBoolean(false)
@@ -93,6 +94,31 @@ internal class DiskSpoolSession(
 
     fun windowStartBytes(): Long = windowStart.get()
 
+    fun currentReadPositionBytes(): Long = readPosition.get()
+
+    fun updateReadPosition(position: Long) {
+        if (position < 0L) return
+        synchronized(lock) {
+            val previous = readPosition.get()
+            if (position > previous) {
+                readPosition.set(position)
+                lock.notifyAll()
+            }
+        }
+    }
+
+    fun adaptiveTargetFrontierBytes(
+        maxFrontierBytes: Long,
+        startupPrebufferBytes: Long,
+        headroomBytes: Long
+    ): Long {
+        val safeMax = maxFrontierBytes.coerceAtLeast(0L)
+        val startupTarget = startupPrebufferBytes.coerceAtLeast(0L)
+        val readTarget = currentReadPositionBytes() + headroomBytes.coerceAtLeast(0L)
+        val contentTarget = contentLength.get().takeIf { it > 0L } ?: safeMax
+        return minOf(maxOf(startupTarget, readTarget), safeMax, contentTarget)
+    }
+
     fun consumePriorityPosition(): Long = priorityPosition.getAndSet(C.TIME_UNSET.toLong())
 
     fun contentLengthBytes(): Long = contentLength.get()
@@ -109,6 +135,7 @@ internal class DiskSpoolSession(
             ensureOpenLocked()
             windowStart.set(position)
             frontier.set(position)
+            readPosition.set(position)
             lock.notifyAll()
         }
     }
