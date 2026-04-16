@@ -1017,7 +1017,7 @@ class PlayerMediaSourceFactoryTest {
     }
 
     @Test
-    fun progressivePlayback_passesParallelProfileIntoDiskSpoolWriterWhenEnabled() {
+    fun progressivePlayback_usesSingleConnectionDiskSpoolEvenWhenParallelConnectionsEnabled() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val capturedProfiles = mutableListOf<Pair<Int, Int>>()
         val factory = PlayerMediaSourceFactory(
@@ -1026,6 +1026,8 @@ class PlayerMediaSourceFactoryTest {
         ).apply {
             useParallelConnections = true
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            diskSpoolStorageLocation = DiskSpoolStorageLocation.BUILTIN
+            spoolStorageProbeResult = passingProbeResult(context)
             diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
             diskSpoolWriterExecutorForTesting = Executor { }
             diskSpoolWriterProfileObserverForTesting = { connections, chunkBytes, _ ->
@@ -1038,7 +1040,7 @@ class PlayerMediaSourceFactoryTest {
             headers = emptyMap()
         )
 
-        assertEquals(listOf(2 to 18), capturedProfiles)
+        assertEquals(listOf(1 to 24), capturedProfiles)
         factory.shutdown()
     }
 

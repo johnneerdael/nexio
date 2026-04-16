@@ -812,16 +812,10 @@ internal class PlayerMediaSourceFactory(
         }
 
         val requestedSpoolBytes = resolveRequestedDiskSpoolBytes(spoolDir) ?: return null
-        val diskSpoolProfile = if (parallelConnectionsEnabled) {
-            resolveParallelProviderProfiles(
-                url = url,
-                warmAheadEnabledForStream = false,
-                fallbackConnectionCount = fallbackParallelConnectionCount,
-                fallbackChunkSizeMb = fallbackParallelChunkSizeMb
-            ).playback
-        } else {
-            ParallelProviderProfile(connectionCount = 1, chunkSizeMb = SAFE_DEFAULT_PARALLEL_CHUNK_SIZE_MB)
-        }
+        val diskSpoolProfile = ParallelProviderProfile(
+            connectionCount = 1,
+            chunkSizeMb = SAFE_DEFAULT_PARALLEL_CHUNK_SIZE_MB
+        )
 
         val spoolFile = File(
             spoolDir,
