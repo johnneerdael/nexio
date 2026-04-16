@@ -2,6 +2,7 @@ package com.nexio.tv.core.metadata
 
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.local.TvdbSettingsDataStore
+import com.nexio.tv.domain.model.TvdbValidationStatus
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
@@ -34,8 +35,11 @@ class MetadataApiKeyResolver @Inject constructor(
 
     suspend fun tvdbCredential(): MetadataProviderCredential {
         val settings = tvdbSettingsDataStore.settings.first()
+        val customKey = settings.apiKey.takeUnless {
+            settings.validationStatus == TvdbValidationStatus.INVALID
+        }.orEmpty()
         return MetadataProviderConfig.resolveCredential(
-            customApiKey = settings.apiKey,
+            customApiKey = customKey,
             builtInApiKey = builtInTvdbKey(),
             pin = settings.subscriberPin
         )

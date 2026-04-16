@@ -1,6 +1,9 @@
 package com.nexio.tv.core.tvdb
 
 import android.util.Log
+import com.nexio.tv.core.metadata.MetadataApiKeyResolver
+import com.nexio.tv.core.metadata.MetadataCredentialSource
+import com.nexio.tv.core.metadata.MetadataProviderConfig
 import com.nexio.tv.data.local.TvdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TvdbApi
 import com.nexio.tv.data.remote.api.TvdbLoginRequest
@@ -50,7 +53,8 @@ class TvdbAuthService(
     private val tvdbApi: TvdbApi,
     private val settingsDataStore: TvdbSettingsDataStore?,
     private val tokenStore: TvdbTokenStore,
-    private val nowMillis: () -> Long
+    private val nowMillis: () -> Long,
+    private val metadataApiKeyResolver: MetadataApiKeyResolver? = null
 ) {
     private val refreshMutex = Mutex()
 
@@ -58,12 +62,14 @@ class TvdbAuthService(
     constructor(
         tvdbApi: TvdbApi,
         settingsDataStore: TvdbSettingsDataStore,
-        tokenStore: TvdbTokenStore
+        tokenStore: TvdbTokenStore,
+        metadataApiKeyResolver: MetadataApiKeyResolver
     ) : this(
         tvdbApi = tvdbApi,
         settingsDataStore = settingsDataStore,
         tokenStore = tokenStore,
-        nowMillis = { System.currentTimeMillis() }
+        nowMillis = { System.currentTimeMillis() },
+        metadataApiKeyResolver = metadataApiKeyResolver
     )
 
     constructor(
@@ -79,10 +85,16 @@ class TvdbAuthService(
 
     suspend fun bearerToken(): String? = withContext(Dispatchers.IO) {
         val settingsStore = settingsDataStore ?: return@withContext null
-        val settings = settingsStore.settings.first()
-        val apiKey = settings.apiKey.trim()
-        val pin = settings.subscriberPin.trim()
-        if (apiKey.isBlank()) {
+        val credential = metadataApiKeyResolver?.tvdbCredential() ?: settingsStore.settings.first().let { settings ->
+            MetadataProviderConfig.resolveCredential(
+                customApiKey = settings.apiKey,
+                builtInApiKey = MetadataProviderConfig.builtInTvdbApiKey(),
+                pin = settings.subscriberPin
+            )
+        }
+        val apiKey = credential.apiKey
+        val pin = credential.pin
+        if (credential.missing) {
             return@withContext null
         }
 
@@ -94,11 +106,18 @@ class TvdbAuthService(
 
             when (val result = requestToken(apiKey = apiKey, pin = pin)) {
                 is TvdbAuthResult.Valid -> {
-                    settingsStore.saveCredentials(
-                        apiKey = apiKey,
-                        pin = pin,
-                        validationStatus = TvdbValidationStatus.VALID
-                    )
+                    if (credential.source == MetadataCredentialSource.CUSTOM) {
+                        settingsStore.saveCredentials(
+                            apiKey = apiKey,
+                            pin = pin,
+                            validationStatus = TvdbValidationStatus.VALID
+                        )
+                    } else {
+                        settingsStore.saveValidationFailure(
+                            status = TvdbValidationStatus.VALID,
+                            lastFailure = ""
+                        )
+                    }
                     tokenStore.saveToken(
                         token = result.authorizationHeader.removePrefix("Bearer "),
                         expiresAtEpochMillis = result.expiresAtEpochMillis,

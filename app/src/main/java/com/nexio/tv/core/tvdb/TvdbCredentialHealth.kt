@@ -1,6 +1,8 @@
 package com.nexio.tv.core.tvdb
 
 import android.util.Log
+import com.nexio.tv.core.metadata.MetadataApiKeyResolver
+import com.nexio.tv.core.metadata.MetadataProviderConfig
 import com.nexio.tv.data.local.TvdbSettingsDataStore
 import com.nexio.tv.domain.model.TvdbValidationStatus
 import kotlinx.coroutines.flow.Flow
@@ -37,7 +39,8 @@ data class TvdbCredentialHealthState(
 @Singleton
 class TvdbCredentialHealth @Inject constructor(
     private val settingsDataStore: TvdbSettingsDataStore,
-    private val diagnosticsRecorder: TvdbDiagnosticsRecorder
+    private val diagnosticsRecorder: TvdbDiagnosticsRecorder,
+    private val metadataApiKeyResolver: MetadataApiKeyResolver? = null
 ) {
     private val _state = MutableStateFlow(TvdbCredentialHealthState())
 
@@ -88,14 +91,18 @@ class TvdbCredentialHealth @Inject constructor(
      * Returns true when status is UNKNOWN (first run) or VALID.
      */
     suspend fun canCallTvdb(): Boolean {
-        // Check if TVDB is enabled and has an API key
         val settings = settingsDataStore.settings.first()
-        if (!settings.enabled || settings.apiKey.isBlank()) {
+        if (!settings.enabled) {
             return false
         }
 
-        // Check validation status from settings
-        if (settings.validationStatus == TvdbValidationStatus.INVALID) {
+        val credential = metadataApiKeyResolver?.tvdbCredential()
+            ?: MetadataProviderConfig.resolveCredential(
+                customApiKey = settings.apiKey,
+                builtInApiKey = MetadataProviderConfig.builtInTvdbApiKey(),
+                pin = settings.subscriberPin
+            )
+        if (credential.missing) {
             return false
         }
 

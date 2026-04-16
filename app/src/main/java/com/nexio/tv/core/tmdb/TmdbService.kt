@@ -1,6 +1,9 @@
 package com.nexio.tv.core.tmdb
 
 import android.util.Log
+import com.nexio.tv.core.metadata.MetadataApiKeyResolver
+import com.nexio.tv.core.metadata.MetadataProviderConfig
+import com.nexio.tv.core.metadata.MetadataProviderCredential
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.remote.api.TmdbApi
 import kotlinx.coroutines.CompletableDeferred
@@ -20,10 +23,32 @@ private const val TAG = "TmdbService"
  * Provides caching to avoid redundant API calls.
  */
 @Singleton
-class TmdbService @Inject constructor(
+class TmdbService(
     private val tmdbApi: TmdbApi,
-    private val tmdbSettingsDataStore: TmdbSettingsDataStore
+    private val tmdbCredentialProvider: suspend () -> MetadataProviderCredential
 ) {
+    @Inject
+    constructor(
+        tmdbApi: TmdbApi,
+        metadataApiKeyResolver: MetadataApiKeyResolver
+    ) : this(
+        tmdbApi = tmdbApi,
+        tmdbCredentialProvider = { metadataApiKeyResolver.tmdbCredential() }
+    )
+
+    constructor(
+        tmdbApi: TmdbApi,
+        tmdbSettingsDataStore: TmdbSettingsDataStore
+    ) : this(
+        tmdbApi = tmdbApi,
+        tmdbCredentialProvider = {
+            MetadataProviderConfig.resolveCredential(
+                customApiKey = tmdbSettingsDataStore.settings.first().apiKey,
+                builtInApiKey = MetadataProviderConfig.builtInTmdbApiKey()
+            )
+        }
+    )
+
     // Cache: IMDB ID -> TMDB ID
     private val imdbToTmdbCache = ConcurrentHashMap<String, Int>()
     
@@ -270,11 +295,11 @@ class TmdbService @Inject constructor(
     }
 
     private suspend fun requireApiKey(): String? {
-        val key = tmdbSettingsDataStore.settings.first().apiKey.trim()
-        if (key.isBlank()) {
+        val credential = tmdbCredentialProvider()
+        if (credential.missing) {
             Log.w(TAG, "TMDB API key is missing; lookup skipped")
             return null
         }
-        return key
+        return credential.apiKey
     }
 }
