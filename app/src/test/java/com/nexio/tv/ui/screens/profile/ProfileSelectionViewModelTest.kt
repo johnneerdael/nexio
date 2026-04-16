@@ -53,17 +53,20 @@ class ProfileSelectionViewModelTest {
         )
 
         val viewModel = ProfileSelectionViewModel(profileManager, profileSyncService)
-        val unlockedProfileId = CompletableDeferred<Int>()
+        val unlockedEvent = CompletableDeferred<ProfileSelectionViewModel.PinUnlockEvent>()
         val collector = launch {
-            viewModel.pinUnlockedProfileId.collect { if (!unlockedProfileId.isCompleted) unlockedProfileId.complete(it) }
+            viewModel.pinUnlockedProfile.collect { if (!unlockedEvent.isCompleted) unlockedEvent.complete(it) }
         }
         runCurrent()
 
-        viewModel.verifyPin(2, "1234")
+        val sessionId = 11L
+        viewModel.verifyPin(2, "1234", sessionId)
         advanceUntilIdle()
 
         coVerify(exactly = 0) { profileManager.setActiveProfile(any()) }
-        assertEquals(2, unlockedProfileId.await())
+        val unlocked = unlockedEvent.await()
+        assertEquals(2, unlocked.profileId)
+        assertEquals(sessionId, unlocked.pinSessionId)
         collector.cancel()
         assertEquals(ProfileSelectionViewModel.PinVerificationState(), viewModel.pinState.value)
     }
@@ -81,17 +84,20 @@ class ProfileSelectionViewModelTest {
         )
 
         val viewModel = ProfileSelectionViewModel(profileManager, profileSyncService)
-        val unlockedProfileId = CompletableDeferred<Int>()
+        val unlockedEvent = CompletableDeferred<ProfileSelectionViewModel.PinUnlockEvent>()
         val collector = launch {
-            viewModel.pinUnlockedProfileId.collect { if (!unlockedProfileId.isCompleted) unlockedProfileId.complete(it) }
+            viewModel.pinUnlockedProfile.collect { if (!unlockedEvent.isCompleted) unlockedEvent.complete(it) }
         }
         runCurrent()
 
-        viewModel.verifyPin(2, "1234")
+        val sessionId = 12L
+        viewModel.verifyPin(2, "1234", sessionId)
         advanceUntilIdle()
 
         coVerify(exactly = 0) { profileManager.setActiveProfile(any()) }
-        assertEquals(2, unlockedProfileId.await())
+        val unlocked = unlockedEvent.await()
+        assertEquals(2, unlocked.profileId)
+        assertEquals(sessionId, unlocked.pinSessionId)
         collector.cancel()
         assertEquals(ProfileSelectionViewModel.PinVerificationState(), viewModel.pinState.value)
     }
@@ -109,7 +115,7 @@ class ProfileSelectionViewModelTest {
         )
 
         val viewModel = ProfileSelectionViewModel(profileManager, profileSyncService)
-        viewModel.verifyPin(2, "0000")
+        viewModel.verifyPin(2, "0000", 21L)
         advanceUntilIdle()
 
         coVerify(exactly = 0) { profileManager.setActiveProfile(any()) }
@@ -130,7 +136,7 @@ class ProfileSelectionViewModelTest {
         )
 
         val viewModel = ProfileSelectionViewModel(profileManager, profileSyncService)
-        viewModel.verifyPin(2, "1234")
+        viewModel.verifyPin(2, "1234", 22L)
         runCurrent()
 
         coVerify(exactly = 0) { profileManager.setActiveProfile(any()) }
@@ -151,8 +157,8 @@ class ProfileSelectionViewModelTest {
         )
 
         val viewModel = ProfileSelectionViewModel(profileManager, profileSyncService)
-        viewModel.verifyPin(2, "1234")
-        viewModel.verifyPin(2, "1234")
+        viewModel.verifyPin(2, "1234", 23L)
+        viewModel.verifyPin(2, "1234", 24L)
         runCurrent()
 
         coVerify(exactly = 1) { profileSyncService.verifyProfilePin(2, "1234") }
@@ -171,9 +177,9 @@ class ProfileSelectionViewModelTest {
         )
 
         val viewModel = ProfileSelectionViewModel(profileManager, profileSyncService)
-        viewModel.verifyPin(2, "1234")
+        viewModel.verifyPin(2, "1234", 25L)
         runCurrent()
-        viewModel.verifyPin(2, "1234")
+        viewModel.verifyPin(2, "1234", 26L)
         runCurrent()
 
         coVerify(exactly = 1) { profileSyncService.verifyProfilePin(2, "1234") }
@@ -188,7 +194,7 @@ class ProfileSelectionViewModelTest {
         )
 
         val viewModel = ProfileSelectionViewModel(profileManager, profileSyncService)
-        viewModel.verifyPin(2, "1234")
+        viewModel.verifyPin(2, "1234", 27L)
         advanceUntilIdle()
 
         coVerify(exactly = 0) { profileManager.setActiveProfile(any()) }
