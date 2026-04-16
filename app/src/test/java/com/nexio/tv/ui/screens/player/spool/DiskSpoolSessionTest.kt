@@ -201,6 +201,84 @@ class DiskSpoolSessionTest {
     }
 
     @Test
+    fun `read position only advances forward`() {
+        val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 1_000L)
+
+        session.updateReadPosition(256L)
+        session.updateReadPosition(128L)
+
+        assertEquals(256L, session.currentReadPositionBytes())
+
+        session.close()
+    }
+
+    @Test
+    fun `adaptive target uses startup target until read headroom catches up`() {
+        val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 1_000L)
+        session.setSourceMetadata(contentLength = 10_000L, supportsRanges = true)
+
+        session.updateReadPosition(100L)
+
+        assertEquals(
+            2_000L,
+            session.adaptiveTargetFrontierBytes(
+                maxFrontierBytes = 8_000L,
+                startupPrebufferBytes = 2_000L,
+                headroomBytes = 500L
+            )
+        )
+
+        session.close()
+    }
+
+    @Test
+    fun `adaptive target follows read position plus headroom after startup target`() {
+        val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 1_000L)
+        session.setSourceMetadata(contentLength = 10_000L, supportsRanges = true)
+
+        session.updateReadPosition(3_000L)
+
+        assertEquals(
+            3_500L,
+            session.adaptiveTargetFrontierBytes(
+                maxFrontierBytes = 8_000L,
+                startupPrebufferBytes = 2_000L,
+                headroomBytes = 500L
+            )
+        )
+
+        session.close()
+    }
+
+    @Test
+    fun `adaptive target never exceeds content length or max frontier`() {
+        val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 1_000L)
+        session.setSourceMetadata(contentLength = 4_000L, supportsRanges = true)
+
+        session.updateReadPosition(3_800L)
+
+        assertEquals(
+            4_000L,
+            session.adaptiveTargetFrontierBytes(
+                maxFrontierBytes = 8_000L,
+                startupPrebufferBytes = 2_000L,
+                headroomBytes = 1_000L
+            )
+        )
+
+        assertEquals(
+            3_900L,
+            session.adaptiveTargetFrontierBytes(
+                maxFrontierBytes = 3_900L,
+                startupPrebufferBytes = 2_000L,
+                headroomBytes = 1_000L
+            )
+        )
+
+        session.close()
+    }
+
+    @Test
     fun `close unblocks waiting reader`() {
         val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 16L, waitTimeoutMs = 5_000L)
         val executor = Executors.newSingleThreadExecutor()
