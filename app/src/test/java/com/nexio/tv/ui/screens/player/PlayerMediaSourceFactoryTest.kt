@@ -125,6 +125,7 @@ class PlayerMediaSourceFactoryTest {
             playbackOkHttpClient = noNetworkOkHttpClient()
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            diskSpoolStorageLocation = DiskSpoolStorageLocation.BUILTIN
             spoolStorageProbeResult = passingProbeResult(context)
             diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
             diskSpoolWriterExecutorForTesting = Executor { writerScheduled.set(true) }
@@ -176,6 +177,7 @@ class PlayerMediaSourceFactoryTest {
             playbackOkHttpClient = OkHttpClient()
         ).apply {
             progressivePlaybackDiskMode = ProgressivePlaybackDiskMode.SPOOL
+            diskSpoolStorageLocation = DiskSpoolStorageLocation.BUILTIN
             spoolStorageProbeResult = passingProbeResult(context)
             diskSpoolAvailableBytesForTesting = Long.MAX_VALUE
             diskSpoolWriterExecutorForTesting = Executor { runnable -> runnable.run() }
