@@ -24,6 +24,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -42,6 +44,21 @@ internal fun shouldEnrichContinueWatchingProviderMetadata(
     if (settings.isActive) return true
     return items.any { item -> isSeriesType(item.contentType()) } ||
         traktUpNextItems.any { item -> isSeriesType(item.contentType()) }
+}
+
+internal suspend fun <T, R> mapContinueWatchingEnrichmentWithLimit(
+    items: List<T>,
+    maxConcurrency: Int,
+    transform: suspend (T) -> R
+): List<R> = coroutineScope {
+    val semaphore = Semaphore(maxConcurrency.coerceAtLeast(1))
+    items.map { item ->
+        async(Dispatchers.IO) {
+            semaphore.withPermit {
+                transform(item)
+            }
+        }
+    }.awaitAll()
 }
 
 internal fun HomeViewModel.loadContinueWatchingPipeline() {
@@ -89,11 +106,16 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
             }
 
             val settings = currentTmdbSettings
-            if (shouldEnrichContinueWatchingProviderMetadata(items, traktUpNextItems, settings)) {
+            if (
+                shouldEnrichContinueWatchingProviderMetadata(items, traktUpNextItems, settings) &&
+                isNonPlaybackHomeWorkAllowed()
+            ) {
                 continueWatchingEnrichmentJob?.cancel()
                 continueWatchingEnrichmentJob = viewModelScope.launch {
                     try {
+                        if (!isNonPlaybackHomeWorkAllowed()) return@launch
                         val enrichedItems = enrichContinueWatchingItems(items, settings)
+                        if (!isNonPlaybackHomeWorkAllowed()) return@launch
                         val enrichedTraktItems = enrichContinueWatchingNextUpItems(traktUpNextItems, settings)
                         if (!isCurrentHomeProfileGeneration(capturedGeneration)) {
                             Log.d(HomeViewModel.TAG, "Skipping stale continue watching enrichment generation=$capturedGeneration")
@@ -117,23 +139,35 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
 internal suspend fun HomeViewModel.enrichContinueWatchingItems(
     items: List<ContinueWatchingItem>,
     settings: TmdbSettings
-): List<ContinueWatchingItem> = coroutineScope {
-    items.map { item ->
-        async(Dispatchers.IO) {
+): List<ContinueWatchingItem> {
+    if (!isNonPlaybackHomeWorkAllowed()) return items
+    return mapContinueWatchingEnrichmentWithLimit(
+        items = items,
+        maxConcurrency = HomeViewModel.CONTINUE_WATCHING_ENRICHMENT_CONCURRENCY
+    ) { item ->
+        if (!isNonPlaybackHomeWorkAllowed()) {
+            item
+        } else {
             enrichContinueWatchingItemWithProvider(item, settings)
         }
-    }.awaitAll()
+    }
 }
 
 internal suspend fun HomeViewModel.enrichContinueWatchingNextUpItems(
     items: List<ContinueWatchingItem.NextUp>,
     settings: TmdbSettings
-): List<ContinueWatchingItem.NextUp> = coroutineScope {
-    items.map { item ->
-        async(Dispatchers.IO) {
+): List<ContinueWatchingItem.NextUp> {
+    if (!isNonPlaybackHomeWorkAllowed()) return items
+    return mapContinueWatchingEnrichmentWithLimit(
+        items = items,
+        maxConcurrency = HomeViewModel.CONTINUE_WATCHING_ENRICHMENT_CONCURRENCY
+    ) { item ->
+        if (!isNonPlaybackHomeWorkAllowed()) {
+            item
+        } else {
             enrichContinueWatchingItemWithProvider(item, settings) as? ContinueWatchingItem.NextUp ?: item
         }
-    }.awaitAll()
+    }
 }
 
 internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
@@ -586,13 +620,16 @@ internal fun HomeViewModel.enrichContinueWatchingWithCurrentSettings() {
     val settings = currentTmdbSettings
     val currentItems = _uiState.value.continueWatchingItems
     val currentTraktItems = _uiState.value.traktUpNextItems
+    if (!isNonPlaybackHomeWorkAllowed()) return
     if (!shouldEnrichContinueWatchingProviderMetadata(currentItems, currentTraktItems, settings)) return
     if (currentItems.isEmpty() && currentTraktItems.isEmpty()) return
 
     continueWatchingEnrichmentJob?.cancel()
     continueWatchingEnrichmentJob = viewModelScope.launch {
         try {
+            if (!isNonPlaybackHomeWorkAllowed()) return@launch
             val enrichedItems = enrichContinueWatchingItems(currentItems, settings)
+            if (!isNonPlaybackHomeWorkAllowed()) return@launch
             val enrichedTraktItems = enrichContinueWatchingNextUpItems(currentTraktItems, settings)
             _uiState.update { state ->
                 state.copy(
