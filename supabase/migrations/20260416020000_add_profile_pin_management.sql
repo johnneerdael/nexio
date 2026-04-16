@@ -2,6 +2,24 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS pin_failed_attempts INT NOT NULL DEFAULT 0;
 
+REVOKE ALL ON TABLE public.profiles FROM anon;
+REVOKE ALL ON TABLE public.profiles FROM authenticated;
+GRANT SELECT (
+  id,
+  user_id,
+  profile_index,
+  name,
+  avatar_color_hex,
+  avatar_url,
+  uses_primary_addons,
+  uses_primary_plugins,
+  avatar_id,
+  pin_enabled,
+  pin_locked_until,
+  created_at,
+  updated_at
+) ON TABLE public.profiles TO authenticated;
+
 DROP FUNCTION IF EXISTS public.sync_pull_profiles();
 CREATE OR REPLACE FUNCTION public.sync_pull_profiles()
 RETURNS TABLE(
@@ -14,6 +32,8 @@ RETURNS TABLE(
   uses_primary_addons BOOLEAN,
   uses_primary_plugins BOOLEAN,
   avatar_id TEXT,
+  pin_enabled BOOLEAN,
+  pin_locked_until TIMESTAMPTZ,
   created_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ
 )
@@ -31,6 +51,8 @@ AS $$
     p.uses_primary_addons,
     p.uses_primary_plugins,
     p.avatar_id,
+    p.pin_enabled,
+    p.pin_locked_until,
     p.created_at,
     p.updated_at
   FROM public.profiles p
@@ -56,6 +78,8 @@ RETURNS TABLE(
   uses_primary_addons BOOLEAN,
   uses_primary_plugins BOOLEAN,
   avatar_id TEXT,
+  pin_enabled BOOLEAN,
+  pin_locked_until TIMESTAMPTZ,
   created_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ
 )
@@ -126,6 +150,8 @@ BEGIN
     p.uses_primary_addons,
     p.uses_primary_plugins,
     p.avatar_id,
+    p.pin_enabled,
+    p.pin_locked_until,
     p.created_at,
     p.updated_at
   FROM public.profiles p
