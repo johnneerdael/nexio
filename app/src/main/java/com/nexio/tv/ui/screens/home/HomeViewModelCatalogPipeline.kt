@@ -252,15 +252,18 @@ internal suspend fun HomeViewModel.loadActiveProfileDiskBackedHomeState(
             val hydrated = applyTomatoesOverridesToTraktSnapshot(snapshot, syntheticTomatoesOverridesByItemId)
             persistedTraktDiscoverySnapshot = hydrated
             traktDiscoverySnapshot = hydrated
+            traktDiscoveryObserved = true
         }
         diskState.simklSnapshot?.let { snapshot ->
             persistedSimklDiscoverySnapshot = snapshot
             simklDiscoverySnapshot = snapshot
+            simklDiscoveryObserved = true
         }
         diskState.mdbSnapshot?.let { snapshot ->
             val hydrated = applyTomatoesOverridesToMDBListSnapshot(snapshot, syntheticTomatoesOverridesByItemId)
             persistedMDBListDiscoverySnapshot = hydrated
             mdbListDiscoverySnapshot = hydrated
+            mdbListDiscoveryObserved = true
         }
         if (diskState.homeSnapshot != null) {
             applyPersistedHomeSnapshotIfEligiblePipeline(
@@ -268,6 +271,9 @@ internal suspend fun HomeViewModel.loadActiveProfileDiskBackedHomeState(
                 requireSourceCachesReady = false
             )
         } else {
+            scheduleUpdateCatalogRows()
+        }
+        if (hasDiskCacheState) {
             scheduleUpdateCatalogRows()
         }
         Log.d(HomeViewModel.TAG, "Loaded active profile disk-backed home state reason=$reason")
@@ -568,7 +574,9 @@ internal fun HomeViewModel.observeMDBListSettingsPipeline() {
                                 Log.w(HomeViewModel.TAG, "Failed to refresh MDBList discovery after settings change", error)
                             }
                     }
-                } else if (!settings.enabled || settings.apiKey.isBlank()) {
+                } else if ((!settings.enabled || settings.apiKey.isBlank()) &&
+                    !shouldBlockProfileSwitchDiskSnapshotRefresh("mdblist_settings_disabled")
+                ) {
                     mdbListDiscoverySnapshot = com.nexio.tv.data.repository.MDBListDiscoverySnapshot()
                     persistedMDBListDiscoverySnapshot = mdbListDiscoverySnapshot
                     startupRefreshPending = true
@@ -609,6 +617,7 @@ internal fun HomeViewModel.dismissTraktRecommendationPipeline(
     ref: com.nexio.tv.data.repository.TraktRecommendationRef
 ) {
     viewModelScope.launch {
+        clearProfileSwitchDiskSnapshotMode("dismiss_trakt_recommendation")
         runCatching {
             traktDiscoveryService.dismissRecommendation(ref)
             traktDiscoveryService.ensureFresh(force = true)
@@ -642,7 +651,8 @@ internal fun HomeViewModel.loadDisabledHomeCatalogPreferencePipeline() {
                 updateCatalogRowsPipeline()
             }
             if (addonsCache.isNotEmpty()) {
-                loadAllCatalogsPipeline(addonsCache)
+                val blockNetworkRefresh = shouldBlockProfileSwitchDiskSnapshotRefresh("observe_disabled_home_catalogs")
+                loadAllCatalogsPipeline(addonsCache, allowNetworkRefresh = !blockNetworkRefresh)
             }
         }
     }
@@ -671,16 +681,18 @@ internal fun HomeViewModel.observeInstalledAddonsPipeline() {
                 if (diskFirstHomeStartupEnabled) {
                     openStartupDeferralWindowIfNeeded("installed_addons")
                 }
-                loadAllCatalogsPipeline(addons)
+                val blockNetworkRefresh = shouldBlockProfileSwitchDiskSnapshotRefresh("observe_installed_addons")
+                loadAllCatalogsPipeline(addons, allowNetworkRefresh = !blockNetworkRefresh)
             }
     }
 }
 
-internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expectedGeneration: Long) {
+internal suspend fun HomeViewModel.runSerializedPostStartupRefreshPipeline(expectedGeneration: Long, reason: String) {
     if (!isCurrentHomeProfileGeneration(expectedGeneration)) {
         Log.d(HomeViewModel.TAG, "Skipping stale serialized home refresh generation=$expectedGeneration")
         return
     }
+    if (shouldBlockProfileSwitchDiskSnapshotRefresh(reason)) return
     Log.d(
         HomeViewModel.TAG,
         "Post-startup refresh pipeline begin addons=${addonsCache.size} persistedTraktGroups=${persistedTraktSyntheticGroups.size} " +

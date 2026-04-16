@@ -128,6 +128,26 @@ class HomeViewModel @Inject constructor(
         internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
         internal const val EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS = 120L
         internal const val MAX_POSTER_STATUS_OBSERVERS = 24
+        private val PROFILE_SWITCH_DISK_SNAPSHOT_ALLOWED_REFRESH_REASONS = setOf(
+            "account_sync",
+            "foreground",
+            "manual_retry",
+            "priority_hydration",
+            "dismiss_trakt_recommendation"
+        )
+        private val PROFILE_SWITCH_DISK_SNAPSHOT_BLOCKED_REFRESH_REASONS = setOf(
+            "trakt_discovery",
+            "trakt_pref_change",
+            "simkl_discovery",
+            "simkl_pref_change",
+            "mdblist_discovery",
+            "mdblist_pref_change",
+            "mdblist_settings_change",
+            "mdblist_settings_disabled",
+            "window_closed",
+            "observe_disabled_home_catalogs",
+            "observe_installed_addons"
+        )
     }
 
     internal val _uiState = MutableStateFlow(HomeUiState())
@@ -274,6 +294,10 @@ class HomeViewModel @Inject constructor(
     internal var profileSwitchDiskHydrationActive: Boolean = false
     @Volatile
     internal var suppressProfileSwitchRefreshUntilMs: Long = 0L
+    @Volatile
+    internal var profileSwitchDiskSnapshotActive: Boolean = false
+    @Volatile
+    internal var profileSwitchDiskSnapshotGeneration: Long = 0L
     @Volatile
     internal var homeProfileGeneration: Long = 0L
     internal var activeHomeProfileSession = startHomeProfileSession(profileManager.activeProfileId.value)
@@ -436,6 +460,11 @@ class HomeViewModel @Inject constructor(
                             expectedGeneration = session.generation
                         )
                         if (isCurrentHomeProfileGeneration(session.generation)) {
+                            if (hasDiskCacheState) {
+                                activateProfileSwitchDiskSnapshotMode(session.generation)
+                            } else {
+                                clearProfileSwitchDiskSnapshotMode("profile_switch_no_disk_state")
+                            }
                             reloadDiskCachedAddonCatalogsForActiveProfileSwitch(allowNetworkRefresh = !hasDiskCacheState)
                         }
                     } finally {
@@ -544,7 +573,10 @@ class HomeViewModel @Inject constructor(
                 episode = event.episode,
                 isNextUp = event.isNextUp
             )
-            HomeEvent.OnRetry -> viewModelScope.launch { loadAllCatalogs(addonsCache, forceReload = true) }
+            HomeEvent.OnRetry -> viewModelScope.launch {
+                clearProfileSwitchDiskSnapshotMode("manual_retry")
+                loadAllCatalogs(addonsCache, forceReload = true)
+            }
         }
     }
 
@@ -617,12 +649,14 @@ class HomeViewModel @Inject constructor(
 
     internal fun runDeferredStartupRefreshIfNeeded(reason: String) {
         if (shouldSuppressProfileSwitchRefresh(reason)) return
+        if (shouldBlockProfileSwitchDiskSnapshotRefresh(reason)) return
         if (!diskFirstHomeStartupEnabled || shouldDeferStartupNetworkWork()) return
         runSerializedHomeRefreshIfNeeded(reason)
     }
 
     internal fun runSerializedHomeRefreshIfNeeded(reason: String) {
         if (shouldSuppressProfileSwitchRefresh(reason)) return
+        if (shouldBlockProfileSwitchDiskSnapshotRefresh(reason)) return
         if (shouldDeferStartupNetworkWork()) return
         if (deferredStartupRefreshJob?.isActive == true) {
             Log.d(TAG, "Serialized home refresh already running; queueing reason=$reason")
@@ -638,7 +672,7 @@ class HomeViewModel @Inject constructor(
                 startupRefreshPending = true
                 Log.d(TAG, "Serialized home refresh start reason=$currentReason")
                 logStartupPerf("catalog_refresh_start", "reason=$currentReason")
-                runSerializedPostStartupRefresh(expectedGeneration = capturedGeneration)
+                runSerializedPostStartupRefresh(expectedGeneration = capturedGeneration, reason = currentReason)
                 logStartupPerf("catalog_refresh_end", "reason=$currentReason")
                 Log.d(TAG, "Serialized home refresh end reason=$currentReason")
                 nextReason = if (isCurrentHomeProfileGeneration(capturedGeneration)) {
@@ -654,6 +688,7 @@ class HomeViewModel @Inject constructor(
     }
 
     internal fun advanceHomeProfileGeneration(): Long {
+        clearProfileSwitchDiskSnapshotMode("profile_generation_advance")
         homeProfileGeneration += 1L
         return homeProfileGeneration
     }
@@ -675,6 +710,38 @@ class HomeViewModel @Inject constructor(
 
     internal fun isCurrentHomeProfileGeneration(generation: Long): Boolean {
         return homeProfileGeneration == generation
+    }
+
+    internal fun activateProfileSwitchDiskSnapshotMode(generation: Long) {
+        profileSwitchDiskSnapshotActive = true
+        profileSwitchDiskSnapshotGeneration = generation
+        Log.d(TAG, "Profile switch disk snapshot mode active generation=$generation")
+    }
+
+    internal fun clearProfileSwitchDiskSnapshotMode(reason: String) {
+        if (!profileSwitchDiskSnapshotActive) return
+        Log.d(TAG, "Clearing profile switch disk snapshot mode reason=$reason")
+        profileSwitchDiskSnapshotActive = false
+        profileSwitchDiskSnapshotGeneration = 0L
+    }
+
+    internal fun isProfileSwitchDiskSnapshotModeActive(): Boolean {
+        return profileSwitchDiskSnapshotActive &&
+            profileSwitchDiskSnapshotGeneration == homeProfileGeneration
+    }
+
+    internal fun shouldBlockProfileSwitchDiskSnapshotRefresh(reason: String): Boolean {
+        if (!isProfileSwitchDiskSnapshotModeActive()) return false
+        if (reason in PROFILE_SWITCH_DISK_SNAPSHOT_ALLOWED_REFRESH_REASONS) {
+            clearProfileSwitchDiskSnapshotMode("explicit_refresh:$reason")
+            return false
+        }
+        val blocked = reason in PROFILE_SWITCH_DISK_SNAPSHOT_BLOCKED_REFRESH_REASONS ||
+            reason !in PROFILE_SWITCH_DISK_SNAPSHOT_ALLOWED_REFRESH_REASONS
+        if (blocked) {
+            Log.d(TAG, "Blocking home refresh during profile switch disk snapshot mode reason=$reason")
+        }
+        return blocked
     }
 
     internal fun shouldSuppressProfileSwitchRefresh(reason: String): Boolean {
@@ -729,8 +796,8 @@ class HomeViewModel @Inject constructor(
     }
 
     private suspend fun updateCatalogRows() = updateCatalogRowsPipeline()
-    private suspend fun runSerializedPostStartupRefresh(expectedGeneration: Long) =
-        runSerializedPostStartupRefreshPipeline(expectedGeneration)
+    private suspend fun runSerializedPostStartupRefresh(expectedGeneration: Long, reason: String) =
+        runSerializedPostStartupRefreshPipeline(expectedGeneration, reason)
 
     internal var posterStatusReconcileJob: Job? = null
 

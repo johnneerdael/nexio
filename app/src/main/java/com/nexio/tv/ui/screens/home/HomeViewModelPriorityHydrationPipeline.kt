@@ -10,6 +10,7 @@ private const val PRIORITY_HYDRATION_TAG = "PriorityHydration"
 internal fun HomeViewModel.observePriorityHydrationPipeline() {
     viewModelScope.launch {
         catalogPriorityHydrationNotifier.events.collect {
+            clearProfileSwitchDiskSnapshotMode("priority_hydration")
             // Run all three concurrently — services short-circuit immediately
             // if auth/API key is missing, so no wasted work.
             launch {
