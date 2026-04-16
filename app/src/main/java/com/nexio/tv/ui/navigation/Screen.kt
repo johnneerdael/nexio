@@ -167,7 +167,7 @@ sealed class Screen(val route: String) {
         }
     }
 
-    data object CastDetail : Screen("cast_detail/{personId}/{personName}?preferCrew={preferCrew}") {
+    data object CastDetail : Screen("cast_detail/{personId}/{personName}?preferCrew={preferCrew}&provider={provider}") {
         private fun encode(value: String): String =
             URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
@@ -176,7 +176,15 @@ sealed class Screen(val route: String) {
             personName: String,
             preferCrew: Boolean = false
         ): String {
-            return "cast_detail/$personId/${encode(personName)}?preferCrew=$preferCrew"
+            return "cast_detail/$personId/${encode(personName)}?preferCrew=$preferCrew&provider=tmdb"
+        }
+
+        fun createTvdbRoute(
+            peopleId: Int,
+            personName: String,
+            preferCrew: Boolean = false
+        ): String {
+            return "cast_detail/$peopleId/${encode(personName)}?preferCrew=$preferCrew&provider=tvdb"
         }
     }
 

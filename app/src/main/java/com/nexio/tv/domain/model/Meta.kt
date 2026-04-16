@@ -31,7 +31,8 @@ data class Meta(
     val links: List<MetaLink>,
     val trailerYtIds: List<String> = emptyList(),
     val tvdbSeasonOrderContext: TvdbSeasonOrderContext? = null,
-    val posterProviderTag: String? = null
+    val posterProviderTag: String? = null,
+    val localReleaseInfo: String? = null
 ) {
     val apiType: String
         get() = type.toApiString(rawType)
@@ -42,7 +43,8 @@ data class MetaCastMember(
     val name: String,
     val character: String? = null,
     val photo: String? = null,
-    val tmdbId: Int? = null
+    val tmdbId: Int? = null,
+    val tvdbPeopleId: Int? = null
 )
 
 @Immutable
@@ -104,7 +106,8 @@ data class Video(
     val episode: Int?,
     val overview: String?,
     val runtime: Int? = null, // episode runtime in minutes
-    val tvdbEpisodeOrder: TvdbEpisodeOrder? = null
+    val tvdbEpisodeOrder: TvdbEpisodeOrder? = null,
+    val localReleaseInfo: String? = null
 )
 
 @Immutable

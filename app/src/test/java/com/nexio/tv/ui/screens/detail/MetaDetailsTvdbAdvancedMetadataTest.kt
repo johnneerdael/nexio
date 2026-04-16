@@ -30,6 +30,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.File
+import java.time.ZoneId
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MetaDetailsTvdbAdvancedMetadataTest {
@@ -146,6 +147,78 @@ class MetaDetailsTvdbAdvancedMetadataTest {
                 source.contains(term)
             )
         }
+    }
+
+    @Test
+    fun `detail treats tvdb creator credits as leading credits without requiring tmdb ids`() {
+        val projectRoot = System.getProperty("user.dir")
+            ?: error("Cannot determine project root")
+        val screenFile = File(projectRoot, "app/src/main/java/com/nexio/tv/ui/screens/detail/MetaDetailsScreen.kt")
+        assertTrue("MetaDetailsScreen.kt must exist", screenFile.exists())
+
+        val source = screenFile.readText()
+        assertFalse(
+            "TVDB lead credits have null tmdbId and must still be eligible for the creator row",
+            source.contains("it.tmdbId != null && it.character.equals(\"Creator\", ignoreCase = true)")
+        )
+        assertFalse(
+            "TVDB lead credits have null tmdbId and must still be removed from the normal cast row",
+            source.contains("id != null && id in leadingIds && isLeadCreditRole(it.character)")
+        )
+    }
+
+    @Test
+    fun `tvdb detail local release info includes release time converted to device timezone`() {
+        val enrichment = TvMetadataEnrichment(
+            seriesTvdbId = 392256,
+            releaseInfo = "2026-04-14",
+            airsTime = "21:00",
+            originalCountry = "US",
+            originalNetwork = "HBO",
+            latestNetwork = "HBO",
+            platformName = "HBO"
+        )
+
+        val label = formatTvdbDetailLocalReleaseInfo(
+            enrichment = enrichment,
+            deviceZoneId = ZoneId.of("Europe/Amsterdam")
+        )
+
+        assertEquals("2026-04-15 03:00", label)
+    }
+
+    @Test
+    fun `tvdb episode local release info includes release time converted to device timezone`() {
+        val enrichment = TvMetadataEnrichment(
+            seriesTvdbId = 392256,
+            airsTime = "21:00",
+            originalCountry = "US",
+            originalNetwork = "HBO",
+            latestNetwork = "HBO",
+            platformName = "HBO"
+        )
+
+        val label = formatTvdbEpisodeLocalReleaseInfo(
+            airDate = "2026-04-14",
+            enrichment = enrichment,
+            deviceZoneId = ZoneId.of("Europe/Amsterdam")
+        )
+
+        assertEquals("2026-04-15 03:00", label)
+    }
+
+    @Test
+    fun `detail hero prefers local release info over year only release text`() {
+        val projectRoot = System.getProperty("user.dir")
+            ?: error("Cannot determine project root")
+        val heroFile = File(projectRoot, "app/src/main/java/com/nexio/tv/ui/screens/detail/HeroSection.kt")
+        assertTrue("HeroSection.kt must exist", heroFile.exists())
+
+        val source = heroFile.readText()
+        assertTrue(
+            "Detail hero must render TVDB local release date-time when it is available",
+            source.contains("meta.localReleaseInfo ?: meta.releaseInfo?.split(\"-\")?.firstOrNull() ?: meta.releaseInfo")
+        )
     }
 
     private fun buildSeriesMetaForAdvanced(): Meta {

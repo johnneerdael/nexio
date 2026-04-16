@@ -233,7 +233,7 @@ fun MetaDetailsScreen(
     onReturnFocusConsumed: () -> Unit = {},
     onTrailerPlaybackActiveChanged: (Boolean) -> Unit = {},
     onBackPress: () -> Unit,
-    onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
+    onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean, provider: String) -> Unit = { _, _, _, _ -> },
     onNavigateToOrganizationDetail: (
         entityId: Int,
         entityName: String,
@@ -997,7 +997,7 @@ private fun MetaDetailsContent(
     onTrailerEnded: () -> Unit,
     onTrailerButtonClick: () -> Unit,
     immediateTrailerTakeoverPending: Boolean,
-    onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean) -> Unit = { _, _, _ -> },
+    onNavigateToCastDetail: (personId: Int, personName: String, preferCrew: Boolean, provider: String) -> Unit = { _, _, _, _ -> },
     onNavigateToOrganizationDetail: (Int, String, String, String) -> Unit = { _, _, _, _ -> },
     onNavigateToDetail: (itemId: String, itemType: String, addonBaseUrl: String?) -> Unit = { _, _, _ -> },
     onReviewFocused: (Int) -> Unit = {}
@@ -1257,10 +1257,15 @@ private fun MetaDetailsContent(
             r.equals("Writer", ignoreCase = true)
     }
 
+    fun MetaCastMember.leadCreditKey(): String {
+        return tmdbId?.let { "tmdb:$it" }
+            ?: "${name.trim().lowercase()}|${character?.trim()?.lowercase().orEmpty()}"
+    }
+
     val directorWriterMembers = remember(castMembersToShow) {
-        val creators = castMembersToShow.filter { it.tmdbId != null && it.character.equals("Creator", ignoreCase = true) }
-        val directors = castMembersToShow.filter { it.tmdbId != null && it.character.equals("Director", ignoreCase = true) }
-        val writers = castMembersToShow.filter { it.tmdbId != null && it.character.equals("Writer", ignoreCase = true) }
+        val creators = castMembersToShow.filter { it.character.equals("Creator", ignoreCase = true) }
+        val directors = castMembersToShow.filter { it.character.equals("Director", ignoreCase = true) }
+        val writers = castMembersToShow.filter { it.character.equals("Writer", ignoreCase = true) }
         when {
             creators.isNotEmpty() -> creators
             directors.isNotEmpty() -> directors
@@ -1269,10 +1274,9 @@ private fun MetaDetailsContent(
     }
 
     val normalCastMembers = remember(castMembersToShow, directorWriterMembers) {
-        val leadingIds = directorWriterMembers.mapNotNull { it.tmdbId }.toSet()
+        val leadingKeys = directorWriterMembers.map { it.leadCreditKey() }.toSet()
         castMembersToShow.filterNot {
-            val id = it.tmdbId
-            id != null && id in leadingIds && isLeadCreditRole(it.character)
+            it.leadCreditKey() in leadingKeys && isLeadCreditRole(it.character)
         }
     }
     val isTvShow = remember(meta.type, meta.apiType) {
@@ -1887,7 +1891,13 @@ private fun MetaDetailsContent(
                                             val preferCrew = member.character.equals("Creator", ignoreCase = true) ||
                                                 member.character.equals("Director", ignoreCase = true) ||
                                                 member.character.equals("Writer", ignoreCase = true)
-                                            onNavigateToCastDetail(id, member.name, preferCrew)
+                                            onNavigateToCastDetail(id, member.name, preferCrew, "tmdb")
+                                        } ?: member.tvdbPeopleId?.let { id ->
+                                            markCastMemberRestore(id)
+                                            val preferCrew = member.character.equals("Creator", ignoreCase = true) ||
+                                                member.character.equals("Director", ignoreCase = true) ||
+                                                member.character.equals("Writer", ignoreCase = true)
+                                            onNavigateToCastDetail(id, member.name, preferCrew, "tvdb")
                                         }
                                     },
                                     modifier = Modifier.onSizeChanged { castSectionHeightPx = it.height }

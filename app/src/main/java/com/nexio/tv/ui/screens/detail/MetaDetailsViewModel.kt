@@ -8,8 +8,12 @@ import com.nexio.tv.BuildConfig
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvMetadataRouter
+import com.nexio.tv.core.tvdb.TvdbAirAvailabilityCalculator
+import com.nexio.tv.core.tvdb.TvdbAirAvailabilityPrecision
+import com.nexio.tv.core.tvdb.TvdbSeriesTiming
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.TraktAuthDataStore
@@ -45,7 +49,11 @@ import com.nexio.tv.domain.repository.MetaRepository
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.domain.repository.WatchProgressRepository
 import com.nexio.tv.core.util.isUnreleased
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -80,6 +88,48 @@ private fun debugLog(tag: String, message: String) {
     runCatching { Log.d(tag, message) }
 }
 private const val TRAKT_REVIEWS_PAGE_SIZE = 8
+
+internal fun formatTvdbDetailLocalReleaseInfo(
+    enrichment: TvMetadataEnrichment,
+    deviceZoneId: ZoneId = ZoneId.systemDefault()
+): String? = formatTvdbLocalReleaseInfo(
+    releaseInfo = enrichment.releaseInfo,
+    enrichment = enrichment,
+    deviceZoneId = deviceZoneId
+)
+
+internal fun formatTvdbEpisodeLocalReleaseInfo(
+    airDate: String?,
+    enrichment: TvMetadataEnrichment,
+    deviceZoneId: ZoneId = ZoneId.systemDefault()
+): String? = formatTvdbLocalReleaseInfo(
+    releaseInfo = airDate,
+    enrichment = enrichment,
+    deviceZoneId = deviceZoneId
+)
+
+private fun formatTvdbLocalReleaseInfo(
+    releaseInfo: String?,
+    enrichment: TvMetadataEnrichment,
+    deviceZoneId: ZoneId
+): String? {
+    val availability = TvdbAirAvailabilityCalculator().computeAvailability(
+        episodeAiredDate = releaseInfo,
+        seriesTiming = TvdbSeriesTiming(
+            airsTime = enrichment.airsTime,
+            originalCountry = enrichment.originalCountry,
+            originalNetwork = enrichment.originalNetwork,
+            latestNetwork = enrichment.latestNetwork,
+            platformName = enrichment.platformName
+        ),
+        deviceZoneId = deviceZoneId
+    )
+    if (availability.precision != TvdbAirAvailabilityPrecision.EXACT_INSTANT) return null
+    val instantMs = availability.instantMs ?: return null
+    return Instant.ofEpochMilli(instantMs)
+        .atZone(deviceZoneId)
+        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.US))
+}
 
 internal fun shouldStopAutoTrailerOnLifecyclePause(
     isTrailerPlaying: Boolean,
@@ -1265,7 +1315,23 @@ class MetaDetailsViewModel @Inject constructor(
             null
         }
         val tmdbEnrichment = if (isTvContent) {
-            null
+            val tmdbId = tvEnrichment?.remoteIds
+                ?.get("tmdb")
+                ?.firstOrNull()
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+            if (
+                tmdbId != null &&
+                settings.isActive &&
+                shouldSupplementTvdbDetailWithTmdb(tvEnrichment, settings)
+            ) {
+                tmdbMetadataService.fetchEnrichment(
+                    tmdbId = tmdbId,
+                    contentType = tmdbContentType
+                )
+            } else {
+                null
+            }
         } else {
             if (!settings.isActive) return meta
             val tmdbId = tmdbService.ensureTmdbId(meta.id, tmdbContentType.toApiString())
@@ -1285,6 +1351,7 @@ class MetaDetailsViewModel @Inject constructor(
         val backdrop = tvEnrichment?.backdrop ?: tmdbEnrichment?.backdrop
         val logo = tvEnrichment?.logo ?: tmdbEnrichment?.logo
         val releaseInfo = tvEnrichment?.releaseInfo ?: tmdbEnrichment?.releaseInfo
+        val localReleaseInfo = tvEnrichment?.let(::formatTvdbDetailLocalReleaseInfo)
         val rating = tvEnrichment?.rating ?: tmdbEnrichment?.rating
         val runtimeMinutes = tvEnrichment?.runtimeMinutes ?: tmdbEnrichment?.runtimeMinutes
         val ageRating = tvEnrichment?.ageRating ?: tmdbEnrichment?.ageRating
@@ -1316,6 +1383,7 @@ class MetaDetailsViewModel @Inject constructor(
             updated = updated.copy(
                 runtime = runtimeMinutes?.toString() ?: updated.runtime,
                 releaseInfo = releaseInfo ?: updated.releaseInfo,
+                localReleaseInfo = localReleaseInfo ?: updated.localReleaseInfo,
                 ageRating = ageRating ?: updated.ageRating,
                 country = countries?.joinToString(", ") ?: updated.country,
                 language = language ?: updated.language
@@ -1394,6 +1462,11 @@ class MetaDetailsViewModel @Inject constructor(
                             title = ep?.title ?: video.title,
                             overview = ep?.overview ?: video.overview,
                             released = ep?.airDate ?: video.released,
+                            localReleaseInfo = if (tvEnrichment != null && ep?.airDate != null) {
+                                formatTvdbEpisodeLocalReleaseInfo(ep.airDate, tvEnrichment) ?: video.localReleaseInfo
+                            } else {
+                                video.localReleaseInfo
+                            },
                             thumbnail = ep?.thumbnail ?: video.thumbnail,
                             runtime = ep?.runtimeMinutes ?: video.runtime,
                             tvdbEpisodeOrder = ep?.tvdbEpisodeOrder ?: video.tvdbEpisodeOrder
@@ -1408,6 +1481,17 @@ class MetaDetailsViewModel @Inject constructor(
         }
 
         return updated
+    }
+
+    private fun shouldSupplementTvdbDetailWithTmdb(
+        tvEnrichment: TvMetadataEnrichment?,
+        settings: TmdbSettings
+    ): Boolean {
+        if (tvEnrichment == null) return false
+        if (settings.useCredits && tvEnrichment.castMembers.any { it.tmdbId == null }) return true
+        if (settings.useProductions && tvEnrichment.productionCompanies.any { it.tmdbId == null || it.logo == null }) return true
+        if (settings.useNetworks && tvEnrichment.networks.any { it.tmdbId == null || it.logo == null }) return true
+        return false
     }
 
     private fun resolveTmdbContentType(meta: Meta): ContentType {

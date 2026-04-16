@@ -130,7 +130,7 @@ class TvdbTrailerResolver @Inject constructor(
             tvdbApi.getSeriesExtended(
                 authorization = authorization,
                 id = identity.tvdbId,
-                meta = "translations",
+                meta = null,
                 short = false
             )
         }.onFailure { error ->

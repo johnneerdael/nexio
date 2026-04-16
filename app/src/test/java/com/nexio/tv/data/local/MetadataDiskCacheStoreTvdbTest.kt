@@ -5,6 +5,9 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
+import com.nexio.tv.domain.model.MetaCastMember
+import com.nexio.tv.domain.model.MetaCompany
+import com.nexio.tv.domain.model.MetaCompanyKind
 import com.nexio.tv.testutil.InMemorySharedPreferences
 import io.mockk.every
 import io.mockk.mockk
@@ -135,6 +138,77 @@ class MetadataDiskCacheStoreTvdbTest {
                 seasonNumber = 1,
                 languageTag = "en-US"
             )
+        )
+    }
+
+    @Test
+    fun `read TVDB enrichment rebuilds typed advanced surfaces from raw JSON`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+        prefs.edit().putString(
+            "tvdb::121361::series_extended::en-US::native",
+            """
+            {
+              "value": {
+                "seriesTvdbId": 121361,
+                "localizedTitle": "Game of Thrones",
+                "genres": [],
+                "airsDays": {},
+                "remoteIds": {},
+                "aliases": [],
+                "contentRatings": [],
+                "castMembers": [
+                  {
+                    "name": "Pedro Pascal",
+                    "character": "Joel Miller",
+                    "photo": "https://art.example/pedro.jpg",
+                    "tmdbId": null
+                  }
+                ],
+                "productionCompanies": [
+                  {
+                    "name": "Bighead Littlehead",
+                    "kind": "COMPANY"
+                  }
+                ],
+                "networks": [
+                  {
+                    "name": "HBO",
+                    "kind": "NETWORK"
+                  }
+                ]
+              },
+              "tvdbSchemaVersion": 2,
+              "languageEpoch": 0,
+              "updatedAtMs": 1
+            }
+            """.trimIndent()
+        ).apply()
+
+        val enrichment = store.readTvdbEnrichment(
+            seriesId = 121361,
+            recordKind = "series_extended",
+            languageTag = "en-US",
+            providerToken = "native"
+        )
+
+        assertEquals(
+            listOf(
+                MetaCastMember(
+                    name = "Pedro Pascal",
+                    character = "Joel Miller",
+                    photo = "https://art.example/pedro.jpg"
+                )
+            ),
+            enrichment?.castMembers
+        )
+        assertEquals(
+            listOf(MetaCompany(name = "Bighead Littlehead", kind = MetaCompanyKind.COMPANY)),
+            enrichment?.productionCompanies
+        )
+        assertEquals(
+            listOf(MetaCompany(name = "HBO", kind = MetaCompanyKind.NETWORK)),
+            enrichment?.networks
         )
     }
 

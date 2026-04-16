@@ -155,7 +155,7 @@ class TvdbIdentityService @Inject constructor(
             tvdbId = id,
             name = name,
             year = firstAired?.take(4),
-            remoteIds = remoteIds.toRemoteIdMap(id)
+            remoteIds = remoteIds.orEmpty().toRemoteIdMap(id)
         )
     }
 
@@ -176,7 +176,7 @@ class TvdbIdentityService @Inject constructor(
             tvdbId = id,
             name = name ?: title,
             year = year ?: firstAirTime?.take(4),
-            remoteIds = remoteIds.toRemoteIdMap(id)
+            remoteIds = remoteIds.orEmpty().toRemoteIdMap(id)
         )
     }
 

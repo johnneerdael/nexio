@@ -21,16 +21,17 @@ class TvdbSeasonOrderMapper @Inject constructor() {
      * AND [TvdbSeriesExtendedRecord.seasonTypes] is empty.
      */
     fun buildSeriesOrderContext(series: TvdbSeriesExtendedRecord): TvdbSeasonOrderContext? {
-        if (series.defaultSeasonType == null && series.seasonTypes.isEmpty()) {
+        val seasonTypes = series.seasonTypes.orEmpty()
+        if (series.defaultSeasonType == null && seasonTypes.isEmpty()) {
             return null
         }
 
-        val matchingType = series.seasonTypes.firstOrNull { it.id == series.defaultSeasonType }
+        val matchingType = seasonTypes.firstOrNull { it.id == series.defaultSeasonType }
 
         val defaultSeasonTypeName = matchingType?.name?.trim()?.takeIf { it.isNotBlank() }
         val defaultSeasonTypeSlug = deriveSlug(matchingType?.type ?: matchingType?.name)
 
-        val availableSeasonTypes = series.seasonTypes.mapNotNull { record ->
+        val availableSeasonTypes = seasonTypes.mapNotNull { record ->
             if (record.id == null && record.name == null && record.type == null) return@mapNotNull null
             TvdbSeasonTypeSummary(
                 id = record.id,

@@ -204,6 +204,36 @@ class TvdbAdvancedMetadataMapperTest {
     }
 
     @Test
+    fun `tvdb creator role uses people type when no character name exists`() {
+        val series = TvdbSeriesExtendedRecord(
+            id = 22222,
+            name = "Creator Show",
+            characters = listOf(
+                TvdbCharacterRecord(
+                    personName = "Craig Mazin",
+                    name = null,
+                    peopleType = "Creator",
+                    sort = 0
+                ),
+                TvdbCharacterRecord(
+                    personName = "Pedro Pascal",
+                    name = "Joel Miller",
+                    peopleType = "Actor",
+                    sort = 1
+                )
+            )
+        )
+
+        val result = mapper.mapAdvancedMetadata(series, emptyList())
+
+        assertEquals(2, result.castMembers.size)
+        assertEquals("Craig Mazin", result.castMembers[0].name)
+        assertEquals("Creator", result.castMembers[0].character)
+        assertEquals("Pedro Pascal", result.castMembers[1].name)
+        assertEquals("Joel Miller", result.castMembers[1].character)
+    }
+
+    @Test
     fun `companies exclude names already in networks case insensitive`() {
         val series = TvdbSeriesExtendedRecord(
             id = 66666,
