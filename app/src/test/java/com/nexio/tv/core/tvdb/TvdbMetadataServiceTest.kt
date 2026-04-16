@@ -137,7 +137,7 @@ class TvdbMetadataServiceTest {
         coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
         coEvery { posterResolver.getActiveProvider() } returns activeProvider
         every {
-            cacheStore.readTvdbEnrichment(121361, "series_extended", "en-US", "TOP_POSTERS:${"top-key".hashCode()}")
+            cacheStore.readTvdbEnrichment(121361, "series_extended", "eng", "TOP_POSTERS:${"top-key".hashCode()}")
         } returns null
         every { cacheStore.writeTvdbEnrichment(any(), any(), any(), any(), any()) } just Runs
         every {
@@ -361,7 +361,7 @@ class TvdbMetadataServiceTest {
         )
 
         every {
-            cacheStore.readTvdbSeasonEpisodes(121361, "default", 1, "en-US")
+            cacheStore.readTvdbSeasonEpisodes(121361, "default", 1, "eng")
         } returns cached
 
         val episodes = service.fetchSeasonEpisodes(TvdbSeriesIdentity(tvdbId = 121361), 1, "en-US")
@@ -379,7 +379,7 @@ class TvdbMetadataServiceTest {
         val cacheStore = mockk<MetadataDiskCacheStore>()
         val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore, TvdbSeasonOrderMapper(), TvdbAdvancedMetadataMapper(), mockk(relaxed = true) { coEvery { resolveAlias(any(), any()) } returns null }, mockk(relaxed = true) { coEvery { canCallTvdb() } returns true }, mockk(relaxUnitFun = true))
 
-        every { cacheStore.readTvdbSeasonEpisodes(121361, "default", 1, "en-US") } returns null
+        every { cacheStore.readTvdbSeasonEpisodes(121361, "default", 1, "eng") } returns null
         every { cacheStore.writeTvdbSeasonEpisodes(any(), any(), any(), any(), any()) } just Runs
         coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
         coEvery {
@@ -400,7 +400,7 @@ class TvdbMetadataServiceTest {
         val cacheStore = mockk<MetadataDiskCacheStore>()
         val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore, TvdbSeasonOrderMapper(), TvdbAdvancedMetadataMapper(), mockk(relaxed = true) { coEvery { resolveAlias(any(), any()) } returns null }, mockk(relaxed = true) { coEvery { canCallTvdb() } returns true }, mockk(relaxUnitFun = true))
 
-        every { cacheStore.readTvdbSeasonEpisodes(121361, "default", 1, "en-US") } returns null
+        every { cacheStore.readTvdbSeasonEpisodes(121361, "default", 1, "eng") } returns null
         every { cacheStore.writeTvdbSeasonEpisodes(any(), any(), any(), any(), any()) } just Runs
         coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
         coEvery {
@@ -424,8 +424,8 @@ class TvdbMetadataServiceTest {
         val cacheStore = mockk<MetadataDiskCacheStore>()
         val service = TvdbMetadataService(tvdbApi, authService, posterResolver, cacheStore, TvdbSeasonOrderMapper(), TvdbAdvancedMetadataMapper(), mockk(relaxed = true) { coEvery { resolveAlias(any(), any()) } returns null }, mockk(relaxed = true) { coEvery { canCallTvdb() } returns true }, mockk(relaxUnitFun = true))
 
-        every { cacheStore.readTvdbSeasonEpisodes(121361, "default", 1, "en-US") } returns null
-        every { cacheStore.writeTvdbSeasonEpisodes(121361, "default", 1, "en-US", emptyList()) } just Runs
+        every { cacheStore.readTvdbSeasonEpisodes(121361, "default", 1, "eng") } returns null
+        every { cacheStore.writeTvdbSeasonEpisodes(121361, "default", 1, "eng", emptyList()) } just Runs
         coEvery { authService.bearerToken() } returns "Bearer tvdb-token"
         coEvery {
             tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
@@ -434,7 +434,7 @@ class TvdbMetadataServiceTest {
         val episodes = service.fetchSeasonEpisodes(TvdbSeriesIdentity(tvdbId = 121361), 1, "en-US")
 
         assertEquals(emptyList<TvSeasonEpisode>(), episodes)
-        verify(exactly = 1) { cacheStore.writeTvdbSeasonEpisodes(121361, "default", 1, "en-US", emptyList()) }
+        verify(exactly = 1) { cacheStore.writeTvdbSeasonEpisodes(121361, "default", 1, "eng", emptyList()) }
     }
 
     private fun tvdbService(tvdbApi: TvdbApi): TvdbMetadataService {
