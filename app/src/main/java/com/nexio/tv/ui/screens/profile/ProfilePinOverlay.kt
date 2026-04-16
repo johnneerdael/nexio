@@ -37,7 +37,7 @@ import kotlinx.coroutines.delay
  * @param onDismiss Called when the user presses Back to cancel PIN entry.
  * @param isVerifying True while network verification is in progress — disables numpad.
  * @param isError True when the last PIN attempt was rejected (triggers shake + "Wrong PIN" text).
- * @param errorMessage Optional override message (currently unused; "Wrong PIN" is hardcoded per spec).
+ * @param errorMessage Optional override message for rejected PINs.
  * @param retryAfterSeconds Remaining rate-limit seconds from ViewModel. >0 disables numpad and shows countdown.
  * @param onErrorConsumed Called after the shake animation completes to clear the error flag.
  */
@@ -57,15 +57,26 @@ internal fun ProfilePinOverlay(
 
     // Local PIN digit accumulation (up to 4 chars)
     var pin by remember { mutableStateOf("") }
+    var submittedPin by remember { mutableStateOf<String?>(null) }
 
     // Shake animation for wrong PIN
     val shakeOffset = remember { Animatable(0f) }
 
-    // Auto-submit when 4th digit is entered
-    LaunchedEffect(pin, isVerifying) {
-        if (pin.length == 4 && !isVerifying) {
-            onPinSubmit(pin)
+    fun submitPinIfReady() {
+        if (pin.length != 4) return
+        if (isVerifying || retryAfterSeconds > 0 || isError) return
+        if (submittedPin == pin) return
+
+        submittedPin = pin
+        onPinSubmit(pin)
+    }
+
+    // Auto-submit when 4th digit is entered.
+    LaunchedEffect(pin, isVerifying, isError, retryAfterSeconds) {
+        if (pin.length < 4) {
+            submittedPin = null
         }
+        submitPinIfReady()
     }
 
     // Shake animation + pin reset on error
@@ -77,6 +88,7 @@ internal fun ProfilePinOverlay(
             }
             delay(600)
             pin = ""
+            submittedPin = null
             onErrorConsumed()
         }
     }
@@ -127,7 +139,7 @@ internal fun ProfilePinOverlay(
                     color = NexioColors.TextSecondary
                 )
                 isError -> Text(
-                    text = "Wrong PIN",
+                    text = errorMessage ?: "Wrong PIN",
                     style = MaterialTheme.typography.bodyMedium,
                     color = NexioColors.Error
                 )
@@ -139,13 +151,21 @@ internal fun ProfilePinOverlay(
             ProfilePinNumpad(
                 enabled = numpadEnabled,
                 onDigit = { digit ->
-                    if (pin.length < 4) pin += digit
+                    if (pin.length < 4) {
+                        pin += digit
+                        if (pin.length < 4) {
+                            submittedPin = null
+                        }
+                    }
                 },
                 onClear = {
-                    if (pin.isNotEmpty()) pin = pin.dropLast(1)
+                    if (pin.isNotEmpty()) {
+                        pin = pin.dropLast(1)
+                        submittedPin = null
+                    }
                 },
                 onConfirm = {
-                    if (pin.length == 4) onPinSubmit(pin)
+                    submitPinIfReady()
                 }
             )
         }

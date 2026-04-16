@@ -92,6 +92,7 @@ class ProfileManager(
         // Read latest from DataStore directly to avoid StateFlow lag
         val current = dataStore.profilesList.first()
         if (current.any { it.id == id }) {
+            if (_activeProfileId.value == id) return
             AppLocaleResolver.setActiveProfileId(context, id)
             _activeProfileId.value = id
             dataStore.setActiveProfile(id)

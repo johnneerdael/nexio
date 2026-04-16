@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -65,6 +66,8 @@ fun ProfileSelectionScreen(
 
     var focusedIndex by remember { mutableIntStateOf(0) }
     var activePinOverlayProfile by remember { mutableStateOf<UserProfile?>(null) }
+    var activePinSessionId by remember { mutableLongStateOf(0L) }
+    var nextPinSessionId by remember { mutableLongStateOf(0L) }
 
     val initialFocusIndex = remember(profiles, activeProfileId) {
         val idx = profiles.indexOfFirst { it.id == activeProfileId }
@@ -79,14 +82,21 @@ fun ProfileSelectionScreen(
         runCatching { focusRequesters[targetIndex].requestFocus() }
     }
 
-    // Detect successful PIN verification: active profile switched to the overlay profile
-    LaunchedEffect(activeProfileId) {
-        val overlayProfile = activePinOverlayProfile
-        if (overlayProfile != null && activeProfileId == overlayProfile.id) {
-            activePinOverlayProfile = null
-            viewModel.resetPinState()
-            onProfileSelected(overlayProfile.id)
+    LaunchedEffect(Unit) {
+        viewModel.pinUnlockedProfile.collect { event ->
+            if (activePinOverlayProfile?.id == event.profileId && activePinSessionId == event.pinSessionId) {
+                activePinOverlayProfile = null
+                activePinSessionId = 0L
+                viewModel.resetPinState()
+                onProfileSelected(event.profileId)
+            }
         }
+    }
+
+    fun openPinOverlay(profile: UserProfile) {
+        nextPinSessionId += 1L
+        activePinOverlayProfile = profile
+        activePinSessionId = nextPinSessionId
     }
 
     Box(
@@ -114,7 +124,7 @@ fun ProfileSelectionScreen(
                         val profile = profiles.getOrNull(focusedIndex)
                         if (profile != null) {
                             if (profilePinEnabled[profile.id] == true) {
-                                activePinOverlayProfile = profile
+                                openPinOverlay(profile)
                             } else {
                                 onProfileSelected(profile.id)
                             }
@@ -134,7 +144,7 @@ fun ProfileSelectionScreen(
                         focusRequester = focusRequesters[index],
                         onClick = {
                             if (isPinLocked) {
-                                activePinOverlayProfile = profile
+                                openPinOverlay(profile)
                             } else {
                                 onProfileSelected(profile.id)
                             }
@@ -156,9 +166,10 @@ fun ProfileSelectionScreen(
         activePinOverlayProfile?.let { profile ->
             ProfilePinOverlay(
                 profile = profile,
-                onPinSubmit = { pin -> viewModel.verifyPin(profile.id, pin) },
+                onPinSubmit = { pin -> viewModel.verifyPin(profile.id, pin, activePinSessionId) },
                 onDismiss = {
                     activePinOverlayProfile = null
+                    activePinSessionId = 0L
                     viewModel.resetPinState()
                 },
                 isVerifying = pinState.isVerifying,

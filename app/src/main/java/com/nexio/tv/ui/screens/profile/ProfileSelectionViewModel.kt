@@ -3,14 +3,18 @@ package com.nexio.tv.ui.screens.profile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexio.tv.core.profile.ProfileManager
+import com.nexio.tv.core.sync.ProfileSyncService
 import com.nexio.tv.domain.model.UserProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -19,12 +23,17 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ProfileSelectionViewModel @Inject constructor(
-    private val profileManager: ProfileManager
+    private val profileManager: ProfileManager,
+    private val profileSyncService: ProfileSyncService
 ) : ViewModel() {
+    private val pinVerificationLock = Any()
+    private val _pinUnlockedProfile = MutableSharedFlow<PinUnlockEvent>(extraBufferCapacity = 1)
 
     val profiles: StateFlow<List<UserProfile>> = profileManager.profiles
 
     val activeProfileId: StateFlow<Int> = profileManager.activeProfileId
+
+    val pinUnlockedProfile: SharedFlow<PinUnlockEvent> = _pinUnlockedProfile.asSharedFlow()
 
     // Derive PIN-enabled map directly from profiles (no Supabase in Phase 3, per Pitfall 5)
     val profilePinEnabled: StateFlow<Map<Int, Boolean>> = profileManager.profiles
@@ -41,30 +50,36 @@ class ProfileSelectionViewModel @Inject constructor(
         }
     }
 
-    fun verifyPin(profileId: Int, pin: String) {
-        if (_pinState.value.isVerifying) return
+    fun verifyPin(profileId: Int, pin: String, pinSessionId: Long) {
+        if (!beginPinVerification()) return
         viewModelScope.launch {
-            _pinState.update { it.copy(isVerifying = true, isError = false, errorMessage = null) }
+            val result = profileSyncService.verifyProfilePin(profileId, pin)
+            if (result.isFailure) {
+                _pinState.update {
+                    it.copy(
+                        isVerifying = false,
+                        isError = true,
+                        errorMessage = "Unable to verify PIN"
+                    )
+                }
+                return@launch
+            }
 
-            // Phase 3 stub: no ProfileSyncService yet.
-            // Phase 4 will replace this with: profileSyncService.verifyProfilePin(profileId, pin)
-            // Since we have no server to verify the actual PIN value, simulate a network call.
-            delay(500)
-            val result = PinVerifyResult(unlocked = false, retryAfterSeconds = 0)
+            val pinResult = result.getOrThrow()
 
-            if (result.unlocked) {
-                _pinState.update { PinVerificationState() }
-                profileManager.setActiveProfile(profileId)
-            } else if (result.retryAfterSeconds > 0) {
+            if (pinResult.unlocked) {
+                resetPinState()
+                _pinUnlockedProfile.emit(PinUnlockEvent(profileId, pinSessionId))
+            } else if (pinResult.retryAfterSeconds > 0) {
                 _pinState.update {
                     it.copy(
                         isVerifying = false,
                         isError = false,
                         errorMessage = null,
-                        retryAfterSeconds = result.retryAfterSeconds
+                        retryAfterSeconds = pinResult.retryAfterSeconds
                     )
                 }
-                startRateLimitCountdown(result.retryAfterSeconds)
+                startRateLimitCountdown(pinResult.retryAfterSeconds)
             } else {
                 _pinState.update {
                     it.copy(
@@ -75,6 +90,13 @@ class ProfileSelectionViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun beginPinVerification(): Boolean = synchronized(pinVerificationLock) {
+        val state = _pinState.value
+        if (state.isVerifying || state.retryAfterSeconds > 0) return false
+        _pinState.value = state.copy(isVerifying = true, isError = false, errorMessage = null)
+        true
     }
 
     private var countdownJob: Job? = null
@@ -109,12 +131,8 @@ class ProfileSelectionViewModel @Inject constructor(
         val retryAfterSeconds: Int = 0
     )
 
-    /**
-     * Local result type for Phase 3 PIN verification stub.
-     * Phase 4 will replace this with SupabaseProfilePinVerifyResult from the sync service.
-     */
-    data class PinVerifyResult(
-        val unlocked: Boolean = false,
-        val retryAfterSeconds: Int = 0
+    data class PinUnlockEvent(
+        val profileId: Int,
+        val pinSessionId: Long
     )
 }
