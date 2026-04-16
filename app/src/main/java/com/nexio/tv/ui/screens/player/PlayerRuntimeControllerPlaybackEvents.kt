@@ -142,6 +142,9 @@ internal fun PlayerRuntimeController.stopProgressUpdates() {
 
 internal fun PlayerRuntimeController.startWatchProgressSaving() {
     watchProgressSaveJob?.cancel()
+    watchProgressSaveJob = null
+    if (!shouldPersistWatchProgressOnPlaybackInterval()) return
+
     watchProgressSaveJob = scope.launch {
         while (isActive) {
             delay(10000)
@@ -154,6 +157,10 @@ internal fun PlayerRuntimeController.stopWatchProgressSaving() {
     watchProgressSaveJob?.cancel()
     watchProgressSaveJob = null
 }
+
+internal fun shouldPersistWatchProgressOnPlaybackInterval(): Boolean = false
+
+internal fun shouldPersistWatchProgressOnPlaybackStopEvent(): Boolean = true
 
 internal fun PlayerRuntimeController.saveWatchProgressIfNeeded() {
     if (!hasRenderedFirstFrame) return
@@ -486,9 +493,14 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
     when (event) {
         PlayerEvent.OnPlayPause -> {
             if (backendIsPlaying()) {
+                val usingMpv = isUsingMpvEngine()
                 userPausedManually = true
                 playbackIdleGateState.onUserPauseStateChanged(isPausedByUser = true)
                 backendPause()
+                if (usingMpv && shouldPersistWatchProgressOnPlaybackStopEvent()) {
+                    emitStopScrobbleForCurrentProgress()
+                    saveWatchProgress()
+                }
                 schedulePauseOverlay()
             } else {
                 userPausedManually = false
