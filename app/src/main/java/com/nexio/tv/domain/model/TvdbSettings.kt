@@ -9,13 +9,14 @@ enum class TvdbValidationStatus {
 }
 
 data class TvdbSettings(
-    val enabled: Boolean = false,
+    val enabled: Boolean = true,
     val apiKey: String = "",
     val subscriberPin: String = "",
-    val validationStatus: TvdbValidationStatus = TvdbValidationStatus.NOT_CONFIGURED,
+    val validationStatus: TvdbValidationStatus = TvdbValidationStatus.VALID,
     val lastFailure: String = "",
     val lastValidatedAtEpochMs: Long? = null
 ) {
-    val configured: Boolean get() = apiKey.isNotBlank()
-    val isActive: Boolean get() = enabled && configured && validationStatus == TvdbValidationStatus.VALID
+    val configured: Boolean get() = true
+    val hasCustomCredentials: Boolean get() = apiKey.isNotBlank()
+    val isActive: Boolean get() = enabled
 }

@@ -355,7 +355,7 @@ internal suspend fun applyAccountConfigSyncSettings(
     layoutPreferenceDataStore.setHomeCatalogOrderKeys(settings.catalogs.home.homeCatalogOrderKeys)
     layoutPreferenceDataStore.setDisabledHomeCatalogKeys(settings.catalogs.home.disabledHomeCatalogKeys)
 
-    tmdbSettingsDataStore.setEnabled(settings.integrations.tmdb.enabled)
+    tmdbSettingsDataStore.setEnabled(true)
     tmdbSettingsDataStore.setUseArtwork(settings.integrations.tmdb.useArtwork)
     tmdbSettingsDataStore.setUseBasicInfo(settings.integrations.tmdb.useBasicInfo)
     tmdbSettingsDataStore.setUseDetails(settings.integrations.tmdb.useDetails)

@@ -40,7 +40,7 @@ class TvdbSettingsDataStore @Inject constructor(
     val settings: Flow<TvdbSettings> = dataStore.data.map { prefs ->
         val statusName = prefs[validationStatusKey]
         TvdbSettings(
-            enabled = prefs[enabledKey] ?: false,
+            enabled = prefs[enabledKey] ?: true,
             apiKey = prefs[apiKeyKey] ?: "",
             subscriberPin = prefs[subscriberPinKey] ?: "",
             validationStatus = parseValidationStatus(statusName),
@@ -50,7 +50,7 @@ class TvdbSettingsDataStore @Inject constructor(
     }
 
     suspend fun setEnabled(enabled: Boolean) {
-        store().edit { prefs -> prefs[enabledKey] = enabled }
+        store().edit { prefs -> prefs[enabledKey] = true }
     }
 
     suspend fun setCredentials(apiKey: String, subscriberPin: String) {
@@ -59,7 +59,7 @@ class TvdbSettingsDataStore @Inject constructor(
         val current = settings.first()
         val credentialsChanged = current.apiKey != trimmedApiKey || current.subscriberPin != trimmedPin
         val nextStatus = if (trimmedApiKey.isBlank()) {
-            TvdbValidationStatus.NOT_CONFIGURED
+            TvdbValidationStatus.VALID
         } else {
             current.validationStatus
         }
@@ -111,10 +111,10 @@ class TvdbSettingsDataStore @Inject constructor(
         store().edit { prefs ->
             prefs.remove(apiKeyKey)
             prefs.remove(subscriberPinKey)
-            prefs[validationStatusKey] = TvdbValidationStatus.NOT_CONFIGURED.name
+            prefs[validationStatusKey] = TvdbValidationStatus.VALID.name
             prefs.remove(lastFailureKey)
             prefs.remove(lastValidatedAtEpochMsKey)
-            prefs[enabledKey] = false
+            prefs[enabledKey] = true
         }
         tokenStore.clear()
     }
@@ -122,6 +122,7 @@ class TvdbSettingsDataStore @Inject constructor(
     private fun parseValidationStatus(statusName: String?): TvdbValidationStatus {
         return statusName
             ?.let { runCatching { TvdbValidationStatus.valueOf(it) }.getOrNull() }
-            ?: TvdbValidationStatus.NOT_CONFIGURED
+            ?.takeUnless { it == TvdbValidationStatus.NOT_CONFIGURED }
+            ?: TvdbValidationStatus.VALID
     }
 }

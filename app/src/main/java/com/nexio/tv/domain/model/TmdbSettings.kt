@@ -1,7 +1,7 @@
 package com.nexio.tv.domain.model
 
 data class TmdbSettings(
-    val enabled: Boolean = false,
+    val enabled: Boolean = true,
     val apiKey: String = "",
     // Group: Artwork (logo, backdrop)
     val useArtwork: Boolean = true,
@@ -25,5 +25,5 @@ data class TmdbSettings(
     val useCollections: Boolean = true
 ) {
     val isActive: Boolean
-        get() = enabled && apiKey.isNotBlank()
+        get() = enabled
 }
