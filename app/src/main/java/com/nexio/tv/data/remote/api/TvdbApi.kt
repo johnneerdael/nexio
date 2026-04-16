@@ -56,6 +56,25 @@ interface TvdbApi {
         @Query("airDate") airDate: String? = null
     ): Response<TvdbSeriesEpisodesResponse>
 
+    @GET("series/{id}/translations/{language}")
+    suspend fun getSeriesTranslation(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: Int,
+        @Path("language") language: String
+    ): Response<TvdbTranslationResponse>
+
+    @GET("series/{id}/episodes/{seasonType}/{language}")
+    suspend fun getSeriesEpisodesTranslated(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: Int,
+        @Path("seasonType") seasonType: String = "default",
+        @Path("language") language: String,
+        @Query("page") page: Int = 0,
+        @Query("season") season: Int? = null,
+        @Query("episodeNumber") episodeNumber: Int? = null,
+        @Query("airDate") airDate: String? = null
+    ): Response<TvdbSeriesEpisodesResponse>
+
     @GET("updates")
     suspend fun getUpdates(
         @Header("Authorization") authorization: String,
@@ -318,6 +337,23 @@ data class TvdbStatusRecord(
 data class TvdbTranslations(
     @Json(name = "nameTranslations") val nameTranslations: List<String>? = emptyList(),
     @Json(name = "overviewTranslations") val overviewTranslations: List<String>? = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbTranslationResponse(
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "data") val data: TvdbTranslationRecord? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TvdbTranslationRecord(
+    @Json(name = "aliases") val aliases: List<String>? = emptyList(),
+    @Json(name = "isAlias") val isAlias: Boolean? = null,
+    @Json(name = "isPrimary") val isPrimary: Boolean? = null,
+    @Json(name = "language") val language: String? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "overview") val overview: String? = null,
+    @Json(name = "tagline") val tagline: String? = null
 )
 
 @JsonClass(generateAdapter = true)
