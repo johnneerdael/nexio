@@ -57,15 +57,26 @@ internal fun ProfilePinOverlay(
 
     // Local PIN digit accumulation (up to 4 chars)
     var pin by remember { mutableStateOf("") }
+    var submittedPin by remember { mutableStateOf<String?>(null) }
 
     // Shake animation for wrong PIN
     val shakeOffset = remember { Animatable(0f) }
 
-    // Auto-submit when 4th digit is entered
-    LaunchedEffect(pin, isVerifying) {
-        if (pin.length == 4 && !isVerifying) {
-            onPinSubmit(pin)
+    fun submitPinIfReady() {
+        if (pin.length != 4) return
+        if (isVerifying || retryAfterSeconds > 0 || isError) return
+        if (submittedPin == pin) return
+
+        submittedPin = pin
+        onPinSubmit(pin)
+    }
+
+    // Auto-submit when 4th digit is entered.
+    LaunchedEffect(pin, isVerifying, isError, retryAfterSeconds) {
+        if (pin.length < 4) {
+            submittedPin = null
         }
+        submitPinIfReady()
     }
 
     // Shake animation + pin reset on error
@@ -77,6 +88,7 @@ internal fun ProfilePinOverlay(
             }
             delay(600)
             pin = ""
+            submittedPin = null
             onErrorConsumed()
         }
     }
@@ -139,13 +151,21 @@ internal fun ProfilePinOverlay(
             ProfilePinNumpad(
                 enabled = numpadEnabled,
                 onDigit = { digit ->
-                    if (pin.length < 4) pin += digit
+                    if (pin.length < 4) {
+                        pin += digit
+                        if (pin.length < 4) {
+                            submittedPin = null
+                        }
+                    }
                 },
                 onClear = {
-                    if (pin.isNotEmpty()) pin = pin.dropLast(1)
+                    if (pin.isNotEmpty()) {
+                        pin = pin.dropLast(1)
+                        submittedPin = null
+                    }
                 },
                 onConfirm = {
-                    if (pin.length == 4) onPinSubmit(pin)
+                    submitPinIfReady()
                 }
             )
         }
