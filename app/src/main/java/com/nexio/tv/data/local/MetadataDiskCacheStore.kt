@@ -51,6 +51,10 @@ class MetadataDiskCacheStore @Inject constructor(
         private const val TVDB_CACHE_SCHEMA_VERSION = 2
         private const val TVDB_EPISODE_CACHE_SCHEMA_VERSION = 1
         private const val TMDB_VIDEO_CACHE_SCHEMA_VERSION = 2
+        private val TMDB_ENRICHMENT_CACHE_TTL: Duration = Duration.ofDays(7)
+        private val TVDB_ENRICHMENT_CACHE_TTL: Duration = Duration.ofDays(7)
+        private val TVDB_EPISODE_CACHE_TTL: Duration = Duration.ofHours(24)
+        private val TVDB_REFERENCE_CACHE_TTL: Duration = Duration.ofDays(30)
         private val TMDB_VIDEO_CACHE_TTL: Duration = Duration.ofHours(12)
     }
 
@@ -166,6 +170,8 @@ class MetadataDiskCacheStore @Inject constructor(
             } ?: return null
             val schemaVersion = root.get("tmdbSchemaVersion")?.asInt ?: 0
             if (schemaVersion != TMDB_CACHE_SCHEMA_VERSION) return null
+            val updatedAtMs = root.get("updatedAtMs")?.asLong ?: return null
+            if (isCacheEntryExpired(updatedAtMs, TMDB_ENRICHMENT_CACHE_TTL)) return null
             decodeTmdbEnrichmentSafely(root)
         }.onFailure { error ->
             Log.w(TAG, "Failed to read TMDB enrichment disk cache entry", error)
@@ -212,6 +218,8 @@ class MetadataDiskCacheStore @Inject constructor(
             } ?: return null
             val schemaVersion = root.get("tvdbSchemaVersion")?.asInt ?: 0
             if (schemaVersion != TVDB_CACHE_SCHEMA_VERSION) return null
+            val updatedAtMs = root.get("updatedAtMs")?.asLong ?: return null
+            if (isCacheEntryExpired(updatedAtMs, TVDB_ENRICHMENT_CACHE_TTL)) return null
             decodeTvdbEnrichmentSafely(root)
         }.onFailure { error ->
             Log.w(TAG, "Failed to read TVDB enrichment disk cache entry", error)
@@ -264,6 +272,8 @@ class MetadataDiskCacheStore @Inject constructor(
             } ?: return null
             val schemaVersion = root.get("tvdbEpisodeSchemaVersion")?.asInt ?: 0
             if (schemaVersion != TVDB_EPISODE_CACHE_SCHEMA_VERSION) return null
+            val updatedAtMs = root.get("updatedAtMs")?.asLong ?: return null
+            if (isCacheEntryExpired(updatedAtMs, TVDB_EPISODE_CACHE_TTL)) return null
             decodeTvdbSeasonEpisodesSafely(root)
         }.onFailure { error ->
             Log.w(TAG, "Failed to read TVDB episode disk cache entry", error)
@@ -458,6 +468,8 @@ class MetadataDiskCacheStore @Inject constructor(
             } ?: return null
             val schemaVersion = root.get("tvdbReferenceSchemaVersion")?.asInt ?: 0
             if (schemaVersion != TVDB_REFERENCE_SCHEMA_VERSION) return null
+            val updatedAtMs = root.get("updatedAtMs")?.asLong ?: return null
+            if (isCacheEntryExpired(updatedAtMs, TVDB_REFERENCE_CACHE_TTL)) return null
             val valuesElement = root.get("values") ?: return null
             val listType = TypeToken.getParameterized(List::class.java, type).type
             val values: List<T> = gson.fromJson(valuesElement, listType) ?: return null
@@ -700,8 +712,12 @@ class MetadataDiskCacheStore @Inject constructor(
     }
 
     private fun isTmdbVideoCacheEntryExpired(updatedAtMs: Long): Boolean {
+        return isCacheEntryExpired(updatedAtMs, TMDB_VIDEO_CACHE_TTL)
+    }
+
+    private fun isCacheEntryExpired(updatedAtMs: Long, ttl: Duration): Boolean {
         val updatedAt = Instant.ofEpochMilli(updatedAtMs)
-        return Duration.between(updatedAt, Instant.now()) > TMDB_VIDEO_CACHE_TTL
+        return Duration.between(updatedAt, Instant.now()) > ttl
     }
 
     private fun readCastMembers(obj: JsonObject, key: String): List<MetaCastMember> {

@@ -6,8 +6,10 @@ import com.nexio.tv.data.remote.api.TvdbApi
 import com.nexio.tv.data.remote.api.TvdbSeriesExtendedRecord
 import com.nexio.tv.data.trailer.TrailerPlaybackSource
 import com.nexio.tv.data.trailer.TrailerResolutionResult
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -31,6 +33,8 @@ class TvdbTrailerResolver @Inject constructor(
     private val authService: TvdbAuthService,
     private val tvdbTrailerMapper: TvdbTrailerMapper
 ) {
+    private val seriesRecordInFlight = ConcurrentHashMap<Int, CompletableDeferred<TvdbSeriesExtendedRecord?>>()
+
     suspend fun resolveTitleTrailer(
         contentId: String?,
         type: String?,
@@ -125,20 +129,35 @@ class TvdbTrailerResolver @Inject constructor(
     }
 
     private suspend fun fetchSeriesRecord(identity: TvdbSeriesIdentity): TvdbSeriesExtendedRecord? {
-        val authorization = authService.bearerToken() ?: return null
-        return runCatching {
-            tvdbApi.getSeriesExtended(
-                authorization = authorization,
-                id = identity.tvdbId,
-                meta = null,
-                short = false
-            )
-        }.onFailure { error ->
-            Log.w(TAG, "TVDB series trailer request failed reason=${error.javaClass.simpleName}")
-        }.getOrNull()
-            ?.takeIf { it.isSuccessful }
-            ?.body()
-            ?.data
+        seriesRecordInFlight[identity.tvdbId]?.let { return it.await() }
+        val deferred = CompletableDeferred<TvdbSeriesExtendedRecord?>()
+        val existingDeferred = seriesRecordInFlight.putIfAbsent(identity.tvdbId, deferred)
+        if (existingDeferred != null) {
+            return existingDeferred.await()
+        }
+
+        return try {
+            val authorization = authService.bearerToken() ?: run {
+                deferred.complete(null)
+                return null
+            }
+            runCatching {
+                tvdbApi.getSeriesExtended(
+                    authorization = authorization,
+                    id = identity.tvdbId,
+                    meta = null,
+                    short = false
+                )
+            }.onFailure { error ->
+                Log.w(TAG, "TVDB series trailer request failed reason=${error.javaClass.simpleName}")
+            }.getOrNull()
+                ?.takeIf { it.isSuccessful }
+                ?.body()
+                ?.data
+                .also { deferred.complete(it) }
+        } finally {
+            seriesRecordInFlight.remove(identity.tvdbId, deferred)
+        }
     }
 
     private suspend fun resolveIdentity(contentId: String): TvdbSeriesIdentity? {
