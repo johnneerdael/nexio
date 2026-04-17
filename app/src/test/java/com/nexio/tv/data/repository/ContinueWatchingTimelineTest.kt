@@ -54,9 +54,9 @@ class ContinueWatchingTimelineTest {
     @Test
     fun `paused episode suppresses same show next up from main feed`() {
         val selection = splitNextUpCandidatesForContinueWatching(
-            resumes = listOf(resumeRef("show-a", 1_000L, suppressNextUp = true)),
+            resumes = listOf(resumeRef("show-a", 90_000L, suppressNextUp = true)),
             nextUpItems = listOf(
-                nextUp(contentId = "show-a", season = 2, episode = 4, activityAtMs = 1_500L, firstAiredMs = 900L),
+                nextUp(contentId = "show-a", season = 2, episode = 4, activityAtMs = 100_000L, firstAiredMs = 900L),
                 nextUp(contentId = "show-b", activityAtMs = 800L, firstAiredMs = 700L)
             ),
             nextUpRef = ::nextUpRef,
@@ -65,6 +65,39 @@ class ContinueWatchingTimelineTest {
 
         assertEquals(listOf("show-b"), selection.mainFeedItems.map { it.contentId })
         assertEquals(listOf("show-a", "show-b"), selection.syntheticRailItems.map { it.contentId })
+    }
+
+    @Test
+    fun `provider next up beats stale same-show local resume`() {
+        val selection = splitNextUpCandidatesForContinueWatching(
+            resumes = listOf(resumeRef("show-a", 1_000L, suppressNextUp = true)),
+            nextUpItems = listOf(
+                nextUp(contentId = "show-a", season = 5, episode = 3, activityAtMs = 200_000L, firstAiredMs = 900L)
+            ),
+            nextUpRef = ::nextUpRef,
+            nowMs = 300_000L
+        )
+
+        assertEquals(listOf("show-a"), selection.mainFeedItems.map { it.contentId })
+    }
+
+    @Test
+    fun `mixed timeline keeps provider next up instead of stale same-show resume`() {
+        val timeline = buildMixedContinueWatchingTimeline(
+            resumeItems = listOf(
+                resume(contentId = "show-a", season = 1, episode = 2, lastWatched = 1_000L)
+            ),
+            nextUpItems = listOf(
+                nextUp(contentId = "show-a", season = 5, episode = 3, activityAtMs = 200_000L, firstAiredMs = 900L)
+            ),
+            resumeRef = ::resumeRef,
+            nextUpRef = ::nextUpRef
+        )
+
+        assertEquals(1, timeline.size)
+        val first = timeline.single() as ContinueWatchingTimelineRow.NextUp
+        assertEquals(5, first.value.season)
+        assertEquals(3, first.value.episode)
     }
 
     @Test
