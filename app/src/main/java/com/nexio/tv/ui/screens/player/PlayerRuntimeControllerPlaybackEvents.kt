@@ -506,10 +506,8 @@ internal fun PlayerRuntimeController.schedulePauseOverlay() {
     _uiState.update { it.copy(showPauseOverlay = false) }
     pauseOverlayJob = scope.launch {
         delay(pauseOverlayDelayMs)
-        val s = _uiState.value
-        val anyPanelOpen = s.showSubtitleDialog || s.showSpeedDialog || s.showMoreDialog ||
-            s.showEpisodesPanel || s.showSourcesPanel || s.showAudioDialog
-        if (!s.isPlaying && s.pauseOverlayEnabled && s.error == null && !anyPanelOpen) {
+        val state = _uiState.value
+        if (shouldShowPauseOverlayAfterDelay(state)) {
             _uiState.update { it.copy(showPauseOverlay = true, showControls = false) }
         }
     }
