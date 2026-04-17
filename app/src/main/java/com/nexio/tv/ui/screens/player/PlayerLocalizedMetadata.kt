@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.player
 
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
+import com.nexio.tv.domain.model.Meta
 
 internal fun PlayerUiState.withLocalizedPlaybackMetadata(
     enrichment: TvMetadataEnrichment?,
@@ -25,6 +26,16 @@ internal fun PlayerUiState.withLocalizedPlaybackMetadata(
         backdrop = localizedBackdrop ?: backdrop,
         logo = localizedLogo ?: logo,
         castMembers = localizedCast
+    )
+}
+
+internal fun PlayerUiState.withAddonMetaArtwork(meta: Meta): PlayerUiState {
+    val addonBackdrop = meta.background.nonBlank()
+    val addonLogo = meta.logo.nonBlank()
+
+    return copy(
+        backdrop = backdrop.nonBlank() ?: addonBackdrop,
+        logo = logo.nonBlank() ?: addonLogo
     )
 }
 

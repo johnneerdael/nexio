@@ -2,7 +2,10 @@ package com.nexio.tv.ui.screens.player
 
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
+import com.nexio.tv.domain.model.ContentType
+import com.nexio.tv.domain.model.Meta
 import com.nexio.tv.domain.model.MetaCastMember
+import com.nexio.tv.domain.model.PosterShape
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -81,4 +84,69 @@ class PlayerLocalizedMetadataTest {
         assertEquals("english-logo", localized.logo)
         assertEquals(addonCast, localized.castMembers)
     }
+
+    @Test
+    fun `addon metadata fills blank playback artwork from existing meta fetch`() {
+        val state = PlayerUiState(
+            title = "Playback Title",
+            backdrop = null,
+            logo = ""
+        )
+
+        val updated = state.withAddonMetaArtwork(
+            meta = testMeta(
+                background = "detail-backdrop",
+                logo = "detail-logo"
+            )
+        )
+
+        assertEquals("detail-backdrop", updated.backdrop)
+        assertEquals("detail-logo", updated.logo)
+    }
+
+    @Test
+    fun `addon metadata does not replace existing playback artwork`() {
+        val state = PlayerUiState(
+            title = "Playback Title",
+            backdrop = "route-backdrop",
+            logo = "route-logo"
+        )
+
+        val updated = state.withAddonMetaArtwork(
+            meta = testMeta(
+                background = "detail-backdrop",
+                logo = "detail-logo"
+            )
+        )
+
+        assertEquals("route-backdrop", updated.backdrop)
+        assertEquals("route-logo", updated.logo)
+    }
+}
+
+private fun testMeta(
+    background: String?,
+    logo: String?
+): Meta {
+    return Meta(
+        id = "movie-1",
+        type = ContentType.MOVIE,
+        name = "Playback Title",
+        poster = null,
+        posterShape = PosterShape.POSTER,
+        background = background,
+        logo = logo,
+        description = "Description",
+        releaseInfo = "2024",
+        imdbRating = null,
+        genres = emptyList(),
+        runtime = null,
+        director = emptyList(),
+        cast = emptyList(),
+        videos = emptyList(),
+        country = null,
+        awards = null,
+        language = null,
+        links = emptyList()
+    )
 }
