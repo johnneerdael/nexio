@@ -99,6 +99,7 @@ class PlayerSettingsDataStoreSpoolModeTest {
     fun `enabling vod cache turns disk spool off`() = runTest {
         val dataStore = playerSettingsDataStoreForTest()
 
+        dataStore.playerSettings.first()
         dataStore.setProgressivePlaybackDiskMode(ProgressivePlaybackDiskMode.SPOOL)
         dataStore.setVodCacheSizeMode(VodCacheSizeMode.ON)
 

@@ -305,6 +305,18 @@ private val migrationDisableBuggyPlaybackPathDoneKey =
     booleanPreferencesKey("migration_disable_buggy_playback_path_done")
 private val migrationAutoplayManualDefaultsDoneKey =
     booleanPreferencesKey("migration_autoplay_manual_defaults_done")
+private val migrationSafePlaybackDefaultsDoneKey =
+    booleanPreferencesKey("migration_safe_playback_defaults_done")
+private val experimentalDv7ToDv81EnabledMigrationKey =
+    booleanPreferencesKey("experimental_dv7_to_dv81_enabled")
+private val experimentalDv7HevcBaseLayerEnabledMigrationKey =
+    booleanPreferencesKey("experimental_dv7_hevc_base_layer_enabled")
+private val experimentalDv7ToDv81PreserveMappingEnabledMigrationKey =
+    booleanPreferencesKey("experimental_dv7_to_dv81_preserve_mapping_enabled")
+private val vodCacheSizeModeMigrationKey =
+    stringPreferencesKey("vod_cache_size_mode")
+private val useParallelConnectionsMigrationKey =
+    booleanPreferencesKey("use_parallel_connections")
 private val preferredAudioLanguageMigrationKey =
     stringPreferencesKey("preferred_audio_language")
 private val streamAutoPlayModeMigrationKey = stringPreferencesKey("stream_auto_play_mode")
@@ -358,6 +370,16 @@ internal fun applyPlayerSettingsMigrations(prefs: MutablePreferences) {
         prefs[autoplayBandwidthModeMigrationKey] = AutoplayBandwidthMode.MANUAL.name
         prefs[manualBitrateLimitMbpsMigrationKey] = 40.0
         prefs[migrationAutoplayManualDefaultsDoneKey] = true
+    }
+
+    val safePlaybackDefaultsDone = prefs[migrationSafePlaybackDefaultsDoneKey] ?: false
+    if (!safePlaybackDefaultsDone) {
+        prefs[experimentalDv7ToDv81EnabledMigrationKey] = false
+        prefs[experimentalDv7HevcBaseLayerEnabledMigrationKey] = true
+        prefs[experimentalDv7ToDv81PreserveMappingEnabledMigrationKey] = false
+        prefs[vodCacheSizeModeMigrationKey] = VodCacheSizeMode.OFF.name
+        prefs[useParallelConnectionsMigrationKey] = false
+        prefs[migrationSafePlaybackDefaultsDoneKey] = true
     }
 }
 
