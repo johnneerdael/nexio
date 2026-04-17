@@ -50,8 +50,13 @@ internal class SettingsViewModel @Inject constructor(
         if (_syncStatus.value == SyncStatus.SYNCING) return
         viewModelScope.launch {
             _syncStatus.value = SyncStatus.SYNCING
+            val pullResult = profileSyncService.pullFromRemote()
             val activeId = profileManager.activeProfileId.value
-            val metaResult = profileSyncService.pushToRemote()
+            val metaResult = if (pullResult.isSuccess) {
+                profileSyncService.pushToRemote()
+            } else {
+                pullResult.map { Unit }
+            }
             val blobResult = profileSettingsSyncService.pushBlobForProfile(activeId)
             _syncStatus.value = if (metaResult.isSuccess && blobResult.isSuccess) {
                 SyncStatus.SUCCESS
