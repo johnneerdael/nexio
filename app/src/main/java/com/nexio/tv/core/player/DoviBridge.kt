@@ -210,6 +210,15 @@ object DoviBridge {
         if (isNativeEnabledInBuild && nativeLoaded) {
             runCatching { nativeSetVerboseLoggingEnabled(enabled) }
                 .onFailure { Log.w(TAG, "Failed to set native verbose logging: ${it.message}") }
+            val nativeEnabled = runCatching { nativeIsVerboseLoggingEnabled() }
+                .onFailure { Log.w(TAG, "Failed to verify native verbose logging: ${it.message}") }
+                .getOrNull()
+            if (nativeEnabled != null && nativeEnabled != enabled) {
+                Log.w(
+                    TAG,
+                    "Native verbose logging mismatch kotlin=$enabled native=$nativeEnabled"
+                )
+            }
         }
     }
 
@@ -253,6 +262,8 @@ object DoviBridge {
         }
         return try {
             System.loadLibrary(LIB_NAME)
+            runCatching { nativeSetVerboseLoggingEnabled(verboseLoggingEnabled) }
+                .onFailure { Log.w(TAG, "Failed to sync native verbose logging: ${it.message}") }
             Log.i(TAG, "Loaded native library: $LIB_NAME")
             true
         } catch (t: Throwable) {
@@ -273,6 +284,9 @@ object DoviBridge {
 
     @JvmStatic
     private external fun nativeSetVerboseLoggingEnabled(enabled: Boolean)
+
+    @JvmStatic
+    private external fun nativeIsVerboseLoggingEnabled(): Boolean
 
     @JvmStatic
     private external fun nativeConvertDv7RpuToDv81(payload: ByteArray, mode: Int): ByteArray?

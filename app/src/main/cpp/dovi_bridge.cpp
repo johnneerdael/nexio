@@ -113,6 +113,14 @@ Java_com_nexio_tv_core_player_DoviBridge_nativeSetVerboseLoggingEnabled(
     g_verbose_logging_enabled.store(enabled == JNI_TRUE, std::memory_order_relaxed);
 }
 
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_nexio_tv_core_player_DoviBridge_nativeIsVerboseLoggingEnabled(
+    JNIEnv* /* env */,
+    jclass /* clazz */
+) {
+    return g_verbose_logging_enabled.load(std::memory_order_relaxed) ? JNI_TRUE : JNI_FALSE;
+}
+
 extern "C" JNIEXPORT jbyteArray JNICALL
 Java_com_nexio_tv_core_player_DoviBridge_nativeConvertDv7RpuToDv81(
     JNIEnv* env,
