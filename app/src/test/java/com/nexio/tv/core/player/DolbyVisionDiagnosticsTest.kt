@@ -34,7 +34,11 @@ class DolbyVisionDiagnosticsTest {
         assertFalse(hook.enabled)
         assertFalse(tap.enabled)
         assertTrue(bridge.inputBytes == 0L)
-        assertTrue(hook.nalCopyBytes == 0L)
+        assertTrue(hook.rewriteCopyBytes == 0L)
+        assertTrue(hook.sourceCopyBytes == 0L)
+        assertTrue(hook.rpuInputBytes == 0L)
+        assertTrue(hook.rpuOutputBytes == 0L)
+        assertTrue(hook.droppedBytes == 0L)
         assertTrue(tap.copiedBytes == 0L)
     }
 }

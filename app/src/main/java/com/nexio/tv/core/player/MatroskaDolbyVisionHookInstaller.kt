@@ -36,7 +36,11 @@ object MatroskaDolbyVisionHookInstaller {
     private val rewriteSampleCalls = AtomicLong(0L)
     private val rewriteInputBytes = AtomicLong(0L)
     private val rewriteOutputBytes = AtomicLong(0L)
-    private val nalCopyBytes = AtomicLong(0L)
+    private val rewriteCopyBytes = AtomicLong(0L)
+    private val sourceCopyBytes = AtomicLong(0L)
+    private val rpuInputBytes = AtomicLong(0L)
+    private val rpuOutputBytes = AtomicLong(0L)
+    private val droppedBytes = AtomicLong(0L)
     private val appendedSampleBytes = AtomicLong(0L)
     private val rpuNalTransformCalls = AtomicLong(0L)
 
@@ -45,7 +49,11 @@ object MatroskaDolbyVisionHookInstaller {
         val rewriteSampleCalls: Long,
         val rewriteInputBytes: Long,
         val rewriteOutputBytes: Long,
-        val nalCopyBytes: Long,
+        val rewriteCopyBytes: Long,
+        val sourceCopyBytes: Long,
+        val rpuInputBytes: Long,
+        val rpuOutputBytes: Long,
+        val droppedBytes: Long,
         val appendedSampleBytes: Long,
         val rpuNalTransformCalls: Long
     )
@@ -57,7 +65,11 @@ object MatroskaDolbyVisionHookInstaller {
         rewriteSampleCalls.set(0L)
         rewriteInputBytes.set(0L)
         rewriteOutputBytes.set(0L)
-        nalCopyBytes.set(0L)
+        rewriteCopyBytes.set(0L)
+        sourceCopyBytes.set(0L)
+        rpuInputBytes.set(0L)
+        rpuOutputBytes.set(0L)
+        droppedBytes.set(0L)
         appendedSampleBytes.set(0L)
         rpuNalTransformCalls.set(0L)
     }
@@ -75,7 +87,11 @@ object MatroskaDolbyVisionHookInstaller {
             rewriteSampleCalls = rewriteSampleCalls.get(),
             rewriteInputBytes = rewriteInputBytes.get(),
             rewriteOutputBytes = rewriteOutputBytes.get(),
-            nalCopyBytes = nalCopyBytes.get(),
+            rewriteCopyBytes = rewriteCopyBytes.get(),
+            sourceCopyBytes = sourceCopyBytes.get(),
+            rpuInputBytes = rpuInputBytes.get(),
+            rpuOutputBytes = rpuOutputBytes.get(),
+            droppedBytes = droppedBytes.get(),
             appendedSampleBytes = appendedSampleBytes.get(),
             rpuNalTransformCalls = rpuNalTransformCalls.get()
         )
@@ -485,11 +501,13 @@ object MatroskaDolbyVisionHookInstaller {
             rewriteSampleCalls.addAndGet(metrics.sampleCalls)
             rewriteInputBytes.addAndGet(metrics.inputBytes)
             rewriteOutputBytes.addAndGet(metrics.outputBytes)
-            // Count the actual byte-copy churn that remains after delegation:
-            // source-copy bytes for base NAL passthrough plus the RPU input/output copies.
-            nalCopyBytes.addAndGet(
+            rewriteCopyBytes.addAndGet(
                 metrics.sourceCopyBytes + metrics.rpuInputBytes + metrics.rpuOutputBytes
             )
+            sourceCopyBytes.addAndGet(metrics.sourceCopyBytes)
+            rpuInputBytes.addAndGet(metrics.rpuInputBytes)
+            rpuOutputBytes.addAndGet(metrics.rpuOutputBytes)
+            droppedBytes.addAndGet(metrics.droppedBytes)
         }
         return rewritten
     }
@@ -531,7 +549,7 @@ object MatroskaDolbyVisionHookInstaller {
         if (getNuhLayerId(nalPayload) == 0) return nalPayload
         val out = nalPayload.copyOf()
         if (diagnosticsEnabled) {
-            nalCopyBytes.addAndGet(out.size.toLong())
+            rewriteCopyBytes.addAndGet(out.size.toLong())
         }
         // Keep nal_unit_type and temporal_id_plus1, force nuh_layer_id to 0.
         out[0] = (out[0].toInt() and 0xFE).toByte()
