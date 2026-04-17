@@ -1,5 +1,6 @@
 #include <jni.h>
 #include <android/log.h>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -96,6 +97,8 @@ static inline uint8_t map_conversion_mode(jint mode) {
 }
 #endif
 
+static std::atomic<bool> g_verbose_logging_enabled(false);
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_nexio_tv_core_player_DoviBridge_nativeGetBridgeVersion(JNIEnv* env, jclass /* clazz */) {
 #if DOVI_REAL_LINKED
@@ -117,6 +120,15 @@ Java_com_nexio_tv_core_player_DoviBridge_nativeIsConversionPathReady(
     LOGI("native conversion path not linked (stub mode)");
     return JNI_FALSE;
 #endif
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_nexio_tv_core_player_DoviBridge_nativeSetVerboseLoggingEnabled(
+    JNIEnv* /* env */,
+    jclass /* clazz */,
+    jboolean enabled
+) {
+    g_verbose_logging_enabled.store(enabled == JNI_TRUE, std::memory_order_relaxed);
 }
 
 extern "C" JNIEXPORT jbyteArray JNICALL
@@ -189,15 +201,19 @@ Java_com_nexio_tv_core_player_DoviBridge_nativeConvertDv7RpuToDv81(
     dovi_data_free(out_data);
     dovi_rpu_free(rpu);
 
-    LOGI(
-        "nativeConvertDv7RpuToDv81 converted %d bytes -> %d bytes (mode=%u)",
-        static_cast<int>(len),
-        static_cast<int>(env->GetArrayLength(out)),
-        static_cast<unsigned int>(conversion_mode)
-    );
+    if (g_verbose_logging_enabled.load(std::memory_order_relaxed)) {
+        LOGI(
+            "nativeConvertDv7RpuToDv81 converted %d bytes -> %d bytes (mode=%u)",
+            static_cast<int>(len),
+            static_cast<int>(env->GetArrayLength(out)),
+            static_cast<unsigned int>(conversion_mode)
+        );
+    }
     return out;
 #else
-    LOGI("nativeConvertDv7RpuToDv81 called in stub mode; returning null");
+    if (g_verbose_logging_enabled.load(std::memory_order_relaxed)) {
+        LOGI("nativeConvertDv7RpuToDv81 called in stub mode; returning null");
+    }
     return nullptr;
 #endif
 }
