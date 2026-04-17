@@ -223,6 +223,50 @@ class DiskSpoolWriterTest {
     }
 
     @Test
+    fun `downloadSequentially returns immediately after top-of-loop priority rebase`() {
+        val requests = CopyOnWriteArrayList<RecordedRequest>()
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                requests += request
+                return MockResponse()
+                    .setResponseCode(206)
+                    .setHeader("Accept-Ranges", "bytes")
+                    .setHeader("Content-Range", "bytes 0-0/524288")
+                    .setHeader("Content-Length", 1)
+                    .setBody(Buffer().writeByte(0x2A))
+            }
+        }
+        server.start()
+
+        try {
+            val writer = DiskSpoolWriter(
+                OkHttpClient(),
+                chunkBytes = 32 * 1024,
+                ioBufferBytes = 8 * 1024
+            )
+            val bridge = PriorityFirstSessionBridge(
+                frontierBytes = 64 * 1024L,
+                priorityBytes = 256 * 1024L
+            )
+
+            writer.downloadSequentially(
+                url = server.url("/movie.bin").toString(),
+                bridge = bridge,
+                targetFrontierBytes = 128 * 1024L,
+                contentLength = 512 * 1024L,
+                ioBuffer = ByteArray(8 * 1024)
+            )
+
+            assertEquals(listOf(256 * 1024L), bridge.rebases)
+            assertTrue(bridge.writeRanges.isEmpty())
+            assertTrue(requests.isEmpty())
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun `writer allocates one io buffer for multiple ranges in one run`() {
         val content = ByteArray(96 * 1024) { (it % 251).toByte() }
         val server = MockWebServer()
@@ -904,6 +948,37 @@ class DiskSpoolWriterTest {
             if (writeCount == 1) {
                 priority = priorityToInject
             }
+        }
+    }
+
+    private class PriorityFirstSessionBridge(
+        frontierBytes: Long,
+        private val priorityBytes: Long
+    ) : DiskSpoolWriter.SessionBridge {
+        val rebases = mutableListOf<Long>()
+        val writeRanges = mutableListOf<Long>()
+        private var frontier = frontierBytes
+        private var priorityPending = true
+
+        override fun isClosed(): Boolean = false
+
+        override fun contiguousFrontierBytes(): Long = frontier
+
+        override fun consumePriorityPosition(): Long = if (priorityPending) {
+            priorityPending = false
+            priorityBytes
+        } else {
+            -1L
+        }
+
+        override fun rebaseTo(position: Long) {
+            rebases += position
+            frontier = position
+        }
+
+        override fun writeRange(start: Long, bytes: ByteArray, length: Int) {
+            writeRanges += start
+            frontier = maxOf(frontier, start + length.toLong())
         }
     }
 }
