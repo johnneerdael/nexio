@@ -754,4 +754,17 @@ class ProfileSettingsScopeContractTest {
         assertTrue(seasonAdapterSource.contains("profileId: Int = 1"))
         assertTrue(watchProgressSource.contains("traktAuthService.currentTraktProfileId()"))
     }
+
+    @Test
+    fun `player safe playback defaults are profile scoped settings`() {
+        val source = File("app/src/main/java/com/nexio/tv/data/local/PlayerSettingsDataStore.kt").readText()
+
+        assertTrue(source.contains("private const val FEATURE = \"player_settings\""))
+        assertTrue(source.contains("factory.get(profileId, FEATURE)"))
+        assertTrue(source.contains("migration_safe_playback_defaults_done"))
+        assertTrue(source.contains("experimental_dv7_hevc_base_layer_enabled"))
+        assertTrue(source.contains("experimental_dv7_to_dv81_enabled"))
+        assertTrue(source.contains("vod_cache_size_mode"))
+        assertTrue(source.contains("use_parallel_connections"))
+    }
 }
