@@ -98,53 +98,6 @@ class DebridBenchmarkServiceTest {
     }
 
     @Test
-    fun `service persists autoplay max bitrate from completed benchmark safe budget`() = runTest {
-        val summary = DebridBenchmarkSummary(
-            startupTimeMs = 4_000L,
-            sustainedThroughputMbps = 123.5,
-            transferredBytes = 600.mb,
-            elapsedMs = 130.seconds
-        )
-        val completedResult = DebridBenchmarkResult(
-            provider = DebridBenchmarkProvider.REAL_DEBRID,
-            measuredAtMs = 42_000L,
-            summary = summary,
-            terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
-            optimized = DebridBenchmarkTransportProfile(
-                startup = DebridBenchmarkStartupMetrics(),
-                sustained = DebridBenchmarkSustainedMetrics(actionable = true),
-                seek = DebridBenchmarkSeekMetrics(),
-                decision = DebridBenchmarkTransportDecisionMetrics(
-                    safeSustainedBudgetMbps = 60.0,
-                    actionable = true
-                )
-            )
-        )
-        val service = buildService(
-            runSession = { _, _, _ ->
-                DebridBenchmarkSessionResult(
-                    summary = summary,
-                    terminationReason = DebridBenchmarkTerminationReason.COMPLETED,
-                    result = completedResult
-                )
-            },
-            scope = backgroundScope
-        )
-        val persisted = CompletableDeferred<Unit>()
-
-        coEvery { playerSettingsStore().setAutoplayMaxBitrate(any()) } answers {
-            persisted.complete(Unit)
-        }
-
-        assertTrue(service.start(DebridBenchmarkProvider.REAL_DEBRID))
-        persisted.await()
-
-        coVerify(exactly = 1) {
-            playerSettingsStore().setAutoplayMaxBitrate(54.0)
-        }
-    }
-
-    @Test
     fun `service uploads completed benchmark results independently of settings ui`() = runTest {
         val summary = DebridBenchmarkSummary(
             startupTimeMs = 4_000L,

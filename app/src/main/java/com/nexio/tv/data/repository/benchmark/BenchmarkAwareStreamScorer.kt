@@ -247,7 +247,8 @@ class BenchmarkAwareStreamScorer internal constructor(
         request: ShadowRequestContext,
         streams: List<StreamCardModel>,
         manualBitrateCap: Double,
-        elapsedMs: Long? = null
+        elapsedMs: Long? = null,
+        device: DeviceCapabilitySnapshot? = null
     ): ShadowAutoPlayDecisionEvent {
         val safeManualCap = manualBitrateCap.takeIf { it.isFinite() && it > 0.0 } ?: 20.0
         val winners = mutableListOf<ShadowStreamDecision>()
@@ -270,7 +271,8 @@ class BenchmarkAwareStreamScorer internal constructor(
                 item = item,
                 provider = provider,
                 request = request,
-                manualBitrateCap = safeManualCap
+                manualBitrateCap = safeManualCap,
+                device = device
             ).fold(
                 onSuccess = { winners += it },
                 onFailure = { reasons ->
@@ -415,7 +417,8 @@ class BenchmarkAwareStreamScorer internal constructor(
         item: StreamCardModel,
         provider: DebridBenchmarkProvider,
         request: ShadowRequestContext,
-        manualBitrateCap: Double
+        manualBitrateCap: Double,
+        device: DeviceCapabilitySnapshot?
     ): EitherSuccessOrReject<ShadowStreamDecision> {
         val parsed = item.parsed
         val sizeBytes = item.effectiveSizeBytes()
@@ -438,12 +441,17 @@ class BenchmarkAwareStreamScorer internal constructor(
         if (releaseType in HARD_REJECT_RELEASE_TYPES) {
             return EitherSuccessOrReject.reject(ShadowRejectReason.LOW_QUALITY_RELEASE)
         }
-        var codecTier = resolveVideoCodecTier(parsed.encode, device = null)
+        var codecTier = resolveVideoCodecTier(parsed.encode, device)
         if (codecTier == ShadowVideoCodecTier.OTHER &&
             resolutionTier == ShadowResolutionTier.UHD_2160 &&
             releaseType == ShadowReleaseType.REMUX
         ) {
-            codecTier = ShadowVideoCodecTier.HEVC_HW
+            codecTier = when {
+                device == null -> ShadowVideoCodecTier.HEVC_HW
+                device.videoDecode.hevc?.hardwareAccelerated == true -> ShadowVideoCodecTier.HEVC_HW
+                device.videoDecode.hevc?.softwareOnlyAvailable == true -> ShadowVideoCodecTier.HEVC_SW
+                else -> ShadowVideoCodecTier.OTHER
+            }
         }
         if (codecTier == ShadowVideoCodecTier.UNSUPPORTED) {
             return EitherSuccessOrReject.reject(ShadowRejectReason.UNSUPPORTED_CODEC)
@@ -455,7 +463,7 @@ class BenchmarkAwareStreamScorer internal constructor(
             resolutionTier = resolutionTier,
             releaseType = releaseType,
             codecTier = codecTier,
-            device = null,
+            device = device,
             runtimeKnown = hasRuntime
         )
         val contentScore = contentBreakdown.total()

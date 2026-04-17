@@ -135,8 +135,7 @@ import com.nexio.tv.data.local.AndroidTvRecommendationsDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.LayoutPreferenceDataStore
 import com.nexio.tv.data.local.ThemeDataStore
-import com.nexio.tv.data.repository.benchmark.DebridBenchmarkRuntimeState
-import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
+import com.nexio.tv.data.repository.device.DeviceCapabilityRepository
 import com.nexio.tv.data.repository.IdleScreensaverRepository
 import com.nexio.tv.data.repository.TrackingProgressService
 import com.nexio.tv.data.trailer.TrailerService
@@ -274,7 +273,7 @@ class MainActivity : ComponentActivity() {
     lateinit var playbackIdleGateState: PlaybackIdleGateState
 
     @Inject
-    lateinit var debridBenchmarkService: DebridBenchmarkService
+    lateinit var deviceCapabilityRepository: DeviceCapabilityRepository
 
     @Inject
     lateinit var profileManager: com.nexio.tv.core.profile.ProfileManager
@@ -372,6 +371,9 @@ class MainActivity : ComponentActivity() {
                 append(" savedStateNull=").append(savedInstanceState == null)
             }
         )
+        lifecycleScope.launch(Dispatchers.IO) {
+            deviceCapabilityRepository.ensureCached()
+        }
         lifecycleScope.launch {
             debugSettingsDataStore.startupPerfTelemetryEnabled.collect { enabled ->
                 startupPerfTelemetryEnabled = enabled
@@ -551,7 +553,6 @@ class MainActivity : ComponentActivity() {
                     val idleScreensaverSessionId by idleScreensaverController.sessionId.collectAsState()
                     val idleLastInteractionAtMs by idleScreensaverController.lastInteractionAtMs.collectAsState()
                     val playbackIdleSnapshot by playbackIdleGateState.snapshot.collectAsState()
-                    val debridBenchmarkRuntimeState by debridBenchmarkService.activeState.collectAsState()
                     val idleTrailerCandidates = remember(
                         idleTrailerRepositoryCandidates,
                         idleScreensaverSlides
@@ -564,10 +565,7 @@ class MainActivity : ComponentActivity() {
                     var inAppTrailerPlaybackActive by remember { mutableStateOf(false) }
                     var modernHomeTrailerFullscreenActive by remember { mutableStateOf(false) }
                     var previousInAppTrailerPlaybackActive by remember { mutableStateOf(false) }
-                    var previousBenchmarkActive by remember { mutableStateOf(false) }
                     var idleTrailerSessionStart by remember { mutableStateOf<IdleTrailerScreensaverSessionStart?>(null) }
-                    val benchmarkActive =
-                        debridBenchmarkRuntimeState is DebridBenchmarkRuntimeState.Running
 
                     LaunchedEffect(pendingRecommendation) {
                         val navigation = pendingRecommendation ?: return@LaunchedEffect
@@ -599,14 +597,12 @@ class MainActivity : ComponentActivity() {
                         currentRoute,
                         showStartupSplash,
                         playbackIdleSnapshot,
-                        inAppTrailerPlaybackActive,
-                        benchmarkActive
+                        inAppTrailerPlaybackActive
                     ) {
                         isIdleScreensaverEligibleRoute(
                             currentRoute = currentRoute,
                             playbackIdleSnapshot = playbackIdleSnapshot,
-                            inAppTrailerPlaybackActive = inAppTrailerPlaybackActive,
-                            benchmarkActive = benchmarkActive
+                            inAppTrailerPlaybackActive = inAppTrailerPlaybackActive
                         ) && !showStartupSplash
                     }
 
@@ -696,18 +692,6 @@ class MainActivity : ComponentActivity() {
                         previousInAppTrailerPlaybackActive = inAppTrailerPlaybackActive
                     }
 
-                    LaunchedEffect(benchmarkActive) {
-                        if (
-                            shouldRegisterIdleInteractionForBenchmarkTransition(
-                                previousActive = previousBenchmarkActive,
-                                currentActive = benchmarkActive
-                            )
-                        ) {
-                            idleScreensaverController.registerInteraction()
-                        }
-                        previousBenchmarkActive = benchmarkActive
-                    }
-
                     LaunchedEffect(idleScreensaverEligible, idleScreensaverVisible) {
                         if (!idleScreensaverEligible && idleScreensaverVisible) {
                             logIdleScreensaverDiagnostics(
@@ -733,12 +717,12 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    DisposableEffect(idleScreensaverVisible, benchmarkActive) {
-                        if (idleScreensaverVisible || benchmarkActive) {
+                    DisposableEffect(idleScreensaverVisible) {
+                        if (idleScreensaverVisible) {
                             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                         }
                         onDispose {
-                            if (idleScreensaverVisible || benchmarkActive) {
+                            if (idleScreensaverVisible) {
                                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                             }
                         }
@@ -1161,7 +1145,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        debridBenchmarkService.onAppBackgrounded()
         startupPerfWindowOpen = false
         deferredStartupWorkJob?.cancel()
         deferredBrowsableRequestJob?.cancel()
@@ -1424,13 +1407,9 @@ internal fun logIdleScreensaverDiagnostics(
 internal fun isIdleScreensaverEligibleRoute(
     currentRoute: String?,
     playbackIdleSnapshot: PlaybackIdleGateSnapshot,
-    inAppTrailerPlaybackActive: Boolean,
-    benchmarkActive: Boolean
+    inAppTrailerPlaybackActive: Boolean
 ): Boolean {
     val route = currentRoute ?: return false
-    if (benchmarkActive) {
-        return false
-    }
     if (
         route == Screen.AuthSignIn.route ||
         route == Screen.AuthQrSignIn.route ||
@@ -1453,11 +1432,6 @@ internal fun isIdleScreensaverEligibleRoute(
 }
 
 internal fun shouldRegisterIdleInteractionForTrailerPlaybackTransition(
-    previousActive: Boolean,
-    currentActive: Boolean
-): Boolean = previousActive != currentActive
-
-internal fun shouldRegisterIdleInteractionForBenchmarkTransition(
     previousActive: Boolean,
     currentActive: Boolean
 ): Boolean = previousActive != currentActive

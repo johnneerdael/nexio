@@ -6,12 +6,10 @@ import android.provider.Settings
 import android.util.Log
 import com.google.gson.JsonObject
 import com.nexio.tv.BuildConfig
-import com.nexio.tv.data.local.PlayerSettingsDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -22,7 +20,6 @@ private const val TAG = "BenchmarkUpload"
 
 @Singleton
 class DebridBenchmarkCollectionUploader internal constructor(
-    private val playerSettingsDataStore: PlayerSettingsDataStore,
     private val okHttpClient: OkHttpClient,
     private val baseUrlProvider: () -> String,
     private val tokenProvider: () -> String,
@@ -31,48 +28,15 @@ class DebridBenchmarkCollectionUploader internal constructor(
     @Inject
     constructor(
         @ApplicationContext context: Context,
-        playerSettingsDataStore: PlayerSettingsDataStore,
         okHttpClient: OkHttpClient
     ) : this(
-        playerSettingsDataStore = playerSettingsDataStore,
         okHttpClient = okHttpClient,
         baseUrlProvider = { BuildConfig.SHADOW_DATA_COLLECTION_BASE_URL.trim().trimEnd('/') },
         tokenProvider = { BuildConfig.SHADOW_DATA_COLLECTION_WRITE_TOKEN.trim() },
         clientInfoProvider = { buildBenchmarkCollectorClientInfo(context) }
     )
 
-    suspend fun submitIfEnabled(result: DebridBenchmarkResult) {
-        val settings = playerSettingsDataStore.playerSettings.first()
-        if (!settings.debridBenchmarkDataCollectionEnabled) return
-        if (result.terminationReason != DebridBenchmarkTerminationReason.COMPLETED) return
-
-        val baseUrl = baseUrlProvider()
-        val token = tokenProvider()
-        if (baseUrl.isBlank() || token.isBlank()) return
-
-        val envelope = JsonObject().apply {
-            addProperty("sentAtMs", System.currentTimeMillis())
-            add("client", clientInfoProvider())
-            add("result", result.toJsonObject())
-        }.toString()
-
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val request = Request.Builder()
-                    .url("$baseUrl/api/v1/debrid-benchmark-results")
-                    .header("Authorization", "Bearer $token")
-                    .post(envelope.toRequestBody("application/json".toMediaType()))
-                    .build()
-                okHttpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        Log.w(TAG, "Upload failed code=${response.code}")
-                    }
-                }
-            }.onFailure { error ->
-                Log.w(TAG, "Upload failed: ${error.message}")
-            }
-        }
-    }
+    suspend fun submitIfEnabled(result: DebridBenchmarkResult) = Unit
 }
 
 private fun buildBenchmarkCollectorClientInfo(context: Context): JsonObject {

@@ -222,54 +222,33 @@ class PlayerSettingsDataStoreTest {
     }
 
     @Test
-    fun `autoplay bandwidth mode defaults to manual with 40 mbps manual cap`() = runTest {
+    fun `autoplay defaults to deterministic manual cap`() = runTest {
         val dataStore = playerSettingsDataStoreForTest()
 
         val settings = dataStore.playerSettings.first()
 
         assertEquals(true, settings.deterministicAutoplayEnabled)
-        assertEquals(AutoplayBandwidthMode.MANUAL, settings.autoplayBandwidthMode)
         assertEquals(40.0, settings.manualBitrateLimitMbps, 0.0)
     }
 
     @Test
-    fun `autoplay defaults migration enables deterministic manual mode once`() {
+    fun `autoplay defaults migration maps legacy auto benchmark mode to manual cap`() {
         val deterministicAutoplayEnabledKey = booleanPreferencesKey("deterministic_autoplay_enabled")
         val autoplayBandwidthModeKey = stringPreferencesKey("autoplay_bandwidth_mode")
         val manualBitrateLimitMbpsKey = doublePreferencesKey("manual_bitrate_limit_mbps")
         val migrationDoneKey = booleanPreferencesKey("migration_autoplay_manual_defaults_done")
         val prefs = mutablePreferencesOf(
             deterministicAutoplayEnabledKey to false,
-            autoplayBandwidthModeKey to AutoplayBandwidthMode.AUTO.name,
+            autoplayBandwidthModeKey to "AUTO",
             manualBitrateLimitMbpsKey to 20.0
         )
 
         applyPlayerSettingsMigrations(prefs)
 
         assertEquals(true, prefs[deterministicAutoplayEnabledKey])
-        assertEquals(AutoplayBandwidthMode.MANUAL.name, prefs[autoplayBandwidthModeKey])
+        assertEquals("MANUAL", prefs[autoplayBandwidthModeKey])
         assertEquals(40.0, prefs[manualBitrateLimitMbpsKey] ?: -1.0, 0.0)
         assertEquals(true, prefs[migrationDoneKey])
-    }
-
-    @Test
-    fun `autoplay defaults migration does not override after it has run`() {
-        val deterministicAutoplayEnabledKey = booleanPreferencesKey("deterministic_autoplay_enabled")
-        val autoplayBandwidthModeKey = stringPreferencesKey("autoplay_bandwidth_mode")
-        val manualBitrateLimitMbpsKey = doublePreferencesKey("manual_bitrate_limit_mbps")
-        val migrationDoneKey = booleanPreferencesKey("migration_autoplay_manual_defaults_done")
-        val prefs = mutablePreferencesOf(
-            deterministicAutoplayEnabledKey to false,
-            autoplayBandwidthModeKey to AutoplayBandwidthMode.AUTO.name,
-            manualBitrateLimitMbpsKey to 80.0,
-            migrationDoneKey to true
-        )
-
-        applyPlayerSettingsMigrations(prefs)
-
-        assertEquals(false, prefs[deterministicAutoplayEnabledKey])
-        assertEquals(AutoplayBandwidthMode.AUTO.name, prefs[autoplayBandwidthModeKey])
-        assertEquals(80.0, prefs[manualBitrateLimitMbpsKey] ?: -1.0, 0.0)
     }
 
     @Test
@@ -289,32 +268,13 @@ class PlayerSettingsDataStoreTest {
     }
 
     @Test
-    fun `autoplay bandwidth mode persists manual selection`() = runTest {
+    fun `setting manual bitrate persists autoplay cap`() = runTest {
         val dataStore = playerSettingsDataStoreForTest()
 
-        dataStore.setAutoplayBandwidthMode(AutoplayBandwidthMode.MANUAL)
+        dataStore.playerSettings.first()
+        dataStore.setManualBitrateLimitMbps(85.0)
 
-        assertEquals(AutoplayBandwidthMode.MANUAL, dataStore.playerSettings.first().autoplayBandwidthMode)
-        assertTrue(dataStore.playerSettings.first().manualBitrateLimitMbps.isFinite())
-    }
-
-    @Test
-    fun `changing transport settings clears persisted autoplay max bitrate`() = runTest {
-        val dataStore = playerSettingsDataStoreForTest()
-
-        dataStore.setUseParallelConnections(false)
-        dataStore.setAutoplayMaxBitrate(42.0)
-        assertEquals(42.0, dataStore.playerSettings.first().autoplayMaxBitrateMbps ?: -1.0, 0.0)
-
-        dataStore.setUseParallelConnections(true)
-        assertNull(dataStore.playerSettings.first().autoplayMaxBitrateMbps)
-
-        dataStore.setVodCacheSizeMode(VodCacheSizeMode.ON)
-        dataStore.setAutoplayMaxBitrate(42.0)
-        assertEquals(42.0, dataStore.playerSettings.first().autoplayMaxBitrateMbps ?: -1.0, 0.0)
-
-        dataStore.setVodCacheSizeMode(VodCacheSizeMode.OFF)
-        assertNull(dataStore.playerSettings.first().autoplayMaxBitrateMbps)
+        assertEquals(85.0, dataStore.playerSettings.first().manualBitrateLimitMbps, 0.0)
     }
 
     @Test
@@ -337,15 +297,4 @@ class PlayerSettingsDataStoreTest {
         assertEquals(true, dataStore.playerSettings.first().vodCacheWarmAheadEnabled)
     }
 
-    @Test
-    fun `changing vod cache warm ahead clears persisted autoplay max bitrate`() = runTest {
-        val dataStore = playerSettingsDataStoreForTest()
-
-        dataStore.setAutoplayMaxBitrate(42.0)
-        assertEquals(42.0, dataStore.playerSettings.first().autoplayMaxBitrateMbps ?: -1.0, 0.0)
-
-        dataStore.setVodCacheWarmAheadEnabled(false)
-
-        assertNull(dataStore.playerSettings.first().autoplayMaxBitrateMbps)
-    }
 }

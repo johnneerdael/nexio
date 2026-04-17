@@ -224,9 +224,6 @@ data class PlayerSettings(
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
     val streamAutoPlayPreferBingeGroupForNextEpisode: Boolean = true,
     val deterministicAutoplayEnabled: Boolean = true,
-    val autoplayMaxBitrateEnabled: Boolean = true,
-    val autoplayMaxBitrateMbps: Double? = null,
-    val autoplayBandwidthMode: AutoplayBandwidthMode = AutoplayBandwidthMode.MANUAL,
     val manualBitrateLimitMbps: Double = 40.0,
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
     val nextEpisodeThresholdPercent: Float = 99f,
@@ -239,7 +236,6 @@ data class PlayerSettings(
     val deduplicateGroupedStreamsEnabled: Boolean = true,
     val serviceWrapEnabled: Boolean = false,
     val shadowAutoplayDataCollectionEnabled: Boolean = false,
-    val debridBenchmarkDataCollectionEnabled: Boolean = false,
     val filterWebDolbyVisionStreamsEnabled: Boolean = false,
     val filterEpisodeMismatchStreamsEnabled: Boolean = true,
     val filterMovieYearMismatchStreamsEnabled: Boolean = true,
@@ -281,9 +277,7 @@ data class PlayerSettings(
 }
 
 fun PlayerSettings.diskSpoolTargetBitrateMbps(): Double? {
-    return autoplayMaxBitrateMbps ?: manualBitrateLimitMbps.takeIf {
-        autoplayBandwidthMode == AutoplayBandwidthMode.MANUAL
-    }
+    return manualBitrateLimitMbps.takeIf { it.isFinite() && it > 0.0 }
 }
 
 private val migrationStreamSelectionDefaultsV2EnabledKey =
@@ -368,7 +362,7 @@ internal fun applyPlayerSettingsMigrations(prefs: MutablePreferences) {
     val autoplayManualDefaultsDone = prefs[migrationAutoplayManualDefaultsDoneKey] ?: false
     if (!autoplayManualDefaultsDone) {
         prefs[deterministicAutoplayEnabledMigrationKey] = true
-        prefs[autoplayBandwidthModeMigrationKey] = AutoplayBandwidthMode.MANUAL.name
+        prefs[autoplayBandwidthModeMigrationKey] = "MANUAL"
         prefs[manualBitrateLimitMbpsMigrationKey] = 40.0
         prefs[migrationAutoplayManualDefaultsDoneKey] = true
     }
@@ -390,11 +384,6 @@ enum class StreamAutoPlayMode {
     MANUAL,
     FIRST_STREAM,
     REGEX_MATCH
-}
-
-enum class AutoplayBandwidthMode {
-    AUTO,
-    MANUAL
 }
 
 enum class StreamAutoPlaySource {
@@ -551,9 +540,6 @@ class PlayerSettingsDataStore @Inject constructor(
     private val streamAutoPlayPreferBingeGroupForNextEpisodeKey =
         booleanPreferencesKey("stream_auto_play_prefer_binge_group_for_next_episode")
     private val deterministicAutoplayEnabledKey = booleanPreferencesKey("deterministic_autoplay_enabled")
-    private val autoplayMaxBitrateEnabledKey = booleanPreferencesKey("autoplay_max_bitrate_enabled")
-    private val autoplayMaxBitrateMbpsKey = doublePreferencesKey("autoplay_max_bitrate_mbps")
-    private val autoplayBandwidthModeKey = stringPreferencesKey("autoplay_bandwidth_mode")
     private val manualBitrateLimitMbpsKey = doublePreferencesKey("manual_bitrate_limit_mbps")
     private val nextEpisodeThresholdModeKey = stringPreferencesKey("next_episode_threshold_mode")
     private val nextEpisodeThresholdPercentLegacyKey = intPreferencesKey("next_episode_threshold_percent")
@@ -573,7 +559,6 @@ class PlayerSettingsDataStore @Inject constructor(
     private val deduplicateGroupedStreamsEnabledKey = booleanPreferencesKey("deduplicate_grouped_streams_enabled")
     private val serviceWrapEnabledKey = booleanPreferencesKey("service_wrap_enabled")
     private val shadowAutoplayDataCollectionEnabledKey = booleanPreferencesKey("shadow_autoplay_data_collection_enabled")
-    private val debridBenchmarkDataCollectionEnabledKey = booleanPreferencesKey("debrid_benchmark_data_collection_enabled")
     private val filterWebDolbyVisionStreamsEnabledKey = booleanPreferencesKey("filter_web_dolby_vision_streams_enabled")
     private val filterEpisodeMismatchStreamsEnabledKey = booleanPreferencesKey("filter_episode_mismatch_streams_enabled")
     private val filterMovieYearMismatchStreamsEnabledKey = booleanPreferencesKey("filter_movie_year_mismatch_streams_enabled")
@@ -851,11 +836,6 @@ class PlayerSettingsDataStore @Inject constructor(
                 streamAutoPlayPreferBingeGroupForNextEpisode =
                     prefs[streamAutoPlayPreferBingeGroupForNextEpisodeKey] ?: true,
                 deterministicAutoplayEnabled = prefs[deterministicAutoplayEnabledKey] ?: true,
-                autoplayMaxBitrateEnabled = prefs[autoplayMaxBitrateEnabledKey] ?: true,
-                autoplayMaxBitrateMbps = prefs[autoplayMaxBitrateMbpsKey]?.takeIf { it.isFinite() && it > 0.0 },
-                autoplayBandwidthMode = prefs[autoplayBandwidthModeKey]?.let {
-                    runCatching { AutoplayBandwidthMode.valueOf(it) }.getOrDefault(AutoplayBandwidthMode.MANUAL)
-                } ?: AutoplayBandwidthMode.MANUAL,
                 manualBitrateLimitMbps = normalizeManualBitrateLimit(
                     prefs[manualBitrateLimitMbpsKey] ?: 40.0
                 ),
@@ -892,7 +872,6 @@ class PlayerSettingsDataStore @Inject constructor(
                 deduplicateGroupedStreamsEnabled = prefs[deduplicateGroupedStreamsEnabledKey] ?: true,
                 serviceWrapEnabled = prefs[serviceWrapEnabledKey] ?: false,
                 shadowAutoplayDataCollectionEnabled = prefs[shadowAutoplayDataCollectionEnabledKey] ?: false,
-                debridBenchmarkDataCollectionEnabled = prefs[debridBenchmarkDataCollectionEnabledKey] ?: false,
                 filterWebDolbyVisionStreamsEnabled = prefs[filterWebDolbyVisionStreamsEnabledKey] ?: false,
                 filterEpisodeMismatchStreamsEnabled = prefs[filterEpisodeMismatchStreamsEnabledKey] ?: true,
                 filterMovieYearMismatchStreamsEnabled = prefs[filterMovieYearMismatchStreamsEnabledKey] ?: true,
@@ -1152,28 +1131,6 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
-    suspend fun setAutoplayMaxBitrateEnabled(enabled: Boolean) {
-        store().edit { prefs ->
-            prefs[autoplayMaxBitrateEnabledKey] = enabled
-        }
-    }
-
-    suspend fun setAutoplayMaxBitrate(mbps: Double?) {
-        store().edit { prefs ->
-            if (mbps != null && mbps.isFinite() && mbps > 0.0) {
-                prefs[autoplayMaxBitrateMbpsKey] = mbps
-            } else {
-                prefs.remove(autoplayMaxBitrateMbpsKey)
-            }
-        }
-    }
-
-    suspend fun setAutoplayBandwidthMode(mode: AutoplayBandwidthMode) {
-        store().edit { prefs ->
-            prefs[autoplayBandwidthModeKey] = mode.name
-        }
-    }
-
     suspend fun setManualBitrateLimitMbps(mbps: Double) {
         store().edit { prefs ->
             prefs[manualBitrateLimitMbpsKey] = normalizeManualBitrateLimit(mbps)
@@ -1296,12 +1253,6 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setShadowAutoplayDataCollectionEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[shadowAutoplayDataCollectionEnabledKey] = enabled
-        }
-    }
-
-    suspend fun setDebridBenchmarkDataCollectionEnabled(enabled: Boolean) {
-        store().edit { prefs ->
-            prefs[debridBenchmarkDataCollectionEnabledKey] = enabled
         }
     }
 
@@ -1693,40 +1644,17 @@ class PlayerSettingsDataStore @Inject constructor(
 
     suspend fun resetNetworkSettingsToDefaults() {
         store().edit { prefs ->
-            val transportChanged =
-                (prefs[vodCacheSizeModeKey]
-                    ?.let { runCatching { VodCacheSizeMode.valueOf(it) }.getOrNull() }
-                    ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE) != PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE ||
-                    (prefs[vodCacheSizeMbKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB) !=
-                    PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB ||
-                    (prefs[vodCacheWarmAheadEnabledKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED) !=
-                    PlayerSettings.DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED ||
-                    (prefs[useParallelConnectionsKey] ?: PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS) !=
-                    PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS ||
-                    (prefs[parallelConnectionCountKey] ?: PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT) !=
-                    PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT ||
-                    (prefs[parallelChunkSizeMbKey] ?: PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB) !=
-                    PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB
             prefs[vodCacheSizeModeKey] = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE.name
             prefs[vodCacheSizeMbKey] = PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB
             prefs[vodCacheWarmAheadEnabledKey] = PlayerSettings.DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED
             prefs[useParallelConnectionsKey] = PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS
             prefs[parallelConnectionCountKey] = PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT
             prefs[parallelChunkSizeMbKey] = PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB
-            if (transportChanged) {
-                prefs.remove(autoplayMaxBitrateMbpsKey)
-            }
         }
     }
 
     suspend fun setVodCacheSizeMode(mode: VodCacheSizeMode) {
         store().edit { prefs ->
-            val current = prefs[vodCacheSizeModeKey]
-                ?.let { runCatching { VodCacheSizeMode.valueOf(it) }.getOrNull() }
-                ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE
-            if (current != mode) {
-                prefs.remove(autoplayMaxBitrateMbpsKey)
-            }
             prefs[vodCacheSizeModeKey] = mode.name
             if (mode == VodCacheSizeMode.ON) {
                 prefs[progressivePlaybackDiskModeKey] = ProgressivePlaybackDiskMode.OFF.name
@@ -1740,21 +1668,12 @@ class PlayerSettingsDataStore @Inject constructor(
                 PlayerSettings.MIN_VOD_CACHE_SIZE_MB,
                 PlayerSettings.MAX_VOD_CACHE_SIZE_MB
             )
-            val current = (prefs[vodCacheSizeMbKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB)
-                .coerceIn(PlayerSettings.MIN_VOD_CACHE_SIZE_MB, PlayerSettings.MAX_VOD_CACHE_SIZE_MB)
-            if (current != normalized) {
-                prefs.remove(autoplayMaxBitrateMbpsKey)
-            }
             prefs[vodCacheSizeMbKey] = normalized
         }
     }
 
     suspend fun setVodCacheWarmAheadEnabled(enabled: Boolean) {
         store().edit { prefs ->
-            val current = prefs[vodCacheWarmAheadEnabledKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED
-            if (current != enabled) {
-                prefs.remove(autoplayMaxBitrateMbpsKey)
-            }
             prefs[vodCacheWarmAheadEnabledKey] = enabled
         }
     }
@@ -1823,10 +1742,6 @@ class PlayerSettingsDataStore @Inject constructor(
 
     suspend fun setUseParallelConnections(enabled: Boolean) {
         store().edit { prefs ->
-            val current = prefs[useParallelConnectionsKey] ?: PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS
-            if (current != enabled) {
-                prefs.remove(autoplayMaxBitrateMbpsKey)
-            }
             prefs[useParallelConnectionsKey] = enabled
         }
     }
@@ -1837,14 +1752,6 @@ class PlayerSettingsDataStore @Inject constructor(
                 PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT,
                 PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT
             )
-            val current = (prefs[parallelConnectionCountKey] ?: PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT)
-                .coerceIn(
-                    PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT,
-                    PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT
-                )
-            if (current != normalized) {
-                prefs.remove(autoplayMaxBitrateMbpsKey)
-            }
             prefs[parallelConnectionCountKey] = normalized
         }
     }
@@ -1855,14 +1762,6 @@ class PlayerSettingsDataStore @Inject constructor(
                 PlayerSettings.MIN_PARALLEL_CHUNK_SIZE_MB,
                 PlayerSettings.MAX_PARALLEL_CHUNK_SIZE_MB
             )
-            val current = (prefs[parallelChunkSizeMbKey] ?: PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB)
-                .coerceIn(
-                    PlayerSettings.MIN_PARALLEL_CHUNK_SIZE_MB,
-                    PlayerSettings.MAX_PARALLEL_CHUNK_SIZE_MB
-                )
-            if (current != normalized) {
-                prefs.remove(autoplayMaxBitrateMbpsKey)
-            }
             prefs[parallelChunkSizeMbKey] = normalized
         }
     }
@@ -1877,13 +1776,8 @@ class PlayerSettingsDataStore @Inject constructor(
         parallelChunkSizeMb: Int? = null
     ) {
         store().edit { prefs ->
-            var transportChanged = false
             targetBufferSizeMb?.let { prefs[targetBufferSizeMbKey] = it.coerceAtLeast(0) }
             vodCacheSizeMode?.let {
-                val current = prefs[vodCacheSizeModeKey]
-                    ?.let { stored -> runCatching { VodCacheSizeMode.valueOf(stored) }.getOrNull() }
-                    ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MODE
-                transportChanged = transportChanged || current != it
                 prefs[vodCacheSizeModeKey] = it.name
             }
             vodCacheSizeMb?.let {
@@ -1891,19 +1785,12 @@ class PlayerSettingsDataStore @Inject constructor(
                     PlayerSettings.MIN_VOD_CACHE_SIZE_MB,
                     PlayerSettings.MAX_VOD_CACHE_SIZE_MB
                 )
-                val current = (prefs[vodCacheSizeMbKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_SIZE_MB)
-                    .coerceIn(PlayerSettings.MIN_VOD_CACHE_SIZE_MB, PlayerSettings.MAX_VOD_CACHE_SIZE_MB)
-                transportChanged = transportChanged || current != normalized
                 prefs[vodCacheSizeMbKey] = normalized
             }
             vodCacheWarmAheadEnabled?.let {
-                val current = prefs[vodCacheWarmAheadEnabledKey] ?: PlayerSettings.DEFAULT_VOD_CACHE_WARM_AHEAD_ENABLED
-                transportChanged = transportChanged || current != it
                 prefs[vodCacheWarmAheadEnabledKey] = it
             }
             useParallelConnections?.let {
-                val current = prefs[useParallelConnectionsKey] ?: PlayerSettings.DEFAULT_USE_PARALLEL_CONNECTIONS
-                transportChanged = transportChanged || current != it
                 prefs[useParallelConnectionsKey] = it
             }
             parallelConnectionCount?.let {
@@ -1911,12 +1798,6 @@ class PlayerSettingsDataStore @Inject constructor(
                     PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT,
                     PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT
                 )
-                val current = (prefs[parallelConnectionCountKey] ?: PlayerSettings.DEFAULT_PARALLEL_CONNECTION_COUNT)
-                    .coerceIn(
-                        PlayerSettings.MIN_PARALLEL_CONNECTION_COUNT,
-                        PlayerSettings.MAX_PARALLEL_CONNECTION_COUNT
-                    )
-                transportChanged = transportChanged || current != normalized
                 prefs[parallelConnectionCountKey] = normalized
             }
             parallelChunkSizeMb?.let {
@@ -1924,16 +1805,7 @@ class PlayerSettingsDataStore @Inject constructor(
                     PlayerSettings.MIN_PARALLEL_CHUNK_SIZE_MB,
                     PlayerSettings.MAX_PARALLEL_CHUNK_SIZE_MB
                 )
-                val current = (prefs[parallelChunkSizeMbKey] ?: PlayerSettings.DEFAULT_PARALLEL_CHUNK_SIZE_MB)
-                    .coerceIn(
-                        PlayerSettings.MIN_PARALLEL_CHUNK_SIZE_MB,
-                        PlayerSettings.MAX_PARALLEL_CHUNK_SIZE_MB
-                    )
-                transportChanged = transportChanged || current != normalized
                 prefs[parallelChunkSizeMbKey] = normalized
-            }
-            if (transportChanged) {
-                prefs.remove(autoplayMaxBitrateMbpsKey)
             }
         }
     }

@@ -39,11 +39,11 @@ import com.nexio.tv.data.repository.benchmark.DeviceAudioOutputCapabilities
 import com.nexio.tv.data.repository.benchmark.DeviceCapabilityEvidence
 import com.nexio.tv.data.repository.benchmark.DeviceCapabilitySnapshot
 import com.nexio.tv.data.repository.benchmark.DeviceHdrCapabilityEvidence
-import com.nexio.tv.data.repository.benchmark.DeviceHdrType
 import com.nexio.tv.data.repository.benchmark.DeviceVideoDecoderEvidence
 import com.nexio.tv.data.repository.benchmark.DeviceVideoDecodeCapabilities
 import com.nexio.tv.data.repository.benchmark.VideoDecoderEvidence
 import com.nexio.tv.data.repository.benchmark.CapabilityEnvelope
+import com.nexio.tv.data.repository.benchmark.parseDeviceCapabilitySnapshotBestEffort
 import com.nexio.tv.data.repository.benchmark.toJsonObject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
@@ -181,7 +181,7 @@ class DebridBenchmarkStore internal constructor(
             } ?: return null
             if (terminationReason != DebridBenchmarkTerminationReason.COMPLETED) return null
             val candidate = root.optionalObject("candidate")?.let(::parseCandidate)
-            val device = root.optionalObject("device")?.let(::parseDeviceSnapshotBestEffort)
+            val device = root.optionalObject("device")?.let { parseDeviceCapabilitySnapshotBestEffort(it) }
             val session = root.optionalObject("session")?.let(::parseSession)
             val direct = root.optionalObject("direct")?.let(::parseTransportProfile)
             val optimized = root.optionalObject("optimized")?.let(::parseTransportProfile)
@@ -477,177 +477,6 @@ class DebridBenchmarkStore internal constructor(
             sizeBytes = candidateJson.optionalStrictIntegralLongOrNull("sizeBytes"),
             host = candidateJson.stringOrNull("host"),
             directUrlFingerprint = candidateJson.stringOrNull("directUrlFingerprint")
-        )
-    }
-
-    private fun parseDeviceSnapshotBestEffort(deviceJson: JsonObject): DeviceCapabilitySnapshot {
-        return try {
-            parseDeviceSnapshot(deviceJson)
-        } catch (_: InvalidDebridBenchmarkPayload) {
-            parseLegacyDeviceSnapshot(deviceJson)
-        }
-    }
-
-    private fun parseDeviceSnapshot(deviceJson: JsonObject): DeviceCapabilitySnapshot {
-        return DeviceCapabilitySnapshot(
-            model = deviceJson.stringOrNull("model"),
-            manufacturer = deviceJson.stringOrNull("manufacturer"),
-            sdkInt = deviceJson.strictIntegralIntOrNull("sdkInt")?.takeIf { it > 0 }
-                ?: throw InvalidDebridBenchmarkPayload(),
-            displayHdrTypes = deviceJson.arrayOrEmpty("displayHdrTypes").map { hdrType ->
-                hdrType.asStringOrThrow().let(DeviceHdrType::fromWireKey)
-                    ?: throw InvalidDebridBenchmarkPayload()
-            }.toSet(),
-            videoDecode = deviceJson.requiredObject("videoDecode").let(::parseVideoDecode),
-            audioOutput = deviceJson.requiredObject("audioOutput").let(::parseAudioOutput),
-            evidence = deviceJson.optionalObject("evidence")?.let(::parseDeviceCapabilityEvidence),
-            capturedAtMs = deviceJson.strictIntegralLongOrNull("capturedAtMs")?.takeIf { it > 0L }
-                ?: throw InvalidDebridBenchmarkPayload()
-        )
-    }
-
-    private fun parseLegacyDeviceSnapshot(deviceJson: JsonObject): DeviceCapabilitySnapshot {
-        return DeviceCapabilitySnapshot(
-            model = deviceJson.stringOrNull("model"),
-            manufacturer = deviceJson.stringOrNull("manufacturer"),
-            sdkInt = deviceJson.strictIntegralIntOrNull("sdkInt")?.takeIf { it > 0 }
-                ?: throw InvalidDebridBenchmarkPayload("legacy_device_sdk_missing"),
-            displayHdrTypes = deviceJson.arrayOrEmpty("displayHdrTypes").map { hdrType ->
-                hdrType.asStringOrThrow().let(DeviceHdrType::fromWireKey)
-                    ?: throw InvalidDebridBenchmarkPayload("legacy_device_hdr_invalid")
-            }.toSet(),
-            videoDecode = deviceJson.requiredObject("videoDecode").let(::parseVideoDecode),
-            audioOutput = deviceJson.requiredObject("audioOutput").let(::parseAudioOutput),
-            evidence = null,
-            capturedAtMs = deviceJson.strictIntegralLongOrNull("capturedAtMs")?.takeIf { it > 0L }
-                ?: throw InvalidDebridBenchmarkPayload("legacy_device_timestamp_missing")
-        )
-    }
-
-    private fun parseDeviceCapabilityEvidence(evidenceJson: JsonObject): DeviceCapabilityEvidence {
-        return DeviceCapabilityEvidence(
-            hdr = evidenceJson.optionalObject("hdr")?.let(::parseHdrEvidence),
-            audio = evidenceJson.optionalObject("audio")?.let(::parseAudioEvidence),
-            video = evidenceJson.optionalObject("video")?.let(::parseVideoEvidence)
-        )
-    }
-
-    private fun parseHdrEvidence(hdrJson: JsonObject): DeviceHdrCapabilityEvidence {
-        return DeviceHdrCapabilityEvidence(
-            displayId = hdrJson.optionalStrictIntegralIntOrNull("displayId"),
-            rawSupportedHdrTypes = hdrJson.arrayOrEmpty("rawSupportedHdrTypes").map { it.asStringOrThrow() }
-        )
-    }
-
-    private fun parseAudioEvidence(audioJson: JsonObject): DeviceAudioCapabilityEvidence {
-        return DeviceAudioCapabilityEvidence(
-            discoveryMode = audioJson.stringOrNull("discoveryMode"),
-            routedDeviceTypes = audioJson.arrayOrEmpty("routedDeviceTypes").map { it.asStringOrThrow() },
-            outputDevices = audioJson.arrayOrEmpty("outputDevices").map { device ->
-                parseAudioOutputDeviceEvidence(device.asJsonObjectOrThrow())
-            },
-            directProfiles = audioJson.arrayOrEmpty("directProfiles").map { profile ->
-                parseAudioDirectProfileEvidence(profile.asJsonObjectOrThrow())
-            },
-            directPlaybackProbes = audioJson.arrayOrEmpty("directPlaybackProbes").map { probe ->
-                parseAudioPlaybackProbeEvidence(probe.asJsonObjectOrThrow())
-            }
-        )
-    }
-
-    private fun parseAudioOutputDeviceEvidence(deviceJson: JsonObject): AudioOutputDeviceEvidence {
-        return AudioOutputDeviceEvidence(
-            id = deviceJson.optionalStrictIntegralIntOrNull("id"),
-            type = deviceJson.stringOrNull("type") ?: throw InvalidDebridBenchmarkPayload(),
-            productName = deviceJson.stringOrNull("productName"),
-            encodings = deviceJson.arrayOrEmpty("encodings").map { it.asStringOrThrow() }
-        )
-    }
-
-    private fun parseAudioDirectProfileEvidence(profileJson: JsonObject): AudioDirectProfileEvidence {
-        return AudioDirectProfileEvidence(
-            format = profileJson.stringOrNull("format") ?: throw InvalidDebridBenchmarkPayload(),
-            channelMasks = profileJson.arrayOrEmpty("channelMasks").map {
-                it.asIntegralIntOrThrow()
-            },
-            sampleRates = profileJson.arrayOrEmpty("sampleRates").map {
-                it.asIntegralIntOrThrow()
-            }
-        )
-    }
-
-    private fun parseAudioPlaybackProbeEvidence(probeJson: JsonObject): AudioPlaybackProbeEvidence {
-        return AudioPlaybackProbeEvidence(
-            bucket = probeJson.stringOrNull("bucket") ?: throw InvalidDebridBenchmarkPayload(),
-            format = probeJson.stringOrNull("format") ?: throw InvalidDebridBenchmarkPayload(),
-            channelMask = probeJson.strictIntegralIntOrNull("channelMask") ?: throw InvalidDebridBenchmarkPayload(),
-            sampleRateHz = probeJson.strictIntegralIntOrNull("sampleRateHz") ?: throw InvalidDebridBenchmarkPayload(),
-            supportMode = probeJson.stringOrNull("supportMode") ?: throw InvalidDebridBenchmarkPayload()
-        )
-    }
-
-    private fun parseVideoEvidence(videoJson: JsonObject): DeviceVideoDecoderEvidence {
-        return DeviceVideoDecoderEvidence(
-            scannedDecoderCount = videoJson.optionalStrictIntegralIntOrNull("scannedDecoderCount") ?: 0,
-            decoders = videoJson.arrayOrEmpty("decoders").map { decoder ->
-                parseVideoDecoderEvidence(decoder.asJsonObjectOrThrow())
-            }
-        )
-    }
-
-    private fun parseVideoDecoderEvidence(decoderJson: JsonObject): VideoDecoderEvidence {
-        return VideoDecoderEvidence(
-            codecName = decoderJson.stringOrNull("codecName") ?: throw InvalidDebridBenchmarkPayload(),
-            mimeType = decoderJson.stringOrNull("mimeType") ?: throw InvalidDebridBenchmarkPayload(),
-            hardwareAccelerated = decoderJson.strictBooleanOrNull("hardwareAccelerated")
-                ?: throw InvalidDebridBenchmarkPayload(),
-            softwareOnly = decoderJson.strictBooleanOrNull("softwareOnly")
-                ?: throw InvalidDebridBenchmarkPayload(),
-            secureSupported = decoderJson.strictBooleanOrNull("secureSupported")
-                ?: throw InvalidDebridBenchmarkPayload()
-        )
-    }
-
-    private fun parseVideoDecode(videoDecodeJson: JsonObject): DeviceVideoDecodeCapabilities {
-        return DeviceVideoDecodeCapabilities(
-            h264 = videoDecodeJson.optionalObject("h264")?.let(::parseCodecSupport),
-            hevc = videoDecodeJson.optionalObject("hevc")?.let(::parseCodecSupport),
-            av1 = videoDecodeJson.optionalObject("av1")?.let(::parseCodecSupport),
-            dolbyVision = videoDecodeJson.optionalObject("dolbyVision")?.let(::parseCodecSupport)
-        )
-    }
-
-    private fun parseCodecSupport(codecJson: JsonObject): CodecSupport {
-        return CodecSupport(
-            hardwareAccelerated = codecJson.strictBooleanOrNull("hardwareAccelerated")
-                ?: throw InvalidDebridBenchmarkPayload(),
-            softwareOnlyAvailable = codecJson.strictBooleanOrNull("softwareOnlyAvailable")
-                ?: throw InvalidDebridBenchmarkPayload(),
-            secureSupported = codecJson.strictBooleanOrNull("secureSupported")
-                ?: throw InvalidDebridBenchmarkPayload()
-        )
-    }
-
-    private fun parseAudioOutput(audioOutputJson: JsonObject): DeviceAudioOutputCapabilities {
-        return DeviceAudioOutputCapabilities(
-            ac3 = audioOutputJson.requiredObject("ac3").let(::parseAudioEncodingSupport),
-            eac3 = audioOutputJson.requiredObject("eac3").let(::parseAudioEncodingSupport),
-            atmos = audioOutputJson.getAsJsonObject("atmos")?.let(::parseAudioEncodingSupport)
-                ?: audioOutputJson.requiredObject("eac3").let(::parseAudioEncodingSupport),
-            truehd = audioOutputJson.requiredObject("truehd").let(::parseAudioEncodingSupport),
-            dts = audioOutputJson.requiredObject("dts").let(::parseAudioEncodingSupport),
-            dtshd = audioOutputJson.requiredObject("dtshd").let(::parseAudioEncodingSupport),
-            dtsx = audioOutputJson.getAsJsonObject("dtsx")?.let(::parseAudioEncodingSupport)
-                ?: audioOutputJson.requiredObject("dtshd").let(::parseAudioEncodingSupport)
-        )
-    }
-
-    private fun parseAudioEncodingSupport(audioEncodingJson: JsonObject): AudioEncodingSupport {
-        return AudioEncodingSupport(
-            supported = audioEncodingJson.strictBooleanOrNull("supported")
-                ?: throw InvalidDebridBenchmarkPayload(),
-            passthroughLikely = audioEncodingJson.strictBooleanOrNull("passthroughLikely")
-                ?: throw InvalidDebridBenchmarkPayload()
         )
     }
 

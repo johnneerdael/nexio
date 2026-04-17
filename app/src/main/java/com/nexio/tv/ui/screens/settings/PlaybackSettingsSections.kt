@@ -60,7 +60,6 @@ import androidx.tv.material3.Text
 import com.nexio.tv.core.player.AndroidFrameRateSettings
 import com.nexio.tv.core.player.ExternalPlayerCandidate
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
-import com.nexio.tv.data.local.AutoplayBandwidthMode
 import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.InternalPlayerEngine
 import com.nexio.tv.data.local.MpvHardwareDecodeMode
@@ -112,8 +111,6 @@ internal fun PlaybackSettingsSections(
     trackingProviderLabel: String,
     trackingProviderEnabled: Boolean,
     trackingProviderVisible: Boolean,
-    autoplayBenchmarkAvailable: Boolean,
-    onShowAutoplayBandwidthModeDialog: () -> Unit,
     onShowNextEpisodeThresholdModeDialog: () -> Unit,
     onShowReuseLastLinkCacheDialog: () -> Unit,
     onSetDeterministicAutoplayEnabled: (Boolean) -> Unit,
@@ -177,8 +174,6 @@ internal fun PlaybackSettingsSections(
     // Troubleshooting — data collection
     shadowAutoplayDataCollectionEnabled: Boolean,
     onSetShadowAutoplayDataCollectionEnabled: (Boolean) -> Unit,
-    debridBenchmarkDataCollectionEnabled: Boolean,
-    onSetDebridBenchmarkDataCollectionEnabled: (Boolean) -> Unit,
     onShowCollectorDashboardQr: () -> Unit,
 ) {
     var generalExpanded by rememberSaveable { mutableStateOf(false) }
@@ -418,8 +413,6 @@ internal fun PlaybackSettingsSections(
 
             autoPlaySettingsItems(
                 playerSettings = playerSettings,
-                autoplayBenchmarkAvailable = autoplayBenchmarkAvailable,
-                onShowAutoplayBandwidthModeDialog = onShowAutoplayBandwidthModeDialog,
                 onShowNextEpisodeThresholdModeDialog = onShowNextEpisodeThresholdModeDialog,
                 onShowReuseLastLinkCacheDialog = onShowReuseLastLinkCacheDialog,
                 onSetDeterministicAutoplayEnabled = onSetDeterministicAutoplayEnabled,
@@ -622,17 +615,6 @@ internal fun PlaybackSettingsSections(
                 )
             }
 
-            item(key = "troubleshooting_benchmark_data_collection") {
-                SettingsToggleRow(
-                    title = stringResource(R.string.debrid_benchmark_title),
-                    subtitle = stringResource(R.string.debrid_benchmark_subtitle),
-                    checked = debridBenchmarkDataCollectionEnabled,
-                    enabled = true,
-                    onToggle = { onSetDebridBenchmarkDataCollectionEnabled(!debridBenchmarkDataCollectionEnabled) },
-                    onFocused = { focusedSection = PlaybackSection.LOGGING }
-                )
-            }
-
             item(key = "troubleshooting_data_collection_qr") {
                 SettingsActionRow(
                     title = stringResource(R.string.debrid_data_collection_analyse_title),
@@ -741,10 +723,8 @@ internal fun PlaybackSettingsDialogsHost(
     showDecoderPriorityDialog: Boolean,
     showMpvHardwareDecodeModeDialog: Boolean,
     showIecPackerChannelLayoutDialog: Boolean,
-    showAutoplayBandwidthModeDialog: Boolean,
     showNextEpisodeThresholdModeDialog: Boolean,
     showReuseLastLinkCacheDialog: Boolean,
-    autoplayBenchmarkAvailable: Boolean,
     onSetPlayerPreference: (PlayerPreference) -> Unit,
     onSetPreferredExternalPlayerPackageName: (String?) -> Unit,
     onSetInternalPlayerEngine: (InternalPlayerEngine) -> Unit,
@@ -762,7 +742,6 @@ internal fun PlaybackSettingsDialogsHost(
     onSetDecoderPriority: (Int) -> Unit,
     onSetMpvHardwareDecodeMode: (MpvHardwareDecodeMode) -> Unit,
     onSetIecPackerMaxPcmChannelLayout: (IecPackerChannelLayout) -> Unit,
-    onSetAutoplayBandwidthMode: (AutoplayBandwidthMode) -> Unit,
     onSetNextEpisodeThresholdMode: (com.nexio.tv.data.local.NextEpisodeThresholdMode) -> Unit,
     onSetReuseLastLinkCacheHours: (Int) -> Unit,
     onDismissLanguageDialog: () -> Unit,
@@ -776,7 +755,6 @@ internal fun PlaybackSettingsDialogsHost(
     onDismissDecoderPriorityDialog: () -> Unit,
     onDismissMpvHardwareDecodeModeDialog: () -> Unit,
     onDismissIecPackerChannelLayoutDialog: () -> Unit,
-    onDismissAutoplayBandwidthModeDialog: () -> Unit,
     onDismissNextEpisodeThresholdModeDialog: () -> Unit,
     onDismissReuseLastLinkCacheDialog: () -> Unit
 ) {
@@ -860,16 +838,12 @@ internal fun PlaybackSettingsDialogsHost(
     )
 
     AutoPlaySettingsDialogs(
-        showAutoplayBandwidthModeDialog = showAutoplayBandwidthModeDialog,
         showNextEpisodeThresholdModeDialog = showNextEpisodeThresholdModeDialog,
         showReuseLastLinkCacheDialog = showReuseLastLinkCacheDialog,
         playerSettings = playerSettings,
-        autoplayBenchmarkAvailable = autoplayBenchmarkAvailable,
         installedAddonNames = installedAddonNames,
-        onSetAutoplayBandwidthMode = onSetAutoplayBandwidthMode,
         onSetNextEpisodeThresholdMode = onSetNextEpisodeThresholdMode,
         onSetReuseLastLinkCacheHours = onSetReuseLastLinkCacheHours,
-        onDismissAutoplayBandwidthModeDialog = onDismissAutoplayBandwidthModeDialog,
         onDismissNextEpisodeThresholdModeDialog = onDismissNextEpisodeThresholdModeDialog,
         onDismissReuseLastLinkCacheDialog = onDismissReuseLastLinkCacheDialog
     )

@@ -6,16 +6,20 @@ import androidx.lifecycle.SavedStateHandle
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.data.local.CachedStreamLink
 import com.nexio.tv.data.local.DebugSettingsDataStore
-import com.nexio.tv.data.local.DebridBenchmarkStore
 import com.nexio.tv.data.local.PlayerPreference
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamAutoPlayMode
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
+import com.nexio.tv.data.repository.benchmark.AudioEncodingSupport
 import com.nexio.tv.data.repository.benchmark.BenchmarkAwareScoringScenarioStream
 import com.nexio.tv.data.repository.benchmark.BenchmarkAwareStreamScorer
+import com.nexio.tv.data.repository.benchmark.CodecSupport
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
 import com.nexio.tv.data.repository.benchmark.DebridBenchmarkTransportMode
+import com.nexio.tv.data.repository.benchmark.DeviceAudioOutputCapabilities
+import com.nexio.tv.data.repository.benchmark.DeviceCapabilitySnapshot
+import com.nexio.tv.data.repository.benchmark.DeviceVideoDecodeCapabilities
 import com.nexio.tv.data.repository.benchmark.ShadowRejectReason
 import com.nexio.tv.data.repository.benchmark.ShadowContentScoreBreakdown
 import com.nexio.tv.data.repository.benchmark.ShadowDecisionBreakdown
@@ -26,6 +30,7 @@ import com.nexio.tv.data.repository.benchmark.ShadowTransportScoreBreakdown
 import com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionLogger
 import com.nexio.tv.data.repository.benchmark.ShadowAutoPlayDecisionEvent
 import com.nexio.tv.data.repository.benchmark.ShadowAutoplayCollectionUploader
+import com.nexio.tv.data.repository.device.DeviceCapabilityRepository
 import com.nexio.tv.domain.model.Addon
 import com.nexio.tv.domain.model.AddonResource
 import com.nexio.tv.domain.model.AddonStreams
@@ -395,6 +400,20 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             runtimeMinutes = 120
         )
         val coordinator = ShadowAutoPlayReplayCoordinator(BenchmarkAwareStreamScorer())
+        val device = DeviceCapabilitySnapshot(
+            model = "AM9 PRO",
+            manufacturer = "UGOOS",
+            sdkInt = 34,
+            videoDecode = DeviceVideoDecodeCapabilities(
+                h264 = CodecSupport(true, false, true)
+            ),
+            audioOutput = DeviceAudioOutputCapabilities(
+                truehd = AudioEncodingSupport(false, false),
+                eac3 = AudioEncodingSupport(true, true),
+                atmos = AudioEncodingSupport(true, true)
+            ),
+            capturedAtMs = 42L
+        )
 
         coordinator.updateCandidates(
             request = request,
@@ -411,15 +430,13 @@ class StreamScreenViewModelDeterministicAutoplayTest {
                     audioTags = listOf("DD+")
                 ).toStreamCardModel()
             ),
-            activeTransportMode = null,
-            autoplayMaxBitrateMbps = 20.0,
-            isManualBandwidthMode = true,
+            manualBitrateCapMbps = 20.0,
+            deviceSnapshot = device,
             isFinalPass = true,
             allowEarlyFinishTerminal = false
         )
 
         val event = coordinator.buildEventIfReady(
-            benchmarkSessions = emptyMap(),
             timingsMs = 7L
         )
 
@@ -427,6 +444,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         assertEquals("manual-cap-1080p|RD", event?.selected?.streamKey)
         assertEquals(emptyList<ShadowRejectReason>(), event?.rejected?.flatMap { it.reasons })
         assertEquals(7L, event?.timingsMs)
+        assertEquals("supported", event?.selected?.breakdown?.content?.audioSupportTier)
     }
 
     @Test
@@ -534,7 +552,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             cachedStore = it
         }
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>()
-        val debridBenchmarkStore = mockk<DebridBenchmarkStore>()
+        val deviceCapabilityRepository = mockk<DeviceCapabilityRepository>()
         val shadowCollectionUploader = mockk<ShadowAutoplayCollectionUploader>(relaxed = true)
 
         every {
@@ -543,6 +561,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
         coEvery { streamLinkCacheDataStore.getValid(any(), any()) } returns cachedLink
         coEvery { streamLinkCacheDataStore.invalidate(any()) } just runs
         every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
+        coEvery { deviceCapabilityRepository.snapshotForAutoplay() } returns null
         every { addonRepository.getInstalledAddons() } returns flowOf(listOf(installedAddon()))
         every {
             streamRepository.getStreamsFromAllAddons(
@@ -556,7 +575,6 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             )
         } returns streamFlow
         every { streamRepository.cancelActiveStreamRequests(any()) } just runs
-        every { debridBenchmarkStore.latestResult(any()) } returns flowOf(null)
 
         return StreamScreenViewModel(
             context = context,
@@ -566,7 +584,7 @@ class StreamScreenViewModelDeterministicAutoplayTest {
             playerSettingsDataStore = playerSettingsDataStore,
             streamLinkCacheDataStore = streamLinkCacheDataStore,
             debugSettingsDataStore = debugSettingsDataStore,
-            debridBenchmarkStore = debridBenchmarkStore,
+            deviceCapabilityRepository = deviceCapabilityRepository,
             benchmarkAwareStreamScorer = BenchmarkAwareStreamScorer(),
             shadowAutoPlayDecisionLogger = shadowLogger,
             shadowAutoplayCollectionUploader = shadowCollectionUploader,

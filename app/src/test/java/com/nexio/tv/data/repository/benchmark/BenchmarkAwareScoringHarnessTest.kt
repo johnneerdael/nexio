@@ -160,6 +160,128 @@ class BenchmarkAwareScoringHarnessTest {
     }
 
     @Test
+    fun `manual cap scoring uses device audio capabilities`() {
+        val request = ShadowRequestContext(
+            requestId = "manual-device-audio",
+            videoId = "tt123",
+            contentType = "movie",
+            title = "Example",
+            season = null,
+            episode = null,
+            runtimeMinutes = 120
+        )
+        val trueHd = BenchmarkAwareScoringScenarioStream(
+            streamKey = "truehd",
+            providerId = "RD",
+            resolution = "2160p",
+            quality = "BluRay Remux",
+            encode = "HEVC",
+            sizeBytes = 12L * 1024L * 1024L * 1024L,
+            durationMs = 120L * 60_000L,
+            visualTags = emptyList(),
+            audioTags = listOf("TrueHD", "Atmos")
+        ).toStreamCardModel()
+        val ddp = BenchmarkAwareScoringScenarioStream(
+            streamKey = "ddp",
+            providerId = "RD",
+            resolution = "2160p",
+            quality = "BluRay Remux",
+            encode = "HEVC",
+            sizeBytes = 12L * 1024L * 1024L * 1024L,
+            durationMs = 120L * 60_000L,
+            visualTags = emptyList(),
+            audioTags = listOf("DD+", "Atmos")
+        ).toStreamCardModel()
+
+        val event = BenchmarkAwareStreamScorer().scoreWithManualCap(
+            request = request,
+            streams = listOf(trueHd, ddp),
+            manualBitrateCap = 200.0,
+            device = deviceSnapshot(
+                truehdSupported = false,
+                truehdPassthrough = false,
+                eac3Supported = true,
+                eac3Passthrough = true,
+                ac3Supported = true,
+                ac3Passthrough = true,
+                dtsSupported = false,
+                dtsPassthrough = false,
+                dtshdSupported = false,
+                dtshdPassthrough = false
+            )
+        )
+
+        assertEquals("ddp|RD", event.selected?.streamKey)
+        assertEquals(
+            "unsupported",
+            event.winners.first { it.streamKey == "truehd|RD" }.breakdown.content.audioSupportTier
+        )
+    }
+
+    @Test
+    fun `manual cap scoring uses device hdr capabilities`() {
+        val request = ShadowRequestContext(
+            requestId = "manual-device-hdr",
+            videoId = "tt123",
+            contentType = "movie",
+            title = "Example",
+            season = null,
+            episode = null,
+            runtimeMinutes = 120
+        )
+        val dolbyVision = BenchmarkAwareScoringScenarioStream(
+            streamKey = "dv",
+            providerId = "RD",
+            resolution = "2160p",
+            quality = "WEB-DL",
+            encode = "HEVC",
+            sizeBytes = 8L * 1024L * 1024L * 1024L,
+            durationMs = 120L * 60_000L,
+            visualTags = listOf("DV"),
+            audioTags = listOf("DD+")
+        ).toStreamCardModel()
+        val hdr10 = BenchmarkAwareScoringScenarioStream(
+            streamKey = "hdr10",
+            providerId = "RD",
+            resolution = "2160p",
+            quality = "WEB-DL",
+            encode = "HEVC",
+            sizeBytes = 8L * 1024L * 1024L * 1024L,
+            durationMs = 120L * 60_000L,
+            visualTags = listOf("HDR10"),
+            audioTags = listOf("DD+")
+        ).toStreamCardModel()
+
+        val event = BenchmarkAwareStreamScorer().scoreWithManualCap(
+            request = request,
+            streams = listOf(dolbyVision, hdr10),
+            manualBitrateCap = 200.0,
+            device = deviceSnapshot(
+                displayHdrTypes = setOf(DeviceHdrType.HDR10),
+                truehdSupported = false,
+                truehdPassthrough = false,
+                eac3Supported = true,
+                eac3Passthrough = true,
+                ac3Supported = true,
+                ac3Passthrough = true,
+                dtsSupported = false,
+                dtsPassthrough = false,
+                dtshdSupported = false,
+                dtshdPassthrough = false
+            )
+        )
+
+        assertEquals(
+            "fallback",
+            event.winners.first { it.streamKey == "dv|RD" }.breakdown.content.hdrSupportTier
+        )
+        assertEquals(
+            "full",
+            event.winners.first { it.streamKey == "hdr10|RD" }.breakdown.content.hdrSupportTier
+        )
+    }
+
+    @Test
     fun `cli runner writes evaluation output`() {
         val datasetFile = Files.createTempFile("benchmark_scoring_dataset", ".json")
         val outputFile = Files.createTempFile("benchmark_scoring_output", ".json")
@@ -361,6 +483,7 @@ class BenchmarkAwareScoringHarnessTest {
     }
 
     private fun deviceSnapshot(
+        displayHdrTypes: Set<DeviceHdrType> = setOf(DeviceHdrType.DOLBY_VISION, DeviceHdrType.HDR10),
         truehdSupported: Boolean,
         truehdPassthrough: Boolean,
         eac3Supported: Boolean,
@@ -378,7 +501,7 @@ class BenchmarkAwareScoringHarnessTest {
             model = "Shield",
             manufacturer = "NVIDIA",
             sdkInt = 35,
-            displayHdrTypes = setOf(DeviceHdrType.DOLBY_VISION, DeviceHdrType.HDR10),
+            displayHdrTypes = displayHdrTypes,
             videoDecode = DeviceVideoDecodeCapabilities(
                 h264 = CodecSupport(true, false, true),
                 hevc = CodecSupport(true, false, true),
