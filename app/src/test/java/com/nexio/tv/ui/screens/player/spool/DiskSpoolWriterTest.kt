@@ -14,6 +14,7 @@ import okio.Buffer
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -256,6 +257,57 @@ class DiskSpoolWriterTest {
             assertEquals(content.size, session.read(0L, buffer, 0, buffer.size))
             assertArrayEquals(content, buffer)
             assertEquals(1, allocationCount.get())
+        } finally {
+            session.close()
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `writer pauses after adaptive headroom target until reader advances`() {
+        val content = ByteArray(512 * 1024) { (it % 251).toByte() }
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return when (val range = request.getHeader("Range")) {
+                    "bytes=0-0" -> MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Accept-Ranges", "bytes")
+                        .setHeader("Content-Range", "bytes 0-0/${content.size}")
+                        .setHeader("Content-Length", 1)
+                        .setBody(Buffer().writeByte(0x2A))
+                    else -> rangedResponse(content, range ?: error("Missing range"))
+                }
+            }
+        }
+        server.start()
+        val session = DiskSpoolSession(File(temp.root, "adaptive.spool"), capacityBytes = 512 * 1024L)
+        val writerFinished = AtomicInteger(0)
+        val writerThread = Thread {
+            DiskSpoolWriter(
+                okHttpClient = OkHttpClient(),
+                chunkBytes = 64 * 1024,
+                ioBufferBytes = 8 * 1024,
+                startupPriorityBytes = 64 * 1024L,
+                adaptiveHeadroomBytes = 128 * 1024L,
+                idlePollMs = 10L
+            ).downloadUntil(server.url("/movie.bin").toString(), session, content.size.toLong())
+            writerFinished.incrementAndGet()
+        }
+
+        try {
+            writerThread.start()
+            assertTrue(session.awaitFrontierAtLeast(128 * 1024L, timeoutMs = 2_000L))
+            Thread.sleep(75L)
+            assertTrue(session.contiguousFrontierBytes() <= 192 * 1024L)
+            assertEquals(0, writerFinished.get())
+
+            session.updateReadPosition(256 * 1024L)
+
+            assertTrue(session.awaitFrontierAtLeast(384 * 1024L, timeoutMs = 2_000L))
+            session.close()
+            writerThread.join(2_000L)
+            assertFalse(writerThread.isAlive)
         } finally {
             session.close()
             server.shutdown()

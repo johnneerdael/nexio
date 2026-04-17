@@ -18,7 +18,9 @@ internal class DiskSpoolWriter(
     @Suppress("UNUSED_PARAMETER")
     parallelConnections: Int = 1,
     private val startupPriorityBytes: Long = 100L * 1024L * 1024L,
-    private val ioBufferFactory: (Int) -> ByteArray = { ByteArray(it) }
+    private val ioBufferFactory: (Int) -> ByteArray = { ByteArray(it) },
+    private val adaptiveHeadroomBytes: Long = DEFAULT_ADAPTIVE_HEADROOM_BYTES,
+    private val idlePollMs: Long = DEFAULT_IDLE_POLL_MS
 ) {
     data class SourceMetadata(
         val contentLength: Long,
@@ -146,13 +148,33 @@ internal class DiskSpoolWriter(
                 ioBuffer = ioBuffer
             )
         }
-        downloadSequentially(
-            url = url,
-            bridge = bridge,
-            targetFrontierBytes = targetFrontierBytes,
-            contentLength = metadata.contentLength,
-            ioBuffer = ioBuffer
-        )
+
+        val maxFrontier = minOf(targetFrontierBytes, metadata.contentLength)
+        while (!session.isClosed() && !Thread.currentThread().isInterrupted) {
+            val target = session.adaptiveTargetFrontierBytes(
+                maxFrontierBytes = maxFrontier,
+                startupPrebufferBytes = startupPriorityBytes,
+                headroomBytes = adaptiveHeadroomBytes
+            )
+            val frontier = bridge.contiguousFrontierBytes()
+            if (frontier >= target) {
+                if (frontier >= maxFrontier) return
+                try {
+                    Thread.sleep(idlePollMs.coerceAtLeast(1L))
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return
+                }
+                continue
+            }
+            downloadSequentially(
+                url = url,
+                bridge = bridge,
+                targetFrontierBytes = target,
+                contentLength = metadata.contentLength,
+                ioBuffer = ioBuffer
+            )
+        }
     }
 
     private fun downloadSequentially(
@@ -378,5 +400,7 @@ internal class DiskSpoolWriter(
 
     private companion object {
         const val TAG = "DiskSpoolWriter"
+        private const val DEFAULT_ADAPTIVE_HEADROOM_BYTES = 256L * 1024L * 1024L
+        private const val DEFAULT_IDLE_POLL_MS = 250L
     }
 }

@@ -15,6 +15,7 @@ import okhttp3.mockwebserver.RecordedRequest
 import okio.Buffer
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -150,6 +151,81 @@ class DiskSpoolPipelineTest {
                 listOf("bytes=0-0", "bytes=0-65535", "bytes=65536-131071", "bytes=131072-196607"),
                 requestedRanges.toList()
             )
+        } finally {
+            dataSource.close()
+            session.close()
+            writerThread.join(5_000L)
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `writer and datasource maintain bounded adaptive headroom as playback advances`() {
+        val content = ByteArray(512 * 1024) { (it % 251).toByte() }
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return when (val range = request.getHeader("Range")) {
+                    "bytes=0-0" -> MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Accept-Ranges", "bytes")
+                        .setHeader("Content-Range", "bytes 0-0/${content.size}")
+                        .setHeader("Content-Length", 1)
+                        .setBody(Buffer().writeByte(0x2A))
+                    else -> rangedResponse(content, range ?: error("Missing range"))
+                }
+            }
+        }
+        server.start()
+
+        val session = DiskSpoolSession(
+            File(temp.root, "adaptive-pipeline.spool"),
+            capacityBytes = 512 * 1024L,
+            waitTimeoutMs = 2_000L
+        )
+        val uri = Uri.parse(server.url("/movie.bin").toString())
+        val writerThread = Thread {
+            DiskSpoolWriter(
+                okHttpClient = OkHttpClient(),
+                chunkBytes = 64 * 1024,
+                ioBufferBytes = 8 * 1024,
+                startupPriorityBytes = 64 * 1024L,
+                adaptiveHeadroomBytes = 128 * 1024L,
+                idlePollMs = 10L
+            ).downloadUntil(uri.toString(), session, content.size.toLong())
+        }
+        val dataSource = DiskSpoolDataSource(session, uri)
+
+        try {
+            assertEquals(C.LENGTH_UNSET.toLong(), dataSource.open(DataSpec(uri)))
+
+            writerThread.start()
+
+            assertTrue(session.awaitFrontierAtLeast(128 * 1024L, timeoutMs = 2_000L))
+            Thread.sleep(75L)
+            assertTrue(session.contiguousFrontierBytes() <= 192 * 1024L)
+
+            val actual = ByteArray(content.size)
+            var offset = 0
+            val firstRead = dataSource.read(actual, offset, 128 * 1024)
+            assertEquals(128 * 1024, firstRead)
+            offset += firstRead
+            assertEquals(128 * 1024L, session.currentReadPositionBytes())
+
+            assertTrue(session.awaitFrontierAtLeast(256 * 1024L, timeoutMs = 2_000L))
+
+            while (offset < actual.size) {
+                val read = dataSource.read(actual, offset, actual.size - offset)
+                if (read == C.RESULT_END_OF_INPUT) break
+                offset += read
+            }
+
+            writerThread.join(5_000L)
+
+            assertEquals(content.size, offset)
+            assertArrayEquals(content, actual)
+            assertEquals(content.size.toLong(), session.contiguousFrontierBytes())
+            assertEquals(content.size.toLong(), session.currentReadPositionBytes())
         } finally {
             dataSource.close()
             session.close()
