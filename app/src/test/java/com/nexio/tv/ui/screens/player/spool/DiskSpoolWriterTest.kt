@@ -332,7 +332,8 @@ class DiskSpoolWriterTest {
     fun `writer never requests invalid range after priority jumps beyond adaptive target`() {
         val content = ByteArray(512 * 1024) { (it % 251).toByte() }
         val requestedRanges = CopyOnWriteArrayList<String>()
-        val firstDataRangeSeen = CountDownLatch(1)
+        val secondDataRangeSeen = CountDownLatch(1)
+        val dataRangeCount = AtomicInteger(0)
         val priorityPublished = AtomicBoolean(false)
         val invalidRangeSeen = AtomicBoolean(false)
         val session = DiskSpoolSession(
@@ -359,10 +360,12 @@ class DiskSpoolWriterTest {
                     null -> MockResponse().setResponseCode(400)
 
                     else -> {
-                        if (priorityPublished.compareAndSet(false, true)) {
-                            firstDataRangeSeen.countDown()
-                            session.updateReadPosition(256 * 1024L)
-                            session.read(256 * 1024L, ByteArray(1), 0, 1)
+                        if (dataRangeCount.incrementAndGet() == 2) {
+                            secondDataRangeSeen.countDown()
+                            if (priorityPublished.compareAndSet(false, true)) {
+                                session.updateReadPosition(256 * 1024L)
+                                session.read(256 * 1024L, ByteArray(1), 0, 1)
+                            }
                         }
 
                         val parsedRange = parseRangeHeader(range)
@@ -397,9 +400,17 @@ class DiskSpoolWriterTest {
         try {
             writerThread.start()
 
-            assertTrue(firstDataRangeSeen.await(2, TimeUnit.SECONDS))
-            assertTrue(session.awaitFrontierAtLeast(256 * 1024L, timeoutMs = 5_000L))
+            assertTrue(secondDataRangeSeen.await(2, TimeUnit.SECONDS))
             assertTrue(session.awaitFrontierAtLeast(256 * 1024L + 64 * 1024L, timeoutMs = 5_000L))
+            assertEquals(
+                listOf(
+                    "bytes=0-0",
+                    "bytes=0-65535",
+                    "bytes=65536-131071",
+                    "bytes=262144-327679"
+                ),
+                requestedRanges.take(4)
+            )
             assertTrue(requestedRanges.contains("bytes=262144-327679"))
             assertFalse(invalidRangeSeen.get())
             assertTrue(requestedRanges.none { range ->
