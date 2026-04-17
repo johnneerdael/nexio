@@ -97,6 +97,89 @@ class PlayerSettingsDataStoreTest {
     }
 
     @Test
+    fun `safe playback migration disables risky settings for existing default profile`() {
+        val dv81Key = booleanPreferencesKey("experimental_dv7_to_dv81_enabled")
+        val hevcBaseLayerKey = booleanPreferencesKey("experimental_dv7_hevc_base_layer_enabled")
+        val preserveMappingKey =
+            booleanPreferencesKey("experimental_dv7_to_dv81_preserve_mapping_enabled")
+        val vodCacheModeKey = stringPreferencesKey("vod_cache_size_mode")
+        val parallelConnectionsKey = booleanPreferencesKey("use_parallel_connections")
+        val migrationDoneKey = booleanPreferencesKey("migration_safe_playback_defaults_done")
+        val prefs = mutablePreferencesOf(
+            dv81Key to true,
+            hevcBaseLayerKey to false,
+            preserveMappingKey to true,
+            vodCacheModeKey to VodCacheSizeMode.ON.name,
+            parallelConnectionsKey to true
+        )
+
+        applyPlayerSettingsMigrations(prefs)
+
+        assertEquals(false, prefs[dv81Key])
+        assertEquals(true, prefs[hevcBaseLayerKey])
+        assertEquals(false, prefs[preserveMappingKey])
+        assertEquals(VodCacheSizeMode.OFF.name, prefs[vodCacheModeKey])
+        assertEquals(false, prefs[parallelConnectionsKey])
+        assertEquals(true, prefs[migrationDoneKey])
+    }
+
+    @Test
+    fun `safe playback migration does not override after it has run`() {
+        val dv81Key = booleanPreferencesKey("experimental_dv7_to_dv81_enabled")
+        val hevcBaseLayerKey = booleanPreferencesKey("experimental_dv7_hevc_base_layer_enabled")
+        val vodCacheModeKey = stringPreferencesKey("vod_cache_size_mode")
+        val parallelConnectionsKey = booleanPreferencesKey("use_parallel_connections")
+        val migrationDoneKey = booleanPreferencesKey("migration_safe_playback_defaults_done")
+        val prefs = mutablePreferencesOf(
+            dv81Key to true,
+            hevcBaseLayerKey to false,
+            vodCacheModeKey to VodCacheSizeMode.ON.name,
+            parallelConnectionsKey to true,
+            migrationDoneKey to true
+        )
+
+        applyPlayerSettingsMigrations(prefs)
+
+        assertEquals(true, prefs[dv81Key])
+        assertEquals(false, prefs[hevcBaseLayerKey])
+        assertEquals(VodCacheSizeMode.ON.name, prefs[vodCacheModeKey])
+        assertEquals(true, prefs[parallelConnectionsKey])
+    }
+
+    @Test
+    fun `safe playback migration applies independently per profile settings store`() = runTest {
+        val activeProfileId = MutableStateFlow(1)
+        val dataStore = playerSettingsDataStoreForTest(activeProfileId)
+
+        dataStore.setExperimentalDv7HevcBaseLayerEnabled(false)
+        dataStore.setExperimentalDv7ToDv81Enabled(true)
+        dataStore.setVodCacheSizeMode(VodCacheSizeMode.ON)
+        dataStore.setUseParallelConnections(true)
+
+        activeProfileId.value = 2
+        dataStore.setExperimentalDv7HevcBaseLayerEnabled(false)
+        dataStore.setExperimentalDv7ToDv81Enabled(true)
+        dataStore.setVodCacheSizeMode(VodCacheSizeMode.ON)
+        dataStore.setUseParallelConnections(true)
+
+        activeProfileId.value = 1
+        val defaultProfileSettings = dataStore.playerSettings.first()
+
+        activeProfileId.value = 2
+        val secondaryProfileSettings = dataStore.playerSettings.first()
+
+        assertEquals(false, defaultProfileSettings.experimentalDv7ToDv81Enabled)
+        assertEquals(true, defaultProfileSettings.experimentalDv7HevcBaseLayerEnabled)
+        assertEquals(VodCacheSizeMode.OFF, defaultProfileSettings.vodCacheSizeMode)
+        assertEquals(false, defaultProfileSettings.useParallelConnections)
+
+        assertEquals(false, secondaryProfileSettings.experimentalDv7ToDv81Enabled)
+        assertEquals(true, secondaryProfileSettings.experimentalDv7HevcBaseLayerEnabled)
+        assertEquals(VodCacheSizeMode.OFF, secondaryProfileSettings.vodCacheSizeMode)
+        assertEquals(false, secondaryProfileSettings.useParallelConnections)
+    }
+
+    @Test
     fun `enabling dv7 hevc base layer disables dv81 conversion and preserve mapping`() = runTest {
         val dataStore = playerSettingsDataStoreForTest()
 
