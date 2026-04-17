@@ -82,6 +82,7 @@ class PlaybackSettingsViewModel @Inject constructor(
     val streamDiagnosticsEnabled: Flow<Boolean> = debugSettingsDataStore.streamDiagnosticsEnabled
     val startupPerfTelemetryEnabled: Flow<Boolean> = debugSettingsDataStore.startupPerfTelemetryEnabled
     val diskSpoolDiagnosticsEnabled: Flow<Boolean> = debugSettingsDataStore.diskSpoolDiagnosticsEnabled
+    val dolbyVisionDiagnosticsEnabled: Flow<Boolean> = debugSettingsDataStore.dolbyVisionDiagnosticsEnabled
     val trackingProviderSelectorState: Flow<TrackingProviderSelectorState> = trackingProviderStateRepository.state
     fun androidFrameRateStatus(): AndroidFrameRateSettings.Status {
         return AndroidFrameRateSettings.readStatus(context)
@@ -246,6 +247,10 @@ class PlaybackSettingsViewModel @Inject constructor(
 
     suspend fun setDiskSpoolDiagnosticsEnabled(enabled: Boolean) {
         debugSettingsDataStore.setDiskSpoolDiagnosticsEnabled(enabled)
+    }
+
+    suspend fun setDolbyVisionDiagnosticsEnabled(enabled: Boolean) {
+        debugSettingsDataStore.setDolbyVisionDiagnosticsEnabled(enabled)
     }
 
     suspend fun setExperimentalDv5ToDv81Enabled(enabled: Boolean) {
