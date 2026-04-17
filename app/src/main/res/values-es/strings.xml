@@ -875,8 +875,8 @@
     <string name="playback_trailer_delay_sub">Tiempo de espera antes de que empiece automáticamente una vista previa de tráiler.</string>
     <string name="playback_section_logging">Solución de problemas</string>
     <string name="playback_section_logging_desc">Diagnósticos en tiempo de ejecución, trazado de reproducción, recopilación de datos y registro del sumidero de audio nativo.</string>
-    <string name="playback_logging_buffer_title">Habilitar registro de caché VOD/descarga paralela</string>
-    <string name="playback_logging_buffer_subtitle">Emitir diagnósticos periódicos de caché, almacenamiento en búfer y descarga paralela en logcat.</string>
+    <string name="playback_logging_buffer_title">Activar diagnósticos del búfer de reproducción</string>
+    <string name="playback_logging_buffer_subtitle">Emitir diagnósticos periódicos del búfer de reproducción, caché, cola de disco y Dolby Vision en logcat.</string>
     <string name="playback_logging_iec_title">Habilitar registros para AudioSink/IEC Packer nativo</string>
     <string name="playback_logging_iec_subtitle">Emitir diagnósticos detallados de AudioSink nativo de Kodi e IEC packer en logcat para solución de problemas ADB.</string>
     <string name="playback_logging_stream_title">Habilitar registros de rendimiento de obtención de streams</string>

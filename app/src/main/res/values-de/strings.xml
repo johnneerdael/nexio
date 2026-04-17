@@ -875,8 +875,8 @@
     <string name="playback_trailer_delay_sub">Wie lange gewartet wird, bevor eine Trailer-Vorschau automatisch startet.</string>
     <string name="playback_section_logging">Fehlerbehebung</string>
     <string name="playback_section_logging_desc">Laufzeit-Diagnose, Wiedergabe-Tracing, Datenerfassung und nativer Audio-Sink-Log.</string>
-    <string name="playback_logging_buffer_title">Protokollierung für VOD-Cache/paralleles Herunterladen aktivieren</string>
-    <string name="playback_logging_buffer_subtitle">Periodische Cache-, Puffer- und Parallel-Download-Diagnose an Logcat senden.</string>
+    <string name="playback_logging_buffer_title">Wiedergabepuffer-Diagnose aktivieren</string>
+    <string name="playback_logging_buffer_subtitle">Periodische Wiedergabepuffer-, Cache-, Disk-Spool- und Dolby-Vision-Diagnose an Logcat senden.</string>
     <string name="playback_logging_iec_title">Protokolle für nativen AudioSink/IEC-Packer aktivieren</string>
     <string name="playback_logging_iec_subtitle">Ausführliche native Kodi AudioSink- und IEC-Packer-Diagnose an Logcat für ADB-Fehlerbehebung senden.</string>
     <string name="playback_logging_stream_title">Leistungsprotokolle für Stream-Abruf aktivieren</string>

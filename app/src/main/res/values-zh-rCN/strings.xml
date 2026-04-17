@@ -875,8 +875,8 @@
     <string name="playback_trailer_delay_sub">自动开始预告片预览前的等待时间。</string>
     <string name="playback_section_logging">故障排除</string>
     <string name="playback_section_logging_desc">运行时诊断、播放追踪、数据收集和原生音频输出日志。</string>
-    <string name="playback_logging_buffer_title">启用 VOD 缓存/并行下载日志</string>
-    <string name="playback_logging_buffer_subtitle">定期向 logcat 发送缓存、缓冲和并行下载诊断信息。</string>
+    <string name="playback_logging_buffer_title">启用播放缓冲诊断</string>
+    <string name="playback_logging_buffer_subtitle">定期向 logcat 发送播放缓冲、缓存、磁盘缓冲和 Dolby Vision 诊断信息。</string>
     <string name="playback_logging_iec_title">启用原生 AudioSink/IEC 打包器日志</string>
     <string name="playback_logging_iec_subtitle">向 logcat 发送详细的原生 Kodi AudioSink 和 IEC 打包器诊断信息，用于 ADB 故障排除。</string>
     <string name="playback_logging_stream_title">启用流获取性能日志</string>

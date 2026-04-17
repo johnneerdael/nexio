@@ -877,8 +877,8 @@
     <string name="playback_trailer_delay_sub">Hoe lang te wachten voordat een trailervoorbeeld automatisch start.</string>
     <string name="playback_section_logging">Probleemoplossing</string>
     <string name="playback_section_logging_desc">Runtime-diagnostiek, afspeeltracing, gegevensverzameling en native audiosink-logboekregistratie.</string>
-    <string name="playback_logging_buffer_title">Logboekregistratie voor VOD-cache/parallel downloaden inschakelen</string>
-    <string name="playback_logging_buffer_subtitle">Periodieke cache-, buffer- en parallelle downloaddiagnostiek naar logcat verzenden.</string>
+    <string name="playback_logging_buffer_title">Afspeelbufferdiagnostiek inschakelen</string>
+    <string name="playback_logging_buffer_subtitle">Periodieke diagnostiek voor afspeelbuffer, cache, disk spool en Dolby Vision naar logcat verzenden.</string>
     <string name="playback_logging_iec_title">Logboeken voor native AudioSink/IEC-packer inschakelen</string>
     <string name="playback_logging_iec_subtitle">Uitgebreide native Kodi AudioSink- en IEC-packerdiagnostiek naar logcat verzenden voor ADB-probleemoplossing.</string>
     <string name="playback_logging_stream_title">Prestatielogboeken voor streamophalen inschakelen</string>
