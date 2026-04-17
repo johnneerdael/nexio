@@ -305,8 +305,8 @@
     <string name="playback_buffer_chunk_size_sub">Size of each download chunk per connection.</string>
     <string name="playback_buffer_info">State: %1$s. Range: %2$d-%3$d MB. Keeps about %4$dMB headroom. Free disk available: %5$s.</string>
     <string name="playback_memory_usage_estimate">Estimated memory usage: %1$d / %2$d MB</string>
-    <string name="playback_logging_buffer_title">Enable VOD Cache/Parallel Downloading Logging</string>
-    <string name="playback_logging_buffer_subtitle">Emit periodic cache, buffering, and parallel downloading diagnostics to logcat.</string>
+    <string name="playback_logging_buffer_title">Enable Playback Buffer Diagnostics</string>
+    <string name="playback_logging_buffer_subtitle">Emit periodic playback buffer, cache, disk spool, and Dolby Vision diagnostics to logcat.</string>
     <string name="playback_logging_iec_title">Enable Logs for Native AudioSink/IEC Packer</string>
     <string name="playback_logging_iec_subtitle">Emit verbose native Kodi AudioSink and IEC packer diagnostics to logcat for ADB troubleshooting.</string>
     <string name="playback_logging_stream_title">Enable Stream Fetching Performance Logs</string>
