@@ -69,6 +69,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -498,12 +499,20 @@ class MainActivity : ComponentActivity() {
                     val shouldShowProfileSelection = !hasSelectedProfileThisSession && profiles.size > 1
                     // Capture composition-local value at composable scope for use in LaunchedEffect
                     val contentFocusRequesterForGating = LocalContentFocusRequester.current
+                    val profileSelectionScope = rememberCoroutineScope()
 
                     if (shouldShowProfileSelection) {
                         ProfileSelectionScreen(
                             onProfileSelected = { profileId ->
-                                hasSelectedProfileThisSession = true
-                                switchProfileAndApplyLocale(profileId)
+                                profileSelectionScope.launch {
+                                    val beforeLocale = AppLocaleResolver.resolveEffectiveAppLanguageTag(this@MainActivity)
+                                    profileManager.setActiveProfile(profileId)
+                                    val afterLocale = AppLocaleResolver.resolveEffectiveAppLanguageTag(this@MainActivity)
+                                    hasSelectedProfileThisSession = true
+                                    if (beforeLocale != afterLocale) {
+                                        recreate()
+                                    }
+                                }
                             }
                         )
                         return@Surface
