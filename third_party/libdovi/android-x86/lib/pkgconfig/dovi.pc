@@ -1,4 +1,4 @@
-prefix=C:/Users/john/Scripts/NuvioTV/third_party/libdovi/android-x86
+prefix=${pcfiledir}/../..
 exec_prefix=${prefix}
 libdir=${prefix}/lib
 includedir=${prefix}/include
@@ -6,6 +6,6 @@ includedir=${prefix}/include
 Name: dovi
 Description: Dolby Vision metadata parsing and writing
 Version: 3.3.2
-Libs: -L${libdir} -ldovi -ldl -llog -lunwind -ldl -lm -lc
+Libs: -L${libdir} -ldovi
 Cflags: -I${includedir}
 Libs.private: -ldl -llog -lunwind -ldl -lm -lc

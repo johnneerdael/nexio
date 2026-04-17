@@ -15,21 +15,7 @@
 #endif
 
 #if DOVI_REAL_LINKED
-extern "C" {
-typedef struct DoviRpuOpaque DoviRpuOpaque;
-typedef struct DoviData {
-    const uint8_t* data;
-    size_t len;
-} DoviData;
-
-DoviRpuOpaque* dovi_parse_unspec62_nalu(const uint8_t* buf, size_t len);
-DoviRpuOpaque* dovi_parse_rpu(const uint8_t* buf, size_t len);
-const char* dovi_rpu_get_error(const DoviRpuOpaque* ptr);
-void dovi_rpu_free(DoviRpuOpaque* ptr);
-int32_t dovi_convert_rpu_with_mode(DoviRpuOpaque* ptr, uint8_t mode);
-const DoviData* dovi_write_unspec62_nalu(DoviRpuOpaque* ptr);
-void dovi_data_free(const DoviData* data);
-}
+#include <libdovi/rpu_parser.h>
 
 static inline bool dovi_has_error(const DoviRpuOpaque* rpu, std::string* out_error) {
     if (rpu == nullptr) {
@@ -83,12 +69,8 @@ static inline DoviRpuOpaque* dovi_parse_any_rpu(const std::vector<uint8_t>& payl
 
 static inline uint8_t map_conversion_mode(jint mode) {
     switch (mode) {
-        case 0:
-        case 1:
         case 2:
-        case 3:
-        case 4:
-            return static_cast<uint8_t>(mode);
+            return 2U;
         case 5:
             return 4U;
         default:
@@ -102,7 +84,7 @@ static std::atomic<bool> g_verbose_logging_enabled(false);
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_nexio_tv_core_player_DoviBridge_nativeGetBridgeVersion(JNIEnv* env, jclass /* clazz */) {
 #if DOVI_REAL_LINKED
-    return env->NewStringUTF("dovi-bridge-libdovi-capi-0.2");
+    return env->NewStringUTF("dovi-bridge-libdovi-capi-0.3");
 #else
     return env->NewStringUTF("dovi-bridge-stub-0.1");
 #endif

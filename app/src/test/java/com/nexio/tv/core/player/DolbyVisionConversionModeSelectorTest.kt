@@ -81,4 +81,14 @@ class DolbyVisionConversionModeSelectorTest {
             )
         )
     }
+
+    @Test
+    fun `bridge defaults to profile 8 1 mode`() {
+        assertEquals(2, DolbyVisionConversionModeSelector.MODE_PROFILE_8_1)
+        assertEquals(5, DolbyVisionConversionModeSelector.MODE_PROFILE_8_1_PRESERVE_MAPPING)
+        assertEquals(
+            DolbyVisionConversionModeSelector.MODE_PROFILE_8_1,
+            DEFAULT_DV7_CONVERSION_MODE
+        )
+    }
 }

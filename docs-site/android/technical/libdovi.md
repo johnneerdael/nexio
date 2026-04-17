@@ -26,6 +26,15 @@ There are two important modes:
 
 In other words, a build can expose the plumbing without shipping a working `libdovi` payload. The app accounts for that by probing the bridge before enabling the feature for a stream.
 
+## Bundled libdovi provenance
+
+The tracked Android prebuilts under `third_party/libdovi` are built from Nexio's `dovi_tool` fork after merging upstream `quietvoid/dovi_tool` 2.3.2. They also include Nexio's C API conversion-mode patch:
+
+- C API mode `2`: default profile 8.1 conversion
+- C API mode `4`: profile 8.1 conversion with mapping metadata preserved
+
+The app intentionally exposes preserve mapping as app mode `5`, then maps it to C API mode `4` in `app/src/main/cpp/dovi_bridge.cpp`. This keeps the UI/runtime setting distinct from raw `libdovi` C API values and avoids accidentally selecting profile 8.4 from the DV7-to-DV8.1 bridge.
+
 ## How DV7 to DV8.1 conversion works
 
 The runtime flow is:

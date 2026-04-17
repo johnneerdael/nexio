@@ -4,6 +4,8 @@ import android.util.Log
 import com.nexio.tv.BuildConfig
 import java.util.concurrent.atomic.AtomicLong
 
+internal const val DEFAULT_DV7_CONVERSION_MODE = DolbyVisionConversionModeSelector.MODE_PROFILE_8_1
+
 object DoviBridge {
     private const val TAG = "DoviBridge"
     private const val LIB_NAME = "dovi_bridge"
@@ -220,7 +222,10 @@ object DoviBridge {
         )
     }
 
-    fun convertDv7RpuToDv81(payload: ByteArray, mode: Int = 1): ByteArray? {
+    fun convertDv7RpuToDv81(
+        payload: ByteArray,
+        mode: Int = DEFAULT_DV7_CONVERSION_MODE
+    ): ByteArray? {
         if (!isAvailable() || payload.isEmpty()) return null
         conversionCallCount.incrementAndGet()
         if (verboseLoggingEnabled) {
