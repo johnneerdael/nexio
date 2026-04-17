@@ -176,10 +176,10 @@ data class PlayerSettings(
     val pauseOverlayEnabled: Boolean = true,
     val osdClockEnabled: Boolean = true,
     val skipIntroEnabled: Boolean = true,
-    // Try native DV7 -> DV8.1 conversion before HEVC fallback.
-    val experimentalDv7ToDv81Enabled: Boolean = true,
+    // Prefer DV7 HEVC HDR10 base-layer playback by default; DV8.1 conversion remains opt-in.
+    val experimentalDv7ToDv81Enabled: Boolean = false,
     // Map DV7 to its HEVC HDR10 base layer on non-Dolby Vision displays.
-    val experimentalDv7HevcBaseLayerEnabled: Boolean = false,
+    val experimentalDv7HevcBaseLayerEnabled: Boolean = true,
     // Experimental: enable the Kodi-style IEC packer custom AudioSink path.
     // When disabled, the normal Media3 passthrough path remains active.
     val experimentalDtsIecPassthroughEnabled: Boolean = false,
@@ -268,8 +268,8 @@ data class PlayerSettings(
         const val MIN_DISK_SPOOL_SIZE_MB = 512
         const val MAX_DISK_SPOOL_SIZE_MB = 2_048
         const val MIN_DISK_SPOOL_STARTUP_BUFFER_MB = 0
-        val DEFAULT_VOD_CACHE_SIZE_MODE: VodCacheSizeMode = VodCacheSizeMode.ON
-        const val DEFAULT_USE_PARALLEL_CONNECTIONS = true
+        val DEFAULT_VOD_CACHE_SIZE_MODE: VodCacheSizeMode = VodCacheSizeMode.OFF
+        const val DEFAULT_USE_PARALLEL_CONNECTIONS = false
         const val DEFAULT_PARALLEL_CONNECTION_COUNT = 2
         const val DEFAULT_PARALLEL_CHUNK_SIZE_MB = 16
         const val MIN_PARALLEL_CONNECTION_COUNT = 2
@@ -749,12 +749,12 @@ class PlayerSettingsDataStore @Inject constructor(
                 osdClockEnabled = prefs[osdClockEnabledKey] ?: true,
                 skipIntroEnabled = prefs[skipIntroEnabledKey] ?: true,
                 experimentalDv7HevcBaseLayerEnabled =
-                    prefs[experimentalDv7HevcBaseLayerEnabledKey] ?: false,
+                    prefs[experimentalDv7HevcBaseLayerEnabledKey] ?: true,
                 experimentalDv7ToDv81Enabled =
-                    if (prefs[experimentalDv7HevcBaseLayerEnabledKey] == true) {
+                    if (prefs[experimentalDv7HevcBaseLayerEnabledKey] != false) {
                         false
                     } else {
-                        prefs[experimentalDv7ToDv81EnabledKey] ?: true
+                        prefs[experimentalDv7ToDv81EnabledKey] ?: false
                     },
                 experimentalDtsIecPassthroughEnabled =
                     prefs[experimentalDtsIecPassthroughEnabledKey] ?: false,
@@ -795,7 +795,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 experimentalDv5HardwareToneMapCpuFallbackEnabled =
                     prefs[experimentalDv5HardwareToneMapCpuFallbackEnabledKey] ?: false,
                 experimentalDv7ToDv81PreserveMappingEnabled =
-                    if (prefs[experimentalDv7HevcBaseLayerEnabledKey] == true) {
+                    if (prefs[experimentalDv7HevcBaseLayerEnabledKey] != false) {
                         false
                     } else {
                         prefs[experimentalDv7ToDv81PreserveMappingEnabledKey] ?: false
