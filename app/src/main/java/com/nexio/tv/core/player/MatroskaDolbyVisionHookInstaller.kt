@@ -42,6 +42,9 @@ object MatroskaDolbyVisionHookInstaller {
     private val rpuOutputBytes = AtomicLong(0L)
     private val lengthFieldBytes = AtomicLong(0L)
     private val droppedBytes = AtomicLong(0L)
+    private val streamingSamples = AtomicLong(0L)
+    private val streamingRpuBytes = AtomicLong(0L)
+    private val streamingConvertedRpuBytes = AtomicLong(0L)
     private val appendedSampleBytes = AtomicLong(0L)
     private val rpuNalTransformCalls = AtomicLong(0L)
 
@@ -56,6 +59,9 @@ object MatroskaDolbyVisionHookInstaller {
         val rpuOutputBytes: Long,
         val lengthFieldBytes: Long,
         val droppedBytes: Long,
+        val streamingSamples: Long,
+        val streamingRpuBytes: Long,
+        val streamingConvertedRpuBytes: Long,
         val appendedSampleBytes: Long,
         val rpuNalTransformCalls: Long
     )
@@ -73,6 +79,9 @@ object MatroskaDolbyVisionHookInstaller {
         rpuOutputBytes.set(0L)
         lengthFieldBytes.set(0L)
         droppedBytes.set(0L)
+        streamingSamples.set(0L)
+        streamingRpuBytes.set(0L)
+        streamingConvertedRpuBytes.set(0L)
         appendedSampleBytes.set(0L)
         rpuNalTransformCalls.set(0L)
     }
@@ -96,6 +105,9 @@ object MatroskaDolbyVisionHookInstaller {
             rpuOutputBytes = rpuOutputBytes.get(),
             lengthFieldBytes = lengthFieldBytes.get(),
             droppedBytes = droppedBytes.get(),
+            streamingSamples = streamingSamples.get(),
+            streamingRpuBytes = streamingRpuBytes.get(),
+            streamingConvertedRpuBytes = streamingConvertedRpuBytes.get(),
             appendedSampleBytes = appendedSampleBytes.get(),
             rpuNalTransformCalls = rpuNalTransformCalls.get()
         )
@@ -310,7 +322,11 @@ object MatroskaDolbyVisionHookInstaller {
                             ?: return@InvocationHandler false
                     val dolbyVisionConfigBytes = invocationArgs.getOrNull(3) as? ByteArray
                     val profile = resolveDolbyVisionProfile(configBytes = dolbyVisionConfigBytes)
-                    nalUnitLengthFieldLength in 1..4 && shouldAllowConversion(profile)
+                    val allowed = nalUnitLengthFieldLength in 1..4 && shouldAllowConversion(profile)
+                    if (allowed && diagnosticsEnabled) {
+                        streamingSamples.incrementAndGet()
+                    }
+                    allowed
                 }
                 "transformHevcSample" -> {
                     val sampleLengthDelimited = invocationArgs.getOrNull(0) as? ByteArray
@@ -406,7 +422,17 @@ object MatroskaDolbyVisionHookInstaller {
                     if (!shouldAllowConversion(profile)) {
                         return@InvocationHandler null
                     }
-                    maybeConvertDolbyVisionRpuNal(nalPayload, selectedConversionMode(profile))
+                    if (secondArg is Number && diagnosticsEnabled) {
+                        streamingRpuBytes.addAndGet(nalPayload.size.toLong())
+                    }
+                    val converted = maybeConvertDolbyVisionRpuNal(
+                        nalPayload,
+                        selectedConversionMode(profile)
+                    )
+                    if (secondArg is Number && diagnosticsEnabled) {
+                        streamingConvertedRpuBytes.addAndGet(converted.size.toLong())
+                    }
+                    converted
                 }
                 "equals" -> proxy === invocationArgs.getOrNull(0)
                 "hashCode" -> System.identityHashCode(proxy)
