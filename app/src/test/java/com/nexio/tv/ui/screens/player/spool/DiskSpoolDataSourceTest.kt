@@ -140,12 +140,14 @@ class DiskSpoolDataSourceTest {
                 .build()
 
             assertEquals(4L, dataSource.open(dataSpec))
+            assertEquals(0L, session.currentReadPositionBytes())
 
             val buffer = ByteArray(4)
             assertEquals(4, dataSource.read(buffer, 0, buffer.size))
             assertArrayEquals(fallbackContent.copyOfRange(1_024, 1_028), buffer)
             assertEquals(0L, session.windowStartBytes())
             assertEquals(4L, session.contiguousFrontierBytes())
+            assertEquals(0L, session.currentReadPositionBytes())
             assertEquals(listOf(1_024L), fallbackFactory.openedPositions)
 
             dataSource.close()

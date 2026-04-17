@@ -44,7 +44,6 @@ internal class DiskSpoolDataSource(
 
         openedDataSpec = dataSpec
         position = dataSpec.position
-        session.updateReadPosition(position)
         resolvedContentLength = when {
             contentLength != C.LENGTH_UNSET.toLong() -> contentLength
             session.contentLengthBytes() != C.LENGTH_UNSET.toLong() -> session.contentLengthBytes()
@@ -59,6 +58,7 @@ internal class DiskSpoolDataSource(
             return openFallback(dataSpec)
         }
 
+        session.updateReadPosition(position)
         transferListeners.forEach { it.onTransferInitializing(this, dataSpec, false) }
         transferListeners.forEach { it.onTransferStart(this, dataSpec, false) }
         return remaining
