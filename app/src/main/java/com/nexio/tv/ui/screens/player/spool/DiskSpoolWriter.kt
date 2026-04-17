@@ -17,7 +17,8 @@ internal class DiskSpoolWriter(
     private val ioBufferBytes: Int = 512 * 1024,
     @Suppress("UNUSED_PARAMETER")
     parallelConnections: Int = 1,
-    private val startupPriorityBytes: Long = 100L * 1024L * 1024L
+    private val startupPriorityBytes: Long = 100L * 1024L * 1024L,
+    private val ioBufferFactory: (Int) -> ByteArray = { ByteArray(it) }
 ) {
     data class SourceMetadata(
         val contentLength: Long,
@@ -130,6 +131,7 @@ internal class DiskSpoolWriter(
         )
 
         val bridge = SessionAdapter(session)
+        val ioBuffer = ioBufferFactory(ioBufferBytes)
         val startupTargetBytes = minOf(
             startupPriorityBytes.coerceAtLeast(0L),
             targetFrontierBytes,
@@ -140,14 +142,16 @@ internal class DiskSpoolWriter(
                 url = url,
                 bridge = bridge,
                 targetFrontierBytes = startupTargetBytes,
-                contentLength = metadata.contentLength
+                contentLength = metadata.contentLength,
+                ioBuffer = ioBuffer
             )
         }
         downloadSequentially(
             url = url,
             bridge = bridge,
             targetFrontierBytes = targetFrontierBytes,
-            contentLength = metadata.contentLength
+            contentLength = metadata.contentLength,
+            ioBuffer = ioBuffer
         )
     }
 
@@ -155,7 +159,8 @@ internal class DiskSpoolWriter(
         url: String,
         bridge: SessionBridge,
         targetFrontierBytes: Long,
-        contentLength: Long
+        contentLength: Long,
+        ioBuffer: ByteArray
     ) {
         var cursor = bridge.contiguousFrontierBytes()
         while (
@@ -173,7 +178,7 @@ internal class DiskSpoolWriter(
             }
 
             val endInclusive = minOf(cursor + chunkBytes - 1L, targetFrontierBytes - 1L, contentLength - 1L)
-            cursor = downloadRangeIntoSession(url, cursor, endInclusive, bridge)
+            cursor = downloadRangeIntoSession(url, cursor, endInclusive, bridge, ioBuffer)
         }
     }
 
@@ -181,10 +186,10 @@ internal class DiskSpoolWriter(
         source: BufferedSource,
         start: Long,
         endInclusive: Long,
-        session: SessionBridge
+        session: SessionBridge,
+        buffer: ByteArray
     ): Long {
         var cursor = start
-        val buffer = ByteArray(ioBufferBytes)
         while (!session.isClosed() && !Thread.currentThread().isInterrupted && cursor <= endInclusive) {
             val priority = session.consumePriorityPosition()
             if (priority >= 0L) {
@@ -213,7 +218,8 @@ internal class DiskSpoolWriter(
         url: String,
         start: Long,
         endInclusive: Long,
-        session: SessionBridge
+        session: SessionBridge,
+        ioBuffer: ByteArray
     ): Long {
         val callerThread = Thread.currentThread()
         fun isCancelled(): Boolean = session.isClosed() || callerThread.isInterrupted
@@ -246,7 +252,7 @@ internal class DiskSpoolWriter(
 
                     val source = response.body?.source()
                         ?: throw IOException("Missing response body for range $start-$endInclusive")
-                    downloadRangeIntoSession(source, start, endInclusive, session)
+                    downloadRangeIntoSession(source, start, endInclusive, session, ioBuffer)
                 }
             } catch (throwable: IOException) {
                 if (isCancelled()) {

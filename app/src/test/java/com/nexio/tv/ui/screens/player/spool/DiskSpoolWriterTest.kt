@@ -220,6 +220,49 @@ class DiskSpoolWriterTest {
     }
 
     @Test
+    fun `writer allocates one io buffer for multiple ranges in one run`() {
+        val content = ByteArray(96 * 1024) { (it % 251).toByte() }
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return when (val range = request.getHeader("Range")) {
+                    "bytes=0-0" -> MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Accept-Ranges", "bytes")
+                        .setHeader("Content-Range", "bytes 0-0/${content.size}")
+                        .setHeader("Content-Length", 1)
+                        .setBody(Buffer().writeByte(0x2A))
+                    else -> rangedResponse(content, range ?: error("Missing range"))
+                }
+            }
+        }
+        server.start()
+        val session = DiskSpoolSession(File(temp.root, "single-buffer.spool"), capacityBytes = 128 * 1024L)
+        val allocationCount = AtomicInteger(0)
+
+        try {
+            DiskSpoolWriter(
+                okHttpClient = OkHttpClient(),
+                chunkBytes = 32 * 1024,
+                ioBufferBytes = 4 * 1024,
+                startupPriorityBytes = 0L,
+                ioBufferFactory = { size ->
+                    allocationCount.incrementAndGet()
+                    ByteArray(size)
+                }
+            ).downloadUntil(server.url("/movie.bin").toString(), session, content.size.toLong())
+
+            val buffer = ByteArray(content.size)
+            assertEquals(content.size, session.read(0L, buffer, 0, buffer.size))
+            assertArrayEquals(content, buffer)
+            assertEquals(1, allocationCount.get())
+        } finally {
+            session.close()
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun `writer retries a failed range request`() {
         val content = ByteArray(64 * 1024) { (it % 251).toByte() }
         val rangeAttempts = AtomicInteger(0)
@@ -291,7 +334,8 @@ class DiskSpoolWriterTest {
             source = source,
             start = firstPriority,
             endInclusive = firstPriority + 32 * 1024L - 1L,
-            session = session
+            session = session,
+            buffer = ByteArray(8 * 1024)
         )
 
         assertEquals(secondPriority, nextCursor)
