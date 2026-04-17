@@ -184,7 +184,7 @@ internal class DiskSpoolWriter(
         }
     }
 
-    private fun downloadSequentially(
+    internal fun downloadSequentially(
         url: String,
         bridge: SessionBridge,
         targetFrontierBytes: Long,
@@ -203,10 +203,7 @@ internal class DiskSpoolWriter(
                 if (!rebaseTo(bridge, priority)) {
                     return
                 }
-                cursor = priority
-                if (cursor >= targetFrontierBytes) {
-                    return
-                }
+                return
             }
 
             val endInclusive = minOf(cursor + chunkBytes - 1L, targetFrontierBytes - 1L, contentLength - 1L)
