@@ -38,6 +38,7 @@ class DolbyVisionDiagnosticsTest {
         assertTrue(hook.sourceCopyBytes == 0L)
         assertTrue(hook.rpuInputBytes == 0L)
         assertTrue(hook.rpuOutputBytes == 0L)
+        assertTrue(hook.lengthFieldBytes == 0L)
         assertTrue(hook.droppedBytes == 0L)
         assertTrue(tap.copiedBytes == 0L)
     }
