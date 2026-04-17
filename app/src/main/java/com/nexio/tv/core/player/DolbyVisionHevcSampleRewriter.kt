@@ -10,6 +10,7 @@ internal object DolbyVisionHevcSampleRewriter {
         var sourceCopyBytes: Long = 0L,
         var rpuInputBytes: Long = 0L,
         var rpuOutputBytes: Long = 0L,
+        var lengthFieldBytes: Long = 0L,
         var droppedBytes: Long = 0L
     )
 
@@ -171,6 +172,7 @@ internal object DolbyVisionHevcSampleRewriter {
             it.sourceCopyBytes += keptNalBytes
             it.rpuInputBytes += rpuInputBytes
             it.rpuOutputBytes += rpuOutputBytes
+            it.lengthFieldBytes += keptLengthFieldBytes
             it.droppedBytes += droppedBytes
         }
 

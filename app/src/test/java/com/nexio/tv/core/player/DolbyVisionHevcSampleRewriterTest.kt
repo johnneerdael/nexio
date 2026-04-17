@@ -34,6 +34,7 @@ class DolbyVisionHevcSampleRewriterTest {
         assertEquals(0L, metrics.outputBytes)
         assertEquals(0L, metrics.sourceCopyBytes)
         assertEquals(0L, metrics.rpuInputBytes)
+        assertEquals(0L, metrics.lengthFieldBytes)
         assertEquals(0L, metrics.droppedBytes)
     }
 
@@ -71,6 +72,7 @@ class DolbyVisionHevcSampleRewriterTest {
         assertEquals((baseVps.size + baseSlice.size).toLong(), metrics.sourceCopyBytes)
         assertEquals(rpu.size.toLong(), metrics.rpuInputBytes)
         assertEquals(convertedRpu.size.toLong(), metrics.rpuOutputBytes)
+        assertEquals((4L * 3L), metrics.lengthFieldBytes)
         assertEquals(enhancementSlice.size.toLong(), metrics.droppedBytes)
     }
 

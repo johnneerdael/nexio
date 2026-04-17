@@ -144,6 +144,8 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                                     append(hookDiagnostics.rpuInputBytes / (1024L * 1024L))
                                     append(",rpuOutMb=")
                                     append(hookDiagnostics.rpuOutputBytes / (1024L * 1024L))
+                                    append(",lengthFieldMb=")
+                                    append(hookDiagnostics.lengthFieldBytes / (1024L * 1024L))
                                     append(",dropMb=")
                                     append(hookDiagnostics.droppedBytes / (1024L * 1024L))
                                     append(",appendMb=")

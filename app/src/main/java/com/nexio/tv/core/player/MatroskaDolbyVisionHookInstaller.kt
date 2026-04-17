@@ -40,6 +40,7 @@ object MatroskaDolbyVisionHookInstaller {
     private val sourceCopyBytes = AtomicLong(0L)
     private val rpuInputBytes = AtomicLong(0L)
     private val rpuOutputBytes = AtomicLong(0L)
+    private val lengthFieldBytes = AtomicLong(0L)
     private val droppedBytes = AtomicLong(0L)
     private val appendedSampleBytes = AtomicLong(0L)
     private val rpuNalTransformCalls = AtomicLong(0L)
@@ -53,6 +54,7 @@ object MatroskaDolbyVisionHookInstaller {
         val sourceCopyBytes: Long,
         val rpuInputBytes: Long,
         val rpuOutputBytes: Long,
+        val lengthFieldBytes: Long,
         val droppedBytes: Long,
         val appendedSampleBytes: Long,
         val rpuNalTransformCalls: Long
@@ -69,6 +71,7 @@ object MatroskaDolbyVisionHookInstaller {
         sourceCopyBytes.set(0L)
         rpuInputBytes.set(0L)
         rpuOutputBytes.set(0L)
+        lengthFieldBytes.set(0L)
         droppedBytes.set(0L)
         appendedSampleBytes.set(0L)
         rpuNalTransformCalls.set(0L)
@@ -91,6 +94,7 @@ object MatroskaDolbyVisionHookInstaller {
             sourceCopyBytes = sourceCopyBytes.get(),
             rpuInputBytes = rpuInputBytes.get(),
             rpuOutputBytes = rpuOutputBytes.get(),
+            lengthFieldBytes = lengthFieldBytes.get(),
             droppedBytes = droppedBytes.get(),
             appendedSampleBytes = appendedSampleBytes.get(),
             rpuNalTransformCalls = rpuNalTransformCalls.get()
@@ -502,11 +506,15 @@ object MatroskaDolbyVisionHookInstaller {
             rewriteInputBytes.addAndGet(metrics.inputBytes)
             rewriteOutputBytes.addAndGet(metrics.outputBytes)
             rewriteCopyBytes.addAndGet(
-                metrics.sourceCopyBytes + metrics.rpuInputBytes + metrics.rpuOutputBytes
+                metrics.sourceCopyBytes +
+                    metrics.rpuInputBytes +
+                    metrics.rpuOutputBytes +
+                    metrics.lengthFieldBytes
             )
             sourceCopyBytes.addAndGet(metrics.sourceCopyBytes)
             rpuInputBytes.addAndGet(metrics.rpuInputBytes)
             rpuOutputBytes.addAndGet(metrics.rpuOutputBytes)
+            lengthFieldBytes.addAndGet(metrics.lengthFieldBytes)
             droppedBytes.addAndGet(metrics.droppedBytes)
         }
         return rewritten
