@@ -27,7 +27,6 @@ import com.nexio.tv.data.repository.SkipInterval
 import com.nexio.tv.data.repository.SubtitleTranslationService
 import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.TrackingScrobbleService
-import com.nexio.tv.data.local.DebridBenchmarkStore
 import okhttp3.OkHttpClient
 import com.nexio.tv.domain.model.SubtitleTranslationSettings
 import com.nexio.tv.domain.model.Video
@@ -67,7 +66,6 @@ class PlayerRuntimeController(
     internal val subtitleTranslationService: SubtitleTranslationService,
     internal val tvMetadataRouter: TvMetadataRouter,
     internal val playbackIdleGateState: PlaybackIdleGateState,
-    internal val debridBenchmarkStore: DebridBenchmarkStore,
     internal val playbackOkHttpClient: OkHttpClient,
     savedStateHandle: SavedStateHandle,
     internal val scope: CoroutineScope

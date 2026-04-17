@@ -44,41 +44,6 @@ class CollectorUploadersTest {
         server.shutdown()
     }
 
-    @Test
-    fun `benchmark uploader includes android id in client envelope`() = runTest {
-        val server = MockWebServer()
-        server.start()
-        server.enqueue(MockResponse().setResponseCode(200))
-        val uploader = DebridBenchmarkCollectionUploader(
-            playerSettingsDataStore = playerSettingsDataStore(
-                PlayerSettings(debridBenchmarkDataCollectionEnabled = true)
-            ),
-            okHttpClient = OkHttpClient(),
-            baseUrlProvider = { server.url("/").toString().trimEnd('/') },
-            tokenProvider = { "write-token" },
-            clientInfoProvider = { clientInfoJson("benchmark-android-id") }
-        )
-
-        uploader.submitIfEnabled(
-            DebridBenchmarkResult(
-                provider = DebridBenchmarkProvider.REAL_DEBRID,
-                measuredAtMs = 1234L,
-                summary = DebridBenchmarkSummary(
-                    startupTimeMs = 1000L,
-                    sustainedThroughputMbps = 50.0,
-                    transferredBytes = 1024L,
-                    elapsedMs = 1000L
-                ),
-                terminationReason = DebridBenchmarkTerminationReason.COMPLETED
-            )
-        )
-
-        val request = server.takeRequest()
-        val envelope = JsonParser.parseString(request.body.readUtf8()).asJsonObject
-        assertEquals("benchmark-android-id", envelope.getAsJsonObject("client").get("androidId").asString)
-        server.shutdown()
-    }
-
     private fun playerSettingsDataStore(settings: PlayerSettings): PlayerSettingsDataStore {
         return mockk<PlayerSettingsDataStore>(relaxed = true).also {
             every { it.playerSettings } returns flowOf(settings)

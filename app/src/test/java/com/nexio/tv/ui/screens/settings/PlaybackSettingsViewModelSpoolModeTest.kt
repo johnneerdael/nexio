@@ -8,8 +8,6 @@ import com.nexio.tv.data.local.TrailerSettings
 import com.nexio.tv.data.local.TrailerSettingsDataStore
 import com.nexio.tv.data.repository.TrackingProviderState
 import com.nexio.tv.data.repository.TrackingProviderStateRepository
-import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
-import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
 import com.nexio.tv.ui.screens.player.spool.SpoolStorageProbeResult
@@ -289,7 +287,6 @@ class PlaybackSettingsViewModelSpoolModeTest {
         val trailerSettingsDataStore = mockk<TrailerSettingsDataStore>(relaxed = true)
         val debugSettingsDataStore = mockk<DebugSettingsDataStore>(relaxed = true)
         val addonRepository = mockk<AddonRepository>(relaxed = true)
-        val debridBenchmarkService = mockk<DebridBenchmarkService>(relaxed = true)
         val trackingProviderStateRepository = mockk<TrackingProviderStateRepository>(relaxed = true)
         val context = mockk<Context>(relaxed = true)
 
@@ -301,14 +298,12 @@ class PlaybackSettingsViewModelSpoolModeTest {
         every { debugSettingsDataStore.startupPerfTelemetryEnabled } returns flowOf(false)
         every { addonRepository.getInstalledAddons() } returns flowOf(emptyList())
         every { trackingProviderStateRepository.state } returns flowOf(TrackingProviderState())
-        every { debridBenchmarkService.latestResult(any<DebridBenchmarkProvider>()) } returns flowOf(null)
 
         return PlaybackSettingsViewModel(
             playerSettingsDataStore = playerSettingsDataStore,
             trailerSettingsDataStore = trailerSettingsDataStore,
             debugSettingsDataStore = debugSettingsDataStore,
             addonRepository = addonRepository,
-            debridBenchmarkService = debridBenchmarkService,
             trackingProviderStateRepository = trackingProviderStateRepository,
             context = context
         )

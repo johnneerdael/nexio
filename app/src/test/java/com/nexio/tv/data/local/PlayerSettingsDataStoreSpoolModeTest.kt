@@ -109,16 +109,6 @@ class PlayerSettingsDataStoreSpoolModeTest {
     }
 
     @Test
-    fun `setting spool mode does not clear autoplay max bitrate`() = runTest {
-        val dataStore = playerSettingsDataStoreForTest()
-
-        dataStore.setAutoplayMaxBitrate(42.0)
-        dataStore.setProgressivePlaybackDiskMode(ProgressivePlaybackDiskMode.SPOOL)
-
-        assertEquals(42.0, dataStore.playerSettings.first().autoplayMaxBitrateMbps ?: -1.0, 0.0)
-    }
-
-    @Test
     fun `persisted spool storage probe result json round trips`() = runTest {
         val dataStore = playerSettingsDataStoreForTest()
         val result = probeResult()

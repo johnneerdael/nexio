@@ -5,7 +5,6 @@ import android.util.Log
 import androidx.annotation.MainThread
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.nexio.tv.data.local.AutoplayBandwidthMode
 import com.nexio.tv.data.local.DebugSettingsDataStore
 import com.nexio.tv.data.local.PlayerSettings
 import com.nexio.tv.data.local.PlayerSettingsDataStore
@@ -26,10 +25,6 @@ import com.nexio.tv.domain.model.TrackingProvider
 import com.nexio.tv.domain.repository.AddonRepository
 import com.nexio.tv.data.repository.TrackingProviderState
 import com.nexio.tv.data.repository.TrackingProviderStateRepository
-import com.nexio.tv.data.repository.benchmark.DebridBenchmarkProvider
-import com.nexio.tv.data.repository.benchmark.DebridBenchmarkResult
-import com.nexio.tv.data.repository.benchmark.DebridBenchmarkService
-import com.nexio.tv.data.repository.benchmark.hasValidAutoplayBenchmarkFor
 import com.nexio.tv.core.player.AndroidFrameRateSettings
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageDiagnostic
 import com.nexio.tv.ui.screens.player.spool.DiskSpoolStorageLocation
@@ -69,7 +64,6 @@ class PlaybackSettingsViewModel @Inject constructor(
     private val trailerSettingsDataStore: TrailerSettingsDataStore,
     private val debugSettingsDataStore: DebugSettingsDataStore,
     private val addonRepository: AddonRepository,
-    private val debridBenchmarkService: DebridBenchmarkService,
     trackingProviderStateRepository: TrackingProviderStateRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -88,20 +82,6 @@ class PlaybackSettingsViewModel @Inject constructor(
         return AndroidFrameRateSettings.readStatus(context)
     }
 
-    private val latestBenchmarkResults: Flow<List<DebridBenchmarkResult>> = combine(
-        debridBenchmarkService.latestResult(DebridBenchmarkProvider.REAL_DEBRID),
-        debridBenchmarkService.latestResult(DebridBenchmarkProvider.PREMIUMIZE),
-        debridBenchmarkService.latestResult(DebridBenchmarkProvider.TORBOX),
-        debridBenchmarkService.latestResult(DebridBenchmarkProvider.EASY_DEBRID)
-    ) { realDebrid, premiumize, torBox, easyDebrid ->
-        listOfNotNull(realDebrid, premiumize, torBox, easyDebrid)
-    }
-    val autoplayBenchmarkAvailable: Flow<Boolean> = combine(
-        playerSettings,
-        latestBenchmarkResults
-    ) { settings, benchmarkResults ->
-        benchmarkResults.any { it.hasValidAutoplayBenchmarkFor(settings) }
-    }.distinctUntilChanged()
     val installedAddonNames: Flow<List<String>> = addonRepository.getInstalledAddons().map { addons ->
         addons
             .filter { addon ->
@@ -498,35 +478,12 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setStreamAutoPlayPreferBingeGroupForNextEpisode(enabled)
     }
 
-    suspend fun setAutoplayBandwidthMode(mode: AutoplayBandwidthMode) {
-        val targetMode = if (mode == AutoplayBandwidthMode.AUTO && !currentAutoplayBenchmarkAvailable()) {
-            AutoplayBandwidthMode.MANUAL
-        } else {
-            mode
-        }
-        playerSettingsDataStore.setAutoplayBandwidthMode(targetMode)
-    }
-
     suspend fun setManualBitrateLimitMbps(mbps: Double) {
         playerSettingsDataStore.setManualBitrateLimitMbps(mbps)
     }
 
     suspend fun setDeterministicAutoplayEnabled(enabled: Boolean) {
         playerSettingsDataStore.setDeterministicAutoplayEnabled(enabled)
-    }
-
-    private suspend fun currentAutoplayBenchmarkAvailable(): Boolean {
-        val settings = playerSettings.first()
-        return listOf(
-            DebridBenchmarkProvider.REAL_DEBRID,
-            DebridBenchmarkProvider.PREMIUMIZE,
-            DebridBenchmarkProvider.TORBOX,
-            DebridBenchmarkProvider.EASY_DEBRID
-        ).any { provider ->
-            debridBenchmarkService.latestResult(provider)
-                .first()
-                ?.hasValidAutoplayBenchmarkFor(settings) == true
-        }
     }
 
     suspend fun setNextEpisodeThresholdMode(mode: NextEpisodeThresholdMode) {

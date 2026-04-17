@@ -9,7 +9,6 @@ import com.nexio.tv.core.tvdb.TvMetadataRouter
 import com.nexio.tv.data.local.PlayerSettingsDataStore
 import com.nexio.tv.data.local.StreamLinkCacheDataStore
 import com.nexio.tv.data.local.DebugSettingsDataStore
-import com.nexio.tv.data.local.DebridBenchmarkStore
 import com.nexio.tv.data.local.SubtitleTranslationSettingsDataStore
 import com.nexio.tv.data.local.TheIntroDbSettingsDataStore
 import com.nexio.tv.data.repository.SkipIntroRepository
@@ -49,7 +48,6 @@ class PlayerViewModel @Inject constructor(
     private val subtitleTranslationService: SubtitleTranslationService,
     private val tvMetadataRouter: TvMetadataRouter,
     private val playbackIdleGateState: PlaybackIdleGateState,
-    private val debridBenchmarkStore: DebridBenchmarkStore,
     @Named("playback") private val playbackOkHttpClient: OkHttpClient,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -71,7 +69,6 @@ class PlayerViewModel @Inject constructor(
         subtitleTranslationService = subtitleTranslationService,
         tvMetadataRouter = tvMetadataRouter,
         playbackIdleGateState = playbackIdleGateState,
-        debridBenchmarkStore = debridBenchmarkStore,
         playbackOkHttpClient = playbackOkHttpClient,
         savedStateHandle = savedStateHandle,
         scope = viewModelScope

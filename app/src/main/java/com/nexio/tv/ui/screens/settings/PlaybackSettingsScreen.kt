@@ -98,7 +98,6 @@ import androidx.tv.material3.Switch
 import androidx.tv.material3.SwitchDefaults
 import androidx.tv.material3.Text
 import com.nexio.tv.data.local.AVAILABLE_SUBTITLE_LANGUAGES
-import com.nexio.tv.data.local.AutoplayBandwidthMode
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.IecPackerChannelLayout
 import com.nexio.tv.data.local.InternalPlayerEngine
@@ -149,7 +148,6 @@ internal fun PlaybackSettingsContent(
     val startupPerfTelemetryEnabled by viewModel.startupPerfTelemetryEnabled.collectAsStateWithLifecycle(initialValue = false)
     val diskSpoolDiagnosticsEnabled by viewModel.diskSpoolDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val dolbyVisionDiagnosticsEnabled by viewModel.dolbyVisionDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
-    val autoplayBenchmarkAvailable by viewModel.autoplayBenchmarkAvailable.collectAsStateWithLifecycle(initialValue = false)
     val diskSpoolStorageProbeUiState by viewModel.diskSpoolStorageProbeUiState.collectAsStateWithLifecycle()
     val debridUiState by debridViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -200,7 +198,6 @@ internal fun PlaybackSettingsContent(
     var showMpvHardwareDecodeModeDialog by remember { mutableStateOf(false) }
     var showIecPackerChannelLayoutDialog by remember { mutableStateOf(false) }
     var showTrackingProviderDialog by remember { mutableStateOf(false) }
-    var showAutoplayBandwidthModeDialog by remember { mutableStateOf(false) }
     var showNextEpisodeThresholdModeDialog by remember { mutableStateOf(false) }
     var showReuseLastLinkCacheDialog by remember { mutableStateOf(false) }
     var showPlayerPreferenceDialog by remember { mutableStateOf(false) }
@@ -221,7 +218,6 @@ internal fun PlaybackSettingsContent(
         showMpvHardwareDecodeModeDialog = false
         showIecPackerChannelLayoutDialog = false
         showTrackingProviderDialog = false
-        showAutoplayBandwidthModeDialog = false
         showNextEpisodeThresholdModeDialog = false
         showReuseLastLinkCacheDialog = false
         showPlayerPreferenceDialog = false
@@ -275,8 +271,6 @@ internal fun PlaybackSettingsContent(
                 },
                 trackingProviderEnabled = trackingProviderSelectorState.canChoose,
                 trackingProviderVisible = trackingProviderSelectorState.hasAnyConfiguredProvider,
-                autoplayBenchmarkAvailable = autoplayBenchmarkAvailable,
-                onShowAutoplayBandwidthModeDialog = { openDialog { showAutoplayBandwidthModeDialog = true } },
                 onShowNextEpisodeThresholdModeDialog = { openDialog { showNextEpisodeThresholdModeDialog = true } },
                 onShowReuseLastLinkCacheDialog = { openDialog { showReuseLastLinkCacheDialog = true } },
                 onSetDeterministicAutoplayEnabled = { enabled ->
@@ -430,8 +424,6 @@ internal fun PlaybackSettingsContent(
                 },
                 shadowAutoplayDataCollectionEnabled = debridUiState.shadowAutoplayDataCollectionEnabled,
                 onSetShadowAutoplayDataCollectionEnabled = { debridViewModel.setShadowAutoplayDataCollectionEnabled(it) },
-                debridBenchmarkDataCollectionEnabled = debridUiState.debridBenchmarkDataCollectionEnabled,
-                onSetDebridBenchmarkDataCollectionEnabled = { debridViewModel.setDebridBenchmarkDataCollectionEnabled(it) },
                 onShowCollectorDashboardQr = {
                     debridViewModel.refreshPublicCollectorDashboardLink()
                     showCollectorDashboardDialog = true
@@ -459,10 +451,8 @@ internal fun PlaybackSettingsContent(
         showDecoderPriorityDialog = showDecoderPriorityDialog,
         showMpvHardwareDecodeModeDialog = showMpvHardwareDecodeModeDialog,
         showIecPackerChannelLayoutDialog = showIecPackerChannelLayoutDialog,
-        showAutoplayBandwidthModeDialog = showAutoplayBandwidthModeDialog,
         showNextEpisodeThresholdModeDialog = showNextEpisodeThresholdModeDialog,
         showReuseLastLinkCacheDialog = showReuseLastLinkCacheDialog,
-        autoplayBenchmarkAvailable = autoplayBenchmarkAvailable,
         onSetPlayerPreference = { preference ->
             coroutineScope.launch { viewModel.setPlayerPreference(preference) }
         },
@@ -508,9 +498,6 @@ internal fun PlaybackSettingsContent(
         onSetIecPackerMaxPcmChannelLayout = { layout: IecPackerChannelLayout ->
             coroutineScope.launch { viewModel.setIecPackerMaxPcmChannelLayout(layout) }
         },
-        onSetAutoplayBandwidthMode = { mode: AutoplayBandwidthMode ->
-            coroutineScope.launch { viewModel.setAutoplayBandwidthMode(mode) }
-        },
         onSetNextEpisodeThresholdMode = { mode ->
             coroutineScope.launch { viewModel.setNextEpisodeThresholdMode(mode) }
         },
@@ -528,7 +515,6 @@ internal fun PlaybackSettingsContent(
         onDismissDecoderPriorityDialog = ::dismissAllDialogs,
         onDismissMpvHardwareDecodeModeDialog = ::dismissAllDialogs,
         onDismissIecPackerChannelLayoutDialog = ::dismissAllDialogs,
-        onDismissAutoplayBandwidthModeDialog = ::dismissAllDialogs,
         onDismissNextEpisodeThresholdModeDialog = ::dismissAllDialogs,
         onDismissReuseLastLinkCacheDialog = ::dismissAllDialogs
     )
