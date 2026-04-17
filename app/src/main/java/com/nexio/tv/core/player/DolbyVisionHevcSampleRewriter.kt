@@ -46,6 +46,10 @@ internal object DolbyVisionHevcSampleRewriter {
                 continue
             }
 
+            if (nalSize < 2) {
+                return null
+            }
+
             val nalType = getNalUnitType(sampleLengthDelimited, offset)
             val layerId = getNuhLayerId(sampleLengthDelimited, offset, nalSize)
 
@@ -115,6 +119,10 @@ internal object DolbyVisionHevcSampleRewriter {
                 writeLengthField(output, outOffset, nalUnitLengthFieldLength, nalSize)
                 outOffset += nalUnitLengthFieldLength
                 continue
+            }
+
+            if (nalSize < 2) {
+                return null
             }
 
             val nalType = getNalUnitType(sampleLengthDelimited, offset)
