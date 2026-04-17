@@ -204,6 +204,9 @@ internal class DiskSpoolWriter(
                     return
                 }
                 cursor = priority
+                if (cursor >= targetFrontierBytes) {
+                    return
+                }
             }
 
             val endInclusive = minOf(cursor + chunkBytes - 1L, targetFrontierBytes - 1L, contentLength - 1L)

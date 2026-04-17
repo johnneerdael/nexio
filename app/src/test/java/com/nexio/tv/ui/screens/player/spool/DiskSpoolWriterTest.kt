@@ -2,7 +2,9 @@ package com.nexio.tv.ui.screens.player.spool
 
 import java.io.File
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
@@ -322,6 +324,97 @@ class DiskSpoolWriterTest {
         } finally {
             session.close()
             writerThread.join(2_000L)
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `writer never requests invalid range after priority jumps beyond adaptive target`() {
+        val content = ByteArray(512 * 1024) { (it % 251).toByte() }
+        val requestedRanges = CopyOnWriteArrayList<String>()
+        val firstDataRangeSeen = CountDownLatch(1)
+        val priorityPublished = AtomicBoolean(false)
+        val invalidRangeSeen = AtomicBoolean(false)
+        val session = DiskSpoolSession(
+            File(temp.root, "priority-target.spool"),
+            capacityBytes = 512 * 1024L,
+            waitTimeoutMs = 0L
+        )
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val range = request.getHeader("Range")
+                if (range != null) {
+                    requestedRanges += range
+                }
+
+                return when (range) {
+                    "bytes=0-0" -> MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Accept-Ranges", "bytes")
+                        .setHeader("Content-Range", "bytes 0-0/${content.size}")
+                        .setHeader("Content-Length", 1)
+                        .setBody(Buffer().writeByte(0x2A))
+
+                    null -> MockResponse().setResponseCode(400)
+
+                    else -> {
+                        if (priorityPublished.compareAndSet(false, true)) {
+                            firstDataRangeSeen.countDown()
+                            session.updateReadPosition(256 * 1024L)
+                            session.read(256 * 1024L, ByteArray(1), 0, 1)
+                        }
+
+                        val parsedRange = parseRangeHeader(range)
+                        if (parsedRange != null && parsedRange.first > parsedRange.second) {
+                            invalidRangeSeen.set(true)
+                            return MockResponse().setResponseCode(500)
+                        }
+
+                        rangedResponse(content, range).throttleBody(8 * 1024, 25, TimeUnit.MILLISECONDS)
+                    }
+                }
+            }
+        }
+        server.start()
+
+        val writerFailure = AtomicReference<Throwable?>(null)
+        val writerThread = Thread {
+            try {
+                DiskSpoolWriter(
+                    okHttpClient = OkHttpClient(),
+                    chunkBytes = 64 * 1024,
+                    ioBufferBytes = 8 * 1024,
+                    startupPriorityBytes = 0L,
+                    adaptiveHeadroomBytes = 128 * 1024L,
+                    idlePollMs = 10L
+                ).downloadUntil(server.url("/movie.bin").toString(), session, content.size.toLong())
+            } catch (throwable: Throwable) {
+                writerFailure.set(throwable)
+            }
+        }
+
+        try {
+            writerThread.start()
+
+            assertTrue(firstDataRangeSeen.await(2, TimeUnit.SECONDS))
+            assertTrue(session.awaitFrontierAtLeast(256 * 1024L, timeoutMs = 5_000L))
+            assertTrue(session.awaitFrontierAtLeast(256 * 1024L + 64 * 1024L, timeoutMs = 5_000L))
+            assertTrue(requestedRanges.contains("bytes=262144-327679"))
+            assertFalse(invalidRangeSeen.get())
+            assertTrue(requestedRanges.none { range ->
+                val parsedRange = parseRangeHeader(range) ?: return@none true
+                parsedRange.first > parsedRange.second
+            })
+
+            session.close()
+            writerThread.join(5_000L)
+
+            assertFalse(writerThread.isAlive)
+            assertEquals(null, writerFailure.get())
+        } finally {
+            session.close()
+            writerThread.join(1_000L)
             server.shutdown()
         }
     }
@@ -766,6 +859,11 @@ class DiskSpoolWriterTest {
             .setHeader("Content-Range", "bytes $start-${endExclusive - 1}/${content.size}")
             .setHeader("Content-Length", length)
             .setBody(Buffer().write(content, start, length))
+    }
+
+    private fun parseRangeHeader(rangeHeader: String): Pair<Long, Long>? {
+        val match = Regex("""bytes=(\d+)-(\d+)""").matchEntire(rangeHeader) ?: return null
+        return match.groupValues[1].toLong() to match.groupValues[2].toLong()
     }
 
     private class ScriptedSessionBridge(
