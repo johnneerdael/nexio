@@ -77,6 +77,37 @@ class DolbyVisionHevcSampleRewriterTest {
     }
 
     @Test
+    fun `converter receives only rpu payloads even when enhancement layer slices exist`() {
+        val ordinaryBase = nal(type = 19, layerId = 0, payload = byteArrayOf(0x01, 0x02))
+        val enhancement = nal(type = 1, layerId = 1, payload = byteArrayOf(0x03, 0x04))
+        val rpuA = nal(type = 62, layerId = 1, payload = byteArrayOf(0x05))
+        val rpuB = nal(type = 62, layerId = 0, payload = byteArrayOf(0x06))
+        val sample = lengthDelimitedSample(ordinaryBase, enhancement, rpuA, rpuB)
+        val seen = mutableListOf<ByteArray>()
+
+        val rewritten = DolbyVisionHevcSampleRewriter.rewriteLengthDelimitedSample(
+            sampleLengthDelimited = sample,
+            nalUnitLengthFieldLength = 4,
+            conversionMode = 2,
+            metrics = DolbyVisionHevcSampleRewriter.Metrics(),
+            convertRpu = { payload, _ ->
+                seen += payload
+                payload
+            }
+        )
+
+        val expected = lengthDelimitedSample(
+            ordinaryBase,
+            nal(type = 62, layerId = 0, payload = byteArrayOf(0x05)),
+            rpuB
+        )
+        assertArrayEquals(expected, rewritten)
+        assertEquals(2, seen.size)
+        assertArrayEquals(rpuA, seen[0])
+        assertArrayEquals(rpuB, seen[1])
+    }
+
+    @Test
     fun `returns null for malformed length-delimited sample`() {
         var conversionCalls = 0
         val malformed = byteArrayOf(
