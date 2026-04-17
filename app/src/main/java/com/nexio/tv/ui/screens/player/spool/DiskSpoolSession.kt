@@ -107,6 +107,17 @@ internal class DiskSpoolSession(
         }
     }
 
+    fun setReadPositionForOpen(position: Long) {
+        if (position < 0L) return
+        synchronized(lock) {
+            val previous = readPosition.get()
+            if (position != previous) {
+                readPosition.set(position)
+                lock.notifyAll()
+            }
+        }
+    }
+
     fun adaptiveTargetFrontierBytes(
         maxFrontierBytes: Long,
         startupPrebufferBytes: Long,

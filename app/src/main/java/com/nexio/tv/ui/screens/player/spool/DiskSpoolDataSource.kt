@@ -58,7 +58,7 @@ internal class DiskSpoolDataSource(
             return openFallback(dataSpec)
         }
 
-        session.updateReadPosition(position)
+        session.setReadPositionForOpen(position)
         transferListeners.forEach { it.onTransferInitializing(this, dataSpec, false) }
         transferListeners.forEach { it.onTransferStart(this, dataSpec, false) }
         return remaining

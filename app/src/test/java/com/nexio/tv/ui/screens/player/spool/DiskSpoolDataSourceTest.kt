@@ -56,6 +56,26 @@ class DiskSpoolDataSourceTest {
     }
 
     @Test
+    fun `spool backed backward open resets read position for adaptive headroom`() {
+        val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 1_000L)
+        session.writeRange(0L, ByteArray(512) { 1 }, 512)
+        val uri = Uri.parse("https://example.com/movie.mkv")
+        val dataSource = DiskSpoolDataSource(session, uri)
+
+        dataSource.open(DataSpec(uri))
+        val buffer = ByteArray(384)
+        assertEquals(384, dataSource.read(buffer, 0, 384))
+        dataSource.close()
+
+        dataSource.open(DataSpec.Builder().setUri(uri).setPosition(128L).build())
+
+        assertEquals(128L, session.currentReadPositionBytes())
+
+        dataSource.close()
+        session.close()
+    }
+
+    @Test
     fun `reads bytes without closing shared session`() {
         val session = DiskSpoolSession(
             File(temp.root, "movie.spool"),
