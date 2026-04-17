@@ -27,6 +27,8 @@ object DoviBridge {
     private var cachedSelfTestResult: SelfTestResult? = null
     private val conversionCallCount = AtomicLong(0L)
     private val conversionSuccessCount = AtomicLong(0L)
+    @Volatile
+    private var verboseLoggingEnabled: Boolean = false
 
     val isNativeEnabledInBuild: Boolean
         get() = BuildConfig.DOVI_NATIVE_ENABLED
@@ -186,6 +188,16 @@ object DoviBridge {
 
     fun getConversionSuccessCount(): Long = conversionSuccessCount.get()
 
+    fun isVerboseLoggingEnabled(): Boolean = verboseLoggingEnabled
+
+    fun setVerboseLoggingEnabled(enabled: Boolean) {
+        verboseLoggingEnabled = enabled
+        if (isNativeEnabledInBuild && nativeLoaded) {
+            runCatching { nativeSetVerboseLoggingEnabled(enabled) }
+                .onFailure { Log.w(TAG, "Failed to set native verbose logging: ${it.message}") }
+        }
+    }
+
     fun convertDv7RpuToDv81(payload: ByteArray, mode: Int = 1): ByteArray? {
         if (!isAvailable() || payload.isEmpty()) return null
         conversionCallCount.incrementAndGet()
@@ -221,6 +233,9 @@ object DoviBridge {
 
     @JvmStatic
     private external fun nativeIsConversionPathReady(): Boolean
+
+    @JvmStatic
+    private external fun nativeSetVerboseLoggingEnabled(enabled: Boolean)
 
     @JvmStatic
     private external fun nativeConvertDv7RpuToDv81(payload: ByteArray, mode: Int): ByteArray?
