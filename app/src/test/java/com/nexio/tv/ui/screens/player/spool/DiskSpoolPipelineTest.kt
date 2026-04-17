@@ -127,13 +127,18 @@ class DiskSpoolPipelineTest {
         server.start()
         val session = DiskSpoolSession(File(temp.root, "single-writer-pipeline.spool"), capacityBytes = 256 * 1024L)
         val uri = Uri.parse(server.url("/movie.bin").toString())
+        val writerFailure = AtomicReference<Throwable?>(null)
         val writerThread = Thread {
-            DiskSpoolWriter(
-                okHttpClient = OkHttpClient(),
-                chunkBytes = 64 * 1024,
-                ioBufferBytes = 8 * 1024,
-                startupPriorityBytes = 64 * 1024L
-            ).downloadUntil(uri.toString(), session, content.size.toLong())
+            try {
+                DiskSpoolWriter(
+                    okHttpClient = OkHttpClient(),
+                    chunkBytes = 64 * 1024,
+                    ioBufferBytes = 8 * 1024,
+                    startupPriorityBytes = 64 * 1024L
+                ).downloadUntil(uri.toString(), session, content.size.toLong())
+            } catch (throwable: Throwable) {
+                writerFailure.set(throwable)
+            }
         }
         val dataSource = DiskSpoolDataSource(session, uri)
 
@@ -153,6 +158,8 @@ class DiskSpoolPipelineTest {
                 listOf("bytes=0-0", "bytes=0-65535", "bytes=65536-131071", "bytes=131072-196607"),
                 requestedRanges.toList()
             )
+            writerThread.join(5_000L)
+            assertEquals(null, writerFailure.get())
         } finally {
             dataSource.close()
             session.close()
