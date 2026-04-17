@@ -23,7 +23,18 @@ fun resolveProperty(dev: Properties, local: Properties, key: String, fallback: S
         ?: fallback
 }
 
-fun cmakePath(path: String): String = path.replace("\\", "/")
+fun cmakePath(path: String): String {
+    val normalized = path.trim()
+    if (normalized.isBlank()) return ""
+
+    val forwardPath = normalized.replace("\\", "/")
+    val isAbsolutePath = forwardPath.startsWith("/") || Regex("^[A-Za-z]:/").containsMatchIn(forwardPath)
+    return if (isAbsolutePath) {
+        forwardPath
+    } else {
+        rootProject.file(normalized).absolutePath.replace("\\", "/")
+    }
+}
 
 val localProperties = Properties().apply {
     val localPropertiesFile = rootProject.file("local.properties")
