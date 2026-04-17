@@ -351,7 +351,11 @@ class DiskSpoolWriterTest {
         }
         server.start()
 
-        val session = DiskSpoolSession(File(temp.root, "priority-idle.spool"), capacityBytes = 384 * 1024L)
+        val session = DiskSpoolSession(
+            File(temp.root, "priority-idle.spool"),
+            capacityBytes = 384 * 1024L,
+            waitTimeoutMs = 50L
+        )
         val writerFailure = AtomicReference<Throwable?>(null)
         val writerThread = Thread {
             try {
