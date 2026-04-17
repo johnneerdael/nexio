@@ -4,6 +4,9 @@ import android.net.Uri
 import android.content.res.Resources
 import android.util.Log
 import com.nexio.tv.core.player.AndroidFrameRateSettings
+import com.nexio.tv.core.player.DoviBridge
+import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
+import com.nexio.tv.core.player.MatroskaDolbyVisionHookInstaller
 import com.nexio.tv.core.player.OpenSubtitlesHasher
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -195,6 +198,14 @@ internal fun PlayerRuntimeController.observeDebugSettings() {
     scope.launch {
         debugSettingsDataStore.diskSpoolDiagnosticsEnabled.collectLatest { enabled ->
             mediaSourceFactory.diskSpoolDiagnosticsEnabled = enabled
+        }
+    }
+    scope.launch {
+        debugSettingsDataStore.dolbyVisionDiagnosticsEnabled.collectLatest { enabled ->
+            dolbyVisionDiagnosticsEnabled = enabled
+            DoviBridge.setVerboseLoggingEnabled(enabled)
+            MatroskaDolbyVisionHookInstaller.setDiagnosticsEnabled(enabled)
+            Dv5HardwareToneMapRpuTap.setDiagnosticsEnabled(enabled)
         }
     }
 }

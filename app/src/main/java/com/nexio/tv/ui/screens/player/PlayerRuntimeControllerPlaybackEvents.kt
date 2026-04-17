@@ -3,6 +3,7 @@ package com.nexio.tv.ui.screens.player
 import android.os.SystemClock
 import android.util.Log
 import com.nexio.tv.core.player.DoviBridge
+import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.MatroskaDolbyVisionHookInstaller
 import com.nexio.tv.data.local.SubtitleStyleSettings
 import com.nexio.tv.data.repository.extractYear
@@ -118,6 +119,36 @@ internal fun PlayerRuntimeController.startProgressUpdates() {
                                 append(if (DoviBridge.isExtractorHookReadyInBuild) "ready" else "missing")
                                 append(",reason=")
                                 append(dv7ProbeReason)
+                                if (dolbyVisionDiagnosticsEnabled) {
+                                    val bridgeDiagnostics = DoviBridge.runtimeDiagnosticsSnapshot()
+                                    val hookDiagnostics = MatroskaDolbyVisionHookInstaller.runtimeAllocationSnapshot()
+                                    val tapDiagnostics = Dv5HardwareToneMapRpuTap.runtimeSnapshot()
+                                    append(",dvDiag=on")
+                                    append(",dvInMb=")
+                                    append(bridgeDiagnostics.inputBytes / (1024L * 1024L))
+                                    append(",dvOutMb=")
+                                    append(bridgeDiagnostics.outputBytes / (1024L * 1024L))
+                                    append(",dvFail=")
+                                    append(bridgeDiagnostics.failedConversions)
+                                    append(",rewriteCalls=")
+                                    append(hookDiagnostics.rewriteSampleCalls)
+                                    append(",rewriteInMb=")
+                                    append(hookDiagnostics.rewriteInputBytes / (1024L * 1024L))
+                                    append(",rewriteOutMb=")
+                                    append(hookDiagnostics.rewriteOutputBytes / (1024L * 1024L))
+                                    append(",nalCopyMb=")
+                                    append(hookDiagnostics.nalCopyBytes / (1024L * 1024L))
+                                    append(",appendMb=")
+                                    append(hookDiagnostics.appendedSampleBytes / (1024L * 1024L))
+                                    append(",rpuCalls=")
+                                    append(hookDiagnostics.rpuNalTransformCalls)
+                                    append(",rpuTapEntries=")
+                                    append(tapDiagnostics.queuedEntries)
+                                    append(",rpuTapQueuedKb=")
+                                    append(tapDiagnostics.queuedBytes / 1024L)
+                                    append(",rpuTapCopiedKb=")
+                                    append(tapDiagnostics.copiedBytes / 1024L)
+                                }
                             }
                             Log.d(
                                 PlayerRuntimeController.TAG,

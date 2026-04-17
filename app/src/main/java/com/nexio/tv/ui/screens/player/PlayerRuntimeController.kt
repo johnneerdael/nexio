@@ -300,6 +300,8 @@ class PlayerRuntimeController(
     internal var cachedVodCacheLogState: String = "vod=warming"
     internal var bufferLogsEnabled: Boolean = false
     internal var streamDiagnosticsEnabled: Boolean = false
+    @Volatile
+    internal var dolbyVisionDiagnosticsEnabled: Boolean = false
     internal var lastProgressUiUpdateUptimeMs: Long = 0L
     internal var lastSkipIntervalEvaluationUptimeMs: Long = 0L
     internal var lastNextEpisodeEvaluationUptimeMs: Long = 0L
