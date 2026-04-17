@@ -167,6 +167,14 @@ android {
             buildConfigField("String", "YOUTUBE_TRAILER_CLIENT_ID", "\"${resolveProperty(devProperties, localProperties, "YOUTUBE_TRAILER_CLIENT_ID")}\"")
             buildConfigField("String", "YOUTUBE_TRAILER_CLIENT_SECRET", "\"${resolveProperty(devProperties, localProperties, "YOUTUBE_TRAILER_CLIENT_SECRET")}\"")
         }
+        create("releaseProfileable") {
+            initWith(getByName("release"))
+            isProfileable = true
+            isDebuggable = false
+            applicationIdSuffix = ".profileable"
+            versionNameSuffix = "-profileable"
+            matchingFallbacks += listOf("release")
+        }
     }
 
     testOptions {
