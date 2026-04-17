@@ -3,7 +3,6 @@ package com.nexio.tv.core.player
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DolbyVisionHevcSampleRewriterTest {
@@ -104,8 +103,9 @@ class DolbyVisionHevcSampleRewriterTest {
 
     @Test
     fun `normalizes converted rpu layer id to zero`() {
-        val rpuLayerOne = nal(type = 62, layerId = 1, payload = byteArrayOf(0x01))
-        val sample = lengthDelimitedSample(rpuLayerOne)
+        val rpuLayer63 = byteArrayOf(0x7D.toByte(), 0xF9.toByte(), 0x01)
+        assertNalHeader(rpuLayer63, expectedType = 62, expectedLayerId = 63)
+        val sample = lengthDelimitedSample(rpuLayer63)
 
         val rewritten = DolbyVisionHevcSampleRewriter.rewriteLengthDelimitedSample(
             sampleLengthDelimited = sample,
@@ -118,8 +118,15 @@ class DolbyVisionHevcSampleRewriterTest {
             }
         ) ?: error("RPU layer normalization should rewrite the sample")
 
-        val normalizedRpu = nal(type = 62, layerId = 0, payload = byteArrayOf(0x01))
-        assertArrayEquals(lengthDelimitedSample(normalizedRpu), rewritten)
+        val normalizedRpu = byteArrayOf(0x7C.toByte(), 0x01, 0x01)
+        assertNalHeader(normalizedRpu, expectedType = 62, expectedLayerId = 0)
+        assertArrayEquals(
+            byteArrayOf(
+                0x00, 0x00, 0x00, 0x03,
+                0x7C.toByte(), 0x01, 0x01
+            ),
+            rewritten
+        )
     }
 
     private fun lengthDelimitedSample(vararg nals: ByteArray): ByteArray {
@@ -149,7 +156,27 @@ class DolbyVisionHevcSampleRewriterTest {
         out[0] = ((type shl 1) or ((layerId ushr 5) and 0x01)).toByte()
         out[1] = (((layerId and 0x1F) shl 3) or 0x01).toByte()
         System.arraycopy(payload, 0, out, 2, payload.size)
-        assertTrue("test NAL must include temporal_id_plus1", (out[1].toInt() and 0x07) != 0)
         return out
     }
+
+    private fun assertNalHeader(nal: ByteArray, expectedType: Int, expectedLayerId: Int) {
+        val header = decodeNalHeader(nal)
+        assertEquals(expectedType, header.type)
+        assertEquals(expectedLayerId, header.layerId)
+        assertEquals(1, header.temporalIdPlus1)
+    }
+
+    private fun decodeNalHeader(nal: ByteArray): NalHeader {
+        require(nal.size >= 2)
+        val type = (nal[0].toInt() ushr 1) and 0x3F
+        val layerId = ((nal[0].toInt() and 0x01) shl 5) or ((nal[1].toInt() ushr 3) and 0x1F)
+        val temporalIdPlus1 = nal[1].toInt() and 0x07
+        return NalHeader(type = type, layerId = layerId, temporalIdPlus1 = temporalIdPlus1)
+    }
+
+    private data class NalHeader(
+        val type: Int,
+        val layerId: Int,
+        val temporalIdPlus1: Int
+    )
 }
