@@ -18,8 +18,11 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -39,6 +42,7 @@ class MetaDetailsFocusNavigationTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
+    @OptIn(ExperimentalTestApi::class)
     fun hero_down_scrolls_lower_content_into_view_before_requesting_focus() {
         composeRule.setContent {
             DetailHeroMoveDownHarness()
