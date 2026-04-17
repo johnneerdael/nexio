@@ -83,11 +83,15 @@ internal object DolbyVisionHevcSampleRewriter {
         val rpuOutputs = ArrayList<ByteArray>(rpuInputs.size)
         var rpuInputBytes = 0L
         var rpuOutputBytes = 0L
+        val maxEncodableRpuSize = maxEncodableNalSize(nalUnitLengthFieldLength)
 
         for (rpuInput in rpuInputs) {
             val converted = convertRpu(rpuInput.payload, conversionMode)
             val effective = converted?.takeIf { it.isNotEmpty() } ?: rpuInput.payload
             val normalized = normalizeNuhLayerIdToZero(effective)
+            if (normalized.size.toLong() > maxEncodableRpuSize) {
+                return null
+            }
             if (!normalized.contentEquals(rpuInput.payload)) {
                 changed = true
             }
@@ -163,7 +167,7 @@ internal object DolbyVisionHevcSampleRewriter {
         if (rpuIndex != rpuOutputs.size) return null
 
         metrics?.let {
-            it.outputBytes = output.size.toLong()
+            it.outputBytes += output.size.toLong()
             it.sourceCopyBytes += keptNalBytes
             it.rpuInputBytes += rpuInputBytes
             it.rpuOutputBytes += rpuOutputBytes
@@ -199,6 +203,10 @@ internal object DolbyVisionHevcSampleRewriter {
             val shift = 8 * (lengthFieldLength - 1 - index)
             out[offset + index] = ((value ushr shift) and 0xFF).toByte()
         }
+    }
+
+    private fun maxEncodableNalSize(lengthFieldLength: Int): Long {
+        return (1L shl (lengthFieldLength * 8)) - 1L
     }
 
     private fun getNalUnitType(sample: ByteArray, offset: Int): Int {
