@@ -196,6 +196,7 @@ class PlayerSettingsDataStoreTest {
     fun `enabling dv81 conversion disables dv7 hevc base layer`() = runTest {
         val dataStore = playerSettingsDataStoreForTest()
 
+        dataStore.playerSettings.first()
         dataStore.setExperimentalDv7HevcBaseLayerEnabled(true)
         dataStore.setExperimentalDv7ToDv81Enabled(true)
 
