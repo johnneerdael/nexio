@@ -355,6 +355,8 @@
     <string name="audio_mpv_hwdec_disabled_desc">Disable hardware decoding and use software decoding only.</string>
     <string name="audio_tunneled">Tunneled Playback</string>
     <string name="audio_tunneled_sub">Hardware-level audio/video sync. May improve playback on some Android TV devices</string>
+    <string name="video_dynamic_scheduling_title">Dynamic video scheduling</string>
+    <string name="video_dynamic_scheduling_sub">Experimental Media3 scheduling that can reduce CPU wakeups by letting playback sleep until video renderer progress is possible. Leave off unless benchmarking shows an improvement.</string>
     <string name="audio_dv_experimental_title">DV7 - DV8.1 Conversion</string>
     <string name="audio_dv_experimental_sub">Native DV7 to DV8.1 conversion path. If conversion is unavailable or fails, playback falls back to HEVC mapping.</string>
     <string name="audio_dts_iec_experimental_title">IEC Packer (Custom AudioSink from Kodi)</string>

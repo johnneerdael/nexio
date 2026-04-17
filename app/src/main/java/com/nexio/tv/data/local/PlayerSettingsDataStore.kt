@@ -167,6 +167,8 @@ data class PlayerSettings(
     // Audio settings
     val decoderPriority: Int = 1, // EXTENSION_RENDERER_MODE_ON (0=off, 1=on, 2=prefer)
     val tunnelingEnabled: Boolean = false,
+    // Experimental: allow Media3 to sleep the playback loop until video renderer progress is possible.
+    val dynamicVideoSchedulingEnabled: Boolean = false,
     val skipSilence: Boolean = false,
     val preferredAudioLanguage: String = AudioLanguageOption.ORIGINAL,
     val secondaryPreferredAudioLanguage: String? = null,
@@ -457,6 +459,8 @@ class PlayerSettingsDataStore @Inject constructor(
     // Audio settings keys
     private val decoderPriorityKey = intPreferencesKey("decoder_priority")
     private val tunnelingEnabledKey = booleanPreferencesKey("tunneling_enabled")
+    private val dynamicVideoSchedulingEnabledKey =
+        booleanPreferencesKey("dynamic_video_scheduling_enabled")
     private val skipSilenceKey = booleanPreferencesKey("skip_silence")
     private val preferredAudioLanguageKey = stringPreferencesKey("preferred_audio_language")
     private val secondaryPreferredAudioLanguageKey = stringPreferencesKey("secondary_preferred_audio_language")
@@ -729,6 +733,7 @@ class PlayerSettingsDataStore @Inject constructor(
                 mpvHardwareDecodeMode = parseMpvHardwareDecodeMode(prefs[mpvHardwareDecodeModeKey]),
                 decoderPriority = prefs[decoderPriorityKey] ?: 1,
                 tunnelingEnabled = prefs[tunnelingEnabledKey] ?: false,
+                dynamicVideoSchedulingEnabled = prefs[dynamicVideoSchedulingEnabledKey] ?: false,
                 skipSilence = prefs[skipSilenceKey] ?: false,
                 preferredAudioLanguage = normalizeSelectableLanguageCode(
                     prefs[preferredAudioLanguageKey] ?: AudioLanguageOption.ORIGINAL
@@ -960,6 +965,12 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setTunnelingEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[tunnelingEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setDynamicVideoSchedulingEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[dynamicVideoSchedulingEnabledKey] = enabled
         }
     }
 

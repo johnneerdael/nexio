@@ -65,6 +65,7 @@ internal fun LazyListScope.videoSettingsItems(
     afrHeaderFocusRequester: FocusRequester,
     onOpenAndroidDisplaySettings: () -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
+    onSetDynamicVideoSchedulingEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {},
@@ -108,6 +109,18 @@ internal fun LazyListScope.videoSettingsItems(
             subtitle = stringResource(R.string.audio_tunneled_sub),
             isChecked = playerSettings.tunnelingEnabled,
             onCheckedChange = onSetTunnelingEnabled,
+            onFocused = onItemFocused,
+            enabled = enabled
+        )
+    }
+
+    item(key = "video_dynamic_scheduling") {
+        ToggleSettingsItem(
+            icon = Icons.Default.Speed,
+            title = stringResource(R.string.video_dynamic_scheduling_title),
+            subtitle = stringResource(R.string.video_dynamic_scheduling_sub),
+            isChecked = playerSettings.dynamicVideoSchedulingEnabled,
+            onCheckedChange = onSetDynamicVideoSchedulingEnabled,
             onFocused = onItemFocused,
             enabled = enabled
         )

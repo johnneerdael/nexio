@@ -149,6 +149,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setTunnelingEnabled(enabled)
     }
 
+    suspend fun setDynamicVideoSchedulingEnabled(enabled: Boolean) {
+        playerSettingsDataStore.setDynamicVideoSchedulingEnabled(enabled)
+    }
+
     suspend fun setSkipSilence(enabled: Boolean) {
         playerSettingsDataStore.setSkipSilence(enabled)
     }

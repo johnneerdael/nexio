@@ -114,6 +114,30 @@ class FfmpegDolbyVisionProfileProbeTest {
     }
 
     @Test
+    fun `stream metadata result 10 maps to detected profile 10`() = runBlocking {
+        val probe = FfmpegDolbyVisionProfileProbe(
+            backend = fakeBackend(
+                streamMetadataJson = """
+                    {
+                      "streams": [
+                        {"codec_type":"video","codec_name":"av1","color_transfer":"smpte2084","color_primaries":"bt2020","dv_profile":10},
+                        {"codec_type":"audio","codec_name":"eac3"}
+                      ]
+                    }
+                """.trimIndent()
+            )
+        )
+
+        val result = probe.probe(context, "https://example.com/dv10.mp4", null, "dv10.mp4")
+
+        assertEquals(DolbyVisionProfileProbeStatus.DETECTED, result.status)
+        assertEquals(10, result.profileNumber)
+        assertEquals("av1", result.videoCodec)
+        assertEquals("eac3", result.audioCodec)
+        assertEquals("dolbyvision", result.hdrType)
+    }
+
+    @Test
     fun `stream metadata prefers strongest audio track`() = runBlocking {
         val probe = FfmpegDolbyVisionProfileProbe(
             backend = fakeBackend(

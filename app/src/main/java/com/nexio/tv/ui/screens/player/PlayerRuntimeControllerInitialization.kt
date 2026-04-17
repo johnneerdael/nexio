@@ -16,6 +16,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
+import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -119,7 +120,7 @@ internal fun resolveAssSsaPipelineOverlayDecision(
     )
 }
 
-@androidx.annotation.OptIn(UnstableApi::class)
+@androidx.annotation.OptIn(UnstableApi::class, ExperimentalApi::class)
 internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<String, String>) {
     if (url.isEmpty()) {
         _uiState.update { it.copy(error = "No stream URL provided", showLoadingOverlay = false) }
@@ -494,6 +495,9 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     dv5HardwareToneMapCpuFallbackEnabled,
                 assSsaRenderControllerProvider = { assSsaRenderController }
             )
+                .setEnableMediaCodecVideoRendererDurationToProgressUs(
+                    playerSettings.dynamicVideoSchedulingEnabled
+                )
                 .setExtensionRendererMode(effectiveDecoderPriority)
                 .setEnableDecoderFallback(true)
                 .setMediaCodecSelector(codecSelector)
@@ -516,6 +520,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                     "av1FfmpegFallbackActive=$av1FfmpegFallbackActive " +
                     "vc1FallbackActive=$vc1SoftwareFallbackActive " +
                     "vc1TrackBypassActive=$vc1TrackSelectionBypassActive " +
+                    "dynamicVideoScheduling=${playerSettings.dynamicVideoSchedulingEnabled} " +
                     "host=${url.safeHost()}"
             )
 
@@ -544,6 +549,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             }
 
             _exoPlayer = ExoPlayer.Builder(context)
+                .experimentalSetDynamicSchedulingEnabled(playerSettings.dynamicVideoSchedulingEnabled)
                 .setTrackSelector(trackSelector!!)
                 .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractorsFactory))
                 .setRenderersFactory(renderersFactory)

@@ -598,16 +598,6 @@ object MatroskaDolbyVisionHookInstaller {
         }.getOrNull()
     }
 
-    private fun resolveDolbyVisionProfileFromCodecString(codecs: String?): Int? {
-        val raw = codecs?.trim().orEmpty()
-        if (raw.isEmpty()) return null
-        val parts = raw.split('.')
-        if (parts.size < 2) return null
-        val prefix = parts[0].lowercase()
-        if (prefix != "dvhe" && prefix != "dvh1") return null
-        return parts[1].toIntOrNull()
-    }
-
     private fun appendLengthDelimitedNal(
         sampleLengthDelimited: ByteArray,
         nalUnitLengthFieldLength: Int,

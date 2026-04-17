@@ -61,6 +61,17 @@ class DolbyVisionConversionModeSelectorTest {
     }
 
     @Test
+    fun `profile 10 selects no conversion mode`() {
+        assertNull(
+            DolbyVisionConversionModeSelector.selectedMode(
+                sourceProfile = 10,
+                preserveMappingEnabled = true,
+                allowDv5Conversion = true
+            )
+        )
+    }
+
+    @Test
     fun `null profile selects no mode`() {
         assertNull(
             DolbyVisionConversionModeSelector.selectedMode(
