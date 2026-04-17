@@ -57,7 +57,7 @@ class AndroidTvLocalSearchCorpusTest {
     fun `snapshot absence returns empty candidates`() = runTest {
         val snapshotStore = mockk<HomeCatalogSnapshotStore>()
         coEvery { snapshotStore.currentPosterProviderToken() } returns "native"
-        every { snapshotStore.read("native") } returns null
+        every { snapshotStore.readActiveProfile("native") } returns null
 
         assertTrue(corpus(snapshotStore).candidates().isEmpty())
     }
@@ -81,7 +81,7 @@ class AndroidTvLocalSearchCorpusTest {
     private fun snapshotStore(snapshot: HomeCatalogSnapshotStore.Snapshot): HomeCatalogSnapshotStore {
         return mockk {
             coEvery { currentPosterProviderToken() } returns "native"
-            every { read("native") } returns snapshot
+            every { readActiveProfile("native") } returns snapshot
         }
     }
 

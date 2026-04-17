@@ -24,7 +24,7 @@ class AndroidTvLocalSearchCorpus @Inject constructor(
             "native"
         }
         val snapshot = runCatching {
-            homeCatalogSnapshotStore.read(posterProviderToken)
+            homeCatalogSnapshotStore.readActiveProfile(posterProviderToken)
         }.getOrNull() ?: return emptyList()
 
         val rowCandidates = buildRowCandidates(snapshot.catalogRows) +

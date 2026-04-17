@@ -88,6 +88,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
+import com.nexio.tv.core.metadata.episodeRuntimeOrSeriesAverageMinutes
 import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.LibraryListTab
@@ -115,6 +116,16 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.Brush
+
+internal fun resolveEpisodePlaybackRuntimeMinutes(
+    episodeRuntimeMinutes: Int?,
+    seriesRuntime: String?
+): Int? {
+    return episodeRuntimeOrSeriesAverageMinutes(
+        episodeRuntimeMinutes = episodeRuntimeMinutes,
+        seriesRuntime = seriesRuntime
+    )
+}
 
 private enum class RestoreTarget {
     HERO,
@@ -627,6 +638,10 @@ fun MetaDetailsScreen(
                             if (uiState.universalStreamerModeEnabled) {
                                 handleUniversalStreamerPlayRequest(meta.name)
                             } else {
+                                val playbackRuntime = resolveEpisodePlaybackRuntimeMinutes(
+                                    episodeRuntimeMinutes = video.runtime,
+                                    seriesRuntime = meta.runtime
+                                )
                                 onPlayClick(
                                     video.id,
                                     meta.apiType,
@@ -640,7 +655,7 @@ fun MetaDetailsScreen(
                                     video.title,
                                     null,
                                     null,
-                                    video.runtime,
+                                    playbackRuntime,
                                     meta.language,
                                     uiState.deterministicAutoplayEnabled
                                 )
@@ -673,6 +688,10 @@ fun MetaDetailsScreen(
                             if (uiState.universalStreamerModeEnabled) {
                                 handleUniversalStreamerPlayRequest(meta.name)
                             } else {
+                                val playbackRuntime = resolveEpisodePlaybackRuntimeMinutes(
+                                    episodeRuntimeMinutes = video.runtime,
+                                    seriesRuntime = meta.runtime
+                                )
                                 onPlayEpisodeWithManualStreamSelection(
                                     video.id,
                                     meta.apiType,
@@ -684,7 +703,7 @@ fun MetaDetailsScreen(
                                     video.season,
                                     video.episode,
                                     video.title,
-                                    video.runtime,
+                                    playbackRuntime,
                                     meta.language
                                 )
                             }

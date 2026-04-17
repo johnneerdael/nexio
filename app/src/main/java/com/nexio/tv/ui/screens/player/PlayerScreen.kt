@@ -202,6 +202,8 @@ fun PlayerScreen(
     onPlaybackEnded: ((nextVideoId: String?, nextSeason: Int?, nextEpisode: Int?) -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val preferredExternalPlayerPackageName by viewModel.preferredExternalPlayerPackageName
+        .collectAsState(initial = null)
     val lifecycleOwner = LocalLifecycleOwner.current
     val containerFocusRequester = remember { FocusRequester() }
     val playPauseFocusRequester = remember { FocusRequester() }
@@ -779,14 +781,17 @@ fun PlayerScreen(
                     val url = viewModel.getCurrentStreamUrl()
                     val title = uiState.title
                     val headers = viewModel.getCurrentHeaders()
-                    viewModel.stopAndRelease()
-                    onBackPress()
-                    ExternalPlayerLauncher.launch(
+                    val launched = ExternalPlayerLauncher.launch(
                         context = context,
                         url = url,
                         title = title,
-                        headers = headers
+                        headers = headers,
+                        preferredPackageName = preferredExternalPlayerPackageName
                     )
+                    if (launched) {
+                        viewModel.stopAndRelease()
+                        onBackPress()
+                    }
                 },
                 onResetHideTimer = { viewModel.scheduleHideControls(); viewModel.onUserInteraction() },
                 onBack = onBackPress,

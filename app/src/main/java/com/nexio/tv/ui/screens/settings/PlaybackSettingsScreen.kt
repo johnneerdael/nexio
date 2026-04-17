@@ -72,6 +72,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.res.stringResource
 import com.nexio.tv.R
+import com.nexio.tv.core.player.ExternalPlayerDiscovery
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.unit.dp
@@ -183,6 +184,9 @@ internal fun PlaybackSettingsContent(
     )
     val installedAddonNames by viewModel.installedAddonNames.collectAsStateWithLifecycle(initialValue = emptyList())
     val coroutineScope = rememberCoroutineScope()
+    val externalPlayerCandidates = remember(context) {
+        ExternalPlayerDiscovery.discover(context)
+    }
     // Dialog states
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showSecondaryLanguageDialog by remember { mutableStateOf(false) }
@@ -200,6 +204,7 @@ internal fun PlaybackSettingsContent(
     var showNextEpisodeThresholdModeDialog by remember { mutableStateOf(false) }
     var showReuseLastLinkCacheDialog by remember { mutableStateOf(false) }
     var showPlayerPreferenceDialog by remember { mutableStateOf(false) }
+    var showExternalPlayerDialog by remember { mutableStateOf(false) }
     var showInternalPlayerEngineDialog by remember { mutableStateOf(false) }
     var showCollectorDashboardDialog by remember { mutableStateOf(false) }
 
@@ -220,6 +225,7 @@ internal fun PlaybackSettingsContent(
         showNextEpisodeThresholdModeDialog = false
         showReuseLastLinkCacheDialog = false
         showPlayerPreferenceDialog = false
+        showExternalPlayerDialog = false
         showInternalPlayerEngineDialog = false
     }
 
@@ -247,7 +253,9 @@ internal fun PlaybackSettingsContent(
                 playerSettings = playerSettings,
                 trailerSettings = trailerSettings,
                 diskSpoolStorageProbeUiState = diskSpoolStorageProbeUiState,
+                externalPlayerCandidates = externalPlayerCandidates,
                 onShowPlayerPreferenceDialog = { openDialog { showPlayerPreferenceDialog = true } },
+                onShowExternalPlayerDialog = { openDialog { showExternalPlayerDialog = true } },
                 onShowInternalPlayerEngineDialog = { openDialog { showInternalPlayerEngineDialog = true } },
                 onShowAudioLanguageDialog = { openDialog { showAudioLanguageDialog = true } },
                 onShowSecondaryAudioLanguageDialog = { openDialog { showSecondaryAudioLanguageDialog = true } },
@@ -436,7 +444,9 @@ internal fun PlaybackSettingsContent(
     PlaybackSettingsDialogsHost(
         playerSettings = playerSettings,
         installedAddonNames = installedAddonNames,
+        externalPlayerCandidates = externalPlayerCandidates,
         showPlayerPreferenceDialog = showPlayerPreferenceDialog,
+        showExternalPlayerDialog = showExternalPlayerDialog,
         showInternalPlayerEngineDialog = showInternalPlayerEngineDialog,
         showLanguageDialog = showLanguageDialog,
         showSecondaryLanguageDialog = showSecondaryLanguageDialog,
@@ -456,10 +466,14 @@ internal fun PlaybackSettingsContent(
         onSetPlayerPreference = { preference ->
             coroutineScope.launch { viewModel.setPlayerPreference(preference) }
         },
+        onSetPreferredExternalPlayerPackageName = { packageName ->
+            coroutineScope.launch { viewModel.setPreferredExternalPlayerPackageName(packageName) }
+        },
         onSetInternalPlayerEngine = { engine: InternalPlayerEngine ->
             coroutineScope.launch { viewModel.setInternalPlayerEngine(engine) }
         },
         onDismissPlayerPreferenceDialog = ::dismissAllDialogs,
+        onDismissExternalPlayerDialog = ::dismissAllDialogs,
         onDismissInternalPlayerEngineDialog = ::dismissAllDialogs,
         onSetSubtitlePreferredLanguage = { language ->
             coroutineScope.launch { viewModel.setSubtitlePreferredLanguage(language ?: "none") }

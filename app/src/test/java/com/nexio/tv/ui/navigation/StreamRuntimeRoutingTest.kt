@@ -1,5 +1,6 @@
 package com.nexio.tv.ui.navigation
 
+import com.nexio.tv.core.metadata.parseRuntimeMinutes
 import com.nexio.tv.domain.model.HomeDisplayMetadata
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.ui.screens.home.ContinueWatchingItem

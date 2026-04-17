@@ -67,6 +67,10 @@ class TraktDiscoverySnapshotStore private constructor(
         }.getOrNull()
     }
 
+    fun readActiveProfile(): TraktDiscoverySnapshot? {
+        return read(activeProfileId())
+    }
+
     fun write(
         snapshot: TraktDiscoverySnapshot,
         profileId: Int = activeProfileId()

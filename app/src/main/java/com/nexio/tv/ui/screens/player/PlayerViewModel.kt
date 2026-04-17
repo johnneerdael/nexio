@@ -24,6 +24,8 @@ import com.nexio.tv.ui.screensaver.PlaybackIdleGateState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import okhttp3.OkHttpClient
 import javax.inject.Inject
 import javax.inject.Named
@@ -83,6 +85,10 @@ class PlayerViewModel @Inject constructor(
 
     val exoPlayer: ExoPlayer?
         get() = controller.exoPlayer
+
+    val preferredExternalPlayerPackageName = playerSettingsDataStore.playerSettings
+        .map { it.preferredExternalPlayerPackageName }
+        .distinctUntilChanged()
 
     fun getCurrentStreamUrl(): String = controller.getCurrentStreamUrl()
 

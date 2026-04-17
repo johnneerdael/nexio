@@ -30,6 +30,22 @@ class PlayerSettingsDataStoreTest {
     }
 
     @Test
+    fun `preferred external player package defaults empty persists and clears`() = runTest {
+        val dataStore = playerSettingsDataStoreForTest()
+
+        assertNull(dataStore.playerSettings.first().preferredExternalPlayerPackageName)
+
+        dataStore.setPreferredExternalPlayerPackageName("org.videolan.vlc")
+        assertEquals(
+            "org.videolan.vlc",
+            dataStore.playerSettings.first().preferredExternalPlayerPackageName
+        )
+
+        dataStore.setPreferredExternalPlayerPackageName(" ")
+        assertNull(dataStore.playerSettings.first().preferredExternalPlayerPackageName)
+    }
+
+    @Test
     fun `auto switch internal player setting persists`() = runTest {
         val dataStore = playerSettingsDataStoreForTest()
 

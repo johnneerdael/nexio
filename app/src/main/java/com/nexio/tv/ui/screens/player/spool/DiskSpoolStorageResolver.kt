@@ -55,7 +55,7 @@ internal object DiskSpoolStorageResolver {
         cacheDir: File,
         externalCacheDirs: Array<File?>,
         location: DiskSpoolStorageLocation,
-        stateOf: (File) -> String,
+        stateOf: (File) -> String?,
         removableOf: (File) -> Boolean
     ): File? {
         return when (location) {
@@ -70,7 +70,7 @@ internal object DiskSpoolStorageResolver {
 
     internal fun externalSpoolDirectoryFromCandidates(
         externalCacheDirs: Array<File?>,
-        stateOf: (File) -> String,
+        stateOf: (File) -> String?,
         removableOf: (File) -> Boolean
     ): File? {
         val mountedCandidates = externalCacheDirs
@@ -85,7 +85,7 @@ internal object DiskSpoolStorageResolver {
     internal fun externalSpoolDirectoryFromStorageRoots(
         storageRoots: List<File>,
         packageName: String,
-        stateOf: (File) -> String
+        stateOf: (File) -> String?
     ): File? {
         return storageRoots
             .asSequence()

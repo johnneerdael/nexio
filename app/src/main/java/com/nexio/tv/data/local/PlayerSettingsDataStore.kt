@@ -159,6 +159,7 @@ enum class IecPackerChannelLayout(val storedValue: String, val kodiChannelLayout
  */
 data class PlayerSettings(
     val playerPreference: PlayerPreference = PlayerPreference.INTERNAL,
+    val preferredExternalPlayerPackageName: String? = null,
     val internalPlayerEngine: InternalPlayerEngine = InternalPlayerEngine.EXOPLAYER,
     val autoSwitchInternalPlayerOnError: Boolean = false,
     val mpvHardwareDecodeMode: MpvHardwareDecodeMode = MpvHardwareDecodeMode.AUTO_SAFE,
@@ -475,6 +476,8 @@ class PlayerSettingsDataStore @Inject constructor(
 
     // Player preference key
     private val playerPreferenceKey = stringPreferencesKey("player_preference")
+    private val preferredExternalPlayerPackageNameKey =
+        stringPreferencesKey("preferred_external_player_package_name")
     private val internalPlayerEngineKey = stringPreferencesKey("internal_player_engine")
     private val autoSwitchInternalPlayerOnErrorKey =
         booleanPreferencesKey("auto_switch_internal_player_on_error")
@@ -754,6 +757,9 @@ class PlayerSettingsDataStore @Inject constructor(
                         else -> runCatching { PlayerPreference.valueOf(it) }.getOrDefault(PlayerPreference.INTERNAL)
                     }
                 } ?: PlayerPreference.INTERNAL,
+                preferredExternalPlayerPackageName = prefs[preferredExternalPlayerPackageNameKey]
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() },
                 internalPlayerEngine = parseInternalPlayerEngine(prefs[internalPlayerEngineKey]),
                 autoSwitchInternalPlayerOnError = prefs[autoSwitchInternalPlayerOnErrorKey] ?: false,
                 mpvHardwareDecodeMode = parseMpvHardwareDecodeMode(prefs[mpvHardwareDecodeModeKey]),
@@ -970,6 +976,17 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setPlayerPreference(preference: PlayerPreference) {
         store().edit { prefs ->
             prefs[playerPreferenceKey] = preference.name
+        }
+    }
+
+    suspend fun setPreferredExternalPlayerPackageName(packageName: String?) {
+        store().edit { prefs ->
+            val normalizedPackageName = packageName?.trim()?.takeIf { it.isNotBlank() }
+            if (normalizedPackageName == null) {
+                prefs.remove(preferredExternalPlayerPackageNameKey)
+            } else {
+                prefs[preferredExternalPlayerPackageNameKey] = normalizedPackageName
+            }
         }
     }
 

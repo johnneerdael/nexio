@@ -411,8 +411,13 @@ internal class PlayerMediaSourceFactory(
     }
 
     private fun diskSpoolDirectoryOrNull(): File? {
-        return diskSpoolDirectoryResolverForTesting?.invoke(context, diskSpoolStorageLocation)
+        val resolved = diskSpoolDirectoryResolverForTesting?.invoke(context, diskSpoolStorageLocation)
             ?: DiskSpoolStorageResolver.resolveSpoolDirectory(context, diskSpoolStorageLocation)
+        if (resolved != null || diskSpoolStorageLocation == DiskSpoolStorageLocation.BUILTIN) {
+            return resolved
+        }
+        return diskSpoolDirectoryResolverForTesting?.invoke(context, DiskSpoolStorageLocation.BUILTIN)
+            ?: DiskSpoolStorageResolver.resolveSpoolDirectory(context, DiskSpoolStorageLocation.BUILTIN)
     }
 
     fun getVodCacheLogState(currentStreamUrl: String? = null): String {
