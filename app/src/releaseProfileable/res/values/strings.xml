@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NEXIO (Profileable)</string>
+    <string name="android_tv_search_authority" translatable="false">com.nexio.tv.profileable.search</string>
+</resources>
