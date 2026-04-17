@@ -148,11 +148,13 @@ internal fun PlaybackSettingsSections(
     streamDiagnosticsEnabled: Boolean,
     startupPerfTelemetryEnabled: Boolean,
     diskSpoolDiagnosticsEnabled: Boolean,
+    dolbyVisionDiagnosticsEnabled: Boolean,
     onSetFireOsIecVerboseLoggingEnabled: (Boolean) -> Unit,
     onSetEnableBufferLogs: (Boolean) -> Unit,
     onSetStreamDiagnosticsEnabled: (Boolean) -> Unit,
     onSetStartupPerfTelemetryEnabled: (Boolean) -> Unit,
     onSetDiskSpoolDiagnosticsEnabled: (Boolean) -> Unit,
+    onSetDolbyVisionDiagnosticsEnabled: (Boolean) -> Unit,
     onSetIecPackerMaxPcmChannelLayout: (IecPackerChannelLayout) -> Unit,
     onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
     onSetSubtitleSize: (Int) -> Unit,
@@ -571,6 +573,17 @@ internal fun PlaybackSettingsSections(
                     subtitle = stringResource(R.string.playback_logging_disk_spool_diagnostics_subtitle),
                     isChecked = diskSpoolDiagnosticsEnabled,
                     onCheckedChange = onSetDiskSpoolDiagnosticsEnabled,
+                    onFocused = { focusedSection = PlaybackSection.LOGGING }
+                )
+            }
+
+            item(key = "logging_dolby_vision_diagnostics") {
+                ToggleSettingsItem(
+                    icon = Icons.Default.Tune,
+                    title = stringResource(R.string.playback_logging_dolby_vision_diagnostics_title),
+                    subtitle = stringResource(R.string.playback_logging_dolby_vision_diagnostics_subtitle),
+                    isChecked = dolbyVisionDiagnosticsEnabled,
+                    onCheckedChange = onSetDolbyVisionDiagnosticsEnabled,
                     onFocused = { focusedSection = PlaybackSection.LOGGING }
                 )
             }

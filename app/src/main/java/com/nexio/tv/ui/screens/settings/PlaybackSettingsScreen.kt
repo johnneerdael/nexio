@@ -147,6 +147,7 @@ internal fun PlaybackSettingsContent(
     val streamDiagnosticsEnabled by viewModel.streamDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val startupPerfTelemetryEnabled by viewModel.startupPerfTelemetryEnabled.collectAsStateWithLifecycle(initialValue = false)
     val diskSpoolDiagnosticsEnabled by viewModel.diskSpoolDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val dolbyVisionDiagnosticsEnabled by viewModel.dolbyVisionDiagnosticsEnabled.collectAsStateWithLifecycle(initialValue = false)
     val autoplayBenchmarkAvailable by viewModel.autoplayBenchmarkAvailable.collectAsStateWithLifecycle(initialValue = false)
     val diskSpoolStorageProbeUiState by viewModel.diskSpoolStorageProbeUiState.collectAsStateWithLifecycle()
     val debridUiState by debridViewModel.uiState.collectAsStateWithLifecycle()
@@ -358,6 +359,7 @@ internal fun PlaybackSettingsContent(
                 streamDiagnosticsEnabled = streamDiagnosticsEnabled,
                 startupPerfTelemetryEnabled = startupPerfTelemetryEnabled,
                 diskSpoolDiagnosticsEnabled = diskSpoolDiagnosticsEnabled,
+                dolbyVisionDiagnosticsEnabled = dolbyVisionDiagnosticsEnabled,
                 onSetFireOsIecVerboseLoggingEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setFireOsIecVerboseLoggingEnabled(enabled) }
                 },
@@ -372,6 +374,9 @@ internal fun PlaybackSettingsContent(
                 },
                 onSetDiskSpoolDiagnosticsEnabled = { enabled ->
                     coroutineScope.launch { viewModel.setDiskSpoolDiagnosticsEnabled(enabled) }
+                },
+                onSetDolbyVisionDiagnosticsEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setDolbyVisionDiagnosticsEnabled(enabled) }
                 },
                 onSetIecPackerMaxPcmChannelLayout = { layout ->
                     coroutineScope.launch { viewModel.setIecPackerMaxPcmChannelLayout(layout) }
