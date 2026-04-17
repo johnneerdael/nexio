@@ -944,7 +944,8 @@ internal class PlayerMediaSourceFactory(
                     requestHeaders = requestHeaders,
                     chunkBytes = chunkBytes,
                     parallelConnections = profile.connectionCount,
-                    startupPriorityBytes = startupPrebufferBytes
+                    startupPriorityBytes = startupPrebufferBytes,
+                    adaptiveHeadroomBytes = DISK_SPOOL_ADAPTIVE_HEADROOM_MB * BYTES_PER_MB
                 )
                     .downloadUntil(url, session, requestedSpoolBytes)
             }.onFailure { error ->
@@ -1249,6 +1250,7 @@ internal class PlayerMediaSourceFactory(
         private const val DISK_SPOOL_DIR = "player_disk_spool"
         private const val BYTES_PER_MB = 1024L * 1024L
         private const val FIXED_DISK_SPOOL_STARTUP_BUFFER_MB = 100
+        private const val DISK_SPOOL_ADAPTIVE_HEADROOM_MB = 256L
         private const val MIN_DISK_SPOOL_FREE_SPACE_MB = 768L
         private const val VOD_CACHE_FREE_SPACE_RESERVE_BYTES = 1024L * 1024L * 1024L
         private const val MIN_RUNTIME_VOD_CACHE_BYTES = 1L * 1024L * 1024L
