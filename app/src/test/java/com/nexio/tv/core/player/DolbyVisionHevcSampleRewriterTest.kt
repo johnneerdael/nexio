@@ -125,6 +125,52 @@ class DolbyVisionHevcSampleRewriterTest {
     }
 
     @Test
+    fun `returns null when rewritten rpu exceeds one byte length field capacity`() {
+        var conversionCalls = 0
+        val sample = byteArrayOf(0x02) + nal(type = 62, layerId = 1, payload = byteArrayOf())
+
+        val rewritten = DolbyVisionHevcSampleRewriter.rewriteLengthDelimitedSample(
+            sampleLengthDelimited = sample,
+            nalUnitLengthFieldLength = 1,
+            conversionMode = 2,
+            metrics = DolbyVisionHevcSampleRewriter.Metrics(),
+            convertRpu = { _, _ ->
+                conversionCalls++
+                ByteArray(256) { 0x11 }
+            }
+        )
+
+        assertNull(rewritten)
+        assertEquals(1, conversionCalls)
+    }
+
+    @Test
+    fun `accumulates output bytes across successful rewrites`() {
+        val metrics = DolbyVisionHevcSampleRewriter.Metrics()
+        val sample = lengthDelimitedSample(
+            nal(type = 62, layerId = 1, payload = byteArrayOf(0x55, 0x66, 0x77))
+        )
+
+        val first = DolbyVisionHevcSampleRewriter.rewriteLengthDelimitedSample(
+            sampleLengthDelimited = sample,
+            nalUnitLengthFieldLength = 4,
+            conversionMode = 5,
+            metrics = metrics,
+            convertRpu = { payload, _ -> payload }
+        ) ?: error("first rewrite should succeed")
+
+        val second = DolbyVisionHevcSampleRewriter.rewriteLengthDelimitedSample(
+            sampleLengthDelimited = sample,
+            nalUnitLengthFieldLength = 4,
+            conversionMode = 5,
+            metrics = metrics,
+            convertRpu = { payload, _ -> payload }
+        ) ?: error("second rewrite should succeed")
+
+        assertEquals(first.size.toLong() + second.size.toLong(), metrics.outputBytes)
+    }
+
+    @Test
     fun `normalizes converted rpu layer id to zero`() {
         val rpuLayer63 = byteArrayOf(0x7D.toByte(), 0xF9.toByte(), 0x01)
         assertNalHeader(rpuLayer63, expectedType = 62, expectedLayerId = 63)
