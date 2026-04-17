@@ -159,6 +159,13 @@ internal class DiskSpoolWriter(
             val frontier = bridge.contiguousFrontierBytes()
             if (frontier >= target) {
                 if (frontier >= maxFrontier) return
+                val priority = bridge.consumePriorityPosition()
+                if (priority >= 0L) {
+                    if (!rebaseTo(bridge, priority)) {
+                        return
+                    }
+                    continue
+                }
                 try {
                     Thread.sleep(idlePollMs.coerceAtLeast(1L))
                 } catch (_: InterruptedException) {

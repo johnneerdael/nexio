@@ -4,8 +4,10 @@ import android.net.Uri
 import androidx.media3.common.C
 import androidx.media3.datasource.DataSpec
 import java.io.File
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
@@ -162,6 +164,8 @@ class DiskSpoolPipelineTest {
     @Test
     fun `writer and datasource maintain bounded adaptive headroom as playback advances`() {
         val content = ByteArray(512 * 1024) { (it % 251).toByte() }
+        val rangeRequests = AtomicInteger(0)
+        val requestLatch = CountDownLatch(2)
         val server = MockWebServer()
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
@@ -172,7 +176,11 @@ class DiskSpoolPipelineTest {
                         .setHeader("Content-Range", "bytes 0-0/${content.size}")
                         .setHeader("Content-Length", 1)
                         .setBody(Buffer().writeByte(0x2A))
-                    else -> rangedResponse(content, range ?: error("Missing range"))
+                    else -> {
+                        rangeRequests.incrementAndGet()
+                        requestLatch.countDown()
+                        rangedResponse(content, range ?: error("Missing range"))
+                    }
                 }
             }
         }
@@ -184,15 +192,20 @@ class DiskSpoolPipelineTest {
             waitTimeoutMs = 2_000L
         )
         val uri = Uri.parse(server.url("/movie.bin").toString())
+        val writerFailure = AtomicReference<Throwable?>(null)
         val writerThread = Thread {
-            DiskSpoolWriter(
-                okHttpClient = OkHttpClient(),
-                chunkBytes = 64 * 1024,
-                ioBufferBytes = 8 * 1024,
-                startupPriorityBytes = 64 * 1024L,
-                adaptiveHeadroomBytes = 128 * 1024L,
-                idlePollMs = 10L
-            ).downloadUntil(uri.toString(), session, content.size.toLong())
+            try {
+                DiskSpoolWriter(
+                    okHttpClient = OkHttpClient(),
+                    chunkBytes = 64 * 1024,
+                    ioBufferBytes = 8 * 1024,
+                    startupPriorityBytes = 64 * 1024L,
+                    adaptiveHeadroomBytes = 128 * 1024L,
+                    idlePollMs = 10L
+                ).downloadUntil(uri.toString(), session, content.size.toLong())
+            } catch (throwable: Throwable) {
+                writerFailure.set(throwable)
+            }
         }
         val dataSource = DiskSpoolDataSource(session, uri)
 
@@ -201,9 +214,10 @@ class DiskSpoolPipelineTest {
 
             writerThread.start()
 
+            assertTrue(requestLatch.await(2, TimeUnit.SECONDS))
             assertTrue(session.awaitFrontierAtLeast(128 * 1024L, timeoutMs = 2_000L))
-            Thread.sleep(75L)
-            assertTrue(session.contiguousFrontierBytes() <= 192 * 1024L)
+            assertEquals(2, rangeRequests.get())
+            assertEquals(null, writerFailure.get())
 
             val actual = ByteArray(content.size)
             var offset = 0
@@ -226,6 +240,7 @@ class DiskSpoolPipelineTest {
             assertArrayEquals(content, actual)
             assertEquals(content.size.toLong(), session.contiguousFrontierBytes())
             assertEquals(content.size.toLong(), session.currentReadPositionBytes())
+            assertEquals(null, writerFailure.get())
         } finally {
             dataSource.close()
             session.close()
