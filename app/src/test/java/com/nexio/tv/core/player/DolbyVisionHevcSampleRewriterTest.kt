@@ -102,6 +102,29 @@ class DolbyVisionHevcSampleRewriterTest {
     }
 
     @Test
+    fun `returns null for truncated one byte nal without invoking converter`() {
+        var conversionCalls = 0
+        val malformed = byteArrayOf(
+            0x00, 0x00, 0x00, 0x01,
+            0x7C.toByte()
+        )
+
+        val rewritten = DolbyVisionHevcSampleRewriter.rewriteLengthDelimitedSample(
+            sampleLengthDelimited = malformed,
+            nalUnitLengthFieldLength = 4,
+            conversionMode = 2,
+            metrics = DolbyVisionHevcSampleRewriter.Metrics(),
+            convertRpu = { _, _ ->
+                conversionCalls++
+                byteArrayOf(0x01)
+            }
+        )
+
+        assertNull(rewritten)
+        assertEquals(0, conversionCalls)
+    }
+
+    @Test
     fun `normalizes converted rpu layer id to zero`() {
         val rpuLayer63 = byteArrayOf(0x7D.toByte(), 0xF9.toByte(), 0x01)
         assertNalHeader(rpuLayer63, expectedType = 62, expectedLayerId = 63)
