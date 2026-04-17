@@ -27,20 +27,27 @@ internal fun <T> splitNextUpCandidatesForContinueWatching(
     resumes: List<ContinueWatchingResumeRef>,
     nextUpItems: List<T>,
     nextUpRef: (T) -> ContinueWatchingNextUpRef,
-    nowMs: Long
+    nowMs: Long,
+    nearEqualWindowMs: Long = 60_000L
 ): ContinueWatchingNextUpSelection<T> {
-    val pausedShowIds = resumes
+    val pausedShowActivityById = resumes
         .asSequence()
         .filter { it.suppressNextUp }
-        .map { it.contentId.trim() }
-        .filter { it.isNotBlank() }
-        .toSet()
+        .mapNotNull { ref ->
+            val contentId = ref.contentId.trim()
+            if (contentId.isBlank()) null else contentId to ref.activityAtMs
+        }
+        .groupingBy { it.first }
+        .fold(0L) { latest, (_, activityAtMs) -> maxOf(latest, activityAtMs) }
 
     val syntheticRailItems = nextUpItems
 
     val mainFeedItems = nextUpItems.filter { candidate ->
         val ref = nextUpRef(candidate)
-        ref.contentId.trim() !in pausedShowIds &&
+        val pausedActivityAtMs = pausedShowActivityById[ref.contentId.trim()]
+        val suppressedByCurrentResume = pausedActivityAtMs != null &&
+            pausedActivityAtMs >= ref.activityAtMs - nearEqualWindowMs
+        !suppressedByCurrentResume &&
             AirDateGate.isAired(
                 availabilityInstantMs = ref.availabilityInstantMs,
                 firstAiredMs = ref.firstAiredMs,
@@ -79,7 +86,7 @@ internal fun <R, N> buildMixedContinueWatchingTimeline(
                 )
             )
         }
-    }.sortedWith(
+    }.dedupeByContentActivity(nearEqualWindowMs).sortedWith(
         compareByDescending<TimelineEntry<R, N>> { it.activityAtMs }
             .thenBy { it.stableKey() }
     )
@@ -170,4 +177,39 @@ private sealed interface TimelineEntry<out R, out N> {
 
 private fun <R, N> TimelineEntry<R, N>.stableKey(): String {
     return "${kindPriority}:${contentId.trim()}:${activityAtMs}"
+}
+
+private fun <R, N> List<TimelineEntry<R, N>>.dedupeByContentActivity(
+    nearEqualWindowMs: Long
+): List<TimelineEntry<R, N>> {
+    val selectedByContent = linkedMapOf<String, TimelineEntry<R, N>>()
+    forEach { entry ->
+        val key = entry.contentId.trim()
+        if (key.isBlank()) return@forEach
+        val existing = selectedByContent[key]
+        if (existing == null || shouldPreferTimelineEntry(existing, entry, nearEqualWindowMs)) {
+            selectedByContent[key] = entry
+        }
+    }
+    return selectedByContent.values.toList()
+}
+
+private fun <R, N> shouldPreferTimelineEntry(
+    existing: TimelineEntry<R, N>,
+    candidate: TimelineEntry<R, N>,
+    nearEqualWindowMs: Long
+): Boolean {
+    val activityDelta = candidate.activityAtMs - existing.activityAtMs
+    if (activityDelta > nearEqualWindowMs) return true
+    if (activityDelta < -nearEqualWindowMs) return false
+
+    if (candidate.kindPriority != existing.kindPriority) {
+        return candidate.kindPriority < existing.kindPriority
+    }
+
+    if (candidate.activityAtMs != existing.activityAtMs) {
+        return candidate.activityAtMs > existing.activityAtMs
+    }
+
+    return candidate.stableKey() < existing.stableKey()
 }

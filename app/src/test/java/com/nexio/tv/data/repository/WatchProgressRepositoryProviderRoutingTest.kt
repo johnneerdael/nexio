@@ -26,19 +26,32 @@ class WatchProgressRepositoryProviderRoutingTest {
         val outbox = mockk<TraktMutationOutboxCoordinator>()
         val envelopeSlot = slot<TraktMutationEnvelope>()
         coEvery { outbox.enqueueAndDrain(capture(envelopeSlot)) } answers { envelopeSlot.captured }
+        val preferences = mockk<WatchProgressPreferences>(relaxed = true)
 
         val repo = repository(
             providerState = EffectiveTrackingProviderState(
                 effectiveProvider = TrackingProvider.SIMKL,
                 simklAuthenticated = true
             ),
-            outbox = outbox
+            outbox = outbox,
+            preferences = preferences
         )
 
         repo.markAsCompleted(sampleEpisodeProgress())
 
         assertEquals(SimklProgressHistoryMutationAdapter.ADAPTER_KEY, envelopeSlot.captured.adapterKey)
         assertEquals(SimklProgressHistoryMutationAdapter.MUTATION_KIND_HISTORY_ADD, envelopeSlot.captured.mutationKind)
+        coVerify(exactly = 1) {
+            preferences.saveProgress(
+                match { progress ->
+                    progress.contentId == "tt1520211" &&
+                        progress.season == 1 &&
+                        progress.episode == 2 &&
+                        progress.progressPercent == 100f &&
+                        progress.isCompleted()
+                }
+            )
+        }
     }
 
     @Test
@@ -95,14 +108,15 @@ class WatchProgressRepositoryProviderRoutingTest {
     private fun repository(
         providerState: EffectiveTrackingProviderState,
         trackingProgressService: TrackingProgressService = mockTrackingProgressService(),
-        outbox: TraktMutationOutboxCoordinator = mockk(relaxed = true)
+        outbox: TraktMutationOutboxCoordinator = mockk(relaxed = true),
+        preferences: WatchProgressPreferences = mockk(relaxed = true)
     ): WatchProgressRepositoryImpl {
         val trackingProviderStateService = mockk<TrackingProviderStateService> {
             every { state } returns flowOf(providerState)
             coEvery { currentState() } returns providerState
         }
         return WatchProgressRepositoryImpl(
-            watchProgressPreferences = mockk<WatchProgressPreferences>(relaxed = true),
+            watchProgressPreferences = preferences,
             trackingProviderStateService = trackingProviderStateService,
             trackingProgressService = trackingProgressService,
             traktMutationOutboxCoordinator = outbox,

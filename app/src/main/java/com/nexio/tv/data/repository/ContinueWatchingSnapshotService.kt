@@ -503,13 +503,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         traktUpNextEntries: List<TrackingNextUpEntry>
     ): ContinueWatchingSnapshot {
         val nowMs = System.currentTimeMillis()
-        val resumeItems = allProgress
-            .asSequence()
-            .filter(::shouldTreatAsResumeForContinueWatching)
-            .mapNotNull(::normalizeResumeItem)
-            .sortedByDescending { it.lastWatched }
-            .distinctBy { it.contentId }
-            .toList()
+        val resumeItems = selectResumeItemsForContinueWatching(allProgress)
         val normalizedNextUpItems = nextUpEntries
             .asSequence()
             .mapNotNull(::normalizeNextUpEntry)
@@ -585,6 +579,76 @@ class ContinueWatchingSnapshotService @Inject constructor(
             updatedAtMs = nowMs,
             scheduledReemit = scheduledReemit
         )
+    }
+
+    private data class ContinueWatchingCompletionAnchor(
+        val season: Int?,
+        val episode: Int?,
+        val lastWatched: Long
+    )
+
+    private fun selectResumeItemsForContinueWatching(allProgress: List<WatchProgress>): List<WatchProgress> {
+        val completionAnchors = completionAnchorsByContent(allProgress)
+        return allProgress
+            .asSequence()
+            .filter(::shouldTreatAsResumeForContinueWatching)
+            .mapNotNull(::normalizeResumeItem)
+            .filterNot { progress -> isSuppressedByCompletionAnchor(progress, completionAnchors[progress.contentId]) }
+            .sortedByDescending { it.lastWatched }
+            .distinctBy { it.contentId }
+            .toList()
+    }
+
+    private fun completionAnchorsByContent(
+        allProgress: List<WatchProgress>
+    ): Map<String, ContinueWatchingCompletionAnchor> {
+        val anchors = linkedMapOf<String, ContinueWatchingCompletionAnchor>()
+        allProgress.forEach { progress ->
+            val contentId = progress.contentId.trim()
+            if (contentId.isBlank()) return@forEach
+            if (!progress.isCompleted()) return@forEach
+            val anchor = ContinueWatchingCompletionAnchor(
+                season = progress.season,
+                episode = progress.episode,
+                lastWatched = progress.lastWatched
+            )
+            val existing = anchors[contentId]
+            if (existing == null || shouldPreferCompletionAnchor(existing, anchor)) {
+                anchors[contentId] = anchor
+            }
+        }
+        return anchors
+    }
+
+    private fun shouldPreferCompletionAnchor(
+        existing: ContinueWatchingCompletionAnchor,
+        candidate: ContinueWatchingCompletionAnchor
+    ): Boolean {
+        if (candidate.lastWatched != existing.lastWatched) {
+            return candidate.lastWatched > existing.lastWatched
+        }
+        val existingSeason = existing.season ?: -1
+        val candidateSeason = candidate.season ?: -1
+        if (candidateSeason != existingSeason) return candidateSeason > existingSeason
+        val existingEpisode = existing.episode ?: -1
+        val candidateEpisode = candidate.episode ?: -1
+        return candidateEpisode > existingEpisode
+    }
+
+    private fun isSuppressedByCompletionAnchor(
+        progress: WatchProgress,
+        anchor: ContinueWatchingCompletionAnchor?
+    ): Boolean {
+        if (anchor == null) return false
+        if (progress.lastWatched <= anchor.lastWatched) return true
+
+        val progressSeason = progress.season ?: return false
+        val progressEpisode = progress.episode ?: return false
+        val anchorSeason = anchor.season ?: return false
+        val anchorEpisode = anchor.episode ?: return false
+
+        return progressSeason < anchorSeason ||
+            (progressSeason == anchorSeason && progressEpisode <= anchorEpisode)
     }
 
     private fun shouldTreatAsResumeForContinueWatching(progress: WatchProgress): Boolean {

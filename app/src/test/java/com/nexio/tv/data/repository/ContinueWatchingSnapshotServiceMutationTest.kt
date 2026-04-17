@@ -43,7 +43,9 @@ class ContinueWatchingSnapshotServiceMutationTest {
         videoId: String = contentId,
         season: Int? = null,
         episode: Int? = null,
-        lastWatched: Long = 1_000L
+        lastWatched: Long = 1_000L,
+        progressPercent: Float = 50f,
+        source: String = WatchProgress.SOURCE_LOCAL
     ): WatchProgress = WatchProgress(
         contentId = contentId,
         contentType = if (season != null) "series" else "movie",
@@ -58,7 +60,8 @@ class ContinueWatchingSnapshotServiceMutationTest {
         position = 50L,
         duration = 100L,
         lastWatched = lastWatched,
-        progressPercent = 50f
+        progressPercent = progressPercent,
+        source = source
     )
 
     /**
@@ -209,6 +212,27 @@ class ContinueWatchingSnapshotServiceMutationTest {
         method.invoke(service, entries, nowMs)
     }
 
+    private fun invokeBuildRawSnapshot(
+        service: ContinueWatchingSnapshotService,
+        allProgress: List<WatchProgress>,
+        nextUpEntries: List<TrackingNextUpEntry>,
+        traktUpNextEntries: List<TrackingNextUpEntry>
+    ): ContinueWatchingSnapshot {
+        val method = ContinueWatchingSnapshotService::class.java.getDeclaredMethod(
+            "buildRawSnapshot",
+            List::class.java,
+            List::class.java,
+            List::class.java
+        )
+        method.isAccessible = true
+        return method.invoke(
+            service,
+            allProgress,
+            nextUpEntries,
+            traktUpNextEntries
+        ) as ContinueWatchingSnapshot
+    }
+
     private fun awaitCondition(timeoutMs: Long = 2_000L, condition: () -> Boolean) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
@@ -217,6 +241,45 @@ class ContinueWatchingSnapshotServiceMutationTest {
         }
         assertTrue("Condition was not met within ${timeoutMs}ms", condition())
     }
+
+    @Test
+    fun `raw snapshot drops stale local resume when provider has newer completed episode next up`() =
+        runTest {
+            val service = buildService()
+            val staleLocalResume = resume(
+                contentId = "tt1520211",
+                videoId = "tt1520211:1:2",
+                season = 1,
+                episode = 2,
+                lastWatched = 1_000L,
+                progressPercent = 40f,
+                source = WatchProgress.SOURCE_LOCAL
+            )
+            val providerCompletedEpisode = resume(
+                contentId = "tt1520211",
+                videoId = "tt1520211:5:2",
+                season = 5,
+                episode = 2,
+                lastWatched = 200_000L,
+                progressPercent = 100f,
+                source = WatchProgress.SOURCE_TRAKT_HISTORY
+            )
+            val providerNextUp = nextUp(
+                contentId = "tt1520211",
+                firstAiredMs = 1L,
+                episode = 3
+            ).copy(season = 5, videoId = "tt1520211:5:3", activityAtMs = 200_000L)
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = listOf(staleLocalResume, providerCompletedEpisode),
+                nextUpEntries = listOf(providerNextUp),
+                traktUpNextEntries = emptyList()
+            )
+
+            assertEquals(emptyList<WatchProgress>(), snapshot.resumeItems)
+            assertEquals(listOf(providerNextUp), snapshot.nextUpItems)
+        }
 
     // ── Inline harness ─────────────────────────────────────────────────────────
     // Tests 1-4 use an inline harness that mirrors the helper implementations

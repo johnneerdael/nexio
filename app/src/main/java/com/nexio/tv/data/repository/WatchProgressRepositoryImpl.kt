@@ -500,6 +500,7 @@ class WatchProgressRepositoryImpl @Inject constructor(
             )
             throw it
         }
+        watchProgressPreferences.saveProgress(completed)
     }
 
     override suspend fun clearAll() {
