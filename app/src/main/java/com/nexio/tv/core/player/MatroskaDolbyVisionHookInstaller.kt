@@ -32,16 +32,55 @@ object MatroskaDolbyVisionHookInstaller {
     private val codecStringRewriteCount = AtomicLong(0L)
     private val lastDetectedSourceProfile = AtomicReference<Int?>(null)
     private val lastSelectedConversionMode = AtomicReference<Int?>(null)
+    @Volatile
+    private var diagnosticsEnabled = false
+    private val rewriteSampleCalls = AtomicLong(0L)
+    private val rewriteInputBytes = AtomicLong(0L)
+    private val rewriteOutputBytes = AtomicLong(0L)
+    private val nalCopyBytes = AtomicLong(0L)
+    private val appendedSampleBytes = AtomicLong(0L)
+    private val rpuNalTransformCalls = AtomicLong(0L)
+
+    data class AllocationSnapshot(
+        val enabled: Boolean,
+        val rewriteSampleCalls: Long,
+        val rewriteInputBytes: Long,
+        val rewriteOutputBytes: Long,
+        val nalCopyBytes: Long,
+        val appendedSampleBytes: Long,
+        val rpuNalTransformCalls: Long
+    )
 
     fun resetRuntimeCounters() {
         codecStringRewriteCount.set(0L)
         lastDetectedSourceProfile.set(null)
         lastSelectedConversionMode.set(null)
+        rewriteSampleCalls.set(0L)
+        rewriteInputBytes.set(0L)
+        rewriteOutputBytes.set(0L)
+        nalCopyBytes.set(0L)
+        appendedSampleBytes.set(0L)
+        rpuNalTransformCalls.set(0L)
     }
 
     fun getCodecStringRewriteCount(): Long = codecStringRewriteCount.get()
     fun getLastDetectedSourceProfile(): Int? = lastDetectedSourceProfile.get()
     fun getLastSelectedConversionMode(): Int? = lastSelectedConversionMode.get()
+    fun setDiagnosticsEnabled(enabled: Boolean) {
+        diagnosticsEnabled = enabled
+    }
+
+    fun runtimeAllocationSnapshot(): AllocationSnapshot {
+        return AllocationSnapshot(
+            enabled = diagnosticsEnabled,
+            rewriteSampleCalls = rewriteSampleCalls.get(),
+            rewriteInputBytes = rewriteInputBytes.get(),
+            rewriteOutputBytes = rewriteOutputBytes.get(),
+            nalCopyBytes = nalCopyBytes.get(),
+            appendedSampleBytes = appendedSampleBytes.get(),
+            rpuNalTransformCalls = rpuNalTransformCalls.get()
+        )
+    }
 
     fun maybeInstall(
         extractorsFactory: DefaultExtractorsFactory,
@@ -427,6 +466,10 @@ object MatroskaDolbyVisionHookInstaller {
         conversionMode: Int
     ): ByteArray? {
         if (nalUnitLengthFieldLength !in 1..4) return null
+        if (diagnosticsEnabled) {
+            rewriteSampleCalls.incrementAndGet()
+            rewriteInputBytes.addAndGet(sampleLengthDelimited.size.toLong())
+        }
         var offset = 0
         var changed = false
         val out = ByteArrayOutputStream(sampleLengthDelimited.size + 128)
@@ -436,6 +479,9 @@ object MatroskaDolbyVisionHookInstaller {
             offset += nalUnitLengthFieldLength
             if (offset + nalSize > sampleLengthDelimited.size) return null
             val originalNal = sampleLengthDelimited.copyOfRange(offset, offset + nalSize)
+            if (diagnosticsEnabled) {
+                nalCopyBytes.addAndGet(originalNal.size.toLong())
+            }
             val convertedNal = transformNalForCompatibility(originalNal, conversionMode)
             if (convertedNal == null) {
                 changed = true
@@ -454,7 +500,11 @@ object MatroskaDolbyVisionHookInstaller {
         if (offset != sampleLengthDelimited.size) return null
         if (!changed) return null
         if (out.size() <= 0) return null
-        return out.toByteArray()
+        val rewritten = out.toByteArray()
+        if (diagnosticsEnabled) {
+            rewriteOutputBytes.addAndGet(rewritten.size.toLong())
+        }
+        return rewritten
     }
 
     private fun transformNalForCompatibility(
@@ -481,6 +531,9 @@ object MatroskaDolbyVisionHookInstaller {
         nalPayload: ByteArray,
         conversionMode: Int
     ): ByteArray {
+        if (diagnosticsEnabled) {
+            rpuNalTransformCalls.incrementAndGet()
+        }
         if (nalPayload.isEmpty()) return nalPayload
         val nalType = getNalUnitType(nalPayload)
         if (nalType != NAL_TYPE_UNSPEC62) return nalPayload
@@ -510,6 +563,9 @@ object MatroskaDolbyVisionHookInstaller {
         if (nalPayload.size < 2) return nalPayload
         if (getNuhLayerId(nalPayload) == 0) return nalPayload
         val out = nalPayload.copyOf()
+        if (diagnosticsEnabled) {
+            nalCopyBytes.addAndGet(out.size.toLong())
+        }
         // Keep nal_unit_type and temporal_id_plus1, force nuh_layer_id to 0.
         out[0] = (out[0].toInt() and 0xFE).toByte()
         out[1] = (out[1].toInt() and 0x07).toByte()
@@ -596,6 +652,9 @@ object MatroskaDolbyVisionHookInstaller {
         }
 
         val out = ByteArray(sampleLengthDelimited.size + nalUnitLengthFieldLength + nalPayload.size)
+        if (diagnosticsEnabled) {
+            appendedSampleBytes.addAndGet(out.size.toLong())
+        }
         System.arraycopy(sampleLengthDelimited, 0, out, 0, sampleLengthDelimited.size)
 
         var value = nalPayload.size

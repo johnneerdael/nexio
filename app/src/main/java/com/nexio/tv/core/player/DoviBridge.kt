@@ -23,10 +23,20 @@ object DoviBridge {
         val outputBytes: Int
     )
 
+    data class RuntimeDiagnosticsSnapshot(
+        val enabled: Boolean,
+        val inputBytes: Long,
+        val outputBytes: Long,
+        val failedConversions: Long
+    )
+
     private val nativeLoaded: Boolean by lazy { loadNativeLibrary() }
     private var cachedSelfTestResult: SelfTestResult? = null
     private val conversionCallCount = AtomicLong(0L)
     private val conversionSuccessCount = AtomicLong(0L)
+    private val diagnosticInputBytes = AtomicLong(0L)
+    private val diagnosticOutputBytes = AtomicLong(0L)
+    private val diagnosticFailedConversions = AtomicLong(0L)
     @Volatile
     private var verboseLoggingEnabled: Boolean = false
 
@@ -182,6 +192,9 @@ object DoviBridge {
     fun resetRuntimeCounters() {
         conversionCallCount.set(0L)
         conversionSuccessCount.set(0L)
+        diagnosticInputBytes.set(0L)
+        diagnosticOutputBytes.set(0L)
+        diagnosticFailedConversions.set(0L)
     }
 
     fun getConversionCallCount(): Long = conversionCallCount.get()
@@ -198,14 +211,33 @@ object DoviBridge {
         }
     }
 
+    fun runtimeDiagnosticsSnapshot(): RuntimeDiagnosticsSnapshot {
+        return RuntimeDiagnosticsSnapshot(
+            enabled = verboseLoggingEnabled,
+            inputBytes = diagnosticInputBytes.get(),
+            outputBytes = diagnosticOutputBytes.get(),
+            failedConversions = diagnosticFailedConversions.get()
+        )
+    }
+
     fun convertDv7RpuToDv81(payload: ByteArray, mode: Int = 1): ByteArray? {
         if (!isAvailable() || payload.isEmpty()) return null
         conversionCallCount.incrementAndGet()
+        if (verboseLoggingEnabled) {
+            diagnosticInputBytes.addAndGet(payload.size.toLong())
+        }
         val converted = runCatching { nativeConvertDv7RpuToDv81(payload, mode) }
             .onFailure { Log.w(TAG, "Conversion failed: ${it.message}") }
             .getOrNull()
         if (converted != null && converted.isNotEmpty()) {
             conversionSuccessCount.incrementAndGet()
+        }
+        if (verboseLoggingEnabled) {
+            if (converted != null && converted.isNotEmpty()) {
+                diagnosticOutputBytes.addAndGet(converted.size.toLong())
+            } else {
+                diagnosticFailedConversions.incrementAndGet()
+            }
         }
         return converted
     }
