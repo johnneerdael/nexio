@@ -178,6 +178,8 @@ data class PlayerSettings(
     val skipIntroEnabled: Boolean = true,
     // Try native DV7 -> DV8.1 conversion before HEVC fallback.
     val experimentalDv7ToDv81Enabled: Boolean = true,
+    // Map DV7 to its HEVC HDR10 base layer on non-Dolby Vision displays.
+    val experimentalDv7HevcBaseLayerEnabled: Boolean = false,
     // Experimental: enable the Kodi-style IEC packer custom AudioSink path.
     // When disabled, the normal Media3 passthrough path remains active.
     val experimentalDtsIecPassthroughEnabled: Boolean = false,
@@ -470,6 +472,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val skipIntroEnabledKey = booleanPreferencesKey("skip_intro_enabled")
     private val experimentalDv7ToDv81EnabledKey =
         booleanPreferencesKey("experimental_dv7_to_dv81_enabled")
+    private val experimentalDv7HevcBaseLayerEnabledKey =
+        booleanPreferencesKey("experimental_dv7_hevc_base_layer_enabled")
     private val experimentalDtsIecPassthroughEnabledKey =
         booleanPreferencesKey("experimental_dts_iec_passthrough_enabled")
     private val iecPackerAc3PassthroughEnabledKey =
@@ -744,7 +748,14 @@ class PlayerSettingsDataStore @Inject constructor(
                 pauseOverlayEnabled = prefs[pauseOverlayEnabledKey] ?: true,
                 osdClockEnabled = prefs[osdClockEnabledKey] ?: true,
                 skipIntroEnabled = prefs[skipIntroEnabledKey] ?: true,
-                experimentalDv7ToDv81Enabled = prefs[experimentalDv7ToDv81EnabledKey] ?: true,
+                experimentalDv7HevcBaseLayerEnabled =
+                    prefs[experimentalDv7HevcBaseLayerEnabledKey] ?: false,
+                experimentalDv7ToDv81Enabled =
+                    if (prefs[experimentalDv7HevcBaseLayerEnabledKey] == true) {
+                        false
+                    } else {
+                        prefs[experimentalDv7ToDv81EnabledKey] ?: true
+                    },
                 experimentalDtsIecPassthroughEnabled =
                     prefs[experimentalDtsIecPassthroughEnabledKey] ?: false,
                 iecPackerAc3PassthroughEnabled =
@@ -784,7 +795,11 @@ class PlayerSettingsDataStore @Inject constructor(
                 experimentalDv5HardwareToneMapCpuFallbackEnabled =
                     prefs[experimentalDv5HardwareToneMapCpuFallbackEnabledKey] ?: false,
                 experimentalDv7ToDv81PreserveMappingEnabled =
-                    prefs[experimentalDv7ToDv81PreserveMappingEnabledKey] ?: false,
+                    if (prefs[experimentalDv7HevcBaseLayerEnabledKey] == true) {
+                        false
+                    } else {
+                        prefs[experimentalDv7ToDv81PreserveMappingEnabledKey] ?: false
+                    },
                 frameRateMatchingMode = prefs[frameRateMatchingModeKey]?.let {
                     runCatching { FrameRateMatchingMode.valueOf(it) }.getOrNull()
                 } ?: if (prefs[frameRateMatchingKey] == true) {
@@ -1362,6 +1377,21 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setExperimentalDv7ToDv81Enabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[experimentalDv7ToDv81EnabledKey] = enabled
+            if (enabled) {
+                prefs[experimentalDv7HevcBaseLayerEnabledKey] = false
+            } else {
+                prefs[experimentalDv7ToDv81PreserveMappingEnabledKey] = false
+            }
+        }
+    }
+
+    suspend fun setExperimentalDv7HevcBaseLayerEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[experimentalDv7HevcBaseLayerEnabledKey] = enabled
+            if (enabled) {
+                prefs[experimentalDv7ToDv81EnabledKey] = false
+                prefs[experimentalDv7ToDv81PreserveMappingEnabledKey] = false
+            }
         }
     }
 
@@ -1481,7 +1511,10 @@ class PlayerSettingsDataStore @Inject constructor(
 
     suspend fun setExperimentalDv7ToDv81PreserveMappingEnabled(enabled: Boolean) {
         store().edit { prefs ->
-            prefs[experimentalDv7ToDv81PreserveMappingEnabledKey] = enabled
+            prefs[experimentalDv7ToDv81PreserveMappingEnabledKey] =
+                enabled &&
+                    prefs[experimentalDv7ToDv81EnabledKey] != false &&
+                    prefs[experimentalDv7HevcBaseLayerEnabledKey] != true
         }
     }
 

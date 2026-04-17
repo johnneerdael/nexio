@@ -2,12 +2,10 @@ package com.nexio.tv.ui.screens.player
 
 import android.content.Context
 import android.content.res.Resources
-import android.hardware.display.DisplayManager
 import android.media.audiofx.LoudnessEnhancer
 import android.net.Uri
 import android.os.Build
 import android.util.Log
-import android.view.Display
 import android.view.accessibility.CaptioningManager
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -16,6 +14,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
+import androidx.media3.common.util.DolbyVisionCompatibility
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.text.CueGroup
@@ -49,6 +48,8 @@ import androidx.media3.session.MediaSession
 import com.nexio.tv.core.player.DoviBridge
 import com.nexio.tv.core.player.Dv5HardwareToneMapRpuTap
 import com.nexio.tv.core.player.MatroskaDolbyVisionHookInstaller
+import com.nexio.tv.core.player.queryDisplayHdrCapabilities
+import com.nexio.tv.core.player.resolveDolbyVisionBaseLayerDecision
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
@@ -253,12 +254,37 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             val useAssSsaPipeline = overlayDecision.useAssSsaPipeline
             DoviBridge.resetRuntimeCounters()
             MatroskaDolbyVisionHookInstaller.resetRuntimeCounters()
-            val dv7ToDv81Probe = if (playerSettings.experimentalDv7ToDv81Enabled) {
+            DolbyVisionCompatibility.setMapDv7ToHevcEnabled(false)
+            val displayHdrCapabilities = context.queryDisplayHdrCapabilities()
+            val dv7HevcBaseLayerDecision = resolveDolbyVisionBaseLayerDecision(
+                enabled = playerSettings.experimentalDv7HevcBaseLayerEnabled,
+                displayCapabilities = displayHdrCapabilities
+            )
+            val dv7HevcBaseLayerActive = dv7HevcBaseLayerDecision.enableHevcMapping
+            DolbyVisionCompatibility.setMapDv7ToHevcEnabled(dv7HevcBaseLayerActive)
+            if (playerSettings.experimentalDv7HevcBaseLayerEnabled) {
+                Log.i(
+                    PlayerRuntimeController.TAG,
+                    "DV7_HEVC_BASE: setting=true active=$dv7HevcBaseLayerActive " +
+                        "decision=$dv7HevcBaseLayerDecision " +
+                        "hdrCapsKnown=${displayHdrCapabilities.hdrCapsKnown} " +
+                        "displayDv=${displayHdrCapabilities.supportsDolbyVision} " +
+                        "displayHdr10=${displayHdrCapabilities.supportsHdr10OrHdr10Plus} " +
+                        "host=${url.safeHost()}"
+                )
+            }
+            val dv7ToDv81SettingActive =
+                playerSettings.experimentalDv7ToDv81Enabled && !dv7HevcBaseLayerActive
+            val dv7ToDv81Probe = if (dv7ToDv81SettingActive) {
                 DoviBridge.probeRealtimeConversionSupport(url)
             } else {
                 DoviBridge.RealtimeConversionProbe(
                     supported = false,
-                    reason = "setting-disabled",
+                    reason = if (dv7HevcBaseLayerActive) {
+                        "dv7-hevc-base-layer-active"
+                    } else {
+                        "setting-disabled"
+                    },
                     bridgeVersion = DoviBridge.getBridgeVersionOrNull(),
                     extractorHookReady = DoviBridge.isExtractorHookReadyInBuild,
                     selfTest = DoviBridge.SelfTestResult(
@@ -270,12 +296,14 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 )
             }
             isExperimentalDv7ToDv81ActiveForCurrentPlayback =
-                playerSettings.experimentalDv7ToDv81Enabled && dv7ToDv81Probe.supported
+                dv7ToDv81SettingActive && dv7ToDv81Probe.supported
             dv7ToDv81BridgeVersionForCurrentPlayback = dv7ToDv81Probe.bridgeVersion
             dv7ToDv81LastProbeReasonForCurrentPlayback = dv7ToDv81Probe.reason
             Log.i(
                 PlayerRuntimeController.TAG,
                 "DV7_DOVI: setting=${playerSettings.experimentalDv7ToDv81Enabled} " +
+                    "hevcBaseLayer=${playerSettings.experimentalDv7HevcBaseLayerEnabled} " +
+                    "hevcBaseLayerActive=$dv7HevcBaseLayerActive " +
                     "dv5Compat=${playerSettings.experimentalDv5ToDv81Enabled} " +
                     "preserveMapping=${playerSettings.experimentalDv7ToDv81PreserveMappingEnabled} " +
                     "buildNative=${DoviBridge.isNativeEnabledInBuild} " +
@@ -407,7 +435,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             val dv5SoftwareForced = !dv5HardwareForced &&
                 dv5SoftwareToneMapPreferredStreamUrls.contains(url)
             val dv5DetectedByProfile = dv5SoftwareForced || dv5HardwareForced
-            val displaySupportsDolbyVision = context.supportsDolbyVisionHdrOutput()
+            val displaySupportsDolbyVision = displayHdrCapabilities.supportsDolbyVision
             isCurrentDisplayDolbyVisionCapable = displaySupportsDolbyVision
             val shieldDevice = context.isNvidiaShieldDevice()
             isCurrentDeviceNvidiaShield = shieldDevice
@@ -438,7 +466,7 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
             )
             val dolbyVisionHookInstalledForPlayback = MatroskaDolbyVisionHookInstaller.maybeInstall(
                 extractorsFactory = extractorsFactory,
-                enabled = playerSettings.experimentalDv7ToDv81Enabled,
+                enabled = dv7ToDv81SettingActive,
                 allowDv5Conversion = playerSettings.experimentalDv5ToDv81Enabled,
                 preserveMappingEnabled = playerSettings.experimentalDv7ToDv81PreserveMappingEnabled,
                 enableRpuTap = dv5HardwareToneMapActive,
@@ -455,11 +483,15 @@ internal fun PlayerRuntimeController.initializePlayer(url: String, headers: Map<
                 dv7ToDv81LastProbeReasonForCurrentPlayback =
                     "extractor-hook-install-failed"
             }
-            if (playerSettings.experimentalDv7ToDv81Enabled || dv5HardwareToneMapActive) {
+            if (playerSettings.experimentalDv7ToDv81Enabled ||
+                playerSettings.experimentalDv7HevcBaseLayerEnabled ||
+                dv5HardwareToneMapActive
+            ) {
                 Log.i(
                     PlayerRuntimeController.TAG,
                     "DV7_DOVI: extractorHookInstalled=$dolbyVisionHookInstalledForPlayback " +
                         "active=$isExperimentalDv7ToDv81ActiveForCurrentPlayback " +
+                        "hevcBaseLayerActive=$dv7HevcBaseLayerActive " +
                         "rpuTap=$dv5HardwareToneMapActive " +
                         "host=${url.safeHost()}"
                 )
@@ -1720,15 +1752,6 @@ private fun createDolbyVisionFallbackCodecSelector(
             )
         }
     }
-}
-
-@Suppress("DEPRECATION")
-private fun Context.supportsDolbyVisionHdrOutput(): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
-    val displayManager = getSystemService(DisplayManager::class.java) ?: return false
-    val display = displayManager.getDisplay(Display.DEFAULT_DISPLAY) ?: return false
-    val hdrTypes = display.hdrCapabilities?.supportedHdrTypes ?: return false
-    return hdrTypes.contains(Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION)
 }
 
 private fun Context.isNvidiaShieldDevice(): Boolean {

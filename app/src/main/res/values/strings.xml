@@ -359,6 +359,8 @@
     <string name="video_dynamic_scheduling_sub">Experimental Media3 scheduling that can reduce CPU wakeups by letting playback sleep until video renderer progress is possible. Leave off unless benchmarking shows an improvement.</string>
     <string name="audio_dv_experimental_title">DV7 - DV8.1 Conversion</string>
     <string name="audio_dv_experimental_sub">Native DV7 to DV8.1 conversion path. If conversion is unavailable or fails, playback falls back to HEVC mapping.</string>
+    <string name="audio_dv_hevc_base_layer_title">DV7 - HDR10 Base Layer</string>
+    <string name="audio_dv_hevc_base_layer_sub">Play the HDR10 base layer on non-Dolby Vision displays. SDR-only displays depend on device tone mapping. Mutually exclusive with DV8.1 conversion.</string>
     <string name="audio_dts_iec_experimental_title">IEC Packer (Custom AudioSink from Kodi)</string>
     <string name="audio_dts_iec_experimental_sub">Enables the custom Kodi-style IEC packer AudioSink path. Disable this to use the normal Media3 passthrough path instead.</string>
     <string name="audio_fire_os_compatibility_fallback_title">Fire OS - Compatibility Fallback</string>

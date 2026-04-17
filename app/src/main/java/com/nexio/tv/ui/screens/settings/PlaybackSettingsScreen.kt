@@ -331,6 +331,11 @@ internal fun PlaybackSettingsContent(
                 onSetExperimentalDv7ToDv81Enabled = {
                     enabled -> coroutineScope.launch { viewModel.setExperimentalDv7ToDv81Enabled(enabled) }
                 },
+                onSetExperimentalDv7HevcBaseLayerEnabled = {
+                    enabled -> coroutineScope.launch {
+                        viewModel.setExperimentalDv7HevcBaseLayerEnabled(enabled)
+                    }
+                },
                 onSetExperimentalDtsIecPassthroughEnabled = {
                     enabled -> coroutineScope.launch {
                         viewModel.setExperimentalDtsIecPassthroughEnabled(enabled)

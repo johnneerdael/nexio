@@ -64,6 +64,41 @@ class PlayerSettingsDataStoreTest {
     }
 
     @Test
+    fun `dv7 hevc base layer defaults off while dv81 conversion stays default`() = runTest {
+        val dataStore = playerSettingsDataStoreForTest()
+
+        val settings = dataStore.playerSettings.first()
+
+        assertEquals(true, settings.experimentalDv7ToDv81Enabled)
+        assertEquals(false, settings.experimentalDv7HevcBaseLayerEnabled)
+    }
+
+    @Test
+    fun `enabling dv7 hevc base layer disables dv81 conversion and preserve mapping`() = runTest {
+        val dataStore = playerSettingsDataStoreForTest()
+
+        dataStore.setExperimentalDv7ToDv81PreserveMappingEnabled(true)
+        dataStore.setExperimentalDv7HevcBaseLayerEnabled(true)
+
+        val settings = dataStore.playerSettings.first()
+        assertEquals(true, settings.experimentalDv7HevcBaseLayerEnabled)
+        assertEquals(false, settings.experimentalDv7ToDv81Enabled)
+        assertEquals(false, settings.experimentalDv7ToDv81PreserveMappingEnabled)
+    }
+
+    @Test
+    fun `enabling dv81 conversion disables dv7 hevc base layer`() = runTest {
+        val dataStore = playerSettingsDataStoreForTest()
+
+        dataStore.setExperimentalDv7HevcBaseLayerEnabled(true)
+        dataStore.setExperimentalDv7ToDv81Enabled(true)
+
+        val settings = dataStore.playerSettings.first()
+        assertEquals(true, settings.experimentalDv7ToDv81Enabled)
+        assertEquals(false, settings.experimentalDv7HevcBaseLayerEnabled)
+    }
+
+    @Test
     fun `autoplay bandwidth mode defaults to manual with 40 mbps manual cap`() = runTest {
         val dataStore = playerSettingsDataStoreForTest()
 

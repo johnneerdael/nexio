@@ -138,6 +138,7 @@ internal fun PlaybackSettingsSections(
     onSetTunnelingEnabled: (Boolean) -> Unit,
     onSetDynamicVideoSchedulingEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
+    onSetExperimentalDv7HevcBaseLayerEnabled: (Boolean) -> Unit,
     onSetExperimentalDtsIecPassthroughEnabled: (Boolean) -> Unit,
     onSetIecPackerAc3PassthroughEnabled: (Boolean) -> Unit,
     onSetIecPackerEac3PassthroughEnabled: (Boolean) -> Unit,
@@ -439,6 +440,8 @@ internal fun PlaybackSettingsSections(
                 onSetTunnelingEnabled = onSetTunnelingEnabled,
                 onSetDynamicVideoSchedulingEnabled = onSetDynamicVideoSchedulingEnabled,
                 onSetExperimentalDv7ToDv81Enabled = onSetExperimentalDv7ToDv81Enabled,
+                onSetExperimentalDv7HevcBaseLayerEnabled =
+                    onSetExperimentalDv7HevcBaseLayerEnabled,
                 onSetExperimentalDv7ToDv81PreserveMappingEnabled =
                     onSetExperimentalDv7ToDv81PreserveMappingEnabled,
                 onItemFocused = { focusedSection = PlaybackSection.AUDIO },
