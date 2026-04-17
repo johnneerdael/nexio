@@ -136,6 +136,7 @@ internal fun PlaybackSettingsSections(
     onOpenAndroidDisplaySettings: () -> Unit,
     onSetSkipSilence: (Boolean) -> Unit,
     onSetTunnelingEnabled: (Boolean) -> Unit,
+    onSetDynamicVideoSchedulingEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
     onSetExperimentalDtsIecPassthroughEnabled: (Boolean) -> Unit,
     onSetIecPackerAc3PassthroughEnabled: (Boolean) -> Unit,
@@ -436,6 +437,7 @@ internal fun PlaybackSettingsSections(
                 afrHeaderFocusRequester = afrHeaderFocus,
                 onOpenAndroidDisplaySettings = onOpenAndroidDisplaySettings,
                 onSetTunnelingEnabled = onSetTunnelingEnabled,
+                onSetDynamicVideoSchedulingEnabled = onSetDynamicVideoSchedulingEnabled,
                 onSetExperimentalDv7ToDv81Enabled = onSetExperimentalDv7ToDv81Enabled,
                 onSetExperimentalDv7ToDv81PreserveMappingEnabled =
                     onSetExperimentalDv7ToDv81PreserveMappingEnabled,

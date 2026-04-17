@@ -325,6 +325,9 @@ internal fun PlaybackSettingsContent(
                 onOpenAndroidDisplaySettings = openAndroidDisplaySettings,
                 onSetSkipSilence = { enabled -> coroutineScope.launch { viewModel.setSkipSilence(enabled) } },
                 onSetTunnelingEnabled = { enabled -> coroutineScope.launch { viewModel.setTunnelingEnabled(enabled) } },
+                onSetDynamicVideoSchedulingEnabled = { enabled ->
+                    coroutineScope.launch { viewModel.setDynamicVideoSchedulingEnabled(enabled) }
+                },
                 onSetExperimentalDv7ToDv81Enabled = {
                     enabled -> coroutineScope.launch { viewModel.setExperimentalDv7ToDv81Enabled(enabled) }
                 },

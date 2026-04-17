@@ -11,6 +11,7 @@ import androidx.media3.common.util.Util
 import androidx.media3.common.util.UnstableApi
 import com.nexio.tv.core.player.AndroidFrameRateSettings
 import com.nexio.tv.core.player.FrameRateUtils
+import com.nexio.tv.core.player.resolveDolbyVisionProfileFromCodecString
 import com.nexio.tv.data.local.AudioLanguageOption
 import com.nexio.tv.data.local.SUBTITLE_LANGUAGE_FORCED
 import com.nexio.tv.domain.model.Subtitle
@@ -756,24 +757,6 @@ private fun isLikelyVc1VideoFormat(
 
 private fun isDolbyVisionProfile5VideoFormat(codecs: String?): Boolean {
     return resolveDolbyVisionProfileFromCodecString(codecs) == 5
-}
-
-private fun resolveDolbyVisionProfileFromCodecString(codecs: String?): Int? {
-    val entries = codecs
-        ?.split(',')
-        ?.asSequence()
-        ?.map { it.trim() }
-        ?.filter { it.isNotEmpty() }
-        ?: return null
-    for (entry in entries) {
-        val parts = entry.split('.')
-        if (parts.size < 2) continue
-        val prefix = parts[0].lowercase(Locale.ROOT)
-        if (prefix != "dvhe" && prefix != "dvh1") continue
-        val profile = parts[1].toIntOrNull()
-        if (profile != null) return profile
-    }
-    return null
 }
 
 private fun formatSupportRank(@C.FormatSupport formatSupport: Int): Int {

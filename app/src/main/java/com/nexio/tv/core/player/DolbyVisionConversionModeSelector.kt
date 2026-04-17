@@ -16,6 +16,7 @@ internal object DolbyVisionConversionModeSelector {
                 MODE_PROFILE_8_1
             }
             5 -> if (allowDv5Conversion) MODE_PROFILE_8_1 else null
+            10 -> null
             else -> null
         }
     }

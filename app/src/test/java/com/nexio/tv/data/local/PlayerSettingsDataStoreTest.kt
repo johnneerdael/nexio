@@ -51,6 +51,19 @@ class PlayerSettingsDataStoreTest {
     }
 
     @Test
+    fun `dynamic video scheduling defaults disabled and persists selection`() = runTest {
+        val dataStore = playerSettingsDataStoreForTest()
+
+        assertEquals(false, dataStore.playerSettings.first().dynamicVideoSchedulingEnabled)
+
+        dataStore.setDynamicVideoSchedulingEnabled(true)
+        assertEquals(true, dataStore.playerSettings.first().dynamicVideoSchedulingEnabled)
+
+        dataStore.setDynamicVideoSchedulingEnabled(false)
+        assertEquals(false, dataStore.playerSettings.first().dynamicVideoSchedulingEnabled)
+    }
+
+    @Test
     fun `autoplay bandwidth mode defaults to manual with 40 mbps manual cap`() = runTest {
         val dataStore = playerSettingsDataStoreForTest()
 

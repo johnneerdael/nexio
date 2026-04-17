@@ -93,6 +93,26 @@ class DolbyVisionAutoPlayGateTest {
     }
 
     @Test
+    fun `autoplay keeps primary stream on non dv displays when probe detects profile 10`() = runBlocking {
+        val probe = RecordingDolbyVisionProfileProbe(
+            DolbyVisionProfileProbeResult.detected(profileLabel = "dav1.10", profileNumber = 10)
+        )
+        val gate = DolbyVisionAutoPlayGate(probe)
+
+        val resolved = gate.resolve(
+            context = context,
+            playbackInfo = primaryPlaybackInfo(),
+            autoPlay = true,
+            displaySupportsDolbyVision = false
+        )
+
+        assertEquals("primary", resolved.playbackInfo.streamKey)
+        assertFalse(resolved.fallbackApplied)
+        assertEquals(DolbyVisionAutoPlayDecisionReason.PROFILE_ALLOWED, resolved.reason)
+        assertEquals(1, probe.invocations)
+    }
+
+    @Test
     fun `autoplay falls back when probe fails or returns unknown`() = runBlocking {
         val failingProbe = RecordingDolbyVisionProfileProbe(DolbyVisionProfileProbeResult.failed("io"))
         val unknownProbe = RecordingDolbyVisionProfileProbe(DolbyVisionProfileProbeResult.unknown())
