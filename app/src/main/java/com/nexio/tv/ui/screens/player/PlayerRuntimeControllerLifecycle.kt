@@ -3,8 +3,11 @@ package com.nexio.tv.ui.screens.player
 import android.content.Intent
 import android.media.audiofx.AudioEffect
 import androidx.media3.common.C
+import androidx.media3.common.util.DolbyVisionCompatibility
+import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.flow.update
 
+@androidx.annotation.OptIn(UnstableApi::class)
 internal fun PlayerRuntimeController.releasePlayer() {
     assSsaRenderController?.release()
     assSsaRenderController = null
@@ -53,6 +56,7 @@ internal fun PlayerRuntimeController.releasePlayer() {
     mpvTrackRefreshInProgress = false
     _exoPlayer?.release()
     _exoPlayer = null
+    DolbyVisionCompatibility.setMapDv7ToHevcEnabled(false)
     mediaSourceFactory.closeActiveDiskSpoolSessionForPlaybackStop()
 }
 

@@ -67,6 +67,7 @@ internal fun LazyListScope.videoSettingsItems(
     onSetTunnelingEnabled: (Boolean) -> Unit,
     onSetDynamicVideoSchedulingEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81Enabled: (Boolean) -> Unit,
+    onSetExperimentalDv7HevcBaseLayerEnabled: (Boolean) -> Unit,
     onSetExperimentalDv7ToDv81PreserveMappingEnabled: (Boolean) -> Unit,
     onItemFocused: () -> Unit = {},
     enabled: Boolean = true
@@ -138,6 +139,18 @@ internal fun LazyListScope.videoSettingsItems(
         )
     }
 
+    item(key = "audio_dv7_hevc_base_layer") {
+        ToggleSettingsItem(
+            icon = Icons.Default.Tune,
+            title = stringResource(R.string.audio_dv_hevc_base_layer_title),
+            subtitle = stringResource(R.string.audio_dv_hevc_base_layer_sub),
+            isChecked = playerSettings.experimentalDv7HevcBaseLayerEnabled,
+            onCheckedChange = onSetExperimentalDv7HevcBaseLayerEnabled,
+            onFocused = onItemFocused,
+            enabled = enabled
+        )
+    }
+
     item(key = "audio_dv7_dovi_experimental_preserve_mapping") {
         ToggleSettingsItem(
             icon = Icons.Default.Tune,
@@ -146,7 +159,9 @@ internal fun LazyListScope.videoSettingsItems(
             isChecked = playerSettings.experimentalDv7ToDv81PreserveMappingEnabled,
             onCheckedChange = onSetExperimentalDv7ToDv81PreserveMappingEnabled,
             onFocused = onItemFocused,
-            enabled = enabled && playerSettings.experimentalDv7ToDv81Enabled
+            enabled = enabled &&
+                playerSettings.experimentalDv7ToDv81Enabled &&
+                !playerSettings.experimentalDv7HevcBaseLayerEnabled
         )
     }
 }
