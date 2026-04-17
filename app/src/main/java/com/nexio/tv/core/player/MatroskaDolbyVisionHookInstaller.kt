@@ -7,7 +7,6 @@ import androidx.media3.common.util.DolbyVisionCompatibility
 import androidx.media3.common.util.ParsableByteArray
 import androidx.media3.container.DolbyVisionConfig
 import androidx.media3.extractor.DefaultExtractorsFactory
-import java.io.ByteArrayOutputStream
 import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Proxy
 import java.util.concurrent.atomic.AtomicBoolean
@@ -329,11 +328,12 @@ object MatroskaDolbyVisionHookInstaller {
                     if (!shouldAllowConversion(profile)) {
                         return@InvocationHandler null
                     }
+                    val conversionMode = selectedConversionMode(profile)
                     val rewrittenSample =
                         rewriteMp4HevcSample(
                             sampleLengthDelimited,
                             nalUnitLengthFieldLength,
-                            selectedConversionMode(profile)
+                            conversionMode
                         )
                             ?: sampleLengthDelimited
                     if (blockAdditionalData == null) {
@@ -471,66 +471,27 @@ object MatroskaDolbyVisionHookInstaller {
         nalUnitLengthFieldLength: Int,
         conversionMode: Int
     ): ByteArray? {
-        if (nalUnitLengthFieldLength !in 1..4) return null
-        if (diagnosticsEnabled) {
-            rewriteSampleCalls.incrementAndGet()
-            rewriteInputBytes.addAndGet(sampleLengthDelimited.size.toLong())
-        }
-        var offset = 0
-        var changed = false
-        val out = ByteArrayOutputStream(sampleLengthDelimited.size + 128)
-        while (offset + nalUnitLengthFieldLength <= sampleLengthDelimited.size) {
-            val nalSize = readLengthField(sampleLengthDelimited, offset, nalUnitLengthFieldLength)
-            if (nalSize < 0) return null
-            offset += nalUnitLengthFieldLength
-            if (offset + nalSize > sampleLengthDelimited.size) return null
-            val originalNal = sampleLengthDelimited.copyOfRange(offset, offset + nalSize)
-            if (diagnosticsEnabled) {
-                nalCopyBytes.addAndGet(originalNal.size.toLong())
+        val metrics = if (diagnosticsEnabled) DolbyVisionHevcSampleRewriter.Metrics() else null
+        val rewritten = DolbyVisionHevcSampleRewriter.rewriteLengthDelimitedSample(
+            sampleLengthDelimited = sampleLengthDelimited,
+            nalUnitLengthFieldLength = nalUnitLengthFieldLength,
+            conversionMode = conversionMode,
+            metrics = metrics,
+            convertRpu = { nalPayload, mode ->
+                DoviBridge.convertDv7RpuToDv81(nalPayload, mode = mode)
             }
-            val convertedNal = transformNalForCompatibility(originalNal, conversionMode)
-            if (convertedNal == null) {
-                changed = true
-                offset += nalSize
-                continue
-            }
-            if (convertedNal !== originalNal) {
-                changed = true
-            }
-            if (!writeLengthField(out, convertedNal.size, nalUnitLengthFieldLength)) {
-                return null
-            }
-            out.write(convertedNal)
-            offset += nalSize
-        }
-        if (offset != sampleLengthDelimited.size) return null
-        if (!changed) return null
-        if (out.size() <= 0) return null
-        val rewritten = out.toByteArray()
-        if (diagnosticsEnabled) {
-            rewriteOutputBytes.addAndGet(rewritten.size.toLong())
+        )
+        if (metrics != null) {
+            rewriteSampleCalls.addAndGet(metrics.sampleCalls)
+            rewriteInputBytes.addAndGet(metrics.inputBytes)
+            rewriteOutputBytes.addAndGet(metrics.outputBytes)
+            // Count the actual byte-copy churn that remains after delegation:
+            // source-copy bytes for base NAL passthrough plus the RPU input/output copies.
+            nalCopyBytes.addAndGet(
+                metrics.sourceCopyBytes + metrics.rpuInputBytes + metrics.rpuOutputBytes
+            )
         }
         return rewritten
-    }
-
-    private fun transformNalForCompatibility(
-        nalPayload: ByteArray,
-        conversionMode: Int
-    ): ByteArray? {
-        if (nalPayload.isEmpty()) return nalPayload
-        val nalType = getNalUnitType(nalPayload)
-        val layerId = getNuhLayerId(nalPayload)
-        // Drop enhancement-layer NAL units; they are not decodable on single-layer HEVC paths.
-        if (layerId > 0 && nalType != NAL_TYPE_UNSPEC62) {
-            return null
-        }
-        if (nalType != NAL_TYPE_UNSPEC62) {
-            return nalPayload
-        }
-        val converted = DoviBridge.convertDv7RpuToDv81(nalPayload, mode = conversionMode)
-            ?.takeIf { it.isNotEmpty() }
-            ?: nalPayload
-        return normalizeNuhLayerIdToZero(converted)
     }
 
     private fun maybeConvertDolbyVisionRpuNal(
@@ -584,26 +545,6 @@ object MatroskaDolbyVisionHookInstaller {
             value = (value shl 8) or (data[offset + i].toInt() and 0xFF)
         }
         return value
-    }
-
-    private fun writeLengthField(
-        out: ByteArrayOutputStream,
-        value: Int,
-        lengthBytes: Int
-    ): Boolean {
-        if (value < 0) return false
-        val maxNalSize = when (lengthBytes) {
-            1 -> 0xFF
-            2 -> 0xFFFF
-            3 -> 0xFFFFFF
-            4 -> Int.MAX_VALUE
-            else -> return false
-        }
-        if (value > maxNalSize) return false
-        for (shift in (lengthBytes - 1) downTo 0) {
-            out.write((value ushr (shift * 8)) and 0xFF)
-        }
-        return true
     }
 
     private fun normalizeDolbyVisionCodecString(codecs: String?): String? {
