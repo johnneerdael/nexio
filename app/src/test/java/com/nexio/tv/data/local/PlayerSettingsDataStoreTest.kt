@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.nexio.tv.testutil.playerSettingsDataStoreForTest
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -64,13 +65,35 @@ class PlayerSettingsDataStoreTest {
     }
 
     @Test
-    fun `dv7 hevc base layer defaults off while dv81 conversion stays default`() = runTest {
+    fun `safe playback defaults prefer dv7 hevc base layer over dv81 conversion`() = runTest {
         val dataStore = playerSettingsDataStoreForTest()
 
         val settings = dataStore.playerSettings.first()
 
-        assertEquals(true, settings.experimentalDv7ToDv81Enabled)
-        assertEquals(false, settings.experimentalDv7HevcBaseLayerEnabled)
+        assertEquals(false, settings.experimentalDv7ToDv81Enabled)
+        assertEquals(true, settings.experimentalDv7HevcBaseLayerEnabled)
+        assertEquals(false, settings.experimentalDv7ToDv81PreserveMappingEnabled)
+    }
+
+    @Test
+    fun `safe playback defaults disable vod cache and parallel connections`() = runTest {
+        val dataStore = playerSettingsDataStoreForTest()
+
+        val settings = dataStore.playerSettings.first()
+
+        assertEquals(VodCacheSizeMode.OFF, settings.vodCacheSizeMode)
+        assertEquals(false, settings.useParallelConnections)
+    }
+
+    @Test
+    fun `player settings data class safe defaults match datastore defaults`() {
+        val settings = PlayerSettings()
+
+        assertEquals(false, settings.experimentalDv7ToDv81Enabled)
+        assertEquals(true, settings.experimentalDv7HevcBaseLayerEnabled)
+        assertEquals(false, settings.experimentalDv7ToDv81PreserveMappingEnabled)
+        assertEquals(VodCacheSizeMode.OFF, settings.vodCacheSizeMode)
+        assertEquals(false, settings.useParallelConnections)
     }
 
     @Test
