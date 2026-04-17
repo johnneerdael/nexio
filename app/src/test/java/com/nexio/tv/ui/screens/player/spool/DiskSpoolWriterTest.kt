@@ -266,6 +266,8 @@ class DiskSpoolWriterTest {
     @Test
     fun `writer pauses after adaptive headroom target until reader advances`() {
         val content = ByteArray(512 * 1024) { (it % 251).toByte() }
+        val rangeRequests = AtomicInteger(0)
+        val requestLatch = CountDownLatch(2)
         val server = MockWebServer()
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
@@ -276,31 +278,39 @@ class DiskSpoolWriterTest {
                         .setHeader("Content-Range", "bytes 0-0/${content.size}")
                         .setHeader("Content-Length", 1)
                         .setBody(Buffer().writeByte(0x2A))
-                    else -> rangedResponse(content, range ?: error("Missing range"))
+                    else -> {
+                        rangeRequests.incrementAndGet()
+                        requestLatch.countDown()
+                        rangedResponse(content, range ?: error("Missing range"))
+                    }
                 }
             }
         }
         server.start()
         val session = DiskSpoolSession(File(temp.root, "adaptive.spool"), capacityBytes = 512 * 1024L)
-        val writerFinished = AtomicInteger(0)
+        val writerFailure = AtomicReference<Throwable?>(null)
         val writerThread = Thread {
-            DiskSpoolWriter(
-                okHttpClient = OkHttpClient(),
-                chunkBytes = 64 * 1024,
-                ioBufferBytes = 8 * 1024,
-                startupPriorityBytes = 64 * 1024L,
-                adaptiveHeadroomBytes = 128 * 1024L,
-                idlePollMs = 10L
-            ).downloadUntil(server.url("/movie.bin").toString(), session, content.size.toLong())
-            writerFinished.incrementAndGet()
+            try {
+                DiskSpoolWriter(
+                    okHttpClient = OkHttpClient(),
+                    chunkBytes = 64 * 1024,
+                    ioBufferBytes = 8 * 1024,
+                    startupPriorityBytes = 64 * 1024L,
+                    adaptiveHeadroomBytes = 128 * 1024L,
+                    idlePollMs = 10L
+                ).downloadUntil(server.url("/movie.bin").toString(), session, content.size.toLong())
+            } catch (throwable: Throwable) {
+                writerFailure.set(throwable)
+            }
         }
 
         try {
             writerThread.start()
+            assertTrue(requestLatch.await(2, java.util.concurrent.TimeUnit.SECONDS))
             assertTrue(session.awaitFrontierAtLeast(128 * 1024L, timeoutMs = 2_000L))
-            Thread.sleep(75L)
-            assertTrue(session.contiguousFrontierBytes() <= 192 * 1024L)
-            assertEquals(0, writerFinished.get())
+            assertEquals(2, rangeRequests.get())
+            assertEquals(null, writerFailure.get())
+            assertTrue(writerThread.isAlive)
 
             session.updateReadPosition(256 * 1024L)
 
@@ -308,8 +318,73 @@ class DiskSpoolWriterTest {
             session.close()
             writerThread.join(2_000L)
             assertFalse(writerThread.isAlive)
+            assertEquals(null, writerFailure.get())
         } finally {
             session.close()
+            writerThread.join(2_000L)
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `writer consumes idle priority seek before sleeping`() {
+        val content = ByteArray(384 * 1024) { (it % 251).toByte() }
+        val rangeRequests = AtomicInteger(0)
+        val requestLatch = CountDownLatch(1)
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return when (val range = request.getHeader("Range")) {
+                    "bytes=0-0" -> MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Accept-Ranges", "bytes")
+                        .setHeader("Content-Range", "bytes 0-0/${content.size}")
+                        .setHeader("Content-Length", 1)
+                        .setBody(Buffer().writeByte(0x2A))
+                    else -> {
+                        rangeRequests.incrementAndGet()
+                        requestLatch.countDown()
+                        rangedResponse(content, range ?: error("Missing range"))
+                    }
+                }
+            }
+        }
+        server.start()
+
+        val session = DiskSpoolSession(File(temp.root, "priority-idle.spool"), capacityBytes = 384 * 1024L)
+        val writerFailure = AtomicReference<Throwable?>(null)
+        val writerThread = Thread {
+            try {
+                DiskSpoolWriter(
+                    okHttpClient = OkHttpClient(),
+                    chunkBytes = 64 * 1024,
+                    ioBufferBytes = 8 * 1024,
+                    startupPriorityBytes = 64 * 1024L,
+                    adaptiveHeadroomBytes = 64 * 1024L,
+                    idlePollMs = 250L
+                ).downloadUntil(server.url("/movie.bin").toString(), session, content.size.toLong())
+            } catch (throwable: Throwable) {
+                writerFailure.set(throwable)
+            }
+        }
+
+        try {
+            writerThread.start()
+            assertTrue(requestLatch.await(2, java.util.concurrent.TimeUnit.SECONDS))
+            assertTrue(session.awaitFrontierAtLeast(64 * 1024L, timeoutMs = 2_000L))
+            assertEquals(1, rangeRequests.get())
+
+            assertEquals(-1, session.read(256 * 1024L, ByteArray(8), 0, 8))
+
+            assertTrue(session.awaitFrontierAtLeast(256 * 1024L, timeoutMs = 2_000L))
+            assertTrue(session.windowStartBytes() >= 256 * 1024L)
+            session.close()
+            writerThread.join(2_000L)
+            assertFalse(writerThread.isAlive)
+            assertEquals(null, writerFailure.get())
+        } finally {
+            session.close()
+            writerThread.join(2_000L)
             server.shutdown()
         }
     }
