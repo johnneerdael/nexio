@@ -30,6 +30,8 @@ class DebugSettingsDataStore @Inject constructor(
     private val streamDiagnosticsEnabledKey = booleanPreferencesKey("stream_diagnostics_enabled")
     private val startupPerfTelemetryEnabledKey = booleanPreferencesKey("startup_perf_telemetry_enabled")
     private val diskSpoolDiagnosticsEnabledKey = booleanPreferencesKey("disk_spool_diagnostics_enabled")
+    private val dolbyVisionDiagnosticsEnabledKey =
+        booleanPreferencesKey("dolby_vision_diagnostics_enabled")
     private val diskFirstHomeStartupEnabledKey = booleanPreferencesKey("disk_first_home_startup_enabled")
     private val diskFirstHomeStartupDefaultAppliedKey =
         booleanPreferencesKey("migration_disk_first_home_startup_default_applied")
@@ -66,6 +68,10 @@ class DebugSettingsDataStore @Inject constructor(
         prefs[diskSpoolDiagnosticsEnabledKey] ?: false
     }
 
+    val dolbyVisionDiagnosticsEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[dolbyVisionDiagnosticsEnabledKey] ?: false
+    }
+
     val diskFirstHomeStartupEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[diskFirstHomeStartupEnabledKey] ?: true
     }
@@ -97,6 +103,12 @@ class DebugSettingsDataStore @Inject constructor(
     suspend fun setDiskSpoolDiagnosticsEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
             prefs[diskSpoolDiagnosticsEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setDolbyVisionDiagnosticsEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[dolbyVisionDiagnosticsEnabledKey] = enabled
         }
     }
 
