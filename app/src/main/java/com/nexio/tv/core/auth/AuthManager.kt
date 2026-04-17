@@ -369,10 +369,13 @@ class AuthManager @Inject constructor(
 internal fun fullAccountStateForSupabaseUser(userId: String, email: String?): AuthState {
     val normalizedUserId = userId.trim()
     if (normalizedUserId.isBlank()) return AuthState.SignedOut
-    return AuthState.FullAccount(
-        userId = normalizedUserId,
-        email = email?.takeIf { it.isNotBlank() } ?: normalizedUserId
-    )
+    // Anonymous Supabase sessions (created via signInAnonymously for QR-pairing RPCs)
+    // have no email. Treat them as SignedOut so the QR login screen stays visible until
+    // a real account exists. Prefer UserInfo.isAnonymous if phone-only or magic-link
+    // auth is added later — the email heuristic assumes email+password is the only
+    // real-account auth method.
+    val normalizedEmail = email?.trim()?.takeIf { it.isNotBlank() } ?: return AuthState.SignedOut
+    return AuthState.FullAccount(userId = normalizedUserId, email = normalizedEmail)
 }
 
 private fun Throwable.isJwtExpiredError(): Boolean {
