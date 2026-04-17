@@ -41,7 +41,7 @@ internal fun PlayerRuntimeController.applyMetaDetails(meta: Meta) {
     val safeCastMembers = sanitizeCastMembers(meta)
 
     _uiState.update { state ->
-        state.copy(
+        state.withAddonMetaArtwork(meta).copy(
             description = description ?: state.description,
             castMembers = if (safeCastMembers.isNotEmpty()) safeCastMembers else state.castMembers
         )
