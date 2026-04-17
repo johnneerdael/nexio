@@ -315,6 +315,8 @@
     <string name="playback_logging_startup_perf_subtitle">Emit startup milestone and slow-frame timing diagnostics to logcat for first-render profiling.</string>
     <string name="playback_logging_disk_spool_diagnostics_title">Enable Disk Spool Diagnostics</string>
     <string name="playback_logging_disk_spool_diagnostics_subtitle">Emit disk spool decisions, prewarm, fallback, and buffer frontier details to logcat.</string>
+    <string name="playback_logging_dolby_vision_diagnostics_title">Enable Dolby Vision Diagnostics</string>
+    <string name="playback_logging_dolby_vision_diagnostics_subtitle">Emit DV conversion counters and native conversion details to logcat for troubleshooting. Leave off during normal playback.</string>
     <string name="playback_logging_disk_first_home_startup_title">Enable Disk-First Home Startup Mode</string>
     <string name="playback_logging_disk_first_home_startup_subtitle">Defer heavy home refresh work for the first 20 seconds and prefer cached disk content on startup.</string>
     <string name="playback_afr_open">Open</string>
