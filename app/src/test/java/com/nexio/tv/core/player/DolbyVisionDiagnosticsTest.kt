@@ -11,6 +11,22 @@ class DolbyVisionDiagnosticsTest {
         fun onDolbyVisionCodecString(codecs: String?, dolbyVisionConfigBytes: ByteArray?): String?
     }
 
+    private interface MatroskaStreamingHandler {
+        fun shouldTransformHevcSampleNalByNal(
+            sampleTimeUs: Long,
+            nalUnitLengthFieldLength: Int,
+            blockAdditionalData: ByteArray?,
+            dolbyVisionConfigBytes: ByteArray?
+        ): Boolean
+
+        fun transformDolbyVisionRpuNal(
+            rpuNalPayload: ByteArray,
+            sampleTimeUs: Long,
+            blockAdditionalData: ByteArray?,
+            dolbyVisionConfigBytes: ByteArray?
+        ): ByteArray?
+    }
+
     @Test
     fun `dolby vision verbose logging flag is tracked in kotlin`() {
         DoviBridge.setVerboseLoggingEnabled(false)
@@ -86,6 +102,92 @@ class DolbyVisionDiagnosticsTest {
         assertEquals(
             DolbyVisionConversionModeSelector.MODE_PROFILE_8_1,
             MatroskaDolbyVisionHookInstaller.getLastSelectedConversionMode()
+        )
+    }
+
+    @Test
+    fun `matroska streaming hook converts only rpu nal and publishes selected mode`() {
+        MatroskaDolbyVisionHookInstaller.resetRuntimeCounters()
+        val invocationHandler = createHookInvocationHandler(
+            conversionEnabled = true,
+            allowDv5Conversion = false,
+            preserveMappingEnabled = true,
+            enableRpuTap = false
+        )
+
+        val shouldStream = invocationHandler.invoke(
+            Any(),
+            MatroskaStreamingMethods.shouldTransform,
+            arrayOf(123L, 4, null, dvConfig(profile = 7))
+        ) as Boolean
+
+        val rpu = byteArrayOf(0x7D.toByte(), 0xF9.toByte(), 0x01)
+        val converted = invocationHandler.invoke(
+            Any(),
+            MatroskaStreamingMethods.transformRpu,
+            arrayOf(rpu, 123L, null, dvConfig(profile = 7))
+        ) as ByteArray?
+
+        assertTrue(shouldStream)
+        assertEquals(
+            DolbyVisionConversionModeSelector.MODE_PROFILE_8_1_PRESERVE_MAPPING,
+            MatroskaDolbyVisionHookInstaller.getLastSelectedConversionMode()
+        )
+        if (DoviBridge.isAvailable()) {
+            assertTrue(converted == null || converted.isNotEmpty())
+        }
+    }
+
+    private fun createHookInvocationHandler(
+        conversionEnabled: Boolean,
+        allowDv5Conversion: Boolean,
+        preserveMappingEnabled: Boolean,
+        enableRpuTap: Boolean
+    ): java.lang.reflect.InvocationHandler {
+        val createInvocationHandler = MatroskaDolbyVisionHookInstaller::class.java.getDeclaredMethod(
+            "createInvocationHandler",
+            String::class.java,
+            Boolean::class.javaPrimitiveType,
+            Boolean::class.javaPrimitiveType,
+            Boolean::class.javaPrimitiveType,
+            Boolean::class.javaPrimitiveType
+        )
+        createInvocationHandler.isAccessible = true
+        return createInvocationHandler.invoke(
+            MatroskaDolbyVisionHookInstaller,
+            "https://example.com/movie.mkv",
+            conversionEnabled,
+            allowDv5Conversion,
+            preserveMappingEnabled,
+            enableRpuTap
+        ) as java.lang.reflect.InvocationHandler
+    }
+
+    private object MatroskaStreamingMethods {
+        val shouldTransform: java.lang.reflect.Method =
+            MatroskaStreamingHandler::class.java.getMethod(
+                "shouldTransformHevcSampleNalByNal",
+                Long::class.javaPrimitiveType,
+                Int::class.javaPrimitiveType,
+                ByteArray::class.java,
+                ByteArray::class.java
+            )
+        val transformRpu: java.lang.reflect.Method =
+            MatroskaStreamingHandler::class.java.getMethod(
+                "transformDolbyVisionRpuNal",
+                ByteArray::class.java,
+                Long::class.javaPrimitiveType,
+                ByteArray::class.java,
+                ByteArray::class.java
+            )
+    }
+
+    private fun dvConfig(profile: Int): ByteArray {
+        return byteArrayOf(
+            0x01,
+            0x00,
+            ((profile and 0x7F) shl 1).toByte(),
+            0x00,
         )
     }
 }

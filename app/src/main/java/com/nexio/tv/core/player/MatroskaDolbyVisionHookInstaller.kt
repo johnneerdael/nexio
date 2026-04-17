@@ -304,6 +304,14 @@ object MatroskaDolbyVisionHookInstaller {
                     }
                     normalized
                 }
+                "shouldTransformHevcSampleNalByNal" -> {
+                    val nalUnitLengthFieldLength =
+                        (invocationArgs.getOrNull(1) as? Number)?.toInt()
+                            ?: return@InvocationHandler false
+                    val dolbyVisionConfigBytes = invocationArgs.getOrNull(3) as? ByteArray
+                    val profile = resolveDolbyVisionProfile(configBytes = dolbyVisionConfigBytes)
+                    nalUnitLengthFieldLength in 1..4 && shouldAllowConversion(profile)
+                }
                 "transformHevcSample" -> {
                     val sampleLengthDelimited = invocationArgs.getOrNull(0) as? ByteArray
                         ?: return@InvocationHandler null
@@ -377,17 +385,24 @@ object MatroskaDolbyVisionHookInstaller {
                 "transformDolbyVisionRpuNal" -> {
                     val nalPayload = invocationArgs.getOrNull(0) as? ByteArray
                         ?: return@InvocationHandler null
-                    val codecs = invocationArgs.getOrNull(1) as? String
-                    val sampleTimeUs =
-                        (invocationArgs.getOrNull(2) as? Number)?.toLong() ?: C.TIME_UNSET
+                    val secondArg = invocationArgs.getOrNull(1)
+                    val sampleTimeUs = (secondArg as? Number)?.toLong()
+                        ?: (invocationArgs.getOrNull(2) as? Number)?.toLong()
+                        ?: C.TIME_UNSET
                     if (enableRpuTap) {
                         tapPotentialRpuNal(
                             nalPayload = nalPayload,
                             sampleTimeUs = sampleTimeUs,
-                            source = "ts:rpuNal"
+                            source = if (secondArg is Number) "mkv:streamingRpuNal" else "ts:rpuNal"
                         )
                     }
-                    val profile = resolveDolbyVisionProfile(codecs = codecs)
+                    val profile = if (secondArg is Number) {
+                        val dolbyVisionConfigBytes = invocationArgs.getOrNull(3) as? ByteArray
+                        resolveDolbyVisionProfile(configBytes = dolbyVisionConfigBytes)
+                    } else {
+                        val codecs = secondArg as? String
+                        resolveDolbyVisionProfile(codecs = codecs)
+                    }
                     if (!shouldAllowConversion(profile)) {
                         return@InvocationHandler null
                     }
