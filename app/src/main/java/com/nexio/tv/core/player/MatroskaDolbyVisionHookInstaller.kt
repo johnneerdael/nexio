@@ -202,10 +202,12 @@ object MatroskaDolbyVisionHookInstaller {
                 return false
             }
             val resolvedProfile = rememberProfile(profile)
-            if (resolvedProfile == 7) {
-                return true
-            }
-            if (resolvedProfile == 5 && allowDv5Conversion) {
+            val selectedMode = DolbyVisionConversionModeSelector.selectedMode(
+                sourceProfile = resolvedProfile,
+                preserveMappingEnabled = preserveMappingEnabled,
+                allowDv5Conversion = allowDv5Conversion
+            )
+            if (selectedMode != null) {
                 return true
             }
             lastSelectedConversionMode.set(null)
@@ -220,7 +222,11 @@ object MatroskaDolbyVisionHookInstaller {
 
         fun selectedConversionMode(profile: Int?): Int {
             val resolvedProfile = rememberProfile(profile)
-            val mode = if (resolvedProfile == 7 && preserveMappingEnabled) 5 else 2
+            val mode = DolbyVisionConversionModeSelector.selectedMode(
+                sourceProfile = resolvedProfile,
+                preserveMappingEnabled = preserveMappingEnabled,
+                allowDv5Conversion = allowDv5Conversion
+            ) ?: DolbyVisionConversionModeSelector.MODE_PROFILE_8_1
             lastSelectedConversionMode.set(mode)
             return mode
         }
