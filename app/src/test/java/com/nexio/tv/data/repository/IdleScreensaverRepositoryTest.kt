@@ -222,7 +222,7 @@ class IdleScreensaverRepositoryTest {
                 enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES, TraktCatalogIds.TRENDING_SHOWS)
             )
         )
-        every { traktSnapshotStore.read() } returns snapshot
+        every { traktSnapshotStore.readActiveProfile() } returns snapshot
         coEvery { mdbListRepository.enrichPreview(any()) } answers { firstArg() }
         every {
             metaRepository.getMetaFromAllAddons(
@@ -288,7 +288,7 @@ class IdleScreensaverRepositoryTest {
                 enabledCatalogs = setOf(TraktCatalogIds.TRENDING_MOVIES, TraktCatalogIds.TRENDING_SHOWS)
             )
         )
-        every { traktSnapshotStore.read() } returns snapshot
+        every { traktSnapshotStore.readActiveProfile() } returns snapshot
         coEvery {
             metaRepository.getCachedMetaFromAllAddons(
                 type = any(),
@@ -369,7 +369,7 @@ class IdleScreensaverRepositoryTest {
         )
         every { traktAuthDataStore.isAuthenticated } returns flowOf(false)
         every { traktSettingsDataStore.catalogPreferences } returns flowOf(TraktCatalogPreferences())
-        every { traktSnapshotStore.read() } returns null
+        every { traktSnapshotStore.readActiveProfile() } returns null
         every {
             catalogRepository.getCatalogCachedFirst(
                 addonBaseUrl = "https://v3-cinemeta.strem.io",
@@ -501,7 +501,7 @@ class IdleScreensaverRepositoryTest {
         )
         every { traktAuthDataStore.isAuthenticated } returns flowOf(false)
         every { traktSettingsDataStore.catalogPreferences } returns flowOf(TraktCatalogPreferences())
-        every { traktSnapshotStore.read() } returns null
+        every { traktSnapshotStore.readActiveProfile() } returns null
         coEvery { mdbListRepository.enrichPreview(any()) } answers { firstArg() }
         every {
             metaRepository.getMetaFromAllAddons(

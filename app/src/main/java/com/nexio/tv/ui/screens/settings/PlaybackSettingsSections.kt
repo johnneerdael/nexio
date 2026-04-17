@@ -58,6 +58,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nexio.tv.core.player.AndroidFrameRateSettings
+import com.nexio.tv.core.player.ExternalPlayerCandidate
 import com.nexio.tv.data.local.AddonSubtitleStartupMode
 import com.nexio.tv.data.local.AutoplayBandwidthMode
 import com.nexio.tv.data.local.IecPackerChannelLayout
@@ -82,7 +83,8 @@ private enum class PlaybackSection {
 }
 
 private data class PlaybackStreamSelectionUi(
-    val playerPreferenceLabel: String
+    val playerPreferenceLabel: String,
+    val externalPlayerLabel: String
 )
 
 @Composable
@@ -91,7 +93,9 @@ internal fun PlaybackSettingsSections(
     playerSettings: PlayerSettings,
     trailerSettings: TrailerSettings,
     diskSpoolStorageProbeUiState: DiskSpoolStorageProbeUiState,
+    externalPlayerCandidates: List<ExternalPlayerCandidate>,
     onShowPlayerPreferenceDialog: () -> Unit,
+    onShowExternalPlayerDialog: () -> Unit,
     onShowInternalPlayerEngineDialog: () -> Unit,
     onShowAudioLanguageDialog: () -> Unit,
     onShowSecondaryAudioLanguageDialog: () -> Unit,
@@ -214,7 +218,11 @@ internal fun PlaybackSettingsSections(
             PlayerPreference.INTERNAL -> stringResource(R.string.playback_player_internal)
             PlayerPreference.EXTERNAL -> stringResource(R.string.playback_player_external)
             PlayerPreference.ASK_EVERY_TIME -> stringResource(R.string.playback_player_ask)
-        }
+        },
+        externalPlayerLabel = playerSettings.preferredExternalPlayerPackageName?.let { packageName ->
+            externalPlayerCandidates.firstOrNull { it.packageName == packageName }?.label
+                ?: packageName
+        } ?: stringResource(R.string.playback_external_player_system)
     )
 
     LaunchedEffect(generalExpanded, focusedSection) {
@@ -354,6 +362,16 @@ internal fun PlaybackSettingsSections(
                     title = stringResource(R.string.playback_player),
                     subtitle = streamSelectionUi.playerPreferenceLabel,
                     onClick = onShowPlayerPreferenceDialog,
+                    onFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
+                )
+            }
+
+            item(key = "stream_external_player_app") {
+                NavigationSettingsItem(
+                    icon = Icons.AutoMirrored.Filled.OpenInNew,
+                    title = stringResource(R.string.playback_external_player_app),
+                    subtitle = streamSelectionUi.externalPlayerLabel,
+                    onClick = onShowExternalPlayerDialog,
                     onFocused = { focusedSection = PlaybackSection.STREAM_SELECTION }
                 )
             }
@@ -708,7 +726,9 @@ internal fun AndroidFrameRateSettingsAction(
 internal fun PlaybackSettingsDialogsHost(
     playerSettings: PlayerSettings,
     installedAddonNames: List<String>,
+    externalPlayerCandidates: List<ExternalPlayerCandidate>,
     showPlayerPreferenceDialog: Boolean,
+    showExternalPlayerDialog: Boolean,
     showInternalPlayerEngineDialog: Boolean,
     showLanguageDialog: Boolean,
     showSecondaryLanguageDialog: Boolean,
@@ -726,8 +746,10 @@ internal fun PlaybackSettingsDialogsHost(
     showReuseLastLinkCacheDialog: Boolean,
     autoplayBenchmarkAvailable: Boolean,
     onSetPlayerPreference: (PlayerPreference) -> Unit,
+    onSetPreferredExternalPlayerPackageName: (String?) -> Unit,
     onSetInternalPlayerEngine: (InternalPlayerEngine) -> Unit,
     onDismissPlayerPreferenceDialog: () -> Unit,
+    onDismissExternalPlayerDialog: () -> Unit,
     onDismissInternalPlayerEngineDialog: () -> Unit,
     onSetSubtitlePreferredLanguage: (String?) -> Unit,
     onSetSubtitleSecondaryLanguage: (String?) -> Unit,
@@ -766,6 +788,18 @@ internal fun PlaybackSettingsDialogsHost(
                 onDismissPlayerPreferenceDialog()
             },
             onDismiss = onDismissPlayerPreferenceDialog
+        )
+    }
+
+    if (showExternalPlayerDialog) {
+        ExternalPlayerDialog(
+            currentPackageName = playerSettings.preferredExternalPlayerPackageName,
+            candidates = externalPlayerCandidates,
+            onPackageSelected = { packageName ->
+                onSetPreferredExternalPlayerPackageName(packageName)
+                onDismissExternalPlayerDialog()
+            },
+            onDismiss = onDismissExternalPlayerDialog
         )
     }
 
@@ -922,6 +956,110 @@ private fun PlayerPreferenceDialog(
                                 )
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExternalPlayerDialog(
+    currentPackageName: String?,
+    candidates: List<ExternalPlayerCandidate>,
+    onPackageSelected: (String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    val systemChooserTitle = stringResource(R.string.playback_external_player_system)
+    val systemChooserDescription = stringResource(R.string.playback_external_player_system_desc)
+    val noPlayersText = stringResource(R.string.playback_external_player_none)
+    val options = listOf<ExternalPlayerCandidate?>(null) + candidates
+
+    NexioDialog(
+        onDismiss = onDismiss,
+        title = stringResource(R.string.playback_external_player_app),
+        width = 460.dp,
+        suppressFirstKeyUp = false
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 360.dp)
+        ) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 4.dp)
+            ) {
+                items(
+                    count = options.size,
+                    key = { index -> options[index]?.packageName ?: "system_chooser" }
+                ) { index ->
+                    val candidate = options[index]
+                    val packageName = candidate?.packageName
+                    val isSelected = packageName == currentPackageName
+                    val title = candidate?.label ?: systemChooserTitle
+                    val description = candidate?.packageName ?: systemChooserDescription
+
+                    Card(
+                        onClick = { onPackageSelected(packageName) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
+                        colors = CardDefaults.colors(
+                            containerColor = if (isSelected) NexioColors.FocusBackground else NexioColors.BackgroundCard,
+                            focusedContainerColor = NexioColors.FocusBackground
+                        ),
+                        shape = CardDefaults.shape(shape = RoundedCornerShape(10.dp)),
+                        scale = CardDefaults.scale(focusedScale = 1f)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = title,
+                                    color = if (isSelected) NexioColors.Primary else NexioColors.TextPrimary,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = description,
+                                    color = NexioColors.TextSecondary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            if (isSelected) {
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = stringResource(R.string.cd_selected),
+                                    tint = NexioColors.Primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (candidates.isEmpty()) {
+                    item(key = "no_external_players") {
+                        Text(
+                            text = noPlayersText,
+                            color = NexioColors.TextSecondary,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
                     }
                 }
             }

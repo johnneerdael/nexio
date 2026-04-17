@@ -293,7 +293,9 @@ class PlaybackSettingsViewModelSpoolModeTest {
         val trackingProviderStateRepository = mockk<TrackingProviderStateRepository>(relaxed = true)
         val context = mockk<Context>(relaxed = true)
 
-        every { playerSettingsDataStore.playerSettings } returns flowOf(PlayerSettings())
+        every { playerSettingsDataStore.playerSettings } returns flowOf(
+            PlayerSettings(diskSpoolStorageLocation = DiskSpoolStorageLocation.BUILTIN)
+        )
         every { trailerSettingsDataStore.settings } returns flowOf(TrailerSettings())
         every { debugSettingsDataStore.streamDiagnosticsEnabled } returns flowOf(false)
         every { debugSettingsDataStore.startupPerfTelemetryEnabled } returns flowOf(false)

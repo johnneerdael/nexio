@@ -89,7 +89,9 @@ class PlayerMediaSourceFactoryTest {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
             playbackOkHttpClient = OkHttpClient()
-        )
+        ).apply {
+            useParallelConnections = true
+        }
 
         val dataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
             url = "https://example.com/video.mkv",
@@ -556,7 +558,9 @@ class PlayerMediaSourceFactoryTest {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
             playbackOkHttpClient = OkHttpClient()
-        )
+        ).apply {
+            useParallelConnections = true
+        }
 
         val dataSourceFactory = factory.progressiveUpstreamFactoryForTesting(
             url = "https://example.com/video.mkv",
@@ -571,7 +575,9 @@ class PlayerMediaSourceFactoryTest {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
             playbackOkHttpClient = OkHttpClient()
-        )
+        ).apply {
+            useParallelConnections = true
+        }
 
         assertEquals("single", factory.currentWarmAheadUpstreamKindForTesting())
     }
@@ -581,7 +587,9 @@ class PlayerMediaSourceFactoryTest {
         val factory = PlayerMediaSourceFactory(
             context = mockk(relaxed = true),
             playbackOkHttpClient = OkHttpClient()
-        )
+        ).apply {
+            useParallelConnections = true
+        }
 
         factory.progressiveUpstreamFactoryForTesting(
             url = "https://real-debrid.com/path/movie.mkv",
@@ -617,6 +625,7 @@ class PlayerMediaSourceFactoryTest {
             context = mockk(relaxed = true),
             playbackOkHttpClient = OkHttpClient()
         ).apply {
+            useParallelConnections = true
             vodCacheWarmAheadEnabled = false
         }
 

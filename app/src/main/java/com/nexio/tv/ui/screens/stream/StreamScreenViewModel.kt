@@ -162,6 +162,10 @@ class StreamScreenViewModel @Inject constructor(
         .map { it.playerPreference }
         .distinctUntilChanged()
 
+    val preferredExternalPlayerPackageName = playerSettingsDataStore.playerSettings
+        .map { it.preferredExternalPlayerPackageName }
+        .distinctUntilChanged()
+
     private inline fun updateUiStateIfChanged(
         transform: (StreamScreenUiState) -> StreamScreenUiState
     ) {
@@ -917,12 +921,11 @@ class StreamScreenViewModel @Inject constructor(
     }
 
     private fun extractRuntimeMinutes(meta: Meta): Int? {
-        if (season != null && episode != null) {
-            return meta.videos.firstOrNull { it.season == season && it.episode == episode }?.runtime
-        }
-        return meta.runtime
-            ?.let { Regex("(\\d+)").find(it)?.groupValues?.getOrNull(1) }
-            ?.toIntOrNull()
+        return resolveStreamRuntimeMinutes(
+            meta = meta,
+            season = season,
+            episode = episode
+        )
     }
 
     private fun filterByAddon(addonName: String?) {

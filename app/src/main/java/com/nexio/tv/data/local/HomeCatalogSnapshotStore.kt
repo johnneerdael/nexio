@@ -80,6 +80,10 @@ class HomeCatalogSnapshotStore private constructor(
         }.getOrNull()
     }
 
+    fun readActiveProfile(posterProviderToken: String): Snapshot? {
+        return read(posterProviderToken, activeProfileId())
+    }
+
     fun write(
         snapshot: Snapshot,
         posterProviderToken: String,

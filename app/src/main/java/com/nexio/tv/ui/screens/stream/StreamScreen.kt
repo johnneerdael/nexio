@@ -119,6 +119,8 @@ fun StreamScreen(
     val playerPreference by viewModel.playerPreference.collectAsStateWithLifecycle(
         initialValue = PlayerPreference.INTERNAL
     )
+    val preferredExternalPlayerPackageName by viewModel.preferredExternalPlayerPackageName
+        .collectAsStateWithLifecycle(initialValue = null)
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
     var focusedStreamIndex by rememberSaveable { mutableStateOf(0) }
@@ -140,7 +142,8 @@ fun StreamScreen(
                         context = context,
                         url = url,
                         title = playbackInfo.title,
-                        headers = playbackInfo.headers
+                        headers = playbackInfo.headers,
+                        preferredPackageName = preferredExternalPlayerPackageName
                     )
                 }
             }
@@ -327,7 +330,8 @@ fun StreamScreen(
                                 context = context,
                                 url = url,
                                 title = info.title,
-                                headers = info.headers
+                                headers = info.headers,
+                                preferredPackageName = preferredExternalPlayerPackageName
                             )
                         }
                     }

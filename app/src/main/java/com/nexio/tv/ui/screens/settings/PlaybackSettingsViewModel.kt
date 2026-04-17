@@ -127,6 +127,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setPlayerPreference(preference)
     }
 
+    suspend fun setPreferredExternalPlayerPackageName(packageName: String?) {
+        playerSettingsDataStore.setPreferredExternalPlayerPackageName(packageName)
+    }
+
     suspend fun setInternalPlayerEngine(engine: InternalPlayerEngine) {
         playerSettingsDataStore.setInternalPlayerEngine(engine)
     }

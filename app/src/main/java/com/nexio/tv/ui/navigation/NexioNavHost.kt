@@ -15,6 +15,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.nexio.tv.core.metadata.parseRuntimeMinutes
 import com.nexio.tv.ui.screens.CatalogSeeAllScreen
 import com.nexio.tv.ui.screens.LayoutSelectionScreen
 import com.nexio.tv.ui.screens.AndroidTvFeedBrowserScreen
@@ -1295,11 +1296,4 @@ internal suspend fun buildContinueWatchingManualSelectionStreamRouteWithHydratio
 internal fun runtimeMinutesFromDurationMs(durationMs: Long?): Int? {
     val value = durationMs?.takeIf { it > 0L } ?: return null
     return ((value + 59_999L) / 60_000L).toInt()
-}
-
-internal fun parseRuntimeMinutes(raw: String?): Int? {
-    return raw
-        ?.let { Regex("(\\d+)").find(it)?.groupValues?.getOrNull(1) }
-        ?.toIntOrNull()
-        ?.takeIf { it > 0 }
 }

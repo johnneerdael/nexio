@@ -356,7 +356,7 @@ class MarkSeasonWatchedTest {
             traktSettingsDataStore = traktSettingsDataStore,
             metaRepository = mockk(relaxed = true),
             metadataDiskCacheStore = mockk(relaxed = true),
-            snapshotStore = mockk(relaxed = true) { every { read() } returns null }
+            snapshotStore = mockk(relaxed = true) { every { read(any()) } returns null }
         )
     }
 

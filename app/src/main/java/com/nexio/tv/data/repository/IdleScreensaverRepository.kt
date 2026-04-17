@@ -122,7 +122,7 @@ class IdleScreensaverRepository @Inject constructor(
 
     private suspend fun selectScreensaverRows(): ScreensaverRowSelection {
         val traktPrefs = traktSettingsDataStore.catalogPreferences.first()
-        val traktSnapshot = traktDiscoverySnapshotStore.read()
+        val traktSnapshot = traktDiscoverySnapshotStore.readActiveProfile()
         val traktAuthenticated = traktAuthDataStore.isAuthenticated.first()
         if (shouldUseTraktScreensaverSource(traktAuthenticated, traktPrefs, traktSnapshot)) {
             return ScreensaverRowSelection(
@@ -144,7 +144,7 @@ class IdleScreensaverRepository @Inject constructor(
 
     private suspend fun selectScreensaverRowsFromCache(): ScreensaverRowSelection? {
         val traktPrefs = traktSettingsDataStore.catalogPreferences.first()
-        val traktSnapshot = traktDiscoverySnapshotStore.read()
+        val traktSnapshot = traktDiscoverySnapshotStore.readActiveProfile()
         val traktAuthenticated = traktAuthDataStore.isAuthenticated.first()
         if (shouldUseTraktScreensaverSource(traktAuthenticated, traktPrefs, traktSnapshot)) {
             return ScreensaverRowSelection(
