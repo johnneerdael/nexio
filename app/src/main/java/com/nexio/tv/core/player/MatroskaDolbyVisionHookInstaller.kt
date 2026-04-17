@@ -227,6 +227,7 @@ object MatroskaDolbyVisionHookInstaller {
                 allowDv5Conversion = allowDv5Conversion
             )
             if (selectedMode != null) {
+                lastSelectedConversionMode.set(selectedMode)
                 return true
             }
             lastSelectedConversionMode.set(null)
