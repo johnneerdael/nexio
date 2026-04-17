@@ -213,6 +213,26 @@ class DiskSpoolSessionTest {
     }
 
     @Test
+    fun `read position can reset on a new spool backed open`() {
+        val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 1_000L)
+
+        session.updateReadPosition(700L)
+        session.setReadPositionForOpen(100L)
+
+        assertEquals(100L, session.currentReadPositionBytes())
+        assertEquals(
+            356L,
+            session.adaptiveTargetFrontierBytes(
+                maxFrontierBytes = 1_000L,
+                startupPrebufferBytes = 0L,
+                headroomBytes = 256L
+            )
+        )
+
+        session.close()
+    }
+
+    @Test
     fun `adaptive target uses startup target until read headroom catches up`() {
         val session = DiskSpoolSession(File(temp.root, "movie.spool"), capacityBytes = 1024L, waitTimeoutMs = 1_000L)
         session.setSourceMetadata(contentLength = 10_000L, supportsRanges = true)
