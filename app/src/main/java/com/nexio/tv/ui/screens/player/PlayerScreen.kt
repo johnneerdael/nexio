@@ -617,6 +617,8 @@ fun PlayerScreen(
             year = uiState.releaseYear,
             type = uiState.contentType,
             description = uiState.description,
+            backdropUrl = uiState.backdrop,
+            logoUrl = uiState.logo,
             cast = uiState.castMembers,
             modifier = Modifier
                 .fillMaxSize()
