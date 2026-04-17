@@ -16,4 +16,25 @@ class DolbyVisionDiagnosticsTest {
 
         DoviBridge.setVerboseLoggingEnabled(false)
     }
+
+    @Test
+    fun `dolby diagnostics snapshots are zero when disabled and reset`() {
+        DoviBridge.setVerboseLoggingEnabled(false)
+        DoviBridge.resetRuntimeCounters()
+        MatroskaDolbyVisionHookInstaller.setDiagnosticsEnabled(false)
+        MatroskaDolbyVisionHookInstaller.resetRuntimeCounters()
+        Dv5HardwareToneMapRpuTap.setDiagnosticsEnabled(false)
+        Dv5HardwareToneMapRpuTap.setEnabledForPlayback(false, "https://example.com/movie.mkv")
+
+        val bridge = DoviBridge.runtimeDiagnosticsSnapshot()
+        val hook = MatroskaDolbyVisionHookInstaller.runtimeAllocationSnapshot()
+        val tap = Dv5HardwareToneMapRpuTap.runtimeSnapshot()
+
+        assertFalse(bridge.enabled)
+        assertFalse(hook.enabled)
+        assertFalse(tap.enabled)
+        assertTrue(bridge.inputBytes == 0L)
+        assertTrue(hook.nalCopyBytes == 0L)
+        assertTrue(tap.copiedBytes == 0L)
+    }
 }

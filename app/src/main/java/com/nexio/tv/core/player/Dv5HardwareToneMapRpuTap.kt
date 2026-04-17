@@ -23,6 +23,8 @@ object Dv5HardwareToneMapRpuTap {
     private val lock = Any()
     private val queue = TreeMap<Long, ByteArray>()
     private var enabled = false
+    @Volatile
+    private var diagnosticsEnabled = false
     private var hostLabel: String = "unknown"
 
     private val queuedCount = AtomicLong(0L)
@@ -30,10 +32,22 @@ object Dv5HardwareToneMapRpuTap {
     private val droppedOverflowCount = AtomicLong(0L)
     private val matchHitCount = AtomicLong(0L)
     private val matchMissCount = AtomicLong(0L)
+    private val copiedBytes = AtomicLong(0L)
     private data class MatchedRpu(
         val sampleTimeUs: Long,
         val payload: ByteArray
     )
+
+    data class RuntimeSnapshot(
+        val enabled: Boolean,
+        val queuedEntries: Int,
+        val queuedBytes: Long,
+        val copiedBytes: Long
+    )
+
+    fun setDiagnosticsEnabled(enabled: Boolean) {
+        diagnosticsEnabled = enabled
+    }
 
     fun setEnabledForPlayback(enabled: Boolean, streamUrl: String) {
         synchronized(lock) {
@@ -51,7 +65,19 @@ object Dv5HardwareToneMapRpuTap {
         droppedOverflowCount.set(0L)
         matchHitCount.set(0L)
         matchMissCount.set(0L)
+        copiedBytes.set(0L)
         Log.i(TAG, "enabled=$enabled host=$hostLabel")
+    }
+
+    fun runtimeSnapshot(): RuntimeSnapshot {
+        return synchronized(lock) {
+            RuntimeSnapshot(
+                enabled = diagnosticsEnabled,
+                queuedEntries = queue.size,
+                queuedBytes = if (diagnosticsEnabled) queue.values.sumOf { it.size.toLong() } else 0L,
+                copiedBytes = copiedBytes.get()
+            )
+        }
     }
 
     fun onRpuSample(sampleTimeUs: Long, rpuNalPayload: ByteArray, source: String) {
@@ -61,7 +87,11 @@ object Dv5HardwareToneMapRpuTap {
             return
         }
         synchronized(lock) {
-            queue[sampleTimeUs] = rpuNalPayload.copyOf()
+            val copy = rpuNalPayload.copyOf()
+            queue[sampleTimeUs] = copy
+            if (diagnosticsEnabled) {
+                copiedBytes.addAndGet(copy.size.toLong())
+            }
             queuedCount.incrementAndGet()
             while (queue.size > MAX_ENTRIES) {
                 queue.pollFirstEntry()
