@@ -112,5 +112,19 @@ class AndroidTvChannelArtworkCache @Inject constructor(
                 localUri = AndroidTvChannelArtwork.posterUri(context, diskCacheKey)
             )
         }
+
+        fun pruneUnreferencedFiles(
+            context: Context,
+            activeDiskCacheKeys: Set<String>
+        ) {
+            val activeFileNames = activeDiskCacheKeys
+                .map { diskCacheKey -> AndroidTvChannelArtwork.posterFile(context, diskCacheKey).name }
+                .toSet()
+            val directory = AndroidTvChannelArtwork.posterDirectoryForMaintenance(context)
+            directory.listFiles()
+                .orEmpty()
+                .filter { file -> file.isFile && file.name !in activeFileNames }
+                .forEach { file -> file.delete() }
+        }
     }
 }
