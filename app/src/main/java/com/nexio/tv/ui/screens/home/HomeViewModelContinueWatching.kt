@@ -97,12 +97,17 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
             }
 
             _uiState.update { state ->
-                if (state.continueWatchingItems == items && state.traktUpNextItems == traktUpNextItems) {
+                if (
+                    state.continueWatchingItems == items &&
+                    state.traktUpNextItems == traktUpNextItems &&
+                    state.initialContinueWatchingResolved
+                ) {
                     state
                 } else {
                     state.copy(
                         continueWatchingItems = items,
-                        traktUpNextItems = traktUpNextItems
+                        traktUpNextItems = traktUpNextItems,
+                        initialContinueWatchingResolved = true
                     )
                 }
             }
@@ -126,7 +131,8 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                         _uiState.update { state ->
                             state.copy(
                                 continueWatchingItems = enrichedItems,
-                                traktUpNextItems = enrichedTraktItems
+                                traktUpNextItems = enrichedTraktItems,
+                                initialContinueWatchingResolved = true
                             )
                         }
                     } catch (e: Exception) {
