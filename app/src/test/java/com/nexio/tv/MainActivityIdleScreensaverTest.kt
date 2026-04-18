@@ -15,6 +15,11 @@ import org.junit.Test
 class MainActivityIdleScreensaverTest {
 
     @Test
+    fun `idle screensaver timeout is five minutes`() {
+        assertEquals(5L * 60 * 1000L, MainActivity.IDLE_SCREENSAVER_TIMEOUT_MS)
+    }
+
+    @Test
     fun `idle timer resets when in app trailer starts`() {
         assertTrue(
             shouldRegisterIdleInteractionForTrailerPlaybackTransition(

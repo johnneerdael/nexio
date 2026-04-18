@@ -214,7 +214,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_RECOMMENDATION_ADDON_BASE_URL = "recommendation_addon_base_url"
         private const val STARTUP_PERF_WINDOW_MS = 12_000L
         private const val STARTUP_DEFERRED_WORK_MIN_DELAY_MS = 2_000L
-        private const val IDLE_SCREENSAVER_TIMEOUT_MS = 2L * 60 * 1000L
+        internal const val IDLE_SCREENSAVER_TIMEOUT_MS = 5L * 60 * 1000L
         private const val BROWSABLE_REQUEST_COOLDOWN_MS = 24L * 60 * 60 * 1000
 
         @Volatile
