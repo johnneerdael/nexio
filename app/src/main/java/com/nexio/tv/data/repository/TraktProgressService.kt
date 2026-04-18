@@ -1842,10 +1842,12 @@ class TraktProgressService @Inject constructor(
                 TraktNextUpValidationPolicy.resolvePublishableCandidate(
                     localCandidate = candidate.entry,
                     validationResult = result,
-                    nowMs = now
+                    nowMs = now,
+                    weakDerivation = candidate.weakDerivation
                 )
             } else {
                 candidate.entry.takeIf {
+                    !candidate.weakDerivation &&
                     AirDateGate.isAired(
                         firstAiredMs = it.firstAiredMs,
                         tmdbAirDate = it.firstAired,

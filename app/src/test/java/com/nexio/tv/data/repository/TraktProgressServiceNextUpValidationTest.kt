@@ -162,4 +162,28 @@ class TraktProgressServiceNextUpValidationTest {
 
         assertEquals(localAired, result)
     }
+
+    @Test
+    fun `validation failure suppresses weakly derived unknown episode candidate`() {
+        val weakLocalCandidate = TraktProgressService.NextUpEntry(
+            contentId = "weak-show",
+            name = "Weak Show",
+            season = 2,
+            episode = 9,
+            episodeTitle = null,
+            videoId = "weak-show:2:9",
+            firstAired = null,
+            firstAiredMs = 0L,
+            activityAtMs = 9_000L
+        )
+
+        val result = TraktNextUpValidationPolicy.resolvePublishableCandidate(
+            localCandidate = weakLocalCandidate,
+            validationResult = TraktNextUpValidationResult.Failed,
+            nowMs = 20_000L,
+            weakDerivation = true
+        )
+
+        assertEquals(null, result)
+    }
 }

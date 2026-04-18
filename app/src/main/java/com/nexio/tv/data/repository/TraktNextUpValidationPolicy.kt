@@ -59,12 +59,14 @@ internal object TraktNextUpValidationPolicy {
     fun resolvePublishableCandidate(
         localCandidate: TraktProgressService.NextUpEntry,
         validationResult: TraktNextUpValidationResult,
-        nowMs: Long
+        nowMs: Long,
+        weakDerivation: Boolean = false
     ): TraktProgressService.NextUpEntry? {
         return when (validationResult) {
             is TraktNextUpValidationResult.CurrentAiredNextEpisode -> validationResult.entry
             TraktNextUpValidationResult.NoCurrentAiredNextEpisode -> null
             TraktNextUpValidationResult.Failed -> {
+                if (weakDerivation) return null
                 localCandidate.takeIf {
                     AirDateGate.isAired(
                         firstAiredMs = it.firstAiredMs,
