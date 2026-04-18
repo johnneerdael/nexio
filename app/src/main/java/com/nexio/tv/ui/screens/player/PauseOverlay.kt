@@ -378,11 +378,15 @@ private fun CastPictureChip(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
-    val cardSize = 92.dp
-    val itemWidth = 132.dp
+    val cardSize = 100.dp
+    val itemWidth = 150.dp
     val cardSizePx = remember(cardSize, density) {
         with(density) { cardSize.roundToPx() }
     }
+    val typography = MaterialTheme.typography
+    val nameStyle = remember(typography) { typography.labelMedium }
+    val characterStyle = remember(typography) { typography.labelSmall }
+    val initialsStyle = remember(typography) { typography.titleLarge }
     val photoModel = remember(context, member.photo, cardSizePx) {
         member.photo?.takeIf { it.isNotBlank() }?.let { url ->
             ImageRequest.Builder(context)
@@ -395,12 +399,13 @@ private fun CastPictureChip(
 
     Column(
         modifier = Modifier.width(itemWidth),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.Start
     ) {
         Card(
             onClick = onClick,
             modifier = Modifier
                 .size(cardSize)
+                .align(Alignment.Start)
                 .testTag("pause_overlay_cast_photo"),
             colors = CardDefaults.colors(
                 containerColor = Color.White.copy(alpha = 0.1f),
@@ -422,7 +427,7 @@ private fun CastPictureChip(
                 } else {
                     Text(
                         text = member.name.firstOrNull()?.uppercase() ?: "?",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = initialsStyle,
                         color = Color.White
                     )
                 }
@@ -433,21 +438,47 @@ private fun CastPictureChip(
 
         Text(
             text = member.name,
-            style = MaterialTheme.typography.labelMedium,
-            color = Color.White,
+            style = nameStyle,
+            color = NexioColors.TextSecondary,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
 
-        if (!member.character.isNullOrBlank()) {
+        val displayCharacter = pauseOverlayCastDisplayRole(
+            character = member.character,
+            creatorLabel = stringResource(R.string.cast_role_creator),
+            directorLabel = stringResource(R.string.cast_role_director),
+            writerLabel = stringResource(R.string.cast_role_writer)
+        )
+        if (!displayCharacter.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = member.character,
-                style = MaterialTheme.typography.labelSmall,
+                text = displayCharacter,
+                style = characterStyle,
                 color = NexioColors.TextTertiary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
+    }
+}
+
+internal fun pauseOverlayCastDisplayRole(
+    character: String?,
+    creatorLabel: String,
+    directorLabel: String,
+    writerLabel: String
+): String? {
+    val normalized = character
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?: return null
+
+    return when {
+        normalized.equals("Creator", ignoreCase = true) -> creatorLabel
+        normalized.equals("Director", ignoreCase = true) -> directorLabel
+        normalized.equals("Writer", ignoreCase = true) -> writerLabel
+        else -> normalized
     }
 }
 
