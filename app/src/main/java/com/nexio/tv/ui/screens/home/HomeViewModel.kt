@@ -305,6 +305,7 @@ class HomeViewModel @Inject constructor(
     internal var profileSwitchDiskSnapshotGeneration: Long = 0L
     @Volatile
     internal var homeProfileGeneration: Long = 0L
+    internal val modernCarouselRowBuildCache = ModernCarouselRowBuildCache()
     internal var activeHomeProfileSession = startHomeProfileSession(profileManager.activeProfileId.value)
 
     val trailerPreviewUrls: Map<String, String>
@@ -334,6 +335,7 @@ class HomeViewModel @Inject constructor(
         restorePersistedSyntheticCatalogRows()
         restorePersistedCatalogSnapshot()
         observeLayoutPreferences()
+        observeModernHomePresentation()
         observeTrailerAutoplaySettings()
         observePlayerSettings()
         observeYouTubeTrailerAuthSession()
@@ -404,6 +406,8 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun observeLayoutPreferences() = observeLayoutPreferencesPipeline()
+
+    private fun observeModernHomePresentation() = observeModernHomePresentationPipeline()
 
     private fun observeTrailerAutoplaySettings() {
         viewModelScope.launch {

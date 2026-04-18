@@ -62,4 +62,25 @@ class HomePlaybackWorkGateTest {
         assertEquals(listOf(1, 2, 3), job.await())
         assertEquals(2, maxActive.get())
     }
+
+    @Test
+    fun `continue watching enrichment keeps input order while limiting concurrency`() = runTest {
+        val active = AtomicInteger(0)
+        val maxObserved = AtomicInteger(0)
+        val inputs = (1..8).toList()
+
+        val result = mapContinueWatchingEnrichmentWithLimit(
+            items = inputs,
+            maxConcurrency = 2
+        ) { value ->
+            val nowActive = active.incrementAndGet()
+            maxObserved.updateAndGet { current -> maxOf(current, nowActive) }
+            kotlinx.coroutines.delay(10)
+            active.decrementAndGet()
+            "item-$value"
+        }
+
+        assertEquals((1..8).map { "item-$it" }, result)
+        assertTrue(maxObserved.get() <= 2)
+    }
 }

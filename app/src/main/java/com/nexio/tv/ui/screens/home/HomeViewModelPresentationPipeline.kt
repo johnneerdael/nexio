@@ -2,6 +2,7 @@ package com.nexio.tv.ui.screens.home
 
 import android.util.Log
 import androidx.lifecycle.viewModelScope
+import com.nexio.tv.R
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
@@ -181,6 +183,43 @@ internal fun HomeViewModel.observeLayoutPreferencesPipeline() {
                 }
                 if (shouldRefreshCatalogPresentation) {
                     scheduleUpdateCatalogRows()
+                }
+            }
+    }
+}
+
+@OptIn(FlowPreview::class)
+internal fun HomeViewModel.observeModernHomePresentationPipeline() {
+    viewModelScope.launch {
+        _uiState
+            .map { state ->
+                ModernHomePresentationInput(
+                    catalogRows = state.catalogRows,
+                    continueWatchingItems = state.continueWatchingItems,
+                    useLandscapePosters = state.modernLandscapePostersEnabled,
+                    showCatalogTypeSuffix = state.catalogTypeSuffixEnabled,
+                    continueWatchingTitle = appContext.getString(R.string.continue_watching),
+                    airsDateTemplate = appContext.getString(R.string.cw_airs_date),
+                    upcomingLabel = appContext.getString(R.string.cw_upcoming)
+                )
+            }
+            .distinctUntilChanged()
+            .debounce(80)
+            .collectLatest { input ->
+                val capturedGeneration = homeProfileGeneration
+                val presentation = withContext(Dispatchers.Default) {
+                    buildModernHomePresentation(
+                        input = input,
+                        cache = modernCarouselRowBuildCache
+                    )
+                }
+                if (!isCurrentHomeProfileGeneration(capturedGeneration)) return@collectLatest
+                _uiState.update { state ->
+                    if (state.modernHomePresentation == presentation) {
+                        state
+                    } else {
+                        state.copy(modernHomePresentation = presentation)
+                    }
                 }
             }
     }

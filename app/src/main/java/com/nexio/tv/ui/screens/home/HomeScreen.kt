@@ -295,7 +295,12 @@ fun HomeScreen(
             }
 
             else -> {
-                val shouldShowLoadingGate = !hasRenderableContent &&
+                val shouldWaitForContinueWatching =
+                    uiState.homeLayout == HomeLayout.MODERN &&
+                        !uiState.initialContinueWatchingResolved &&
+                        uiState.error == null &&
+                        uiState.installedAddonsCount > 0
+                val shouldShowLoadingGate = (!hasRenderableContent || shouldWaitForContinueWatching) &&
                     uiState.error == null &&
                     !startupContentGateTimedOut
                 LaunchedEffect(shouldShowLoadingGate) {
@@ -725,6 +730,7 @@ private fun ModernHomeRoute(
     val modernContentState = remember(
         uiState.catalogRows,
         uiState.continueWatchingItems,
+        uiState.modernHomePresentation,
         uiState.deterministicAutoplayEnabled,
         uiState.modernLandscapePostersEnabled,
         uiState.catalogTypeSuffixEnabled,
@@ -749,6 +755,7 @@ private fun ModernHomeRoute(
         ModernHomeContentState(
             catalogRows = uiState.catalogRows,
             continueWatchingItems = uiState.continueWatchingItems,
+            modernHomePresentation = uiState.modernHomePresentation,
             deterministicAutoplayEnabled = uiState.deterministicAutoplayEnabled,
             modernLandscapePostersEnabled = uiState.modernLandscapePostersEnabled,
             catalogTypeSuffixEnabled = uiState.catalogTypeSuffixEnabled,
