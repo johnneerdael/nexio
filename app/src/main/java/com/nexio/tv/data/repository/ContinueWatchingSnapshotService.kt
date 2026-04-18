@@ -239,7 +239,7 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val owned = ProfileOwnedContinueWatchingSnapshot(profileId = profileId, snapshot = normalized)
         rawSnapshotState.value = owned
         snapshotState.value = owned
-        lastRefreshRequestMs = normalized.updatedAtMs
+        lastRefreshRequestMs = 0L
         handleScheduledReemit(normalized.scheduledReemit, System.currentTimeMillis())
     }
 
