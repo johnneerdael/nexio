@@ -12,6 +12,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
@@ -518,6 +519,42 @@ class ContinueWatchingSnapshotServiceMutationTest {
                 2,
                 refreshCount
             )
+        }
+
+    @Test
+    fun `persisted snapshot does not throttle first live refresh on observe`() =
+        runTest {
+            var refreshCount = 0
+            val persisted = ContinueWatchingSnapshot(
+                resumeItems = listOf(resume(contentId = "stale-show")),
+                updatedAtMs = System.currentTimeMillis()
+            )
+            val trackingProgressService = mockk<TrackingProgressService>(relaxed = true) {
+                every { observeRemoteSnapshotLoaded() } returns flowOf(false)
+                every { observeContinueWatchingNextUp() } returns flowOf(emptyList())
+                every { observeSyntheticContinueWatchingNextUp() } returns flowOf(emptyList())
+                coEvery { refreshNow() } answers { refreshCount++ }
+            }
+            val service = ContinueWatchingSnapshotService(
+                watchProgressRepository = mockk(relaxed = true) {
+                    every { allProgress } returns flowOf(emptyList())
+                },
+                trackingProgressService = trackingProgressService,
+                trackingProviderStateService = mockk(relaxed = true) {
+                    every { state } returns flowOf(EffectiveTrackingProviderState())
+                },
+                traktSettingsDataStore = mockk(relaxed = true) {
+                    every { dismissedNextUpKeys } returns flowOf(emptySet())
+                },
+                metaRepository = mockk(relaxed = true),
+                metadataDiskCacheStore = mockk(relaxed = true),
+                snapshotStore = mockk(relaxed = true) { every { read(any()) } returns persisted }
+            )
+
+            service.reloadPersistedSnapshotForActiveProfile(clearWhenMissing = true)
+            service.observeSnapshot().first()
+
+            awaitCondition { refreshCount == 1 }
         }
 
     // ── Test 4: collectorRaceConvergence ──────────────────────────────────────
