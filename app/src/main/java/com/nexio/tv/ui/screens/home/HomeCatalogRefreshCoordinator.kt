@@ -11,14 +11,10 @@ import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.poster.PosterRatingsUrlResolver
 import com.nexio.tv.core.profile.ProfileBoundary
 import com.nexio.tv.core.search.AndroidTvSearchRuntimeReadiness
-import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
-import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvMetadataEnrichment
-import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvMetadataRouter
-import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.data.local.MetadataDiskCacheStore
 import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.data.repository.MDBListRepository
@@ -92,31 +88,15 @@ class HomeCatalogRefreshCoordinator @Inject constructor(
         item: MetaPreview,
         onLog: (String, String?) -> Unit = { _, _ -> }
     ): MetaPreview {
-        return try {
-            val enrichment = if (item.type.isHomeCatalogTvContent()) {
-                val decision = tvMetadataRouter.fetchEnrichment(
-                    TvMetadataRequest(
-                        contentId = item.id,
-                        fallbackContentId = null,
-                        contentType = item.type,
-                        language = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
-                    )
-                )
-                logProviderDecisionDiagnostics(item, decision.diagnostics, onLog)
-                decision.value
-            } else {
-                val apiKey = tmdbSettingsDataStore.settings.first().apiKey.trim()
-                if (apiKey.isEmpty()) return item
-                val tmdbId = tmdbService.ensureTmdbId(item.id, item.apiType) ?: return item
-                tmdbMetadataService.fetchEnrichment(
-                    tmdbId = tmdbId,
-                    contentType = item.type
-                )?.toTvMetadataEnrichment()
-            } ?: return item
-            item.applyProviderEnrichment(enrichment)
-        } catch (_: Throwable) {
-            item
-        }
+        return overlayProviderLocalizedMetadataForHome(
+            item = item,
+            tvMetadataRouter = tvMetadataRouter,
+            tmdbSettingsDataStore = tmdbSettingsDataStore,
+            tmdbService = tmdbService,
+            tmdbMetadataService = tmdbMetadataService,
+            profileBoundary = profileBoundary,
+            onLog = onLog
+        )
     }
 
     private val refreshMutex = Mutex()
@@ -568,40 +548,3 @@ internal fun MetaPreview.applyTvMetadataEnrichmentForHome(enrichment: TvMetadata
         poster = enrichment.poster ?: poster
     )
 }
-
-private fun MetaPreview.applyProviderEnrichment(enrichment: TvMetadataEnrichment): MetaPreview =
-    applyTvMetadataEnrichmentForHome(enrichment)
-
-private fun TmdbEnrichment.toTvMetadataEnrichment(): TvMetadataEnrichment {
-    return TvMetadataEnrichment(
-        seriesTvdbId = null,
-        localizedTitle = localizedTitle,
-        description = description,
-        genres = genres,
-        backdrop = backdrop,
-        logo = logo,
-        poster = poster,
-        releaseInfo = releaseInfo,
-        rating = rating,
-        runtimeMinutes = runtimeMinutes,
-        ageRating = ageRating,
-        countries = countries,
-        language = language
-    )
-}
-
-private fun logProviderDecisionDiagnostics(
-    item: MetaPreview,
-    diagnostics: List<com.nexio.tv.core.tvdb.TvMetadataDiagnosticEvent>,
-    onLog: (String, String?) -> Unit
-) {
-    val itemKey = "itemKey=${item.apiType}:${item.id}"
-    if (diagnostics.any { it.reason == TvMetadataDecisionReason.TMDB_TV_SKIPPED }) {
-        onLog("tmdb_tv_skipped", itemKey)
-    }
-    if (diagnostics.any { it.reason == TvMetadataDecisionReason.TVDB_FALLBACK_TMDB }) {
-        onLog("tvdb_fallback_tmdb", itemKey)
-    }
-}
-
-private fun ContentType.isHomeCatalogTvContent(): Boolean = this == ContentType.SERIES || this == ContentType.TV

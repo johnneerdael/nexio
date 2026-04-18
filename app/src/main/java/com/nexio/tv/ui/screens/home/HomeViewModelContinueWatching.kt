@@ -2,7 +2,6 @@ package com.nexio.tv.ui.screens.home
 
 import android.util.Log
 import androidx.lifecycle.viewModelScope
-import com.nexio.tv.core.tvdb.TvMetadataEnrichment
 import com.nexio.tv.core.tvdb.TvMetadataRequest
 import com.nexio.tv.core.tvdb.TvdbLanguageMapper
 import com.nexio.tv.data.repository.ContinueWatchingNextUpRef
@@ -13,10 +12,13 @@ import com.nexio.tv.data.repository.TrackingScrobbleItem
 import com.nexio.tv.data.repository.buildMixedContinueWatchingTimeline
 import com.nexio.tv.domain.model.ContentType
 import com.nexio.tv.domain.model.HomeDisplayMetadata
+import com.nexio.tv.domain.model.MetaPreview
+import com.nexio.tv.domain.model.PosterShape
 import com.nexio.tv.domain.model.TmdbSettings
 import com.nexio.tv.domain.model.WatchProgress
 import com.nexio.tv.domain.model.homeDisplayItemKey
 import com.nexio.tv.domain.model.mergeFallback
+import com.nexio.tv.domain.model.toHomeDisplayMetadata
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -148,7 +150,7 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItems(
         if (!isNonPlaybackHomeWorkAllowed()) {
             item
         } else {
-            enrichContinueWatchingItemWithProvider(item, settings)
+            enrichContinueWatchingItemWithProvider(item)
         }
     }
 }
@@ -165,33 +167,29 @@ internal suspend fun HomeViewModel.enrichContinueWatchingNextUpItems(
         if (!isNonPlaybackHomeWorkAllowed()) {
             item
         } else {
-            enrichContinueWatchingItemWithProvider(item, settings) as? ContinueWatchingItem.NextUp ?: item
+            enrichContinueWatchingItemWithProvider(item) as? ContinueWatchingItem.NextUp ?: item
         }
     }
 }
 
 internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
-    item: ContinueWatchingItem,
-    settings: TmdbSettings
+    item: ContinueWatchingItem
 ): ContinueWatchingItem {
     val contentId = when (item) {
         is ContinueWatchingItem.InProgress -> item.progress.contentId
         is ContinueWatchingItem.NextUp -> item.info.contentId
     }
-    val contentType = when (item) {
-        is ContinueWatchingItem.InProgress -> item.progress.contentType
-        is ContinueWatchingItem.NextUp -> item.info.contentType
-    }
     val tvdbLanguage = TvdbLanguageMapper.normalize(profileBoundary.currentLanguageTag())
     return try {
-        val enrichment = tvMetadataRouter.fetchEnrichment(
-            TvMetadataRequest(
-                contentId = contentId,
-                fallbackContentId = item.providerFallbackContentId(),
-                contentType = ContentType.fromString(contentType),
-                language = tvdbLanguage
-            )
-        ).value ?: return item
+        val localizedPreview = overlayProviderLocalizedMetadataForHome(
+            item = item.toContinueWatchingProviderPreview(),
+            fallbackContentId = item.providerFallbackContentId(),
+            tvMetadataRouter = tvMetadataRouter,
+            tmdbSettingsDataStore = tmdbSettingsDataStore,
+            tmdbService = tmdbService,
+            tmdbMetadataService = tmdbMetadataService,
+            profileBoundary = profileBoundary
+        )
         val localizedEpisodeDescription = localizedContinueWatchingEpisodeDescription(
             tvMetadataRouter = tvMetadataRouter,
             item = item,
@@ -203,10 +201,7 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
             is ContinueWatchingItem.NextUp -> item.info.displayMetadata
         }
 
-        val enrichedMetadata = enrichment.toHomeDisplayMetadata(
-            fallback = existing,
-            settings = settings
-        )
+        val enrichedMetadata = localizedPreview.toHomeDisplayMetadata().mergeFallback(existing)
 
         when (item) {
             is ContinueWatchingItem.InProgress -> item.copy(
@@ -238,6 +233,54 @@ internal suspend fun HomeViewModel.enrichContinueWatchingItemWithProvider(
     }
 }
 
+private fun ContinueWatchingItem.toContinueWatchingProviderPreview(): MetaPreview {
+    return when (this) {
+        is ContinueWatchingItem.InProgress -> {
+            val displayMetadata = displayMetadata
+            MetaPreview(
+                id = progress.contentId,
+                type = ContentType.fromString(progress.contentType),
+                rawType = progress.contentType,
+                name = displayMetadata?.title ?: progress.name,
+                poster = displayMetadata?.poster ?: progress.poster,
+                posterShape = PosterShape.LANDSCAPE,
+                background = displayMetadata?.backdrop ?: progress.backdrop,
+                logo = displayMetadata?.logo ?: progress.logo,
+                description = displayMetadata?.description ?: episodeDescription ?: progress.episodeTitle,
+                releaseInfo = displayMetadata?.releaseInfo ?: releaseInfo,
+                runtime = displayMetadata?.runtime,
+                imdbRating = displayMetadata?.imdbRating ?: episodeImdbRating,
+                tomatoesRating = displayMetadata?.tomatoesRating,
+                genres = displayMetadata?.genres?.takeIf { it.isNotEmpty() } ?: genres,
+                language = null,
+                posterProviderTag = displayMetadata?.posterProviderTag
+            )
+        }
+
+        is ContinueWatchingItem.NextUp -> {
+            val displayMetadata = info.displayMetadata
+            MetaPreview(
+                id = info.contentId,
+                type = ContentType.fromString(info.contentType),
+                rawType = info.contentType,
+                name = displayMetadata?.title ?: info.name,
+                poster = displayMetadata?.poster ?: info.poster,
+                posterShape = PosterShape.LANDSCAPE,
+                background = displayMetadata?.backdrop ?: info.backdrop,
+                logo = displayMetadata?.logo ?: info.logo,
+                description = displayMetadata?.description ?: info.episodeDescription ?: info.episodeTitle,
+                releaseInfo = displayMetadata?.releaseInfo ?: info.releaseInfo ?: info.released,
+                runtime = displayMetadata?.runtime,
+                imdbRating = displayMetadata?.imdbRating ?: info.imdbRating,
+                tomatoesRating = displayMetadata?.tomatoesRating,
+                genres = displayMetadata?.genres?.takeIf { it.isNotEmpty() } ?: info.genres,
+                language = null,
+                posterProviderTag = displayMetadata?.posterProviderTag
+            )
+        }
+    }
+}
+
 internal suspend fun localizedContinueWatchingEpisodeDescription(
     tvMetadataRouter: com.nexio.tv.core.tvdb.TvMetadataRouter,
     item: ContinueWatchingItem,
@@ -256,22 +299,6 @@ internal suspend fun localizedContinueWatchingEpisodeDescription(
             seasonNumbers = listOf(season)
         )
     ).value?.get(season to episode)?.overview?.takeIf { it.isNotBlank() }
-}
-
-private fun TvMetadataEnrichment.toHomeDisplayMetadata(
-    fallback: HomeDisplayMetadata?,
-    settings: TmdbSettings
-): HomeDisplayMetadata {
-    return HomeDisplayMetadata(
-        title = localizedTitle,
-        description = description,
-        genres = genres,
-        imdbRating = rating?.toFloat(),
-        poster = if (settings.useArtwork) poster else null,
-        backdrop = if (settings.useArtwork) backdrop else null,
-        logo = if (settings.useArtwork) logo else null,
-        releaseInfo = if (settings.useDetails) releaseInfo else null
-    ).mergeFallback(fallback)
 }
 
 private fun ContinueWatchingItem.providerFallbackContentId(): String {
