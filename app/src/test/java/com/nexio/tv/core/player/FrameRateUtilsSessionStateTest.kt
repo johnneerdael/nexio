@@ -28,4 +28,15 @@ class FrameRateUtilsSessionStateTest {
         assertFalse(FrameRateUtils.isMainPlayerDisplayModeSessionActiveForTests())
         assertFalse(FrameRateUtils.canChangeDisplayModeForPlaybackForTests())
     }
+
+    @Test
+    fun `non player playback guard blocks display mode changes even after stale main player session`() {
+        FrameRateUtils.resetDisplayModeSessionStateForTests()
+        FrameRateUtils.beginMainPlayerDisplayModeSession()
+
+        FrameRateUtils.blockDisplayModeChangesForNonPlayerPlayback()
+
+        assertFalse(FrameRateUtils.isMainPlayerDisplayModeSessionActiveForTests())
+        assertFalse(FrameRateUtils.canChangeDisplayModeForPlaybackForTests())
+    }
 }

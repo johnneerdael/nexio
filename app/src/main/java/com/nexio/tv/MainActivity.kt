@@ -538,6 +538,19 @@ class MainActivity : ComponentActivity() {
                     val pendingRecommendation by pendingRecommendationNavigation
                     val pendingFeed by pendingFeedNavigation
                     val lifecycleOwner = LocalLifecycleOwner.current
+                    var appLifecycleState by remember(lifecycleOwner) {
+                        mutableStateOf(lifecycleOwner.lifecycle.currentState)
+                    }
+                    DisposableEffect(lifecycleOwner) {
+                        val observer = LifecycleEventObserver { _, _ ->
+                            appLifecycleState = lifecycleOwner.lifecycle.currentState
+                        }
+                        lifecycleOwner.lifecycle.addObserver(observer)
+                        appLifecycleState = lifecycleOwner.lifecycle.currentState
+                        onDispose {
+                            lifecycleOwner.lifecycle.removeObserver(observer)
+                        }
+                    }
                     val rootView = LocalView.current
                     val initialSplashDismissed = remember {
                         launchDisposition == StartupLaunchDisposition.WARM_PROCESS_SKIP_SPLASH
@@ -730,16 +743,20 @@ class MainActivity : ComponentActivity() {
 
                     LaunchedEffect(
                         idleScreensaverEligible,
+                        appLifecycleState,
                         idleScreensaverVisible,
                         idleScreensaverSlides,
                         idleTrailerCandidates,
                         mainUiPrefs.trailerScreensaverEnabled,
                         idleLastInteractionAtMs
                     ) {
-                        if (
-                            !idleScreensaverEligible ||
-                            idleScreensaverVisible ||
-                            (idleScreensaverSlides.isEmpty() && idleTrailerCandidates.isEmpty())
+                        if (!shouldScheduleIdleScreensaverStart(
+                                lifecycleState = appLifecycleState,
+                                idleScreensaverEligible = idleScreensaverEligible,
+                                idleScreensaverVisible = idleScreensaverVisible,
+                                slideCount = idleScreensaverSlides.size,
+                                trailerCandidateCount = idleTrailerCandidates.size
+                            )
                         ) {
                             logIdleScreensaverDiagnostics(
                                 buildIdleScreensaverDiagnosticsMessage(
@@ -776,7 +793,14 @@ class MainActivity : ComponentActivity() {
                             )
                         )
                         delay(remainingDelayMs)
-                        if (!idleScreensaverEligible || idleScreensaverVisible) {
+                        if (!shouldScheduleIdleScreensaverStart(
+                                lifecycleState = appLifecycleState,
+                                idleScreensaverEligible = idleScreensaverEligible,
+                                idleScreensaverVisible = idleScreensaverVisible,
+                                slideCount = idleScreensaverSlides.size,
+                                trailerCandidateCount = idleTrailerCandidates.size
+                            )
+                        ) {
                             logIdleScreensaverDiagnostics(
                                 buildIdleScreensaverDiagnosticsMessage(
                                     event = "start_aborted_after_delay",
@@ -1429,6 +1453,19 @@ internal fun isIdleScreensaverEligibleRoute(
         return false
     }
     return true
+}
+
+internal fun shouldScheduleIdleScreensaverStart(
+    lifecycleState: Lifecycle.State,
+    idleScreensaverEligible: Boolean,
+    idleScreensaverVisible: Boolean,
+    slideCount: Int,
+    trailerCandidateCount: Int
+): Boolean {
+    return lifecycleState == Lifecycle.State.RESUMED &&
+        idleScreensaverEligible &&
+        !idleScreensaverVisible &&
+        (slideCount > 0 || trailerCandidateCount > 0)
 }
 
 internal fun shouldRegisterIdleInteractionForTrailerPlaybackTransition(
