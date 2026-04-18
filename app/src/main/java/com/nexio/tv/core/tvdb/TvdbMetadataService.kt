@@ -278,11 +278,18 @@ class TvdbMetadataService @Inject constructor(
             seasonNumber = seasonNumber,
             language = normalizedLanguage
         )
+        val perEpisodeTranslatedOverviewsById = fetchPerEpisodeTranslationOverviews(
+            authorization = authorization,
+            episodeIds = records.mapNotNull { record -> record.id }
+                .filterNot { episodeId -> episodeId in translatedOverviewsById },
+            language = normalizedLanguage
+        )
+        val allTranslatedOverviewsById = translatedOverviewsById + perEpisodeTranslatedOverviewsById
 
         val mapped = records
             .map { record ->
                 record.toEpisodeMetadata(
-                    translatedOverview = record.id?.let { translatedOverviewsById[it] }
+                    translatedOverview = record.id?.let { allTranslatedOverviewsById[it] }
                 )
             }
             .filter { metadata -> metadata.seasonNumber == seasonNumber }
@@ -414,6 +421,34 @@ class TvdbMetadataService @Inject constructor(
                 id to overview
             }
             .toMap()
+    }
+
+    private suspend fun fetchPerEpisodeTranslationOverviews(
+        authorization: String,
+        episodeIds: List<Int>,
+        language: String
+    ): Map<Int, String> {
+        if (language == "eng" || episodeIds.isEmpty()) return emptyMap()
+        val translated = linkedMapOf<Int, String>()
+        episodeIds.distinct().forEach { episodeId ->
+            val overview = runCatching {
+                tvdbApi.getEpisodeTranslation(
+                    authorization = authorization,
+                    id = episodeId,
+                    language = language
+                )
+            }.onFailure { error ->
+                Log.w(TAG, "TVDB episode translation request failed reason=${error.javaClass.simpleName}")
+            }.getOrNull()
+                ?.takeIf { response -> response.isSuccessful }
+                ?.body()
+                ?.data
+                .overviewText()
+            if (overview != null) {
+                translated[episodeId] = overview
+            }
+        }
+        return translated
     }
 
     private fun TvdbEpisodeRecord.toEpisodeMetadata(
