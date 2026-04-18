@@ -129,11 +129,19 @@ internal fun HomeViewModel.loadContinueWatchingPipeline() {
                             return@launch
                         }
                         _uiState.update { state ->
-                            state.copy(
-                                continueWatchingItems = enrichedItems,
-                                traktUpNextItems = enrichedTraktItems,
-                                initialContinueWatchingResolved = true
-                            )
+                            if (
+                                state.continueWatchingItems == enrichedItems &&
+                                state.traktUpNextItems == enrichedTraktItems &&
+                                state.initialContinueWatchingResolved
+                            ) {
+                                state
+                            } else {
+                                state.copy(
+                                    continueWatchingItems = enrichedItems,
+                                    traktUpNextItems = enrichedTraktItems,
+                                    initialContinueWatchingResolved = true
+                                )
+                            }
                         }
                     } catch (e: Exception) {
                         Log.w(HomeViewModel.TAG, "Continue watching metadata enrichment failed: ${e.message}")
