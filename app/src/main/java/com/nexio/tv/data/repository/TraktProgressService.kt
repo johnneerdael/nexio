@@ -1164,7 +1164,8 @@ class TraktProgressService @Inject constructor(
         val allNextUpSnapshot = deriveNextUpFromHistory(
             progressSnapshot = progressSnapshot,
             watchedShows = watchedShows,
-            hiddenProgress = hiddenProgress
+            hiddenProgress = hiddenProgress,
+            forceValidation = activityChanged
         )
         hydrateMetadata(
             progressList = progressSnapshot +
@@ -1659,7 +1660,8 @@ class TraktProgressService @Inject constructor(
     private suspend fun deriveNextUpFromHistory(
         progressSnapshot: List<WatchProgress>,
         watchedShows: Map<String, WatchedShowIndexEntry>,
-        hiddenProgress: HiddenProgressSnapshot
+        hiddenProgress: HiddenProgressSnapshot,
+        forceValidation: Boolean = false
     ): List<NextUpEntry> {
         val completedByShow = progressSnapshot
             .filter { it.season != null && it.episode != null }
@@ -1715,7 +1717,8 @@ class TraktProgressService @Inject constructor(
 
         return validateNextUpCandidates(
             candidates = entries.sortedByDescending { it.entry.activityAtMs },
-            hiddenProgress = hiddenProgress
+            hiddenProgress = hiddenProgress,
+            forceValidation = forceValidation
         )
     }
 
@@ -1766,7 +1769,8 @@ class TraktProgressService @Inject constructor(
 
     private suspend fun validateNextUpCandidates(
         candidates: List<DerivedNextUpCandidate>,
-        hiddenProgress: HiddenProgressSnapshot
+        hiddenProgress: HiddenProgressSnapshot,
+        forceValidation: Boolean = false
     ): List<NextUpEntry> {
         if (candidates.isEmpty()) return emptyList()
 
@@ -1785,7 +1789,7 @@ class TraktProgressService @Inject constructor(
                 visibleRank = index + 1,
                 weakDerivation = candidate.weakDerivation,
                 mutationAffected = key in bypassSnapshot,
-                staleValidation = cacheSnapshot[key]?.isFresh(now) == false
+                staleValidation = forceValidation || cacheSnapshot[key]?.isFresh(now) == false
             )
         }
         val selectedKeys = TraktNextUpValidationPolicy.selectCandidates(

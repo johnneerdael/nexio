@@ -281,6 +281,36 @@ class ContinueWatchingSnapshotServiceMutationTest {
             assertEquals(listOf(providerNextUp), snapshot.nextUpItems)
         }
 
+    @Test
+    fun `raw snapshot drops next up entry when target episode is already completed`() =
+        runTest {
+            val service = buildService()
+            val completedTargetEpisode = resume(
+                contentId = "tt27444205",
+                videoId = "tt27444205:2:9",
+                season = 2,
+                episode = 9,
+                lastWatched = 200_000L,
+                progressPercent = 100f,
+                source = WatchProgress.SOURCE_TRAKT_HISTORY
+            )
+            val staleNextUp = nextUp(
+                contentId = "tt27444205",
+                firstAiredMs = 1L,
+                episode = 9
+            ).copy(season = 2, videoId = "tt27444205:2:9", activityAtMs = 200_000L)
+
+            val snapshot = invokeBuildRawSnapshot(
+                service = service,
+                allProgress = listOf(completedTargetEpisode),
+                nextUpEntries = listOf(staleNextUp),
+                traktUpNextEntries = listOf(staleNextUp)
+            )
+
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.nextUpItems)
+            assertEquals(emptyList<TrackingNextUpEntry>(), snapshot.traktUpNextItems)
+        }
+
     // ── Inline harness ─────────────────────────────────────────────────────────
     // Tests 1-4 use an inline harness that mirrors the helper implementations
     // exactly, without any dependency on Dispatchers.IO or the service's init pipeline.
