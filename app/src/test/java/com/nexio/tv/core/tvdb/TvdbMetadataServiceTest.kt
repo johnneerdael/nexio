@@ -46,11 +46,13 @@ class TvdbMetadataServiceTest {
         val episodes = TvdbApi::class.java.methods.first { it.name == "getSeriesEpisodes" }
         val seriesTranslation = TvdbApi::class.java.methods.first { it.name == "getSeriesTranslation" }
         val translatedEpisodes = TvdbApi::class.java.methods.first { it.name == "getSeriesEpisodesTranslated" }
+        val episodeTranslation = TvdbApi::class.java.methods.first { it.name == "getEpisodeTranslation" }
 
         assertEquals("series/{id}/extended", extended.getAnnotation(GET::class.java)?.value)
         assertEquals("series/{id}/episodes/{seasonType}", episodes.getAnnotation(GET::class.java)?.value)
         assertEquals("series/{id}/translations/{language}", seriesTranslation.getAnnotation(GET::class.java)?.value)
         assertEquals("series/{id}/episodes/{seasonType}/{language}", translatedEpisodes.getAnnotation(GET::class.java)?.value)
+        assertEquals("episodes/{id}/translations/{language}", episodeTranslation.getAnnotation(GET::class.java)?.value)
     }
 
     @Test
@@ -340,6 +342,64 @@ class TvdbMetadataServiceTest {
         assertEquals(62, episode?.runtimeMinutes)
         coVerify(exactly = 1) {
             tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 121361, "default", "nld", 0, 1, null, null)
+        }
+    }
+
+    @Test
+    fun `fetch episode enrichment falls back to per episode translation overview`() = runTest {
+        val tvdbApi = mockk<TvdbApi>()
+        val service = tvdbService(tvdbApi)
+        val identity = TvdbSeriesIdentity(tvdbId = 121361)
+
+        coEvery {
+            tvdbApi.getSeriesEpisodes("Bearer tvdb-token", 121361, "default", 0, 1, null, null)
+        } returns Response.success(
+            TvdbSeriesEpisodesResponse(
+                data = TvdbSeriesEpisodesData(
+                    episodes = listOf(
+                        episodeRecord().copy(
+                            id = 3254641,
+                            name = "Winter Is Coming",
+                            overview = "English episode overview"
+                        )
+                    )
+                )
+            )
+        )
+        coEvery {
+            tvdbApi.getSeriesEpisodesTranslated("Bearer tvdb-token", 121361, "default", "nld", 0, 1, null, null)
+        } returns Response.success(
+            TvdbSeriesEpisodesResponse(
+                data = TvdbSeriesEpisodesData(
+                    episodes = listOf(
+                        episodeRecord().copy(
+                            id = 3254641,
+                            name = "Dutch title from season translation endpoint",
+                            overview = null
+                        )
+                    )
+                )
+            )
+        )
+        coEvery {
+            tvdbApi.getEpisodeTranslation("Bearer tvdb-token", 3254641, "nld")
+        } returns Response.success(
+            TvdbTranslationResponse(
+                data = TvdbTranslationRecord(
+                    name = "Dutch title from episode translation endpoint",
+                    overview = "Nederlandse afleveringstekst"
+                )
+            )
+        )
+
+        val episodes = service.fetchEpisodeEnrichment(identity, seasonNumbers = listOf(1), language = "nl")
+
+        val episode = episodes[1 to 1]
+        assertNotNull(episode)
+        assertEquals("Winter Is Coming", episode?.title)
+        assertEquals("Nederlandse afleveringstekst", episode?.overview)
+        coVerify(exactly = 1) {
+            tvdbApi.getEpisodeTranslation("Bearer tvdb-token", 3254641, "nld")
         }
     }
 

@@ -75,6 +75,13 @@ interface TvdbApi {
         @Query("airDate") airDate: String? = null
     ): Response<TvdbSeriesEpisodesResponse>
 
+    @GET("episodes/{id}/translations/{language}")
+    suspend fun getEpisodeTranslation(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: Int,
+        @Path("language") language: String
+    ): Response<TvdbTranslationResponse>
+
     @GET("updates")
     suspend fun getUpdates(
         @Header("Authorization") authorization: String,
