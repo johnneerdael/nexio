@@ -117,6 +117,55 @@ internal data class CarouselRowLookups(
 )
 
 @Immutable
+internal data class ModernHomePresentationInput(
+    val catalogRows: List<CatalogRow>,
+    val continueWatchingItems: List<ContinueWatchingItem>,
+    val useLandscapePosters: Boolean,
+    val showCatalogTypeSuffix: Boolean,
+    val continueWatchingTitle: String,
+    val airsDateTemplate: String,
+    val upcomingLabel: String
+)
+
+@Immutable
+internal data class ModernHomePresentationState(
+    val rows: List<HeroCarouselRow> = emptyList(),
+    val lookups: CarouselRowLookups = buildCarouselRowLookups(emptyList())
+)
+
+internal fun buildCarouselRowLookups(carouselRows: List<HeroCarouselRow>): CarouselRowLookups {
+    val rowIndexByKey = LinkedHashMap<String, Int>(carouselRows.size)
+    val rowByKey = LinkedHashMap<String, HeroCarouselRow>(carouselRows.size)
+    val activeRowKeys = LinkedHashSet<String>(carouselRows.size)
+    val activeItemKeysByRow = LinkedHashMap<String, Set<String>>(carouselRows.size)
+    val activeCatalogItemIds = LinkedHashSet<String>()
+
+    carouselRows.forEachIndexed { index, row ->
+        rowIndexByKey[row.key] = index
+        rowByKey[row.key] = row
+        activeRowKeys += row.key
+
+        val itemKeys = LinkedHashSet<String>(row.items.size)
+        row.items.forEach { item ->
+            itemKeys += item.key
+            val payload = item.payload
+            if (payload is ModernPayload.Catalog) {
+                activeCatalogItemIds += payload.itemId
+            }
+        }
+        activeItemKeysByRow[row.key] = itemKeys
+    }
+
+    return CarouselRowLookups(
+        rowIndexByKey = rowIndexByKey,
+        rowByKey = rowByKey,
+        activeRowKeys = activeRowKeys,
+        activeItemKeysByRow = activeItemKeysByRow,
+        activeCatalogItemIds = activeCatalogItemIds
+    )
+}
+
+@Immutable
 internal data class ModernHomeContentState(
     val catalogRows: List<CatalogRow> = emptyList(),
     val continueWatchingItems: List<ContinueWatchingItem> = emptyList(),
