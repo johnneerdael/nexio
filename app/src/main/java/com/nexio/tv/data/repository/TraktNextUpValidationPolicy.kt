@@ -24,6 +24,7 @@ internal sealed interface TraktNextUpValidationResult {
     ) : TraktNextUpValidationResult
 
     data object NoCurrentAiredNextEpisode : TraktNextUpValidationResult
+    data object UnresolvedEpisode : TraktNextUpValidationResult
     data object Failed : TraktNextUpValidationResult
 }
 
@@ -65,6 +66,7 @@ internal object TraktNextUpValidationPolicy {
         return when (validationResult) {
             is TraktNextUpValidationResult.CurrentAiredNextEpisode -> validationResult.entry
             TraktNextUpValidationResult.NoCurrentAiredNextEpisode -> null
+            TraktNextUpValidationResult.UnresolvedEpisode -> null
             TraktNextUpValidationResult.Failed -> {
                 if (weakDerivation) return null
                 localCandidate.takeIf {
