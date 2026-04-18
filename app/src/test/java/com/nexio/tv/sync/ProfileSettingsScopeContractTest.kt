@@ -704,6 +704,22 @@ class ProfileSettingsScopeContractTest {
     }
 
     @Test
+    fun `modern home presentation is built by view model and consumed by content`() {
+        val stateSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeUiState.kt").readText()
+        val viewModelSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModel.kt").readText()
+        val pipelineSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelPresentationPipeline.kt").readText()
+        val contentSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/ModernHomeContent.kt").readText()
+
+        assertTrue(stateSource.contains("val modernHomePresentation: ModernHomePresentationState = ModernHomePresentationState()"))
+        assertTrue(viewModelSource.contains("internal val modernCarouselRowBuildCache = ModernCarouselRowBuildCache()"))
+        assertTrue(pipelineSource.contains("buildModernHomePresentation("))
+        assertTrue(pipelineSource.contains("modernCarouselRowBuildCache"))
+        assertTrue(contentSource.contains("val presentation = contentState.modernHomePresentation"))
+        assertTrue(!contentSource.contains("val rowBuildCache = remember { ModernCarouselRowBuildCache() }"))
+        assertTrue(!contentSource.contains("buildCatalogItem("))
+    }
+
+    @Test
     fun `tracking scrobble service requires provider specific auth`() {
         val source = File("app/src/main/java/com/nexio/tv/data/repository/TrackingScrobbleService.kt").readText()
 
