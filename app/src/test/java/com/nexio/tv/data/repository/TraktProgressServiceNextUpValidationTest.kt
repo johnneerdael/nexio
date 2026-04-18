@@ -141,6 +141,29 @@ class TraktProgressServiceNextUpValidationTest {
     }
 
     @Test
+    fun `validation unresolved episode suppresses candidate`() {
+        val localCandidate = TraktProgressService.NextUpEntry(
+            contentId = "show-with-missing-episode",
+            name = "Show With Missing Episode",
+            season = 2,
+            episode = 9,
+            episodeTitle = null,
+            videoId = "show-with-missing-episode:2:9",
+            firstAired = null,
+            firstAiredMs = 0L,
+            activityAtMs = 10_000L
+        )
+
+        val result = TraktNextUpValidationPolicy.resolvePublishableCandidate(
+            localCandidate = localCandidate,
+            validationResult = TraktNextUpValidationResult.UnresolvedEpisode,
+            nowMs = 20_000L
+        )
+
+        assertEquals(null, result)
+    }
+
+    @Test
     fun `validation failure keeps aired local candidate`() {
         val localAired = TraktProgressService.NextUpEntry(
             contentId = "aired-show",

@@ -1888,7 +1888,8 @@ class TraktProgressService @Inject constructor(
                 return TraktNextUpValidationResult.NoCurrentAiredNextEpisode
             }
 
-            val episodeInfo = resolveEpisodeInfo(candidate.contentId, season, episode)
+            val episodeInfo = findEpisodeInfo(candidate.contentId, season, episode)
+                ?: return TraktNextUpValidationResult.UnresolvedEpisode
             TraktNextUpValidationResult.CurrentAiredNextEpisode(
                 candidate.copy(
                     season = season,
@@ -2235,6 +2236,15 @@ class TraktProgressService @Inject constructor(
         season: Int,
         episode: Int
     ): ResolvedEpisodeInfo {
+        return findEpisodeInfo(contentId, season, episode)
+            ?: ResolvedEpisodeInfo(videoId = "$contentId:$season:$episode")
+    }
+
+    private suspend fun findEpisodeInfo(
+        contentId: String,
+        season: Int,
+        episode: Int
+    ): ResolvedEpisodeInfo? {
         val key = "$contentId:$season:$episode"
         episodeInfoCache[key]?.let { return it }
 
@@ -2267,7 +2277,7 @@ class TraktProgressService @Inject constructor(
             }
         }
 
-        return ResolvedEpisodeInfo(videoId = "$contentId:$season:$episode")
+        return null
     }
 
     private fun progressKey(progress: WatchProgress): String {
