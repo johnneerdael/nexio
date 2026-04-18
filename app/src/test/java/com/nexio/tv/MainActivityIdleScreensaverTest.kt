@@ -7,6 +7,7 @@ import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverCandidate
 import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverPlayback
 import com.nexio.tv.ui.screensaver.IdleTrailerScreensaverSessionStart
 import com.nexio.tv.ui.screensaver.PlaybackIdleGateSnapshot
+import androidx.lifecycle.Lifecycle
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
@@ -79,6 +80,62 @@ class MainActivityIdleScreensaverTest {
                 currentRoute = Screen.Home.route,
                 playbackIdleSnapshot = PlaybackIdleGateSnapshot(),
                 inAppTrailerPlaybackActive = false
+            )
+        )
+    }
+
+    @Test
+    fun `idle screensaver start is blocked while activity is not resumed`() {
+        assertFalse(
+            shouldScheduleIdleScreensaverStart(
+                lifecycleState = Lifecycle.State.CREATED,
+                idleScreensaverEligible = true,
+                idleScreensaverVisible = false,
+                slideCount = 0,
+                trailerCandidateCount = 1
+            )
+        )
+
+        assertFalse(
+            shouldScheduleIdleScreensaverStart(
+                lifecycleState = Lifecycle.State.STARTED,
+                idleScreensaverEligible = true,
+                idleScreensaverVisible = false,
+                slideCount = 0,
+                trailerCandidateCount = 1
+            )
+        )
+    }
+
+    @Test
+    fun `idle screensaver start is allowed only when resumed eligible hidden and has content`() {
+        assertTrue(
+            shouldScheduleIdleScreensaverStart(
+                lifecycleState = Lifecycle.State.RESUMED,
+                idleScreensaverEligible = true,
+                idleScreensaverVisible = false,
+                slideCount = 0,
+                trailerCandidateCount = 1
+            )
+        )
+
+        assertFalse(
+            shouldScheduleIdleScreensaverStart(
+                lifecycleState = Lifecycle.State.RESUMED,
+                idleScreensaverEligible = true,
+                idleScreensaverVisible = true,
+                slideCount = 0,
+                trailerCandidateCount = 1
+            )
+        )
+
+        assertFalse(
+            shouldScheduleIdleScreensaverStart(
+                lifecycleState = Lifecycle.State.RESUMED,
+                idleScreensaverEligible = true,
+                idleScreensaverVisible = false,
+                slideCount = 0,
+                trailerCandidateCount = 0
             )
         )
     }

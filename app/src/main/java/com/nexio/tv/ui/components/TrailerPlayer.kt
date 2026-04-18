@@ -33,6 +33,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import com.nexio.tv.core.player.FrameRateUtils
 import com.nexio.tv.core.ui.findLifecycleOwner
 import com.nexio.tv.data.trailer.YoutubeChunkedDataSourceFactory
 import com.nexio.tv.data.trailer.shouldUseYouTubeChunkedTransfer
@@ -67,6 +68,14 @@ internal fun bindTrailerPlayerView(
     }
 }
 
+internal fun shouldPrepareTrailerPlayback(
+    lifecycleState: Lifecycle.State,
+    isPlaying: Boolean,
+    trailerUrl: String?
+): Boolean {
+    return lifecycleState == Lifecycle.State.RESUMED && isPlaying && !trailerUrl.isNullOrBlank()
+}
+
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 fun TrailerPlayer(
@@ -92,6 +101,7 @@ fun TrailerPlayer(
     val lifecycleOwner = remember(context, navLifecycleOwner) {
         context.findLifecycleOwner() ?: navLifecycleOwner
     }
+    var lifecycleState by remember(lifecycleOwner) { mutableStateOf(lifecycleOwner.lifecycle.currentState) }
     val currentIsPlaying by rememberUpdatedState(isPlaying)
     val currentTrailerUrl by rememberUpdatedState(trailerUrl)
     val currentTrailerAudioUrl by rememberUpdatedState(trailerAudioUrl)
@@ -163,12 +173,13 @@ fun TrailerPlayer(
         }
     }
 
-    LaunchedEffect(isPlaying, trailerUrl, trailerAudioUrl, muted) {
+    LaunchedEffect(isPlaying, trailerUrl, trailerAudioUrl, muted, lifecycleState) {
         val player = trailerPlayer ?: return@LaunchedEffect
         player.volume = if (muted) 0f else 1f
-        if (isPlaying && trailerUrl != null) {
+        if (shouldPrepareTrailerPlayback(lifecycleState, isPlaying, trailerUrl)) {
+            FrameRateUtils.blockDisplayModeChangesForNonPlayerPlayback()
             hasRenderedFirstFrame = false
-            prepareTrailerMediaSource(player, trailerUrl, trailerAudioUrl)
+            prepareTrailerMediaSource(player, trailerUrl!!, trailerAudioUrl)
             player.prepare()
             player.playWhenReady = true
         } else {
@@ -232,9 +243,17 @@ fun TrailerPlayer(
             }
         }
         val observer = LifecycleEventObserver { _, event ->
+            lifecycleState = lifecycleOwner.lifecycle.currentState
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
-                    if (currentIsPlaying && !currentTrailerUrl.isNullOrBlank()) {
+                    if (
+                        shouldPrepareTrailerPlayback(
+                            lifecycleState = lifecycleOwner.lifecycle.currentState,
+                            isPlaying = currentIsPlaying,
+                            trailerUrl = currentTrailerUrl
+                        )
+                    ) {
+                        FrameRateUtils.blockDisplayModeChangesForNonPlayerPlayback()
                         if (player.currentMediaItem == null) {
                             prepareTrailerMediaSource(player, currentTrailerUrl!!, currentTrailerAudioUrl)
                             player.prepare()
@@ -261,6 +280,7 @@ fun TrailerPlayer(
         }
         player.addListener(listener)
         lifecycleOwner.lifecycle.addObserver(observer)
+        lifecycleState = lifecycleOwner.lifecycle.currentState
         onDispose {
             runCatching { lifecycleOwner.lifecycle.removeObserver(observer) }
             runCatching { player.removeListener(listener) }

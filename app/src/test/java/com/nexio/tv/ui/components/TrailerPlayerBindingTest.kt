@@ -1,9 +1,12 @@
 package com.nexio.tv.ui.components
 
+import androidx.lifecycle.Lifecycle
 import androidx.media3.common.Player
 import androidx.media3.ui.PlayerView
 import io.mockk.every
 import io.mockk.mockk
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import io.mockk.verify
 import org.junit.Test
 
@@ -30,5 +33,30 @@ class TrailerPlayerBindingTest {
         bindTrailerPlayerView(view, player)
 
         verify(exactly = 0) { view.player = any() }
+    }
+
+    @Test
+    fun `trailer playback prepare is blocked until lifecycle is resumed`() {
+        assertFalse(
+            shouldPrepareTrailerPlayback(
+                lifecycleState = Lifecycle.State.CREATED,
+                isPlaying = true,
+                trailerUrl = "https://video.example.com/trailer.m3u8"
+            )
+        )
+        assertFalse(
+            shouldPrepareTrailerPlayback(
+                lifecycleState = Lifecycle.State.STARTED,
+                isPlaying = true,
+                trailerUrl = "https://video.example.com/trailer.m3u8"
+            )
+        )
+        assertTrue(
+            shouldPrepareTrailerPlayback(
+                lifecycleState = Lifecycle.State.RESUMED,
+                isPlaying = true,
+                trailerUrl = "https://video.example.com/trailer.m3u8"
+            )
+        )
     }
 }

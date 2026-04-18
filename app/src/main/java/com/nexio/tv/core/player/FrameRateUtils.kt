@@ -83,6 +83,11 @@ object FrameRateUtils {
         setMainPlayerDisplayModeSessionActive(false)
     }
 
+    fun blockDisplayModeChangesForNonPlayerPlayback() {
+        setBlockDisplayModeChangesOutsideMainPlayer(true)
+        setMainPlayerDisplayModeSessionActive(false)
+    }
+
     private fun canChangeDisplayModeForPlayback(): Boolean {
         return !blockDisplayModeChangesOutsideMainPlayer || mainPlayerDisplayModeSessionActive
     }
