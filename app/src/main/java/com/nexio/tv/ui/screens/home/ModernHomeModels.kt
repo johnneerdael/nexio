@@ -32,7 +32,7 @@ internal val MODERN_LANDSCAPE_LOGO_GRADIENT = Brush.verticalGradient(
 )
 
 @Immutable
-internal data class HeroPreview(
+data class HeroPreview(
     val title: String,
     val logo: String?,
     val description: String?,
@@ -49,7 +49,7 @@ internal data class HeroPreview(
 )
 
 @Immutable
-internal sealed class ModernPayload {
+sealed class ModernPayload {
     data class ContinueWatching(val item: ContinueWatchingItem) : ModernPayload()
     data class Catalog(
         val focusKey: String,
@@ -83,7 +83,7 @@ internal data class FocusedTrailerSelection(
 )
 
 @Immutable
-internal data class ModernCarouselItem(
+data class ModernCarouselItem(
     val key: String,
     val title: String,
     val subtitle: String?,
@@ -94,7 +94,7 @@ internal data class ModernCarouselItem(
 )
 
 @Immutable
-internal data class HeroCarouselRow(
+data class HeroCarouselRow(
     val key: String,
     val title: String,
     val globalRowIndex: Int,
@@ -108,7 +108,7 @@ internal data class HeroCarouselRow(
 )
 
 @Immutable
-internal data class CarouselRowLookups(
+data class CarouselRowLookups(
     val rowIndexByKey: Map<String, Int>,
     val rowByKey: Map<String, HeroCarouselRow>,
     val activeRowKeys: Set<String>,
@@ -128,7 +128,7 @@ internal data class ModernHomePresentationInput(
 )
 
 @Immutable
-internal data class ModernHomePresentationState(
+data class ModernHomePresentationState(
     val rows: List<HeroCarouselRow> = emptyList(),
     val lookups: CarouselRowLookups = buildCarouselRowLookups(emptyList())
 )
@@ -169,6 +169,7 @@ internal fun buildCarouselRowLookups(carouselRows: List<HeroCarouselRow>): Carou
 internal data class ModernHomeContentState(
     val catalogRows: List<CatalogRow> = emptyList(),
     val continueWatchingItems: List<ContinueWatchingItem> = emptyList(),
+    val modernHomePresentation: ModernHomePresentationState = ModernHomePresentationState(),
     val deterministicAutoplayEnabled: Boolean = false,
     val modernLandscapePostersEnabled: Boolean = false,
     val catalogTypeSuffixEnabled: Boolean = true,

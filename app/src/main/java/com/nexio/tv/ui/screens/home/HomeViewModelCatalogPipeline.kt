@@ -170,6 +170,10 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
     pendingRestoredCatalogSnapshot = null
     pendingHomeSnapshotPersist = null
     homeSnapshotPersistJob?.cancel()
+    modernCarouselRowBuildCache.continueWatchingItems = emptyList()
+    modernCarouselRowBuildCache.continueWatchingRow = null
+    modernCarouselRowBuildCache.catalogRows.clear()
+    modernCarouselRowBuildCache.catalogItemCache.clear()
     restoredCatalogSnapshotActive = false
     hasPersistedCatalogSnapshot = false
     hasRenderedFirstCatalog = false
@@ -185,6 +189,8 @@ internal fun HomeViewModel.resetProfileScopedHomeState(reason: String) {
             heroCatalogKeys = emptyList(),
             continueWatchingItems = emptyList(),
             traktUpNextItems = emptyList(),
+            modernHomePresentation = ModernHomePresentationState(),
+            initialContinueWatchingResolved = false,
             traktRecommendationRefs = emptyMap(),
             gridItems = emptyList(),
             isLoading = true,

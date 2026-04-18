@@ -725,6 +725,7 @@ private fun ModernHomeRoute(
     val modernContentState = remember(
         uiState.catalogRows,
         uiState.continueWatchingItems,
+        uiState.modernHomePresentation,
         uiState.deterministicAutoplayEnabled,
         uiState.modernLandscapePostersEnabled,
         uiState.catalogTypeSuffixEnabled,
@@ -749,6 +750,7 @@ private fun ModernHomeRoute(
         ModernHomeContentState(
             catalogRows = uiState.catalogRows,
             continueWatchingItems = uiState.continueWatchingItems,
+            modernHomePresentation = uiState.modernHomePresentation,
             deterministicAutoplayEnabled = uiState.deterministicAutoplayEnabled,
             modernLandscapePostersEnabled = uiState.modernLandscapePostersEnabled,
             catalogTypeSuffixEnabled = uiState.catalogTypeSuffixEnabled,
