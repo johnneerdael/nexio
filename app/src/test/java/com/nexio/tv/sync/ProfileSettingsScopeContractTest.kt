@@ -720,6 +720,20 @@ class ProfileSettingsScopeContractTest {
     }
 
     @Test
+    fun `initial continue watching resolution is owned by active home profile`() {
+        val homeStateSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeUiState.kt").readText()
+        val homeContinueWatchingSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelContinueWatching.kt").readText()
+        val homeScreenSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeScreen.kt").readText()
+        val homeViewModelSource = File("app/src/main/java/com/nexio/tv/ui/screens/home/HomeViewModelCatalogPipeline.kt").readText()
+
+        assertTrue(homeStateSource.contains("val initialContinueWatchingResolved: Boolean = false"))
+        assertTrue(homeContinueWatchingSource.contains("ownedSnapshot.profileId != activeHomeProfileSession.profileId"))
+        assertTrue(homeContinueWatchingSource.contains("initialContinueWatchingResolved = true"))
+        assertTrue(homeViewModelSource.contains("initialContinueWatchingResolved = false"))
+        assertTrue(homeScreenSource.contains("uiState.initialContinueWatchingResolved"))
+    }
+
+    @Test
     fun `tracking scrobble service requires provider specific auth`() {
         val source = File("app/src/main/java/com/nexio/tv/data/repository/TrackingScrobbleService.kt").readText()
 

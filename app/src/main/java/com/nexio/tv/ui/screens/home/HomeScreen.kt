@@ -295,7 +295,12 @@ fun HomeScreen(
             }
 
             else -> {
-                val shouldShowLoadingGate = !hasRenderableContent &&
+                val shouldWaitForContinueWatching =
+                    uiState.homeLayout == HomeLayout.MODERN &&
+                        !uiState.initialContinueWatchingResolved &&
+                        uiState.error == null &&
+                        uiState.installedAddonsCount > 0
+                val shouldShowLoadingGate = (!hasRenderableContent || shouldWaitForContinueWatching) &&
                     uiState.error == null &&
                     !startupContentGateTimedOut
                 LaunchedEffect(shouldShowLoadingGate) {
