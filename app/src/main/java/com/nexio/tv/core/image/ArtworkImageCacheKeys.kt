@@ -4,12 +4,13 @@ object ArtworkImageCacheKeys {
     private const val NATIVE_PROVIDER = "native"
     private const val RPDB_PROVIDER = "rpdb"
     private const val TOP_POSTERS_PROVIDER = "top_posters"
+    private const val POSTER_CACHE_TYPE = "poster_v2"
 
     fun poster(itemId: String, providerTag: String?): String =
-        build(itemId, resolvePosterProvider(providerTag, posterUrl = null), "poster")
+        build(itemId, resolvePosterProvider(providerTag, posterUrl = null), POSTER_CACHE_TYPE)
 
     fun poster(itemId: String, providerTag: String?, posterUrl: String?): String =
-        build(itemId, resolvePosterProvider(providerTag, posterUrl), "poster")
+        build(itemId, resolvePosterProvider(providerTag, posterUrl), POSTER_CACHE_TYPE)
 
     fun backdrop(itemId: String): String =
         build(itemId, NATIVE_PROVIDER, "background")

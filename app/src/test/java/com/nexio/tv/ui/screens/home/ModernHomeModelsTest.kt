@@ -186,6 +186,32 @@ class ModernHomeModelsTest {
     }
 
     @Test
+    fun `modern carousel card uses poster image until focused backdrop expands`() {
+        assertEquals(
+            "rpdb-poster",
+            resolveModernCarouselCardImageUrl(
+                focusedPosterBackdropExpandEnabled = true,
+                isBackdropExpanded = false,
+                frozenBackdropUrl = "stock-backdrop",
+                itemImageUrl = "rpdb-poster",
+                heroPoster = "rpdb-poster",
+                heroBackdrop = "stock-backdrop"
+            )
+        )
+        assertEquals(
+            "stock-backdrop",
+            resolveModernCarouselCardImageUrl(
+                focusedPosterBackdropExpandEnabled = true,
+                isBackdropExpanded = true,
+                frozenBackdropUrl = "stock-backdrop",
+                itemImageUrl = "rpdb-poster",
+                heroPoster = "rpdb-poster",
+                heroBackdrop = "stock-backdrop"
+            )
+        )
+    }
+
+    @Test
     fun `modern visible catalog rows include loading rows and exclude empty settled rows`() {
         val hydrated = CatalogRow(
             addonId = "addon",
