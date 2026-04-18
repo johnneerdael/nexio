@@ -61,6 +61,44 @@ class AndroidTvProgramPresentationTest {
         assertEquals("82", presentation.reviewRating)
     }
 
+    @Test
+    fun `catalog feeds use local cached poster uri when available`() {
+        val localPosterUri = Uri.parse("content://com.nexio.tv.channelart/poster/local.jpg")
+
+        val presentation = AndroidTvProgramPresentation.from(
+            item = preview(
+                posterShape = PosterShape.LANDSCAPE,
+                poster = "https://api.ratingposterdb.com/key/imdb/poster-default/tt123.jpg",
+                background = "https://images.example/backdrop.jpg"
+            ),
+            feedKey = "trakt_movie_popular",
+            localPosterArtUri = localPosterUri
+        )
+
+        assertEquals(localPosterUri, presentation.posterArtUri)
+        assertEquals(TvContractCompat.PreviewPrograms.ASPECT_RATIO_2_3, presentation.posterArtAspectRatio)
+        assertNull(presentation.thumbnailUri)
+    }
+
+    @Test
+    fun `continue watching keeps landscape artwork even when local poster is available`() {
+        val localPosterUri = Uri.parse("content://com.nexio.tv.channelart/poster/local.jpg")
+
+        val presentation = AndroidTvProgramPresentation.from(
+            item = preview(
+                posterShape = PosterShape.LANDSCAPE,
+                poster = "https://api.ratingposterdb.com/key/imdb/poster-default/tt123.jpg",
+                background = "https://images.example/backdrop.jpg"
+            ),
+            feedKey = AndroidTvFeedCatalogService.CONTINUE_WATCHING_FEED_KEY,
+            localPosterArtUri = localPosterUri
+        )
+
+        assertEquals(Uri.parse("https://images.example/backdrop.jpg"), presentation.posterArtUri)
+        assertEquals(Uri.parse("https://images.example/backdrop.jpg"), presentation.thumbnailUri)
+        assertEquals(TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9, presentation.posterArtAspectRatio)
+    }
+
     private fun preview(
         posterShape: PosterShape = PosterShape.POSTER,
         poster: String? = "https://images.example/poster.jpg",

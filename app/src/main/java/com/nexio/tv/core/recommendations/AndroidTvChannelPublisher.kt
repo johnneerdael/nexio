@@ -48,7 +48,8 @@ class AndroidTvChannelPublisher @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dataStore: AndroidTvRecommendationsDataStore,
     private val feedCatalogService: AndroidTvFeedCatalogService,
-    private val continueWatchingSnapshotService: ContinueWatchingSnapshotService
+    private val continueWatchingSnapshotService: ContinueWatchingSnapshotService,
+    private val channelArtworkCache: AndroidTvChannelArtworkCache
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
@@ -239,13 +240,18 @@ class AndroidTvChannelPublisher @Inject constructor(
         }
     }
 
-    private fun publishProgram(
+    private suspend fun publishProgram(
         channelId: Long,
         item: MetaPreview,
         option: AndroidTvFeedOption,
         addonBaseUrl: String?,
         position: Int
     ) {
+        val localPosterArtUri = if (option.key == AndroidTvFeedCatalogService.CONTINUE_WATCHING_FEED_KEY) {
+            null
+        } else {
+            channelArtworkCache.cachedPosterUri(item)
+        }
         runCatching {
             previewChannelHelper.publishPreviewProgram(
                 buildProgram(
@@ -253,7 +259,8 @@ class AndroidTvChannelPublisher @Inject constructor(
                     item = item,
                     option = option,
                     addonBaseUrl = addonBaseUrl,
-                    position = position
+                    position = position,
+                    localPosterArtUri = localPosterArtUri
                 )
             )
         }.onFailure { error ->
@@ -266,7 +273,8 @@ class AndroidTvChannelPublisher @Inject constructor(
         item: MetaPreview,
         option: AndroidTvFeedOption,
         addonBaseUrl: String?,
-        position: Int
+        position: Int,
+        localPosterArtUri: Uri?
     ): PreviewProgram {
         val contentType = item.apiType
         val programType = when (contentType.lowercase()) {
@@ -275,7 +283,8 @@ class AndroidTvChannelPublisher @Inject constructor(
         }
         val presentation = AndroidTvProgramPresentation.from(
             item = item,
-            feedKey = option.key
+            feedKey = option.key,
+            localPosterArtUri = localPosterArtUri
         )
 
         return PreviewProgram.Builder()
@@ -365,7 +374,8 @@ internal data class AndroidTvProgramPresentation(
     companion object {
         fun from(
             item: MetaPreview,
-            feedKey: String
+            feedKey: String,
+            localPosterArtUri: Uri? = null
         ): AndroidTvProgramPresentation {
             val poster = item.poster.asNonBlankUri()
             val background = item.background.asNonBlankUri()
@@ -376,7 +386,7 @@ internal data class AndroidTvProgramPresentation(
             val posterArtAspectRatio: Int
 
             if (!useContinueWatchingArtwork && poster != null) {
-                posterArtUri = poster
+                posterArtUri = localPosterArtUri ?: poster
                 thumbnailUri = null
                 posterArtAspectRatio = TvContractCompat.PreviewPrograms.ASPECT_RATIO_2_3
             } else {
