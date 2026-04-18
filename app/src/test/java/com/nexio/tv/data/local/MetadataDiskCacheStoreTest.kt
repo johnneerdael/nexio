@@ -104,6 +104,29 @@ class MetadataDiskCacheStoreTest {
     }
 
     @Test
+    fun `readMeta ignores active poster provider entries without matching poster provider tag`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+
+        store.writeMeta("movie:tt1", "en", "RPDB:12345", meta("tt1"))
+        store.flushPendingWritesForTest()
+
+        assertNull(store.readMeta("movie:tt1", "en", "RPDB:12345"))
+    }
+
+    @Test
+    fun `readMeta restores active poster provider entries with matching poster provider tag`() {
+        val prefs = InMemorySharedPreferences()
+        val store = MetadataDiskCacheStore(context = mockContext(prefs))
+        val meta = meta("tt1").copy(posterProviderTag = "rpdb")
+
+        store.writeMeta("movie:tt1", "en", "RPDB:12345", meta)
+        store.flushPendingWritesForTest()
+
+        assertEquals(meta, store.readMeta("movie:tt1", "en", "RPDB:12345"))
+    }
+
+    @Test
     fun `readTmdbEnrichment preserves legacy companies cached before tmdbId and kind fields existed`() {
         val prefs = InMemorySharedPreferences()
         val context = mockContext(prefs)

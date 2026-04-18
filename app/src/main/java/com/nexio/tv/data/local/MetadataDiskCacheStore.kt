@@ -139,7 +139,7 @@ class MetadataDiskCacheStore @Inject constructor(
             } ?: return null
             val schemaVersion = root.get("metaSchemaVersion")?.asInt ?: 0
             if (schemaVersion != META_CACHE_SCHEMA_VERSION) return null
-            decodeMetaSafely(root)
+            decodeMetaSafely(root)?.takeIf { it.hasValidPosterProviderTag(providerToken) }
         }.onFailure { error ->
             Log.w(TAG, "Failed to read disk metadata entry", error)
         }.getOrNull()
@@ -585,6 +585,18 @@ class MetadataDiskCacheStore @Inject constructor(
 
     private fun buildMetaKey(itemKey: String, languageTag: String, providerToken: String): String {
         return "$META_PREFIX$itemKey::$languageTag::$providerToken"
+    }
+
+    private fun requiredPosterProviderTag(providerToken: String): String? {
+        val provider = providerToken.substringBefore(':').trim()
+        return provider
+            .takeIf { it.isNotBlank() && !it.equals("native", ignoreCase = true) }
+            ?.lowercase()
+    }
+
+    private fun Meta.hasValidPosterProviderTag(providerToken: String): Boolean {
+        val requiredTag = requiredPosterProviderTag(providerToken) ?: return true
+        return posterProviderTag == requiredTag
     }
 
     private fun buildTmdbKey(tmdbKey: String, languageTag: String, providerToken: String): String {

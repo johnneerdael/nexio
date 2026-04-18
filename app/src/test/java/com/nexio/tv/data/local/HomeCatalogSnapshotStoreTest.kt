@@ -141,6 +141,49 @@ class HomeCatalogSnapshotStoreTest {
         assertEquals(profileTwoSnapshot, store.read(testPosterToken, profileId = 2))
     }
 
+    @Test
+    fun `read rejects active poster provider snapshots with untagged posters`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver
+        )
+
+        store.write(sampleSnapshot(), "RPDB:12345")
+
+        assertNull(store.read("RPDB:12345"))
+    }
+
+    @Test
+    fun `read accepts active poster provider snapshots with matching poster tags`() {
+        val snapshotPrefs = InMemorySharedPreferences()
+        val localePrefs = localePrefs("en")
+        val metadataStore = mockk<MetadataDiskCacheStore>()
+        every { metadataStore.currentLanguageEpoch() } returns 0
+        val posterResolver = mockk<PosterRatingsUrlResolver>()
+        val store = HomeCatalogSnapshotStore(
+            context = mockContext(snapshotPrefs, "home_catalog_snapshot", localePrefs),
+            metadataDiskCacheStore = metadataStore,
+            posterRatingsUrlResolver = posterResolver
+        )
+        val row = sampleRow("addon", "movies", posterProviderTag = "rpdb")
+        val snapshot = HomeCatalogSnapshotStore.Snapshot(
+            catalogRows = listOf(row),
+            fullCatalogRows = listOf(row),
+            heroItems = row.items,
+            orderedGroupKeys = listOf("addon_movie_movies")
+        )
+
+        store.write(snapshot, "RPDB:12345")
+
+        assertEquals(snapshot, store.read("RPDB:12345"))
+    }
+
     private fun sampleSnapshot(): HomeCatalogSnapshotStore.Snapshot {
         val row = sampleRow("addon", "movies")
         return HomeCatalogSnapshotStore.Snapshot(
@@ -151,7 +194,11 @@ class HomeCatalogSnapshotStoreTest {
         )
     }
 
-    private fun sampleRow(addonId: String, catalogId: String): CatalogRow {
+    private fun sampleRow(
+        addonId: String,
+        catalogId: String,
+        posterProviderTag: String? = null
+    ): CatalogRow {
         return CatalogRow(
             addonId = addonId,
             addonName = addonId,
@@ -172,7 +219,8 @@ class HomeCatalogSnapshotStoreTest {
                     description = "description",
                     releaseInfo = "2025",
                     imdbRating = 8.1f,
-                    genres = listOf("Drama")
+                    genres = listOf("Drama"),
+                    posterProviderTag = posterProviderTag
                 )
             )
         )

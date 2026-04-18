@@ -73,7 +73,10 @@ class HomeCatalogSnapshotStore private constructor(
         return runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val raw = prefs.getString(snapshotKey(profileId), null)?.takeIf { it.isNotBlank() } ?: return null
-            decodeSnapshot(raw, posterProviderToken)?.sanitize()
+            val requiredPosterProviderTag = requiredPosterProviderTag(posterProviderToken)
+            decodeSnapshot(raw, posterProviderToken)
+                ?.sanitize()
+                ?.takeIf { it.hasValidPosterProviderTags(requiredPosterProviderTag) }
         }.onFailure { error ->
             Log.w(TAG, "Failed to restore home snapshot", error)
             clear(profileId)
@@ -159,6 +162,24 @@ class HomeCatalogSnapshotStore private constructor(
 
     private fun snapshotKey(profileId: Int = activeProfileId()): String {
         return "$SNAPSHOT_KEY:p$profileId:${currentLanguageTag()}"
+    }
+
+    private fun requiredPosterProviderTag(posterProviderToken: String): String? {
+        val provider = posterProviderToken.substringBefore(':').trim()
+        return provider
+            .takeIf { it.isNotBlank() && !it.equals("native", ignoreCase = true) }
+            ?.lowercase()
+    }
+
+    private fun Snapshot.hasValidPosterProviderTags(requiredTag: String?): Boolean {
+        if (requiredTag == null) return true
+        return sequence {
+            catalogRows.forEach { row -> yieldAll(row.items) }
+            fullCatalogRows.forEach { row -> yieldAll(row.items) }
+            yieldAll(heroItems)
+        }.all { item ->
+            item.posterProviderTag == requiredTag
+        }
     }
 
     private fun Snapshot.sanitize(): Snapshot {

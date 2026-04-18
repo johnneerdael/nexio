@@ -210,7 +210,7 @@ fun ContentCard(
             val diskKey = if (isBackdrop) {
                 ArtworkImageCacheKeys.backdrop(item.id)
             } else {
-                ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag)
+                ArtworkImageCacheKeys.poster(item.id, item.posterProviderTag, imageUrl)
             }
             ImageRequest.Builder(context)
                 .data(imageUrl)
