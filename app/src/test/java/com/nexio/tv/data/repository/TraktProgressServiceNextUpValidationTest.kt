@@ -69,6 +69,32 @@ class TraktProgressServiceNextUpValidationTest {
     }
 
     @Test
+    fun `stale validation bypasses fresh cache after remote activity changes`() {
+        val candidate = TraktNextUpValidationCandidate(
+            contentId = "stale-show",
+            activityAtMs = 10_000L,
+            visibleRank = 1,
+            weakDerivation = false,
+            mutationAffected = false,
+            staleValidation = true
+        )
+        val freshCache = TraktNextUpValidationCacheEntry(
+            updatedAtMs = 19_000L,
+            ttlMs = 10_000L
+        )
+
+        val selected = TraktNextUpValidationPolicy.selectCandidates(
+            candidates = listOf(candidate),
+            nowMs = 20_000L,
+            cache = mapOf("stale-show" to freshCache),
+            visibleCandidateLimit = 20,
+            validationBudget = 5
+        )
+
+        assertEquals(listOf("stale-show"), selected.map { it.contentId })
+    }
+
+    @Test
     fun `validation fallback does not publish unaired local continue watching candidate`() {
         val localFuture = TraktProgressService.NextUpEntry(
             contentId = "future-show",

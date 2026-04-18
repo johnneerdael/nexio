@@ -41,7 +41,11 @@ internal object TraktNextUpValidationPolicy {
             .asSequence()
             .filter { candidate ->
                 candidate.isHighPriority(visibleCandidateLimit) &&
-                    (candidate.mutationAffected || cache[candidate.contentId]?.isFresh(nowMs) != true)
+                    (
+                        candidate.mutationAffected ||
+                            candidate.staleValidation ||
+                            cache[candidate.contentId]?.isFresh(nowMs) != true
+                        )
             }
             .sortedWith(
                 compareBy<TraktNextUpValidationCandidate> { it.visibleRank.takeIf { rank -> rank > 0 } ?: Int.MAX_VALUE }

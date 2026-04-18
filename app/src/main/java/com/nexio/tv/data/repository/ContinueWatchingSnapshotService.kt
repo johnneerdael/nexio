@@ -503,10 +503,14 @@ class ContinueWatchingSnapshotService @Inject constructor(
         traktUpNextEntries: List<TrackingNextUpEntry>
     ): ContinueWatchingSnapshot {
         val nowMs = System.currentTimeMillis()
+        val completionAnchors = completionAnchorsByContent(allProgress)
         val resumeItems = selectResumeItemsForContinueWatching(allProgress)
         val normalizedNextUpItems = nextUpEntries
             .asSequence()
             .mapNotNull(::normalizeNextUpEntry)
+            .filterNot { entry ->
+                isNextUpSuppressedByCompletionAnchor(entry, completionAnchors[entry.contentId])
+            }
             .sortedByDescending { it.activityAtMs }
             .distinctBy { "${it.contentId}|${it.season}|${it.episode}" }
             .toList()
@@ -527,6 +531,9 @@ class ContinueWatchingSnapshotService @Inject constructor(
         val normalizedTraktUpNextItems = traktUpNextEntries
             .asSequence()
             .mapNotNull(::normalizeNextUpEntry)
+            .filterNot { entry ->
+                isNextUpSuppressedByCompletionAnchor(entry, completionAnchors[entry.contentId])
+            }
             .sortedByDescending { it.activityAtMs }
             .distinctBy { "${it.contentId}|${it.season}|${it.episode}" }
             .toList()
@@ -649,6 +656,18 @@ class ContinueWatchingSnapshotService @Inject constructor(
 
         return progressSeason < anchorSeason ||
             (progressSeason == anchorSeason && progressEpisode <= anchorEpisode)
+    }
+
+    private fun isNextUpSuppressedByCompletionAnchor(
+        entry: TrackingNextUpEntry,
+        anchor: ContinueWatchingCompletionAnchor?
+    ): Boolean {
+        if (anchor == null) return false
+        val anchorSeason = anchor.season ?: return false
+        val anchorEpisode = anchor.episode ?: return false
+
+        return entry.season < anchorSeason ||
+            (entry.season == anchorSeason && entry.episode <= anchorEpisode)
     }
 
     private fun shouldTreatAsResumeForContinueWatching(progress: WatchProgress): Boolean {
