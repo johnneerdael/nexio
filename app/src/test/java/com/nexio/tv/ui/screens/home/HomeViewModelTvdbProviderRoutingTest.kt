@@ -2,8 +2,10 @@ package com.nexio.tv.ui.screens.home
 
 import com.nexio.tv.core.network.NetworkResult
 import com.nexio.tv.core.profile.ProfileBoundary
+import com.nexio.tv.core.tmdb.TmdbEnrichment
 import com.nexio.tv.core.tmdb.TmdbMetadataService
 import com.nexio.tv.core.tmdb.TmdbService
+import com.nexio.tv.data.local.TmdbSettingsDataStore
 import com.nexio.tv.core.tvdb.TvMetadataDecision
 import com.nexio.tv.core.tvdb.TvMetadataDecisionReason
 import com.nexio.tv.core.tvdb.TvEpisodeMetadata
@@ -123,6 +125,40 @@ class HomeViewModelTvdbProviderRoutingTest {
     // @Test fun `continue watching tvdb success applies metadata with tmdb disabled`()
     // @Test fun `runtime hydration uses tvdb episode runtime`()
 
+    @Test
+    fun `continue watching movie enrichment uses shared home provider overlay`() = runTest {
+        val viewModel = mockk<HomeViewModel>()
+        val tvMetadataRouter = mockk<TvMetadataRouter>()
+        val tmdbService = mockk<TmdbService>()
+        val tmdbMetadataService = mockk<TmdbMetadataService>()
+        val tmdbSettingsDataStore = mockk<TmdbSettingsDataStore>()
+        val profileBoundary = mockk<ProfileBoundary>()
+        every { viewModel.tvMetadataRouter } returns tvMetadataRouter
+        every { viewModel.tmdbService } returns tmdbService
+        every { viewModel.tmdbMetadataService } returns tmdbMetadataService
+        every { viewModel.tmdbSettingsDataStore } returns tmdbSettingsDataStore
+        every { viewModel.profileBoundary } returns profileBoundary
+        every { tmdbSettingsDataStore.settings } returns flowOf(TmdbSettings(enabled = true, apiKey = "tmdb-key"))
+        every { profileBoundary.currentLanguageTag() } returns "nl"
+        coEvery { tvMetadataRouter.fetchEnrichment(any()) } returns TvMetadataDecision(
+            provider = TvProvider.TMDB,
+            reason = TvMetadataDecisionReason.TVDB_INACTIVE,
+            value = null
+        )
+        coEvery { tmdbService.ensureTmdbId("tt1375666", "movie") } returns "27205"
+        coEvery { tmdbMetadataService.fetchEnrichment("27205", ContentType.MOVIE, any()) } returns tmdbMovieEnrichment()
+
+        val result = viewModel.enrichContinueWatchingItemWithProvider(
+            item = continueWatchingMovieItem()
+        ) as ContinueWatchingItem.InProgress
+
+        assertEquals("Nederlandse titel", result.displayMetadata?.title)
+        assertEquals("Nederlandse omschrijving", result.displayMetadata?.description)
+        coVerify(exactly = 1) { tmdbService.ensureTmdbId("tt1375666", "movie") }
+        coVerify(exactly = 1) { tmdbMetadataService.fetchEnrichment("27205", ContentType.MOVIE, any()) }
+        coVerify(exactly = 0) { tvMetadataRouter.fetchEnrichment(any()) }
+    }
+
     private fun seriesPreview(): MetaPreview {
         return MetaPreview(
             id = "tt0944947",
@@ -151,6 +187,32 @@ class HomeViewModelTvdbProviderRoutingTest {
             rating = 8.9,
             runtimeMinutes = 52,
             language = "en"
+        )
+    }
+
+    private fun tmdbMovieEnrichment(): TmdbEnrichment {
+        return TmdbEnrichment(
+            localizedTitle = "Nederlandse titel",
+            description = "Nederlandse omschrijving",
+            genres = listOf("Animatie"),
+            backdrop = "tmdb-backdrop",
+            logo = "tmdb-logo",
+            poster = "tmdb-poster",
+            directorMembers = emptyList(),
+            writerMembers = emptyList(),
+            castMembers = emptyList(),
+            releaseInfo = "2025",
+            rating = 7.4,
+            runtimeMinutes = 107,
+            director = emptyList(),
+            writer = emptyList(),
+            productionCompanies = emptyList(),
+            networks = emptyList(),
+            ageRating = null,
+            countries = null,
+            language = "nl",
+            collectionId = null,
+            collectionName = null
         )
     }
 
