@@ -85,6 +85,11 @@
             android:name=".core.search.AndroidTvSearchProvider"
             android:authorities="@string/android_tv_search_authority"
             android:exported="true" />
+        <provider
+            android:name=".core.recommendations.AndroidTvChannelArtworkProvider"
+            android:authorities="${applicationId}.channelart"
+            android:exported="true"
+            android:grantUriPermissions="false" />
 
         <receiver
             android:name=".core.scheduler.ContinueWatchingAirAlarmReceiver"
